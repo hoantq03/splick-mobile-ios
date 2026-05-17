@@ -1,0 +1,9 @@
+{
+  "/api/v1/auth/login": "/auth_login",
+  "/api/v1/auth/register": "/auth_login",
+  "/api/v1/auth/refresh": "/auth_login",
+  "/api/v1/feed": "/feed",
+  "/api/v1/expenses": "/expenses",
+  "/api/v1/expenses/debts": "/debts",
+  "/api/v1/notifications": "/notifications"
+}

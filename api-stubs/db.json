@@ -1,0 +1,219 @@
+{
+  "auth_login": {
+    "access_token": "eyJhbGciOiJIUzI1NiJ9.fake-access-token-for-dev",
+    "refresh_token": "eyJhbGciOiJIUzI1NiJ9.fake-refresh-token-for-dev",
+    "expires_in": 3600,
+    "token_type": "Bearer",
+    "user": {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "email": "test@splick.app",
+      "username": "namtran",
+      "display_name": "Nam Tran",
+      "avatar_url": null,
+      "created_at": "2025-01-15T08:00:00Z"
+    }
+  },
+  "feed": [
+    {
+      "id": "f0000001-0000-0000-0000-000000000001",
+      "author": {
+        "id": "00000000-0000-0000-0000-000000000002",
+        "username": "linhpham",
+        "display_name": "Linh Pham",
+        "avatar_url": null
+      },
+      "image_url": "https://picsum.photos/seed/1/400/500",
+      "thumbnail_url": "https://picsum.photos/seed/1/200/250",
+      "caption": "Coffee time ☕",
+      "reactions": [
+        {
+          "id": "r0000001-0000-0000-0000-000000000001",
+          "emoji": "❤️",
+          "user_id": "00000000-0000-0000-0000-000000000001",
+          "created_at": "2025-01-16T10:30:00Z"
+        }
+      ],
+      "group_id": null,
+      "created_at": "2025-01-16T10:00:00Z"
+    },
+    {
+      "id": "f0000001-0000-0000-0000-000000000002",
+      "author": {
+        "id": "00000000-0000-0000-0000-000000000003",
+        "username": "ducnguyen",
+        "display_name": "Duc Nguyen",
+        "avatar_url": null
+      },
+      "image_url": "https://picsum.photos/seed/2/400/600",
+      "thumbnail_url": null,
+      "caption": "Sunset vibes 🌅",
+      "reactions": [],
+      "group_id": null,
+      "created_at": "2025-01-16T08:00:00Z"
+    },
+    {
+      "id": "f0000001-0000-0000-0000-000000000003",
+      "author": {
+        "id": "00000000-0000-0000-0000-000000000002",
+        "username": "linhpham",
+        "display_name": "Linh Pham",
+        "avatar_url": null
+      },
+      "image_url": "https://picsum.photos/seed/3/400/400",
+      "thumbnail_url": null,
+      "caption": null,
+      "reactions": [
+        {
+          "id": "r0000002-0000-0000-0000-000000000001",
+          "emoji": "🔥",
+          "user_id": "00000000-0000-0000-0000-000000000003",
+          "created_at": "2025-01-15T20:00:00Z"
+        }
+      ],
+      "group_id": null,
+      "created_at": "2025-01-15T18:00:00Z"
+    }
+  ],
+  "expenses": [
+    {
+      "id": "e0000001-0000-0000-0000-000000000001",
+      "description": "Korean BBQ dinner",
+      "total_amount": "450000",
+      "currency": "VND",
+      "paid_by": {
+        "id": "00000000-0000-0000-0000-000000000002",
+        "username": "linhpham",
+        "display_name": "Linh Pham",
+        "avatar_url": null
+      },
+      "splits": [
+        {
+          "id": "s0000001-0000-0000-0000-000000000001",
+          "user": {
+            "id": "00000000-0000-0000-0000-000000000001",
+            "username": "namtran",
+            "display_name": "Nam Tran",
+            "avatar_url": null
+          },
+          "amount": "150000",
+          "is_paid": false
+        },
+        {
+          "id": "s0000001-0000-0000-0000-000000000002",
+          "user": {
+            "id": "00000000-0000-0000-0000-000000000002",
+            "username": "linhpham",
+            "display_name": "Linh Pham",
+            "avatar_url": null
+          },
+          "amount": "150000",
+          "is_paid": true
+        },
+        {
+          "id": "s0000001-0000-0000-0000-000000000003",
+          "user": {
+            "id": "00000000-0000-0000-0000-000000000003",
+            "username": "ducnguyen",
+            "display_name": "Duc Nguyen",
+            "avatar_url": null
+          },
+          "amount": "150000",
+          "is_paid": false
+        }
+      ],
+      "group_id": null,
+      "category": "FOOD",
+      "status": "PENDING",
+      "created_at": "2025-01-16T12:00:00Z"
+    },
+    {
+      "id": "e0000001-0000-0000-0000-000000000002",
+      "description": "Grab to District 1",
+      "total_amount": "85000",
+      "currency": "VND",
+      "paid_by": {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "username": "namtran",
+        "display_name": "Nam Tran",
+        "avatar_url": null
+      },
+      "splits": [
+        {
+          "id": "s0000002-0000-0000-0000-000000000001",
+          "user": {
+            "id": "00000000-0000-0000-0000-000000000002",
+            "username": "linhpham",
+            "display_name": "Linh Pham",
+            "avatar_url": null
+          },
+          "amount": "42500",
+          "is_paid": true
+        }
+      ],
+      "group_id": null,
+      "category": "TRANSPORT",
+      "status": "SETTLED",
+      "created_at": "2025-01-15T09:00:00Z"
+    }
+  ],
+  "debts": [
+    {
+      "user": {
+        "id": "00000000-0000-0000-0000-000000000002",
+        "username": "linhpham",
+        "display_name": "Linh Pham",
+        "avatar_url": null
+      },
+      "amount": "150000",
+      "currency": "VND"
+    },
+    {
+      "user": {
+        "id": "00000000-0000-0000-0000-000000000003",
+        "username": "ducnguyen",
+        "display_name": "Duc Nguyen",
+        "avatar_url": null
+      },
+      "amount": "-100000",
+      "currency": "VND"
+    }
+  ],
+  "notifications": [
+    {
+      "id": "n0000001-0000-0000-0000-000000000001",
+      "type": "EXPENSE_CREATED",
+      "title": "New Expense",
+      "body": "Linh added 'Korean BBQ dinner' — 450,000₫",
+      "is_read": false,
+      "reference_id": "e0000001-0000-0000-0000-000000000001",
+      "created_at": "2025-01-16T12:00:00Z"
+    },
+    {
+      "id": "n0000001-0000-0000-0000-000000000002",
+      "type": "REACTION",
+      "title": "New Reaction",
+      "body": "Duc reacted ❤️ to your photo",
+      "is_read": false,
+      "reference_id": "f0000001-0000-0000-0000-000000000001",
+      "created_at": "2025-01-16T10:30:00Z"
+    },
+    {
+      "id": "n0000001-0000-0000-0000-000000000003",
+      "type": "EXPENSE_REMINDER",
+      "title": "Payment Reminder",
+      "body": "You owe Linh 150,000₫ for Korean BBQ",
+      "is_read": true,
+      "reference_id": "e0000001-0000-0000-0000-000000000001",
+      "created_at": "2025-01-15T18:00:00Z"
+    },
+    {
+      "id": "n0000001-0000-0000-0000-000000000004",
+      "type": "FRIEND_REQUEST",
+      "title": "Friend Request",
+      "body": "Minh Thu wants to connect with you",
+      "is_read": true,
+      "reference_id": null,
+      "created_at": "2025-01-14T10:00:00Z"
+    }
+  ]
+}

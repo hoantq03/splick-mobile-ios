@@ -1,0 +1,37 @@
+name: Run Simulation Sandbox
+
+on:
+  workflow_dispatch:
+    inputs:
+      simulation:
+        description: 'Which simulation to run'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - auth
+          - feed
+          - expense
+          - notification
+          - full
+
+jobs:
+  simulate:
+    name: Run Simulation
+    runs-on: macos-14
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Sandbox
+        run: |
+          cd Packages/SimulationKit
+          swift build -c debug
+
+      - name: Run Simulation (${{ inputs.simulation }})
+        run: |
+          cd Packages/SimulationKit
+          swift run Sandbox ${{ inputs.simulation }}

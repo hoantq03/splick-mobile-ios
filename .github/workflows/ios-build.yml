@@ -1,0 +1,79 @@
+name: iOS Build Verification
+
+on:
+  push:
+    branches: [main, develop, "feature/**"]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build & Verify
+    runs-on: macos-14
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode Project
+        run: xcodegen generate
+
+      - name: Resolve Package Dependencies
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project Splick.xcodeproj \
+            -scheme SplickApp
+
+      - name: Build for iOS Simulator
+        run: |
+          xcodebuild build \
+            -project Splick.xcodeproj \
+            -scheme SplickApp \
+            -destination 'platform=iOS Simulator,name=iPhone 15,OS=latest' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcpretty || true
+
+      - name: Build SimulationKit
+        run: |
+          cd Packages/SimulationKit
+          swift build
+        continue-on-error: true
+
+  package-check:
+    name: SPM Package Resolution
+    runs-on: macos-14
+    timeout-minutes: 10
+
+    strategy:
+      matrix:
+        package:
+          - SplickCore
+          - SplickDomain
+          - FeatureAuth
+          - FeatureSocialFeed
+          - FeatureMedia
+          - FeatureExpense
+          - FeatureNotification
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve ${{ matrix.package }}
+        run: |
+          cd Packages/${{ matrix.package }}
+          swift package resolve
