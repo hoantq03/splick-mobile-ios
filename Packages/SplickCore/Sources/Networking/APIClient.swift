@@ -127,6 +127,8 @@ public final class APIClient: APIClientProtocol, Sendable {
             return .noConnection
         case .timedOut:
             return .timeout
+        case .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed:
+            return .serverUnreachable
         default:
             return .unknown(error.localizedDescription)
         }

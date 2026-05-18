@@ -1,13 +1,18 @@
 import SwiftUI
 import DesignSystem
 import Common
+import SplickDomain
 
 public struct RegisterView: View {
     @StateObject private var viewModel: RegisterViewModel
-    @Environment(\.dismiss) private var dismiss
+    private let onAuthenticated: ((User) -> Void)?
 
-    public init(viewModel: @autoclosure @escaping () -> RegisterViewModel) {
+    public init(
+        viewModel: @autoclosure @escaping () -> RegisterViewModel,
+        onAuthenticated: ((User) -> Void)? = nil
+    ) {
         _viewModel = StateObject(wrappedValue: viewModel())
+        self.onAuthenticated = onAuthenticated
     }
 
     public var body: some View {
@@ -23,12 +28,9 @@ public struct RegisterView: View {
         .scrollDismissesKeyboard(.interactively)
         .background(SplickTheme.Colors.background)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.left")
-                        .foregroundStyle(SplickTheme.Colors.textPrimary)
-                }
+        .onChange(of: viewModel.state) { state in
+            if case .loaded(let session) = state {
+                onAuthenticated?(session.user)
             }
         }
     }
@@ -103,8 +105,9 @@ public struct RegisterView: View {
             SplickButton(
                 "Create Account",
                 isLoading: viewModel.state.isLoading,
-                isDisabled: viewModel.email.isEmpty || viewModel.username.isEmpty
-                    || viewModel.password.isEmpty || viewModel.confirmPassword.isEmpty
+                isDisabled: !AppConstants.Dev.useMockData
+                    && (viewModel.email.isEmpty || viewModel.username.isEmpty
+                        || viewModel.password.isEmpty || viewModel.confirmPassword.isEmpty)
             ) {
                 Task { await viewModel.register() }
             }

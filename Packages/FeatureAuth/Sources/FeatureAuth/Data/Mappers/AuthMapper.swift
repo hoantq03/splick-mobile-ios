@@ -15,7 +15,7 @@ enum AuthMapper {
 
     static func toAuthToken(_ dto: AuthResponseDTO) -> AuthToken {
         AuthToken(
-            accessToken: dto.accessToken,
+            accessToken: dto.accessToken,	
             refreshToken: dto.refreshToken,
             expiresIn: dto.expiresIn,
             tokenType: dto.tokenType

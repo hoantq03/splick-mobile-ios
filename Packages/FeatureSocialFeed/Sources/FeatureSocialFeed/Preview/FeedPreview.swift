@@ -17,18 +17,45 @@ final class MockReactToPostUseCase: ReactToPostUseCaseProtocol, Sendable {
     }
 }
 
+final class MockDeletePostUseCase: DeletePostUseCaseProtocol, Sendable {
+    func execute(postId: UUID) async throws {}
+}
+
 #Preview("Feed") {
-    FeedView(
-        viewModel: FeedViewModel(
-            fetchFeedUseCase: MockFetchFeedUseCase(),
-            reactToPostUseCase: MockReactToPostUseCase()
+    NavigationStack {
+        FeedView(
+            viewModel: FeedViewModel(
+                fetchFeedUseCase: MockFetchFeedUseCase(),
+                reactToPostUseCase: MockReactToPostUseCase(),
+                deletePostUseCase: MockDeletePostUseCase(),
+                currentUserId: PreviewData.currentUser.id,
+                currentUser: UserSummary(
+                    id: PreviewData.currentUser.id,
+                    username: PreviewData.currentUser.username,
+                    displayName: PreviewData.currentUser.displayName,
+                    avatarURL: PreviewData.currentUser.avatarURL
+                )
+            )
         )
-    )
+    }
 }
 
 #Preview("Post Card") {
-    PostCardView(post: PreviewData.samplePost) { _ in }
-        .padding()
+    PostCardView(
+        post: PreviewData.samplePost,
+        currentUser: UserSummary(
+            id: PreviewData.currentUser.id,
+            username: PreviewData.currentUser.username,
+            displayName: PreviewData.currentUser.displayName,
+            avatarURL: nil
+        ),
+        onReact: { _ in },
+        onDelete: {},
+        onUserTap: { _ in },
+        onOpenComments: {},
+        onShowCompanions: {}
+    )
+    .padding()
 }
 
 #endif

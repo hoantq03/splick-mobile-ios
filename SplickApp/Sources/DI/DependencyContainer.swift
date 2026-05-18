@@ -8,6 +8,7 @@ import FeatureSocialFeed
 import FeatureMedia
 import FeatureExpense
 import FeatureNotification
+import SimulationKit
 
 @MainActor
 final class DependencyContainer: ObservableObject {
@@ -18,6 +19,8 @@ final class DependencyContainer: ObservableObject {
     let tokenProvider: TokenProvider
     let keychainService: KeychainServiceProtocol
     let userDefaultsService: UserDefaultsServiceProtocol
+    private let simulation: SimulationContainer?
+
     lazy var apiClient: APIClientProtocol = {
         APIClient(tokenProvider: tokenProvider)
     }()
@@ -37,15 +40,18 @@ final class DependencyContainer: ObservableObject {
     }()
 
     lazy var loginUseCase: LoginUseCaseProtocol = {
-        LoginUseCase(repository: authRepository, sessionManager: sessionManager)
+        if let simulation { return simulation.loginUseCase }
+        return LoginUseCase(repository: authRepository, sessionManager: sessionManager)
     }()
 
     lazy var registerUseCase: RegisterUseCaseProtocol = {
-        RegisterUseCase(repository: authRepository, sessionManager: sessionManager)
+        if let simulation { return simulation.registerUseCase }
+        return RegisterUseCase(repository: authRepository, sessionManager: sessionManager)
     }()
 
     lazy var logoutUseCase: LogoutUseCaseProtocol = {
-        LogoutUseCase(repository: authRepository, sessionManager: sessionManager)
+        if let simulation { return simulation.logoutUseCase }
+        return LogoutUseCase(repository: authRepository, sessionManager: sessionManager)
     }()
 
     // MARK: - Feed
@@ -55,11 +61,27 @@ final class DependencyContainer: ObservableObject {
     }()
 
     lazy var fetchFeedUseCase: FetchFeedUseCaseProtocol = {
-        FetchFeedUseCase(repository: feedRepository)
+        if let simulation { return simulation.fetchFeedUseCase }
+        return FetchFeedUseCase(repository: feedRepository)
     }()
 
     lazy var reactToPostUseCase: ReactToPostUseCaseProtocol = {
-        ReactToPostUseCase(repository: feedRepository)
+        if let simulation { return simulation.reactToPostUseCase }
+        return ReactToPostUseCase(repository: feedRepository)
+    }()
+
+    lazy var deletePostUseCase: DeletePostUseCaseProtocol = {
+        if let simulation { return simulation.deletePostUseCase }
+        return DeletePostUseCase(repository: feedRepository)
+    }()
+
+    private lazy var friendsRepository: FriendsRepositoryProtocol = {
+        FriendsRepository()
+    }()
+
+    lazy var fetchFriendsUseCase: FetchFriendsUseCaseProtocol = {
+        if let simulation { return simulation.fetchFriendsUseCase }
+        return FetchFriendsUseCase(repository: friendsRepository)
     }()
 
     // MARK: - Media
@@ -69,7 +91,8 @@ final class DependencyContainer: ObservableObject {
     }()
 
     lazy var uploadMediaUseCase: UploadMediaUseCaseProtocol = {
-        UploadMediaUseCase(repository: mediaRepository)
+        if let simulation { return simulation.uploadMediaUseCase }
+        return UploadMediaUseCase(repository: mediaRepository)
     }()
 
     // MARK: - Expense
@@ -79,15 +102,18 @@ final class DependencyContainer: ObservableObject {
     }()
 
     lazy var fetchExpensesUseCase: FetchExpensesUseCaseProtocol = {
-        FetchExpensesUseCase(repository: expenseRepository)
+        if let simulation { return simulation.fetchExpensesUseCase }
+        return FetchExpensesUseCase(repository: expenseRepository)
     }()
 
     lazy var createExpenseUseCase: CreateExpenseUseCaseProtocol = {
-        CreateExpenseUseCase(repository: expenseRepository)
+        if let simulation { return simulation.createExpenseUseCase }
+        return CreateExpenseUseCase(repository: expenseRepository)
     }()
 
     lazy var fetchDebtSummaryUseCase: FetchDebtSummaryUseCaseProtocol = {
-        FetchDebtSummaryUseCase(repository: expenseRepository)
+        if let simulation { return simulation.fetchDebtSummaryUseCase }
+        return FetchDebtSummaryUseCase(repository: expenseRepository)
     }()
 
     // MARK: - Notification
@@ -97,11 +123,13 @@ final class DependencyContainer: ObservableObject {
     }()
 
     lazy var fetchNotificationsUseCase: FetchNotificationsUseCaseProtocol = {
-        FetchNotificationsUseCase(repository: notificationRepository)
+        if let simulation { return simulation.fetchNotificationsUseCase }
+        return FetchNotificationsUseCase(repository: notificationRepository)
     }()
 
     lazy var markNotificationReadUseCase: MarkNotificationReadUseCaseProtocol = {
-        MarkNotificationReadUseCase(repository: notificationRepository)
+        if let simulation { return simulation.markNotificationReadUseCase }
+        return MarkNotificationReadUseCase(repository: notificationRepository)
     }()
 
     // MARK: - Init
@@ -111,6 +139,15 @@ final class DependencyContainer: ObservableObject {
         self.tokenProvider = tokenProvider
         self.keychainService = KeychainService()
         self.userDefaultsService = UserDefaultsService()
-        self.sessionManager = SessionManager()
+
+        if AppConstants.Dev.useMockData {
+            let simulation = SimulationContainer(loggerModule: "SplickApp")
+            self.simulation = simulation
+            self.sessionManager = simulation.sessionManager
+            Task { await simulation.seedTestData() }
+        } else {
+            self.simulation = nil
+            self.sessionManager = SessionManager()
+        }
     }
 }

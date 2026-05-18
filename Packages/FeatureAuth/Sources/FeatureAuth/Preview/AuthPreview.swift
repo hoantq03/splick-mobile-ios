@@ -29,7 +29,12 @@ final class MockRegisterUseCase: RegisterUseCaseProtocol, Sendable {
 // MARK: - Previews
 
 #Preview("Login") {
-    LoginView(viewModel: LoginViewModel(loginUseCase: MockLoginUseCase()))
+    NavigationStack {
+        LoginView(
+            viewModel: LoginViewModel(loginUseCase: MockLoginUseCase()),
+            registerUseCase: MockRegisterUseCase()
+        )
+    }
 }
 
 #Preview("Register") {

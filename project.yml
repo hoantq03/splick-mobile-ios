@@ -14,6 +14,9 @@ settings:
     CURRENT_PROJECT_VERSION: 1
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
+    ONLY_ACTIVE_ARCH: YES
+    # Apple Silicon simulators are arm64-only; avoid x86_64 SplickApp vs arm64 SPM mismatch
+    EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
 
 packages:
   SplickCore:
@@ -30,6 +33,8 @@ packages:
     path: Packages/FeatureExpense
   FeatureNotification:
     path: Packages/FeatureNotification
+  SimulationKit:
+    path: Packages/SimulationKit
 
 targets:
   SplickApp:
@@ -37,8 +42,6 @@ targets:
     platform: iOS
     sources:
       - path: SplickApp/Sources
-    resources:
-      - path: SplickApp/Resources
     dependencies:
       - package: SplickCore
         product: Networking
@@ -60,23 +63,19 @@ targets:
         product: FeatureExpense
       - package: FeatureNotification
         product: FeatureNotification
+      - package: SimulationKit
+        product: SimulationKit
     settings:
       base:
+        PRODUCT_NAME: SplickApp
         INFOPLIST_FILE: SplickApp/Resources/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
         PRODUCT_BUNDLE_IDENTIFIER: com.splick.app
         TARGETED_DEVICE_FAMILY: 1
-    info:
-      path: SplickApp/Resources/Info.plist
-      properties:
-        CFBundleName: Splick
-        CFBundleDisplayName: Splick
-        CFBundleShortVersionString: "$(MARKETING_VERSION)"
-        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
-        UILaunchScreen: {}
-        UISupportedInterfaceOrientations:
-          - UIInterfaceOrientationPortrait
-        NSCameraUsageDescription: "Splick needs camera access to capture and share moments with friends."
-        NSPhotoLibraryUsageDescription: "Splick needs photo library access to share photos with friends."
+    resources:
+      - path: SplickApp/Resources
+        excludes:
+          - Info.plist
 
 schemes:
   SplickApp:

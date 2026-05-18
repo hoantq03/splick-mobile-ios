@@ -28,11 +28,18 @@ public enum NetworkError: Error, Equatable {
     case forbidden
     case notFound
     case rateLimited
+    case serverUnreachable
     case unknown(String)
 
     public var userMessage: String {
         switch self {
         case .noConnection: return "No internet connection. Please check your network."
+        case .serverUnreachable:
+            #if DEBUG
+            return "Cannot reach the API server. In Terminal, run: make -C splick-mobile-ios stubs"
+            #else
+            return "Cannot reach the server. Please try again later."
+            #endif
         case .timeout: return "Request timed out. Please try again."
         case .serverError: return "Something went wrong. Please try again later."
         case .decodingFailed: return "Failed to process server response."

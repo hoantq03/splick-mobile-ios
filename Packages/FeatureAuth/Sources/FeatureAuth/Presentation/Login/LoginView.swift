@@ -1,12 +1,21 @@
 import SwiftUI
 import DesignSystem
 import Common
+import SplickDomain
 
 public struct LoginView: View {
     @StateObject private var viewModel: LoginViewModel
+    private let registerUseCase: RegisterUseCaseProtocol
+    private let onAuthenticated: ((User) -> Void)?
 
-    public init(viewModel: @autoclosure @escaping () -> LoginViewModel) {
+    public init(
+        viewModel: @autoclosure @escaping () -> LoginViewModel,
+        registerUseCase: RegisterUseCaseProtocol,
+        onAuthenticated: ((User) -> Void)? = nil
+    ) {
         _viewModel = StateObject(wrappedValue: viewModel())
+        self.registerUseCase = registerUseCase
+        self.onAuthenticated = onAuthenticated
     }
 
     public var body: some View {
@@ -22,6 +31,17 @@ public struct LoginView: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .background(SplickTheme.Colors.background)
+        .navigationDestination(isPresented: $viewModel.showRegistration) {
+            RegisterView(
+                viewModel: RegisterViewModel(registerUseCase: registerUseCase),
+                onAuthenticated: onAuthenticated
+            )
+        }
+        .onChange(of: viewModel.state) { state in
+            if case .loaded(let session) = state {
+                onAuthenticated?(session.user)
+            }
+        }
     }
 
     // MARK: - Sections
@@ -75,7 +95,8 @@ public struct LoginView: View {
             SplickButton(
                 "Sign In",
                 isLoading: viewModel.state.isLoading,
-                isDisabled: viewModel.email.isEmpty || viewModel.password.isEmpty
+                isDisabled: !AppConstants.Dev.useMockData
+                    && (viewModel.email.isEmpty || viewModel.password.isEmpty)
             ) {
                 Task { await viewModel.login() }
             }

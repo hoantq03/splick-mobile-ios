@@ -19,7 +19,7 @@ public final class LoginViewModel: ObservableObject {
     }
 
     func login() async {
-        guard validate() else { return }
+        guard AppConstants.Dev.useMockData || validate() else { return }
 
         state = .loading
         do {

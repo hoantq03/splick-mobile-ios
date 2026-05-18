@@ -1,5 +1,6 @@
 import SwiftUI
 import DesignSystem
+import Common
 import FeatureAuth
 
 struct RootView: View {
@@ -40,19 +41,19 @@ struct RootView: View {
     private var authFlow: some View {
         NavigationStack {
             LoginView(
-                viewModel: LoginViewModel(loginUseCase: container.loginUseCase)
+                viewModel: LoginViewModel(loginUseCase: container.loginUseCase),
+                registerUseCase: container.registerUseCase,
+                onAuthenticated: { user in
+                    appState.setAuthenticated(user: user)
+                }
             )
-            .navigationDestination(isPresented: .constant(false)) {
-                RegisterView(
-                    viewModel: RegisterViewModel(registerUseCase: container.registerUseCase)
-                )
-            }
         }
-        .onChange(of: appState.authState) { _ in }
     }
 
     private func checkExistingSession() async {
-        try? await Task.sleep(for: .seconds(1))
+        if !AppConstants.Dev.useMockData {
+            try? await Task.sleep(for: .seconds(1))
+        }
 
         if await container.sessionManager.isAuthenticated(),
            let session = await container.sessionManager.currentSession() {

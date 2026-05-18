@@ -6,6 +6,7 @@ enum FeedEndpoint: APIEndpoint {
     case post(id: UUID)
     case addReaction(postId: UUID, CreateReactionRequestDTO)
     case removeReaction(postId: UUID, reactionId: UUID)
+    case deletePost(id: UUID)
 
     var path: String {
         switch self {
@@ -14,6 +15,7 @@ enum FeedEndpoint: APIEndpoint {
         case .addReaction(let postId, _): return "/v1/feed/posts/\(postId)/reactions"
         case .removeReaction(let postId, let reactionId):
             return "/v1/feed/posts/\(postId)/reactions/\(reactionId)"
+        case .deletePost(let id): return "/v1/feed/posts/\(id)"
         }
     }
 
@@ -21,7 +23,7 @@ enum FeedEndpoint: APIEndpoint {
         switch self {
         case .feed, .post: return .get
         case .addReaction: return .post
-        case .removeReaction: return .delete
+        case .removeReaction, .deletePost: return .delete
         }
     }
 

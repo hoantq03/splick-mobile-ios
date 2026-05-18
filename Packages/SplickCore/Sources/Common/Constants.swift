@@ -1,6 +1,15 @@
 import Foundation
 
 public enum AppConstants {
+    /// When true, all features use in-memory fake repositories (no network).
+    public enum Dev {
+        #if DEBUG
+        public static let useMockData = true
+        #else
+        public static let useMockData = false
+        #endif
+    }
+
     public enum API {
         #if DEBUG
         public static let baseURL = "http://localhost:8080/api"

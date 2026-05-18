@@ -1,5 +1,6 @@
 import SwiftUI
 import DesignSystem
+import SplickDomain
 import FeatureSocialFeed
 import FeatureExpense
 import FeatureMedia
@@ -14,8 +15,19 @@ struct MainTabView: View {
             FeedView(
                 viewModel: FeedViewModel(
                     fetchFeedUseCase: container.fetchFeedUseCase,
-                    reactToPostUseCase: container.reactToPostUseCase
-                )
+                    reactToPostUseCase: container.reactToPostUseCase,
+                    deletePostUseCase: container.deletePostUseCase,
+                    currentUserId: appState.currentUser?.id,
+                    currentUser: appState.currentUser.map {
+                        UserSummary(
+                            id: $0.id,
+                            username: $0.username,
+                            displayName: $0.displayName,
+                            avatarURL: $0.avatarURL
+                        )
+                    }
+                ),
+                fetchFriendsUseCase: container.fetchFriendsUseCase
             )
             .tabItem {
                 Label(Tab.feed.rawValue, systemImage: appState.selectedTab == .feed ? Tab.feed.selectedIcon : Tab.feed.icon)

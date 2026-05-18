@@ -40,4 +40,8 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
         )
         return FeedMapper.toPost(dto)
     }
+
+    public func deletePost(id: UUID) async throws {
+        try await apiClient.request(FeedEndpoint.deletePost(id: id))
+    }
 }

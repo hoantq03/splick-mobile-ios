@@ -37,64 +37,42 @@ public actor FakeAuthRepository: AuthRepositoryProtocol {
     }
 
     public func login(email: String, password: String) async throws -> AuthSession {
-        logger.log("Login attempt: \(email)")
-
-        try await Task.sleep(for: .milliseconds(300))
-
-        guard let entry = users[email] else {
-            logger.failure("Login failed: user not found")
-            throw AuthError.invalidCredentials
-        }
-
-        guard entry.password == password else {
-            logger.failure("Login failed: wrong password")
-            throw AuthError.invalidCredentials
-        }
-
-        let token = AuthToken(
-            accessToken: "fake-access-\(UUID().uuidString.prefix(8))",
-            refreshToken: "fake-refresh-\(UUID().uuidString.prefix(8))",
-            expiresIn: 3600,
-            tokenType: "Bearer"
-        )
-        let session = AuthSession(user: entry.user, token: token)
+        logger.log("Mock login: \(email)")
+        try await Task.sleep(for: .milliseconds(200))
+        let session = makeSession(email: email, username: nil)
         currentSession = session
-
-        logger.success("Login successful: \(entry.user.username)")
+        logger.success("Mock login successful: \(session.user.username)")
         return session
     }
 
     public func register(email: String, username: String, password: String) async throws -> AuthSession {
-        logger.log("Register attempt: \(email) / @\(username)")
+        logger.log("Mock register: \(email) / @\(username)")
+        try await Task.sleep(for: .milliseconds(300))
+        let session = makeSession(email: email, username: username)
+        users[email] = (password: password, user: session.user)
+        currentSession = session
+        logger.success("Mock registration successful: @\(session.user.username)")
+        return session
+    }
 
-        try await Task.sleep(for: .milliseconds(500))
-
-        guard users[email] == nil else {
-            logger.failure("Register failed: email exists")
-            throw AuthError.emailAlreadyExists
-        }
-
-        let newUser = User(
-            id: UUID(),
-            email: email,
-            username: username,
-            displayName: username.capitalized,
+    private func makeSession(email: String, username: String?) -> AuthSession {
+        let resolvedEmail = email.isEmpty ? "dev@splick.app" : email
+        let resolvedUsername = username ?? resolvedEmail.split(separator: "@").first.map(String.init) ?? "splickuser"
+        let user = User(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+            email: resolvedEmail,
+            username: resolvedUsername,
+            displayName: resolvedUsername.capitalized,
             avatarURL: nil,
             createdAt: .now
         )
-        users[email] = (password: password, user: newUser)
-
         let token = AuthToken(
-            accessToken: "fake-access-\(UUID().uuidString.prefix(8))",
-            refreshToken: "fake-refresh-\(UUID().uuidString.prefix(8))",
+            accessToken: "mock-access-token",
+            refreshToken: "mock-refresh-token",
             expiresIn: 3600,
             tokenType: "Bearer"
         )
-        let session = AuthSession(user: newUser, token: token)
-        currentSession = session
-
-        logger.success("Registration successful: @\(username)")
-        return session
+        return AuthSession(user: user, token: token)
     }
 
     public func refreshToken(_ refreshToken: String) async throws -> AuthToken {

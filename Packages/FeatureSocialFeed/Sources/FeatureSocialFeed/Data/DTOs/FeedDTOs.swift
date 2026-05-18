@@ -9,6 +9,26 @@ struct PostDTO: Decodable {
     let reactions: [ReactionDTO]
     let groupId: UUID?
     let createdAt: Date
+    let mediaType: String?
+    let videoUrl: String?
+    let videoDurationSeconds: Int?
+    let companions: [AuthorDTO]?
+    let feedKind: String?
+    let checkInPlace: String?
+    let billSplit: PostBillSplitDTO?
+    let viewCount: Int?
+}
+
+struct PostBillSplitDTO: Decodable {
+    let totalAmount: Decimal
+    let currency: String
+    let splits: [PostBillSplitLineDTO]
+}
+
+struct PostBillSplitLineDTO: Decodable {
+    let id: UUID?
+    let user: AuthorDTO
+    let amount: Decimal
 }
 
 struct AuthorDTO: Decodable {
