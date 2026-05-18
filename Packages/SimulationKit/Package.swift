@@ -17,6 +17,7 @@ let package = Package(
         .package(path: "../FeatureExpense"),
         .package(path: "../FeatureNotification"),
         .package(path: "../FeatureMedia"),
+        .package(path: "../FeatureFriends"),
     ],
     targets: [
         .target(
@@ -31,6 +32,7 @@ let package = Package(
                 .product(name: "FeatureExpense", package: "FeatureExpense"),
                 .product(name: "FeatureNotification", package: "FeatureNotification"),
                 .product(name: "FeatureMedia", package: "FeatureMedia"),
+                .product(name: "FeatureFriends", package: "FeatureFriends"),
             ],
             path: "Sources/SimulationKit"
         ),

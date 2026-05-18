@@ -3,6 +3,7 @@ import Foundation
 public struct Group: Identifiable, Codable, Equatable, Sendable {
     public let id: UUID
     public let name: String
+    public let inviteCode: String
     public let description: String?
     public let avatarURL: URL?
     public let members: [UserSummary]
@@ -12,6 +13,7 @@ public struct Group: Identifiable, Codable, Equatable, Sendable {
     public init(
         id: UUID,
         name: String,
+        inviteCode: String,
         description: String? = nil,
         avatarURL: URL? = nil,
         members: [UserSummary] = [],
@@ -20,6 +22,7 @@ public struct Group: Identifiable, Codable, Equatable, Sendable {
     ) {
         self.id = id
         self.name = name
+        self.inviteCode = inviteCode
         self.description = description
         self.avatarURL = avatarURL
         self.members = members

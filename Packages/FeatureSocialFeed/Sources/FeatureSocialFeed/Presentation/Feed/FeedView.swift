@@ -48,7 +48,8 @@ public struct FeedView: View {
                     }
                 }
             }
-            .navigationTitle("Feed")
+            .navigationTitle("Feeds")
+            .splickProfileToolbar()
             .navigationDestination(for: UUID.self) { postId in
                 if let post = viewModel.posts.first(where: { $0.id == postId }) {
                     PostDetailView(
@@ -130,5 +131,6 @@ public struct FeedView: View {
         .scrollDisabled(feedScrollLocked)
         .refreshable { await viewModel.loadFeed(isPullToRefresh: true) }
         .environment(\.feedVideoCoordinator, videoCoordinator)
+        .tabBarHideOnScroll()
     }
 }

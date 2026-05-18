@@ -34,6 +34,7 @@ public struct NotificationListView: View {
                 }
             }
             .navigationTitle("Notifications")
+            .splickProfileToolbar()
             .toolbar {
                 if viewModel.unreadCount > 0 {
                     ToolbarItem(placement: .primaryAction) {
@@ -63,6 +64,7 @@ public struct NotificationListView: View {
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
         }
+        .tabBarHideOnScroll()
     }
 }
 

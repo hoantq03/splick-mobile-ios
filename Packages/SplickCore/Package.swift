@@ -11,6 +11,9 @@ let package = Package(
         .library(name: "DesignSystem", targets: ["DesignSystem"]),
         .library(name: "Common", targets: ["Common"]),
     ],
+    dependencies: [
+        .package(path: "../SplickDomain"),
+    ],
     targets: [
         .target(
             name: "Common",
@@ -28,7 +31,10 @@ let package = Package(
         ),
         .target(
             name: "DesignSystem",
-            dependencies: ["Common"],
+            dependencies: [
+                "Common",
+                .product(name: "SplickDomain", package: "SplickDomain"),
+            ],
             path: "Sources/DesignSystem",
             resources: [.process("Resources")]
         ),

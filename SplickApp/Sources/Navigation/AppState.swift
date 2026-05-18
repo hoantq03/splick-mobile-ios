@@ -13,6 +13,7 @@ final class AppState: ObservableObject {
 
     @Published var authState: AuthState = .unknown
     @Published var selectedTab: Tab = .feed
+    @Published var showProfileSettings = false
     @Published private(set) var hasCompletedOnboarding: Bool
 
     init() {
@@ -53,8 +54,9 @@ final class AppState: ObservableObject {
 }
 
 enum Tab: String, CaseIterable {
-    case feed = "Feed"
+    case feed = "Feeds"
     case expenses = "Expenses"
+    case friends = "Friends"
     case camera = "Camera"
     case notifications = "Notifications"
     case profile = "Profile"
@@ -63,6 +65,7 @@ enum Tab: String, CaseIterable {
         switch self {
         case .feed: return "photo.on.rectangle"
         case .expenses: return "dollarsign.circle"
+        case .friends: return "person.2"
         case .camera: return "camera"
         case .notifications: return "bell"
         case .profile: return "person.circle"
@@ -73,6 +76,7 @@ enum Tab: String, CaseIterable {
         switch self {
         case .feed: return "photo.on.rectangle.fill"
         case .expenses: return "dollarsign.circle.fill"
+        case .friends: return "person.2.fill"
         case .camera: return "camera.fill"
         case .notifications: return "bell.fill"
         case .profile: return "person.circle.fill"

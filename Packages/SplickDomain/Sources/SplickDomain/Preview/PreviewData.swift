@@ -205,6 +205,7 @@ public enum PreviewData {
     public static let sampleGroup = Group(
         id: UUID(),
         name: "Roommates Q7",
+        inviteCode: "roommates-q7",
         description: "Sharing expenses for apartment",
         members: [friendUser, friend2],
         createdBy: currentUser.id

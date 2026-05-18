@@ -8,6 +8,7 @@ import FeatureSocialFeed
 import FeatureExpense
 import FeatureNotification
 import FeatureMedia
+import FeatureFriends
 
 public final class SimulationContainer: @unchecked Sendable {
     public let logger: StateLogger
@@ -36,6 +37,12 @@ public final class SimulationContainer: @unchecked Sendable {
     public let reactToPostUseCase: ReactToPostUseCase
     public let deletePostUseCase: DeletePostUseCase
     public let fetchFriendsUseCase: FetchFriendsUseCase
+
+    // Use Cases — Friends tab
+    public let fetchMyFriendsUseCase: FetchMyFriendsUseCase
+    public let fetchMyGroupsUseCase: FetchMyGroupsUseCase
+    public let addFriendUseCase: AddFriendUseCase
+    public let joinGroupUseCase: JoinGroupUseCase
 
     // Use Cases — Expense
     public let fetchExpensesUseCase: FetchExpensesUseCase
@@ -76,6 +83,10 @@ public final class SimulationContainer: @unchecked Sendable {
         self.reactToPostUseCase = ReactToPostUseCase(repository: feedRepository)
         self.deletePostUseCase = DeletePostUseCase(repository: feedRepository)
         self.fetchFriendsUseCase = FetchFriendsUseCase(repository: friendsRepository)
+        self.fetchMyFriendsUseCase = FetchMyFriendsUseCase(repository: friendsRepository)
+        self.fetchMyGroupsUseCase = FetchMyGroupsUseCase(repository: friendsRepository)
+        self.addFriendUseCase = AddFriendUseCase(repository: friendsRepository)
+        self.joinGroupUseCase = JoinGroupUseCase(repository: friendsRepository)
 
         // Expense Use Cases
         self.fetchExpensesUseCase = FetchExpensesUseCase(repository: expenseRepository)

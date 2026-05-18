@@ -47,6 +47,7 @@ public struct ExpenseListView: View {
                 }
             }
             .navigationTitle("Expenses")
+            .splickProfileToolbar()
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
@@ -90,6 +91,7 @@ public struct ExpenseListView: View {
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
         }
+        .tabBarHideOnScroll()
     }
 
     private var filteredEmptyState: some View {

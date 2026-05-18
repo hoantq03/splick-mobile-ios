@@ -19,6 +19,7 @@ public enum SplickTheme {
         public static let textSecondary = Color(.secondaryLabel)
         public static let textTertiary = Color(.tertiaryLabel)
 
+        public static let tabCameraRing = Color(hex: 0x6FCF97)
         public static let success = Color(hex: 0x27AE60)
         public static let warning = Color(hex: 0xF2994A)
         public static let error = Color(hex: 0xEB5757)

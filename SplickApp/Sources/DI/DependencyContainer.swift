@@ -8,6 +8,7 @@ import FeatureSocialFeed
 import FeatureMedia
 import FeatureExpense
 import FeatureNotification
+import FeatureFriends
 import SimulationKit
 
 @MainActor
@@ -82,6 +83,36 @@ final class DependencyContainer: ObservableObject {
     lazy var fetchFriendsUseCase: FetchFriendsUseCaseProtocol = {
         if let simulation { return simulation.fetchFriendsUseCase }
         return FetchFriendsUseCase(repository: friendsRepository)
+    }()
+
+    private lazy var friendsManagementRepository: FriendsManagementRepositoryProtocol = {
+        if let simulation { return simulation.friendsRepository }
+        return FriendsManagementRepository()
+    }()
+
+    private lazy var groupsRepository: GroupsRepositoryProtocol = {
+        if let simulation { return simulation.friendsRepository }
+        return GroupsRepository()
+    }()
+
+    lazy var fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol = {
+        if let simulation { return simulation.fetchMyFriendsUseCase }
+        return FetchMyFriendsUseCase(repository: friendsManagementRepository)
+    }()
+
+    lazy var fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol = {
+        if let simulation { return simulation.fetchMyGroupsUseCase }
+        return FetchMyGroupsUseCase(repository: groupsRepository)
+    }()
+
+    lazy var addFriendUseCase: AddFriendUseCaseProtocol = {
+        if let simulation { return simulation.addFriendUseCase }
+        return AddFriendUseCase(repository: friendsManagementRepository)
+    }()
+
+    lazy var joinGroupUseCase: JoinGroupUseCaseProtocol = {
+        if let simulation { return simulation.joinGroupUseCase }
+        return JoinGroupUseCase(repository: groupsRepository)
     }()
 
     // MARK: - Media

@@ -20,7 +20,8 @@ public struct CameraView: View {
                 }
             }
             .padding(SplickTheme.Spacing.lg)
-            .navigationTitle("New Post")
+            .navigationTitle("Camera")
+            .splickProfileToolbar()
             .sheet(isPresented: $showImagePicker) {
                 ImagePicker(image: $viewModel.capturedImage)
             }
