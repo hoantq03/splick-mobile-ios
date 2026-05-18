@@ -3,15 +3,24 @@ import DesignSystem
 import Common
 import SplickDomain
 
+private struct UserProfileRoute: Identifiable {
+    let user: UserSummary
+    var id: UUID { user.id }
+}
+
+
 public struct FriendsRootView: View {
     @StateObject private var viewModel: FriendsRootViewModel
     @StateObject private var addFriendViewModel: AddFriendViewModel
     @StateObject private var joinGroupViewModel: JoinGroupViewModel
+    @Environment(\.currentUserSummary) private var currentUserSummary
 
     @State private var showAddFriend = false
     @State private var showJoinGroup = false
     @State private var showAddFriendQR = false
     @State private var showJoinGroupQR = false
+    @State private var showMyQR = false
+    @State private var profileRoute: UserProfileRoute?
 
     public init(
         fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol,
@@ -61,6 +70,16 @@ public struct FriendsRootView: View {
             .splickProfileToolbar()
             .toolbar { toolbarContent }
             .refreshable { await viewModel.refresh() }
+            .navigationDestination(for: UUID.self) { groupId in
+                if let group = viewModel.groups.first(where: { $0.id == groupId }) {
+                    GroupDetailView(group: group) { user in
+                        profileRoute = UserProfileRoute(user: user)
+                    }
+                }
+            }
+            .sheet(item: $profileRoute) { route in
+                FriendUserProfileView(user: route.user)
+            }
             .sheet(isPresented: $showAddFriend) {
                 AddFriendSheet(viewModel: addFriendViewModel)
             }
@@ -77,6 +96,15 @@ public struct FriendsRootView: View {
                     Task { await joinGroupViewModel.joinFromQR(code) }
                 }
             }
+            .sheet(isPresented: $showMyQR) {
+                if let user = currentUserSummary {
+                    MyQRSheet(
+                        username: user.username,
+                        displayName: user.displayName,
+                        avatarURL: user.avatarURL
+                    )
+                }
+            }
         }
         .onFirstAppear {
             Task { await viewModel.load() }
@@ -87,6 +115,14 @@ public struct FriendsRootView: View {
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
             Menu {
+                Button {
+                    showMyQR = true
+                } label: {
+                    Label("Mã QR của tôi", systemImage: "qrcode")
+                }
+
+                Divider()
+
                 Button {
                     showAddFriend = true
                 } label: {
@@ -141,7 +177,12 @@ public struct FriendsRootView: View {
             ScrollView {
                 LazyVStack(spacing: SplickTheme.Spacing.xs) {
                     ForEach(viewModel.friends) { friend in
-                        FriendRowView(user: friend)
+                        Button {
+                            profileRoute = UserProfileRoute(user: friend)
+                        } label: {
+                            FriendRowView(user: friend)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 .padding(.horizontal, SplickTheme.Spacing.md)
@@ -173,7 +214,10 @@ public struct FriendsRootView: View {
             ScrollView {
                 LazyVStack(spacing: SplickTheme.Spacing.xs) {
                     ForEach(viewModel.groups) { group in
-                        GroupRowView(group: group)
+                        NavigationLink(value: group.id) {
+                            GroupRowView(group: group)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 .padding(.horizontal, SplickTheme.Spacing.md)
