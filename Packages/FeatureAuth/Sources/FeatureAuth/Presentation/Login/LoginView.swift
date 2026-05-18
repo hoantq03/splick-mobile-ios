@@ -47,12 +47,12 @@ public struct LoginView: View {
     // MARK: - Sections
 
     private var headerSection: some View {
-        VStack(spacing: SplickTheme.Spacing.xs) {
+        VStack(spacing: SplickTheme.Spacing.sm) {
+            SplickLogoMark(size: 96, layout: .markOnly, style: .fullColor)
             Text("Splick")
                 .font(SplickTheme.Typography.largeTitle)
                 .foregroundStyle(SplickTheme.Colors.primaryGradient)
-
-            Text("Share moments. Split bills.")
+            Text("Click moments, Split bills, Keep relations.")
                 .font(SplickTheme.Typography.callout)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
         }

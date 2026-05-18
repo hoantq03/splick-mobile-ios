@@ -13,6 +13,13 @@ final class AppState: ObservableObject {
 
     @Published var authState: AuthState = .unknown
     @Published var selectedTab: Tab = .feed
+    @Published private(set) var hasCompletedOnboarding: Bool
+
+    init() {
+        hasCompletedOnboarding = UserDefaults.standard.bool(
+            forKey: AppConstants.UserDefaults.isOnboardingCompleted
+        )
+    }
 
     var isAuthenticated: Bool {
         if case .authenticated = authState { return true }
@@ -26,6 +33,9 @@ final class AppState: ObservableObject {
 
     func setAuthenticated(user: User) {
         authState = .authenticated(user)
+        if !hasCompletedOnboarding {
+            completeOnboarding()
+        }
         Log.info("User authenticated: \(user.username)", category: .lifecycle)
     }
 
@@ -33,6 +43,12 @@ final class AppState: ObservableObject {
         authState = .unauthenticated
         selectedTab = .feed
         Log.info("User signed out", category: .lifecycle)
+    }
+
+    func completeOnboarding() {
+        hasCompletedOnboarding = true
+        UserDefaults.standard.set(true, forKey: AppConstants.UserDefaults.isOnboardingCompleted)
+        Log.info("Onboarding completed", category: .lifecycle)
     }
 }
 
