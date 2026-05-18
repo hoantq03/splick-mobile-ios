@@ -37,8 +37,13 @@ struct MainTabView: View {
             ExpenseListView(
                 viewModel: ExpenseListViewModel(
                     fetchExpensesUseCase: container.fetchExpensesUseCase,
-                    fetchDebtSummaryUseCase: container.fetchDebtSummaryUseCase
-                )
+                    fetchDebtSummaryUseCase: container.fetchDebtSummaryUseCase,
+                    currentUserId: appState.currentUser?.id
+                ),
+                userSearchUseCase: FriendsUserSearchAdapter(
+                    fetchFriendsUseCase: container.fetchFriendsUseCase
+                ),
+                currentUserId: appState.currentUser?.id
             )
             .tabItem {
                 Label(Tab.expenses.rawValue, systemImage: appState.selectedTab == .expenses ? Tab.expenses.selectedIcon : Tab.expenses.icon)

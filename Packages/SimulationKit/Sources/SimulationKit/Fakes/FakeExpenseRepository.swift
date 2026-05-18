@@ -27,6 +27,9 @@ public actor FakeExpenseRepository: ExpenseRepositoryProtocol {
     }
 
     public func seed() {
+        let grabSettledAt = Date().addingTimeInterval(-82800)
+        let internetPartialPaidAt = Date().addingTimeInterval(-86400)
+
         expenses = [
             Expense(
                 id: UUID(), description: "Korean BBQ dinner",
@@ -34,7 +37,10 @@ public actor FakeExpenseRepository: ExpenseRepositoryProtocol {
                 paidBy: friend1,
                 splits: [
                     ExpenseSplit(id: UUID(), user: currentUser, amount: 150000, isPaid: false),
-                    ExpenseSplit(id: UUID(), user: friend1, amount: 150000, isPaid: true),
+                    ExpenseSplit(
+                        id: UUID(), user: friend1, amount: 150000, isPaid: true,
+                        paidAt: Date().addingTimeInterval(-3500)
+                    ),
                     ExpenseSplit(id: UUID(), user: friend2, amount: 150000, isPaid: false),
                 ],
                 category: .food, status: .pending,
@@ -45,11 +51,16 @@ public actor FakeExpenseRepository: ExpenseRepositoryProtocol {
                 totalAmount: 85000, currency: "VND",
                 paidBy: currentUser,
                 splits: [
-                    ExpenseSplit(id: UUID(), user: friend1, amount: 42500, isPaid: true),
-                    ExpenseSplit(id: UUID(), user: currentUser, amount: 42500, isPaid: true),
+                    ExpenseSplit(
+                        id: UUID(), user: friend1, amount: 42500, isPaid: true, paidAt: grabSettledAt
+                    ),
+                    ExpenseSplit(
+                        id: UUID(), user: currentUser, amount: 42500, isPaid: true, paidAt: grabSettledAt
+                    ),
                 ],
                 category: .transport, status: .settled,
-                createdAt: Date().addingTimeInterval(-86400)
+                createdAt: Date().addingTimeInterval(-86400),
+                settledAt: grabSettledAt
             ),
             Expense(
                 id: UUID(), description: "Monthly internet bill",
@@ -57,8 +68,13 @@ public actor FakeExpenseRepository: ExpenseRepositoryProtocol {
                 paidBy: friend2,
                 splits: [
                     ExpenseSplit(id: UUID(), user: currentUser, amount: 100000, isPaid: false),
-                    ExpenseSplit(id: UUID(), user: friend1, amount: 100000, isPaid: true),
-                    ExpenseSplit(id: UUID(), user: friend2, amount: 100000, isPaid: true),
+                    ExpenseSplit(
+                        id: UUID(), user: friend1, amount: 100000, isPaid: true, paidAt: internetPartialPaidAt
+                    ),
+                    ExpenseSplit(
+                        id: UUID(), user: friend2, amount: 100000, isPaid: true,
+                        paidAt: Date().addingTimeInterval(-170000)
+                    ),
                 ],
                 category: .utilities, status: .partiallySettled,
                 createdAt: Date().addingTimeInterval(-172800)

@@ -11,6 +11,7 @@ struct ExpenseResponseDTO: Decodable {
     let category: String
     let status: String
     let createdAt: Date
+    let settledAt: Date?
 }
 
 struct ExpenseUserDTO: Decodable {
@@ -25,6 +26,7 @@ struct ExpenseSplitDTO: Decodable {
     let user: ExpenseUserDTO
     let amount: String
     let isPaid: Bool
+    let paidAt: Date?
 }
 
 struct CreateExpenseRequestDTO: Encodable {

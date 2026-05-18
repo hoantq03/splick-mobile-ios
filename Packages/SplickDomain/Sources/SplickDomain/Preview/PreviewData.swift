@@ -113,7 +113,10 @@ public enum PreviewData {
         currency: "VND",
         paidBy: friendUser,
         splits: [
-            ExpenseSplit(id: UUID(), user: friendUser, amount: 150000, isPaid: true),
+            ExpenseSplit(
+                id: UUID(), user: friendUser, amount: 150000, isPaid: true,
+                paidAt: Date().addingTimeInterval(-3500)
+            ),
             ExpenseSplit(id: UUID(), user: friend2, amount: 150000, isPaid: false),
             ExpenseSplit(
                 id: UUID(),
@@ -142,11 +145,15 @@ public enum PreviewData {
                 displayName: currentUser.displayName, avatarURL: nil
             ),
             splits: [
-                ExpenseSplit(id: UUID(), user: friendUser, amount: 42500, isPaid: true),
+                ExpenseSplit(
+                    id: UUID(), user: friendUser, amount: 42500, isPaid: true,
+                    paidAt: Date().addingTimeInterval(-82800)
+                ),
             ],
             category: .transport,
             status: .settled,
-            createdAt: Date().addingTimeInterval(-86400)
+            createdAt: Date().addingTimeInterval(-86400),
+            settledAt: Date().addingTimeInterval(-82800)
         ),
         Expense(
             id: UUID(),

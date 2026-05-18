@@ -13,7 +13,8 @@ enum ExpenseMapper {
             groupId: dto.groupId,
             category: ExpenseCategory(rawValue: dto.category) ?? .general,
             status: ExpenseStatus(rawValue: dto.status) ?? .pending,
-            createdAt: dto.createdAt
+            createdAt: dto.createdAt,
+            settledAt: dto.settledAt
         )
     }
 
@@ -22,7 +23,8 @@ enum ExpenseMapper {
             id: dto.id,
             user: toUserSummary(dto.user),
             amount: Decimal(string: dto.amount) ?? 0,
-            isPaid: dto.isPaid
+            isPaid: dto.isPaid,
+            paidAt: dto.paidAt
         )
     }
 

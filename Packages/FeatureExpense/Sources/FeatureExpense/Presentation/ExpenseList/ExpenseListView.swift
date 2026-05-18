@@ -5,9 +5,19 @@ import SplickDomain
 
 public struct ExpenseListView: View {
     @StateObject private var viewModel: ExpenseListViewModel
+    @StateObject private var userSearchViewModel: ExpenseUserSearchViewModel
+    private let currentUserId: UUID?
 
-    public init(viewModel: @autoclosure @escaping () -> ExpenseListViewModel) {
+    public init(
+        viewModel: @autoclosure @escaping () -> ExpenseListViewModel,
+        userSearchUseCase: UserSearchUseCaseProtocol? = nil,
+        currentUserId: UUID? = nil
+    ) {
         _viewModel = StateObject(wrappedValue: viewModel())
+        _userSearchViewModel = StateObject(
+            wrappedValue: ExpenseUserSearchViewModel(useCase: userSearchUseCase)
+        )
+        self.currentUserId = currentUserId
     }
 
     public var body: some View {
@@ -17,7 +27,7 @@ public struct ExpenseListView: View {
                 case .idle, .loading:
                     LoadingView(message: "Loading expenses...")
 
-                case .loaded(let expenses) where expenses.isEmpty:
+                case .loaded where viewModel.expenses.isEmpty:
                     EmptyStateView(
                         icon: "dollarsign.circle",
                         title: "No Expenses",
@@ -47,21 +57,57 @@ public struct ExpenseListView: View {
                     }
                 }
             }
-            .refreshable { await viewModel.load() }
+            .refreshable { await viewModel.load(isPullToRefresh: true) }
         }
         .onFirstAppear {
+            viewModel.updateCurrentUserId(currentUserId)
             Task { await viewModel.load() }
+        }
+        .onChange(of: currentUserId) { userId in
+            viewModel.updateCurrentUserId(userId)
         }
     }
 
     private var expenseContent: some View {
-        ScrollView {
+        let displayed = viewModel.filteredExpenses
+        return ScrollView {
             VStack(spacing: SplickTheme.Spacing.md) {
-                debtSummaryCard
-                expensesList
+                ExpenseFilterBarView(
+                    viewModel: viewModel,
+                    userSearchViewModel: userSearchViewModel
+                )
+
+                VStack(spacing: SplickTheme.Spacing.md) {
+                    debtSummaryCard
+
+                    if displayed.isEmpty {
+                        filteredEmptyState
+                    } else {
+                        expensesList(displayed)
+                    }
+                }
+                .id(viewModel.filterSignature)
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
         }
+    }
+
+    private var filteredEmptyState: some View {
+        VStack(spacing: SplickTheme.Spacing.sm) {
+            Image(systemName: "line.3.horizontal.decrease.circle")
+                .font(.system(size: 36))
+                .foregroundStyle(SplickTheme.Colors.textTertiary)
+            Text("No matching expenses")
+                .font(SplickTheme.Typography.headline)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
+            Text("Try changing filters or clearing them.")
+                .font(SplickTheme.Typography.caption)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, SplickTheme.Spacing.xl)
+        .splickCard()
     }
 
     private var debtSummaryCard: some View {
@@ -89,9 +135,9 @@ public struct ExpenseListView: View {
         .splickCard()
     }
 
-    private var expensesList: some View {
+    private func expensesList(_ expenses: [Expense]) -> some View {
         LazyVStack(spacing: SplickTheme.Spacing.xs) {
-            ForEach(viewModel.expenses) { expense in
+            ForEach(expenses) { expense in
                 ExpenseRowView(expense: expense)
             }
         }
@@ -127,6 +173,16 @@ struct ExpenseRowView: View {
                 Text("Paid by \(expense.paidBy.displayName)")
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
+
+                Text("Created \(expense.createdAt.formatted(date: .abbreviated, time: .shortened))")
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.textTertiary)
+
+                if let settledAt = expense.displaySettledAt {
+                    Text("Settled \(settledAt.formatted(date: .abbreviated, time: .shortened))")
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.success.opacity(0.85))
+                }
             }
 
             Spacer()
