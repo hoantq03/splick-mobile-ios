@@ -35,6 +35,10 @@ public final class TabBarScrollState: ObservableObject {
         setVisible(true)
     }
 
+    public func hide() {
+        setVisible(false)
+    }
+
     private func setVisible(_ visible: Bool) {
         guard isVisible != visible else { return }
         isVisible = visible

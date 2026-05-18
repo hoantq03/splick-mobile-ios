@@ -10,6 +10,7 @@ private struct ProfileRoute: Identifiable {
 
 public struct FeedView: View {
     @StateObject private var viewModel: FeedViewModel
+    @Environment(\.openPostCaptureFlow) private var openPostCaptureFlow
     private let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
     @State private var profileRoute: ProfileRoute?
     @State private var companionsRoute: CompanionsSheetRoute?
@@ -37,7 +38,9 @@ public struct FeedView: View {
                         title: "No Posts Yet",
                         message: "Share a moment with your friends to get started!",
                         actionTitle: "Take a Photo"
-                    ) {}
+                    ) {
+                        openPostCaptureFlow?()
+                    }
 
                 case .loaded:
                     feedList

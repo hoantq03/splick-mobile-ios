@@ -6,6 +6,6 @@ public protocol FeedRepositoryProtocol: Sendable {
     func fetchPost(id: UUID) async throws -> Post
     func addReaction(postId: UUID, emoji: String) async throws -> Reaction
     func removeReaction(postId: UUID, reactionId: UUID) async throws
-    func createPost(imageData: Data, caption: String?, groupId: UUID?) async throws -> Post
+    func createPost(_ input: CreatePostInput) async throws -> Post
     func deletePost(id: UUID) async throws
 }

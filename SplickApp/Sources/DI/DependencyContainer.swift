@@ -76,6 +76,11 @@ final class DependencyContainer: ObservableObject {
         return DeletePostUseCase(repository: feedRepository)
     }()
 
+    lazy var createPostUseCase: CreatePostUseCaseProtocol = {
+        if let simulation { return simulation.createPostUseCase }
+        return CreatePostUseCase(repository: feedRepository)
+    }()
+
     private lazy var friendsRepository: FriendsRepositoryProtocol = {
         FriendsRepository()
     }()

@@ -60,11 +60,9 @@ struct MainTabView: View {
                 )
 
             case .camera:
-                CameraView(
-                    viewModel: CameraViewModel(
-                        uploadMediaUseCase: container.uploadMediaUseCase
-                    )
-                )
+                PostCaptureFlowView(onDismiss: {
+                    appState.selectedTab = .feed
+                })
 
             case .notifications:
                 NotificationListView(
@@ -83,6 +81,9 @@ struct MainTabView: View {
         .modifier(FloatingTabBarContentPadding())
         .environment(\.openProfileSettings) {
             appState.showProfileSettings = true
+        }
+        .environment(\.openPostCaptureFlow) {
+            appState.selectedTab = .camera
         }
         .environment(\.currentUserSummary, currentUserSummary)
         .environment(\.tabBarScrollState, tabBarScrollState)

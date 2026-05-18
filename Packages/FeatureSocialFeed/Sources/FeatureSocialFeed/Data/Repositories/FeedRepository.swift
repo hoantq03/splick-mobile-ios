@@ -32,7 +32,10 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
         try await apiClient.request(FeedEndpoint.removeReaction(postId: postId, reactionId: reactionId))
     }
 
-    public func createPost(imageData: Data, caption: String?, groupId: UUID?) async throws -> Post {
+    public func createPost(_ input: CreatePostInput) async throws -> Post {
+        guard let imageData = input.imageData else {
+            throw NetworkError.unknown("Missing image data")
+        }
         let dto: PostDTO = try await apiClient.upload(
             FeedEndpoint.feed(page: 0, limit: 0),
             data: imageData,

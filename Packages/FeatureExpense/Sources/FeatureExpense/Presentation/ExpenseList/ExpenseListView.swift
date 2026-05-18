@@ -6,6 +6,7 @@ import SplickDomain
 public struct ExpenseListView: View {
     @StateObject private var viewModel: ExpenseListViewModel
     @StateObject private var userSearchViewModel: ExpenseUserSearchViewModel
+    @Environment(\.openPostCaptureFlow) private var openPostCaptureFlow
     private let currentUserId: UUID?
 
     public init(
@@ -34,7 +35,7 @@ public struct ExpenseListView: View {
                         message: "Create your first shared expense to start splitting bills.",
                         actionTitle: "Add Expense"
                     ) {
-                        viewModel.showCreateExpense = true
+                        openPostCapture()
                     }
 
                 case .loaded:
@@ -51,7 +52,7 @@ public struct ExpenseListView: View {
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
-                        viewModel.showCreateExpense = true
+                        openPostCapture()
                     } label: {
                         Image(systemName: "plus.circle.fill")
                             .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
@@ -143,6 +144,10 @@ public struct ExpenseListView: View {
                 ExpenseRowView(expense: expense)
             }
         }
+    }
+
+    private func openPostCapture() {
+        openPostCaptureFlow?()
     }
 
     private func formatAmount(_ amount: Decimal) -> String {

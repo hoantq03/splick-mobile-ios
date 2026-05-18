@@ -238,20 +238,29 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
         logger.success("Reaction removed")
     }
 
-    public func createPost(imageData: Data, caption: String?, groupId: UUID?) async throws -> Post {
-        logger.log("Create post: \(imageData.count) bytes, caption=\(caption ?? "nil")")
+    public func createPost(_ input: CreatePostInput) async throws -> Post {
+        logger.log("Create post: \(input.imageData?.count ?? 0) bytes, kind=\(input.feedKind)")
         try await Task.sleep(for: .milliseconds(800))
+
+        let companions = input.companionIds.map { id in
+            UserSummary(id: id, username: "friend", displayName: "Friend", avatarURL: nil)
+        }
 
         let post = Post(
             id: UUID(),
             author: UserSummary(id: UUID(), username: "namtran", displayName: "Nam Tran", avatarURL: nil),
-            imageURL: URL(string: "https://picsum.photos/400/500")!,
-            caption: caption,
+            imageURL: URL(string: "https://picsum.photos/seed/new/\(Int.random(in: 1...999))/400/500")!,
+            caption: input.caption,
             reactions: [],
-            groupId: groupId,
+            groupId: input.groupId,
             createdAt: .now,
-            feedKind: .checkIn,
-            checkInPlace: "Splick HQ",
+            mediaType: input.mediaType,
+            videoURL: input.videoURL,
+            videoDurationSeconds: input.mediaType == .video ? 12 : nil,
+            companions: companions,
+            feedKind: input.feedKind,
+            checkInPlace: input.checkInPlace,
+            billSplit: input.billSplit,
             viewCount: 0
         )
         posts.insert(post, at: 0)
