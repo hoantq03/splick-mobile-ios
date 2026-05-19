@@ -4,7 +4,8 @@ import SplickDomain
 
 public protocol RegisterUseCaseProtocol: Sendable {
     func execute(
-        email: String,
+        channel: AuthRegistrationChannel,
+        identifier: String,
         username: String,
         password: String,
         otpCode: String,
@@ -22,19 +23,32 @@ public final class RegisterUseCase: RegisterUseCaseProtocol, Sendable {
     }
 
     public func execute(
-        email: String,
+        channel: AuthRegistrationChannel,
+        identifier: String,
         username: String,
         password: String,
         otpCode: String,
         displayName: String?
     ) async throws -> AuthSession {
-        let session = try await repository.register(
-            email: email,
-            username: username,
-            password: password,
-            otpCode: otpCode,
-            displayName: displayName
-        )
+        let session: AuthSession
+        switch channel {
+        case .email:
+            session = try await repository.registerWithEmail(
+                email: identifier,
+                username: username,
+                password: password,
+                otpCode: otpCode,
+                displayName: displayName
+            )
+        case .phone:
+            session = try await repository.registerWithPhone(
+                phoneNumber: identifier,
+                username: username,
+                password: password,
+                otpCode: otpCode,
+                displayName: displayName
+            )
+        }
         guard session.user.status.allowsSignIn else {
             throw AuthError.accountLocked
         }
