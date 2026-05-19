@@ -22,27 +22,22 @@ final class DependencyContainer: ObservableObject {
     let userDefaultsService: UserDefaultsServiceProtocol
     private let simulation: SimulationContainer?
 
-    lazy var apiClient: APIClientProtocol = {
-        APIClient(tokenProvider: tokenProvider)
-    }()
-
-    // MARK: - Session
-
+    let apiClient: APIClientProtocol
     let sessionManager: SessionManagerProtocol
 
     // MARK: - Auth
 
-    private lazy var authRepository: AuthRepositoryProtocol = {
-        AuthRepository(
-            apiClient: apiClient,
-            keychainService: keychainService,
-            tokenProvider: tokenProvider
-        )
-    }()
+    private let authRepository: AuthRepositoryProtocol
+    let refreshTokenUseCase: RefreshTokenUseCaseProtocol
+    let restoreSessionUseCase: RestoreSessionUseCaseProtocol
 
     lazy var loginUseCase: LoginUseCaseProtocol = {
         if let simulation { return simulation.loginUseCase }
         return LoginUseCase(repository: authRepository, sessionManager: sessionManager)
+    }()
+
+    lazy var requestEmailOtpUseCase: RequestEmailOtpUseCaseProtocol = {
+        RequestEmailOtpUseCase(repository: authRepository)
     }()
 
     lazy var registerUseCase: RegisterUseCaseProtocol = {
@@ -180,10 +175,52 @@ final class DependencyContainer: ObservableObject {
             let simulation = SimulationContainer(loggerModule: "SplickApp")
             self.simulation = simulation
             self.sessionManager = simulation.sessionManager
+            self.apiClient = APIClient(tokenProvider: tokenProvider)
+            self.authRepository = simulation.authRepository
+            self.refreshTokenUseCase = RefreshTokenUseCase(
+                repository: simulation.authRepository,
+                sessionManager: simulation.sessionManager,
+                tokenProvider: tokenProvider
+            )
+            self.restoreSessionUseCase = RestoreSessionUseCase(
+                repository: simulation.authRepository,
+                sessionManager: simulation.sessionManager,
+                keychainService: keychainService,
+                tokenProvider: tokenProvider,
+                refreshTokenUseCase: refreshTokenUseCase
+            )
             Task { await simulation.seedTestData() }
-        } else {
-            self.simulation = nil
-            self.sessionManager = SessionManager()
+            return
         }
+
+        self.simulation = nil
+        self.sessionManager = SessionManager()
+
+        let refreshCoordinator = TokenRefreshCoordinator()
+        let apiClient = APIClient(tokenProvider: tokenProvider, tokenRefresher: refreshCoordinator)
+        let authRepository = AuthRepository(
+            apiClient: apiClient,
+            keychainService: keychainService,
+            tokenProvider: tokenProvider
+        )
+        let refreshTokenUseCase = RefreshTokenUseCase(
+            repository: authRepository,
+            sessionManager: sessionManager,
+            tokenProvider: tokenProvider
+        )
+        refreshCoordinator.configure { [refreshTokenUseCase] in
+            try await refreshTokenUseCase.refreshSession()
+        }
+
+        self.apiClient = apiClient
+        self.authRepository = authRepository
+        self.refreshTokenUseCase = refreshTokenUseCase
+        self.restoreSessionUseCase = RestoreSessionUseCase(
+            repository: authRepository,
+            sessionManager: sessionManager,
+            keychainService: keychainService,
+            tokenProvider: tokenProvider,
+            refreshTokenUseCase: refreshTokenUseCase
+        )
     }
 }
