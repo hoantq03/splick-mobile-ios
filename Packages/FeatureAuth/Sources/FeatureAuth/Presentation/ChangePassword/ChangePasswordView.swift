@@ -47,18 +47,7 @@ public struct ChangePasswordView: View {
                         SplickButton("Send code to email", style: .secondary) {
                             Task { await viewModel.requestEmailCode() }
                         }
-                        SplickTextField(
-                            "Verification code",
-                            text: $viewModel.otpCode,
-                            errorMessage: viewModel.otpError,
-                            icon: "number"
-                        )
-                        .textContentType(.oneTimeCode)
-                        .keyboardType(.numberPad)
-                        .onChange(of: viewModel.otpCode) { newValue in
-                            let digits = newValue.filter(\.isNumber)
-                            viewModel.otpCode = String(digits.prefix(6))
-                        }
+                        SplickOtpField(code: $viewModel.otpCode, errorMessage: viewModel.otpError)
                     }
                 }
 

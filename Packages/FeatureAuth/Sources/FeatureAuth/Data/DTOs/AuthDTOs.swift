@@ -3,12 +3,16 @@ import Foundation
 struct GoogleSignInRequestDTO: Encodable {
     let idToken: String
     let deviceInfo: String?
+    let deviceName: String?
+    let loginLocation: String?
 }
 
 struct LoginRequestDTO: Encodable {
     let email: String
     let password: String
     let deviceInfo: String?
+    let deviceName: String?
+    let loginLocation: String?
 }
 
 struct EmailOtpRequestDTO: Encodable {
@@ -23,6 +27,8 @@ struct PhoneOtpVerifyRequestDTO: Encodable {
     let phoneNumber: String
     let otpCode: String
     let deviceInfo: String?
+    let deviceName: String?
+    let loginLocation: String?
 }
 
 struct EmailRegisterRequestDTO: Encodable {
@@ -31,6 +37,9 @@ struct EmailRegisterRequestDTO: Encodable {
     let password: String
     let otpCode: String
     let displayName: String?
+    let deviceInfo: String?
+    let deviceName: String?
+    let loginLocation: String?
 }
 
 struct PhoneRegisterRequestDTO: Encodable {
@@ -39,6 +48,9 @@ struct PhoneRegisterRequestDTO: Encodable {
     let password: String
     let otpCode: String
     let displayName: String?
+    let deviceInfo: String?
+    let deviceName: String?
+    let loginLocation: String?
 }
 
 struct AuthResponseDTO: Decodable {
@@ -73,6 +85,8 @@ struct ResetPasswordRequestDTO: Encodable {
     let otpCode: String
     let newPassword: String
     let deviceInfo: String?
+    let deviceName: String?
+    let loginLocation: String?
 }
 
 struct ChangePasswordRequestDTO: Encodable {
@@ -80,6 +94,8 @@ struct ChangePasswordRequestDTO: Encodable {
     let otpCode: String?
     let newPassword: String
     let deviceInfo: String?
+    let deviceName: String?
+    let loginLocation: String?
 }
 
 struct LogoutRequestDTO: Encodable {
@@ -98,9 +114,23 @@ struct LinkGoogleRequestDTO: Encodable {
 struct SessionDTO: Decodable {
     let id: UUID
     let deviceInfo: String?
+    let deviceName: String?
+    let loginIp: String?
+    let loginLocation: String?
     let createdAt: Date
     let expiresAt: Date
     let current: Bool
+}
+
+struct LinkPhoneAccountRequestDTO: Encodable {
+    let phoneNumber: String
+    let otpCode: String
+}
+
+struct LinkEmailAccountRequestDTO: Encodable {
+    let email: String?
+    let otpCode: String
+    let password: String
 }
 
 struct ConnectedAccountsDTO: Decodable {

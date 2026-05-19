@@ -23,6 +23,10 @@ enum AuthEndpoint: APIEndpoint {
     case connectedAccounts
     case linkGoogle(LinkGoogleRequestDTO)
     case unlinkGoogle(AccountActionRequestDTO)
+    case requestLinkPhoneOtp(PhoneOtpRequestDTO)
+    case linkPhone(LinkPhoneAccountRequestDTO)
+    case requestLinkEmailOtp(EmailOtpRequestDTO)
+    case linkEmail(LinkEmailAccountRequestDTO)
 
     var path: String {
         switch self {
@@ -46,6 +50,10 @@ enum AuthEndpoint: APIEndpoint {
         case .connectedAccounts: return "/v1/auth/connected-accounts"
         case .linkGoogle: return "/v1/auth/connected-accounts/google"
         case .unlinkGoogle: return "/v1/auth/connected-accounts/google"
+        case .requestLinkPhoneOtp: return "/v1/auth/connected-accounts/phone/otp/request"
+        case .linkPhone: return "/v1/auth/connected-accounts/phone"
+        case .requestLinkEmailOtp: return "/v1/auth/connected-accounts/email/otp/request"
+        case .linkEmail: return "/v1/auth/connected-accounts/email"
         }
     }
 
@@ -54,7 +62,8 @@ enum AuthEndpoint: APIEndpoint {
         case .googleSignIn, .login, .requestEmailOtp, .requestPhoneOtp, .verifyPhoneOtp,
              .registerEmail, .registerPhone, .refreshToken,
              .forgotPassword, .resetPassword, .changePassword, .logout, .revokeAllSessions,
-             .deactivateAccount, .linkGoogle:
+             .deactivateAccount, .linkGoogle, .requestLinkPhoneOtp, .linkPhone,
+             .requestLinkEmailOtp, .linkEmail:
             return .post
         case .me, .listSessions, .connectedAccounts:
             return .get
@@ -81,6 +90,10 @@ enum AuthEndpoint: APIEndpoint {
         case .deleteAccount(let dto): return dto
         case .linkGoogle(let dto): return dto
         case .unlinkGoogle(let dto): return dto
+        case .requestLinkPhoneOtp(let dto): return dto
+        case .linkPhone(let dto): return dto
+        case .requestLinkEmailOtp(let dto): return dto
+        case .linkEmail(let dto): return dto
         case .me, .listSessions, .revokeAllSessions, .revokeSession, .connectedAccounts:
             return nil
         }
@@ -103,7 +116,8 @@ enum AuthEndpoint: APIEndpoint {
              .forgotPassword, .resetPassword:
             return false
         case .changePassword, .logout, .me, .listSessions, .revokeAllSessions, .revokeSession,
-             .deactivateAccount, .deleteAccount, .connectedAccounts, .linkGoogle, .unlinkGoogle:
+             .deactivateAccount, .deleteAccount, .connectedAccounts, .linkGoogle, .unlinkGoogle,
+             .requestLinkPhoneOtp, .linkPhone, .requestLinkEmailOtp, .linkEmail:
             return true
         }
     }

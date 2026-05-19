@@ -90,6 +90,7 @@ public enum AuthError: Error, Equatable {
     case accountInactive
     case cannotUnlinkLastAuthMethod
     case googleAlreadyLinked
+    case providerAlreadyLinked
     case invalidOtp(String)
     case otpRateLimited
     case registrationFailed(String)
@@ -109,6 +110,8 @@ public enum AuthError: Error, Equatable {
             return "Keep at least one sign-in method on your account."
         case .googleAlreadyLinked:
             return "This Google account is already linked to another user."
+        case .providerAlreadyLinked:
+            return "This sign-in method is already connected."
         case .invalidOtp(let message): return message
         case .otpRateLimited:
             return "Too many verification attempts. Please wait a few minutes before requesting a new code."

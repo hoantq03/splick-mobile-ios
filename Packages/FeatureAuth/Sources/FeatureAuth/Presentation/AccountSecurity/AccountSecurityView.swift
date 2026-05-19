@@ -58,8 +58,7 @@ public struct AccountSecurityView: View {
                     SplickButton("Send code to email", style: .secondary) {
                         Task { await sendCode() }
                     }
-                    SplickTextField("Verification code", text: $otpCode, icon: "number")
-                        .keyboardType(.numberPad)
+                    SplickOtpField(code: $otpCode)
                 }
 
                 if let infoMessage {

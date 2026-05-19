@@ -20,17 +20,26 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
     }
 
     public func signInWithGoogle(idToken: String) async throws -> AuthSession {
-        let dto = GoogleSignInRequestDTO(idToken: idToken, deviceInfo: DeviceInfo.current)
+        let session = SessionMetadata.current
+        let dto = GoogleSignInRequestDTO(
+            idToken: idToken,
+            deviceInfo: session.deviceInfo,
+            deviceName: session.deviceName,
+            loginLocation: session.loginLocation
+        )
         let response: AuthResponseDTO = try await apiClient.request(AuthEndpoint.googleSignIn(dto))
         try await persistSession(response)
         return AuthMapper.toAuthSession(response)
     }
 
     public func login(email: String, password: String) async throws -> AuthSession {
+        let session = SessionMetadata.current
         let dto = LoginRequestDTO(
             email: email,
             password: password,
-            deviceInfo: DeviceInfo.current
+            deviceInfo: session.deviceInfo,
+            deviceName: session.deviceName,
+            loginLocation: session.loginLocation
         )
         let response: AuthResponseDTO = try await apiClient.request(AuthEndpoint.login(dto))
         try await persistSession(response)
@@ -48,10 +57,13 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
     }
 
     public func verifyPhoneOtp(phoneNumber: String, otpCode: String) async throws -> AuthSession {
+        let session = SessionMetadata.current
         let dto = PhoneOtpVerifyRequestDTO(
             phoneNumber: phoneNumber,
             otpCode: otpCode,
-            deviceInfo: DeviceInfo.current
+            deviceInfo: session.deviceInfo,
+            deviceName: session.deviceName,
+            loginLocation: session.loginLocation
         )
         let response: AuthResponseDTO = try await apiClient.request(AuthEndpoint.verifyPhoneOtp(dto))
         try await persistSession(response)
@@ -65,12 +77,16 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
         otpCode: String,
         displayName: String?
     ) async throws -> AuthSession {
+        let session = SessionMetadata.current
         let dto = EmailRegisterRequestDTO(
             email: email,
             username: username,
             password: password,
             otpCode: otpCode,
-            displayName: displayName
+            displayName: displayName,
+            deviceInfo: session.deviceInfo,
+            deviceName: session.deviceName,
+            loginLocation: session.loginLocation
         )
         let response: AuthResponseDTO = try await apiClient.request(AuthEndpoint.registerEmail(dto))
         try await persistSession(response)
@@ -84,12 +100,16 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
         otpCode: String,
         displayName: String?
     ) async throws -> AuthSession {
+        let session = SessionMetadata.current
         let dto = PhoneRegisterRequestDTO(
             phoneNumber: phoneNumber,
             username: username,
             password: password,
             otpCode: otpCode,
-            displayName: displayName
+            displayName: displayName,
+            deviceInfo: session.deviceInfo,
+            deviceName: session.deviceName,
+            loginLocation: session.loginLocation
         )
         let response: AuthResponseDTO = try await apiClient.request(AuthEndpoint.registerPhone(dto))
         try await persistSession(response)
@@ -113,11 +133,14 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
         otpCode: String,
         newPassword: String
     ) async throws -> AuthSession {
+        let session = SessionMetadata.current
         let dto = ResetPasswordRequestDTO(
             email: email,
             otpCode: otpCode,
             newPassword: newPassword,
-            deviceInfo: DeviceInfo.current
+            deviceInfo: session.deviceInfo,
+            deviceName: session.deviceName,
+            loginLocation: session.loginLocation
         )
         let response: AuthResponseDTO = try await apiClient.request(AuthEndpoint.resetPassword(dto))
         try await persistSession(response)
@@ -129,11 +152,14 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
         otpCode: String?,
         newPassword: String
     ) async throws -> AuthSession {
+        let session = SessionMetadata.current
         let dto = ChangePasswordRequestDTO(
             currentPassword: currentPassword,
             otpCode: otpCode,
             newPassword: newPassword,
-            deviceInfo: DeviceInfo.current
+            deviceInfo: session.deviceInfo,
+            deviceName: session.deviceName,
+            loginLocation: session.loginLocation
         )
         let response: AuthResponseDTO = try await apiClient.request(AuthEndpoint.changePassword(dto))
         try await persistSession(response)
@@ -197,6 +223,26 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
         try await apiClient.request(AuthEndpoint.unlinkGoogle(dto))
     }
 
+    public func requestLinkPhoneOtp(phoneNumber: String) async throws {
+        let dto = PhoneOtpRequestDTO(phoneNumber: phoneNumber)
+        try await apiClient.request(AuthEndpoint.requestLinkPhoneOtp(dto))
+    }
+
+    public func linkPhoneAccount(phoneNumber: String, otpCode: String) async throws {
+        let dto = LinkPhoneAccountRequestDTO(phoneNumber: phoneNumber, otpCode: otpCode)
+        try await apiClient.request(AuthEndpoint.linkPhone(dto))
+    }
+
+    public func requestLinkEmailOtp(email: String?) async throws {
+        let dto = EmailOtpRequestDTO(email: email ?? "")
+        try await apiClient.request(AuthEndpoint.requestLinkEmailOtp(dto))
+    }
+
+    public func linkEmailAccount(email: String?, otpCode: String, password: String) async throws {
+        let dto = LinkEmailAccountRequestDTO(email: email, otpCode: otpCode, password: password)
+        try await apiClient.request(AuthEndpoint.linkEmail(dto))
+    }
+
     // MARK: - Private
 
     private func clearLocalCredentials() async {
@@ -218,15 +264,5 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
             access: response.accessToken,
             refresh: response.refreshToken
         )
-    }
-}
-
-private enum DeviceInfo {
-    static var current: String {
-        #if os(iOS)
-        return "Splick iOS"
-        #else
-        return "Splick"
-        #endif
     }
 }

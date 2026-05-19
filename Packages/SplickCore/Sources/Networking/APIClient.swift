@@ -188,6 +188,8 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
             return AuthError.cannotUnlinkLastAuthMethod
         case "GOOGLE_ALREADY_LINKED":
             return AuthError.googleAlreadyLinked
+        case "PROVIDER_ALREADY_LINKED":
+            return AuthError.providerAlreadyLinked
         case "CONFLICT":
             return AuthError.emailAlreadyExists
         case "EMAIL_ALREADY_REGISTERED":

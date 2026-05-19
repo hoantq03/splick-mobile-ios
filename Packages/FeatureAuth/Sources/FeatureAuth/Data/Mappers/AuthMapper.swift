@@ -33,6 +33,9 @@ enum AuthMapper {
         UserSession(
             id: dto.id,
             deviceInfo: dto.deviceInfo,
+            deviceName: dto.deviceName,
+            loginIp: dto.loginIp,
+            loginLocation: dto.loginLocation,
             createdAt: dto.createdAt,
             expiresAt: dto.expiresAt,
             isCurrent: dto.current

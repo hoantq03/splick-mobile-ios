@@ -40,18 +40,22 @@ public struct ConnectedAccountsView: View {
                 providerRow(
                     title: "Email & password",
                     provider: accounts.emailPassword,
-                    actionTitle: nil,
+                    actionTitle: accounts.emailPassword.isLinked ? nil : "Connect",
                     isLoading: false,
-                    isDisabled: true
-                ) {}
+                    isDisabled: false
+                ) {
+                    viewModel.showConnectEmailSheet = true
+                }
 
                 providerRow(
                     title: "Phone",
                     provider: accounts.phone,
-                    actionTitle: nil,
+                    actionTitle: accounts.phone.isLinked ? nil : "Connect",
                     isLoading: false,
-                    isDisabled: true
-                ) {}
+                    isDisabled: false
+                ) {
+                    viewModel.showConnectPhoneSheet = true
+                }
             }
         }
         .navigationTitle("Connected accounts")
@@ -59,7 +63,13 @@ public struct ConnectedAccountsView: View {
         .task { await viewModel.load() }
         .refreshable { await viewModel.load() }
         .sheet(isPresented: $viewModel.showUnlinkSheet) {
-            unlinkSheet
+            unlinkGoogleSheet
+        }
+        .sheet(isPresented: $viewModel.showConnectPhoneSheet) {
+            connectPhoneSheet
+        }
+        .sheet(isPresented: $viewModel.showConnectEmailSheet) {
+            connectEmailSheet
         }
     }
 
@@ -76,7 +86,7 @@ public struct ConnectedAccountsView: View {
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
                 Text(title)
                     .font(SplickTheme.Typography.body)
-                Text(provider.isLinked ? (provider.detail ?? "Linked") : "Not connected")
+                Text(provider.isLinked ? (provider.detail ?? "Connected") : "Not connected")
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
             }
@@ -88,7 +98,96 @@ public struct ConnectedAccountsView: View {
         }
     }
 
-    private var unlinkSheet: some View {
+    private var connectPhoneSheet: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: SplickTheme.Spacing.lg) {
+                    Text("Enter your phone number. We will send a verification code by SMS.")
+                        .font(SplickTheme.Typography.callout)
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+                        .multilineTextAlignment(.center)
+
+                    SplickTextField("Phone number", text: $viewModel.connectPhoneNumber, icon: "phone")
+                        .keyboardType(.phonePad)
+
+                    SplickButton("Send verification code", style: .secondary) {
+                        Task { await viewModel.requestPhoneConnectCode() }
+                    }
+
+                    SplickOtpField(code: $viewModel.connectPhoneOtp)
+
+                    SplickButton(
+                        "Connect phone",
+                        isLoading: viewModel.isConnectingPhone,
+                        isDisabled: viewModel.connectPhoneOtp.count != SplickOtpField.defaultLength
+                    ) {
+                        Task { _ = await viewModel.linkPhone() }
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("Connect phone")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { viewModel.showConnectPhoneSheet = false }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private var connectEmailSheet: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: SplickTheme.Spacing.lg) {
+                    if viewModel.isPhoneOnlyAccount {
+                        Text("Add an email and password to sign in without SMS.")
+                            .font(SplickTheme.Typography.callout)
+                            .foregroundStyle(SplickTheme.Colors.textSecondary)
+                            .multilineTextAlignment(.center)
+                        SplickTextField("Email", text: $viewModel.connectEmail, icon: "envelope")
+                            .textContentType(.emailAddress)
+                            .keyboardType(.emailAddress)
+                            .textInputAutocapitalization(.never)
+                    } else {
+                        Text("Set a password for \(viewModel.linkEmailAddress). We will email you a verification code.")
+                            .font(SplickTheme.Typography.callout)
+                            .foregroundStyle(SplickTheme.Colors.textSecondary)
+                            .multilineTextAlignment(.center)
+                    }
+
+                    SplickButton("Send verification code", style: .secondary) {
+                        Task { await viewModel.requestEmailConnectCode() }
+                    }
+
+                    SplickOtpField(code: $viewModel.connectEmailOtp)
+
+                    SplickTextField("Password", text: $viewModel.connectEmailPassword, isSecure: true, icon: "lock")
+                    SplickTextField("Confirm password", text: $viewModel.connectEmailConfirm, isSecure: true, icon: "lock.fill")
+
+                    SplickButton(
+                        "Connect email",
+                        isLoading: viewModel.isConnectingEmail,
+                        isDisabled: viewModel.connectEmailOtp.count != SplickOtpField.defaultLength
+                    ) {
+                        Task { _ = await viewModel.linkEmail() }
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("Connect email")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { viewModel.showConnectEmailSheet = false }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private var unlinkGoogleSheet: some View {
         NavigationStack {
             VStack(spacing: SplickTheme.Spacing.lg) {
                 Picker("Verify with", selection: $viewModel.unlinkMethod) {
@@ -105,8 +204,7 @@ public struct ConnectedAccountsView: View {
                     SplickButton("Send code to email", style: .secondary) {
                         Task { await viewModel.requestUnlinkCode() }
                     }
-                    SplickTextField("Verification code", text: $viewModel.unlinkOtpCode, icon: "number")
-                        .keyboardType(.numberPad)
+                    SplickOtpField(code: $viewModel.unlinkOtpCode)
                 }
 
                 SplickButton("Unlink Google", style: .destructive, isLoading: viewModel.isUnlinkingGoogle) {

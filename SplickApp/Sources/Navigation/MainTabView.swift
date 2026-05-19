@@ -237,6 +237,8 @@ struct ProfileSettingsView: View {
                             getConnectedAccountsUseCase: container.getConnectedAccountsUseCase,
                             linkGoogleAccountUseCase: container.linkGoogleAccountUseCase,
                             unlinkGoogleAccountUseCase: container.unlinkGoogleAccountUseCase,
+                            linkPhoneAccountUseCase: container.linkPhoneAccountUseCase,
+                            linkEmailAccountUseCase: container.linkEmailAccountUseCase,
                             requestEmailOtpUseCase: container.requestEmailOtpUseCase,
                             googleSignInPresenter: GoogleSignInClient.shared
                         )

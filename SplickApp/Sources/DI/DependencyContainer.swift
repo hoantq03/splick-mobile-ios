@@ -107,6 +107,14 @@ final class DependencyContainer: ObservableObject {
         UnlinkGoogleAccountUseCase(repository: authRepository)
     }()
 
+    lazy var linkPhoneAccountUseCase: LinkPhoneAccountUseCaseProtocol = {
+        LinkPhoneAccountUseCase(repository: authRepository)
+    }()
+
+    lazy var linkEmailAccountUseCase: LinkEmailAccountUseCaseProtocol = {
+        LinkEmailAccountUseCase(repository: authRepository)
+    }()
+
     // MARK: - Feed
 
     private lazy var feedRepository: FeedRepositoryProtocol = {

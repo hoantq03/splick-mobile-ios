@@ -19,27 +19,40 @@ public struct SessionsView: View {
             }
 
             ForEach(viewModel.sessions) { session in
-                HStack {
-                    VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
-                        Text(session.deviceInfo ?? "Unknown device")
+                VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+                    HStack {
+                        Text(session.displayDevice)
                             .font(SplickTheme.Typography.body)
-                        Text(session.createdAt.formatted(date: .abbreviated, time: .shortened))
-                            .font(SplickTheme.Typography.caption)
-                            .foregroundStyle(SplickTheme.Colors.textSecondary)
+                        Spacer()
                         if session.isCurrent {
                             Text("This device")
                                 .font(SplickTheme.Typography.caption)
                                 .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                        } else {
+                            Button("Sign out") {
+                                Task { await viewModel.revoke(session: session) }
+                            }
+                            .font(SplickTheme.Typography.caption)
                         }
                     }
-                    Spacer()
-                    if !session.isCurrent {
-                        Button("Sign out") {
-                            Task { await viewModel.revoke(session: session) }
-                        }
+
+                    if let deviceInfo = session.deviceInfo, deviceInfo != session.displayDevice {
+                        Text(deviceInfo)
+                            .font(SplickTheme.Typography.caption)
+                            .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    }
+
+                    if let location = sessionLocationText(session) {
+                        Label(location, systemImage: "location")
+                            .font(SplickTheme.Typography.caption)
+                            .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    }
+
+                    Text(session.createdAt.formatted(date: .abbreviated, time: .shortened))
                         .font(SplickTheme.Typography.caption)
-                    }
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
                 }
+                .padding(.vertical, SplickTheme.Spacing.xs)
             }
         }
         .navigationTitle("Devices")
@@ -58,5 +71,18 @@ public struct SessionsView: View {
         }
         .task { await viewModel.load() }
         .refreshable { await viewModel.load() }
+    }
+
+    private func sessionLocationText(_ session: UserSession) -> String? {
+        if let loginLocation = session.loginLocation, !loginLocation.isEmpty {
+            if let loginIp = session.loginIp, !loginIp.isEmpty {
+                return "\(loginLocation) · \(loginIp)"
+            }
+            return loginLocation
+        }
+        if let loginIp = session.loginIp, !loginIp.isEmpty {
+            return loginIp
+        }
+        return nil
     }
 }

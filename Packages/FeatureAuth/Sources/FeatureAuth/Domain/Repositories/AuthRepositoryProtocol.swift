@@ -40,4 +40,8 @@ public protocol AuthRepositoryProtocol: Sendable {
     func getConnectedAccounts() async throws -> ConnectedAccounts
     func linkGoogleAccount(idToken: String) async throws
     func unlinkGoogleAccount(currentPassword: String?, otpCode: String?) async throws
+    func requestLinkPhoneOtp(phoneNumber: String) async throws
+    func linkPhoneAccount(phoneNumber: String, otpCode: String) async throws
+    func requestLinkEmailOtp(email: String?) async throws
+    func linkEmailAccount(email: String?, otpCode: String, password: String) async throws
 }
