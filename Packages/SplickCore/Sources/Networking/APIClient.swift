@@ -182,6 +182,12 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
             return NetworkError.unauthorized
         case "ACCOUNT_LOCKED":
             return AuthError.accountLocked
+        case "ACCOUNT_INACTIVE":
+            return AuthError.accountInactive
+        case "CANNOT_UNLINK_LAST_AUTH_METHOD":
+            return AuthError.cannotUnlinkLastAuthMethod
+        case "GOOGLE_ALREADY_LINKED":
+            return AuthError.googleAlreadyLinked
         case "CONFLICT":
             return AuthError.emailAlreadyExists
         case "EMAIL_ALREADY_REGISTERED":

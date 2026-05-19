@@ -87,6 +87,9 @@ public enum AuthError: Error, Equatable {
     case tokenExpired
     case refreshFailed
     case accountLocked
+    case accountInactive
+    case cannotUnlinkLastAuthMethod
+    case googleAlreadyLinked
     case invalidOtp(String)
     case otpRateLimited
     case registrationFailed(String)
@@ -101,6 +104,11 @@ public enum AuthError: Error, Equatable {
         case .tokenExpired: return "Your session has expired. Please log in again."
         case .refreshFailed: return "Failed to refresh session."
         case .accountLocked: return "Your account has been locked."
+        case .accountInactive: return "This account has been deactivated."
+        case .cannotUnlinkLastAuthMethod:
+            return "Keep at least one sign-in method on your account."
+        case .googleAlreadyLinked:
+            return "This Google account is already linked to another user."
         case .invalidOtp(let message): return message
         case .otpRateLimited:
             return "Too many verification attempts. Please wait a few minutes before requesting a new code."

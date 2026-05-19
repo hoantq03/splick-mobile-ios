@@ -18,8 +18,11 @@ public final class LoginUseCase: LoginUseCaseProtocol, Sendable {
     public func execute(email: String, password: String) async throws -> AuthSession {
         do {
             let session = try await repository.login(email: email, password: password)
+            if session.user.status == .inactive {
+                throw AuthError.accountInactive
+            }
             guard session.user.status.allowsSignIn else {
-                throw AuthError.invalidCredentials
+                throw AuthError.accountLocked
             }
             await sessionManager.setSession(session)
             return session

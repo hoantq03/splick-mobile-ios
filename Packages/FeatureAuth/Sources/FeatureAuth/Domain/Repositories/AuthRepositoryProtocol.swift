@@ -29,7 +29,15 @@ public protocol AuthRepositoryProtocol: Sendable {
         otpCode: String?,
         newPassword: String
     ) async throws -> AuthSession
-    /// Revokes the session on the server when possible, then clears local credentials.
+    /// Revokes the current device session on the server when possible, then clears local credentials.
     func logout() async
     func getCurrentUser() async throws -> User
+    func listSessions() async throws -> [UserSession]
+    func revokeSession(id: UUID) async throws
+    func revokeAllSessions() async throws
+    func deactivateAccount(currentPassword: String?, otpCode: String?) async throws
+    func deleteAccount(currentPassword: String?, otpCode: String?) async throws
+    func getConnectedAccounts() async throws -> ConnectedAccounts
+    func linkGoogleAccount(idToken: String) async throws
+    func unlinkGoogleAccount(currentPassword: String?, otpCode: String?) async throws
 }

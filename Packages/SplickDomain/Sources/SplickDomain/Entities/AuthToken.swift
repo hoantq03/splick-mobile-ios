@@ -5,17 +5,20 @@ public struct AuthToken: Codable, Equatable, Sendable {
     public let refreshToken: String
     public let expiresIn: Int
     public let tokenType: String
+    public let sessionId: UUID?
 
     public init(
         accessToken: String,
         refreshToken: String,
         expiresIn: Int,
-        tokenType: String = "Bearer"
+        tokenType: String = "Bearer",
+        sessionId: UUID? = nil
     ) {
         self.accessToken = accessToken
         self.refreshToken = refreshToken
         self.expiresIn = expiresIn
         self.tokenType = tokenType
+        self.sessionId = sessionId
     }
 }
 

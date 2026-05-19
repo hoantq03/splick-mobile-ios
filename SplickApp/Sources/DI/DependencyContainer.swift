@@ -75,6 +75,38 @@ final class DependencyContainer: ObservableObject {
         RefreshProfileUseCase(repository: authRepository, sessionManager: sessionManager)
     }()
 
+    lazy var listSessionsUseCase: ListSessionsUseCaseProtocol = {
+        ListSessionsUseCase(repository: authRepository)
+    }()
+
+    lazy var revokeSessionUseCase: RevokeSessionUseCaseProtocol = {
+        RevokeSessionUseCase(repository: authRepository)
+    }()
+
+    lazy var revokeAllSessionsUseCase: RevokeAllSessionsUseCaseProtocol = {
+        RevokeAllSessionsUseCase(repository: authRepository, sessionManager: sessionManager)
+    }()
+
+    lazy var deactivateAccountUseCase: DeactivateAccountUseCaseProtocol = {
+        DeactivateAccountUseCase(repository: authRepository, sessionManager: sessionManager)
+    }()
+
+    lazy var deleteAccountUseCase: DeleteAccountUseCaseProtocol = {
+        DeleteAccountUseCase(repository: authRepository, sessionManager: sessionManager)
+    }()
+
+    lazy var getConnectedAccountsUseCase: GetConnectedAccountsUseCaseProtocol = {
+        GetConnectedAccountsUseCase(repository: authRepository)
+    }()
+
+    lazy var linkGoogleAccountUseCase: LinkGoogleAccountUseCaseProtocol = {
+        LinkGoogleAccountUseCase(repository: authRepository)
+    }()
+
+    lazy var unlinkGoogleAccountUseCase: UnlinkGoogleAccountUseCaseProtocol = {
+        UnlinkGoogleAccountUseCase(repository: authRepository)
+    }()
+
     // MARK: - Feed
 
     private lazy var feedRepository: FeedRepositoryProtocol = {

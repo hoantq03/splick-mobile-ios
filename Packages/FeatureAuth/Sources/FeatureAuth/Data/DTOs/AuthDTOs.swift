@@ -46,6 +46,7 @@ struct AuthResponseDTO: Decodable {
     let refreshToken: String
     let expiresIn: Int
     let tokenType: String
+    let sessionId: UUID?
     let user: UserDTO
 }
 
@@ -79,4 +80,36 @@ struct ChangePasswordRequestDTO: Encodable {
     let otpCode: String?
     let newPassword: String
     let deviceInfo: String?
+}
+
+struct LogoutRequestDTO: Encodable {
+    let refreshToken: String
+}
+
+struct AccountActionRequestDTO: Encodable {
+    let currentPassword: String?
+    let otpCode: String?
+}
+
+struct LinkGoogleRequestDTO: Encodable {
+    let idToken: String
+}
+
+struct SessionDTO: Decodable {
+    let id: UUID
+    let deviceInfo: String?
+    let createdAt: Date
+    let expiresAt: Date
+    let current: Bool
+}
+
+struct ConnectedAccountsDTO: Decodable {
+    let google: ProviderDTO
+    let emailPassword: ProviderDTO
+    let phone: ProviderDTO
+
+    struct ProviderDTO: Decodable {
+        let linked: Bool
+        let detail: String?
+    }
 }

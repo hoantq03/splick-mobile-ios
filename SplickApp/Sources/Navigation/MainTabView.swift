@@ -116,6 +116,9 @@ struct ProfileSettingsView: View {
     @State private var isRefreshingProfile = false
     @State private var profileError: String?
     @State private var showChangePassword = false
+    @State private var showSessions = false
+    @State private var showConnectedAccounts = false
+    @State private var showAccountSecurity = false
 
     var body: some View {
         NavigationStack {
@@ -149,6 +152,21 @@ struct ProfileSettingsView: View {
                     isDisabled: appState.currentUser == nil
                 ) {
                     showChangePassword = true
+                }
+                .padding(.horizontal, SplickTheme.Spacing.xl)
+
+                SplickButton("Devices & sessions", style: .secondary) {
+                    showSessions = true
+                }
+                .padding(.horizontal, SplickTheme.Spacing.xl)
+
+                SplickButton("Connected accounts", style: .secondary) {
+                    showConnectedAccounts = true
+                }
+                .padding(.horizontal, SplickTheme.Spacing.xl)
+
+                SplickButton("Deactivate or delete account", style: .secondary) {
+                    showAccountSecurity = true
                 }
                 .padding(.horizontal, SplickTheme.Spacing.xl)
 
@@ -194,6 +212,47 @@ struct ProfileSettingsView: View {
                         ),
                         onPasswordChanged: { user in
                             appState.updateAuthenticatedUser(user)
+                        }
+                    )
+                }
+            }
+            .navigationDestination(isPresented: $showSessions) {
+                SessionsView(
+                    viewModel: SessionsViewModel(
+                        listSessionsUseCase: container.listSessionsUseCase,
+                        revokeSessionUseCase: container.revokeSessionUseCase,
+                        revokeAllSessionsUseCase: container.revokeAllSessionsUseCase,
+                        onSignedOutEverywhere: {
+                            appState.setUnauthenticated()
+                            dismiss()
+                        }
+                    )
+                )
+            }
+            .navigationDestination(isPresented: $showConnectedAccounts) {
+                if let email = appState.currentUser?.email {
+                    ConnectedAccountsView(
+                        viewModel: ConnectedAccountsViewModel(
+                            accountEmail: email,
+                            getConnectedAccountsUseCase: container.getConnectedAccountsUseCase,
+                            linkGoogleAccountUseCase: container.linkGoogleAccountUseCase,
+                            unlinkGoogleAccountUseCase: container.unlinkGoogleAccountUseCase,
+                            requestEmailOtpUseCase: container.requestEmailOtpUseCase,
+                            googleSignInPresenter: GoogleSignInClient.shared
+                        )
+                    )
+                }
+            }
+            .navigationDestination(isPresented: $showAccountSecurity) {
+                if let email = appState.currentUser?.email {
+                    AccountSecurityView(
+                        accountEmail: email,
+                        requestEmailOtpUseCase: container.requestEmailOtpUseCase,
+                        deactivateAccountUseCase: container.deactivateAccountUseCase,
+                        deleteAccountUseCase: container.deleteAccountUseCase,
+                        onAccountClosed: {
+                            appState.setUnauthenticated()
+                            dismiss()
                         }
                     )
                 }

@@ -142,8 +142,11 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
 
     public func logout() async {
         do {
-            try await apiClient.request(AuthEndpoint.logout)
-            Log.info("Server session revoked", category: .auth)
+            if let refreshToken = try? keychainService.loadString(for: AppConstants.Keychain.refreshTokenKey) {
+                let dto = LogoutRequestDTO(refreshToken: refreshToken)
+                try await apiClient.request(AuthEndpoint.logout(dto))
+                Log.info("Server session revoked", category: .auth)
+            }
         } catch {
             Log.error("Remote logout failed; clearing local session anyway: \(error)", category: .auth)
         }
@@ -155,12 +158,52 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
         return AuthMapper.toUser(dto)
     }
 
+    public func listSessions() async throws -> [UserSession] {
+        let refreshToken = try? keychainService.loadString(for: AppConstants.Keychain.refreshTokenKey)
+        let dtos: [SessionDTO] = try await apiClient.request(AuthEndpoint.listSessions(refreshToken: refreshToken))
+        return dtos.map(AuthMapper.toUserSession)
+    }
+
+    public func revokeSession(id: UUID) async throws {
+        try await apiClient.request(AuthEndpoint.revokeSession(id))
+    }
+
+    public func revokeAllSessions() async throws {
+        try await apiClient.request(AuthEndpoint.revokeAllSessions)
+    }
+
+    public func deactivateAccount(currentPassword: String?, otpCode: String?) async throws {
+        let dto = AccountActionRequestDTO(currentPassword: currentPassword, otpCode: otpCode)
+        try await apiClient.request(AuthEndpoint.deactivateAccount(dto))
+    }
+
+    public func deleteAccount(currentPassword: String?, otpCode: String?) async throws {
+        let dto = AccountActionRequestDTO(currentPassword: currentPassword, otpCode: otpCode)
+        try await apiClient.request(AuthEndpoint.deleteAccount(dto))
+    }
+
+    public func getConnectedAccounts() async throws -> ConnectedAccounts {
+        let dto: ConnectedAccountsDTO = try await apiClient.request(AuthEndpoint.connectedAccounts)
+        return AuthMapper.toConnectedAccounts(dto)
+    }
+
+    public func linkGoogleAccount(idToken: String) async throws {
+        let dto = LinkGoogleRequestDTO(idToken: idToken)
+        try await apiClient.request(AuthEndpoint.linkGoogle(dto))
+    }
+
+    public func unlinkGoogleAccount(currentPassword: String?, otpCode: String?) async throws {
+        let dto = AccountActionRequestDTO(currentPassword: currentPassword, otpCode: otpCode)
+        try await apiClient.request(AuthEndpoint.unlinkGoogle(dto))
+    }
+
     // MARK: - Private
 
     private func clearLocalCredentials() async {
         try? keychainService.delete(for: AppConstants.Keychain.accessTokenKey)
         try? keychainService.delete(for: AppConstants.Keychain.refreshTokenKey)
         try? keychainService.delete(for: AppConstants.Keychain.userIdKey)
+        try? keychainService.delete(for: AppConstants.Keychain.sessionIdKey)
         await tokenProvider.clearTokens()
     }
 
@@ -168,6 +211,9 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
         try keychainService.saveString(response.accessToken, for: AppConstants.Keychain.accessTokenKey)
         try keychainService.saveString(response.refreshToken, for: AppConstants.Keychain.refreshTokenKey)
         try keychainService.saveString(response.user.id.uuidString, for: AppConstants.Keychain.userIdKey)
+        if let sessionId = response.sessionId {
+            try keychainService.saveString(sessionId.uuidString, for: AppConstants.Keychain.sessionIdKey)
+        }
         await tokenProvider.updateTokens(
             access: response.accessToken,
             refresh: response.refreshToken

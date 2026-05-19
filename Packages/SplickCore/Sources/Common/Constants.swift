@@ -26,6 +26,7 @@ public enum AppConstants {
         public static let accessTokenKey = "com.splick.accessToken"
         public static let refreshTokenKey = "com.splick.refreshToken"
         public static let userIdKey = "com.splick.userId"
+        public static let sessionIdKey = "com.splick.sessionId"
         public static let serviceName = "com.splick.keychain"
     }
 

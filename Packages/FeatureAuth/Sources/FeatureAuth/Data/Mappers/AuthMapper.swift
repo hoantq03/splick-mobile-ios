@@ -24,8 +24,31 @@ enum AuthMapper {
             accessToken: dto.accessToken,
             refreshToken: dto.refreshToken,
             expiresIn: dto.expiresIn,
-            tokenType: dto.tokenType
+            tokenType: dto.tokenType,
+            sessionId: dto.sessionId
         )
+    }
+
+    static func toUserSession(_ dto: SessionDTO) -> UserSession {
+        UserSession(
+            id: dto.id,
+            deviceInfo: dto.deviceInfo,
+            createdAt: dto.createdAt,
+            expiresAt: dto.expiresAt,
+            isCurrent: dto.current
+        )
+    }
+
+    static func toConnectedAccounts(_ dto: ConnectedAccountsDTO) -> ConnectedAccounts {
+        ConnectedAccounts(
+            google: toProvider(dto.google),
+            emailPassword: toProvider(dto.emailPassword),
+            phone: toProvider(dto.phone)
+        )
+    }
+
+    private static func toProvider(_ dto: ConnectedAccountsDTO.ProviderDTO) -> ConnectedProvider {
+        ConnectedProvider(isLinked: dto.linked, detail: dto.detail)
     }
 
     static func toAuthSession(_ dto: AuthResponseDTO) -> AuthSession {
