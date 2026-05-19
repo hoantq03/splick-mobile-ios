@@ -10,8 +10,26 @@ struct EmailOtpRequestDTO: Encodable {
     let email: String
 }
 
-struct RegisterRequestDTO: Encodable {
+struct PhoneOtpRequestDTO: Encodable {
+    let phoneNumber: String
+}
+
+struct PhoneOtpVerifyRequestDTO: Encodable {
+    let phoneNumber: String
+    let otpCode: String
+    let deviceInfo: String?
+}
+
+struct EmailRegisterRequestDTO: Encodable {
     let email: String
+    let username: String
+    let password: String
+    let otpCode: String
+    let displayName: String?
+}
+
+struct PhoneRegisterRequestDTO: Encodable {
+    let phoneNumber: String
     let username: String
     let password: String
     let otpCode: String
