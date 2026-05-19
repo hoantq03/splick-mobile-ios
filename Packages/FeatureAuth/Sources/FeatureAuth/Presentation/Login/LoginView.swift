@@ -50,6 +50,9 @@ public struct LoginView: View {
                 }
 
                 if viewModel.step == .credentials {
+                    if viewModel.isGoogleSignInAvailable {
+                        googleSignInSection
+                    }
                     footerSection
                 }
             }
@@ -163,6 +166,32 @@ public struct LoginView: View {
         case .phone:
             return viewModel.phoneNumber.isEmpty || viewModel.phoneError != nil
         }
+    }
+
+    private var googleSignInSection: some View {
+        VStack(spacing: SplickTheme.Spacing.md) {
+            HStack {
+                Rectangle()
+                    .fill(SplickTheme.Colors.textSecondary.opacity(0.35))
+                    .frame(height: 1)
+                Text("or")
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                Rectangle()
+                    .fill(SplickTheme.Colors.textSecondary.opacity(0.35))
+                    .frame(height: 1)
+            }
+
+            SplickButton(
+                "Continue with Google",
+                style: .secondary,
+                isLoading: viewModel.state.isLoading,
+                isDisabled: viewModel.state.isLoading
+            ) {
+                Task { await viewModel.signInWithGoogle() }
+            }
+        }
+        .padding(.top, SplickTheme.Spacing.sm)
     }
 
     private var footerSection: some View {

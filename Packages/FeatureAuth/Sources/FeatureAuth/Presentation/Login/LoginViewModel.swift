@@ -30,17 +30,27 @@ public final class LoginViewModel: ObservableObject {
     private let loginUseCase: LoginUseCaseProtocol
     private let requestPhoneOtpUseCase: RequestPhoneOtpUseCaseProtocol
     private let verifyPhoneOtpUseCase: VerifyPhoneOtpUseCaseProtocol
+    private let googleSignInUseCase: GoogleSignInUseCaseProtocol
+    private weak var googleSignInPresenter: GoogleSignInPresenting?
 
     private var normalizedPhone: String { phoneNumber.normalizedE164Phone }
+
+    public var isGoogleSignInAvailable: Bool {
+        googleSignInPresenter?.isAvailable == true
+    }
 
     public init(
         loginUseCase: LoginUseCaseProtocol,
         requestPhoneOtpUseCase: RequestPhoneOtpUseCaseProtocol,
-        verifyPhoneOtpUseCase: VerifyPhoneOtpUseCaseProtocol
+        verifyPhoneOtpUseCase: VerifyPhoneOtpUseCaseProtocol,
+        googleSignInUseCase: GoogleSignInUseCaseProtocol,
+        googleSignInPresenter: GoogleSignInPresenting? = nil
     ) {
         self.loginUseCase = loginUseCase
         self.requestPhoneOtpUseCase = requestPhoneOtpUseCase
         self.verifyPhoneOtpUseCase = verifyPhoneOtpUseCase
+        self.googleSignInUseCase = googleSignInUseCase
+        self.googleSignInPresenter = googleSignInPresenter
     }
 
     func validatePhoneField() {
@@ -120,6 +130,27 @@ public final class LoginViewModel: ObservableObject {
         otpInfoMessage = nil
         if case .failed = state {
             state = .idle
+        }
+    }
+
+    func signInWithGoogle() async {
+        guard let googleSignInPresenter, googleSignInPresenter.isAvailable else {
+            state = .failed("Google Sign-In is not configured.")
+            return
+        }
+
+        state = .loading
+        do {
+            let idToken = try await googleSignInPresenter.fetchIdToken()
+            let session = try await googleSignInUseCase.execute(idToken: idToken)
+            state = .loaded(session)
+            Log.info("Google sign-in successful for \(session.user.username)", category: .auth)
+        } catch let error as NetworkError where error.isConnectivityIssue {
+            state = .failed(error.userMessage)
+        } catch let error as AuthError {
+            state = .failed(error.userMessage)
+        } catch {
+            state = .failed("Google sign-in was cancelled or failed.")
         }
     }
 

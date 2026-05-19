@@ -38,6 +38,16 @@ final class MockVerifyPhoneOtpUseCase: VerifyPhoneOtpUseCaseProtocol, Sendable {
     }
 }
 
+final class MockGoogleSignInUseCase: GoogleSignInUseCaseProtocol, Sendable {
+    func execute(idToken: String) async throws -> AuthSession {
+        try await Task.sleep(for: .seconds(1))
+        return AuthSession(
+            user: PreviewData.currentUser,
+            token: AuthToken(accessToken: "mock-token", refreshToken: "mock-refresh", expiresIn: 3600)
+        )
+    }
+}
+
 final class MockRegisterUseCase: RegisterUseCaseProtocol, Sendable {
     func execute(
         channel: AuthRegistrationChannel,
@@ -63,7 +73,8 @@ final class MockRegisterUseCase: RegisterUseCaseProtocol, Sendable {
             viewModel: LoginViewModel(
                 loginUseCase: MockLoginUseCase(),
                 requestPhoneOtpUseCase: MockRequestPhoneOtpUseCase(),
-                verifyPhoneOtpUseCase: MockVerifyPhoneOtpUseCase()
+                verifyPhoneOtpUseCase: MockVerifyPhoneOtpUseCase(),
+                googleSignInUseCase: MockGoogleSignInUseCase()
             ),
             registerViewModelFactory: {
                 RegisterViewModel(
