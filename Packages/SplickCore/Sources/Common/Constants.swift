@@ -45,8 +45,8 @@ public enum AppConstants {
 
     public enum Validation {
         public static let minPasswordLength = 8
-        public static let maxPasswordLength = 128
-        public static let maxUsernameLength = 30
+        public static let maxPasswordLength = 100
+        public static let maxUsernameLength = 50
         public static let maxGroupNameLength = 50
         public static let maxExpenseDescriptionLength = 200
     }

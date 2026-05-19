@@ -6,6 +6,11 @@ extension String {
         return range(of: pattern, options: .regularExpression) != nil
     }
 
+    public var isValidUsername: Bool {
+        let pattern = #"^[a-zA-Z0-9_]+$"#
+        return range(of: pattern, options: .regularExpression) != nil
+    }
+
     public var trimmed: String {
         trimmingCharacters(in: .whitespacesAndNewlines)
     }
