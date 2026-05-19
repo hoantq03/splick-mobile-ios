@@ -35,22 +35,56 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
         try await apiClient.request(AuthEndpoint.requestEmailOtp(dto))
     }
 
-    public func register(
+    public func requestPhoneOtp(phoneNumber: String) async throws {
+        let dto = PhoneOtpRequestDTO(phoneNumber: phoneNumber)
+        try await apiClient.request(AuthEndpoint.requestPhoneOtp(dto))
+    }
+
+    public func verifyPhoneOtp(phoneNumber: String, otpCode: String) async throws -> AuthSession {
+        let dto = PhoneOtpVerifyRequestDTO(
+            phoneNumber: phoneNumber,
+            otpCode: otpCode,
+            deviceInfo: DeviceInfo.current
+        )
+        let response: AuthResponseDTO = try await apiClient.request(AuthEndpoint.verifyPhoneOtp(dto))
+        try await persistSession(response)
+        return AuthMapper.toAuthSession(response)
+    }
+
+    public func registerWithEmail(
         email: String,
         username: String,
         password: String,
         otpCode: String,
         displayName: String?
     ) async throws -> AuthSession {
-        let trimmedDisplayName = displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let dto = RegisterRequestDTO(
+        let dto = EmailRegisterRequestDTO(
             email: email,
             username: username,
             password: password,
             otpCode: otpCode,
-            displayName: trimmedDisplayName?.isEmpty == false ? trimmedDisplayName : nil
+            displayName: displayName
         )
-        let response: AuthResponseDTO = try await apiClient.request(AuthEndpoint.register(dto))
+        let response: AuthResponseDTO = try await apiClient.request(AuthEndpoint.registerEmail(dto))
+        try await persistSession(response)
+        return AuthMapper.toAuthSession(response)
+    }
+
+    public func registerWithPhone(
+        phoneNumber: String,
+        username: String,
+        password: String,
+        otpCode: String,
+        displayName: String?
+    ) async throws -> AuthSession {
+        let dto = PhoneRegisterRequestDTO(
+            phoneNumber: phoneNumber,
+            username: username,
+            password: password,
+            otpCode: otpCode,
+            displayName: displayName
+        )
+        let response: AuthResponseDTO = try await apiClient.request(AuthEndpoint.registerPhone(dto))
         try await persistSession(response)
         return AuthMapper.toAuthSession(response)
     }

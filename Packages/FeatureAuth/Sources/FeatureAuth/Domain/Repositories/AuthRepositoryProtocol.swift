@@ -4,8 +4,17 @@ import SplickDomain
 public protocol AuthRepositoryProtocol: Sendable {
     func login(email: String, password: String) async throws -> AuthSession
     func requestEmailOtp(email: String) async throws
-    func register(
+    func requestPhoneOtp(phoneNumber: String) async throws
+    func verifyPhoneOtp(phoneNumber: String, otpCode: String) async throws -> AuthSession
+    func registerWithEmail(
         email: String,
+        username: String,
+        password: String,
+        otpCode: String,
+        displayName: String?
+    ) async throws -> AuthSession
+    func registerWithPhone(
+        phoneNumber: String,
         username: String,
         password: String,
         otpCode: String,
