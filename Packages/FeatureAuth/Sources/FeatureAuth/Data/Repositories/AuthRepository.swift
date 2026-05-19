@@ -62,12 +62,14 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
         return AuthMapper.toAuthSession(response)
     }
 
-    public func logout() async throws {
-        try? await apiClient.request(AuthEndpoint.logout)
-        try? keychainService.delete(for: AppConstants.Keychain.accessTokenKey)
-        try? keychainService.delete(for: AppConstants.Keychain.refreshTokenKey)
-        try? keychainService.delete(for: AppConstants.Keychain.userIdKey)
-        await tokenProvider.clearTokens()
+    public func logout() async {
+        do {
+            try await apiClient.request(AuthEndpoint.logout)
+            Log.info("Server session revoked", category: .auth)
+        } catch {
+            Log.error("Remote logout failed; clearing local session anyway: \(error)", category: .auth)
+        }
+        await clearLocalCredentials()
     }
 
     public func getCurrentUser() async throws -> User {
@@ -76,6 +78,13 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
     }
 
     // MARK: - Private
+
+    private func clearLocalCredentials() async {
+        try? keychainService.delete(for: AppConstants.Keychain.accessTokenKey)
+        try? keychainService.delete(for: AppConstants.Keychain.refreshTokenKey)
+        try? keychainService.delete(for: AppConstants.Keychain.userIdKey)
+        await tokenProvider.clearTokens()
+    }
 
     private func persistSession(_ response: AuthResponseDTO) async throws {
         try keychainService.saveString(response.accessToken, for: AppConstants.Keychain.accessTokenKey)

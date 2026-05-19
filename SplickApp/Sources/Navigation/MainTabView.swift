@@ -111,6 +111,7 @@ struct ProfileSettingsView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var container: DependencyContainer
     @Environment(\.dismiss) private var dismiss
+    @State private var isSigningOut = false
 
     var body: some View {
         NavigationStack {
@@ -128,9 +129,16 @@ struct ProfileSettingsView: View {
 
                 Spacer()
 
-                SplickButton("Sign Out", style: .destructive) {
+                SplickButton(
+                    "Sign Out",
+                    style: .destructive,
+                    isLoading: isSigningOut,
+                    isDisabled: isSigningOut
+                ) {
                     Task {
-                        try? await container.logoutUseCase.execute()
+                        isSigningOut = true
+                        defer { isSigningOut = false }
+                        await container.logoutUseCase.execute()
                         appState.setUnauthenticated()
                         dismiss()
                     }
