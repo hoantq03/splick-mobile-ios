@@ -2,14 +2,13 @@
 
 API_STUB_PORT ?= 8080
 
-# Generate Xcode project using XcodeGen
+# Generate Xcode project using XcodeGen (installs binary if needed)
 generate:
-	xcodegen generate
+	./scripts/generate-xcodeproj.sh
 
 # Install dependencies and generate project
-setup:
-	brew install xcodegen || true
-	$(MAKE) generate
+setup: generate
+	@echo "Splick.xcodeproj ready. Open Splick.xcodeproj in Xcode."
 
 # Clean build artifacts
 clean:

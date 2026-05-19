@@ -1,5 +1,22 @@
 # Splick iOS — Architecture & Technical Documentation
 
+## Open in Xcode (required first step)
+
+`Splick.xcodeproj` is **generated** from `project.yml` (XcodeGen) and is not in git. After clone:
+
+```bash
+cd splick-mobile-ios
+make setup
+# or: ./scripts/generate-xcodeproj.sh
+open Splick.xcodeproj
+```
+
+If Xcode says *missing project.pbxproj*, run `make setup` again.
+
+Requires: Xcode 15+, macOS. XcodeGen is downloaded automatically by the script (or `brew install xcodegen`).
+
+---
+
 ## Table of Contents
 
 1. [Product Overview](#1-product-overview)
