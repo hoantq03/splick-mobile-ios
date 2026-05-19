@@ -103,6 +103,43 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
         return AuthMapper.toAuthSession(response)
     }
 
+    public func forgotPassword(email: String) async throws {
+        let dto = ForgotPasswordRequestDTO(email: email)
+        try await apiClient.request(AuthEndpoint.forgotPassword(dto))
+    }
+
+    public func resetPassword(
+        email: String,
+        otpCode: String,
+        newPassword: String
+    ) async throws -> AuthSession {
+        let dto = ResetPasswordRequestDTO(
+            email: email,
+            otpCode: otpCode,
+            newPassword: newPassword,
+            deviceInfo: DeviceInfo.current
+        )
+        let response: AuthResponseDTO = try await apiClient.request(AuthEndpoint.resetPassword(dto))
+        try await persistSession(response)
+        return AuthMapper.toAuthSession(response)
+    }
+
+    public func changePassword(
+        currentPassword: String?,
+        otpCode: String?,
+        newPassword: String
+    ) async throws -> AuthSession {
+        let dto = ChangePasswordRequestDTO(
+            currentPassword: currentPassword,
+            otpCode: otpCode,
+            newPassword: newPassword,
+            deviceInfo: DeviceInfo.current
+        )
+        let response: AuthResponseDTO = try await apiClient.request(AuthEndpoint.changePassword(dto))
+        try await persistSession(response)
+        return AuthMapper.toAuthSession(response)
+    }
+
     public func logout() async {
         do {
             try await apiClient.request(AuthEndpoint.logout)

@@ -40,6 +40,11 @@ final class AppState: ObservableObject {
         Log.info("User authenticated: \(user.username)", category: .lifecycle)
     }
 
+    func updateAuthenticatedUser(_ user: User) {
+        guard case .authenticated = authState else { return }
+        authState = .authenticated(user)
+    }
+
     func setUnauthenticated() {
         authState = .unauthenticated
         selectedTab = .feed

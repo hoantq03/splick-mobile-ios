@@ -10,6 +10,9 @@ enum AuthEndpoint: APIEndpoint {
     case registerEmail(EmailRegisterRequestDTO)
     case registerPhone(PhoneRegisterRequestDTO)
     case refreshToken(RefreshTokenRequestDTO)
+    case forgotPassword(ForgotPasswordRequestDTO)
+    case resetPassword(ResetPasswordRequestDTO)
+    case changePassword(ChangePasswordRequestDTO)
     case logout
     case me
 
@@ -22,6 +25,9 @@ enum AuthEndpoint: APIEndpoint {
         case .verifyPhoneOtp: return "/v1/auth/phone/otp/verify"
         case .registerEmail, .registerPhone: return "/v1/auth/register"
         case .refreshToken: return "/v1/auth/refresh"
+        case .forgotPassword: return "/v1/auth/password/forgot"
+        case .resetPassword: return "/v1/auth/password/reset"
+        case .changePassword: return "/v1/auth/password/change"
         case .logout: return "/v1/auth/logout"
         case .me: return "/v1/auth/me"
         }
@@ -30,7 +36,8 @@ enum AuthEndpoint: APIEndpoint {
     var method: HTTPMethod {
         switch self {
         case .googleSignIn, .login, .requestEmailOtp, .requestPhoneOtp, .verifyPhoneOtp,
-             .registerEmail, .registerPhone, .refreshToken, .logout:
+             .registerEmail, .registerPhone, .refreshToken,
+             .forgotPassword, .resetPassword, .changePassword, .logout:
             return .post
         case .me:
             return .get
@@ -47,6 +54,9 @@ enum AuthEndpoint: APIEndpoint {
         case .registerEmail(let dto): return dto
         case .registerPhone(let dto): return dto
         case .refreshToken(let dto): return dto
+        case .forgotPassword(let dto): return dto
+        case .resetPassword(let dto): return dto
+        case .changePassword(let dto): return dto
         case .logout, .me: return nil
         }
     }
@@ -54,9 +64,10 @@ enum AuthEndpoint: APIEndpoint {
     var requiresAuth: Bool {
         switch self {
         case .googleSignIn, .login, .requestEmailOtp, .requestPhoneOtp, .verifyPhoneOtp,
-             .registerEmail, .registerPhone, .refreshToken:
+             .registerEmail, .registerPhone, .refreshToken,
+             .forgotPassword, .resetPassword:
             return false
-        case .logout, .me:
+        case .changePassword, .logout, .me:
             return true
         }
     }

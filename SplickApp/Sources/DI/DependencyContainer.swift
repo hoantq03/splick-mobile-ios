@@ -59,6 +59,22 @@ final class DependencyContainer: ObservableObject {
         LogoutUseCase(repository: authRepository, sessionManager: sessionManager)
     }()
 
+    lazy var forgotPasswordUseCase: ForgotPasswordUseCaseProtocol = {
+        ForgotPasswordUseCase(repository: authRepository)
+    }()
+
+    lazy var resetPasswordUseCase: ResetPasswordUseCaseProtocol = {
+        ResetPasswordUseCase(repository: authRepository, sessionManager: sessionManager)
+    }()
+
+    lazy var changePasswordUseCase: ChangePasswordUseCaseProtocol = {
+        ChangePasswordUseCase(repository: authRepository, sessionManager: sessionManager)
+    }()
+
+    lazy var refreshProfileUseCase: RefreshProfileUseCaseProtocol = {
+        RefreshProfileUseCase(repository: authRepository, sessionManager: sessionManager)
+    }()
+
     // MARK: - Feed
 
     private lazy var feedRepository: FeedRepositoryProtocol = {

@@ -48,6 +48,22 @@ final class MockGoogleSignInUseCase: GoogleSignInUseCaseProtocol, Sendable {
     }
 }
 
+final class MockForgotPasswordUseCase: ForgotPasswordUseCaseProtocol, Sendable {
+    func execute(email: String) async throws {
+        try await Task.sleep(for: .milliseconds(300))
+    }
+}
+
+final class MockResetPasswordUseCase: ResetPasswordUseCaseProtocol, Sendable {
+    func execute(email: String, otpCode: String, newPassword: String) async throws -> AuthSession {
+        try await Task.sleep(for: .seconds(1))
+        return AuthSession(
+            user: PreviewData.currentUser,
+            token: AuthToken(accessToken: "mock-token", refreshToken: "mock-refresh", expiresIn: 3600)
+        )
+    }
+}
+
 final class MockRegisterUseCase: RegisterUseCaseProtocol, Sendable {
     func execute(
         channel: AuthRegistrationChannel,
@@ -81,6 +97,12 @@ final class MockRegisterUseCase: RegisterUseCaseProtocol, Sendable {
                     registerUseCase: MockRegisterUseCase(),
                     requestEmailOtpUseCase: MockRequestEmailOtpUseCase(),
                     requestPhoneOtpUseCase: MockRequestPhoneOtpUseCase()
+                )
+            },
+            forgotPasswordViewModelFactory: {
+                ForgotPasswordViewModel(
+                    forgotPasswordUseCase: MockForgotPasswordUseCase(),
+                    resetPasswordUseCase: MockResetPasswordUseCase()
                 )
             }
         )

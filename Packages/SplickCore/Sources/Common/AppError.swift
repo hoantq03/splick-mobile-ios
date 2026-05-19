@@ -88,8 +88,12 @@ public enum AuthError: Error, Equatable {
     case refreshFailed
     case accountLocked
     case invalidOtp(String)
+    case otpRateLimited
     case registrationFailed(String)
     case emailAlreadyExists
+    case emailUseGoogle
+    case phoneAlreadyExists
+    case usernameAlreadyExists
 
     public var userMessage: String {
         switch self {
@@ -98,8 +102,26 @@ public enum AuthError: Error, Equatable {
         case .refreshFailed: return "Failed to refresh session."
         case .accountLocked: return "Your account has been locked."
         case .invalidOtp(let message): return message
+        case .otpRateLimited:
+            return "Too many verification attempts. Please wait a few minutes before requesting a new code."
         case .registrationFailed(let reason): return "Registration failed: \(reason)"
-        case .emailAlreadyExists: return "An account with this email already exists."
+        case .emailAlreadyExists:
+            return "An account with this email already exists. Sign in instead."
+        case .emailUseGoogle:
+            return "This account uses Google sign-in. Tap Continue with Google on the login screen."
+        case .phoneAlreadyExists:
+            return "This phone number already has an account. Sign in with SMS instead."
+        case .usernameAlreadyExists:
+            return "That username is taken. Choose another."
+        }
+    }
+
+    public var shouldShowOnOtpStep: Bool {
+        switch self {
+        case .invalidOtp, .otpRateLimited:
+            return true
+        default:
+            return false
         }
     }
 }

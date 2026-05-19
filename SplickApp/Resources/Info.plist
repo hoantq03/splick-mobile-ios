@@ -26,13 +26,13 @@
 		<true/>
 	</dict>
 	<key>GIDClientID</key>
-	<string>REPLACE_WITH_IOS_CLIENT_ID.apps.googleusercontent.com</string>
+	<string>702860718891-59e0chbkkidsbqvclul3d3a0klga4ve3.apps.googleusercontent.com</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.REPLACE_WITH_IOS_CLIENT_ID</string>
+				<string>com.googleusercontent.apps.702860718891-59e0chbkkidsbqvclul3d3a0klga4ve3</string>
 			</array>
 		</dict>
 	</array>

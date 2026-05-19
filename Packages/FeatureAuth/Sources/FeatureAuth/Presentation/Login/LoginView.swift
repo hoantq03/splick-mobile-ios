@@ -6,15 +6,19 @@ import SplickDomain
 public struct LoginView: View {
     @StateObject private var viewModel: LoginViewModel
     private let registerViewModelFactory: () -> RegisterViewModel
+    private let forgotPasswordViewModelFactory: () -> ForgotPasswordViewModel
     private let onAuthenticated: ((User) -> Void)?
+    @State private var showForgotPassword = false
 
     public init(
         viewModel: @autoclosure @escaping () -> LoginViewModel,
         registerViewModelFactory: @escaping () -> RegisterViewModel,
+        forgotPasswordViewModelFactory: @escaping () -> ForgotPasswordViewModel,
         onAuthenticated: ((User) -> Void)? = nil
     ) {
         _viewModel = StateObject(wrappedValue: viewModel())
         self.registerViewModelFactory = registerViewModelFactory
+        self.forgotPasswordViewModelFactory = forgotPasswordViewModelFactory
         self.onAuthenticated = onAuthenticated
     }
 
@@ -64,6 +68,12 @@ public struct LoginView: View {
         .navigationDestination(isPresented: $viewModel.showRegistration) {
             RegisterView(
                 viewModel: registerViewModelFactory(),
+                onAuthenticated: onAuthenticated
+            )
+        }
+        .sheet(isPresented: $showForgotPassword) {
+            ForgotPasswordView(
+                viewModel: forgotPasswordViewModelFactory(),
                 onAuthenticated: onAuthenticated
             )
         }
@@ -125,6 +135,15 @@ public struct LoginView: View {
                 icon: "lock"
             )
             .textContentType(.password)
+
+            HStack {
+                Spacer()
+                Button("Forgot password?") {
+                    showForgotPassword = true
+                }
+                .font(SplickTheme.Typography.caption)
+                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+            }
         }
     }
 

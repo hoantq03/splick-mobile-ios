@@ -1,6 +1,7 @@
 import SwiftUI
 import DesignSystem
 import SplickDomain
+import FeatureAuth
 import FeatureSocialFeed
 import FeatureExpense
 import FeatureMedia
@@ -112,6 +113,9 @@ struct ProfileSettingsView: View {
     @EnvironmentObject private var container: DependencyContainer
     @Environment(\.dismiss) private var dismiss
     @State private var isSigningOut = false
+    @State private var isRefreshingProfile = false
+    @State private var profileError: String?
+    @State private var showChangePassword = false
 
     var body: some View {
         NavigationStack {
@@ -125,7 +129,28 @@ struct ProfileSettingsView: View {
                     Text("@\(user.username)")
                         .font(SplickTheme.Typography.callout)
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
+
+                    Text(user.email)
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
                 }
+
+                if let profileError {
+                    Text(profileError)
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.error)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+
+                SplickButton(
+                    "Change password",
+                    style: .secondary,
+                    isDisabled: appState.currentUser == nil
+                ) {
+                    showChangePassword = true
+                }
+                .padding(.horizontal, SplickTheme.Spacing.xl)
 
                 Spacer()
 
@@ -153,6 +178,39 @@ struct ProfileSettingsView: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .refreshable {
+                await refreshProfile()
+            }
+            .task {
+                await refreshProfile()
+            }
+            .navigationDestination(isPresented: $showChangePassword) {
+                if let email = appState.currentUser?.email {
+                    ChangePasswordView(
+                        viewModel: ChangePasswordViewModel(
+                            accountEmail: email,
+                            changePasswordUseCase: container.changePasswordUseCase,
+                            requestEmailOtpUseCase: container.requestEmailOtpUseCase
+                        ),
+                        onPasswordChanged: { user in
+                            appState.updateAuthenticatedUser(user)
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    private func refreshProfile() async {
+        guard !isRefreshingProfile else { return }
+        isRefreshingProfile = true
+        defer { isRefreshingProfile = false }
+        profileError = nil
+        do {
+            let user = try await container.refreshProfileUseCase.execute()
+            appState.updateAuthenticatedUser(user)
+        } catch {
+            profileError = "Could not refresh profile."
         }
     }
 }

@@ -62,3 +62,21 @@ struct UserDTO: Decodable {
 struct RefreshTokenRequestDTO: Encodable {
     let refreshToken: String
 }
+
+struct ForgotPasswordRequestDTO: Encodable {
+    let email: String
+}
+
+struct ResetPasswordRequestDTO: Encodable {
+    let email: String
+    let otpCode: String
+    let newPassword: String
+    let deviceInfo: String?
+}
+
+struct ChangePasswordRequestDTO: Encodable {
+    let currentPassword: String?
+    let otpCode: String?
+    let newPassword: String
+    let deviceInfo: String?
+}

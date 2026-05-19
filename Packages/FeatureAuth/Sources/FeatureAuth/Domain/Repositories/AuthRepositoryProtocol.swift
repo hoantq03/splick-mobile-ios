@@ -22,6 +22,13 @@ public protocol AuthRepositoryProtocol: Sendable {
         displayName: String?
     ) async throws -> AuthSession
     func refreshToken(_ refreshToken: String) async throws -> AuthSession
+    func forgotPassword(email: String) async throws
+    func resetPassword(email: String, otpCode: String, newPassword: String) async throws -> AuthSession
+    func changePassword(
+        currentPassword: String?,
+        otpCode: String?,
+        newPassword: String
+    ) async throws -> AuthSession
     /// Revokes the session on the server when possible, then clears local credentials.
     func logout() async
     func getCurrentUser() async throws -> User

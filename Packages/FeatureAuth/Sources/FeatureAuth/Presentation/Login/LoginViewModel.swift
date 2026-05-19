@@ -87,6 +87,8 @@ public final class LoginViewModel: ObservableObject {
             otpInfoMessage = "Verification code sent to your phone."
             #endif
             state = .idle
+        } catch let error as AuthError {
+            applyOtpRequestError(error)
         } catch let error as NetworkError {
             state = .failed(error.userMessage)
         } catch {
@@ -113,8 +115,7 @@ public final class LoginViewModel: ObservableObject {
             )
             state = .loaded(session)
         } catch let error as AuthError {
-            otpError = error.userMessage
-            state = .idle
+            applyOtpVerifyError(error)
         } catch let error as NetworkError where error.isConnectivityIssue {
             state = .failed(error.userMessage)
         } catch {
@@ -147,10 +148,17 @@ public final class LoginViewModel: ObservableObject {
             Log.info("Google sign-in successful for \(session.user.username)", category: .auth)
         } catch let error as NetworkError where error.isConnectivityIssue {
             state = .failed(error.userMessage)
+        } catch let error as NetworkError {
+            state = .failed(error.userMessage)
         } catch let error as AuthError {
             state = .failed(error.userMessage)
         } catch {
-            state = .failed("Google sign-in was cancelled or failed.")
+            let nsError = error as NSError
+            if nsError.domain == "com.google.GIDSignIn" && nsError.code == -5 {
+                state = .failed("Google sign-in was cancelled.")
+            } else {
+                state = .failed(error.localizedDescription)
+            }
         }
     }
 
@@ -165,10 +173,30 @@ public final class LoginViewModel: ObservableObject {
             )
             state = .loaded(session)
             Log.info("Login successful for \(session.user.username)", category: .auth)
+        } catch let error as AuthError {
+            state = .failed(error.userMessage)
         } catch let error as NetworkError where error.isConnectivityIssue {
             state = .failed(error.userMessage)
         } catch {
             state = .failed(AuthError.invalidCredentials.userMessage)
+        }
+    }
+
+    private func applyOtpRequestError(_ error: AuthError) {
+        if error.shouldShowOnOtpStep {
+            otpError = error.userMessage
+            state = .idle
+        } else {
+            state = .failed(error.userMessage)
+        }
+    }
+
+    private func applyOtpVerifyError(_ error: AuthError) {
+        if error.shouldShowOnOtpStep {
+            otpError = error.userMessage
+            state = .idle
+        } else {
+            state = .failed(error.userMessage)
         }
     }
 

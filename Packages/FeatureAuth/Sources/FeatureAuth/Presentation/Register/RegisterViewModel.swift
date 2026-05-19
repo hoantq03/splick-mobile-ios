@@ -228,15 +228,7 @@ public final class RegisterViewModel: ObservableObject {
             state = .loaded(session)
             Log.info("Registration successful for \(session.user.username)", category: .auth)
         } catch let error as AuthError {
-            switch error {
-            case .invalidOtp(let message):
-                otpError = message
-                state = .idle
-            case .emailAlreadyExists:
-                state = .failed(error.userMessage)
-            default:
-                state = .failed(error.userMessage)
-            }
+            applyAuthError(error, onOtpStep: true)
         } catch let error as NetworkError {
             if case .decodingFailed = error {
                 state = .failed(error.userMessage)
@@ -273,7 +265,7 @@ public final class RegisterViewModel: ObservableObject {
 
     private func applyRequestFailure(_ error: Error, fallback: String) {
         if let authError = error as? AuthError {
-            state = .failed(authError.userMessage)
+            applyAuthError(authError, onOtpStep: step == .otpVerification)
             return
         }
         if let networkError = error as? NetworkError {
@@ -286,6 +278,31 @@ public final class RegisterViewModel: ObservableObject {
         }
         state = .failed(fallback)
         Log.error(error, category: .auth)
+    }
+
+    private func applyAuthError(_ error: AuthError, onOtpStep: Bool) {
+        if onOtpStep && error.shouldShowOnOtpStep {
+            otpError = error.userMessage
+            state = .idle
+            return
+        }
+        switch error {
+        case .emailAlreadyExists:
+            if channel == .email {
+                emailError = error.userMessage
+            }
+            goBackToAccountDetails()
+        case .phoneAlreadyExists:
+            if channel == .phone {
+                phoneError = error.userMessage
+            }
+            goBackToAccountDetails()
+        case .usernameAlreadyExists:
+            usernameError = error.userMessage
+            goBackToAccountDetails()
+        default:
+            state = .failed(error.userMessage)
+        }
     }
 
     private func applyValidationMessage(_ message: String) {

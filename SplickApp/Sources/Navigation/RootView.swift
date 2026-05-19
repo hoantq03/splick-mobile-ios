@@ -78,6 +78,12 @@ struct RootView: View {
                         requestPhoneOtpUseCase: container.requestPhoneOtpUseCase
                     )
                 },
+                forgotPasswordViewModelFactory: {
+                    ForgotPasswordViewModel(
+                        forgotPasswordUseCase: container.forgotPasswordUseCase,
+                        resetPasswordUseCase: container.resetPasswordUseCase
+                    )
+                },
                 onAuthenticated: { user in
                     appState.setAuthenticated(user: user)
                 }

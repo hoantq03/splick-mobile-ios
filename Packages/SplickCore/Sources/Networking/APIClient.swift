@@ -184,8 +184,16 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
             return AuthError.accountLocked
         case "CONFLICT":
             return AuthError.emailAlreadyExists
+        case "EMAIL_ALREADY_REGISTERED":
+            return AuthError.emailAlreadyExists
+        case "EMAIL_USE_GOOGLE":
+            return AuthError.emailUseGoogle
+        case "PHONE_ALREADY_REGISTERED":
+            return AuthError.phoneAlreadyExists
+        case "USERNAME_ALREADY_REGISTERED":
+            return AuthError.usernameAlreadyExists
         case "OTP_RATE_LIMIT":
-            return NetworkError.rateLimited
+            return AuthError.otpRateLimited
         case "EMAIL_DELIVERY_FAILED":
             return NetworkError.unknown(
                 body.message.isEmpty ? "Unable to send email. Please try again later." : body.message

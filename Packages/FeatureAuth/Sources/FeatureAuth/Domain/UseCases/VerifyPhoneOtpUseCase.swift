@@ -23,6 +23,8 @@ public final class VerifyPhoneOtpUseCase: VerifyPhoneOtpUseCaseProtocol, Sendabl
             }
             await sessionManager.setSession(session)
             return session
+        } catch let error as AuthError {
+            throw error
         } catch let error as NetworkError where error.isConnectivityIssue {
             throw error
         } catch {
