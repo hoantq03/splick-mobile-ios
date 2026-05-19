@@ -8,12 +8,25 @@ extension JSONDecoder {
             let container = try decoder.singleValueContainer()
             let dateString = try container.decode(String.self)
 
+            let fractional = ISO8601DateFormatter()
+            fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = fractional.date(from: dateString) {
+                return date
+            }
+
             if let date = ISO8601DateFormatter().date(from: dateString) {
                 return date
             }
 
             let formatter = DateFormatter()
-            formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = TimeZone(secondsFromGMT: 0)
+            formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'"
+            if let date = formatter.date(from: dateString) {
+                return date
+            }
+
+            formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'"
             if let date = formatter.date(from: dateString) {
                 return date
             }
@@ -30,7 +43,7 @@ extension JSONDecoder {
 extension JSONEncoder {
     public static var apiEncoder: JSONEncoder {
         let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
+        // Backend/OpenAPI use camelCase (otpCode, deviceInfo). Do not snake_case requests.
         encoder.dateEncodingStrategy = .iso8601
         return encoder
     }
