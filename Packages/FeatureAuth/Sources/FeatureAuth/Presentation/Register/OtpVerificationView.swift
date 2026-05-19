@@ -2,9 +2,11 @@ import SwiftUI
 import DesignSystem
 import Common
 
-struct EmailOtpVerificationView: View {
+struct OtpVerificationView: View {
     @Binding var otpCode: String
-    let email: String
+    let title: String
+    let subtitle: String
+    let submitTitle: String
     let otpError: String?
     let otpInfoMessage: String?
     let isLoading: Bool
@@ -15,11 +17,11 @@ struct EmailOtpVerificationView: View {
     var body: some View {
         VStack(spacing: SplickTheme.Spacing.lg) {
             VStack(spacing: SplickTheme.Spacing.xs) {
-                Text("Verify your email")
+                Text(title)
                     .font(SplickTheme.Typography.title)
                     .foregroundStyle(SplickTheme.Colors.textPrimary)
 
-                Text("We sent a 6-digit code to \(email)")
+                Text(subtitle)
                     .font(SplickTheme.Typography.callout)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
                     .multilineTextAlignment(.center)
@@ -50,7 +52,7 @@ struct EmailOtpVerificationView: View {
                 }
             }
 
-            SplickButton("Create Account", isLoading: isLoading, isDisabled: otpCode.count != 6) {
+            SplickButton(submitTitle, isLoading: isLoading, isDisabled: otpCode.count != 6) {
                 hideKeyboard()
                 onSubmit()
             }
