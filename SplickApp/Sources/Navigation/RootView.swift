@@ -65,7 +65,12 @@ struct RootView: View {
         NavigationStack {
             LoginView(
                 viewModel: LoginViewModel(loginUseCase: container.loginUseCase),
-                registerUseCase: container.registerUseCase,
+                registerViewModelFactory: {
+                    RegisterViewModel(
+                        registerUseCase: container.registerUseCase,
+                        requestEmailOtpUseCase: container.requestEmailOtpUseCase
+                    )
+                },
                 onAuthenticated: { user in
                     appState.setAuthenticated(user: user)
                 }
@@ -74,12 +79,17 @@ struct RootView: View {
     }
 
     private func checkExistingSession() async {
-        if !AppConstants.Dev.useMockData {
-            try? await Task.sleep(for: .seconds(1))
+        if AppConstants.Dev.useMockData {
+            if await container.sessionManager.isAuthenticated(),
+               let session = await container.sessionManager.currentSession() {
+                appState.setAuthenticated(user: session.user)
+            } else {
+                appState.setUnauthenticated()
+            }
+            return
         }
 
-        if await container.sessionManager.isAuthenticated(),
-           let session = await container.sessionManager.currentSession() {
+        if let session = await container.restoreSessionUseCase.execute() {
             appState.setAuthenticated(user: session.user)
         } else {
             appState.setUnauthenticated()

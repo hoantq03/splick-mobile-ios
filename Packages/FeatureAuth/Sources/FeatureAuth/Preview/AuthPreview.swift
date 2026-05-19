@@ -16,8 +16,20 @@ final class MockLoginUseCase: LoginUseCaseProtocol, Sendable {
     }
 }
 
+final class MockRequestEmailOtpUseCase: RequestEmailOtpUseCaseProtocol, Sendable {
+    func execute(email: String) async throws {
+        try await Task.sleep(for: .milliseconds(300))
+    }
+}
+
 final class MockRegisterUseCase: RegisterUseCaseProtocol, Sendable {
-    func execute(email: String, username: String, password: String) async throws -> AuthSession {
+    func execute(
+        email: String,
+        username: String,
+        password: String,
+        otpCode: String,
+        displayName: String?
+    ) async throws -> AuthSession {
         try await Task.sleep(for: .seconds(1))
         return AuthSession(
             user: PreviewData.currentUser,
@@ -32,14 +44,24 @@ final class MockRegisterUseCase: RegisterUseCaseProtocol, Sendable {
     NavigationStack {
         LoginView(
             viewModel: LoginViewModel(loginUseCase: MockLoginUseCase()),
-            registerUseCase: MockRegisterUseCase()
+            registerViewModelFactory: {
+                RegisterViewModel(
+                    registerUseCase: MockRegisterUseCase(),
+                    requestEmailOtpUseCase: MockRequestEmailOtpUseCase()
+                )
+            }
         )
     }
 }
 
 #Preview("Register") {
     NavigationStack {
-        RegisterView(viewModel: RegisterViewModel(registerUseCase: MockRegisterUseCase()))
+        RegisterView(
+            viewModel: RegisterViewModel(
+                registerUseCase: MockRegisterUseCase(),
+                requestEmailOtpUseCase: MockRequestEmailOtpUseCase()
+            )
+        )
     }
 }
 

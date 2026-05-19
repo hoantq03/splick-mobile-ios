@@ -45,25 +45,40 @@ public actor FakeAuthRepository: AuthRepositoryProtocol {
         return session
     }
 
-    public func register(email: String, username: String, password: String) async throws -> AuthSession {
-        logger.log("Mock register: \(email) / @\(username)")
+    public func requestEmailOtp(email: String) async throws {
+        logger.log("Mock OTP requested for \(email)")
+        try await Task.sleep(for: .milliseconds(150))
+    }
+
+    public func register(
+        email: String,
+        username: String,
+        password: String,
+        otpCode: String,
+        displayName: String?
+    ) async throws -> AuthSession {
+        logger.log("Mock register: \(email) / @\(username) otp=\(otpCode)")
         try await Task.sleep(for: .milliseconds(300))
-        let session = makeSession(email: email, username: username)
+        let session = makeSession(email: email, username: username, displayName: displayName)
         users[email] = (password: password, user: session.user)
         currentSession = session
         logger.success("Mock registration successful: @\(session.user.username)")
         return session
     }
 
-    private func makeSession(email: String, username: String?) -> AuthSession {
+    private func makeSession(email: String, username: String?, displayName: String? = nil) -> AuthSession {
         let resolvedEmail = email.isEmpty ? "dev@splick.app" : email
         let resolvedUsername = username ?? resolvedEmail.split(separator: "@").first.map(String.init) ?? "splickuser"
+        let resolvedDisplayName = displayName?.isEmpty == false
+            ? displayName!
+            : resolvedUsername.capitalized
         let user = User(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
             email: resolvedEmail,
             username: resolvedUsername,
-            displayName: resolvedUsername.capitalized,
+            displayName: resolvedDisplayName,
             avatarURL: nil,
+            status: .active,
             createdAt: .now
         )
         let token = AuthToken(
@@ -75,16 +90,20 @@ public actor FakeAuthRepository: AuthRepositoryProtocol {
         return AuthSession(user: user, token: token)
     }
 
-    public func refreshToken(_ refreshToken: String) async throws -> AuthToken {
+    public func refreshToken(_ refreshToken: String) async throws -> AuthSession {
         logger.log("Token refresh requested")
         try await Task.sleep(for: .milliseconds(200))
 
-        return AuthToken(
+        let user = currentSession?.user ?? makeSession(email: "dev@splick.app", username: "splickuser", displayName: nil).user
+        let token = AuthToken(
             accessToken: "fake-access-refreshed-\(UUID().uuidString.prefix(8))",
             refreshToken: "fake-refresh-new-\(UUID().uuidString.prefix(8))",
             expiresIn: 3600,
             tokenType: "Bearer"
         )
+        let session = AuthSession(user: user, token: token)
+        currentSession = session
+        return session
     }
 
     public func logout() async throws {

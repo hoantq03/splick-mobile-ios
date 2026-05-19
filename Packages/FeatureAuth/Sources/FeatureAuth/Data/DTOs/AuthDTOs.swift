@@ -3,12 +3,19 @@ import Foundation
 struct LoginRequestDTO: Encodable {
     let email: String
     let password: String
+    let deviceInfo: String?
+}
+
+struct EmailOtpRequestDTO: Encodable {
+    let email: String
 }
 
 struct RegisterRequestDTO: Encodable {
     let email: String
     let username: String
     let password: String
+    let otpCode: String
+    let displayName: String?
 }
 
 struct AuthResponseDTO: Decodable {
@@ -23,18 +30,12 @@ struct UserDTO: Decodable {
     let id: UUID
     let email: String
     let username: String
-    let displayName: String
+    let displayName: String?
     let avatarUrl: String?
+    let status: String?
     let createdAt: Date
 }
 
 struct RefreshTokenRequestDTO: Encodable {
     let refreshToken: String
-}
-
-struct TokenResponseDTO: Decodable {
-    let accessToken: String
-    let refreshToken: String
-    let expiresIn: Int
-    let tokenType: String
 }

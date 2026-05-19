@@ -5,16 +5,16 @@ import SplickDomain
 
 public struct LoginView: View {
     @StateObject private var viewModel: LoginViewModel
-    private let registerUseCase: RegisterUseCaseProtocol
+    private let registerViewModelFactory: () -> RegisterViewModel
     private let onAuthenticated: ((User) -> Void)?
 
     public init(
         viewModel: @autoclosure @escaping () -> LoginViewModel,
-        registerUseCase: RegisterUseCaseProtocol,
+        registerViewModelFactory: @escaping () -> RegisterViewModel,
         onAuthenticated: ((User) -> Void)? = nil
     ) {
         _viewModel = StateObject(wrappedValue: viewModel())
-        self.registerUseCase = registerUseCase
+        self.registerViewModelFactory = registerViewModelFactory
         self.onAuthenticated = onAuthenticated
     }
 
@@ -33,7 +33,7 @@ public struct LoginView: View {
         .background(SplickTheme.Colors.background)
         .navigationDestination(isPresented: $viewModel.showRegistration) {
             RegisterView(
-                viewModel: RegisterViewModel(registerUseCase: registerUseCase),
+                viewModel: registerViewModelFactory(),
                 onAuthenticated: onAuthenticated
             )
         }

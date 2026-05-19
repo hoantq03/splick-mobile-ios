@@ -19,8 +19,29 @@ public struct RegisterView: View {
         ScrollView {
             VStack(spacing: SplickTheme.Spacing.lg) {
                 headerSection
-                formSection
-                actionSection
+
+                switch viewModel.step {
+                case .accountDetails:
+                    accountDetailsSection
+                    accountDetailsActions
+                case .emailOtp:
+                    EmailOtpVerificationView(
+                        otpCode: $viewModel.otpCode,
+                        email: viewModel.email,
+                        otpError: viewModel.otpError,
+                        isLoading: viewModel.state.isLoading,
+                        onResend: { Task { await viewModel.resendOtp() } },
+                        onSubmit: { Task { await viewModel.register() } },
+                        onBack: { viewModel.goBackToAccountDetails() }
+                    )
+                }
+
+                if let error = viewModel.state.error {
+                    Text(error)
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.error)
+                        .multilineTextAlignment(.center)
+                }
             }
             .padding(.horizontal, SplickTheme.Spacing.lg)
             .padding(.top, SplickTheme.Spacing.xl)
@@ -35,22 +56,22 @@ public struct RegisterView: View {
         }
     }
 
-    // MARK: - Sections
-
     private var headerSection: some View {
         VStack(spacing: SplickTheme.Spacing.xs) {
             Text("Create Account")
                 .font(SplickTheme.Typography.largeTitle)
                 .foregroundStyle(SplickTheme.Colors.textPrimary)
 
-            Text("Join your friends on Splick")
+            Text(viewModel.step == .accountDetails
+                 ? "Join your friends on Splick"
+                 : "Almost there — verify your email")
                 .font(SplickTheme.Typography.callout)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
         }
         .padding(.bottom, SplickTheme.Spacing.md)
     }
 
-    private var formSection: some View {
+    private var accountDetailsSection: some View {
         VStack(spacing: SplickTheme.Spacing.md) {
             SplickTextField(
                 "Email",
@@ -74,6 +95,13 @@ public struct RegisterView: View {
             .textInputAutocapitalization(.never)
 
             SplickTextField(
+                "Display name (optional)",
+                text: $viewModel.displayName,
+                icon: "textformat"
+            )
+            .textContentType(.name)
+
+            SplickTextField(
                 "Password",
                 text: $viewModel.password,
                 isSecure: true,
@@ -93,24 +121,15 @@ public struct RegisterView: View {
         }
     }
 
-    private var actionSection: some View {
-        VStack(spacing: SplickTheme.Spacing.md) {
-            if let error = viewModel.state.error {
-                Text(error)
-                    .font(SplickTheme.Typography.caption)
-                    .foregroundStyle(SplickTheme.Colors.error)
-                    .multilineTextAlignment(.center)
-            }
-
-            SplickButton(
-                "Create Account",
-                isLoading: viewModel.state.isLoading,
-                isDisabled: !AppConstants.Dev.useMockData
-                    && (viewModel.email.isEmpty || viewModel.username.isEmpty
-                        || viewModel.password.isEmpty || viewModel.confirmPassword.isEmpty)
-            ) {
-                Task { await viewModel.register() }
-            }
+    private var accountDetailsActions: some View {
+        SplickButton(
+            "Continue",
+            isLoading: viewModel.state.isLoading,
+            isDisabled: !AppConstants.Dev.useMockData
+                && (viewModel.email.isEmpty || viewModel.username.isEmpty
+                    || viewModel.password.isEmpty || viewModel.confirmPassword.isEmpty)
+        ) {
+            Task { await viewModel.requestOtpAndContinue() }
         }
     }
 }

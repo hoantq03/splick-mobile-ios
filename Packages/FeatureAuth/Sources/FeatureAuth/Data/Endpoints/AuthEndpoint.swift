@@ -3,6 +3,7 @@ import Networking
 
 enum AuthEndpoint: APIEndpoint {
     case login(LoginRequestDTO)
+    case requestEmailOtp(EmailOtpRequestDTO)
     case register(RegisterRequestDTO)
     case refreshToken(RefreshTokenRequestDTO)
     case logout
@@ -11,6 +12,7 @@ enum AuthEndpoint: APIEndpoint {
     var path: String {
         switch self {
         case .login: return "/v1/auth/login"
+        case .requestEmailOtp: return "/v1/auth/email/otp/request"
         case .register: return "/v1/auth/register"
         case .refreshToken: return "/v1/auth/refresh"
         case .logout: return "/v1/auth/logout"
@@ -20,7 +22,7 @@ enum AuthEndpoint: APIEndpoint {
 
     var method: HTTPMethod {
         switch self {
-        case .login, .register, .refreshToken, .logout:
+        case .login, .requestEmailOtp, .register, .refreshToken, .logout:
             return .post
         case .me:
             return .get
@@ -30,6 +32,7 @@ enum AuthEndpoint: APIEndpoint {
     var body: Encodable? {
         switch self {
         case .login(let dto): return dto
+        case .requestEmailOtp(let dto): return dto
         case .register(let dto): return dto
         case .refreshToken(let dto): return dto
         case .logout, .me: return nil
@@ -38,7 +41,7 @@ enum AuthEndpoint: APIEndpoint {
 
     var requiresAuth: Bool {
         switch self {
-        case .login, .register, .refreshToken:
+        case .login, .requestEmailOtp, .register, .refreshToken:
             return false
         case .logout, .me:
             return true
