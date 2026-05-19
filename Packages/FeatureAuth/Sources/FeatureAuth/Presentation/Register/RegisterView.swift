@@ -125,9 +125,8 @@ public struct RegisterView: View {
         SplickButton(
             "Continue",
             isLoading: viewModel.state.isLoading,
-            isDisabled: !AppConstants.Dev.useMockData
-                && (viewModel.email.isEmpty || viewModel.username.isEmpty
-                    || viewModel.password.isEmpty || viewModel.confirmPassword.isEmpty)
+            isDisabled: viewModel.email.isEmpty || viewModel.username.isEmpty
+                || viewModel.password.isEmpty || viewModel.confirmPassword.isEmpty
         ) {
             Task { await viewModel.requestOtpAndContinue() }
         }

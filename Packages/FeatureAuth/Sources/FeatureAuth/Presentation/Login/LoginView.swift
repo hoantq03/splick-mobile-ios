@@ -95,8 +95,7 @@ public struct LoginView: View {
             SplickButton(
                 "Sign In",
                 isLoading: viewModel.state.isLoading,
-                isDisabled: !AppConstants.Dev.useMockData
-                    && (viewModel.email.isEmpty || viewModel.password.isEmpty)
+                isDisabled: viewModel.email.isEmpty || viewModel.password.isEmpty
             ) {
                 Task { await viewModel.login() }
             }

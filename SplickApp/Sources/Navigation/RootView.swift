@@ -79,16 +79,6 @@ struct RootView: View {
     }
 
     private func checkExistingSession() async {
-        if AppConstants.Dev.useMockData {
-            if await container.sessionManager.isAuthenticated(),
-               let session = await container.sessionManager.currentSession() {
-                appState.setAuthenticated(user: session.user)
-            } else {
-                appState.setUnauthenticated()
-            }
-            return
-        }
-
         if let session = await container.restoreSessionUseCase.execute() {
             appState.setAuthenticated(user: session.user)
         } else {

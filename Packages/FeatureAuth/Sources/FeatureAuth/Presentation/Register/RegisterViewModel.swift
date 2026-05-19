@@ -36,14 +36,12 @@ public final class RegisterViewModel: ObservableObject {
     }
 
     func requestOtpAndContinue() async {
-        guard AppConstants.Dev.useMockData || validateAccountDetails() else { return }
+        guard validateAccountDetails() else { return }
 
         state = .loading
         otpError = nil
         do {
-            if !AppConstants.Dev.useMockData {
-                try await requestEmailOtpUseCase.execute(email: email.trimmed)
-            }
+            try await requestEmailOtpUseCase.execute(email: email.trimmed)
             step = .emailOtp
             state = .idle
         } catch let error as NetworkError {
@@ -55,7 +53,6 @@ public final class RegisterViewModel: ObservableObject {
     }
 
     func resendOtp() async {
-        guard !AppConstants.Dev.useMockData else { return }
         state = .loading
         otpError = nil
         do {
@@ -69,7 +66,7 @@ public final class RegisterViewModel: ObservableObject {
     }
 
     func register() async {
-        guard AppConstants.Dev.useMockData || validateOtp() else { return }
+        guard validateOtp() else { return }
 
         state = .loading
         do {
@@ -77,7 +74,7 @@ public final class RegisterViewModel: ObservableObject {
                 email: email.trimmed,
                 username: username.trimmed,
                 password: password,
-                otpCode: AppConstants.Dev.useMockData ? "000000" : otpCode,
+                otpCode: otpCode,
                 displayName: displayName.trimmed
             )
             state = .loaded(session)

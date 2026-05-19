@@ -25,15 +25,14 @@ final class DependencyContainer: ObservableObject {
     let apiClient: APIClientProtocol
     let sessionManager: SessionManagerProtocol
 
-    // MARK: - Auth
+    // MARK: - Auth (always live API)
 
     private let authRepository: AuthRepositoryProtocol
     let refreshTokenUseCase: RefreshTokenUseCaseProtocol
     let restoreSessionUseCase: RestoreSessionUseCaseProtocol
 
     lazy var loginUseCase: LoginUseCaseProtocol = {
-        if let simulation { return simulation.loginUseCase }
-        return LoginUseCase(repository: authRepository, sessionManager: sessionManager)
+        LoginUseCase(repository: authRepository, sessionManager: sessionManager)
     }()
 
     lazy var requestEmailOtpUseCase: RequestEmailOtpUseCaseProtocol = {
@@ -41,13 +40,11 @@ final class DependencyContainer: ObservableObject {
     }()
 
     lazy var registerUseCase: RegisterUseCaseProtocol = {
-        if let simulation { return simulation.registerUseCase }
-        return RegisterUseCase(repository: authRepository, sessionManager: sessionManager)
+        RegisterUseCase(repository: authRepository, sessionManager: sessionManager)
     }()
 
     lazy var logoutUseCase: LogoutUseCaseProtocol = {
-        if let simulation { return simulation.logoutUseCase }
-        return LogoutUseCase(repository: authRepository, sessionManager: sessionManager)
+        LogoutUseCase(repository: authRepository, sessionManager: sessionManager)
     }()
 
     // MARK: - Feed
@@ -170,30 +167,6 @@ final class DependencyContainer: ObservableObject {
         self.tokenProvider = tokenProvider
         self.keychainService = KeychainService()
         self.userDefaultsService = UserDefaultsService()
-
-        if AppConstants.Dev.useMockData {
-            let simulation = SimulationContainer(loggerModule: "SplickApp")
-            self.simulation = simulation
-            self.sessionManager = simulation.sessionManager
-            self.apiClient = APIClient(tokenProvider: tokenProvider)
-            self.authRepository = simulation.authRepository
-            self.refreshTokenUseCase = RefreshTokenUseCase(
-                repository: simulation.authRepository,
-                sessionManager: simulation.sessionManager,
-                tokenProvider: tokenProvider
-            )
-            self.restoreSessionUseCase = RestoreSessionUseCase(
-                repository: simulation.authRepository,
-                sessionManager: simulation.sessionManager,
-                keychainService: keychainService,
-                tokenProvider: tokenProvider,
-                refreshTokenUseCase: refreshTokenUseCase
-            )
-            Task { await simulation.seedTestData() }
-            return
-        }
-
-        self.simulation = nil
         self.sessionManager = SessionManager()
 
         let refreshCoordinator = TokenRefreshCoordinator()
@@ -222,5 +195,13 @@ final class DependencyContainer: ObservableObject {
             tokenProvider: tokenProvider,
             refreshTokenUseCase: refreshTokenUseCase
         )
+
+        if AppConstants.Dev.useMockData {
+            let simulation = SimulationContainer(loggerModule: "SplickApp")
+            self.simulation = simulation
+            Task { await simulation.seedTestData() }
+        } else {
+            self.simulation = nil
+        }
     }
 }

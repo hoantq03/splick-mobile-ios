@@ -1,7 +1,7 @@
 import Foundation
 
 public enum AppConstants {
-    /// When true, all features use in-memory fake repositories (no network).
+    /// When true, feed/expense/notification use in-memory fakes. Auth always calls the live API.
     public enum Dev {
         #if DEBUG
         public static let useMockData = true

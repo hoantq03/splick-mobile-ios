@@ -11,7 +11,7 @@ struct SandboxRunner {
         print("""
         ╔══════════════════════════════════════════════════╗
         ║       SPLICK — Simulation Sandbox (v1.0)        ║
-        ║   Windows-compatible feature flow testing       ║
+        ║   Non-auth feature flows (feed, expense, …)     ║
         ╚══════════════════════════════════════════════════╝
         """)
 
@@ -22,10 +22,8 @@ struct SandboxRunner {
         let command = args.first ?? "all"
 
         switch command {
-        case "auth", "login":
-            await simulateAuthLogin(container)
-        case "register":
-            await simulateAuthRegister(container)
+        case "auth", "login", "register":
+            printAuthNotSupported(command)
         case "feed":
             await simulateFeedFlow(container)
         case "expense", "split":
@@ -43,13 +41,17 @@ struct SandboxRunner {
         print("\n✅ Simulation complete.")
     }
 
-    // MARK: - All Simulations
+    static func printAuthNotSupported(_ command: String) {
+        print("""
+        Auth is no longer simulated. Use the Splick iOS app against the live backend:
+          • Start splick-backend (gateway :8080, auth-service :8081)
+          • Register/login in the app (OTP via Mailpit: http://localhost:8025)
+
+        Command '\(command)' skipped.
+        """)
+    }
 
     static func runAllSimulations(_ container: SimulationContainer) async {
-        await simulateAuthLogin(container)
-        print("")
-        await simulateAuthRegister(container)
-        print("")
         await simulateFeedFlow(container)
         print("")
         await simulateExpenseFlow(container)
@@ -57,90 +59,12 @@ struct SandboxRunner {
         await simulateNotificationFlow(container)
     }
 
-    // MARK: - Auth Simulations
-
-    static func simulateAuthLogin(_ container: SimulationContainer) async {
-        let logger = StateLogger(module: "Auth.Login")
-        logger.separator()
-        logger.log("▶ SIMULATION: Login Flow")
-        logger.separator()
-
-        // Successful login
-        logger.log("Scenario 1: Valid credentials")
-        do {
-            let session = try await container.loginUseCase.execute(
-                email: "test@splick.app",
-                password: "password123"
-            )
-            logger.success("Logged in as: @\(session.user.username)")
-            logger.log("Token: \(session.token.accessToken.prefix(20))...")
-        } catch {
-            logger.failure("Unexpected error: \(error)")
-        }
-
-        print("")
-
-        // Failed login
-        logger.log("Scenario 2: Invalid credentials")
-        do {
-            _ = try await container.loginUseCase.execute(
-                email: "test@splick.app",
-                password: "wrongpassword"
-            )
-            logger.failure("Should have thrown error")
-        } catch {
-            logger.success("Correctly rejected: \(error)")
-        }
-
-        logger.separator()
-    }
-
-    static func simulateAuthRegister(_ container: SimulationContainer) async {
-        let logger = StateLogger(module: "Auth.Register")
-        logger.separator()
-        logger.log("▶ SIMULATION: Register Flow")
-        logger.separator()
-
-        // Successful registration
-        logger.log("Scenario 1: New user registration")
-        do {
-            let session = try await container.registerUseCase.execute(
-                email: "newuser@splick.app",
-                username: "newuser",
-                password: "securepass123"
-            )
-            logger.success("Registered: @\(session.user.username) (\(session.user.email))")
-        } catch {
-            logger.failure("Unexpected error: \(error)")
-        }
-
-        print("")
-
-        // Duplicate email
-        logger.log("Scenario 2: Duplicate email")
-        do {
-            _ = try await container.registerUseCase.execute(
-                email: "test@splick.app",
-                username: "another",
-                password: "password123"
-            )
-            logger.failure("Should have thrown error")
-        } catch {
-            logger.success("Correctly rejected duplicate: \(error)")
-        }
-
-        logger.separator()
-    }
-
-    // MARK: - Feed Simulation
-
     static func simulateFeedFlow(_ container: SimulationContainer) async {
         let logger = StateLogger(module: "Feed")
         logger.separator()
         logger.log("▶ SIMULATION: Social Feed Flow")
         logger.separator()
 
-        // Load feed page 0
         logger.log("Loading feed (page 0)...")
         do {
             let posts = try await container.fetchFeedUseCase.execute(page: 0)
@@ -150,7 +74,6 @@ struct SandboxRunner {
                 logger.log("  [\(i+1)] @\(post.author.username): \(post.caption ?? "(no caption)") — \(post.reactions.count) reactions")
             }
 
-            // React to first post
             if let firstPost = posts.first {
                 print("")
                 logger.log("Adding reaction ❤️ to first post...")
@@ -163,7 +86,6 @@ struct SandboxRunner {
             logger.failure("Feed error: \(error)")
         }
 
-        // Load page 1 (pagination)
         print("")
         logger.log("Loading feed (page 1) — pagination test...")
         do {
@@ -176,15 +98,12 @@ struct SandboxRunner {
         logger.separator()
     }
 
-    // MARK: - Expense Simulation
-
     static func simulateExpenseFlow(_ container: SimulationContainer) async {
         let logger = StateLogger(module: "Expense")
         logger.separator()
         logger.log("▶ SIMULATION: Expense Splitting Flow")
         logger.separator()
 
-        // Fetch existing expenses
         logger.log("Loading expenses...")
         do {
             let expenses = try await container.fetchExpensesUseCase.execute(groupId: nil, page: 0)
@@ -198,8 +117,6 @@ struct SandboxRunner {
         }
 
         print("")
-
-        // Create new expense
         logger.log("Creating new expense: 'Team lunch' = 600,000₫ split 3 ways...")
         do {
             let request = CreateExpenseRequest(
@@ -222,8 +139,6 @@ struct SandboxRunner {
         }
 
         print("")
-
-        // Fetch debt summary
         logger.log("Loading debt summary...")
         do {
             let debts = try await container.fetchDebtSummaryUseCase.execute(groupId: nil)
@@ -235,40 +150,8 @@ struct SandboxRunner {
             logger.failure("Debt summary error: \(error)")
         }
 
-        print("")
-
-        // Validation test — empty description
-        logger.log("Validation test: empty description...")
-        do {
-            let badRequest = CreateExpenseRequest(
-                description: "   ",
-                totalAmount: 100000,
-                participants: [UUID()]
-            )
-            _ = try await container.createExpenseUseCase.execute(badRequest)
-            logger.failure("Should have rejected empty description")
-        } catch {
-            logger.success("Validation caught: \(error)")
-        }
-
-        // Validation test — zero amount
-        logger.log("Validation test: zero amount...")
-        do {
-            let badRequest = CreateExpenseRequest(
-                description: "Test",
-                totalAmount: 0,
-                participants: [UUID()]
-            )
-            _ = try await container.createExpenseUseCase.execute(badRequest)
-            logger.failure("Should have rejected zero amount")
-        } catch {
-            logger.success("Validation caught: \(error)")
-        }
-
         logger.separator()
     }
-
-    // MARK: - Notification Simulation
 
     static func simulateNotificationFlow(_ container: SimulationContainer) async {
         let logger = StateLogger(module: "Notification")
@@ -286,7 +169,6 @@ struct SandboxRunner {
                 logger.log("  \(status) [\(n.type.rawValue)] \(n.title): \(n.body)")
             }
 
-            // Mark first unread as read
             if let firstUnread = unread.first {
                 print("")
                 logger.log("Marking notification as read: \(firstUnread.id.uuidString.prefix(8))...")
@@ -294,7 +176,6 @@ struct SandboxRunner {
                 logger.success("Marked as read")
             }
 
-            // Mark all as read
             print("")
             logger.log("Marking all as read...")
             try await container.markNotificationReadUseCase.markAllRead()
@@ -306,31 +187,13 @@ struct SandboxRunner {
         logger.separator()
     }
 
-    // MARK: - Full Flow
-
     static func simulateFullFlow(_ container: SimulationContainer) async {
         let logger = StateLogger(module: "FullFlow")
         logger.separator()
-        logger.log("▶ SIMULATION: Complete User Journey")
+        logger.log("▶ SIMULATION: Post-login feature journey (mock data)")
         logger.separator()
 
-        // 1. Register
-        logger.log("Step 1: Register new user")
-        do {
-            let session = try await container.registerUseCase.execute(
-                email: "journey@splick.app",
-                username: "journeyuser",
-                password: "test12345"
-            )
-            logger.success("Registered: @\(session.user.username)")
-        } catch {
-            logger.failure("Registration failed: \(error)")
-            return
-        }
-
-        // 2. View feed
-        print("")
-        logger.log("Step 2: Browse feed")
+        logger.log("Step 1: Browse feed")
         do {
             let posts = try await container.fetchFeedUseCase.execute(page: 0)
             logger.success("Feed has \(posts.count) posts")
@@ -338,9 +201,8 @@ struct SandboxRunner {
             logger.failure("Feed failed: \(error)")
         }
 
-        // 3. Create expense
         print("")
-        logger.log("Step 3: Create expense after group dinner")
+        logger.log("Step 2: Create expense")
         do {
             let request = CreateExpenseRequest(
                 description: "Group dinner celebration",
@@ -359,9 +221,8 @@ struct SandboxRunner {
             logger.failure("Expense failed: \(error)")
         }
 
-        // 4. Check notifications
         print("")
-        logger.log("Step 4: Check notifications")
+        logger.log("Step 3: Check notifications")
         do {
             let notifications = try await container.fetchNotificationsUseCase.execute(page: 0)
             let unread = notifications.filter { !$0.isRead }.count
@@ -371,23 +232,21 @@ struct SandboxRunner {
         }
 
         logger.separator()
-        logger.success("Full user journey completed successfully")
+        logger.success("Feature journey completed (auth uses live API in the app)")
     }
-
-    // MARK: - Usage
 
     static func printUsage() {
         print("""
         Usage: Sandbox [command]
 
         Commands:
-          auth, login     Simulate login flow
-          register        Simulate registration flow
           feed            Simulate social feed flow
           expense, split  Simulate expense splitting
           notification    Simulate notifications
-          full            Simulate complete user journey
-          all             Run all simulations (default)
+          full            Simulate feed + expense + notifications
+          all             Run all feature simulations (default)
+
+        Auth (login/register) is not simulated — use the iOS app with splick-backend.
         """)
     }
 }
