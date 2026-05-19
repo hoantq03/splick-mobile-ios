@@ -6,6 +6,7 @@ public struct User: Identifiable, Codable, Equatable, Sendable {
     public let username: String
     public let displayName: String
     public let avatarURL: URL?
+    public let status: UserAccountStatus
     public let createdAt: Date
 
     public init(
@@ -14,6 +15,7 @@ public struct User: Identifiable, Codable, Equatable, Sendable {
         username: String,
         displayName: String,
         avatarURL: URL? = nil,
+        status: UserAccountStatus = .active,
         createdAt: Date = .now
     ) {
         self.id = id
@@ -21,6 +23,7 @@ public struct User: Identifiable, Codable, Equatable, Sendable {
         self.username = username
         self.displayName = displayName
         self.avatarURL = avatarURL
+        self.status = status
         self.createdAt = createdAt
     }
 }

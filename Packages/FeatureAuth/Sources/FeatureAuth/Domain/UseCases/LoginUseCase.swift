@@ -1,4 +1,5 @@
 import Foundation
+import Common
 import SplickDomain
 
 public protocol LoginUseCaseProtocol: Sendable {
@@ -16,6 +17,9 @@ public final class LoginUseCase: LoginUseCaseProtocol, Sendable {
 
     public func execute(email: String, password: String) async throws -> AuthSession {
         let session = try await repository.login(email: email, password: password)
+        guard session.user.status.allowsSignIn else {
+            throw AuthError.accountLocked
+        }
         await sessionManager.setSession(session)
         return session
     }
