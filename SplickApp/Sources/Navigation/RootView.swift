@@ -64,11 +64,16 @@ struct RootView: View {
     private var authFlow: some View {
         NavigationStack {
             LoginView(
-                viewModel: LoginViewModel(loginUseCase: container.loginUseCase),
+                viewModel: LoginViewModel(
+                    loginUseCase: container.loginUseCase,
+                    requestPhoneOtpUseCase: container.requestPhoneOtpUseCase,
+                    verifyPhoneOtpUseCase: container.verifyPhoneOtpUseCase
+                ),
                 registerViewModelFactory: {
                     RegisterViewModel(
                         registerUseCase: container.registerUseCase,
-                        requestEmailOtpUseCase: container.requestEmailOtpUseCase
+                        requestEmailOtpUseCase: container.requestEmailOtpUseCase,
+                        requestPhoneOtpUseCase: container.requestPhoneOtpUseCase
                     )
                 },
                 onAuthenticated: { user in

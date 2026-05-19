@@ -39,6 +39,14 @@ final class DependencyContainer: ObservableObject {
         RequestEmailOtpUseCase(repository: authRepository)
     }()
 
+    lazy var requestPhoneOtpUseCase: RequestPhoneOtpUseCaseProtocol = {
+        RequestPhoneOtpUseCase(repository: authRepository)
+    }()
+
+    lazy var verifyPhoneOtpUseCase: VerifyPhoneOtpUseCaseProtocol = {
+        VerifyPhoneOtpUseCase(repository: authRepository, sessionManager: sessionManager)
+    }()
+
     lazy var registerUseCase: RegisterUseCaseProtocol = {
         RegisterUseCase(repository: authRepository, sessionManager: sessionManager)
     }()
