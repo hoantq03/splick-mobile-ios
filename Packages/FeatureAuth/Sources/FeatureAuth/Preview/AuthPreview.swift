@@ -22,9 +22,26 @@ final class MockRequestEmailOtpUseCase: RequestEmailOtpUseCaseProtocol, Sendable
     }
 }
 
+final class MockRequestPhoneOtpUseCase: RequestPhoneOtpUseCaseProtocol, Sendable {
+    func execute(phoneNumber: String) async throws {
+        try await Task.sleep(for: .milliseconds(300))
+    }
+}
+
+final class MockVerifyPhoneOtpUseCase: VerifyPhoneOtpUseCaseProtocol, Sendable {
+    func execute(phoneNumber: String, otpCode: String) async throws -> AuthSession {
+        try await Task.sleep(for: .seconds(1))
+        return AuthSession(
+            user: PreviewData.currentUser,
+            token: AuthToken(accessToken: "mock-token", refreshToken: "mock-refresh", expiresIn: 3600)
+        )
+    }
+}
+
 final class MockRegisterUseCase: RegisterUseCaseProtocol, Sendable {
     func execute(
-        email: String,
+        channel: AuthRegistrationChannel,
+        identifier: String,
         username: String,
         password: String,
         otpCode: String,
@@ -43,11 +60,16 @@ final class MockRegisterUseCase: RegisterUseCaseProtocol, Sendable {
 #Preview("Login") {
     NavigationStack {
         LoginView(
-            viewModel: LoginViewModel(loginUseCase: MockLoginUseCase()),
+            viewModel: LoginViewModel(
+                loginUseCase: MockLoginUseCase(),
+                requestPhoneOtpUseCase: MockRequestPhoneOtpUseCase(),
+                verifyPhoneOtpUseCase: MockVerifyPhoneOtpUseCase()
+            ),
             registerViewModelFactory: {
                 RegisterViewModel(
                     registerUseCase: MockRegisterUseCase(),
-                    requestEmailOtpUseCase: MockRequestEmailOtpUseCase()
+                    requestEmailOtpUseCase: MockRequestEmailOtpUseCase(),
+                    requestPhoneOtpUseCase: MockRequestPhoneOtpUseCase()
                 )
             }
         )
@@ -59,7 +81,8 @@ final class MockRegisterUseCase: RegisterUseCaseProtocol, Sendable {
         RegisterView(
             viewModel: RegisterViewModel(
                 registerUseCase: MockRegisterUseCase(),
-                requestEmailOtpUseCase: MockRequestEmailOtpUseCase()
+                requestEmailOtpUseCase: MockRequestEmailOtpUseCase(),
+                requestPhoneOtpUseCase: MockRequestPhoneOtpUseCase()
             )
         )
     }
