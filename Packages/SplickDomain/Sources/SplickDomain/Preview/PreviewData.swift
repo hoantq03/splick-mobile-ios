@@ -10,7 +10,8 @@ public enum PreviewData {
         email: "nam@splick.app",
         username: "namtran",
         displayName: "Nam Tran",
-        avatarURL: nil,
+        avatarURL: URL(string: "https://cdn.splick.app/avatars/preview-nam.png"),
+        status: .active,
         createdAt: .now
     )
 
