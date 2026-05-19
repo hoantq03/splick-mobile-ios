@@ -121,32 +121,43 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
             throw NetworkError.unknown("Invalid response type")
         }
 
-        switch httpResponse.statusCode {
+        let statusCode = httpResponse.statusCode
+
+        switch statusCode {
         case 200...299:
             return
+        case 400:
+            throw mapAPIError(statusCode: statusCode, data: data, fallback: .unknown("Bad request"))
         case 401:
-            throw NetworkError.unauthorized
+            // Parse body: INVALID_OTP vs UNAUTHORIZED vs INVALID_TOKEN (not a blind unauthorized).
+            throw mapAPIError(statusCode: statusCode, data: data, fallback: .unauthorized)
         case 403:
-            throw mapAPIError(statusCode: 403, data: data, fallback: .forbidden)
+            throw mapAPIError(statusCode: statusCode, data: data, fallback: .forbidden)
         case 404:
-            throw mapAPIError(statusCode: 404, data: data, fallback: .notFound)
+            throw mapAPIError(statusCode: statusCode, data: data, fallback: .notFound)
         case 409:
-            throw mapAPIError(statusCode: 409, data: data, fallback: .unknown("Conflict"))
+            throw mapAPIError(statusCode: statusCode, data: data, fallback: .unknown("Conflict"))
         case 423:
-            throw AuthError.accountLocked
+            throw mapAPIError(statusCode: statusCode, data: data, fallback: .forbidden)
         case 429:
-            throw mapAPIError(statusCode: 429, data: data, fallback: .rateLimited)
+            throw mapAPIError(statusCode: statusCode, data: data, fallback: .rateLimited)
+        case 503:
+            throw mapAPIError(
+                statusCode: statusCode,
+                data: data,
+                fallback: .serverError(statusCode: statusCode)
+            )
         case 500...599:
             throw mapAPIError(
-                statusCode: httpResponse.statusCode,
+                statusCode: statusCode,
                 data: data,
-                fallback: .serverError(statusCode: httpResponse.statusCode)
+                fallback: .serverError(statusCode: statusCode)
             )
         default:
             throw mapAPIError(
-                statusCode: httpResponse.statusCode,
+                statusCode: statusCode,
                 data: data,
-                fallback: .unknown("HTTP \(httpResponse.statusCode)")
+                fallback: .unknown("HTTP \(statusCode)")
             )
         }
     }
@@ -161,20 +172,43 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
         }
 
         switch body.error.uppercased() {
-        case "UNAUTHORIZED", "INVALID_OTP", "INVALID_TOKEN":
+        case "INVALID_OTP":
+            return AuthError.invalidOtp(
+                body.message.isEmpty ? "Invalid or expired verification code." : body.message
+            )
+        case "UNAUTHORIZED", "INVALID_TOKEN":
             return NetworkError.unauthorized
         case "ACCOUNT_LOCKED":
             return AuthError.accountLocked
         case "CONFLICT":
             return AuthError.emailAlreadyExists
+        case "OTP_RATE_LIMIT":
+            return NetworkError.rateLimited
         case "EMAIL_DELIVERY_FAILED":
-            return NetworkError.unknown(body.message)
+            return NetworkError.unknown(
+                body.message.isEmpty ? "Unable to send email. Please try again later." : body.message
+            )
+        case "VALIDATION_ERROR":
+            return mapValidationError(body.message)
+        case "NOT_FOUND":
+            return NetworkError.notFound
+        case "INTERNAL_ERROR":
+            return NetworkError.serverError(statusCode: body.status)
         default:
             if body.message.isEmpty {
                 return fallback
             }
             return NetworkError.unknown(body.message)
         }
+    }
+
+    private func mapValidationError(_ message: String) -> Error {
+        if message.localizedCaseInsensitiveContains("otpcode") {
+            return AuthError.invalidOtp(
+                message.isEmpty ? "Enter the 6-digit code from your email." : message
+            )
+        }
+        return NetworkError.unknown(message.isEmpty ? "Validation failed." : message)
     }
 
     private func mapURLError(_ error: URLError) -> NetworkError {

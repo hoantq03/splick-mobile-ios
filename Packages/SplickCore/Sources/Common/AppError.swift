@@ -31,6 +31,16 @@ public enum NetworkError: Error, Equatable {
     case serverUnreachable
     case unknown(String)
 
+    /// True for errors where retrying after fixing network may succeed (not credential-related).
+    public var isConnectivityIssue: Bool {
+        switch self {
+        case .noConnection, .timeout, .serverUnreachable:
+            return true
+        default:
+            return false
+        }
+    }
+
     public var userMessage: String {
         switch self {
         case .noConnection: return "No internet connection. Please check your network."
@@ -48,7 +58,8 @@ public enum NetworkError: Error, Equatable {
         case .forbidden: return "You don't have permission to perform this action."
         case .notFound: return "The requested resource was not found."
         case .rateLimited: return "Too many requests. Please wait a moment."
-        case .unknown: return "An unexpected error occurred."
+        case .unknown(let message):
+            return message.isEmpty ? "An unexpected error occurred." : message
         }
     }
 }
@@ -76,6 +87,7 @@ public enum AuthError: Error, Equatable {
     case tokenExpired
     case refreshFailed
     case accountLocked
+    case invalidOtp(String)
     case registrationFailed(String)
     case emailAlreadyExists
 
@@ -85,6 +97,7 @@ public enum AuthError: Error, Equatable {
         case .tokenExpired: return "Your session has expired. Please log in again."
         case .refreshFailed: return "Failed to refresh session."
         case .accountLocked: return "Your account has been locked."
+        case .invalidOtp(let message): return message
         case .registrationFailed(let reason): return "Registration failed: \(reason)"
         case .emailAlreadyExists: return "An account with this email already exists."
         }
