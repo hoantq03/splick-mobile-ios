@@ -47,6 +47,10 @@ final class DependencyContainer: ObservableObject {
         VerifyPhoneOtpUseCase(repository: authRepository, sessionManager: sessionManager)
     }()
 
+    lazy var googleSignInUseCase: GoogleSignInUseCaseProtocol = {
+        GoogleSignInUseCase(repository: authRepository, sessionManager: sessionManager)
+    }()
+
     lazy var registerUseCase: RegisterUseCaseProtocol = {
         RegisterUseCase(repository: authRepository, sessionManager: sessionManager)
     }()

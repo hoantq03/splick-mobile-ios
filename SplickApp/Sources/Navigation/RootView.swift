@@ -67,7 +67,9 @@ struct RootView: View {
                 viewModel: LoginViewModel(
                     loginUseCase: container.loginUseCase,
                     requestPhoneOtpUseCase: container.requestPhoneOtpUseCase,
-                    verifyPhoneOtpUseCase: container.verifyPhoneOtpUseCase
+                    verifyPhoneOtpUseCase: container.verifyPhoneOtpUseCase,
+                    googleSignInUseCase: container.googleSignInUseCase,
+                    googleSignInPresenter: GoogleSignInClient.shared
                 ),
                 registerViewModelFactory: {
                     RegisterViewModel(

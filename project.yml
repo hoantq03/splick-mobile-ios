@@ -37,6 +37,9 @@ packages:
     path: Packages/FeatureFriends
   SimulationKit:
     path: Packages/SimulationKit
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    from: "8.0.0"
 
 targets:
   SplickApp:
@@ -69,6 +72,8 @@ targets:
         product: FeatureFriends
       - package: SimulationKit
         product: SimulationKit
+      - package: GoogleSignIn
+        product: GoogleSignIn
     settings:
       base:
         PRODUCT_NAME: SplickApp
