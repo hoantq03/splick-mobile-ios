@@ -29,6 +29,7 @@ public struct RegisterView: View {
                         otpCode: $viewModel.otpCode,
                         email: viewModel.email,
                         otpError: viewModel.otpError,
+                        otpInfoMessage: viewModel.otpInfoMessage,
                         isLoading: viewModel.state.isLoading,
                         onResend: { Task { await viewModel.resendOtp() } },
                         onSubmit: { Task { await viewModel.register() } },
@@ -49,6 +50,9 @@ public struct RegisterView: View {
         .scrollDismissesKeyboard(.interactively)
         .background(SplickTheme.Colors.background)
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $viewModel.showPasswordRequirements) {
+            PasswordRequirementsSheet(result: viewModel.passwordStrength)
+        }
         .onChange(of: viewModel.state) { state in
             if case .loaded(let session) = state {
                 onAuthenticated?(session.user)
@@ -77,22 +81,26 @@ public struct RegisterView: View {
                 "Email",
                 text: $viewModel.email,
                 errorMessage: viewModel.emailError,
-                icon: "envelope"
+                icon: "envelope",
+                validationStatus: viewModel.emailStatus
             )
             .textContentType(.emailAddress)
             .keyboardType(.emailAddress)
             .autocorrectionDisabled()
             .textInputAutocapitalization(.never)
+            .onChange(of: viewModel.email) { _ in viewModel.validateEmailField() }
 
             SplickTextField(
                 "Username",
                 text: $viewModel.username,
                 errorMessage: viewModel.usernameError,
-                icon: "person"
+                icon: "person",
+                validationStatus: viewModel.usernameStatus
             )
             .textContentType(.username)
             .autocorrectionDisabled()
             .textInputAutocapitalization(.never)
+            .onChange(of: viewModel.username) { _ in viewModel.validateUsernameField() }
 
             SplickTextField(
                 "Display name (optional)",
@@ -106,18 +114,23 @@ public struct RegisterView: View {
                 text: $viewModel.password,
                 isSecure: true,
                 errorMessage: viewModel.passwordError,
-                icon: "lock"
+                icon: "lock",
+                validationStatus: viewModel.passwordStatus,
+                onValidationAccessoryTap: { viewModel.showPasswordRequirements = true }
             )
             .textContentType(.newPassword)
+            .onChange(of: viewModel.password) { _ in viewModel.validatePasswordField() }
 
             SplickTextField(
                 "Confirm Password",
                 text: $viewModel.confirmPassword,
                 isSecure: true,
                 errorMessage: viewModel.confirmPasswordError,
-                icon: "lock.fill"
+                icon: "lock.fill",
+                validationStatus: viewModel.confirmPasswordStatus
             )
             .textContentType(.newPassword)
+            .onChange(of: viewModel.confirmPassword) { _ in viewModel.validateConfirmPasswordField() }
         }
     }
 
@@ -125,8 +138,7 @@ public struct RegisterView: View {
         SplickButton(
             "Continue",
             isLoading: viewModel.state.isLoading,
-            isDisabled: viewModel.email.isEmpty || viewModel.username.isEmpty
-                || viewModel.password.isEmpty || viewModel.confirmPassword.isEmpty
+            isDisabled: !viewModel.canContinueAccountDetails
         ) {
             Task { await viewModel.requestOtpAndContinue() }
         }

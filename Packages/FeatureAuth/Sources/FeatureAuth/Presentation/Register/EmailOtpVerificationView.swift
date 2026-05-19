@@ -6,6 +6,7 @@ struct EmailOtpVerificationView: View {
     @Binding var otpCode: String
     let email: String
     let otpError: String?
+    let otpInfoMessage: String?
     let isLoading: Bool
     let onResend: () -> Void
     let onSubmit: () -> Void
@@ -24,14 +25,22 @@ struct EmailOtpVerificationView: View {
                     .multilineTextAlignment(.center)
             }
 
+            if let otpInfoMessage {
+                Text(otpInfoMessage)
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
+
             SplickTextField(
                 "Verification code",
                 text: $otpCode,
                 errorMessage: otpError,
                 icon: "number"
             )
-            .keyboardType(.numberPad)
             .textContentType(.oneTimeCode)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
             .onChange(of: otpCode) { newValue in
                 let digits = newValue.filter(\.isNumber)
                 if digits.count > 6 {
@@ -42,6 +51,7 @@ struct EmailOtpVerificationView: View {
             }
 
             SplickButton("Create Account", isLoading: isLoading, isDisabled: otpCode.count != 6) {
+                hideKeyboard()
                 onSubmit()
             }
 
