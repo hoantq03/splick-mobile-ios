@@ -24,10 +24,12 @@ public struct RegisterView: View {
                 case .accountDetails:
                     accountDetailsSection
                     accountDetailsActions
-                case .emailOtp:
-                    EmailOtpVerificationView(
+                case .otpVerification:
+                    OtpVerificationView(
                         otpCode: $viewModel.otpCode,
-                        email: viewModel.email,
+                        title: "Verify your \(viewModel.channel.title.lowercased())",
+                        subtitle: otpSubtitle,
+                        submitTitle: "Create Account",
                         otpError: viewModel.otpError,
                         otpInfoMessage: viewModel.otpInfoMessage,
                         isLoading: viewModel.state.isLoading,
@@ -60,35 +62,75 @@ public struct RegisterView: View {
         }
     }
 
+    private var otpSubtitle: String {
+        switch viewModel.channel {
+        case .email:
+            return "Enter the code sent to \(viewModel.email)"
+        case .phone:
+            return "Enter the code sent to \(viewModel.phoneNumber)"
+        }
+    }
+
     private var headerSection: some View {
         VStack(spacing: SplickTheme.Spacing.xs) {
             Text("Create Account")
                 .font(SplickTheme.Typography.largeTitle)
                 .foregroundStyle(SplickTheme.Colors.textPrimary)
 
-            Text(viewModel.step == .accountDetails
-                 ? "Join your friends on Splick"
-                 : "Almost there — verify your email")
+            Text(headerSubtitle)
                 .font(SplickTheme.Typography.callout)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
         }
         .padding(.bottom, SplickTheme.Spacing.md)
     }
 
+    private var headerSubtitle: String {
+        switch viewModel.step {
+        case .accountDetails:
+            return "Join your friends on Splick"
+        case .otpVerification:
+            return viewModel.channel == .email
+                ? "Almost there — verify your email"
+                : "Almost there — verify your phone"
+        }
+    }
+
     private var accountDetailsSection: some View {
         VStack(spacing: SplickTheme.Spacing.md) {
-            SplickTextField(
-                "Email",
-                text: $viewModel.email,
-                errorMessage: viewModel.emailError,
-                icon: "envelope",
-                validationStatus: viewModel.emailStatus
+            AuthMethodPicker(
+                selection: $viewModel.channel,
+                methods: AuthRegistrationChannel.allCases,
+                title: { $0.title }
             )
-            .textContentType(.emailAddress)
-            .keyboardType(.emailAddress)
-            .autocorrectionDisabled()
-            .textInputAutocapitalization(.never)
-            .onChange(of: viewModel.email) { _ in viewModel.validateEmailField() }
+
+            switch viewModel.channel {
+            case .email:
+                SplickTextField(
+                    "Email",
+                    text: $viewModel.email,
+                    errorMessage: viewModel.emailError,
+                    icon: "envelope",
+                    validationStatus: viewModel.emailStatus
+                )
+                .textContentType(.emailAddress)
+                .keyboardType(.emailAddress)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .onChange(of: viewModel.email) { _ in viewModel.validateEmailField() }
+
+            case .phone:
+                SplickTextField(
+                    "Phone number",
+                    text: $viewModel.phoneNumber,
+                    errorMessage: viewModel.phoneError,
+                    icon: "phone",
+                    validationStatus: viewModel.phoneStatus
+                )
+                .textContentType(.telephoneNumber)
+                .keyboardType(.phonePad)
+                .autocorrectionDisabled()
+                .onChange(of: viewModel.phoneNumber) { _ in viewModel.validatePhoneField() }
+            }
 
             SplickTextField(
                 "Username",

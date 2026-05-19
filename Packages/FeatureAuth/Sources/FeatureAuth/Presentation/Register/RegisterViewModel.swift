@@ -8,17 +8,20 @@ import SplickDomain
 public final class RegisterViewModel: ObservableObject {
     enum Step {
         case accountDetails
-        case emailOtp
+        case otpVerification
     }
 
+    @Published var channel: AuthRegistrationChannel = .email
     @Published var step: Step = .accountDetails
     @Published var email = ""
+    @Published var phoneNumber = ""
     @Published var username = ""
     @Published var displayName = ""
     @Published var password = ""
     @Published var confirmPassword = ""
     @Published var otpCode = ""
     @Published var emailError: String?
+    @Published var phoneError: String?
     @Published var usernameError: String?
     @Published var passwordError: String?
     @Published var confirmPasswordError: String?
@@ -29,32 +32,53 @@ public final class RegisterViewModel: ObservableObject {
     @Published var showPasswordRequirements = false
 
     @Published private(set) var emailStatus: FieldValidationStatus = .neutral
+    @Published private(set) var phoneStatus: FieldValidationStatus = .neutral
     @Published private(set) var usernameStatus: FieldValidationStatus = .neutral
     @Published private(set) var passwordStatus: FieldValidationStatus = .neutral
     @Published private(set) var confirmPasswordStatus: FieldValidationStatus = .neutral
 
     private let registerUseCase: RegisterUseCaseProtocol
     private let requestEmailOtpUseCase: RequestEmailOtpUseCaseProtocol
+    private let requestPhoneOtpUseCase: RequestPhoneOtpUseCaseProtocol
 
     private static let minUsernameLength = 3
 
+    private var normalizedPhone: String { phoneNumber.normalizedE164Phone }
+
+    var registrationIdentifier: String {
+        switch channel {
+        case .email: return email.trimmed
+        case .phone: return normalizedPhone
+        }
+    }
+
     public init(
         registerUseCase: RegisterUseCaseProtocol,
-        requestEmailOtpUseCase: RequestEmailOtpUseCaseProtocol
+        requestEmailOtpUseCase: RequestEmailOtpUseCaseProtocol,
+        requestPhoneOtpUseCase: RequestPhoneOtpUseCaseProtocol
     ) {
         self.registerUseCase = registerUseCase
         self.requestEmailOtpUseCase = requestEmailOtpUseCase
+        self.requestPhoneOtpUseCase = requestPhoneOtpUseCase
     }
 
     var canContinueAccountDetails: Bool {
-        emailError == nil
-            && usernameError == nil
+        usernameError == nil
             && passwordError == nil
             && confirmPasswordError == nil
-            && !email.trimmed.isEmpty
             && !username.trimmed.isEmpty
             && passwordStrength.isStrong
             && password == confirmPassword
+            && identifierIsValid
+    }
+
+    private var identifierIsValid: Bool {
+        switch channel {
+        case .email:
+            return emailError == nil && !email.trimmed.isEmpty
+        case .phone:
+            return phoneError == nil && !normalizedPhone.isEmpty
+        }
     }
 
     func validateEmailField() {
@@ -70,6 +94,22 @@ public final class RegisterViewModel: ObservableObject {
         } else {
             emailError = "Please enter a valid email"
             emailStatus = .neutral
+        }
+    }
+
+    func validatePhoneField() {
+        let value = normalizedPhone
+        if value.isEmpty {
+            phoneError = nil
+            phoneStatus = .neutral
+            return
+        }
+        if value.isValidE164Phone {
+            phoneError = nil
+            phoneStatus = .valid
+        } else {
+            phoneError = "Use international format, e.g. +84901234567"
+            phoneStatus = .neutral
         }
     }
 
@@ -131,7 +171,12 @@ public final class RegisterViewModel: ObservableObject {
     }
 
     func requestOtpAndContinue() async {
-        validateEmailField()
+        switch channel {
+        case .email: validateEmailField()
+        case .phone:
+            validatePhoneField()
+            phoneNumber = normalizedPhone
+        }
         validateUsernameField()
         validatePasswordField()
         validateConfirmPasswordField()
@@ -141,10 +186,20 @@ public final class RegisterViewModel: ObservableObject {
         otpError = nil
         otpInfoMessage = nil
         do {
-            try await requestEmailOtpUseCase.execute(email: email.trimmed)
-            step = .emailOtp
+            switch channel {
+            case .email:
+                try await requestEmailOtpUseCase.execute(email: email.trimmed)
+                otpInfoMessage = "Verification code sent. Check your email."
+            case .phone:
+                try await requestPhoneOtpUseCase.execute(phoneNumber: normalizedPhone)
+                #if DEBUG
+                otpInfoMessage = "Code sent via SMS. Check auth-service logs for [MockTwilio]."
+                #else
+                otpInfoMessage = "Verification code sent to your phone."
+                #endif
+            }
+            step = .otpVerification
             otpCode = ""
-            otpInfoMessage = "Verification code sent. Check your email."
             state = .idle
         } catch {
             applyRequestFailure(error, fallback: "Could not send verification code. Please try again.")
@@ -152,35 +207,7 @@ public final class RegisterViewModel: ObservableObject {
     }
 
     func resendOtp() async {
-        state = .loading
-        otpError = nil
-        otpInfoMessage = nil
-        do {
-            try await requestEmailOtpUseCase.execute(email: email.trimmed)
-            otpCode = ""
-            #if DEBUG
-            otpInfoMessage = "A new code was sent. Check Mailpit at http://localhost:8025 or auth-service logs."
-            #else
-            otpInfoMessage = "A new code was sent. Check your email."
-            #endif
-            state = .idle
-        } catch let error as NetworkError where error == .rateLimited {
-            otpError = error.userMessage
-            state = .idle
-        } catch let error as NetworkError {
-            if case .unknown(let message) = error {
-                otpError = message
-            } else {
-                state = .failed(error.userMessage)
-            }
-            state = .idle
-        } catch let error as AuthError {
-            state = .failed(error.userMessage)
-            state = .idle
-        } catch {
-            otpError = "Could not resend verification code."
-            state = .idle
-        }
+        await requestOtpAndContinue()
     }
 
     func register() async {
@@ -191,7 +218,8 @@ public final class RegisterViewModel: ObservableObject {
         state = .loading
         do {
             let session = try await registerUseCase.execute(
-                email: email.trimmed,
+                channel: channel,
+                identifier: registrationIdentifier,
                 username: username.trimmed,
                 password: password,
                 otpCode: otpCode,
@@ -235,7 +263,9 @@ public final class RegisterViewModel: ObservableObject {
     private func validateOtp() -> Bool {
         otpError = nil
         if otpCode.count != 6 {
-            otpError = "Enter the 6-digit code from your email"
+            otpError = channel == .email
+                ? "Enter the 6-digit code from your email"
+                : "Enter the 6-digit code from SMS"
             return false
         }
         return true
@@ -272,6 +302,10 @@ public final class RegisterViewModel: ObservableObject {
             case "email":
                 emailError = detail
                 emailStatus = .neutral
+                applied = true
+            case "phonenumber":
+                phoneError = detail
+                phoneStatus = .neutral
                 applied = true
             case "username":
                 usernameError = detail
