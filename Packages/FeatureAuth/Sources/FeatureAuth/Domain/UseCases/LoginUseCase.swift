@@ -16,11 +16,17 @@ public final class LoginUseCase: LoginUseCaseProtocol, Sendable {
     }
 
     public func execute(email: String, password: String) async throws -> AuthSession {
-        let session = try await repository.login(email: email, password: password)
-        guard session.user.status.allowsSignIn else {
-            throw AuthError.accountLocked
+        do {
+            let session = try await repository.login(email: email, password: password)
+            guard session.user.status.allowsSignIn else {
+                throw AuthError.invalidCredentials
+            }
+            await sessionManager.setSession(session)
+            return session
+        } catch let error as NetworkError where error.isConnectivityIssue {
+            throw error
+        } catch {
+            throw AuthError.invalidCredentials
         }
-        await sessionManager.setSession(session)
-        return session
     }
 }
