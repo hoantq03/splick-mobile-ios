@@ -1,5 +1,10 @@
 import Foundation
 
+struct GoogleSignInRequestDTO: Encodable {
+    let idToken: String
+    let deviceInfo: String?
+}
+
 struct LoginRequestDTO: Encodable {
     let email: String
     let password: String

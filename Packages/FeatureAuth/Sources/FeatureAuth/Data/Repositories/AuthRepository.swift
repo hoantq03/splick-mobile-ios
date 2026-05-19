@@ -19,6 +19,13 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
         self.tokenProvider = tokenProvider
     }
 
+    public func signInWithGoogle(idToken: String) async throws -> AuthSession {
+        let dto = GoogleSignInRequestDTO(idToken: idToken, deviceInfo: DeviceInfo.current)
+        let response: AuthResponseDTO = try await apiClient.request(AuthEndpoint.googleSignIn(dto))
+        try await persistSession(response)
+        return AuthMapper.toAuthSession(response)
+    }
+
     public func login(email: String, password: String) async throws -> AuthSession {
         let dto = LoginRequestDTO(
             email: email,

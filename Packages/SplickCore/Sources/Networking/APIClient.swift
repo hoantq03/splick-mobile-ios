@@ -176,6 +176,8 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
             return AuthError.invalidOtp(
                 body.message.isEmpty ? "Invalid or expired verification code." : body.message
             )
+        case "INVALID_GOOGLE_TOKEN":
+            return AuthError.invalidCredentials
         case "UNAUTHORIZED", "INVALID_TOKEN":
             return NetworkError.unauthorized
         case "ACCOUNT_LOCKED":
