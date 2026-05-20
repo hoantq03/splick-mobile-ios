@@ -1,12 +1,30 @@
 import Foundation
+import Networking
 import SplickDomain
 
 public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
-    public init() {}
+    private let apiClient: APIClientProtocol
+
+    public init(apiClient: APIClientProtocol) {
+        self.apiClient = apiClient
+    }
 
     public func fetchMyFriends() async throws -> [UserSummary] { [] }
 
-    public func searchUser(username: String) async throws -> UserSummary? { nil }
+    public func searchUser(username: String) async throws -> UserSummary? {
+        let normalized = username
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "@", with: "")
+        guard !normalized.isEmpty else { return nil }
+
+        let response: SocialPageUserSearchResponseDTO = try await apiClient.request(
+            SocialEndpoint.searchUsers(query: normalized, page: 0, size: 20)
+        )
+
+        return response.content
+            .first { $0.username.caseInsensitiveCompare(normalized) == .orderedSame }
+            .map(FriendsMapper.toUserSummary)
+    }
 
     public func addFriend(username: String) async throws -> UserSummary {
         throw FriendsError.notImplemented

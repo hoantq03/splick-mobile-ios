@@ -152,7 +152,7 @@ final class DependencyContainer: ObservableObject {
 
     private lazy var friendsManagementRepository: FriendsManagementRepositoryProtocol = {
         if let simulation { return simulation.friendsRepository }
-        return FriendsManagementRepository()
+        return FriendsManagementRepository(apiClient: apiClient)
     }()
 
     private lazy var groupsRepository: GroupsRepositoryProtocol = {
