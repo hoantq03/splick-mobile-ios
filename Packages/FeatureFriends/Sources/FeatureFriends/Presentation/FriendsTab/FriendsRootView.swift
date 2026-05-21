@@ -22,16 +22,22 @@ public struct FriendsRootView: View {
     @State private var showMyQR = false
     @State private var profileRoute: UserProfileRoute?
 
+    private let generateMyQrUseCase: GenerateMyQrUseCaseProtocol
+
     public init(
         fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol,
         fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol,
+        searchUsersUseCase: SearchUsersUseCaseProtocol,
+        generateMyQrUseCase: GenerateMyQrUseCaseProtocol,
         addFriendUseCase: AddFriendUseCaseProtocol,
         joinGroupUseCase: JoinGroupUseCaseProtocol
     ) {
         let rootVM = FriendsRootViewModel(
             fetchMyFriendsUseCase: fetchMyFriendsUseCase,
-            fetchMyGroupsUseCase: fetchMyGroupsUseCase
+            fetchMyGroupsUseCase: fetchMyGroupsUseCase,
+            searchUsersUseCase: searchUsersUseCase
         )
+        self.generateMyQrUseCase = generateMyQrUseCase
         _viewModel = StateObject(wrappedValue: rootVM)
         _addFriendViewModel = StateObject(
             wrappedValue: AddFriendViewModel(addFriendUseCase: addFriendUseCase) {
@@ -48,6 +54,10 @@ public struct FriendsRootView: View {
     public var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                if viewModel.segment == .friends {
+                    friendsTopBar
+                }
+
                 Picker("Section", selection: $viewModel.segment) {
                     ForEach(FriendsRootViewModel.Segment.allCases, id: \.self) { segment in
                         Text(segment.rawValue).tag(segment)
@@ -60,15 +70,31 @@ public struct FriendsRootView: View {
                 Group {
                     switch viewModel.segment {
                     case .friends:
-                        friendsContent
+                        if viewModel.isSearching {
+                            searchResultsContent
+                        } else {
+                            friendsContent
+                        }
                     case .groups:
                         groupsContent
                     }
                 }
             }
             .navigationTitle("Friends")
+            .onChange(of: viewModel.searchQuery) { newValue in
+                viewModel.onSearchQueryChanged(newValue)
+            }
+            .onChange(of: viewModel.segment) { segment in
+                guard segment == .groups else { return }
+                viewModel.searchQuery = ""
+                viewModel.onSearchQueryChanged("")
+            }
             .splickProfileToolbar()
-            .toolbar { toolbarContent }
+            .toolbar {
+                if viewModel.segment == .groups {
+                    toolbarAddMenu
+                }
+            }
             .refreshable { await viewModel.refresh() }
             .navigationDestination(for: UUID.self) { groupId in
                 if let group = viewModel.groups.first(where: { $0.id == groupId }) {
@@ -101,7 +127,8 @@ public struct FriendsRootView: View {
                     MyQRSheet(
                         username: user.username,
                         displayName: user.displayName,
-                        avatarURL: user.avatarURL
+                        avatarURL: user.avatarURL,
+                        generateMyQrUseCase: generateMyQrUseCase
                     )
                 }
             }
@@ -111,47 +138,115 @@ public struct FriendsRootView: View {
         }
     }
 
+    private var friendsTopBar: some View {
+        HStack(spacing: SplickTheme.Spacing.sm) {
+            friendsSearchField
+            addMenuButton
+        }
+        .padding(.horizontal, SplickTheme.Spacing.md)
+        .padding(.bottom, SplickTheme.Spacing.sm)
+    }
+
+    private var friendsSearchField: some View {
+        HStack(spacing: SplickTheme.Spacing.xs) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+
+            TextField("Search by username", text: $viewModel.searchQuery)
+                .font(SplickTheme.Typography.callout)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+        }
+        .padding(.horizontal, SplickTheme.Spacing.md)
+        .padding(.vertical, SplickTheme.Spacing.sm)
+        .frame(maxWidth: .infinity)
+        .background(SplickTheme.Colors.secondaryBackground)
+        .clipShape(Capsule(style: .continuous))
+    }
+
     @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
+    private var toolbarAddMenu: some ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
-            Menu {
-                Button {
-                    showMyQR = true
-                } label: {
-                    Label("Mã QR của tôi", systemImage: "qrcode")
-                }
+            addMenuButton
+        }
+    }
 
-                Divider()
-
-                Button {
-                    showAddFriend = true
-                } label: {
-                    Label("Add friend by username", systemImage: "person.badge.plus")
-                }
-
-                Button {
-                    showAddFriendQR = true
-                } label: {
-                    Label("Add friend by QR", systemImage: "qrcode.viewfinder")
-                }
-
-                Divider()
-
-                Button {
-                    showJoinGroup = true
-                } label: {
-                    Label("Join group by code", systemImage: "person.3.fill")
-                }
-
-                Button {
-                    showJoinGroupQR = true
-                } label: {
-                    Label("Join group by QR", systemImage: "qrcode")
-                }
+    private var addMenuButton: some View {
+        Menu {
+            Button {
+                showMyQR = true
             } label: {
-                Image(systemName: "plus.circle.fill")
-                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                Label("Mã QR của tôi", systemImage: "qrcode")
             }
+
+            Divider()
+
+            Button {
+                showAddFriend = true
+            } label: {
+                Label("Add friend by username", systemImage: "person.badge.plus")
+            }
+
+            Button {
+                showAddFriendQR = true
+            } label: {
+                Label("Add friend by QR", systemImage: "qrcode.viewfinder")
+            }
+
+            Divider()
+
+            Button {
+                showJoinGroup = true
+            } label: {
+                Label("Join group by code", systemImage: "person.3.fill")
+            }
+
+            Button {
+                showJoinGroupQR = true
+            } label: {
+                Label("Join group by QR", systemImage: "qrcode")
+            }
+        } label: {
+            Image(systemName: "plus.circle.fill")
+                .font(.system(size: 28))
+                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Add")
+    }
+
+    @ViewBuilder
+    private var searchResultsContent: some View {
+        switch viewModel.searchState {
+        case .idle, .loading:
+            LoadingView(message: "Searching...")
+        case .failed(let message):
+            ErrorView(message: message) {
+                viewModel.onSearchQueryChanged(viewModel.searchQuery)
+            }
+        case .loaded(let results) where results.isEmpty:
+            EmptyStateView(
+                icon: "magnifyingglass",
+                title: "No users found",
+                message: "Try another username."
+            )
+        case .loaded:
+            ScrollView {
+                LazyVStack(spacing: SplickTheme.Spacing.xs) {
+                    ForEach(viewModel.searchResults) { user in
+                        Button {
+                            profileRoute = UserProfileRoute(user: user)
+                        } label: {
+                            FriendRowView(user: user)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, SplickTheme.Spacing.md)
+                .padding(.bottom, SplickTheme.Spacing.md)
+            }
+            .tabBarHideOnScroll()
         }
     }
 
