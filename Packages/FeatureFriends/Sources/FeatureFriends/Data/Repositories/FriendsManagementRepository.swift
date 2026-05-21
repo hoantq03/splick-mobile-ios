@@ -54,6 +54,27 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
         )
     }
 
+    public func fetchIncomingFriendRequests(page: Int, size: Int) async throws -> [IncomingFriendRequest] {
+        let response: SocialPageIncomingFriendRequestResponseDTO = try await apiClient.request(
+            SocialEndpoint.listIncomingFriendRequests(page: page, size: size)
+        )
+        return response.content.map(FriendsMapper.toIncomingFriendRequest)
+    }
+
+    public func acceptFriendRequest(requestId: UUID) async throws {
+        let _: FriendshipResponseDTO = try await apiClient.request(
+            SocialEndpoint.acceptFriendRequest(requestId: requestId)
+        )
+    }
+
+    public func rejectFriendRequest(requestId: UUID) async throws {
+        try await apiClient.request(SocialEndpoint.rejectFriendRequest(requestId: requestId))
+    }
+
+    public func cancelFriendRequest(requestId: UUID) async throws {
+        try await apiClient.request(SocialEndpoint.cancelFriendRequest(requestId: requestId))
+    }
+
     public func addFriendFromQRCode(_ payload: String) async throws -> UserSummary {
         throw FriendsError.notImplemented
     }

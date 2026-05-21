@@ -59,6 +59,9 @@ struct MainTabView: View {
                     searchUsersUseCase: container.searchUsersUseCase,
                     generateMyQrUseCase: container.generateMyQrUseCase,
                     addFriendUseCase: container.addFriendUseCase,
+                    fetchIncomingFriendRequestsUseCase: container.fetchIncomingFriendRequestsUseCase,
+                    acceptFriendRequestUseCase: container.acceptFriendRequestUseCase,
+                    rejectFriendRequestUseCase: container.rejectFriendRequestUseCase,
                     joinGroupUseCase: container.joinGroupUseCase
                 )
 

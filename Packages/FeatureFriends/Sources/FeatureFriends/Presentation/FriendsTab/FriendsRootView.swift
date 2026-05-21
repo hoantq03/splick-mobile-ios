@@ -19,9 +19,13 @@ public struct FriendsRootView: View {
     @State private var showJoinGroup = false
     @State private var showAddFriendQR = false
     @State private var showJoinGroupQR = false
+    @State private var showIncomingRequests = false
     @State private var profileRoute: UserProfileRoute?
 
     private let generateMyQrUseCase: GenerateMyQrUseCaseProtocol
+    private let fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol
+    private let acceptFriendRequestUseCase: AcceptFriendRequestUseCaseProtocol
+    private let rejectFriendRequestUseCase: RejectFriendRequestUseCaseProtocol
 
     public init(
         fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol,
@@ -29,15 +33,22 @@ public struct FriendsRootView: View {
         searchUsersUseCase: SearchUsersUseCaseProtocol,
         generateMyQrUseCase: GenerateMyQrUseCaseProtocol,
         addFriendUseCase: AddFriendUseCaseProtocol,
+        fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol,
+        acceptFriendRequestUseCase: AcceptFriendRequestUseCaseProtocol,
+        rejectFriendRequestUseCase: RejectFriendRequestUseCaseProtocol,
         joinGroupUseCase: JoinGroupUseCaseProtocol
     ) {
         let rootVM = FriendsRootViewModel(
             fetchMyFriendsUseCase: fetchMyFriendsUseCase,
             fetchMyGroupsUseCase: fetchMyGroupsUseCase,
             searchUsersUseCase: searchUsersUseCase,
-            addFriendUseCase: addFriendUseCase
+            addFriendUseCase: addFriendUseCase,
+            fetchIncomingFriendRequestsUseCase: fetchIncomingFriendRequestsUseCase
         )
         self.generateMyQrUseCase = generateMyQrUseCase
+        self.fetchIncomingFriendRequestsUseCase = fetchIncomingFriendRequestsUseCase
+        self.acceptFriendRequestUseCase = acceptFriendRequestUseCase
+        self.rejectFriendRequestUseCase = rejectFriendRequestUseCase
         _viewModel = StateObject(wrappedValue: rootVM)
         _addFriendViewModel = StateObject(
             wrappedValue: AddFriendViewModel(addFriendUseCase: addFriendUseCase) {
@@ -73,7 +84,10 @@ public struct FriendsRootView: View {
                         if viewModel.isSearching {
                             searchResultsContent
                         } else {
-                            friendsContent
+                            VStack(spacing: SplickTheme.Spacing.xs) {
+                                incomingRequestsBanner
+                                friendsContent
+                            }
                         }
                     case .groups:
                         groupsContent
@@ -112,6 +126,18 @@ public struct FriendsRootView: View {
             .sheet(isPresented: $showJoinGroup) {
                 JoinGroupSheet(viewModel: joinGroupViewModel)
             }
+            .sheet(isPresented: $showIncomingRequests, onDismiss: {
+                Task { await viewModel.refreshIncomingRequestCount() }
+            }) {
+                IncomingFriendRequestsSheet(
+                    viewModel: IncomingFriendRequestsViewModel(
+                        fetchIncomingUseCase: fetchIncomingFriendRequestsUseCase,
+                        acceptUseCase: acceptFriendRequestUseCase,
+                        rejectUseCase: rejectFriendRequestUseCase,
+                        onFriendshipChanged: { viewModel.onFriendAdded() }
+                    )
+                )
+            }
             .sheet(isPresented: $showAddFriendQR) {
                 if let user = currentUserSummary {
                     QRScannerSheet(
@@ -144,6 +170,42 @@ public struct FriendsRootView: View {
         }
         .onFirstAppear {
             Task { await viewModel.load() }
+        }
+    }
+
+    @ViewBuilder
+    private var incomingRequestsBanner: some View {
+        if viewModel.incomingRequestCount > 0 {
+            Button {
+                showIncomingRequests = true
+            } label: {
+                HStack {
+                    Image(systemName: "person.crop.circle.badge.plus")
+                    Text("Lời mời kết bạn (\(viewModel.incomingRequestCount))")
+                        .font(SplickTheme.Typography.callout.weight(.semibold))
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                }
+                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                .padding(SplickTheme.Spacing.sm)
+                .background(SplickTheme.Colors.primaryGradientStart.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, SplickTheme.Spacing.md)
+            .padding(.top, SplickTheme.Spacing.xs)
+        }
+    }
+
+    private func actionForSearchResult(_ result: UserSearchResult) -> (() -> Void)? {
+        switch result.friendStatus {
+        case .none:
+            return { Task { await viewModel.sendFriendRequest(to: result) } }
+        case .requestReceived:
+            return { showIncomingRequests = true }
+        case .friends, .requestSent, .blocked:
+            return nil
         }
     }
 
@@ -258,9 +320,7 @@ public struct FriendsRootView: View {
                             onProfileTap: {
                                 profileRoute = UserProfileRoute(user: result.user)
                             },
-                            onAddFriend: result.friendStatus == .none
-                                ? { Task { await viewModel.sendFriendRequest(to: result) } }
-                                : nil
+                            onAddFriend: actionForSearchResult(result)
                         )
                     }
                 }

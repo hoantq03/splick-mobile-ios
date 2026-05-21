@@ -20,11 +20,13 @@ public final class FriendsRootViewModel: ObservableObject {
     @Published var searchResults: [UserSearchResult] = []
     @Published var searchState: LoadingState<[UserSearchResult]> = .idle
     @Published private(set) var sendingFriendRequestUserIds: Set<UUID> = []
+    @Published private(set) var incomingRequestCount = 0
 
     private let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol
     private let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol
     private let searchUsersUseCase: SearchUsersUseCaseProtocol
     private let addFriendUseCase: AddFriendUseCaseProtocol
+    private let fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol
     private var searchTask: Task<Void, Never>?
 
     public var isSearching: Bool {
@@ -35,24 +37,37 @@ public final class FriendsRootViewModel: ObservableObject {
         fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol,
         fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol,
         searchUsersUseCase: SearchUsersUseCaseProtocol,
-        addFriendUseCase: AddFriendUseCaseProtocol
+        addFriendUseCase: AddFriendUseCaseProtocol,
+        fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol
     ) {
         self.fetchMyFriendsUseCase = fetchMyFriendsUseCase
         self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
         self.searchUsersUseCase = searchUsersUseCase
         self.addFriendUseCase = addFriendUseCase
+        self.fetchIncomingFriendRequestsUseCase = fetchIncomingFriendRequestsUseCase
     }
 
     func load() async {
         await loadFriends(isPullToRefresh: false)
         await loadGroups(isPullToRefresh: false)
+        await refreshIncomingRequestCount()
     }
 
     func refresh() async {
         isRefreshing = true
         await loadFriends(isPullToRefresh: true)
         await loadGroups(isPullToRefresh: true)
+        await refreshIncomingRequestCount()
         isRefreshing = false
+    }
+
+    func refreshIncomingRequestCount() async {
+        do {
+            let incoming = try await fetchIncomingFriendRequestsUseCase.execute(page: 0, size: 50)
+            incomingRequestCount = incoming.count
+        } catch {
+            incomingRequestCount = 0
+        }
     }
 
     func loadFriends(isPullToRefresh: Bool) async {
@@ -90,7 +105,10 @@ public final class FriendsRootViewModel: ObservableObject {
     }
 
     func onFriendAdded() {
-        Task { await loadFriends(isPullToRefresh: true) }
+        Task {
+            await loadFriends(isPullToRefresh: true)
+            await refreshIncomingRequestCount()
+        }
     }
 
     func onGroupJoined() {

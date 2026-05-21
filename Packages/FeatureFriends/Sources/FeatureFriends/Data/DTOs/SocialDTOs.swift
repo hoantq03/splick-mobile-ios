@@ -40,3 +40,26 @@ struct FriendRequestResponseDTO: Decodable {
     let createdAt: Date
     let expiresAt: Date
 }
+
+struct IncomingFriendRequestResponseDTO: Decodable {
+    let id: UUID
+    let requesterId: UUID
+    let requesterUsername: String
+    let requesterDisplayName: String
+    let requesterAvatarUrl: String?
+    let message: String?
+    let createdAt: Date
+    let expiresAt: Date
+}
+
+struct SocialPageIncomingFriendRequestResponseDTO: Decodable {
+    let content: [IncomingFriendRequestResponseDTO]
+    let page: SocialPageMetaDTO
+}
+
+struct FriendshipResponseDTO: Decodable {
+    let friendshipId: UUID
+    let userAId: UUID
+    let userBId: UUID
+    let createdAt: Date
+}

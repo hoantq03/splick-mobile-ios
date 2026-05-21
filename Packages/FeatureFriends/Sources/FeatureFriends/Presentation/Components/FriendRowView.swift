@@ -49,7 +49,14 @@ struct FriendRowView: View {
         case .requestSent:
             relationBadge("Đã gửi", foreground: SplickTheme.Colors.textSecondary)
         case .requestReceived:
-            relationBadge("Đã nhận", foreground: SplickTheme.Colors.textSecondary)
+            Button {
+                onAddFriend?()
+            } label: {
+                Text("Xem lời mời")
+                    .font(SplickTheme.Typography.caption.weight(.semibold))
+                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+            }
+            .buttonStyle(.plain)
         case .blocked:
             EmptyView()
         case .none:

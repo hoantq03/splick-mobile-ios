@@ -66,6 +66,27 @@ public actor FakeFriendsRepository: FriendsRepositoryProtocol, FriendsManagement
         throw FriendsError.notImplemented
     }
 
+    public func fetchIncomingFriendRequests(page: Int, size: Int) async throws -> [IncomingFriendRequest] {
+        _ = page
+        _ = size
+        return []
+    }
+
+    public func acceptFriendRequest(requestId: UUID) async throws {
+        _ = requestId
+        throw FriendsError.notImplemented
+    }
+
+    public func rejectFriendRequest(requestId: UUID) async throws {
+        _ = requestId
+        throw FriendsError.notImplemented
+    }
+
+    public func cancelFriendRequest(requestId: UUID) async throws {
+        _ = requestId
+        throw FriendsError.notImplemented
+    }
+
     public func addFriendFromQRCode(_ payload: String) async throws -> UserSummary {
         throw FriendsError.notImplemented
     }

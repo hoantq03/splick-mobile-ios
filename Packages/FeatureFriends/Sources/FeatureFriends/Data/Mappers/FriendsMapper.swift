@@ -18,6 +18,21 @@ enum FriendsMapper {
         )
     }
 
+    static func toIncomingFriendRequest(_ dto: IncomingFriendRequestResponseDTO) -> IncomingFriendRequest {
+        IncomingFriendRequest(
+            id: dto.id,
+            requester: UserSummary(
+                id: dto.requesterId,
+                username: dto.requesterUsername,
+                displayName: dto.requesterDisplayName,
+                avatarURL: dto.requesterAvatarUrl.flatMap { URL(string: $0) }
+            ),
+            message: dto.message,
+            createdAt: dto.createdAt,
+            expiresAt: dto.expiresAt
+        )
+    }
+
     static func mapFriendStatus(_ raw: String?) -> FriendRelationStatus {
         guard let raw, let status = FriendRelationStatus(rawValue: raw) else {
             return .none
