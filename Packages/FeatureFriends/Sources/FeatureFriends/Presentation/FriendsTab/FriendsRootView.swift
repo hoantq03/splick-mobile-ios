@@ -13,6 +13,7 @@ public struct FriendsRootView: View {
     @StateObject private var viewModel: FriendsRootViewModel
     @StateObject private var addFriendViewModel: AddFriendViewModel
     @StateObject private var joinGroupViewModel: JoinGroupViewModel
+    @StateObject private var incomingRequestsViewModel: IncomingFriendRequestsViewModel
     @Environment(\.currentUserSummary) private var currentUserSummary
 
     @State private var showAddFriend = false
@@ -23,9 +24,6 @@ public struct FriendsRootView: View {
     @State private var profileRoute: UserProfileRoute?
 
     private let generateMyQrUseCase: GenerateMyQrUseCaseProtocol
-    private let fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol
-    private let acceptFriendRequestUseCase: AcceptFriendRequestUseCaseProtocol
-    private let rejectFriendRequestUseCase: RejectFriendRequestUseCaseProtocol
 
     public init(
         fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol,
@@ -46,9 +44,6 @@ public struct FriendsRootView: View {
             fetchIncomingFriendRequestsUseCase: fetchIncomingFriendRequestsUseCase
         )
         self.generateMyQrUseCase = generateMyQrUseCase
-        self.fetchIncomingFriendRequestsUseCase = fetchIncomingFriendRequestsUseCase
-        self.acceptFriendRequestUseCase = acceptFriendRequestUseCase
-        self.rejectFriendRequestUseCase = rejectFriendRequestUseCase
         _viewModel = StateObject(wrappedValue: rootVM)
         _addFriendViewModel = StateObject(
             wrappedValue: AddFriendViewModel(addFriendUseCase: addFriendUseCase) {
@@ -59,6 +54,14 @@ public struct FriendsRootView: View {
             wrappedValue: JoinGroupViewModel(joinGroupUseCase: joinGroupUseCase) {
                 rootVM.onGroupJoined()
             }
+        )
+        _incomingRequestsViewModel = StateObject(
+            wrappedValue: IncomingFriendRequestsViewModel(
+                fetchIncomingUseCase: fetchIncomingFriendRequestsUseCase,
+                acceptUseCase: acceptFriendRequestUseCase,
+                rejectUseCase: rejectFriendRequestUseCase,
+                onFriendshipChanged: { rootVM.onFriendAdded() }
+            )
         )
     }
 
@@ -129,14 +132,7 @@ public struct FriendsRootView: View {
             .sheet(isPresented: $showIncomingRequests, onDismiss: {
                 Task { await viewModel.refreshIncomingRequestCount() }
             }) {
-                IncomingFriendRequestsSheet(
-                    viewModel: IncomingFriendRequestsViewModel(
-                        fetchIncomingUseCase: fetchIncomingFriendRequestsUseCase,
-                        acceptUseCase: acceptFriendRequestUseCase,
-                        rejectUseCase: rejectFriendRequestUseCase,
-                        onFriendshipChanged: { viewModel.onFriendAdded() }
-                    )
-                )
+                IncomingFriendRequestsSheet(viewModel: incomingRequestsViewModel)
             }
             .sheet(isPresented: $showAddFriendQR) {
                 if let user = currentUserSummary {

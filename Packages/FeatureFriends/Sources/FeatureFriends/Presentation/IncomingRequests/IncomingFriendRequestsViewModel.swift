@@ -38,8 +38,10 @@ public final class IncomingFriendRequestsViewModel: ObservableObject {
     }
 
     func accept(_ request: IncomingFriendRequest) async {
-        await respond(to: request) {
+        let accepted = await respond(to: request) {
             try await acceptUseCase.execute(requestId: request.id)
+        }
+        if accepted {
             onFriendshipChanged()
         }
     }
@@ -50,8 +52,9 @@ public final class IncomingFriendRequestsViewModel: ObservableObject {
         }
     }
 
-    private func respond(to request: IncomingFriendRequest, action: () async throws -> Void) async {
-        guard !processingRequestIds.contains(request.id) else { return }
+    @discardableResult
+    private func respond(to request: IncomingFriendRequest, action: () async throws -> Void) async -> Bool {
+        guard !processingRequestIds.contains(request.id) else { return false }
         processingRequestIds.insert(request.id)
         defer { processingRequestIds.remove(request.id) }
 
@@ -59,8 +62,10 @@ public final class IncomingFriendRequestsViewModel: ObservableObject {
             try await action()
             requests.removeAll { $0.id == request.id }
             state = .loaded(requests)
+            return true
         } catch {
             alertMessage = error.localizedDescription
+            return false
         }
     }
 }

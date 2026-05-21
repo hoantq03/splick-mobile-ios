@@ -63,3 +63,17 @@ struct FriendshipResponseDTO: Decodable {
     let userBId: UUID
     let createdAt: Date
 }
+
+struct FriendResponseDTO: Decodable {
+    let friendId: UUID
+    let username: String
+    let displayName: String
+    let avatarUrl: String?
+    let nickname: String?
+    let friendsSince: Date
+}
+
+struct SocialPageFriendResponseDTO: Decodable {
+    let content: [FriendResponseDTO]
+    let page: SocialPageMetaDTO
+}

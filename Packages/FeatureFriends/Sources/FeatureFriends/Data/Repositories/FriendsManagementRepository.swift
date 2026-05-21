@@ -9,7 +9,12 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
         self.apiClient = apiClient
     }
 
-    public func fetchMyFriends() async throws -> [UserSummary] { [] }
+    public func fetchMyFriends() async throws -> [UserSummary] {
+        let response: SocialPageFriendResponseDTO = try await apiClient.request(
+            SocialEndpoint.listFriends(page: 0, size: 100)
+        )
+        return response.content.map(FriendsMapper.toUserSummary)
+    }
 
     public func searchUsers(query: String, page: Int, size: Int) async throws -> [UserSearchResult] {
         let normalized = query
@@ -62,9 +67,7 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
     }
 
     public func acceptFriendRequest(requestId: UUID) async throws {
-        let _: FriendshipResponseDTO = try await apiClient.request(
-            SocialEndpoint.acceptFriendRequest(requestId: requestId)
-        )
+        try await apiClient.request(SocialEndpoint.acceptFriendRequest(requestId: requestId))
     }
 
     public func rejectFriendRequest(requestId: UUID) async throws {

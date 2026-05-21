@@ -9,6 +9,15 @@ enum FriendsMapper {
         )
     }
 
+    static func toUserSummary(_ dto: FriendResponseDTO) -> UserSummary {
+        UserSummary(
+            id: dto.friendId,
+            username: dto.username,
+            displayName: dto.displayName,
+            avatarURL: dto.avatarUrl.flatMap { URL(string: $0) }
+        )
+    }
+
     static func toUserSummary(_ dto: UserSearchResponseDTO) -> UserSummary {
         UserSummary(
             id: dto.userId,

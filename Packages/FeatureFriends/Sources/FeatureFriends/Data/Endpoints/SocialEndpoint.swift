@@ -4,6 +4,7 @@ import Networking
 enum SocialEndpoint: APIEndpoint {
     case searchUsers(query: String, page: Int, size: Int)
     case sendFriendRequest(username: String, message: String?)
+    case listFriends(page: Int, size: Int)
     case listIncomingFriendRequests(page: Int, size: Int)
     case acceptFriendRequest(requestId: UUID)
     case rejectFriendRequest(requestId: UUID)
@@ -15,6 +16,8 @@ enum SocialEndpoint: APIEndpoint {
         switch self {
         case .searchUsers:
             return "/v1/social/users/search"
+        case .listFriends:
+            return "/v1/social/friendships"
         case .sendFriendRequest:
             return "/v1/social/friendships/requests"
         case .listIncomingFriendRequests:
@@ -32,7 +35,7 @@ enum SocialEndpoint: APIEndpoint {
 
     var method: HTTPMethod {
         switch self {
-        case .searchUsers, .listIncomingFriendRequests:
+        case .searchUsers, .listFriends, .listIncomingFriendRequests:
             return .get
         case .sendFriendRequest, .generateMyQr, .acceptFriendRequest, .rejectFriendRequest:
             return .post
@@ -49,7 +52,7 @@ enum SocialEndpoint: APIEndpoint {
                 URLQueryItem(name: "page", value: String(page)),
                 URLQueryItem(name: "size", value: String(size)),
             ]
-        case .listIncomingFriendRequests(let page, let size):
+        case .listFriends(let page, let size), .listIncomingFriendRequests(let page, let size):
             return [
                 URLQueryItem(name: "page", value: String(page)),
                 URLQueryItem(name: "size", value: String(size)),
@@ -64,7 +67,7 @@ enum SocialEndpoint: APIEndpoint {
         switch self {
         case .sendFriendRequest(let username, let message):
             return SendFriendRequestBodyDTO(username: username, message: message)
-        case .searchUsers, .listIncomingFriendRequests, .generateMyQr, .revokeMyQr,
+        case .searchUsers, .listFriends, .listIncomingFriendRequests, .generateMyQr, .revokeMyQr,
              .acceptFriendRequest, .rejectFriendRequest, .cancelFriendRequest:
             return nil
         }
