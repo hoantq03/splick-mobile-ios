@@ -19,3 +19,9 @@ struct SocialPageUserSearchResponseDTO: Decodable {
     let content: [UserSearchResponseDTO]
     let page: SocialPageMetaDTO
 }
+
+struct MyQRResponseDTO: Decodable {
+    let payload: String
+    let version: Int
+    let issuedAt: Date
+}

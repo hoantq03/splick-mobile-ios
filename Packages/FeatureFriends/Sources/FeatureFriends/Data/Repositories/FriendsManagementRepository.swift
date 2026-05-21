@@ -11,19 +11,26 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
 
     public func fetchMyFriends() async throws -> [UserSummary] { [] }
 
+    public func searchUsers(query: String, page: Int, size: Int) async throws -> [UserSummary] {
+        let normalized = query
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "@", with: "")
+        guard !normalized.isEmpty else { return [] }
+
+        let response: SocialPageUserSearchResponseDTO = try await apiClient.request(
+            SocialEndpoint.searchUsers(query: normalized, page: page, size: size)
+        )
+        return response.content.map(FriendsMapper.toUserSummary)
+    }
+
     public func searchUser(username: String) async throws -> UserSummary? {
         let normalized = username
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "@", with: "")
         guard !normalized.isEmpty else { return nil }
 
-        let response: SocialPageUserSearchResponseDTO = try await apiClient.request(
-            SocialEndpoint.searchUsers(query: normalized, page: 0, size: 20)
-        )
-
-        return response.content
-            .first { $0.username.caseInsensitiveCompare(normalized) == .orderedSame }
-            .map(FriendsMapper.toUserSummary)
+        let results = try await searchUsers(query: normalized, page: 0, size: 20)
+        return results.first { $0.username.caseInsensitiveCompare(normalized) == .orderedSame }
     }
 
     public func addFriend(username: String) async throws -> UserSummary {
@@ -32,6 +39,19 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
 
     public func addFriendFromQRCode(_ payload: String) async throws -> UserSummary {
         throw FriendsError.notImplemented
+    }
+
+    public func generateMyQr() async throws -> PersonalQRCode {
+        let response: MyQRResponseDTO = try await apiClient.request(SocialEndpoint.generateMyQr)
+        return PersonalQRCode(
+            payload: response.payload,
+            version: response.version,
+            issuedAt: response.issuedAt
+        )
+    }
+
+    public func revokeMyQr() async throws {
+        try await apiClient.request(SocialEndpoint.revokeMyQr)
     }
 }
 

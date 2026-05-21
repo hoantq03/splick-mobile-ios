@@ -3,11 +3,15 @@ import Networking
 
 enum SocialEndpoint: APIEndpoint {
     case searchUsers(query: String, page: Int, size: Int)
+    case generateMyQr
+    case revokeMyQr
 
     var path: String {
         switch self {
         case .searchUsers:
             return "/v1/social/users/search"
+        case .generateMyQr, .revokeMyQr:
+            return "/v1/social/qr/me"
         }
     }
 
@@ -15,6 +19,10 @@ enum SocialEndpoint: APIEndpoint {
         switch self {
         case .searchUsers:
             return .get
+        case .generateMyQr:
+            return .post
+        case .revokeMyQr:
+            return .delete
         }
     }
 
@@ -26,6 +34,8 @@ enum SocialEndpoint: APIEndpoint {
                 URLQueryItem(name: "page", value: String(page)),
                 URLQueryItem(name: "size", value: String(size)),
             ]
+        case .generateMyQr, .revokeMyQr:
+            return nil
         }
     }
 

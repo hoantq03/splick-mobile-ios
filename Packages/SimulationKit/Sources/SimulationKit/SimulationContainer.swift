@@ -29,6 +29,7 @@ public final class SimulationContainer: @unchecked Sendable {
     public let fetchFriendsUseCase: FetchFriendsUseCase
 
     public let fetchMyFriendsUseCase: FetchMyFriendsUseCase
+    public let searchUsersUseCase: SearchUsersUseCase
     public let fetchMyGroupsUseCase: FetchMyGroupsUseCase
     public let addFriendUseCase: AddFriendUseCase
     public let joinGroupUseCase: JoinGroupUseCase
@@ -60,6 +61,7 @@ public final class SimulationContainer: @unchecked Sendable {
         self.createPostUseCase = CreatePostUseCase(repository: feedRepository)
         self.fetchFriendsUseCase = FetchFriendsUseCase(repository: friendsRepository)
         self.fetchMyFriendsUseCase = FetchMyFriendsUseCase(repository: friendsRepository)
+        self.searchUsersUseCase = SearchUsersUseCase(repository: friendsRepository)
         self.fetchMyGroupsUseCase = FetchMyGroupsUseCase(repository: friendsRepository)
         self.addFriendUseCase = AddFriendUseCase(repository: friendsRepository)
         self.joinGroupUseCase = JoinGroupUseCase(repository: friendsRepository)
