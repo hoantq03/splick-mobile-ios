@@ -56,6 +56,8 @@ struct MainTabView: View {
                 FriendsRootView(
                     fetchMyFriendsUseCase: container.fetchMyFriendsUseCase,
                     fetchMyGroupsUseCase: container.fetchMyGroupsUseCase,
+                    searchUsersUseCase: container.searchUsersUseCase,
+                    generateMyQrUseCase: container.generateMyQrUseCase,
                     addFriendUseCase: container.addFriendUseCase,
                     joinGroupUseCase: container.joinGroupUseCase
                 )
