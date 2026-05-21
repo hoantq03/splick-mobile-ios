@@ -1,4 +1,5 @@
 import Foundation
+import Common
 import Networking
 import SplickDomain
 
@@ -30,6 +31,34 @@ public struct GroupsRepository: GroupsRepositoryProtocol {
             SocialEndpoint.createGroup(name: trimmedName, description: bodyDescription)
         )
         return FriendsMapper.toGroup(response)
+    }
+
+    public func fetchActiveInviteCode(groupId: UUID) async throws -> GroupInviteCode? {
+        do {
+            let response: InviteCodeResponseDTO = try await apiClient.request(
+                SocialEndpoint.getActiveGroupInviteCode(groupId: groupId)
+            )
+            return FriendsMapper.toGroupInviteCode(response)
+        } catch let error as NetworkError where error == .notFound {
+            return nil
+        }
+    }
+
+    public func generateInviteCode(groupId: UUID) async throws -> GroupInviteCode {
+        let response: InviteCodeResponseDTO = try await apiClient.request(
+            SocialEndpoint.generateGroupInviteCode(groupId: groupId)
+        )
+        return FriendsMapper.toGroupInviteCode(response)
+    }
+
+    public func inviteFriends(groupId: UUID, userIds: [UUID]) async throws -> InviteFriendsToGroupResult {
+        guard !userIds.isEmpty else {
+            throw FriendsError.invalidInviteSelection
+        }
+        let response: InviteFriendsResponseDTO = try await apiClient.request(
+            SocialEndpoint.inviteFriendsToGroup(groupId: groupId, userIds: userIds)
+        )
+        return InviteFriendsToGroupResult(invited: response.invited, skipped: response.skipped)
     }
 
     public func searchGroup(inviteCode: String) async throws -> Group? {

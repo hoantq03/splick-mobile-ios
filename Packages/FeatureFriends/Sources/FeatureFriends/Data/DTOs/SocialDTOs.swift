@@ -105,3 +105,22 @@ struct CreateGroupBodyDTO: Encodable {
     let name: String
     let description: String?
 }
+
+struct InviteCodeResponseDTO: Decodable {
+    let id: UUID
+    let code: String
+    let groupId: UUID
+    let issuedAt: Date
+    let expiresAt: Date?
+    let maxUses: Int?
+    let usedCount: Int
+}
+
+struct InviteFriendsBodyDTO: Encodable {
+    let userIds: [UUID]
+}
+
+struct InviteFriendsResponseDTO: Decodable {
+    let invited: [UUID]
+    let skipped: [UUID]
+}

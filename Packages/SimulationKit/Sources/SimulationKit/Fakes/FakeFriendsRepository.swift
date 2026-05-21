@@ -133,6 +133,50 @@ public actor FakeFriendsRepository: FriendsRepositoryProtocol, FriendsManagement
         return group
     }
 
+    public func fetchActiveInviteCode(groupId: UUID) async throws -> GroupInviteCode? {
+        guard let group = groups.first(where: { $0.id == groupId }) else { return nil }
+        let code = group.inviteCode.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !code.isEmpty else { return nil }
+        return GroupInviteCode(
+            id: UUID(),
+            code: code,
+            groupId: groupId,
+            issuedAt: .now,
+            expiresAt: nil
+        )
+    }
+
+    public func generateInviteCode(groupId: UUID) async throws -> GroupInviteCode {
+        guard let index = groups.firstIndex(where: { $0.id == groupId }) else {
+            throw FriendsError.groupNotFound
+        }
+        let code = "MOCK\(String(groups[index].name.prefix(4)).uppercased())"
+        var group = groups[index]
+        group = Group(
+            id: group.id,
+            name: group.name,
+            inviteCode: code,
+            description: group.description,
+            avatarURL: group.avatarURL,
+            members: group.members,
+            memberCount: group.memberCount,
+            createdBy: group.createdBy,
+            createdAt: group.createdAt
+        )
+        groups[index] = group
+        return GroupInviteCode(
+            id: UUID(),
+            code: code,
+            groupId: groupId,
+            issuedAt: .now,
+            expiresAt: nil
+        )
+    }
+
+    public func inviteFriends(groupId: UUID, userIds: [UUID]) async throws -> InviteFriendsToGroupResult {
+        InviteFriendsToGroupResult(invited: userIds, skipped: [])
+    }
+
     public func searchGroup(inviteCode: String) async throws -> Group? {
         let code = inviteCode.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return groups.first { $0.inviteCode.lowercased() == code }

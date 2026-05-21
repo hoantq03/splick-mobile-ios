@@ -24,8 +24,12 @@ public struct FriendsRootView: View {
     @State private var showIncomingRequests = false
     @State private var profileRoute: UserProfileRoute?
 
+    private let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol
     private let generateMyQrUseCase: GenerateMyQrUseCaseProtocol
     private let createGroupUseCase: CreateGroupUseCaseProtocol
+    private let fetchGroupInviteCodeUseCase: FetchGroupInviteCodeUseCaseProtocol
+    private let generateGroupInviteCodeUseCase: GenerateGroupInviteCodeUseCaseProtocol
+    private let inviteFriendsToGroupUseCase: InviteFriendsToGroupUseCaseProtocol
 
     public init(
         fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol,
@@ -37,7 +41,10 @@ public struct FriendsRootView: View {
         acceptFriendRequestUseCase: AcceptFriendRequestUseCaseProtocol,
         rejectFriendRequestUseCase: RejectFriendRequestUseCaseProtocol,
         joinGroupUseCase: JoinGroupUseCaseProtocol,
-        createGroupUseCase: CreateGroupUseCaseProtocol
+        createGroupUseCase: CreateGroupUseCaseProtocol,
+        fetchGroupInviteCodeUseCase: FetchGroupInviteCodeUseCaseProtocol,
+        generateGroupInviteCodeUseCase: GenerateGroupInviteCodeUseCaseProtocol,
+        inviteFriendsToGroupUseCase: InviteFriendsToGroupUseCaseProtocol
     ) {
         let rootVM = FriendsRootViewModel(
             fetchMyFriendsUseCase: fetchMyFriendsUseCase,
@@ -46,8 +53,12 @@ public struct FriendsRootView: View {
             addFriendUseCase: addFriendUseCase,
             fetchIncomingFriendRequestsUseCase: fetchIncomingFriendRequestsUseCase
         )
+        self.fetchMyFriendsUseCase = fetchMyFriendsUseCase
         self.generateMyQrUseCase = generateMyQrUseCase
         self.createGroupUseCase = createGroupUseCase
+        self.fetchGroupInviteCodeUseCase = fetchGroupInviteCodeUseCase
+        self.generateGroupInviteCodeUseCase = generateGroupInviteCodeUseCase
+        self.inviteFriendsToGroupUseCase = inviteFriendsToGroupUseCase
         _viewModel = StateObject(wrappedValue: rootVM)
         _addFriendViewModel = StateObject(
             wrappedValue: AddFriendViewModel(addFriendUseCase: addFriendUseCase) {
@@ -119,9 +130,16 @@ public struct FriendsRootView: View {
             .refreshable { await viewModel.refresh() }
             .navigationDestination(for: UUID.self) { groupId in
                 if let group = viewModel.groups.first(where: { $0.id == groupId }) {
-                    GroupDetailView(group: group) { user in
-                        profileRoute = UserProfileRoute(user: user)
-                    }
+                    GroupDetailView(
+                        group: group,
+                        onUserTap: { user in
+                            profileRoute = UserProfileRoute(user: user)
+                        },
+                        fetchInviteCodeUseCase: fetchGroupInviteCodeUseCase,
+                        generateInviteCodeUseCase: generateGroupInviteCodeUseCase,
+                        fetchMyFriendsUseCase: fetchMyFriendsUseCase,
+                        inviteFriendsUseCase: inviteFriendsToGroupUseCase
+                    )
                 }
             }
             .sheet(item: $profileRoute) { route in

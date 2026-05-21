@@ -63,6 +63,16 @@ enum FriendsMapper {
         )
     }
 
+    static func toGroupInviteCode(_ dto: InviteCodeResponseDTO) -> GroupInviteCode {
+        GroupInviteCode(
+            id: dto.id,
+            code: dto.code,
+            groupId: dto.groupId,
+            issuedAt: dto.issuedAt,
+            expiresAt: dto.expiresAt
+        )
+    }
+
     static func toGroup(_ dto: GroupSummaryResponseDTO) -> Group {
         Group(
             id: dto.id,

@@ -105,11 +105,13 @@ public enum FriendsError: LocalizedError {
     case groupNotFound
     case alreadyInGroup
     case invalidGroupName
+    case invalidInviteSelection
 
     public var errorDescription: String? {
         switch self {
         case .notImplemented: return "This feature is not available yet."
         case .invalidGroupName: return "Enter a group name."
+        case .invalidInviteSelection: return "Chọn ít nhất một bạn bè."
         case .invalidUsername: return "Enter a valid username."
         case .userNotFound: return "User not found."
         case .alreadyFriends: return "You are already friends."

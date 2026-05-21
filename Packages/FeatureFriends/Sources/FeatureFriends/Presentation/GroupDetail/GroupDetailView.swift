@@ -5,6 +5,31 @@ import SplickDomain
 struct GroupDetailView: View {
     let group: SplickDomain.Group
     let onUserTap: (UserSummary) -> Void
+    let fetchInviteCodeUseCase: FetchGroupInviteCodeUseCaseProtocol
+    let generateInviteCodeUseCase: GenerateGroupInviteCodeUseCaseProtocol
+    let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol
+    let inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol
+
+    @State private var showGroupQR = false
+    @State private var showInviteFriends = false
+    @State private var displayedInviteCode: String
+
+    init(
+        group: SplickDomain.Group,
+        onUserTap: @escaping (UserSummary) -> Void,
+        fetchInviteCodeUseCase: FetchGroupInviteCodeUseCaseProtocol,
+        generateInviteCodeUseCase: GenerateGroupInviteCodeUseCaseProtocol,
+        fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol,
+        inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol
+    ) {
+        self.group = group
+        self.onUserTap = onUserTap
+        self.fetchInviteCodeUseCase = fetchInviteCodeUseCase
+        self.generateInviteCodeUseCase = generateInviteCodeUseCase
+        self.fetchMyFriendsUseCase = fetchMyFriendsUseCase
+        self.inviteFriendsUseCase = inviteFriendsUseCase
+        _displayedInviteCode = State(initialValue: group.inviteCode)
+    }
 
     var body: some View {
         ScrollView {
@@ -33,6 +58,51 @@ struct GroupDetailView: View {
         .background(SplickTheme.Colors.background)
         .navigationTitle(group.name)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                groupActionsMenu
+            }
+        }
+        .sheet(isPresented: $showGroupQR) {
+            GroupInviteQRSheet(
+                groupName: group.name,
+                groupId: group.id,
+                fetchInviteCodeUseCase: fetchInviteCodeUseCase,
+                generateInviteCodeUseCase: generateInviteCodeUseCase
+            )
+        }
+        .sheet(isPresented: $showInviteFriends) {
+            InviteFriendsToGroupSheet(
+                groupId: group.id,
+                fetchMyFriendsUseCase: fetchMyFriendsUseCase,
+                inviteFriendsUseCase: inviteFriendsUseCase,
+                onInvited: {}
+            )
+        }
+        .task {
+            await refreshInviteCodeLabel()
+        }
+    }
+
+    private var groupActionsMenu: some View {
+        Menu {
+            Button {
+                showGroupQR = true
+            } label: {
+                Label("Mã QR & mã nhóm", systemImage: "qrcode")
+            }
+
+            Button {
+                showInviteFriends = true
+            } label: {
+                Label("Thêm thành viên", systemImage: "person.badge.plus")
+            }
+        } label: {
+            Image(systemName: "plus.circle.fill")
+                .font(.system(size: 28))
+                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+        }
+        .accessibilityLabel("Thao tác nhóm")
     }
 
     private var headerCard: some View {
@@ -60,14 +130,23 @@ struct GroupDetailView: View {
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
             }
 
-            HStack {
-                Text("Mã mời: \(group.inviteCode)")
-                    .font(SplickTheme.Typography.caption)
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
-                Spacer()
+            if !displayedInviteCode.isEmpty {
+                HStack {
+                    Text("Mã mời: \(displayedInviteCode)")
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    Spacer()
+                }
             }
         }
         .splickCard()
+    }
+
+    private func refreshInviteCodeLabel() async {
+        guard displayedInviteCode.isEmpty else { return }
+        if let code = try? await fetchInviteCodeUseCase.execute(groupId: group.id) {
+            displayedInviteCode = code.code
+        }
     }
 
     private func memberRow(_ user: UserSummary) -> some View {
