@@ -11,7 +11,7 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
 
     public func fetchMyFriends() async throws -> [UserSummary] { [] }
 
-    public func searchUsers(query: String, page: Int, size: Int) async throws -> [UserSummary] {
+    public func searchUsers(query: String, page: Int, size: Int) async throws -> [UserSearchResult] {
         let normalized = query
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "@", with: "")
@@ -20,7 +20,7 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
         let response: SocialPageUserSearchResponseDTO = try await apiClient.request(
             SocialEndpoint.searchUsers(query: normalized, page: page, size: size)
         )
-        return response.content.map(FriendsMapper.toUserSummary)
+        return response.content.map(FriendsMapper.toUserSearchResult)
     }
 
     public func searchUser(username: String) async throws -> UserSummary? {
@@ -30,11 +30,28 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
         guard !normalized.isEmpty else { return nil }
 
         let results = try await searchUsers(query: normalized, page: 0, size: 20)
-        return results.first { $0.username.caseInsensitiveCompare(normalized) == .orderedSame }
+        return results.first {
+            $0.user.username.caseInsensitiveCompare(normalized) == .orderedSame
+        }?.user
     }
 
     public func addFriend(username: String) async throws -> UserSummary {
-        throw FriendsError.notImplemented
+        let normalized = username
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "@", with: "")
+        guard !normalized.isEmpty else {
+            throw FriendsError.invalidUsername
+        }
+
+        let response: FriendRequestResponseDTO = try await apiClient.request(
+            SocialEndpoint.sendFriendRequest(username: normalized, message: nil)
+        )
+        return UserSummary(
+            id: response.addresseeId,
+            username: normalized,
+            displayName: normalized,
+            avatarURL: nil
+        )
     }
 
     public func addFriendFromQRCode(_ payload: String) async throws -> UserSummary {
@@ -57,6 +74,7 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
 
 public enum FriendsError: LocalizedError {
     case notImplemented
+    case invalidUsername
     case userNotFound
     case alreadyFriends
     case invalidQRCode
@@ -66,6 +84,7 @@ public enum FriendsError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .notImplemented: return "This feature is not available yet."
+        case .invalidUsername: return "Enter a valid username."
         case .userNotFound: return "User not found."
         case .alreadyFriends: return "You are already friends."
         case .invalidQRCode: return "Invalid QR code."

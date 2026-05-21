@@ -63,7 +63,11 @@ final class QRScannerViewController: UIViewController, AVCaptureMetadataOutputOb
     private func setupCapture() {
         guard let device = AVCaptureDevice.default(for: .video),
               let input = try? AVCaptureDeviceInput(device: device) else {
-            onError?("Unable to access the camera.")
+            #if targetEnvironment(simulator)
+            onError?("Simulator không hỗ trợ camera.")
+            #else
+            onError?("Không thể truy cập camera.")
+            #endif
             return
         }
 

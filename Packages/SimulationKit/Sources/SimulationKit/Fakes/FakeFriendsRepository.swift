@@ -50,7 +50,7 @@ public actor FakeFriendsRepository: FriendsRepositoryProtocol, FriendsManagement
 
     public func fetchMyFriends() async throws -> [UserSummary] { [] }
 
-    public func searchUsers(query: String, page: Int, size: Int) async throws -> [UserSummary] {
+    public func searchUsers(query: String, page: Int, size: Int) async throws -> [UserSearchResult] {
         _ = query
         _ = page
         _ = size

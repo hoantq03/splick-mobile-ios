@@ -25,3 +25,18 @@ struct MyQRResponseDTO: Decodable {
     let version: Int
     let issuedAt: Date
 }
+
+struct SendFriendRequestBodyDTO: Encodable {
+    let username: String
+    let message: String?
+}
+
+struct FriendRequestResponseDTO: Decodable {
+    let id: UUID
+    let requesterId: UUID
+    let addresseeId: UUID
+    let status: String
+    let message: String?
+    let createdAt: Date
+    let expiresAt: Date
+}

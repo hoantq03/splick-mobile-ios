@@ -19,7 +19,6 @@ public struct FriendsRootView: View {
     @State private var showJoinGroup = false
     @State private var showAddFriendQR = false
     @State private var showJoinGroupQR = false
-    @State private var showMyQR = false
     @State private var profileRoute: UserProfileRoute?
 
     private let generateMyQrUseCase: GenerateMyQrUseCaseProtocol
@@ -35,7 +34,8 @@ public struct FriendsRootView: View {
         let rootVM = FriendsRootViewModel(
             fetchMyFriendsUseCase: fetchMyFriendsUseCase,
             fetchMyGroupsUseCase: fetchMyGroupsUseCase,
-            searchUsersUseCase: searchUsersUseCase
+            searchUsersUseCase: searchUsersUseCase,
+            addFriendUseCase: addFriendUseCase
         )
         self.generateMyQrUseCase = generateMyQrUseCase
         _viewModel = StateObject(wrappedValue: rootVM)
@@ -113,8 +113,19 @@ public struct FriendsRootView: View {
                 JoinGroupSheet(viewModel: joinGroupViewModel)
             }
             .sheet(isPresented: $showAddFriendQR) {
-                QRScannerSheet(mode: .addFriend) { code in
-                    Task { await addFriendViewModel.addFromQR(code) }
+                if let user = currentUserSummary {
+                    QRScannerSheet(
+                        mode: .addFriend,
+                        onScan: { code in
+                            Task { await addFriendViewModel.addFromQR(code) }
+                        },
+                        myQrContext: QRScannerMyQrContext(
+                            username: user.username,
+                            displayName: user.displayName,
+                            avatarURL: user.avatarURL,
+                            generateMyQrUseCase: generateMyQrUseCase
+                        )
+                    )
                 }
             }
             .sheet(isPresented: $showJoinGroupQR) {
@@ -122,16 +133,14 @@ public struct FriendsRootView: View {
                     Task { await joinGroupViewModel.joinFromQR(code) }
                 }
             }
-            .sheet(isPresented: $showMyQR) {
-                if let user = currentUserSummary {
-                    MyQRSheet(
-                        username: user.username,
-                        displayName: user.displayName,
-                        avatarURL: user.avatarURL,
-                        generateMyQrUseCase: generateMyQrUseCase
-                    )
-                }
-            }
+        }
+        .alert("Friends", isPresented: Binding(
+            get: { viewModel.alertMessage != nil },
+            set: { if !$0 { viewModel.alertMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) { viewModel.alertMessage = nil }
+        } message: {
+            Text(viewModel.alertMessage ?? "")
         }
         .onFirstAppear {
             Task { await viewModel.load() }
@@ -141,7 +150,7 @@ public struct FriendsRootView: View {
     private var friendsTopBar: some View {
         HStack(spacing: SplickTheme.Spacing.sm) {
             friendsSearchField
-            addMenuButton
+            scanQrButton
         }
         .padding(.horizontal, SplickTheme.Spacing.md)
         .padding(.bottom, SplickTheme.Spacing.sm)
@@ -172,16 +181,23 @@ public struct FriendsRootView: View {
         }
     }
 
+    private var scanQrButton: some View {
+        Button {
+            showAddFriendQR = true
+        } label: {
+            Image(systemName: "qrcode.viewfinder")
+                .font(.system(size: 22, weight: .medium))
+                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                .frame(width: 44, height: 44)
+                .background(SplickTheme.Colors.secondaryBackground)
+                .clipShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Quét mã QR")
+    }
+
     private var addMenuButton: some View {
         Menu {
-            Button {
-                showMyQR = true
-            } label: {
-                Label("Mã QR của tôi", systemImage: "qrcode")
-            }
-
-            Divider()
-
             Button {
                 showAddFriend = true
             } label: {
@@ -234,13 +250,18 @@ public struct FriendsRootView: View {
         case .loaded:
             ScrollView {
                 LazyVStack(spacing: SplickTheme.Spacing.xs) {
-                    ForEach(viewModel.searchResults) { user in
-                        Button {
-                            profileRoute = UserProfileRoute(user: user)
-                        } label: {
-                            FriendRowView(user: user)
-                        }
-                        .buttonStyle(.plain)
+                    ForEach(viewModel.searchResults) { result in
+                        FriendRowView(
+                            user: result.user,
+                            friendStatus: result.friendStatus,
+                            isSendingRequest: viewModel.sendingFriendRequestUserIds.contains(result.user.id),
+                            onProfileTap: {
+                                profileRoute = UserProfileRoute(user: result.user)
+                            },
+                            onAddFriend: result.friendStatus == .none
+                                ? { Task { await viewModel.sendFriendRequest(to: result) } }
+                                : nil
+                        )
                     }
                 }
                 .padding(.horizontal, SplickTheme.Spacing.md)

@@ -11,5 +11,6 @@ public final class FriendsRepository: FriendsRepositoryProtocol, Sendable {
 
     public func fetchFriends(query: String, page: Int, limit: Int) async throws -> [UserSummary] {
         try await searchRepository.searchUsers(query: query, page: page, size: limit)
+            .map(\.user)
     }
 }

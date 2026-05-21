@@ -17,12 +17,14 @@ public final class FriendsRootViewModel: ObservableObject {
     @Published var isRefreshing = false
     @Published var alertMessage: String?
     @Published var searchQuery = ""
-    @Published var searchResults: [UserSummary] = []
-    @Published var searchState: LoadingState<[UserSummary]> = .idle
+    @Published var searchResults: [UserSearchResult] = []
+    @Published var searchState: LoadingState<[UserSearchResult]> = .idle
+    @Published private(set) var sendingFriendRequestUserIds: Set<UUID> = []
 
     private let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol
     private let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol
     private let searchUsersUseCase: SearchUsersUseCaseProtocol
+    private let addFriendUseCase: AddFriendUseCaseProtocol
     private var searchTask: Task<Void, Never>?
 
     public var isSearching: Bool {
@@ -32,11 +34,13 @@ public final class FriendsRootViewModel: ObservableObject {
     public init(
         fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol,
         fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol,
-        searchUsersUseCase: SearchUsersUseCaseProtocol
+        searchUsersUseCase: SearchUsersUseCaseProtocol,
+        addFriendUseCase: AddFriendUseCaseProtocol
     ) {
         self.fetchMyFriendsUseCase = fetchMyFriendsUseCase
         self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
         self.searchUsersUseCase = searchUsersUseCase
+        self.addFriendUseCase = addFriendUseCase
     }
 
     func load() async {
@@ -117,6 +121,33 @@ public final class FriendsRootViewModel: ObservableObject {
                 searchResults = []
                 searchState = .failed(error.localizedDescription)
             }
+        }
+    }
+
+    func sendFriendRequest(to result: UserSearchResult) async {
+        guard result.friendStatus == .none else { return }
+        let userId = result.user.id
+        guard !sendingFriendRequestUserIds.contains(userId) else { return }
+
+        sendingFriendRequestUserIds.insert(userId)
+        defer { sendingFriendRequestUserIds.remove(userId) }
+
+        do {
+            _ = try await addFriendUseCase.execute(username: result.user.username)
+            updateSearchResult(userId: userId, status: .requestSent)
+            onFriendAdded()
+        } catch {
+            alertMessage = error.localizedDescription
+        }
+    }
+
+    private func updateSearchResult(userId: UUID, status: FriendRelationStatus) {
+        searchResults = searchResults.map { item in
+            guard item.user.id == userId else { return item }
+            return UserSearchResult(user: item.user, friendStatus: status)
+        }
+        if case .loaded = searchState {
+            searchState = .loaded(searchResults)
         }
     }
 }
