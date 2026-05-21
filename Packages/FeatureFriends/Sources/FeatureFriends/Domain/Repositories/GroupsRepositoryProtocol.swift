@@ -29,6 +29,7 @@ public struct InviteFriendsToGroupResult: Sendable, Equatable {
 
 public protocol GroupsRepositoryProtocol: Sendable {
     func fetchMyGroups() async throws -> [Group]
+    func fetchGroupMembers(groupId: UUID, status: String?) async throws -> [UserSummary]
     func createGroup(name: String, description: String?) async throws -> Group
     func fetchActiveInviteCode(groupId: UUID) async throws -> GroupInviteCode?
     func generateInviteCode(groupId: UUID) async throws -> GroupInviteCode

@@ -1,5 +1,6 @@
 import SwiftUI
 import DesignSystem
+import Common
 import SplickDomain
 
 struct InviteFriendsToGroupSheet: View {
@@ -8,14 +9,20 @@ struct InviteFriendsToGroupSheet: View {
 
     init(
         groupId: UUID,
-        fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol,
+        existingMemberIds: Set<UUID>,
+        currentUserId: UUID?,
+        searchUsersUseCase: SearchUsersUseCaseProtocol,
+        addFriendUseCase: AddFriendUseCaseProtocol,
         inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol,
         onInvited: @escaping () -> Void
     ) {
         _viewModel = StateObject(
             wrappedValue: InviteFriendsToGroupViewModel(
                 groupId: groupId,
-                fetchMyFriendsUseCase: fetchMyFriendsUseCase,
+                existingMemberIds: existingMemberIds,
+                currentUserId: currentUserId,
+                searchUsersUseCase: searchUsersUseCase,
+                addFriendUseCase: addFriendUseCase,
                 inviteFriendsUseCase: inviteFriendsUseCase,
                 onInvited: onInvited
             )
@@ -24,23 +31,20 @@ struct InviteFriendsToGroupSheet: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                switch viewModel.state {
-                case .idle, .loading:
-                    LoadingView(message: "Đang tải danh sách bạn...")
-                case .failed(let message):
-                    ErrorView(message: message) {
-                        Task { await viewModel.load() }
-                    }
-                case .loaded, .submitting:
-                    if viewModel.friends.isEmpty {
-                        EmptyStateView(
-                            icon: "person.2",
-                            title: "Chưa có bạn bè",
-                            message: "Kết bạn trước khi mời vào nhóm."
-                        )
+            VStack(spacing: 0) {
+                searchField
+                    .padding(.horizontal, SplickTheme.Spacing.md)
+                    .padding(.vertical, SplickTheme.Spacing.sm)
+
+                Group {
+                    if viewModel.isSearching {
+                        searchResultsContent
                     } else {
-                        friendList
+                        EmptyStateView(
+                            icon: "magnifyingglass",
+                            title: "Tìm người dùng",
+                            message: "Nhập username để mời vào nhóm. Chỉ bạn bè mới được thêm thành công."
+                        )
                     }
                 }
             }
@@ -56,14 +60,12 @@ struct InviteFriendsToGroupSheet: View {
                     Button("Mời") {
                         Task { await viewModel.submit() }
                     }
-                    .disabled(
-                        viewModel.selectedIds.isEmpty
-                            || viewModel.state == .submitting
-                            || viewModel.state == .loading
-                    )
+                    .disabled(viewModel.selectedIds.isEmpty || viewModel.state == .submitting)
                 }
             }
-            .task { await viewModel.load() }
+            .onChange(of: viewModel.searchQuery) { newValue in
+                viewModel.onSearchQueryChanged(newValue)
+            }
             .alert("Lỗi", isPresented: Binding(
                 get: { viewModel.alertMessage != nil },
                 set: { if !$0 { viewModel.alertMessage = nil } }
@@ -83,43 +85,77 @@ struct InviteFriendsToGroupSheet: View {
         }
     }
 
-    private var friendList: some View {
-        ScrollView {
-            LazyVStack(spacing: SplickTheme.Spacing.xs) {
-                ForEach(viewModel.friends) { friend in
-                    Button {
-                        viewModel.toggleSelection(friend.id)
-                    } label: {
-                        HStack(spacing: SplickTheme.Spacing.sm) {
-                            AvatarView(imageURL: friend.avatarURL, name: friend.displayName, size: .medium)
+    private var searchField: some View {
+        HStack(spacing: SplickTheme.Spacing.xs) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
 
-                            VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
-                                Text(friend.displayName)
-                                    .font(SplickTheme.Typography.headline)
-                                    .foregroundStyle(SplickTheme.Colors.textPrimary)
-                                Text("@\(friend.username)")
-                                    .font(SplickTheme.Typography.caption)
-                                    .foregroundStyle(SplickTheme.Colors.textSecondary)
-                            }
+            TextField("Tìm theo username", text: $viewModel.searchQuery)
+                .font(SplickTheme.Typography.callout)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+        }
+        .padding(.horizontal, SplickTheme.Spacing.md)
+        .padding(.vertical, SplickTheme.Spacing.sm)
+        .background(SplickTheme.Colors.secondaryBackground)
+        .clipShape(Capsule(style: .continuous))
+    }
 
-                            Spacer()
-
-                            Image(systemName: viewModel.selectedIds.contains(friend.id)
-                                  ? "checkmark.circle.fill"
-                                  : "circle")
-                                .font(.title3)
-                                .foregroundStyle(
-                                    viewModel.selectedIds.contains(friend.id)
-                                        ? SplickTheme.Colors.primaryGradientStart
-                                        : SplickTheme.Colors.textTertiary
-                                )
-                        }
-                        .splickCard(padding: SplickTheme.Spacing.sm)
-                    }
-                    .buttonStyle(.plain)
-                }
+    @ViewBuilder
+    private var searchResultsContent: some View {
+        switch viewModel.searchState {
+        case .idle, .loading:
+            LoadingView(message: "Đang tìm...")
+        case .failed(let message):
+            ErrorView(message: message) {
+                viewModel.onSearchQueryChanged(viewModel.searchQuery)
             }
-            .padding(SplickTheme.Spacing.md)
+        case .loaded(let results) where results.isEmpty:
+            EmptyStateView(
+                icon: "magnifyingglass",
+                title: "Không tìm thấy",
+                message: "Thử username khác hoặc người này đã trong nhóm."
+            )
+        case .loaded:
+            ScrollView {
+                LazyVStack(spacing: SplickTheme.Spacing.xs) {
+                    ForEach(viewModel.searchResults) { result in
+                        inviteRow(for: result)
+                    }
+                }
+                .padding(.horizontal, SplickTheme.Spacing.md)
+                .padding(.bottom, SplickTheme.Spacing.md)
+            }
+        }
+    }
+
+    private func inviteRow(for result: UserSearchResult) -> some View {
+        HStack(spacing: SplickTheme.Spacing.xs) {
+            FriendRowView(
+                user: result.user,
+                friendStatus: result.friendStatus,
+                isSendingRequest: viewModel.sendingFriendRequestUserIds.contains(result.user.id),
+                onAddFriend: {
+                    Task { await viewModel.sendFriendRequest(to: result) }
+                }
+            )
+
+            Button {
+                viewModel.toggleSelection(result.user.id)
+            } label: {
+                Image(systemName: viewModel.selectedIds.contains(result.user.id)
+                      ? "checkmark.circle.fill"
+                      : "circle")
+                    .font(.title3)
+                    .foregroundStyle(
+                        viewModel.selectedIds.contains(result.user.id)
+                            ? SplickTheme.Colors.primaryGradientStart
+                            : SplickTheme.Colors.textTertiary
+                    )
+            }
+            .buttonStyle(.plain)
+            .padding(.trailing, SplickTheme.Spacing.sm)
         }
     }
 }

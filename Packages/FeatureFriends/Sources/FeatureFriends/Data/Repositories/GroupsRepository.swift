@@ -17,6 +17,13 @@ public struct GroupsRepository: GroupsRepositoryProtocol {
         return response.content.map(FriendsMapper.toGroup)
     }
 
+    public func fetchGroupMembers(groupId: UUID, status: String? = "ACTIVE") async throws -> [UserSummary] {
+        let response: SocialPageMemberResponseDTO = try await apiClient.request(
+            SocialEndpoint.listGroupMembers(groupId: groupId, status: status, page: 0, size: 100)
+        )
+        return response.content.map(FriendsMapper.toUserSummary)
+    }
+
     public func createGroup(name: String, description: String?) async throws -> Group {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else {

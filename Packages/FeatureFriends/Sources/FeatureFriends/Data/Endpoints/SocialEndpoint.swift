@@ -11,6 +11,7 @@ enum SocialEndpoint: APIEndpoint {
     case cancelFriendRequest(requestId: UUID)
     case listMyGroups(page: Int, size: Int)
     case createGroup(name: String, description: String?)
+    case listGroupMembers(groupId: UUID, status: String?, page: Int, size: Int)
     case getActiveGroupInviteCode(groupId: UUID)
     case generateGroupInviteCode(groupId: UUID)
     case inviteFriendsToGroup(groupId: UUID, userIds: [UUID])
@@ -25,6 +26,8 @@ enum SocialEndpoint: APIEndpoint {
             return "/v1/social/friendships"
         case .listMyGroups, .createGroup:
             return "/v1/social/groups"
+        case .listGroupMembers(let groupId, _, _, _):
+            return "/v1/social/groups/\(groupId.uuidString)/members"
         case .getActiveGroupInviteCode(let groupId):
             return "/v1/social/groups/\(groupId.uuidString)/invite-codes/active"
         case .generateGroupInviteCode(let groupId):
@@ -48,7 +51,7 @@ enum SocialEndpoint: APIEndpoint {
 
     var method: HTTPMethod {
         switch self {
-        case .searchUsers, .listFriends, .listIncomingFriendRequests, .listMyGroups:
+        case .searchUsers, .listFriends, .listIncomingFriendRequests, .listMyGroups, .listGroupMembers:
             return .get
         case .getActiveGroupInviteCode:
             return .get
@@ -75,6 +78,15 @@ enum SocialEndpoint: APIEndpoint {
                 URLQueryItem(name: "page", value: String(page)),
                 URLQueryItem(name: "size", value: String(size)),
             ]
+        case .listGroupMembers(_, let status, let page, let size):
+            var items = [
+                URLQueryItem(name: "page", value: String(page)),
+                URLQueryItem(name: "size", value: String(size)),
+            ]
+            if let status, !status.isEmpty {
+                items.append(URLQueryItem(name: "status", value: status))
+            }
+            return items
         case .sendFriendRequest, .generateMyQr, .revokeMyQr, .getActiveGroupInviteCode,
              .acceptFriendRequest, .rejectFriendRequest, .cancelFriendRequest, .createGroup,
              .generateGroupInviteCode, .inviteFriendsToGroup:
@@ -90,7 +102,7 @@ enum SocialEndpoint: APIEndpoint {
             return CreateGroupBodyDTO(name: name, description: description)
         case .inviteFriendsToGroup(_, let userIds):
             return InviteFriendsBodyDTO(userIds: userIds)
-        case .searchUsers, .listFriends, .listIncomingFriendRequests, .listMyGroups,
+        case .searchUsers, .listFriends, .listIncomingFriendRequests, .listMyGroups, .listGroupMembers,
              .generateMyQr, .revokeMyQr, .getActiveGroupInviteCode, .generateGroupInviteCode,
              .acceptFriendRequest, .rejectFriendRequest, .cancelFriendRequest:
             return nil

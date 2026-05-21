@@ -24,7 +24,9 @@ public struct FriendsRootView: View {
     @State private var showIncomingRequests = false
     @State private var profileRoute: UserProfileRoute?
 
-    private let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol
+    private let fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol
+    private let searchUsersUseCase: SearchUsersUseCaseProtocol
+    private let addFriendUseCase: AddFriendUseCaseProtocol
     private let generateMyQrUseCase: GenerateMyQrUseCaseProtocol
     private let createGroupUseCase: CreateGroupUseCaseProtocol
     private let fetchGroupInviteCodeUseCase: FetchGroupInviteCodeUseCaseProtocol
@@ -42,6 +44,7 @@ public struct FriendsRootView: View {
         rejectFriendRequestUseCase: RejectFriendRequestUseCaseProtocol,
         joinGroupUseCase: JoinGroupUseCaseProtocol,
         createGroupUseCase: CreateGroupUseCaseProtocol,
+        fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol,
         fetchGroupInviteCodeUseCase: FetchGroupInviteCodeUseCaseProtocol,
         generateGroupInviteCodeUseCase: GenerateGroupInviteCodeUseCaseProtocol,
         inviteFriendsToGroupUseCase: InviteFriendsToGroupUseCaseProtocol
@@ -53,7 +56,9 @@ public struct FriendsRootView: View {
             addFriendUseCase: addFriendUseCase,
             fetchIncomingFriendRequestsUseCase: fetchIncomingFriendRequestsUseCase
         )
-        self.fetchMyFriendsUseCase = fetchMyFriendsUseCase
+        self.fetchGroupMembersUseCase = fetchGroupMembersUseCase
+        self.searchUsersUseCase = searchUsersUseCase
+        self.addFriendUseCase = addFriendUseCase
         self.generateMyQrUseCase = generateMyQrUseCase
         self.createGroupUseCase = createGroupUseCase
         self.fetchGroupInviteCodeUseCase = fetchGroupInviteCodeUseCase
@@ -135,9 +140,11 @@ public struct FriendsRootView: View {
                         onUserTap: { user in
                             profileRoute = UserProfileRoute(user: user)
                         },
+                        fetchGroupMembersUseCase: fetchGroupMembersUseCase,
                         fetchInviteCodeUseCase: fetchGroupInviteCodeUseCase,
                         generateInviteCodeUseCase: generateGroupInviteCodeUseCase,
-                        fetchMyFriendsUseCase: fetchMyFriendsUseCase,
+                        searchUsersUseCase: searchUsersUseCase,
+                        addFriendUseCase: addFriendUseCase,
                         inviteFriendsUseCase: inviteFriendsToGroupUseCase
                     )
                 }

@@ -63,6 +63,15 @@ enum FriendsMapper {
         )
     }
 
+    static func toUserSummary(_ dto: MemberResponseDTO) -> UserSummary {
+        UserSummary(
+            id: dto.userId,
+            username: dto.username,
+            displayName: dto.displayName,
+            avatarURL: dto.avatarUrl.flatMap { URL(string: $0) }
+        )
+    }
+
     static func toGroupInviteCode(_ dto: InviteCodeResponseDTO) -> GroupInviteCode {
         GroupInviteCode(
             id: dto.id,

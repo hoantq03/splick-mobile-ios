@@ -133,6 +133,11 @@ public actor FakeFriendsRepository: FriendsRepositoryProtocol, FriendsManagement
         return group
     }
 
+    public func fetchGroupMembers(groupId: UUID, status: String?) async throws -> [UserSummary] {
+        guard let group = groups.first(where: { $0.id == groupId }) else { return [] }
+        return group.members
+    }
+
     public func fetchActiveInviteCode(groupId: UUID) async throws -> GroupInviteCode? {
         guard let group = groups.first(where: { $0.id == groupId }) else { return nil }
         let code = group.inviteCode.trimmingCharacters(in: .whitespacesAndNewlines)

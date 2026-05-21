@@ -197,6 +197,10 @@ final class DependencyContainer: ObservableObject {
         CreateGroupUseCase(repository: groupsRepository)
     }()
 
+    lazy var fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol = {
+        FetchGroupMembersUseCase(repository: groupsRepository)
+    }()
+
     lazy var fetchGroupInviteCodeUseCase: FetchGroupInviteCodeUseCaseProtocol = {
         FetchGroupInviteCodeUseCase(repository: groupsRepository)
     }()

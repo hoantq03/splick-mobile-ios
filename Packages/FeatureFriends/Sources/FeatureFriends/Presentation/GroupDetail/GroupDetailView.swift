@@ -1,62 +1,57 @@
 import SwiftUI
 import DesignSystem
+import Common
 import SplickDomain
 
 struct GroupDetailView: View {
-    let group: SplickDomain.Group
+    @StateObject private var viewModel: GroupDetailViewModel
     let onUserTap: (UserSummary) -> Void
     let fetchInviteCodeUseCase: FetchGroupInviteCodeUseCaseProtocol
     let generateInviteCodeUseCase: GenerateGroupInviteCodeUseCaseProtocol
-    let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol
+    let searchUsersUseCase: SearchUsersUseCaseProtocol
+    let addFriendUseCase: AddFriendUseCaseProtocol
     let inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol
+
+    @Environment(\.currentUserSummary) private var currentUserSummary
 
     @State private var showGroupQR = false
     @State private var showInviteFriends = false
-    @State private var displayedInviteCode: String
 
     init(
         group: SplickDomain.Group,
         onUserTap: @escaping (UserSummary) -> Void,
+        fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol,
         fetchInviteCodeUseCase: FetchGroupInviteCodeUseCaseProtocol,
         generateInviteCodeUseCase: GenerateGroupInviteCodeUseCaseProtocol,
-        fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol,
+        searchUsersUseCase: SearchUsersUseCaseProtocol,
+        addFriendUseCase: AddFriendUseCaseProtocol,
         inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol
     ) {
-        self.group = group
         self.onUserTap = onUserTap
         self.fetchInviteCodeUseCase = fetchInviteCodeUseCase
         self.generateInviteCodeUseCase = generateInviteCodeUseCase
-        self.fetchMyFriendsUseCase = fetchMyFriendsUseCase
+        self.searchUsersUseCase = searchUsersUseCase
+        self.addFriendUseCase = addFriendUseCase
         self.inviteFriendsUseCase = inviteFriendsUseCase
-        _displayedInviteCode = State(initialValue: group.inviteCode)
+        _viewModel = StateObject(
+            wrappedValue: GroupDetailViewModel(
+                group: group,
+                fetchGroupMembersUseCase: fetchGroupMembersUseCase,
+                fetchInviteCodeUseCase: fetchInviteCodeUseCase
+            )
+        )
     }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
                 headerCard
-
-                VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-                    Text("Thành viên (\(group.memberCount))")
-                        .font(SplickTheme.Typography.headline)
-                        .foregroundStyle(SplickTheme.Colors.textPrimary)
-
-                    LazyVStack(spacing: SplickTheme.Spacing.xs) {
-                        ForEach(group.members) { member in
-                            Button {
-                                onUserTap(member)
-                            } label: {
-                                memberRow(member)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
+                membersSection
             }
             .padding(SplickTheme.Spacing.md)
         }
         .background(SplickTheme.Colors.background)
-        .navigationTitle(group.name)
+        .navigationTitle(viewModel.group.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -65,22 +60,64 @@ struct GroupDetailView: View {
         }
         .sheet(isPresented: $showGroupQR) {
             GroupInviteQRSheet(
-                groupName: group.name,
-                groupId: group.id,
+                groupName: viewModel.group.name,
+                groupId: viewModel.group.id,
                 fetchInviteCodeUseCase: fetchInviteCodeUseCase,
                 generateInviteCodeUseCase: generateInviteCodeUseCase
             )
         }
         .sheet(isPresented: $showInviteFriends) {
             InviteFriendsToGroupSheet(
-                groupId: group.id,
-                fetchMyFriendsUseCase: fetchMyFriendsUseCase,
+                groupId: viewModel.group.id,
+                existingMemberIds: viewModel.existingMemberIds,
+                currentUserId: currentUserSummary?.id,
+                searchUsersUseCase: searchUsersUseCase,
+                addFriendUseCase: addFriendUseCase,
                 inviteFriendsUseCase: inviteFriendsUseCase,
-                onInvited: {}
+                onInvited: {
+                    Task { await viewModel.loadMembers() }
+                }
             )
         }
         .task {
-            await refreshInviteCodeLabel()
+            await viewModel.load()
+        }
+        .refreshable {
+            await viewModel.loadMembers()
+        }
+    }
+
+    @ViewBuilder
+    private var membersSection: some View {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+            Text("Thành viên (\(viewModel.displayedMemberCount))")
+                .font(SplickTheme.Typography.headline)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
+
+            switch viewModel.membersState {
+            case .idle, .loading where viewModel.members.isEmpty:
+                LoadingView(message: "Đang tải thành viên...")
+                    .frame(minHeight: 80)
+            case .failed(let message) where viewModel.members.isEmpty:
+                ErrorView(message: message) {
+                    Task { await viewModel.loadMembers() }
+                }
+                .frame(minHeight: 80)
+            default:
+                LazyVStack(spacing: SplickTheme.Spacing.xs) {
+                    ForEach(viewModel.sortedMembers(currentUserId: currentUserSummary?.id)) { member in
+                        Button {
+                            onUserTap(member)
+                        } label: {
+                            memberRow(
+                                member,
+                                isCurrentUser: viewModel.isCurrentUser(member, currentUserId: currentUserSummary?.id)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
         }
     }
 
@@ -116,23 +153,23 @@ struct GroupDetailView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                 VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
-                    Text(group.name)
+                    Text(viewModel.group.name)
                         .font(SplickTheme.Typography.title)
-                    Text("\(group.memberCount) thành viên")
+                    Text("\(viewModel.displayedMemberCount) thành viên")
                         .font(SplickTheme.Typography.caption)
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
                 }
             }
 
-            if let description = group.description, !description.isEmpty {
+            if let description = viewModel.group.description, !description.isEmpty {
                 Text(description)
                     .font(SplickTheme.Typography.callout)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
             }
 
-            if !displayedInviteCode.isEmpty {
+            if !viewModel.displayedInviteCode.isEmpty {
                 HStack {
-                    Text("Mã mời: \(displayedInviteCode)")
+                    Text("Mã mời: \(viewModel.displayedInviteCode)")
                         .font(SplickTheme.Typography.caption)
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
                     Spacer()
@@ -142,19 +179,12 @@ struct GroupDetailView: View {
         .splickCard()
     }
 
-    private func refreshInviteCodeLabel() async {
-        guard displayedInviteCode.isEmpty else { return }
-        if let code = try? await fetchInviteCodeUseCase.execute(groupId: group.id) {
-            displayedInviteCode = code.code
-        }
-    }
-
-    private func memberRow(_ user: UserSummary) -> some View {
+    private func memberRow(_ user: UserSummary, isCurrentUser: Bool) -> some View {
         HStack(spacing: SplickTheme.Spacing.sm) {
             AvatarView(imageURL: user.avatarURL, name: user.displayName, size: .medium)
 
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
-                Text(user.displayName)
+                Text(isCurrentUser ? "\(user.displayName) (tôi)" : user.displayName)
                     .font(SplickTheme.Typography.headline)
                     .foregroundStyle(SplickTheme.Colors.textPrimary)
                 Text("@\(user.username)")

@@ -64,6 +64,7 @@ struct MainTabView: View {
                     rejectFriendRequestUseCase: container.rejectFriendRequestUseCase,
                     joinGroupUseCase: container.joinGroupUseCase,
                     createGroupUseCase: container.createGroupUseCase,
+                    fetchGroupMembersUseCase: container.fetchGroupMembersUseCase,
                     fetchGroupInviteCodeUseCase: container.fetchGroupInviteCodeUseCase,
                     generateGroupInviteCodeUseCase: container.generateGroupInviteCodeUseCase,
                     inviteFriendsToGroupUseCase: container.inviteFriendsToGroupUseCase

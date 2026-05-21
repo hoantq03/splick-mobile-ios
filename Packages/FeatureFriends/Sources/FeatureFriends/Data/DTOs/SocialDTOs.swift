@@ -124,3 +124,18 @@ struct InviteFriendsResponseDTO: Decodable {
     let invited: [UUID]
     let skipped: [UUID]
 }
+
+struct MemberResponseDTO: Decodable {
+    let id: UUID
+    let userId: UUID
+    let username: String
+    let displayName: String
+    let avatarUrl: String?
+    let role: String?
+    let status: String?
+}
+
+struct SocialPageMemberResponseDTO: Decodable {
+    let content: [MemberResponseDTO]
+    let page: SocialPageMetaDTO
+}
