@@ -7,6 +7,7 @@ public struct Group: Identifiable, Codable, Equatable, Sendable {
     public let description: String?
     public let avatarURL: URL?
     public let members: [UserSummary]
+    public let memberCount: Int
     public let createdBy: UUID
     public let createdAt: Date
 
@@ -17,6 +18,7 @@ public struct Group: Identifiable, Codable, Equatable, Sendable {
         description: String? = nil,
         avatarURL: URL? = nil,
         members: [UserSummary] = [],
+        memberCount: Int? = nil,
         createdBy: UUID,
         createdAt: Date = .now
     ) {
@@ -26,9 +28,8 @@ public struct Group: Identifiable, Codable, Equatable, Sendable {
         self.description = description
         self.avatarURL = avatarURL
         self.members = members
+        self.memberCount = memberCount ?? members.count
         self.createdBy = createdBy
         self.createdAt = createdAt
     }
-
-    public var memberCount: Int { members.count }
 }

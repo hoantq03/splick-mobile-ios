@@ -150,7 +150,7 @@ final class DependencyContainer: ObservableObject {
     }()
 
     private lazy var groupsRepository: GroupsRepositoryProtocol = {
-        GroupsRepository()
+        GroupsRepository(apiClient: apiClient)
     }()
 
     lazy var fetchFriendsUseCase: FetchFriendsUseCaseProtocol = {
@@ -191,6 +191,10 @@ final class DependencyContainer: ObservableObject {
 
     lazy var joinGroupUseCase: JoinGroupUseCaseProtocol = {
         JoinGroupUseCase(repository: groupsRepository)
+    }()
+
+    lazy var createGroupUseCase: CreateGroupUseCaseProtocol = {
+        CreateGroupUseCase(repository: groupsRepository)
     }()
 
     // MARK: - Media

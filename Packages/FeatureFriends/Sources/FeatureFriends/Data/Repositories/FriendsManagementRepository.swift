@@ -104,10 +104,12 @@ public enum FriendsError: LocalizedError {
     case invalidQRCode
     case groupNotFound
     case alreadyInGroup
+    case invalidGroupName
 
     public var errorDescription: String? {
         switch self {
         case .notImplemented: return "This feature is not available yet."
+        case .invalidGroupName: return "Enter a group name."
         case .invalidUsername: return "Enter a valid username."
         case .userNotFound: return "User not found."
         case .alreadyFriends: return "You are already friends."

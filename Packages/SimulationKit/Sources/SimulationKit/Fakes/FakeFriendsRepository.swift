@@ -104,8 +104,33 @@ public actor FakeFriendsRepository: FriendsRepositoryProtocol, FriendsManagement
     public func fetchMyGroups() async throws -> [Group] {
         try await Task.sleep(for: .milliseconds(150))
         return groups.filter { group in
-            group.members.contains { $0.id == currentUserId }
+            group.createdBy == currentUserId
+                || group.members.contains { $0.id == currentUserId }
         }
+    }
+
+    public func createGroup(name: String, description: String?) async throws -> Group {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw FriendsError.invalidGroupName }
+
+        let me = UserSummary(
+            id: currentUserId,
+            username: "devuser",
+            displayName: "Dev User",
+            avatarURL: nil
+        )
+        let group = Group(
+            id: UUID(),
+            name: trimmed,
+            inviteCode: "",
+            description: description,
+            members: [me],
+            memberCount: 1,
+            createdBy: currentUserId
+        )
+        groups.append(group)
+        logger.log("Created mock group \(trimmed)")
+        return group
     }
 
     public func searchGroup(inviteCode: String) async throws -> Group? {

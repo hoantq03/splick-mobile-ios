@@ -77,3 +77,31 @@ struct SocialPageFriendResponseDTO: Decodable {
     let content: [FriendResponseDTO]
     let page: SocialPageMetaDTO
 }
+
+struct GroupResponseDTO: Decodable {
+    let id: UUID
+    let name: String
+    let description: String?
+    let avatarUrl: String?
+    let ownerId: UUID
+    let createdAt: Date
+}
+
+struct GroupSummaryResponseDTO: Decodable {
+    let id: UUID
+    let name: String
+    let avatarUrl: String?
+    let ownerId: UUID
+    let createdAt: Date
+    let memberCount: Int
+}
+
+struct SocialPageGroupSummaryResponseDTO: Decodable {
+    let content: [GroupSummaryResponseDTO]
+    let page: SocialPageMetaDTO
+}
+
+struct CreateGroupBodyDTO: Encodable {
+    let name: String
+    let description: String?
+}
