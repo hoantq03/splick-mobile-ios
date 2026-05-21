@@ -18,12 +18,14 @@ public struct FriendsRootView: View {
 
     @State private var showAddFriend = false
     @State private var showJoinGroup = false
+    @State private var showCreateGroup = false
     @State private var showAddFriendQR = false
     @State private var showJoinGroupQR = false
     @State private var showIncomingRequests = false
     @State private var profileRoute: UserProfileRoute?
 
     private let generateMyQrUseCase: GenerateMyQrUseCaseProtocol
+    private let createGroupUseCase: CreateGroupUseCaseProtocol
 
     public init(
         fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol,
@@ -34,7 +36,8 @@ public struct FriendsRootView: View {
         fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol,
         acceptFriendRequestUseCase: AcceptFriendRequestUseCaseProtocol,
         rejectFriendRequestUseCase: RejectFriendRequestUseCaseProtocol,
-        joinGroupUseCase: JoinGroupUseCaseProtocol
+        joinGroupUseCase: JoinGroupUseCaseProtocol,
+        createGroupUseCase: CreateGroupUseCaseProtocol
     ) {
         let rootVM = FriendsRootViewModel(
             fetchMyFriendsUseCase: fetchMyFriendsUseCase,
@@ -44,6 +47,7 @@ public struct FriendsRootView: View {
             fetchIncomingFriendRequestsUseCase: fetchIncomingFriendRequestsUseCase
         )
         self.generateMyQrUseCase = generateMyQrUseCase
+        self.createGroupUseCase = createGroupUseCase
         _viewModel = StateObject(wrappedValue: rootVM)
         _addFriendViewModel = StateObject(
             wrappedValue: AddFriendViewModel(addFriendUseCase: addFriendUseCase) {
@@ -128,6 +132,14 @@ public struct FriendsRootView: View {
             }
             .sheet(isPresented: $showJoinGroup) {
                 JoinGroupSheet(viewModel: joinGroupViewModel)
+            }
+            .sheet(isPresented: $showCreateGroup) {
+                CreateGroupSheet(
+                    viewModel: CreateGroupViewModel(createGroupUseCase: createGroupUseCase) { group in
+                        viewModel.onGroupCreated(group)
+                        showCreateGroup = false
+                    }
+                )
             }
             .sheet(isPresented: $showIncomingRequests, onDismiss: {
                 Task { await viewModel.refreshIncomingRequestCount() }
@@ -268,6 +280,12 @@ public struct FriendsRootView: View {
                 Label("Add friend by QR", systemImage: "qrcode.viewfinder")
             }
 
+            Button {
+                showCreateGroup = true
+            } label: {
+                Label("Tạo nhóm", systemImage: "plus.circle")
+            }
+
             Divider()
 
             Button {
@@ -376,11 +394,11 @@ public struct FriendsRootView: View {
         case .loaded where viewModel.groups.isEmpty:
             EmptyStateView(
                 icon: "person.3",
-                title: "No groups yet",
-                message: "Join a group with an invite code or scan a group QR code.",
-                actionTitle: "Join group"
+                title: "Chưa có nhóm",
+                message: "Tạo nhóm mới hoặc tham gia bằng mã mời / QR.",
+                actionTitle: "Tạo nhóm"
             ) {
-                showJoinGroup = true
+                showCreateGroup = true
             }
         default:
             ScrollView {

@@ -115,6 +115,14 @@ public final class FriendsRootViewModel: ObservableObject {
         Task { await loadGroups(isPullToRefresh: true) }
     }
 
+    func onGroupCreated(_ group: Group) {
+        if !groups.contains(where: { $0.id == group.id }) {
+            groups.insert(group, at: 0)
+        }
+        groupsState = .loaded(groups)
+        Task { await loadGroups(isPullToRefresh: true) }
+    }
+
     func onSearchQueryChanged(_ query: String) {
         searchTask?.cancel()
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)

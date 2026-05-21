@@ -5,6 +5,14 @@ import SplickDomain
 struct GroupRowView: View {
     let group: SplickDomain.Group
 
+    private var subtitle: String {
+        let count = "\(group.memberCount) thành viên"
+        if group.inviteCode.isEmpty {
+            return count
+        }
+        return "\(count) · @\(group.inviteCode)"
+    }
+
     var body: some View {
         HStack(spacing: SplickTheme.Spacing.sm) {
             Image(systemName: "person.3.fill")
@@ -18,7 +26,7 @@ struct GroupRowView: View {
                 Text(group.name)
                     .font(SplickTheme.Typography.headline)
                     .foregroundStyle(SplickTheme.Colors.textPrimary)
-                Text("\(group.memberCount) members · @\(group.inviteCode)")
+                Text(subtitle)
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
                     .lineLimit(1)

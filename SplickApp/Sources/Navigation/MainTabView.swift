@@ -62,7 +62,8 @@ struct MainTabView: View {
                     fetchIncomingFriendRequestsUseCase: container.fetchIncomingFriendRequestsUseCase,
                     acceptFriendRequestUseCase: container.acceptFriendRequestUseCase,
                     rejectFriendRequestUseCase: container.rejectFriendRequestUseCase,
-                    joinGroupUseCase: container.joinGroupUseCase
+                    joinGroupUseCase: container.joinGroupUseCase,
+                    createGroupUseCase: container.createGroupUseCase
                 )
 
             case .camera:
