@@ -13,7 +13,7 @@ struct GroupDetailView: View {
     let revokeGroupQrUseCase: RevokeGroupQrUseCaseProtocol
     let updateGroupUseCase: UpdateGroupUseCaseProtocol
     let updateGroupAvatarUseCase: UpdateGroupAvatarUseCaseProtocol
-    let uploadMediaUseCase: UploadMediaUseCaseProtocol
+    let uploadGroupAvatarUseCase: UploadGroupAvatarUseCaseProtocol
     let transferOwnershipUseCase: TransferGroupOwnershipUseCaseProtocol
     let searchUsersUseCase: SearchUsersUseCaseProtocol
     let addFriendUseCase: AddFriendUseCaseProtocol
@@ -40,7 +40,7 @@ struct GroupDetailView: View {
         revokeGroupQrUseCase: RevokeGroupQrUseCaseProtocol,
         updateGroupUseCase: UpdateGroupUseCaseProtocol,
         updateGroupAvatarUseCase: UpdateGroupAvatarUseCaseProtocol,
-        uploadMediaUseCase: UploadMediaUseCaseProtocol,
+        uploadGroupAvatarUseCase: UploadGroupAvatarUseCaseProtocol,
         transferOwnershipUseCase: TransferGroupOwnershipUseCaseProtocol,
         searchUsersUseCase: SearchUsersUseCaseProtocol,
         addFriendUseCase: AddFriendUseCaseProtocol,
@@ -59,7 +59,7 @@ struct GroupDetailView: View {
         self.revokeGroupQrUseCase = revokeGroupQrUseCase
         self.updateGroupUseCase = updateGroupUseCase
         self.updateGroupAvatarUseCase = updateGroupAvatarUseCase
-        self.uploadMediaUseCase = uploadMediaUseCase
+        self.uploadGroupAvatarUseCase = uploadGroupAvatarUseCase
         self.transferOwnershipUseCase = transferOwnershipUseCase
         self.searchUsersUseCase = searchUsersUseCase
         self.addFriendUseCase = addFriendUseCase
@@ -111,7 +111,7 @@ struct GroupDetailView: View {
                 group: viewModel.group,
                 updateGroupUseCase: updateGroupUseCase,
                 updateGroupAvatarUseCase: updateGroupAvatarUseCase,
-                uploadMediaUseCase: uploadMediaUseCase,
+                uploadGroupAvatarUseCase: uploadGroupAvatarUseCase,
                 onSaved: { updated in
                     viewModel.applyUpdatedGroup(updated)
                 }

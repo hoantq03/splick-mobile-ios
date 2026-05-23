@@ -83,7 +83,7 @@ struct MainTabView: View {
                     deleteGroupUseCase: container.deleteGroupUseCase,
                     updateGroupUseCase: container.updateGroupUseCase,
                     updateGroupAvatarUseCase: container.updateGroupAvatarUseCase,
-                    uploadMediaUseCase: container.uploadMediaUseCase,
+                    uploadGroupAvatarUseCase: container.uploadGroupAvatarUseCase,
                     transferGroupOwnershipUseCase: container.transferGroupOwnershipUseCase,
                     generateGroupQrUseCase: container.generateGroupQrUseCase,
                     revokeGroupQrUseCase: container.revokeGroupQrUseCase

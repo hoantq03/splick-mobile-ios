@@ -54,7 +54,7 @@ public struct FriendsRootView: View {
     private let deleteGroupUseCase: DeleteGroupUseCaseProtocol
     private let updateGroupUseCase: UpdateGroupUseCaseProtocol
     private let updateGroupAvatarUseCase: UpdateGroupAvatarUseCaseProtocol
-    private let uploadMediaUseCase: UploadMediaUseCaseProtocol
+    private let uploadGroupAvatarUseCase: UploadGroupAvatarUseCaseProtocol
     private let transferGroupOwnershipUseCase: TransferGroupOwnershipUseCaseProtocol
     private let generateGroupQrUseCase: GenerateGroupQrUseCaseProtocol
     private let revokeGroupQrUseCase: RevokeGroupQrUseCaseProtocol
@@ -89,7 +89,7 @@ public struct FriendsRootView: View {
         deleteGroupUseCase: DeleteGroupUseCaseProtocol,
         updateGroupUseCase: UpdateGroupUseCaseProtocol,
         updateGroupAvatarUseCase: UpdateGroupAvatarUseCaseProtocol,
-        uploadMediaUseCase: UploadMediaUseCaseProtocol,
+        uploadGroupAvatarUseCase: UploadGroupAvatarUseCaseProtocol,
         transferGroupOwnershipUseCase: TransferGroupOwnershipUseCaseProtocol,
         generateGroupQrUseCase: GenerateGroupQrUseCaseProtocol,
         revokeGroupQrUseCase: RevokeGroupQrUseCaseProtocol
@@ -126,7 +126,7 @@ public struct FriendsRootView: View {
         self.deleteGroupUseCase = deleteGroupUseCase
         self.updateGroupUseCase = updateGroupUseCase
         self.updateGroupAvatarUseCase = updateGroupAvatarUseCase
-        self.uploadMediaUseCase = uploadMediaUseCase
+        self.uploadGroupAvatarUseCase = uploadGroupAvatarUseCase
         self.transferGroupOwnershipUseCase = transferGroupOwnershipUseCase
         self.generateGroupQrUseCase = generateGroupQrUseCase
         self.revokeGroupQrUseCase = revokeGroupQrUseCase
@@ -229,7 +229,7 @@ public struct FriendsRootView: View {
                         revokeGroupQrUseCase: revokeGroupQrUseCase,
                         updateGroupUseCase: updateGroupUseCase,
                         updateGroupAvatarUseCase: updateGroupAvatarUseCase,
-                        uploadMediaUseCase: uploadMediaUseCase,
+                        uploadGroupAvatarUseCase: uploadGroupAvatarUseCase,
                         transferOwnershipUseCase: transferGroupOwnershipUseCase,
                         searchUsersUseCase: searchUsersUseCase,
                         addFriendUseCase: addFriendUseCase,

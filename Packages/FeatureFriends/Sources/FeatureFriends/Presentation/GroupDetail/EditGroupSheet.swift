@@ -13,7 +13,7 @@ struct EditGroupSheet: View {
         group: SplickDomain.Group,
         updateGroupUseCase: UpdateGroupUseCaseProtocol,
         updateGroupAvatarUseCase: UpdateGroupAvatarUseCaseProtocol,
-        uploadMediaUseCase: UploadMediaUseCaseProtocol,
+        uploadGroupAvatarUseCase: UploadGroupAvatarUseCaseProtocol,
         onSaved: @escaping (SplickDomain.Group) -> Void
     ) {
         _viewModel = StateObject(
@@ -21,7 +21,7 @@ struct EditGroupSheet: View {
                 group: group,
                 updateGroupUseCase: updateGroupUseCase,
                 updateGroupAvatarUseCase: updateGroupAvatarUseCase,
-                uploadMediaUseCase: uploadMediaUseCase
+                uploadGroupAvatarUseCase: uploadGroupAvatarUseCase
             )
         )
         self.onSaved = onSaved

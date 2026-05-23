@@ -42,6 +42,7 @@ public final class SimulationContainer: @unchecked Sendable {
     public let markNotificationReadUseCase: MarkNotificationReadUseCase
 
     public let uploadMediaUseCase: UploadMediaUseCase
+    public let uploadGroupAvatarUseCase: UploadGroupAvatarUseCase
 
     public init(loggerModule: String = "Simulation") {
         self.logger = StateLogger(module: loggerModule)
@@ -74,6 +75,7 @@ public final class SimulationContainer: @unchecked Sendable {
         self.markNotificationReadUseCase = MarkNotificationReadUseCase(repository: notificationRepository)
 
         self.uploadMediaUseCase = UploadMediaUseCase(repository: mediaRepository)
+        self.uploadGroupAvatarUseCase = UploadGroupAvatarUseCase(repository: mediaRepository)
     }
 
     public func seedTestData() async {

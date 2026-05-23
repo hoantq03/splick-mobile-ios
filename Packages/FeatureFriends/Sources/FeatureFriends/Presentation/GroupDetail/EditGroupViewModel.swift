@@ -18,20 +18,20 @@ final class EditGroupViewModel: ObservableObject {
     private let groupId: UUID
     private let updateGroupUseCase: UpdateGroupUseCaseProtocol
     private let updateGroupAvatarUseCase: UpdateGroupAvatarUseCaseProtocol
-    private let uploadMediaUseCase: UploadMediaUseCaseProtocol
+    private let uploadGroupAvatarUseCase: UploadGroupAvatarUseCaseProtocol
 
     init(
         group: SplickDomain.Group,
         updateGroupUseCase: UpdateGroupUseCaseProtocol,
         updateGroupAvatarUseCase: UpdateGroupAvatarUseCaseProtocol,
-        uploadMediaUseCase: UploadMediaUseCaseProtocol
+        uploadGroupAvatarUseCase: UploadGroupAvatarUseCaseProtocol
     ) {
         self.groupId = group.id
         self.name = group.name
         self.description = group.description ?? ""
         self.updateGroupUseCase = updateGroupUseCase
         self.updateGroupAvatarUseCase = updateGroupAvatarUseCase
-        self.uploadMediaUseCase = uploadMediaUseCase
+        self.uploadGroupAvatarUseCase = uploadGroupAvatarUseCase
     }
 
     func onPhotoItemChanged() async {
@@ -68,7 +68,7 @@ final class EditGroupViewModel: ObservableObject {
 
             if let previewImage,
                let jpeg = previewImage.jpegData(compressionQuality: 0.85) {
-                let upload = try await uploadMediaUseCase.execute(imageData: jpeg)
+                let upload = try await uploadGroupAvatarUseCase.execute(imageData: jpeg, groupId: groupId)
                 updated = try await updateGroupAvatarUseCase.execute(
                     groupId: groupId,
                     avatarURL: upload.url.absoluteString
