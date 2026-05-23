@@ -27,21 +27,17 @@ public struct EditProfileView: View {
                     Task { await viewModel.onPhotoItemChanged() }
                 }
 
+                Text("Tap the photo to choose a new avatar.")
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    .multilineTextAlignment(.center)
+
                 SplickTextField(
                     "Display name",
                     text: $viewModel.displayName,
                     icon: "person"
                 )
                 .textInputAutocapitalization(.words)
-
-                SplickTextField(
-                    "Avatar URL (optional)",
-                    text: $viewModel.avatarUrlText,
-                    icon: "link"
-                )
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .keyboardType(.URL)
 
                 if let error = viewModel.errorMessage {
                     Text(error)
@@ -77,17 +73,8 @@ public struct EditProfileView: View {
                 .scaledToFill()
                 .frame(width: 96, height: 96)
                 .clipShape(Circle())
-        } else if let urlText = viewModel.avatarUrlText.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
-                  let url = URL(string: urlText) {
-            AvatarView(imageURL: url, name: viewModel.displayName, size: .large)
         } else {
-            AvatarView(imageURL: nil, name: viewModel.displayName, size: .large)
+            AvatarView(imageURL: viewModel.existingAvatarURL, name: viewModel.displayName, size: .large)
         }
-    }
-}
-
-private extension String {
-    var nilIfEmpty: String? {
-        isEmpty ? nil : self
     }
 }

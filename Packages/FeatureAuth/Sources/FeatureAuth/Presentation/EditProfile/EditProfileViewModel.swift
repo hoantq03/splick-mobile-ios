@@ -1,33 +1,34 @@
 import Foundation
 import SwiftUI
 import PhotosUI
+import UIKit
 import Common
 import DesignSystem
 import SplickDomain
 
-public typealias ProfileImageUploader = @Sendable (Data) async throws -> URL
+public typealias UserAvatarUploader = @Sendable (UIImage) async throws -> URL
 
 @MainActor
 public final class EditProfileViewModel: ObservableObject {
     @Published var displayName: String
-    @Published var avatarUrlText: String
+    @Published var existingAvatarURL: URL?
     @Published var selectedPhotoItem: PhotosPickerItem?
     @Published var previewImage: UIImage?
     @Published var state: LoadingState<User> = .idle
     @Published var errorMessage: String?
 
     private let updateProfileUseCase: UpdateProfileUseCaseProtocol
-    private let uploadImage: ProfileImageUploader?
+    private let uploadAvatar: UserAvatarUploader?
 
     public init(
         user: User,
         updateProfileUseCase: UpdateProfileUseCaseProtocol,
-        uploadImage: ProfileImageUploader? = nil
+        uploadAvatar: UserAvatarUploader? = nil
     ) {
         self.displayName = user.displayName
-        self.avatarUrlText = user.avatarURL?.absoluteString ?? ""
+        self.existingAvatarURL = user.avatarURL
         self.updateProfileUseCase = updateProfileUseCase
-        self.uploadImage = uploadImage
+        self.uploadAvatar = uploadAvatar
     }
 
     func onPhotoItemChanged() async {
@@ -44,10 +45,8 @@ public final class EditProfileViewModel: ObservableObject {
 
     func save() async -> User? {
         let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        var resolvedAvatar = avatarUrlText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if resolvedAvatar.isEmpty { resolvedAvatar = "" }
 
-        if trimmedName.isEmpty && resolvedAvatar.isEmpty && previewImage == nil {
+        if trimmedName.isEmpty && previewImage == nil {
             errorMessage = "Enter a display name or choose a photo."
             return nil
         }
@@ -59,15 +58,10 @@ public final class EditProfileViewModel: ObservableObject {
         }
 
         do {
-            var avatarToSend: String? = resolvedAvatar.isEmpty ? nil : resolvedAvatar
+            var avatarToSend: String?
 
-            if let previewImage, let uploadImage {
-                guard let jpeg = previewImage.jpegData(compressionQuality: 0.85) else {
-                    errorMessage = "Could not process the photo."
-                    state = .idle
-                    return nil
-                }
-                let uploaded = try await uploadImage(jpeg)
+            if let previewImage, let uploadAvatar {
+                let uploaded = try await uploadAvatar(previewImage)
                 avatarToSend = uploaded.absoluteString
             }
 

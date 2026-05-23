@@ -300,6 +300,11 @@ final class DependencyContainer: ObservableObject {
         return UploadMediaUseCase(repository: mediaRepository)
     }()
 
+    lazy var uploadUserAvatarUseCase: UploadUserAvatarUseCaseProtocol = {
+        if let simulation { return simulation.uploadUserAvatarUseCase }
+        return UploadUserAvatarUseCase(repository: mediaRepository)
+    }()
+
     lazy var uploadGroupAvatarUseCase: UploadGroupAvatarUseCaseProtocol = {
         if let simulation { return simulation.uploadGroupAvatarUseCase }
         return UploadGroupAvatarUseCase(repository: mediaRepository)

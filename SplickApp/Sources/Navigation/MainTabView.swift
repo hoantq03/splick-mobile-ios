@@ -247,8 +247,8 @@ struct ProfileSettingsView: View {
                         viewModel: EditProfileViewModel(
                             user: user,
                             updateProfileUseCase: container.updateProfileUseCase,
-                            uploadImage: { data in
-                                let result = try await container.uploadMediaUseCase.execute(imageData: data)
+                            uploadAvatar: { image in
+                                let result = try await container.uploadUserAvatarUseCase.execute(image: image)
                                 return result.url
                             }
                         ),
