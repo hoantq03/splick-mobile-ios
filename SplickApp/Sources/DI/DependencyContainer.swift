@@ -296,18 +296,16 @@ final class DependencyContainer: ObservableObject {
     }()
 
     lazy var uploadMediaUseCase: UploadMediaUseCaseProtocol = {
-        if let simulation { return simulation.uploadMediaUseCase }
-        return UploadMediaUseCase(repository: mediaRepository)
+        UploadMediaUseCase(repository: mediaRepository)
     }()
 
+  // Avatar uploads always hit media-service (URLs are persisted via auth/social).
     lazy var uploadUserAvatarUseCase: UploadUserAvatarUseCaseProtocol = {
-        if let simulation { return simulation.uploadUserAvatarUseCase }
-        return UploadUserAvatarUseCase(repository: mediaRepository)
+        UploadUserAvatarUseCase(repository: mediaRepository)
     }()
 
     lazy var uploadGroupAvatarUseCase: UploadGroupAvatarUseCaseProtocol = {
-        if let simulation { return simulation.uploadGroupAvatarUseCase }
-        return UploadGroupAvatarUseCase(repository: mediaRepository)
+        UploadGroupAvatarUseCase(repository: mediaRepository)
     }()
 
     // MARK: - Expense

@@ -15,10 +15,11 @@ public actor FakeMediaRepository: MediaRepositoryProtocol {
         let id = UUID()
         let pathPrefix = purpose == .groupAvatar ? "groups" : "users"
         let contextSegment = groupId.map { "/\($0.uuidString)" } ?? ""
-        let base = "https://media.dev.splick.example/\(pathPrefix)\(contextSegment)/avatars/\(id).jpg"
+        // Simulation-only URL — not used for profile avatars (live media-service in DependencyContainer).
+        let urlString = "https://example.com/\(pathPrefix)\(contextSegment)/avatars/\(id).jpg"
         return MediaUploadResult(
             id: id,
-            url: URL(string: base)!,
+            url: URL(string: urlString)!,
             thumbnailURL: nil,
             sizeBytes: data.count
         )

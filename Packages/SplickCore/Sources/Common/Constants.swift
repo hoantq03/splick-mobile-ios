@@ -1,7 +1,8 @@
 import Foundation
 
 public enum AppConstants {
-    /// When true, feed/expense/notification use in-memory fakes. Auth and user search always use the live API.
+    /// When true, feed/expense/notification use in-memory fakes.
+    /// Auth, user search, and media uploads always use the live API.
     public enum Dev {
         #if DEBUG
         public static let useMockData = true
