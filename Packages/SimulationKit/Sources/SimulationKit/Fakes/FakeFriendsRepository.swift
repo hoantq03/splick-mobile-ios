@@ -62,7 +62,9 @@ public actor FakeFriendsRepository: FriendsRepositoryProtocol, FriendsManagement
         return nil
     }
 
-    public func addFriend(username: String) async throws -> UserSummary {
+    public func addFriend(username: String, message: String?) async throws -> UserSummary {
+        _ = username
+        _ = message
         throw FriendsError.notImplemented
     }
 
@@ -70,6 +72,10 @@ public actor FakeFriendsRepository: FriendsRepositoryProtocol, FriendsManagement
         _ = page
         _ = size
         return []
+    }
+
+    public func fetchAllIncomingFriendRequests() async throws -> [IncomingFriendRequest] {
+        []
     }
 
     public func acceptFriendRequest(requestId: UUID) async throws {
@@ -93,6 +99,10 @@ public actor FakeFriendsRepository: FriendsRepositoryProtocol, FriendsManagement
         return []
     }
 
+    public func fetchAllOutgoingFriendRequests() async throws -> [OutgoingFriendRequest] {
+        []
+    }
+
     public func removeFriend(friendUserId: UUID) async throws {
         _ = friendUserId
         throw FriendsError.notImplemented
@@ -108,6 +118,10 @@ public actor FakeFriendsRepository: FriendsRepositoryProtocol, FriendsManagement
         _ = page
         _ = size
         return []
+    }
+
+    public func fetchAllBlockedUsers() async throws -> [BlockedUser] {
+        []
     }
 
     public func blockUser(userId: UUID) async throws {

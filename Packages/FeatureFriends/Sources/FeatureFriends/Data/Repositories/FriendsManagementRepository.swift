@@ -10,10 +10,13 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
     }
 
     public func fetchMyFriends() async throws -> [UserSummary] {
-        let response: SocialPageFriendResponseDTO = try await apiClient.request(
-            SocialEndpoint.listFriends(page: 0, size: 100)
-        )
-        return response.content.map(FriendsMapper.toUserSummary)
+        let friends = try await SocialPageFetcher.fetchAll { page, size in
+            let response: SocialPageFriendResponseDTO = try await apiClient.request(
+                SocialEndpoint.listFriends(page: page, size: size)
+            )
+            return (response.content, response.page)
+        }
+        return friends.map(FriendsMapper.toUserSummary)
     }
 
     public func searchUsers(query: String, page: Int, size: Int) async throws -> [UserSearchResult] {
@@ -40,7 +43,7 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
         }?.user
     }
 
-    public func addFriend(username: String) async throws -> UserSummary {
+    public func addFriend(username: String, message: String?) async throws -> UserSummary {
         let normalized = username
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "@", with: "")
@@ -48,8 +51,12 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
             throw FriendsError.invalidUsername
         }
 
+        let trimmedMessage = message?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+
         let response: FriendRequestResponseDTO = try await apiClient.request(
-            SocialEndpoint.sendFriendRequest(username: normalized, message: nil)
+            SocialEndpoint.sendFriendRequest(username: normalized, message: trimmedMessage)
         )
         return UserSummary(
             id: response.addresseeId,
@@ -64,6 +71,16 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
             SocialEndpoint.listIncomingFriendRequests(page: page, size: size)
         )
         return response.content.map(FriendsMapper.toIncomingFriendRequest)
+    }
+
+    public func fetchAllIncomingFriendRequests() async throws -> [IncomingFriendRequest] {
+        let items = try await SocialPageFetcher.fetchAll { page, size in
+            let response: SocialPageIncomingFriendRequestResponseDTO = try await apiClient.request(
+                SocialEndpoint.listIncomingFriendRequests(page: page, size: size)
+            )
+            return (response.content, response.page)
+        }
+        return items.map(FriendsMapper.toIncomingFriendRequest)
     }
 
     public func acceptFriendRequest(requestId: UUID) async throws {
@@ -85,6 +102,16 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
         return response.content.map(FriendsMapper.toOutgoingFriendRequest)
     }
 
+    public func fetchAllOutgoingFriendRequests() async throws -> [OutgoingFriendRequest] {
+        let items = try await SocialPageFetcher.fetchAll { page, size in
+            let response: SocialPageFriendRequestResponseDTO = try await apiClient.request(
+                SocialEndpoint.listOutgoingFriendRequests(page: page, size: size)
+            )
+            return (response.content, response.page)
+        }
+        return items.map(FriendsMapper.toOutgoingFriendRequest)
+    }
+
     public func removeFriend(friendUserId: UUID) async throws {
         try await apiClient.request(SocialEndpoint.removeFriend(friendUserId: friendUserId))
     }
@@ -103,6 +130,16 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
         return response.content.map(FriendsMapper.toBlockedUser)
     }
 
+    public func fetchAllBlockedUsers() async throws -> [BlockedUser] {
+        let items = try await SocialPageFetcher.fetchAll { page, size in
+            let response: SocialPageBlockedUserResponseDTO = try await apiClient.request(
+                SocialEndpoint.listBlockedUsers(page: page, size: size)
+            )
+            return (response.content, response.page)
+        }
+        return items.map(FriendsMapper.toBlockedUser)
+    }
+
     public func blockUser(userId: UUID) async throws {
         try await apiClient.request(SocialEndpoint.blockUser(userId: userId))
     }
@@ -118,7 +155,7 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
 
         switch action {
         case .addFriend(let username):
-            return try await addFriend(username: username)
+            return try await addFriend(username: username, message: nil)
         case .addFriendByServerPayload(let payload):
             let response: FriendRequestResponseDTO = try await apiClient.request(
                 SocialEndpoint.sendFriendRequestByQr(qrPayload: payload, message: nil)
@@ -147,6 +184,12 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
 
     public func revokeMyQr() async throws {
         try await apiClient.request(SocialEndpoint.revokeMyQr)
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
     }
 }
 

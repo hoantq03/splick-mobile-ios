@@ -25,7 +25,7 @@ public final class OutgoingFriendRequestsViewModel: ObservableObject {
     func load() async {
         state = .loading
         do {
-            let items = try await fetchOutgoingUseCase.execute(page: 0, size: 50)
+            let items = try await fetchOutgoingUseCase.executeAll()
             requests = items
             state = .loaded(items)
         } catch {

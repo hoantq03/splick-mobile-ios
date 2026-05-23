@@ -5,7 +5,10 @@ public protocol FriendsManagementRepositoryProtocol: Sendable {
     func fetchMyFriends() async throws -> [UserSummary]
     func searchUsers(query: String, page: Int, size: Int) async throws -> [UserSearchResult]
     func searchUser(username: String) async throws -> UserSummary?
-    func addFriend(username: String) async throws -> UserSummary
+    func addFriend(username: String, message: String?) async throws -> UserSummary
+    func fetchAllIncomingFriendRequests() async throws -> [IncomingFriendRequest]
+    func fetchAllOutgoingFriendRequests() async throws -> [OutgoingFriendRequest]
+    func fetchAllBlockedUsers() async throws -> [BlockedUser]
     func fetchIncomingFriendRequests(page: Int, size: Int) async throws -> [IncomingFriendRequest]
     func fetchOutgoingFriendRequests(page: Int, size: Int) async throws -> [OutgoingFriendRequest]
     func acceptFriendRequest(requestId: UUID) async throws
