@@ -189,6 +189,30 @@ final class DependencyContainer: ObservableObject {
         RejectFriendRequestUseCase(repository: friendsManagementRepository)
     }()
 
+    lazy var fetchOutgoingFriendRequestsUseCase: FetchOutgoingFriendRequestsUseCaseProtocol = {
+        FetchOutgoingFriendRequestsUseCase(repository: friendsManagementRepository)
+    }()
+
+    lazy var cancelFriendRequestUseCase: CancelFriendRequestUseCaseProtocol = {
+        CancelFriendRequestUseCase(repository: friendsManagementRepository)
+    }()
+
+    lazy var removeFriendUseCase: RemoveFriendUseCaseProtocol = {
+        RemoveFriendUseCase(repository: friendsManagementRepository)
+    }()
+
+    lazy var setFriendNicknameUseCase: SetFriendNicknameUseCaseProtocol = {
+        SetFriendNicknameUseCase(repository: friendsManagementRepository)
+    }()
+
+    lazy var blockUserUseCase: BlockUserUseCaseProtocol = {
+        BlockUserUseCase(repository: friendsManagementRepository)
+    }()
+
+    lazy var unblockUserUseCase: UnblockUserUseCaseProtocol = {
+        UnblockUserUseCase(repository: friendsManagementRepository)
+    }()
+
     lazy var joinGroupUseCase: JoinGroupUseCaseProtocol = {
         JoinGroupUseCase(repository: groupsRepository)
     }()

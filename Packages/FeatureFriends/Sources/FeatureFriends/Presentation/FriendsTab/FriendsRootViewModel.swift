@@ -21,12 +21,14 @@ public final class FriendsRootViewModel: ObservableObject {
     @Published var searchState: LoadingState<[UserSearchResult]> = .idle
     @Published private(set) var sendingFriendRequestUserIds: Set<UUID> = []
     @Published private(set) var incomingRequestCount = 0
+    @Published private(set) var outgoingRequestCount = 0
 
     private let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol
     private let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol
     private let searchUsersUseCase: SearchUsersUseCaseProtocol
     private let addFriendUseCase: AddFriendUseCaseProtocol
     private let fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol
+    private let fetchOutgoingFriendRequestsUseCase: FetchOutgoingFriendRequestsUseCaseProtocol
     private var searchTask: Task<Void, Never>?
 
     public var isSearching: Bool {
@@ -38,19 +40,22 @@ public final class FriendsRootViewModel: ObservableObject {
         fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol,
         searchUsersUseCase: SearchUsersUseCaseProtocol,
         addFriendUseCase: AddFriendUseCaseProtocol,
-        fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol
+        fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol,
+        fetchOutgoingFriendRequestsUseCase: FetchOutgoingFriendRequestsUseCaseProtocol
     ) {
         self.fetchMyFriendsUseCase = fetchMyFriendsUseCase
         self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
         self.searchUsersUseCase = searchUsersUseCase
         self.addFriendUseCase = addFriendUseCase
         self.fetchIncomingFriendRequestsUseCase = fetchIncomingFriendRequestsUseCase
+        self.fetchOutgoingFriendRequestsUseCase = fetchOutgoingFriendRequestsUseCase
     }
 
     func load() async {
         await loadFriends(isPullToRefresh: false)
         await loadGroups(isPullToRefresh: false)
         await refreshIncomingRequestCount()
+        await refreshOutgoingRequestCount()
     }
 
     func refresh() async {
@@ -58,6 +63,7 @@ public final class FriendsRootViewModel: ObservableObject {
         await loadFriends(isPullToRefresh: true)
         await loadGroups(isPullToRefresh: true)
         await refreshIncomingRequestCount()
+        await refreshOutgoingRequestCount()
         isRefreshing = false
     }
 
@@ -68,6 +74,19 @@ public final class FriendsRootViewModel: ObservableObject {
         } catch {
             incomingRequestCount = 0
         }
+    }
+
+    func refreshOutgoingRequestCount() async {
+        do {
+            let outgoing = try await fetchOutgoingFriendRequestsUseCase.execute(page: 0, size: 50)
+            outgoingRequestCount = outgoing.count
+        } catch {
+            outgoingRequestCount = 0
+        }
+    }
+
+    func isFriend(userId: UUID) -> Bool {
+        friends.contains { $0.id == userId }
     }
 
     func loadFriends(isPullToRefresh: Bool) async {
@@ -108,6 +127,7 @@ public final class FriendsRootViewModel: ObservableObject {
         Task {
             await loadFriends(isPullToRefresh: true)
             await refreshIncomingRequestCount()
+            await refreshOutgoingRequestCount()
         }
     }
 

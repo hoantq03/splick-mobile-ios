@@ -10,11 +10,43 @@ enum FriendsMapper {
     }
 
     static func toUserSummary(_ dto: FriendResponseDTO) -> UserSummary {
-        UserSummary(
+        let label = (dto.nickname?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { nick in
+            nick.isEmpty ? nil : nick
+        } ?? dto.displayName
+        return UserSummary(
             id: dto.friendId,
             username: dto.username,
-            displayName: dto.displayName,
+            displayName: label,
             avatarURL: dto.avatarUrl.flatMap { URL(string: $0) }
+        )
+    }
+
+    static func toOutgoingFriendRequest(_ dto: FriendRequestResponseDTO) -> OutgoingFriendRequest {
+        let username = dto.addresseeUsername ?? "user"
+        let displayName = dto.addresseeDisplayName ?? username
+        return OutgoingFriendRequest(
+            id: dto.id,
+            addressee: UserSummary(
+                id: dto.addresseeId,
+                username: username,
+                displayName: displayName,
+                avatarURL: nil
+            ),
+            message: dto.message,
+            createdAt: dto.createdAt,
+            expiresAt: dto.expiresAt
+        )
+    }
+
+    static func toBlockedUser(_ dto: BlockedUserResponseDTO) -> BlockedUser {
+        BlockedUser(
+            user: UserSummary(
+                id: dto.userId,
+                username: dto.username,
+                displayName: dto.displayName,
+                avatarURL: nil
+            ),
+            blockedAt: dto.blockedAt
         )
     }
 
