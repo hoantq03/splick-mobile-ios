@@ -34,6 +34,11 @@ struct FriendRowView: View {
                 Text(user.displayName)
                     .font(SplickTheme.Typography.headline)
                     .foregroundStyle(SplickTheme.Colors.textPrimary)
+                if let subtitle = user.subtitle {
+                    Text(subtitle)
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+                }
                 Text("@\(user.username)")
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
@@ -52,11 +57,24 @@ struct FriendRowView: View {
             Button {
                 onAddFriend?()
             } label: {
-                Text("Xem lời mời")
-                    .font(SplickTheme.Typography.caption.weight(.semibold))
-                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                Group {
+                    if isSendingRequest {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Text("Chấp nhận")
+                            .font(SplickTheme.Typography.caption.weight(.semibold))
+                    }
+                }
+                .frame(minWidth: 72)
+                .padding(.horizontal, SplickTheme.Spacing.xs)
+                .padding(.vertical, SplickTheme.Spacing.xxxs)
+                .background(SplickTheme.Colors.primaryGradientStart.opacity(0.12))
+                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                .clipShape(Capsule())
             }
             .buttonStyle(.plain)
+            .disabled(isSendingRequest || onAddFriend == nil)
         case .blocked:
             EmptyView()
         case .none:

@@ -10,13 +10,17 @@ enum FriendsMapper {
     }
 
     static func toUserSummary(_ dto: FriendResponseDTO) -> UserSummary {
-        let label = (dto.nickname?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { nick in
+        let legalName = dto.displayName
+        let nickname = (dto.nickname?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { nick in
             nick.isEmpty ? nil : nick
-        } ?? dto.displayName
+        }
+        let primary = nickname ?? legalName
+        let subtitle = nickname != nil ? legalName : nil
         return UserSummary(
             id: dto.friendId,
             username: dto.username,
-            displayName: label,
+            displayName: primary,
+            subtitle: subtitle,
             avatarURL: dto.avatarUrl.flatMap { URL(string: $0) }
         )
     }

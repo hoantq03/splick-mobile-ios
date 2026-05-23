@@ -20,6 +20,7 @@ public final class FriendsRootViewModel: ObservableObject {
     @Published var searchResults: [UserSearchResult] = []
     @Published var searchState: LoadingState<[UserSearchResult]> = .idle
     @Published private(set) var sendingFriendRequestUserIds: Set<UUID> = []
+    @Published private(set) var acceptingFriendRequestUserIds: Set<UUID> = []
     @Published private(set) var incomingRequestCount = 0
     @Published private(set) var outgoingRequestCount = 0
 
@@ -27,6 +28,7 @@ public final class FriendsRootViewModel: ObservableObject {
     private let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol
     private let searchUsersUseCase: SearchUsersUseCaseProtocol
     private let addFriendUseCase: AddFriendUseCaseProtocol
+    private let acceptFriendRequestUseCase: AcceptFriendRequestUseCaseProtocol
     private let fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol
     private let fetchOutgoingFriendRequestsUseCase: FetchOutgoingFriendRequestsUseCaseProtocol
     private var searchTask: Task<Void, Never>?
@@ -40,6 +42,7 @@ public final class FriendsRootViewModel: ObservableObject {
         fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol,
         searchUsersUseCase: SearchUsersUseCaseProtocol,
         addFriendUseCase: AddFriendUseCaseProtocol,
+        acceptFriendRequestUseCase: AcceptFriendRequestUseCaseProtocol,
         fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol,
         fetchOutgoingFriendRequestsUseCase: FetchOutgoingFriendRequestsUseCaseProtocol
     ) {
@@ -47,6 +50,7 @@ public final class FriendsRootViewModel: ObservableObject {
         self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
         self.searchUsersUseCase = searchUsersUseCase
         self.addFriendUseCase = addFriendUseCase
+        self.acceptFriendRequestUseCase = acceptFriendRequestUseCase
         self.fetchIncomingFriendRequestsUseCase = fetchIncomingFriendRequestsUseCase
         self.fetchOutgoingFriendRequestsUseCase = fetchOutgoingFriendRequestsUseCase
     }
@@ -69,7 +73,7 @@ public final class FriendsRootViewModel: ObservableObject {
 
     func refreshIncomingRequestCount() async {
         do {
-            let incoming = try await fetchIncomingFriendRequestsUseCase.execute(page: 0, size: 50)
+            let incoming = try await fetchIncomingFriendRequestsUseCase.executeAll()
             incomingRequestCount = incoming.count
         } catch {
             incomingRequestCount = 0
@@ -78,7 +82,7 @@ public final class FriendsRootViewModel: ObservableObject {
 
     func refreshOutgoingRequestCount() async {
         do {
-            let outgoing = try await fetchOutgoingFriendRequestsUseCase.execute(page: 0, size: 50)
+            let outgoing = try await fetchOutgoingFriendRequestsUseCase.executeAll()
             outgoingRequestCount = outgoing.count
         } catch {
             outgoingRequestCount = 0
@@ -170,7 +174,7 @@ public final class FriendsRootViewModel: ObservableObject {
         }
     }
 
-    func sendFriendRequest(to result: UserSearchResult) async {
+    func sendFriendRequest(to result: UserSearchResult, message: String? = nil) async {
         guard result.friendStatus == .none else { return }
         let userId = result.user.id
         guard !sendingFriendRequestUserIds.contains(userId) else { return }
@@ -179,8 +183,30 @@ public final class FriendsRootViewModel: ObservableObject {
         defer { sendingFriendRequestUserIds.remove(userId) }
 
         do {
-            _ = try await addFriendUseCase.execute(username: result.user.username)
+            _ = try await addFriendUseCase.execute(username: result.user.username, message: message)
             updateSearchResult(userId: userId, status: .requestSent)
+            onFriendAdded()
+        } catch {
+            alertMessage = error.localizedDescription
+        }
+    }
+
+    func acceptFriendRequest(from result: UserSearchResult) async {
+        guard result.friendStatus == .requestReceived else { return }
+        let userId = result.user.id
+        guard !acceptingFriendRequestUserIds.contains(userId) else { return }
+
+        acceptingFriendRequestUserIds.insert(userId)
+        defer { acceptingFriendRequestUserIds.remove(userId) }
+
+        do {
+            let incoming = try await fetchIncomingFriendRequestsUseCase.executeAll()
+            guard let request = incoming.first(where: { $0.requester.id == userId }) else {
+                alertMessage = "Friend request not found. Open incoming requests to refresh."
+                return
+            }
+            try await acceptFriendRequestUseCase.execute(requestId: request.id)
+            updateSearchResult(userId: userId, status: .friends)
             onFriendAdded()
         } catch {
             alertMessage = error.localizedDescription
