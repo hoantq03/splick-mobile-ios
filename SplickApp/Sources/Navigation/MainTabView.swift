@@ -68,6 +68,7 @@ struct MainTabView: View {
                     setFriendNicknameUseCase: container.setFriendNicknameUseCase,
                     blockUserUseCase: container.blockUserUseCase,
                     unblockUserUseCase: container.unblockUserUseCase,
+                    fetchBlockedUsersUseCase: container.fetchBlockedUsersUseCase,
                     joinGroupUseCase: container.joinGroupUseCase,
                     createGroupUseCase: container.createGroupUseCase,
                     fetchGroupMembersUseCase: container.fetchGroupMembersUseCase,

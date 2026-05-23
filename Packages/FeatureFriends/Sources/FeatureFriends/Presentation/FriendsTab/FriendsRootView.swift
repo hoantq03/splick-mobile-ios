@@ -16,9 +16,11 @@ public struct FriendsRootView: View {
     @StateObject private var joinGroupViewModel: JoinGroupViewModel
     @StateObject private var incomingRequestsViewModel: IncomingFriendRequestsViewModel
     @StateObject private var outgoingRequestsViewModel: OutgoingFriendRequestsViewModel
+    @StateObject private var blockedUsersViewModel: BlockedUsersViewModel
     @Environment(\.currentUserSummary) private var currentUserSummary
 
     private let fetchOutgoingFriendRequestsUseCase: FetchOutgoingFriendRequestsUseCaseProtocol
+    private let fetchBlockedUsersUseCase: FetchBlockedUsersUseCaseProtocol
     private let cancelFriendRequestUseCase: CancelFriendRequestUseCaseProtocol
     private let removeFriendUseCase: RemoveFriendUseCaseProtocol
     private let setFriendNicknameUseCase: SetFriendNicknameUseCaseProtocol
@@ -32,6 +34,7 @@ public struct FriendsRootView: View {
     @State private var showJoinGroupQR = false
     @State private var showIncomingRequests = false
     @State private var showOutgoingRequests = false
+    @State private var showBlockedUsers = false
     @State private var profileRoute: UserProfileRoute?
 
     private let fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol
@@ -64,6 +67,7 @@ public struct FriendsRootView: View {
         setFriendNicknameUseCase: SetFriendNicknameUseCaseProtocol,
         blockUserUseCase: BlockUserUseCaseProtocol,
         unblockUserUseCase: UnblockUserUseCaseProtocol,
+        fetchBlockedUsersUseCase: FetchBlockedUsersUseCaseProtocol,
         joinGroupUseCase: JoinGroupUseCaseProtocol,
         createGroupUseCase: CreateGroupUseCaseProtocol,
         fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol,
@@ -82,10 +86,12 @@ public struct FriendsRootView: View {
             fetchMyGroupsUseCase: fetchMyGroupsUseCase,
             searchUsersUseCase: searchUsersUseCase,
             addFriendUseCase: addFriendUseCase,
+            acceptFriendRequestUseCase: acceptFriendRequestUseCase,
             fetchIncomingFriendRequestsUseCase: fetchIncomingFriendRequestsUseCase,
             fetchOutgoingFriendRequestsUseCase: fetchOutgoingFriendRequestsUseCase
         )
         self.fetchOutgoingFriendRequestsUseCase = fetchOutgoingFriendRequestsUseCase
+        self.fetchBlockedUsersUseCase = fetchBlockedUsersUseCase
         self.cancelFriendRequestUseCase = cancelFriendRequestUseCase
         self.removeFriendUseCase = removeFriendUseCase
         self.setFriendNicknameUseCase = setFriendNicknameUseCase
@@ -131,6 +137,12 @@ public struct FriendsRootView: View {
                 onFriendshipChanged: { rootVM.onFriendAdded() }
             )
         )
+        _blockedUsersViewModel = StateObject(
+            wrappedValue: BlockedUsersViewModel(
+                fetchBlockedUsersUseCase: fetchBlockedUsersUseCase,
+                unblockUserUseCase: unblockUserUseCase
+            )
+        )
     }
 
     public var body: some View {
@@ -158,6 +170,7 @@ public struct FriendsRootView: View {
                             VStack(spacing: SplickTheme.Spacing.xs) {
                                 incomingRequestsBanner
                                 outgoingRequestsBanner
+                                blockedUsersLink
                                 friendsContent
                             }
                         }
@@ -243,6 +256,9 @@ public struct FriendsRootView: View {
             }) {
                 OutgoingFriendRequestsSheet(viewModel: outgoingRequestsViewModel)
             }
+            .sheet(isPresented: $showBlockedUsers) {
+                BlockedUsersSheet(viewModel: blockedUsersViewModel)
+            }
             .sheet(isPresented: $showAddFriendQR) {
                 if let user = currentUserSummary {
                     QRScannerSheet(
@@ -305,6 +321,28 @@ public struct FriendsRootView: View {
     }
 
     @ViewBuilder
+    private var blockedUsersLink: some View {
+        Button {
+            showBlockedUsers = true
+        } label: {
+            HStack {
+                Image(systemName: "hand.raised")
+                Text("Blocked users")
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+            }
+            .font(SplickTheme.Typography.callout.weight(.semibold))
+            .foregroundStyle(SplickTheme.Colors.textSecondary)
+            .padding(SplickTheme.Spacing.sm)
+            .background(SplickTheme.Colors.secondaryBackground)
+            .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, SplickTheme.Spacing.md)
+    }
+
+    @ViewBuilder
     private var incomingRequestsBanner: some View {
         if viewModel.incomingRequestCount > 0 {
             Button {
@@ -345,7 +383,7 @@ public struct FriendsRootView: View {
         case .none:
             return { Task { await viewModel.sendFriendRequest(to: result) } }
         case .requestReceived:
-            return { showIncomingRequests = true }
+            return { Task { await viewModel.acceptFriendRequest(from: result) } }
         case .requestSent:
             return { showOutgoingRequests = true }
         case .friends, .blocked:
@@ -466,7 +504,8 @@ public struct FriendsRootView: View {
                         FriendRowView(
                             user: result.user,
                             friendStatus: result.friendStatus,
-                            isSendingRequest: viewModel.sendingFriendRequestUserIds.contains(result.user.id),
+                            isSendingRequest: viewModel.sendingFriendRequestUserIds.contains(result.user.id)
+                                || viewModel.acceptingFriendRequestUserIds.contains(result.user.id),
                             onProfileTap: {
                                 profileRoute = UserProfileRoute(
                                     user: result.user,

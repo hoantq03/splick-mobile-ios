@@ -213,6 +213,10 @@ final class DependencyContainer: ObservableObject {
         UnblockUserUseCase(repository: friendsManagementRepository)
     }()
 
+    lazy var fetchBlockedUsersUseCase: FetchBlockedUsersUseCaseProtocol = {
+        FetchBlockedUsersUseCase(repository: friendsManagementRepository)
+    }()
+
     lazy var joinGroupUseCase: JoinGroupUseCaseProtocol = {
         JoinGroupUseCase(repository: groupsRepository)
     }()
