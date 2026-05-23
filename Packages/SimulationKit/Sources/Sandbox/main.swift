@@ -45,7 +45,7 @@ struct SandboxRunner {
         print("""
         Auth is no longer simulated. Use the Splick iOS app against the live backend:
           • Start splick-backend (gateway :8080, auth-service :8081)
-          • Register/login in the app (OTP via Mailpit: http://localhost:8025)
+          • Register/login in the app (OTP via Gmail SMTP — see splick-backend/docs/email-smtp.md)
 
         Command '\(command)' skipped.
         """)

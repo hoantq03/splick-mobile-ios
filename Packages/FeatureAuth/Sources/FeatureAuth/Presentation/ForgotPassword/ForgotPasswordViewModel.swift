@@ -71,7 +71,7 @@ public final class ForgotPasswordViewModel: ObservableObject {
         do {
             try await forgotPasswordUseCase.execute(email: normalized)
             step = .reset
-            otpInfoMessage = "If an account exists for this email, a code was sent. Check Mailpit at http://localhost:8025 (dev)."
+            otpInfoMessage = "If an account exists for this email, a code was sent. Check your Gmail inbox (dev)."
             state = .idle
         } catch let error as AuthError {
             applyAuthError(error, onOtpStep: false)

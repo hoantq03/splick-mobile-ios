@@ -61,7 +61,7 @@ public final class ChangePasswordViewModel: ObservableObject {
         state = .loading
         do {
             try await requestEmailOtpUseCase.execute(email: accountEmail)
-            otpInfoMessage = "Code sent to \(accountEmail). Check Mailpit at http://localhost:8025 (dev)."
+            otpInfoMessage = "Code sent to \(accountEmail). Check your Gmail inbox (dev)."
             state = .idle
         } catch let error as AuthError {
             if error.shouldShowOnOtpStep {

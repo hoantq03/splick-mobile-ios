@@ -30,4 +30,4 @@ Note: port `8080` conflicts with the API gateway. Use stubs only when the gatewa
 | POST | /api/v1/auth/register | auth-service via gateway |
 | POST | /api/v1/auth/email/otp/request | auth-service via gateway |
 
-Run auth-service with `--spring.profiles.active=dev` and Mailpit for OTP: http://localhost:8025
+Run auth-service and communication-service with Gmail SMTP configured in `splick-backend/.env` (see `docs/email-smtp.md`).
