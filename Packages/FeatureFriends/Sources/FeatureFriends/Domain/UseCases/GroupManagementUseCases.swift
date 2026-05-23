@@ -96,3 +96,83 @@ public struct DeleteGroupUseCase: DeleteGroupUseCaseProtocol {
         try await repository.deleteGroup(groupId: groupId)
     }
 }
+
+public protocol UpdateGroupUseCaseProtocol: Sendable {
+    func execute(groupId: UUID, name: String, description: String?) async throws -> Group
+}
+
+public struct UpdateGroupUseCase: UpdateGroupUseCaseProtocol {
+    private let repository: GroupsRepositoryProtocol
+
+    public init(repository: GroupsRepositoryProtocol) {
+        self.repository = repository
+    }
+
+    public func execute(groupId: UUID, name: String, description: String?) async throws -> Group {
+        try await repository.updateGroup(groupId: groupId, name: name, description: description)
+    }
+}
+
+public protocol UpdateGroupAvatarUseCaseProtocol: Sendable {
+    func execute(groupId: UUID, avatarURL: String) async throws -> Group
+}
+
+public struct UpdateGroupAvatarUseCase: UpdateGroupAvatarUseCaseProtocol {
+    private let repository: GroupsRepositoryProtocol
+
+    public init(repository: GroupsRepositoryProtocol) {
+        self.repository = repository
+    }
+
+    public func execute(groupId: UUID, avatarURL: String) async throws -> Group {
+        try await repository.updateGroupAvatar(groupId: groupId, avatarURL: avatarURL)
+    }
+}
+
+public protocol TransferGroupOwnershipUseCaseProtocol: Sendable {
+    func execute(groupId: UUID, newOwnerId: UUID) async throws -> Group
+}
+
+public struct TransferGroupOwnershipUseCase: TransferGroupOwnershipUseCaseProtocol {
+    private let repository: GroupsRepositoryProtocol
+
+    public init(repository: GroupsRepositoryProtocol) {
+        self.repository = repository
+    }
+
+    public func execute(groupId: UUID, newOwnerId: UUID) async throws -> Group {
+        try await repository.transferOwnership(groupId: groupId, newOwnerId: newOwnerId)
+    }
+}
+
+public protocol GenerateGroupQrUseCaseProtocol: Sendable {
+    func execute(groupId: UUID, ttlSeconds: Int?) async throws -> GroupServerQR
+}
+
+public struct GenerateGroupQrUseCase: GenerateGroupQrUseCaseProtocol {
+    private let repository: GroupsRepositoryProtocol
+
+    public init(repository: GroupsRepositoryProtocol) {
+        self.repository = repository
+    }
+
+    public func execute(groupId: UUID, ttlSeconds: Int? = 86_400) async throws -> GroupServerQR {
+        try await repository.generateGroupQr(groupId: groupId, ttlSeconds: ttlSeconds)
+    }
+}
+
+public protocol RevokeGroupQrUseCaseProtocol: Sendable {
+    func execute(groupId: UUID, qrId: UUID) async throws
+}
+
+public struct RevokeGroupQrUseCase: RevokeGroupQrUseCaseProtocol {
+    private let repository: GroupsRepositoryProtocol
+
+    public init(repository: GroupsRepositoryProtocol) {
+        self.repository = repository
+    }
+
+    public func execute(groupId: UUID, qrId: UUID) async throws {
+        try await repository.revokeGroupQr(groupId: groupId, qrId: qrId)
+    }
+}

@@ -89,11 +89,17 @@ public struct GroupsRepository: GroupsRepositoryProtocol {
         )
     }
 
-    public func generateGroupQr(groupId: UUID, ttlSeconds: Int?) async throws -> String {
+    public func generateGroupQr(groupId: UUID, ttlSeconds: Int?) async throws -> GroupServerQR {
         let response: GroupQRResponseDTO = try await apiClient.request(
             SocialEndpoint.generateGroupQr(groupId: groupId, ttlSeconds: ttlSeconds)
         )
-        return response.payload
+        return GroupServerQR(
+            id: response.id,
+            payload: response.payload,
+            groupId: response.groupId,
+            issuedAt: response.issuedAt,
+            expiresAt: response.expiresAt
+        )
     }
 
     public func revokeGroupQr(groupId: UUID, qrId: UUID) async throws {

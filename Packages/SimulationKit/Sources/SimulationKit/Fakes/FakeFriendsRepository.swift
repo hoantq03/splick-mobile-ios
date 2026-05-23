@@ -232,8 +232,17 @@ public actor FakeFriendsRepository: FriendsRepositoryProtocol, FriendsManagement
 
     public func revokeInviteCode(groupId: UUID, invitationId: UUID) async throws {}
 
-    public func generateGroupQr(groupId: UUID, ttlSeconds: Int?) async throws -> String {
-        SplickQRParser.groupPayload(inviteCode: groups.first { $0.id == groupId }?.inviteCode ?? "MOCKCODE1")
+    public func generateGroupQr(groupId: UUID, ttlSeconds: Int?) async throws -> GroupServerQR {
+        let payload = SplickQRParser.groupPayload(
+            inviteCode: groups.first { $0.id == groupId }?.inviteCode ?? "MOCKCODE1"
+        )
+        return GroupServerQR(
+            id: UUID(),
+            payload: payload,
+            groupId: groupId,
+            issuedAt: .now,
+            expiresAt: .now.addingTimeInterval(86_400)
+        )
     }
 
     public func revokeGroupQr(groupId: UUID, qrId: UUID) async throws {}

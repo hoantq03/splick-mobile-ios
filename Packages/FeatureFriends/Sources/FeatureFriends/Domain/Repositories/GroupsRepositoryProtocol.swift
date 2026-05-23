@@ -17,6 +17,22 @@ public struct GroupInviteCode: Sendable, Equatable {
     }
 }
 
+public struct GroupServerQR: Sendable, Equatable {
+    public let id: UUID
+    public let payload: String
+    public let groupId: UUID
+    public let issuedAt: Date
+    public let expiresAt: Date
+
+    public init(id: UUID, payload: String, groupId: UUID, issuedAt: Date, expiresAt: Date) {
+        self.id = id
+        self.payload = payload
+        self.groupId = groupId
+        self.issuedAt = issuedAt
+        self.expiresAt = expiresAt
+    }
+}
+
 public struct InviteFriendsToGroupResult: Sendable, Equatable {
     public let invited: [UUID]
     public let skipped: [UUID]
@@ -38,7 +54,7 @@ public protocol GroupsRepositoryProtocol: Sendable {
     func fetchActiveInviteCode(groupId: UUID) async throws -> GroupInviteCode?
     func generateInviteCode(groupId: UUID) async throws -> GroupInviteCode
     func revokeInviteCode(groupId: UUID, invitationId: UUID) async throws
-    func generateGroupQr(groupId: UUID, ttlSeconds: Int?) async throws -> String
+    func generateGroupQr(groupId: UUID, ttlSeconds: Int?) async throws -> GroupServerQR
     func revokeGroupQr(groupId: UUID, qrId: UUID) async throws
     func inviteFriends(groupId: UUID, userIds: [UUID]) async throws -> InviteFriendsToGroupResult
     func joinGroup(inviteCode: String) async throws -> Group
