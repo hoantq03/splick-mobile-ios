@@ -63,6 +63,11 @@ public struct EditProfileView: View {
         }
         .navigationTitle("Edit profile")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { dismiss() }
+            }
+        }
     }
 
     @ViewBuilder

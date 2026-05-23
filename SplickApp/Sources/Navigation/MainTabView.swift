@@ -241,21 +241,24 @@ struct ProfileSettingsView: View {
             .task {
                 await refreshProfile()
             }
-            .navigationDestination(isPresented: $showEditProfile) {
+            .sheet(isPresented: $showEditProfile) {
                 if let user = appState.currentUser {
-                    EditProfileView(
-                        viewModel: EditProfileViewModel(
-                            user: user,
-                            updateProfileUseCase: container.updateProfileUseCase,
-                            uploadAvatar: { image in
-                                let result = try await container.uploadUserAvatarUseCase.execute(image: image)
-                                return result.url
+                    NavigationStack {
+                        EditProfileView(
+                            viewModel: EditProfileViewModel(
+                                user: user,
+                                updateProfileUseCase: container.updateProfileUseCase,
+                                uploadAvatar: { image in
+                                    let result = try await container.uploadUserAvatarUseCase.execute(image: image)
+                                    return result.url
+                                }
+                            ),
+                            onProfileUpdated: { updated in
+                                appState.updateAuthenticatedUser(updated)
+                                showEditProfile = false
                             }
-                        ),
-                        onProfileUpdated: { updated in
-                            appState.updateAuthenticatedUser(updated)
-                        }
-                    )
+                        )
+                    }
                 }
             }
             .navigationDestination(isPresented: $showChangePassword) {

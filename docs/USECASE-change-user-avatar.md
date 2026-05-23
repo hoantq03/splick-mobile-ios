@@ -32,9 +32,12 @@ ProfileSettingsView → Edit profile
 
 ## Kiểm thử
 
-1. Đăng nhập → avatar góc phải → Profile → **Edit profile**.
-2. Chọn ảnh → **Save** → quay lại, avatar mới hiển thị.
-3. Chỉ đổi display name (không chọn ảnh) → Save → tên cập nhật, avatar giữ nguyên.
+1. Backend: `./gradlew devUp` + `runAuth` + `runMedia` (và `SHARED_MEDIA_PUBLIC_BASE_URL` = URL public R2 thật).
+2. Đăng nhập → avatar góc trái (Feed/Friends/…) → **Profile settings** → **Edit profile** (mở sheet).
+3. Chọn ảnh → **Save** → avatar cập nhật trên Profile và toolbar.
+4. Chỉ đổi display name → Save → tên đổi, avatar giữ nguyên.
+
+Nếu upload lỗi, xem message (vd. R2 CORS / HTTP status). Simulator cần `localhost:8080`; device thật cần IP máy dev.
 
 ## Backend contract
 

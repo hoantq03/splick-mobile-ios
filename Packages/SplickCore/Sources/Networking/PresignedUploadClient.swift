@@ -1,9 +1,18 @@
 import Foundation
 import Common
 
-public enum PresignedUploadError: Error {
+public enum PresignedUploadError: Error, LocalizedError {
     case invalidURL
     case uploadFailed(statusCode: Int)
+
+    public var errorDescription: String? {
+        switch self {
+        case .invalidURL:
+            return "Invalid upload URL from the server."
+        case .uploadFailed(let statusCode):
+            return "Photo upload to storage failed (HTTP \(statusCode)). Check R2 bucket CORS and credentials."
+        }
+    }
 }
 
 public protocol PresignedUploadClientProtocol: Sendable {
