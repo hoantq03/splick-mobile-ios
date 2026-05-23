@@ -18,10 +18,24 @@ enum SocialEndpoint: APIEndpoint {
     case unblockUser(userId: UUID)
     case listMyGroups(page: Int, size: Int)
     case createGroup(name: String, description: String?)
+    case getGroup(groupId: UUID)
+    case updateGroup(groupId: UUID, name: String, description: String?)
+    case updateGroupAvatar(groupId: UUID, avatarURL: String)
+    case deleteGroup(groupId: UUID)
+    case joinGroupByCode(code: String)
+    case joinGroupByQr(qrPayload: String)
     case listGroupMembers(groupId: UUID, status: String?, page: Int, size: Int)
     case getActiveGroupInviteCode(groupId: UUID)
     case generateGroupInviteCode(groupId: UUID)
+    case revokeGroupInviteCode(groupId: UUID, invitationId: UUID)
+    case generateGroupQr(groupId: UUID, ttlSeconds: Int?)
+    case revokeGroupQr(groupId: UUID, qrId: UUID)
     case inviteFriendsToGroup(groupId: UUID, userIds: [UUID])
+    case approveGroupMember(groupId: UUID, memberRowId: UUID)
+    case rejectGroupMember(groupId: UUID, memberRowId: UUID)
+    case removeGroupMember(groupId: UUID, memberRowId: UUID)
+    case leaveGroup(groupId: UUID)
+    case transferGroupOwnership(groupId: UUID, newOwnerId: UUID)
     case generateMyQr
     case revokeMyQr
 
@@ -33,14 +47,38 @@ enum SocialEndpoint: APIEndpoint {
             return "/v1/social/friendships"
         case .listMyGroups, .createGroup:
             return "/v1/social/groups"
+        case .joinGroupByCode:
+            return "/v1/social/groups/join"
+        case .joinGroupByQr:
+            return "/v1/social/groups/join/qr"
+        case .getGroup(let groupId), .updateGroup(let groupId, _, _), .deleteGroup(let groupId):
+            return "/v1/social/groups/\(groupId.uuidString)"
+        case .updateGroupAvatar(let groupId, _):
+            return "/v1/social/groups/\(groupId.uuidString)/avatar"
+        case .transferGroupOwnership(let groupId, _):
+            return "/v1/social/groups/\(groupId.uuidString)/transfer-ownership"
         case .listGroupMembers(let groupId, _, _, _):
             return "/v1/social/groups/\(groupId.uuidString)/members"
         case .getActiveGroupInviteCode(let groupId):
             return "/v1/social/groups/\(groupId.uuidString)/invite-codes/active"
         case .generateGroupInviteCode(let groupId):
             return "/v1/social/groups/\(groupId.uuidString)/invite-codes"
+        case .revokeGroupInviteCode(let groupId, let invitationId):
+            return "/v1/social/groups/\(groupId.uuidString)/invite-codes/\(invitationId.uuidString)"
+        case .generateGroupQr(let groupId, _):
+            return "/v1/social/groups/\(groupId.uuidString)/qr"
+        case .revokeGroupQr(let groupId, let qrId):
+            return "/v1/social/groups/\(groupId.uuidString)/qr/\(qrId.uuidString)"
         case .inviteFriendsToGroup(let groupId, _):
             return "/v1/social/groups/\(groupId.uuidString)/members/invite"
+        case .approveGroupMember(let groupId, let memberRowId):
+            return "/v1/social/groups/\(groupId.uuidString)/members/\(memberRowId.uuidString)/approve"
+        case .rejectGroupMember(let groupId, let memberRowId):
+            return "/v1/social/groups/\(groupId.uuidString)/members/\(memberRowId.uuidString)/reject"
+        case .removeGroupMember(let groupId, let memberRowId):
+            return "/v1/social/groups/\(groupId.uuidString)/members/\(memberRowId.uuidString)"
+        case .leaveGroup(let groupId):
+            return "/v1/social/groups/\(groupId.uuidString)/membership"
         case .sendFriendRequest:
             return "/v1/social/friendships/requests"
         case .sendFriendRequestByQr:
@@ -71,15 +109,17 @@ enum SocialEndpoint: APIEndpoint {
     var method: HTTPMethod {
         switch self {
         case .searchUsers, .listFriends, .listIncomingFriendRequests, .listOutgoingFriendRequests,
-             .listBlockedUsers, .listMyGroups, .listGroupMembers, .getActiveGroupInviteCode:
+             .listBlockedUsers, .listMyGroups, .listGroupMembers, .getActiveGroupInviteCode, .getGroup:
             return .get
         case .sendFriendRequest, .sendFriendRequestByQr, .generateMyQr, .acceptFriendRequest,
              .rejectFriendRequest, .createGroup, .generateGroupInviteCode, .inviteFriendsToGroup,
-             .blockUser:
+             .blockUser, .joinGroupByCode, .joinGroupByQr, .generateGroupQr, .approveGroupMember,
+             .rejectGroupMember, .transferGroupOwnership:
             return .post
-        case .revokeMyQr, .cancelFriendRequest, .removeFriend, .unblockUser:
+        case .revokeMyQr, .cancelFriendRequest, .removeFriend, .unblockUser, .deleteGroup,
+             .revokeGroupInviteCode, .revokeGroupQr, .removeGroupMember, .leaveGroup:
             return .delete
-        case .setFriendNickname:
+        case .setFriendNickname, .updateGroup, .updateGroupAvatar:
             return .patch
         }
     }
@@ -110,10 +150,7 @@ enum SocialEndpoint: APIEndpoint {
                 items.append(URLQueryItem(name: "status", value: status))
             }
             return items
-        case .sendFriendRequest, .sendFriendRequestByQr, .generateMyQr, .revokeMyQr,
-             .getActiveGroupInviteCode, .acceptFriendRequest, .rejectFriendRequest,
-             .cancelFriendRequest, .createGroup, .generateGroupInviteCode, .inviteFriendsToGroup,
-             .removeFriend, .setFriendNickname, .blockUser, .unblockUser:
+        default:
             return nil
         }
     }
@@ -126,16 +163,25 @@ enum SocialEndpoint: APIEndpoint {
             return SendFriendRequestByQrBodyDTO(qrPayload: qrPayload, message: message)
         case .createGroup(let name, let description):
             return CreateGroupBodyDTO(name: name, description: description)
+        case .updateGroup(_, let name, let description):
+            return UpdateGroupBodyDTO(name: name, description: description)
+        case .updateGroupAvatar(_, let avatarURL):
+            return UpdateAvatarBodyDTO(avatarUrl: avatarURL)
+        case .joinGroupByCode(let code):
+            return JoinGroupByCodeBodyDTO(code: code)
+        case .joinGroupByQr(let qrPayload):
+            return JoinGroupByQRBodyDTO(qrPayload: qrPayload)
+        case .generateGroupQr(_, let ttlSeconds):
+            return GenerateGroupQRBodyDTO(ttlSeconds: ttlSeconds)
+        case .transferGroupOwnership(_, let newOwnerId):
+            return TransferOwnershipBodyDTO(newOwnerId: newOwnerId)
         case .inviteFriendsToGroup(_, let userIds):
             return InviteFriendsBodyDTO(userIds: userIds)
         case .setFriendNickname(_, let nickname):
             return SetNicknameBodyDTO(nickname: nickname)
         case .blockUser(let userId):
             return BlockUserBodyDTO(userId: userId)
-        case .searchUsers, .listFriends, .listIncomingFriendRequests, .listOutgoingFriendRequests,
-             .listBlockedUsers, .listMyGroups, .listGroupMembers,
-             .generateMyQr, .revokeMyQr, .getActiveGroupInviteCode, .generateGroupInviteCode,
-             .acceptFriendRequest, .rejectFriendRequest, .cancelFriendRequest, .removeFriend, .unblockUser:
+        default:
             return nil
         }
     }

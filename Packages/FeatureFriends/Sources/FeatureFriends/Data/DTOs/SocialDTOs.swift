@@ -171,3 +171,42 @@ struct SocialPageMemberResponseDTO: Decodable {
     let content: [MemberResponseDTO]
     let page: SocialPageMetaDTO
 }
+
+struct JoinGroupByCodeBodyDTO: Encodable {
+    let code: String
+}
+
+struct JoinGroupByQRBodyDTO: Encodable {
+    let qrPayload: String
+}
+
+struct JoinGroupResponseDTO: Decodable {
+    let groupId: UUID
+    let membershipId: UUID
+    let status: String
+}
+
+struct UpdateGroupBodyDTO: Encodable {
+    let name: String
+    let description: String?
+}
+
+struct UpdateAvatarBodyDTO: Encodable {
+    let avatarUrl: String
+}
+
+struct TransferOwnershipBodyDTO: Encodable {
+    let newOwnerId: UUID
+}
+
+struct GenerateGroupQRBodyDTO: Encodable {
+    let ttlSeconds: Int?
+}
+
+struct GroupQRResponseDTO: Decodable {
+    let id: UUID
+    let payload: String
+    let groupId: UUID
+    let issuedAt: Date
+    let expiresAt: Date
+}

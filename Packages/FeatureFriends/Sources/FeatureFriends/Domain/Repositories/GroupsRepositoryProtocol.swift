@@ -29,12 +29,23 @@ public struct InviteFriendsToGroupResult: Sendable, Equatable {
 
 public protocol GroupsRepositoryProtocol: Sendable {
     func fetchMyGroups() async throws -> [Group]
-    func fetchGroupMembers(groupId: UUID, status: String?) async throws -> [UserSummary]
+    func fetchGroup(groupId: UUID) async throws -> Group
+    func fetchGroupMembers(groupId: UUID, status: String?) async throws -> [GroupMemberItem]
     func createGroup(name: String, description: String?) async throws -> Group
+    func updateGroup(groupId: UUID, name: String, description: String?) async throws -> Group
+    func updateGroupAvatar(groupId: UUID, avatarURL: String) async throws -> Group
+    func deleteGroup(groupId: UUID) async throws
     func fetchActiveInviteCode(groupId: UUID) async throws -> GroupInviteCode?
     func generateInviteCode(groupId: UUID) async throws -> GroupInviteCode
+    func revokeInviteCode(groupId: UUID, invitationId: UUID) async throws
+    func generateGroupQr(groupId: UUID, ttlSeconds: Int?) async throws -> String
+    func revokeGroupQr(groupId: UUID, qrId: UUID) async throws
     func inviteFriends(groupId: UUID, userIds: [UUID]) async throws -> InviteFriendsToGroupResult
-    func searchGroup(inviteCode: String) async throws -> Group?
     func joinGroup(inviteCode: String) async throws -> Group
     func joinGroupFromQRCode(_ payload: String) async throws -> Group
+    func approvePendingMember(groupId: UUID, memberRowId: UUID) async throws
+    func rejectPendingMember(groupId: UUID, memberRowId: UUID) async throws
+    func removeMember(groupId: UUID, memberRowId: UUID) async throws
+    func leaveGroup(groupId: UUID) async throws
+    func transferOwnership(groupId: UUID, newOwnerId: UUID) async throws -> Group
 }
