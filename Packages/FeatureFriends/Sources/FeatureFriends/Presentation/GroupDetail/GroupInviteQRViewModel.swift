@@ -5,7 +5,7 @@ final class GroupInviteQRViewModel: ObservableObject {
     enum State: Equatable {
         case idle
         case loading
-        case loaded(code: String)
+        case loaded(GroupServerQR)
         case failed(String)
     }
 
@@ -13,37 +13,32 @@ final class GroupInviteQRViewModel: ObservableObject {
     @Published var alertMessage: String?
 
     private let groupId: UUID
-    private let fetchInviteCodeUseCase: FetchGroupInviteCodeUseCaseProtocol
-    private let generateInviteCodeUseCase: GenerateGroupInviteCodeUseCaseProtocol
+    private let generateGroupQrUseCase: GenerateGroupQrUseCaseProtocol
+    private let revokeGroupQrUseCase: RevokeGroupQrUseCaseProtocol
 
     init(
         groupId: UUID,
-        fetchInviteCodeUseCase: FetchGroupInviteCodeUseCaseProtocol,
-        generateInviteCodeUseCase: GenerateGroupInviteCodeUseCaseProtocol
+        generateGroupQrUseCase: GenerateGroupQrUseCaseProtocol,
+        revokeGroupQrUseCase: RevokeGroupQrUseCaseProtocol
     ) {
         self.groupId = groupId
-        self.fetchInviteCodeUseCase = fetchInviteCodeUseCase
-        self.generateInviteCodeUseCase = generateInviteCodeUseCase
+        self.generateGroupQrUseCase = generateGroupQrUseCase
+        self.revokeGroupQrUseCase = revokeGroupQrUseCase
     }
 
-    var inviteCode: String? {
-        if case .loaded(let code) = state { return code }
+    var serverQR: GroupServerQR? {
+        if case .loaded(let qr) = state { return qr }
         return nil
     }
 
     var qrPayload: String? {
-        guard let code = inviteCode else { return nil }
-        return SplickQRParser.groupPayload(inviteCode: code)
+        serverQR?.payload
     }
 
     func load() async {
         state = .loading
         do {
-            if let existing = try await fetchInviteCodeUseCase.execute(groupId: groupId) {
-                state = .loaded(code: existing.code)
-            } else {
-                try await regenerate()
-            }
+            try await regenerate()
         } catch {
             state = .failed(error.localizedDescription)
         }
@@ -51,11 +46,19 @@ final class GroupInviteQRViewModel: ObservableObject {
 
     func regenerate() async throws {
         state = .loading
-        let invite = try await generateInviteCodeUseCase.execute(groupId: groupId)
-        state = .loaded(code: invite.code)
+        let qr = try await generateGroupQrUseCase.execute(groupId: groupId, ttlSeconds: 86_400)
+        state = .loaded(qr)
     }
 
     func refresh() async {
+        if let existing = serverQR {
+            do {
+                try await revokeGroupQrUseCase.execute(groupId: groupId, qrId: existing.id)
+            } catch {
+                alertMessage = error.localizedDescription
+                return
+            }
+        }
         do {
             try await regenerate()
         } catch {

@@ -1,6 +1,7 @@
 import SwiftUI
 import DesignSystem
 import Common
+import FeatureMedia
 import SplickDomain
 
 struct GroupDetailView: View {
@@ -8,8 +9,12 @@ struct GroupDetailView: View {
     let onUserTap: (UserSummary) -> Void
     let onGroupLeft: () -> Void
     let onGroupDeleted: () -> Void
-    let fetchInviteCodeUseCase: FetchGroupInviteCodeUseCaseProtocol
-    let generateInviteCodeUseCase: GenerateGroupInviteCodeUseCaseProtocol
+    let generateGroupQrUseCase: GenerateGroupQrUseCaseProtocol
+    let revokeGroupQrUseCase: RevokeGroupQrUseCaseProtocol
+    let updateGroupUseCase: UpdateGroupUseCaseProtocol
+    let updateGroupAvatarUseCase: UpdateGroupAvatarUseCaseProtocol
+    let uploadMediaUseCase: UploadMediaUseCaseProtocol
+    let transferOwnershipUseCase: TransferGroupOwnershipUseCaseProtocol
     let searchUsersUseCase: SearchUsersUseCaseProtocol
     let addFriendUseCase: AddFriendUseCaseProtocol
     let inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol
@@ -19,6 +24,8 @@ struct GroupDetailView: View {
 
     @State private var showGroupQR = false
     @State private var showInviteFriends = false
+    @State private var showEditGroup = false
+    @State private var showTransferOwnership = false
     @State private var confirmLeave = false
     @State private var confirmDelete = false
 
@@ -29,7 +36,12 @@ struct GroupDetailView: View {
         onGroupDeleted: @escaping () -> Void = {},
         fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol,
         fetchInviteCodeUseCase: FetchGroupInviteCodeUseCaseProtocol,
-        generateInviteCodeUseCase: GenerateGroupInviteCodeUseCaseProtocol,
+        generateGroupQrUseCase: GenerateGroupQrUseCaseProtocol,
+        revokeGroupQrUseCase: RevokeGroupQrUseCaseProtocol,
+        updateGroupUseCase: UpdateGroupUseCaseProtocol,
+        updateGroupAvatarUseCase: UpdateGroupAvatarUseCaseProtocol,
+        uploadMediaUseCase: UploadMediaUseCaseProtocol,
+        transferOwnershipUseCase: TransferGroupOwnershipUseCaseProtocol,
         searchUsersUseCase: SearchUsersUseCaseProtocol,
         addFriendUseCase: AddFriendUseCaseProtocol,
         inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol,
@@ -43,8 +55,12 @@ struct GroupDetailView: View {
         self.onUserTap = onUserTap
         self.onGroupLeft = onGroupLeft
         self.onGroupDeleted = onGroupDeleted
-        self.fetchInviteCodeUseCase = fetchInviteCodeUseCase
-        self.generateInviteCodeUseCase = generateInviteCodeUseCase
+        self.generateGroupQrUseCase = generateGroupQrUseCase
+        self.revokeGroupQrUseCase = revokeGroupQrUseCase
+        self.updateGroupUseCase = updateGroupUseCase
+        self.updateGroupAvatarUseCase = updateGroupAvatarUseCase
+        self.uploadMediaUseCase = uploadMediaUseCase
+        self.transferOwnershipUseCase = transferOwnershipUseCase
         self.searchUsersUseCase = searchUsersUseCase
         self.addFriendUseCase = addFriendUseCase
         self.inviteFriendsUseCase = inviteFriendsUseCase
@@ -86,8 +102,31 @@ struct GroupDetailView: View {
             GroupInviteQRSheet(
                 groupName: viewModel.group.name,
                 groupId: viewModel.group.id,
-                fetchInviteCodeUseCase: fetchInviteCodeUseCase,
-                generateInviteCodeUseCase: generateInviteCodeUseCase
+                generateGroupQrUseCase: generateGroupQrUseCase,
+                revokeGroupQrUseCase: revokeGroupQrUseCase
+            )
+        }
+        .sheet(isPresented: $showEditGroup) {
+            EditGroupSheet(
+                group: viewModel.group,
+                updateGroupUseCase: updateGroupUseCase,
+                updateGroupAvatarUseCase: updateGroupAvatarUseCase,
+                uploadMediaUseCase: uploadMediaUseCase,
+                onSaved: { updated in
+                    viewModel.applyUpdatedGroup(updated)
+                }
+            )
+        }
+        .sheet(isPresented: $showTransferOwnership) {
+            TransferGroupOwnershipSheet(
+                groupId: viewModel.group.id,
+                members: viewModel.members,
+                currentUserId: currentUserSummary?.id,
+                transferOwnershipUseCase: transferOwnershipUseCase,
+                onTransferred: { updated in
+                    viewModel.applyUpdatedGroup(updated)
+                    Task { await viewModel.load(currentUserId: currentUserSummary?.id) }
+                }
             )
         }
         .sheet(isPresented: $showInviteFriends) {
@@ -227,6 +266,18 @@ struct GroupDetailView: View {
             }
 
             if viewModel.isOwner(currentUserId: currentUserSummary?.id) {
+                Button {
+                    showEditGroup = true
+                } label: {
+                    Label("Chỉnh sửa nhóm", systemImage: "pencil")
+                }
+
+                Button {
+                    showTransferOwnership = true
+                } label: {
+                    Label("Chuyển quyền chủ nhóm", systemImage: "person.crop.circle.badge.checkmark")
+                }
+
                 Divider()
                 Button(role: .destructive) {
                     confirmDelete = true
@@ -251,12 +302,16 @@ struct GroupDetailView: View {
     private var headerCard: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
             HStack(spacing: SplickTheme.Spacing.sm) {
-                Image(systemName: "person.3.fill")
-                    .font(.title2)
-                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                    .frame(width: 52, height: 52)
-                    .background(SplickTheme.Colors.primaryGradientStart.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                if let avatarURL = viewModel.group.avatarURL {
+                    AvatarView(imageURL: avatarURL, name: viewModel.group.name, size: .large)
+                } else {
+                    Image(systemName: "person.3.fill")
+                        .font(.title2)
+                        .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                        .frame(width: 52, height: 52)
+                        .background(SplickTheme.Colors.primaryGradientStart.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
 
                 VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
                     Text(viewModel.group.name)

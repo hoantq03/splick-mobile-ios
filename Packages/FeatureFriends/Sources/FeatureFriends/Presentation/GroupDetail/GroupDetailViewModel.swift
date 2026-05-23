@@ -188,4 +188,8 @@ final class GroupDetailViewModel: ObservableObject {
             return false
         }
     }
+
+    func applyUpdatedGroup(_ updated: Group) {
+        group = updated
+    }
 }

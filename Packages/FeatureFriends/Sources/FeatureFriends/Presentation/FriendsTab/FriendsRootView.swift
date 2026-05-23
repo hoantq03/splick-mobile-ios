@@ -1,6 +1,7 @@
 import SwiftUI
 import DesignSystem
 import Common
+import FeatureMedia
 import SplickDomain
 
 private struct UserProfileRoute: Identifiable {
@@ -51,6 +52,12 @@ public struct FriendsRootView: View {
     private let removeGroupMemberUseCase: RemoveGroupMemberUseCaseProtocol
     private let leaveGroupUseCase: LeaveGroupUseCaseProtocol
     private let deleteGroupUseCase: DeleteGroupUseCaseProtocol
+    private let updateGroupUseCase: UpdateGroupUseCaseProtocol
+    private let updateGroupAvatarUseCase: UpdateGroupAvatarUseCaseProtocol
+    private let uploadMediaUseCase: UploadMediaUseCaseProtocol
+    private let transferGroupOwnershipUseCase: TransferGroupOwnershipUseCaseProtocol
+    private let generateGroupQrUseCase: GenerateGroupQrUseCaseProtocol
+    private let revokeGroupQrUseCase: RevokeGroupQrUseCaseProtocol
 
     public init(
         fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol,
@@ -79,7 +86,13 @@ public struct FriendsRootView: View {
         rejectGroupMemberUseCase: RejectGroupMemberUseCaseProtocol,
         removeGroupMemberUseCase: RemoveGroupMemberUseCaseProtocol,
         leaveGroupUseCase: LeaveGroupUseCaseProtocol,
-        deleteGroupUseCase: DeleteGroupUseCaseProtocol
+        deleteGroupUseCase: DeleteGroupUseCaseProtocol,
+        updateGroupUseCase: UpdateGroupUseCaseProtocol,
+        updateGroupAvatarUseCase: UpdateGroupAvatarUseCaseProtocol,
+        uploadMediaUseCase: UploadMediaUseCaseProtocol,
+        transferGroupOwnershipUseCase: TransferGroupOwnershipUseCaseProtocol,
+        generateGroupQrUseCase: GenerateGroupQrUseCaseProtocol,
+        revokeGroupQrUseCase: RevokeGroupQrUseCaseProtocol
     ) {
         let rootVM = FriendsRootViewModel(
             fetchMyFriendsUseCase: fetchMyFriendsUseCase,
@@ -111,6 +124,12 @@ public struct FriendsRootView: View {
         self.removeGroupMemberUseCase = removeGroupMemberUseCase
         self.leaveGroupUseCase = leaveGroupUseCase
         self.deleteGroupUseCase = deleteGroupUseCase
+        self.updateGroupUseCase = updateGroupUseCase
+        self.updateGroupAvatarUseCase = updateGroupAvatarUseCase
+        self.uploadMediaUseCase = uploadMediaUseCase
+        self.transferGroupOwnershipUseCase = transferGroupOwnershipUseCase
+        self.generateGroupQrUseCase = generateGroupQrUseCase
+        self.revokeGroupQrUseCase = revokeGroupQrUseCase
         _viewModel = StateObject(wrappedValue: rootVM)
         _addFriendViewModel = StateObject(
             wrappedValue: AddFriendViewModel(addFriendUseCase: addFriendUseCase) {
@@ -206,7 +225,12 @@ public struct FriendsRootView: View {
                         onGroupDeleted: { viewModel.onGroupJoined() },
                         fetchGroupMembersUseCase: fetchGroupMembersUseCase,
                         fetchInviteCodeUseCase: fetchGroupInviteCodeUseCase,
-                        generateInviteCodeUseCase: generateGroupInviteCodeUseCase,
+                        generateGroupQrUseCase: generateGroupQrUseCase,
+                        revokeGroupQrUseCase: revokeGroupQrUseCase,
+                        updateGroupUseCase: updateGroupUseCase,
+                        updateGroupAvatarUseCase: updateGroupAvatarUseCase,
+                        uploadMediaUseCase: uploadMediaUseCase,
+                        transferOwnershipUseCase: transferGroupOwnershipUseCase,
                         searchUsersUseCase: searchUsersUseCase,
                         addFriendUseCase: addFriendUseCase,
                         inviteFriendsUseCase: inviteFriendsToGroupUseCase,
