@@ -39,6 +39,13 @@ struct FriendRequestResponseDTO: Decodable {
     let message: String?
     let createdAt: Date
     let expiresAt: Date
+    let addresseeUsername: String?
+    let addresseeDisplayName: String?
+}
+
+struct SendFriendRequestByQrBodyDTO: Encodable {
+    let qrPayload: String
+    let message: String?
 }
 
 struct IncomingFriendRequestResponseDTO: Decodable {
@@ -54,6 +61,31 @@ struct IncomingFriendRequestResponseDTO: Decodable {
 
 struct SocialPageIncomingFriendRequestResponseDTO: Decodable {
     let content: [IncomingFriendRequestResponseDTO]
+    let page: SocialPageMetaDTO
+}
+
+struct SocialPageFriendRequestResponseDTO: Decodable {
+    let content: [FriendRequestResponseDTO]
+    let page: SocialPageMetaDTO
+}
+
+struct SetNicknameBodyDTO: Encodable {
+    let nickname: String?
+}
+
+struct BlockUserBodyDTO: Encodable {
+    let userId: UUID
+}
+
+struct BlockedUserResponseDTO: Decodable {
+    let userId: UUID
+    let username: String
+    let displayName: String
+    let blockedAt: Date
+}
+
+struct SocialPageBlockedUserResponseDTO: Decodable {
+    let content: [BlockedUserResponseDTO]
     let page: SocialPageMetaDTO
 }
 

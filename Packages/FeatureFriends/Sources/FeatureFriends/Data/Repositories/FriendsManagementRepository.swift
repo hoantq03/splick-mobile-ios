@@ -78,8 +78,62 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
         try await apiClient.request(SocialEndpoint.cancelFriendRequest(requestId: requestId))
     }
 
-    public func addFriendFromQRCode(_ payload: String) async throws -> UserSummary {
-        throw FriendsError.notImplemented
+    public func fetchOutgoingFriendRequests(page: Int, size: Int) async throws -> [OutgoingFriendRequest] {
+        let response: SocialPageFriendRequestResponseDTO = try await apiClient.request(
+            SocialEndpoint.listOutgoingFriendRequests(page: page, size: size)
+        )
+        return response.content.map(FriendsMapper.toOutgoingFriendRequest)
+    }
+
+    public func removeFriend(friendUserId: UUID) async throws {
+        try await apiClient.request(SocialEndpoint.removeFriend(friendUserId: friendUserId))
+    }
+
+    public func setFriendNickname(friendUserId: UUID, nickname: String?) async throws -> UserSummary {
+        let response: FriendResponseDTO = try await apiClient.request(
+            SocialEndpoint.setFriendNickname(friendUserId: friendUserId, nickname: nickname)
+        )
+        return FriendsMapper.toUserSummary(response)
+    }
+
+    public func fetchBlockedUsers(page: Int, size: Int) async throws -> [BlockedUser] {
+        let response: SocialPageBlockedUserResponseDTO = try await apiClient.request(
+            SocialEndpoint.listBlockedUsers(page: page, size: size)
+        )
+        return response.content.map(FriendsMapper.toBlockedUser)
+    }
+
+    public func blockUser(userId: UUID) async throws {
+        try await apiClient.request(SocialEndpoint.blockUser(userId: userId))
+    }
+
+    public func unblockUser(userId: UUID) async throws {
+        try await apiClient.request(SocialEndpoint.unblockUser(userId: userId))
+    }
+
+    public func addFriendFromQRCode(_ raw: String) async throws -> UserSummary {
+        guard let action = SplickQRParser.parse(raw) else {
+            throw FriendsError.invalidQRCode
+        }
+
+        switch action {
+        case .addFriend(let username):
+            return try await addFriend(username: username)
+        case .addFriendByServerPayload(let payload):
+            let response: FriendRequestResponseDTO = try await apiClient.request(
+                SocialEndpoint.sendFriendRequestByQr(qrPayload: payload, message: nil)
+            )
+            let username = response.addresseeUsername ?? "user"
+            let displayName = response.addresseeDisplayName ?? username
+            return UserSummary(
+                id: response.addresseeId,
+                username: username,
+                displayName: displayName,
+                avatarURL: nil
+            )
+        case .joinGroup:
+            throw FriendsError.invalidQRCode
+        }
     }
 
     public func generateMyQr() async throws -> PersonalQRCode {

@@ -4,11 +4,18 @@ import Networking
 enum SocialEndpoint: APIEndpoint {
     case searchUsers(query: String, page: Int, size: Int)
     case sendFriendRequest(username: String, message: String?)
+    case sendFriendRequestByQr(qrPayload: String, message: String?)
     case listFriends(page: Int, size: Int)
     case listIncomingFriendRequests(page: Int, size: Int)
+    case listOutgoingFriendRequests(page: Int, size: Int)
     case acceptFriendRequest(requestId: UUID)
     case rejectFriendRequest(requestId: UUID)
     case cancelFriendRequest(requestId: UUID)
+    case removeFriend(friendUserId: UUID)
+    case setFriendNickname(friendUserId: UUID, nickname: String?)
+    case listBlockedUsers(page: Int, size: Int)
+    case blockUser(userId: UUID)
+    case unblockUser(userId: UUID)
     case listMyGroups(page: Int, size: Int)
     case createGroup(name: String, description: String?)
     case listGroupMembers(groupId: UUID, status: String?, page: Int, size: Int)
@@ -36,8 +43,20 @@ enum SocialEndpoint: APIEndpoint {
             return "/v1/social/groups/\(groupId.uuidString)/members/invite"
         case .sendFriendRequest:
             return "/v1/social/friendships/requests"
+        case .sendFriendRequestByQr:
+            return "/v1/social/friendships/requests/qr"
         case .listIncomingFriendRequests:
             return "/v1/social/friendships/requests/incoming"
+        case .listOutgoingFriendRequests:
+            return "/v1/social/friendships/requests/outgoing"
+        case .removeFriend(let friendUserId):
+            return "/v1/social/friendships/\(friendUserId.uuidString)"
+        case .setFriendNickname(let friendUserId, _):
+            return "/v1/social/friendships/\(friendUserId.uuidString)/nickname"
+        case .listBlockedUsers, .blockUser:
+            return "/v1/social/blocks"
+        case .unblockUser(let userId):
+            return "/v1/social/blocks/\(userId.uuidString)"
         case .acceptFriendRequest(let requestId):
             return "/v1/social/friendships/requests/\(requestId.uuidString)/accept"
         case .rejectFriendRequest(let requestId):
@@ -51,15 +70,17 @@ enum SocialEndpoint: APIEndpoint {
 
     var method: HTTPMethod {
         switch self {
-        case .searchUsers, .listFriends, .listIncomingFriendRequests, .listMyGroups, .listGroupMembers:
+        case .searchUsers, .listFriends, .listIncomingFriendRequests, .listOutgoingFriendRequests,
+             .listBlockedUsers, .listMyGroups, .listGroupMembers, .getActiveGroupInviteCode:
             return .get
-        case .getActiveGroupInviteCode:
-            return .get
-        case .sendFriendRequest, .generateMyQr, .acceptFriendRequest, .rejectFriendRequest,
-             .createGroup, .generateGroupInviteCode, .inviteFriendsToGroup:
+        case .sendFriendRequest, .sendFriendRequestByQr, .generateMyQr, .acceptFriendRequest,
+             .rejectFriendRequest, .createGroup, .generateGroupInviteCode, .inviteFriendsToGroup,
+             .blockUser:
             return .post
-        case .revokeMyQr, .cancelFriendRequest:
+        case .revokeMyQr, .cancelFriendRequest, .removeFriend, .unblockUser:
             return .delete
+        case .setFriendNickname:
+            return .patch
         }
     }
 
@@ -73,6 +94,8 @@ enum SocialEndpoint: APIEndpoint {
             ]
         case .listFriends(let page, let size),
              .listIncomingFriendRequests(let page, let size),
+             .listOutgoingFriendRequests(let page, let size),
+             .listBlockedUsers(let page, let size),
              .listMyGroups(let page, let size):
             return [
                 URLQueryItem(name: "page", value: String(page)),
@@ -87,9 +110,10 @@ enum SocialEndpoint: APIEndpoint {
                 items.append(URLQueryItem(name: "status", value: status))
             }
             return items
-        case .sendFriendRequest, .generateMyQr, .revokeMyQr, .getActiveGroupInviteCode,
-             .acceptFriendRequest, .rejectFriendRequest, .cancelFriendRequest, .createGroup,
-             .generateGroupInviteCode, .inviteFriendsToGroup:
+        case .sendFriendRequest, .sendFriendRequestByQr, .generateMyQr, .revokeMyQr,
+             .getActiveGroupInviteCode, .acceptFriendRequest, .rejectFriendRequest,
+             .cancelFriendRequest, .createGroup, .generateGroupInviteCode, .inviteFriendsToGroup,
+             .removeFriend, .setFriendNickname, .blockUser, .unblockUser:
             return nil
         }
     }
@@ -98,13 +122,20 @@ enum SocialEndpoint: APIEndpoint {
         switch self {
         case .sendFriendRequest(let username, let message):
             return SendFriendRequestBodyDTO(username: username, message: message)
+        case .sendFriendRequestByQr(let qrPayload, let message):
+            return SendFriendRequestByQrBodyDTO(qrPayload: qrPayload, message: message)
         case .createGroup(let name, let description):
             return CreateGroupBodyDTO(name: name, description: description)
         case .inviteFriendsToGroup(_, let userIds):
             return InviteFriendsBodyDTO(userIds: userIds)
-        case .searchUsers, .listFriends, .listIncomingFriendRequests, .listMyGroups, .listGroupMembers,
+        case .setFriendNickname(_, let nickname):
+            return SetNicknameBodyDTO(nickname: nickname)
+        case .blockUser(let userId):
+            return BlockUserBodyDTO(userId: userId)
+        case .searchUsers, .listFriends, .listIncomingFriendRequests, .listOutgoingFriendRequests,
+             .listBlockedUsers, .listMyGroups, .listGroupMembers,
              .generateMyQr, .revokeMyQr, .getActiveGroupInviteCode, .generateGroupInviteCode,
-             .acceptFriendRequest, .rejectFriendRequest, .cancelFriendRequest:
+             .acceptFriendRequest, .rejectFriendRequest, .cancelFriendRequest, .removeFriend, .unblockUser:
             return nil
         }
     }
