@@ -237,6 +237,30 @@ final class DependencyContainer: ObservableObject {
         InviteFriendsToGroupUseCase(repository: groupsRepository)
     }()
 
+    lazy var fetchGroupUseCase: FetchGroupUseCaseProtocol = {
+        FetchGroupUseCase(repository: groupsRepository)
+    }()
+
+    lazy var approveGroupMemberUseCase: ApproveGroupMemberUseCaseProtocol = {
+        ApproveGroupMemberUseCase(repository: groupsRepository)
+    }()
+
+    lazy var rejectGroupMemberUseCase: RejectGroupMemberUseCaseProtocol = {
+        RejectGroupMemberUseCase(repository: groupsRepository)
+    }()
+
+    lazy var removeGroupMemberUseCase: RemoveGroupMemberUseCaseProtocol = {
+        RemoveGroupMemberUseCase(repository: groupsRepository)
+    }()
+
+    lazy var leaveGroupUseCase: LeaveGroupUseCaseProtocol = {
+        LeaveGroupUseCase(repository: groupsRepository)
+    }()
+
+    lazy var deleteGroupUseCase: DeleteGroupUseCaseProtocol = {
+        DeleteGroupUseCase(repository: groupsRepository)
+    }()
+
     // MARK: - Media
 
     private lazy var mediaRepository: MediaRepositoryProtocol = {

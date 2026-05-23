@@ -166,9 +166,89 @@ public actor FakeFriendsRepository: FriendsRepositoryProtocol, FriendsManagement
         return group
     }
 
-    public func fetchGroupMembers(groupId: UUID, status: String?) async throws -> [UserSummary] {
+    public func fetchGroup(groupId: UUID) async throws -> Group {
+        guard let group = groups.first(where: { $0.id == groupId }) else {
+            throw FriendsError.groupNotFound
+        }
+        return group
+    }
+
+    public func fetchGroupMembers(groupId: UUID, status: String?) async throws -> [GroupMemberItem] {
         guard let group = groups.first(where: { $0.id == groupId }) else { return [] }
-        return group.members
+        return group.members.enumerated().map { index, user in
+            GroupMemberItem(
+                id: UUID(),
+                userId: user.id,
+                username: user.username,
+                displayName: user.displayName,
+                avatarURL: user.avatarURL,
+                role: user.id == group.createdBy ? "OWNER" : "MEMBER",
+                status: status?.uppercased() ?? "ACTIVE"
+            )
+        }
+    }
+
+    public func updateGroup(groupId: UUID, name: String, description: String?) async throws -> Group {
+        guard let index = groups.firstIndex(where: { $0.id == groupId }) else {
+            throw FriendsError.groupNotFound
+        }
+        var group = groups[index]
+        group = Group(
+            id: group.id,
+            name: name,
+            inviteCode: group.inviteCode,
+            description: description,
+            avatarURL: group.avatarURL,
+            members: group.members,
+            memberCount: group.memberCount,
+            createdBy: group.createdBy,
+            createdAt: group.createdAt
+        )
+        groups[index] = group
+        return group
+    }
+
+    public func updateGroupAvatar(groupId: UUID, avatarURL: String) async throws -> Group {
+        try await fetchGroup(groupId: groupId)
+    }
+
+    public func deleteGroup(groupId: UUID) async throws {
+        groups.removeAll { $0.id == groupId }
+    }
+
+    public func revokeInviteCode(groupId: UUID, invitationId: UUID) async throws {}
+
+    public func generateGroupQr(groupId: UUID, ttlSeconds: Int?) async throws -> String {
+        SplickQRParser.groupPayload(inviteCode: groups.first { $0.id == groupId }?.inviteCode ?? "MOCKCODE1")
+    }
+
+    public func revokeGroupQr(groupId: UUID, qrId: UUID) async throws {}
+
+    public func approvePendingMember(groupId: UUID, memberRowId: UUID) async throws {}
+
+    public func rejectPendingMember(groupId: UUID, memberRowId: UUID) async throws {}
+
+    public func removeMember(groupId: UUID, memberRowId: UUID) async throws {}
+
+    public func leaveGroup(groupId: UUID) async throws {
+        guard let index = groups.firstIndex(where: { $0.id == groupId }) else { return }
+        var group = groups[index]
+        group = Group(
+            id: group.id,
+            name: group.name,
+            inviteCode: group.inviteCode,
+            description: group.description,
+            avatarURL: group.avatarURL,
+            members: group.members.filter { $0.id != currentUserId },
+            memberCount: max(0, group.memberCount - 1),
+            createdBy: group.createdBy,
+            createdAt: group.createdAt
+        )
+        groups[index] = group
+    }
+
+    public func transferOwnership(groupId: UUID, newOwnerId: UUID) async throws -> Group {
+        try await fetchGroup(groupId: groupId)
     }
 
     public func fetchActiveInviteCode(groupId: UUID) async throws -> GroupInviteCode? {
@@ -213,11 +293,6 @@ public actor FakeFriendsRepository: FriendsRepositoryProtocol, FriendsManagement
 
     public func inviteFriends(groupId: UUID, userIds: [UUID]) async throws -> InviteFriendsToGroupResult {
         InviteFriendsToGroupResult(invited: userIds, skipped: [])
-    }
-
-    public func searchGroup(inviteCode: String) async throws -> Group? {
-        let code = inviteCode.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return groups.first { $0.inviteCode.lowercased() == code }
     }
 
     public func joinGroup(inviteCode: String) async throws -> Group {

@@ -6,6 +6,8 @@ import SplickDomain
 struct GroupDetailView: View {
     @StateObject private var viewModel: GroupDetailViewModel
     let onUserTap: (UserSummary) -> Void
+    let onGroupLeft: () -> Void
+    let onGroupDeleted: () -> Void
     let fetchInviteCodeUseCase: FetchGroupInviteCodeUseCaseProtocol
     let generateInviteCodeUseCase: GenerateGroupInviteCodeUseCaseProtocol
     let searchUsersUseCase: SearchUsersUseCaseProtocol
@@ -13,21 +15,34 @@ struct GroupDetailView: View {
     let inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol
 
     @Environment(\.currentUserSummary) private var currentUserSummary
+    @Environment(\.dismiss) private var dismiss
 
     @State private var showGroupQR = false
     @State private var showInviteFriends = false
+    @State private var confirmLeave = false
+    @State private var confirmDelete = false
 
     init(
         group: SplickDomain.Group,
         onUserTap: @escaping (UserSummary) -> Void,
+        onGroupLeft: @escaping () -> Void = {},
+        onGroupDeleted: @escaping () -> Void = {},
         fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol,
         fetchInviteCodeUseCase: FetchGroupInviteCodeUseCaseProtocol,
         generateInviteCodeUseCase: GenerateGroupInviteCodeUseCaseProtocol,
         searchUsersUseCase: SearchUsersUseCaseProtocol,
         addFriendUseCase: AddFriendUseCaseProtocol,
-        inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol
+        inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol,
+        fetchGroupUseCase: FetchGroupUseCaseProtocol? = nil,
+        approveMemberUseCase: ApproveGroupMemberUseCaseProtocol? = nil,
+        rejectMemberUseCase: RejectGroupMemberUseCaseProtocol? = nil,
+        removeMemberUseCase: RemoveGroupMemberUseCaseProtocol? = nil,
+        leaveGroupUseCase: LeaveGroupUseCaseProtocol? = nil,
+        deleteGroupUseCase: DeleteGroupUseCaseProtocol? = nil
     ) {
         self.onUserTap = onUserTap
+        self.onGroupLeft = onGroupLeft
+        self.onGroupDeleted = onGroupDeleted
         self.fetchInviteCodeUseCase = fetchInviteCodeUseCase
         self.generateInviteCodeUseCase = generateInviteCodeUseCase
         self.searchUsersUseCase = searchUsersUseCase
@@ -37,7 +52,13 @@ struct GroupDetailView: View {
             wrappedValue: GroupDetailViewModel(
                 group: group,
                 fetchGroupMembersUseCase: fetchGroupMembersUseCase,
-                fetchInviteCodeUseCase: fetchInviteCodeUseCase
+                fetchInviteCodeUseCase: fetchInviteCodeUseCase,
+                fetchGroupUseCase: fetchGroupUseCase,
+                approveMemberUseCase: approveMemberUseCase,
+                rejectMemberUseCase: rejectMemberUseCase,
+                removeMemberUseCase: removeMemberUseCase,
+                leaveGroupUseCase: leaveGroupUseCase,
+                deleteGroupUseCase: deleteGroupUseCase
             )
         )
     }
@@ -46,6 +67,9 @@ struct GroupDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
                 headerCard
+                if !viewModel.pendingMembers.isEmpty {
+                    pendingMembersSection
+                }
                 membersSection
             }
             .padding(SplickTheme.Spacing.md)
@@ -75,15 +99,90 @@ struct GroupDetailView: View {
                 addFriendUseCase: addFriendUseCase,
                 inviteFriendsUseCase: inviteFriendsUseCase,
                 onInvited: {
-                    Task { await viewModel.loadMembers() }
+                    Task {
+                        await viewModel.loadMembers()
+                        await viewModel.loadPendingMembers()
+                    }
                 }
             )
         }
         .task {
-            await viewModel.load()
+            await viewModel.load(currentUserId: currentUserSummary?.id)
         }
         .refreshable {
-            await viewModel.loadMembers()
+            await viewModel.load(currentUserId: currentUserSummary?.id)
+        }
+        .alert("Thông báo", isPresented: Binding(
+            get: { viewModel.actionMessage != nil },
+            set: { if !$0 { viewModel.actionMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) { viewModel.actionMessage = nil }
+        } message: {
+            Text(viewModel.actionMessage ?? "")
+        }
+        .alert("Lỗi", isPresented: Binding(
+            get: { viewModel.actionError != nil },
+            set: { if !$0 { viewModel.actionError = nil } }
+        )) {
+            Button("OK", role: .cancel) { viewModel.actionError = nil }
+        } message: {
+            Text(viewModel.actionError ?? "")
+        }
+        .confirmationDialog("Rời nhóm?", isPresented: $confirmLeave, titleVisibility: .visible) {
+            Button("Rời nhóm", role: .destructive) {
+                Task {
+                    if await viewModel.leave(currentUserId: currentUserSummary?.id) {
+                        onGroupLeft()
+                        dismiss()
+                    }
+                }
+            }
+            Button("Huỷ", role: .cancel) {}
+        }
+        .confirmationDialog("Xóa nhóm?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Xóa nhóm", role: .destructive) {
+                Task {
+                    if await viewModel.deleteGroup(currentUserId: currentUserSummary?.id) {
+                        onGroupDeleted()
+                        dismiss()
+                    }
+                }
+            }
+            Button("Huỷ", role: .cancel) {}
+        }
+    }
+
+    @ViewBuilder
+    private var pendingMembersSection: some View {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+            Text("Chờ duyệt (\(viewModel.pendingMembers.count))")
+                .font(SplickTheme.Typography.headline)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
+
+            ForEach(viewModel.pendingMembers) { member in
+                HStack(spacing: SplickTheme.Spacing.sm) {
+                    AvatarView(imageURL: member.avatarURL, name: member.displayName, size: .medium)
+                    VStack(alignment: .leading) {
+                        Text(member.displayName)
+                            .font(SplickTheme.Typography.headline)
+                        Text("@\(member.username)")
+                            .font(SplickTheme.Typography.caption)
+                            .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    }
+                    Spacer()
+                    if viewModel.isOwner(currentUserId: currentUserSummary?.id) {
+                        Button("Duyệt") {
+                            Task { await viewModel.approve(member, currentUserId: currentUserSummary?.id) }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        Button("Từ chối") {
+                            Task { await viewModel.reject(member, currentUserId: currentUserSummary?.id) }
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+                .splickCard(padding: SplickTheme.Spacing.sm)
+            }
         }
     }
 
@@ -106,15 +205,7 @@ struct GroupDetailView: View {
             default:
                 LazyVStack(spacing: SplickTheme.Spacing.xs) {
                     ForEach(viewModel.sortedMembers(currentUserId: currentUserSummary?.id)) { member in
-                        Button {
-                            onUserTap(member)
-                        } label: {
-                            memberRow(
-                                member,
-                                isCurrentUser: viewModel.isCurrentUser(member, currentUserId: currentUserSummary?.id)
-                            )
-                        }
-                        .buttonStyle(.plain)
+                        memberRow(member)
                     }
                 }
             }
@@ -134,8 +225,23 @@ struct GroupDetailView: View {
             } label: {
                 Label("Thêm thành viên", systemImage: "person.badge.plus")
             }
+
+            if viewModel.isOwner(currentUserId: currentUserSummary?.id) {
+                Divider()
+                Button(role: .destructive) {
+                    confirmDelete = true
+                } label: {
+                    Label("Xóa nhóm", systemImage: "trash")
+                }
+            } else {
+                Button(role: .destructive) {
+                    confirmLeave = true
+                } label: {
+                    Label("Rời nhóm", systemImage: "rectangle.portrait.and.arrow.right")
+                }
+            }
         } label: {
-            Image(systemName: "plus.circle.fill")
+            Image(systemName: "ellipsis.circle.fill")
                 .font(.system(size: 28))
                 .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
         }
@@ -179,24 +285,51 @@ struct GroupDetailView: View {
         .splickCard()
     }
 
-    private func memberRow(_ user: UserSummary, isCurrentUser: Bool) -> some View {
+    @ViewBuilder
+    private func memberRow(_ member: GroupMemberItem) -> some View {
+        let isMe = viewModel.isCurrentUser(member, currentUserId: currentUserSummary?.id)
+        let userSummary = UserSummary(
+            id: member.userId,
+            username: member.username,
+            displayName: member.displayName,
+            avatarURL: member.avatarURL
+        )
+
         HStack(spacing: SplickTheme.Spacing.sm) {
-            AvatarView(imageURL: user.avatarURL, name: user.displayName, size: .medium)
-
-            VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
-                Text(isCurrentUser ? "\(user.displayName) (tôi)" : user.displayName)
-                    .font(SplickTheme.Typography.headline)
-                    .foregroundStyle(SplickTheme.Colors.textPrimary)
-                Text("@\(user.username)")
-                    .font(SplickTheme.Typography.caption)
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+            Button {
+                onUserTap(userSummary)
+            } label: {
+                HStack(spacing: SplickTheme.Spacing.sm) {
+                    AvatarView(imageURL: member.avatarURL, name: member.displayName, size: .medium)
+                    VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
+                        Text(isMe ? "\(member.displayName) (tôi)" : member.displayName)
+                            .font(SplickTheme.Typography.headline)
+                            .foregroundStyle(SplickTheme.Colors.textPrimary)
+                        Text("@\(member.username)")
+                            .font(SplickTheme.Typography.caption)
+                            .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(SplickTheme.Colors.textTertiary)
+                }
             }
+            .buttonStyle(.plain)
 
-            Spacer()
-
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(SplickTheme.Colors.textTertiary)
+            if viewModel.isOwner(currentUserId: currentUserSummary?.id), !member.isOwner, !isMe {
+                Menu {
+                    Button(role: .destructive) {
+                        Task { await viewModel.remove(member, currentUserId: currentUserSummary?.id) }
+                    } label: {
+                        Label("Xóa khỏi nhóm", systemImage: "person.fill.xmark")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+                        .padding(.horizontal, SplickTheme.Spacing.xs)
+                }
+            }
         }
         .splickCard(padding: SplickTheme.Spacing.sm)
     }

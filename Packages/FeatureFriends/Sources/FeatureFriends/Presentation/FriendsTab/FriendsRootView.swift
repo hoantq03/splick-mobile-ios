@@ -42,6 +42,12 @@ public struct FriendsRootView: View {
     private let fetchGroupInviteCodeUseCase: FetchGroupInviteCodeUseCaseProtocol
     private let generateGroupInviteCodeUseCase: GenerateGroupInviteCodeUseCaseProtocol
     private let inviteFriendsToGroupUseCase: InviteFriendsToGroupUseCaseProtocol
+    private let fetchGroupUseCase: FetchGroupUseCaseProtocol
+    private let approveGroupMemberUseCase: ApproveGroupMemberUseCaseProtocol
+    private let rejectGroupMemberUseCase: RejectGroupMemberUseCaseProtocol
+    private let removeGroupMemberUseCase: RemoveGroupMemberUseCaseProtocol
+    private let leaveGroupUseCase: LeaveGroupUseCaseProtocol
+    private let deleteGroupUseCase: DeleteGroupUseCaseProtocol
 
     public init(
         fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol,
@@ -63,7 +69,13 @@ public struct FriendsRootView: View {
         fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol,
         fetchGroupInviteCodeUseCase: FetchGroupInviteCodeUseCaseProtocol,
         generateGroupInviteCodeUseCase: GenerateGroupInviteCodeUseCaseProtocol,
-        inviteFriendsToGroupUseCase: InviteFriendsToGroupUseCaseProtocol
+        inviteFriendsToGroupUseCase: InviteFriendsToGroupUseCaseProtocol,
+        fetchGroupUseCase: FetchGroupUseCaseProtocol,
+        approveGroupMemberUseCase: ApproveGroupMemberUseCaseProtocol,
+        rejectGroupMemberUseCase: RejectGroupMemberUseCaseProtocol,
+        removeGroupMemberUseCase: RemoveGroupMemberUseCaseProtocol,
+        leaveGroupUseCase: LeaveGroupUseCaseProtocol,
+        deleteGroupUseCase: DeleteGroupUseCaseProtocol
     ) {
         let rootVM = FriendsRootViewModel(
             fetchMyFriendsUseCase: fetchMyFriendsUseCase,
@@ -87,6 +99,12 @@ public struct FriendsRootView: View {
         self.fetchGroupInviteCodeUseCase = fetchGroupInviteCodeUseCase
         self.generateGroupInviteCodeUseCase = generateGroupInviteCodeUseCase
         self.inviteFriendsToGroupUseCase = inviteFriendsToGroupUseCase
+        self.fetchGroupUseCase = fetchGroupUseCase
+        self.approveGroupMemberUseCase = approveGroupMemberUseCase
+        self.rejectGroupMemberUseCase = rejectGroupMemberUseCase
+        self.removeGroupMemberUseCase = removeGroupMemberUseCase
+        self.leaveGroupUseCase = leaveGroupUseCase
+        self.deleteGroupUseCase = deleteGroupUseCase
         _viewModel = StateObject(wrappedValue: rootVM)
         _addFriendViewModel = StateObject(
             wrappedValue: AddFriendViewModel(addFriendUseCase: addFriendUseCase) {
@@ -171,12 +189,20 @@ public struct FriendsRootView: View {
                         onUserTap: { user in
                             profileRoute = UserProfileRoute(user: user, mode: .stranger)
                         },
+                        onGroupLeft: { viewModel.onGroupJoined() },
+                        onGroupDeleted: { viewModel.onGroupJoined() },
                         fetchGroupMembersUseCase: fetchGroupMembersUseCase,
                         fetchInviteCodeUseCase: fetchGroupInviteCodeUseCase,
                         generateInviteCodeUseCase: generateGroupInviteCodeUseCase,
                         searchUsersUseCase: searchUsersUseCase,
                         addFriendUseCase: addFriendUseCase,
-                        inviteFriendsUseCase: inviteFriendsToGroupUseCase
+                        inviteFriendsUseCase: inviteFriendsToGroupUseCase,
+                        fetchGroupUseCase: fetchGroupUseCase,
+                        approveMemberUseCase: approveGroupMemberUseCase,
+                        rejectMemberUseCase: rejectGroupMemberUseCase,
+                        removeMemberUseCase: removeGroupMemberUseCase,
+                        leaveGroupUseCase: leaveGroupUseCase,
+                        deleteGroupUseCase: deleteGroupUseCase
                     )
                 }
             }

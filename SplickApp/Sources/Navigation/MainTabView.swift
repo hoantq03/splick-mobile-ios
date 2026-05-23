@@ -73,7 +73,13 @@ struct MainTabView: View {
                     fetchGroupMembersUseCase: container.fetchGroupMembersUseCase,
                     fetchGroupInviteCodeUseCase: container.fetchGroupInviteCodeUseCase,
                     generateGroupInviteCodeUseCase: container.generateGroupInviteCodeUseCase,
-                    inviteFriendsToGroupUseCase: container.inviteFriendsToGroupUseCase
+                    inviteFriendsToGroupUseCase: container.inviteFriendsToGroupUseCase,
+                    fetchGroupUseCase: container.fetchGroupUseCase,
+                    approveGroupMemberUseCase: container.approveGroupMemberUseCase,
+                    rejectGroupMemberUseCase: container.rejectGroupMemberUseCase,
+                    removeGroupMemberUseCase: container.removeGroupMemberUseCase,
+                    leaveGroupUseCase: container.leaveGroupUseCase,
+                    deleteGroupUseCase: container.deleteGroupUseCase
                 )
 
             case .camera:
