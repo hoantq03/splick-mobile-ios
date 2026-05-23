@@ -42,6 +42,7 @@ public final class SimulationContainer: @unchecked Sendable {
     public let markNotificationReadUseCase: MarkNotificationReadUseCase
 
     public let uploadMediaUseCase: UploadMediaUseCase
+    public let uploadUserAvatarUseCase: UploadUserAvatarUseCase
     public let uploadGroupAvatarUseCase: UploadGroupAvatarUseCase
 
     public init(loggerModule: String = "Simulation") {
@@ -75,6 +76,7 @@ public final class SimulationContainer: @unchecked Sendable {
         self.markNotificationReadUseCase = MarkNotificationReadUseCase(repository: notificationRepository)
 
         self.uploadMediaUseCase = UploadMediaUseCase(repository: mediaRepository)
+        self.uploadUserAvatarUseCase = UploadUserAvatarUseCase(repository: mediaRepository)
         self.uploadGroupAvatarUseCase = UploadGroupAvatarUseCase(repository: mediaRepository)
     }
 

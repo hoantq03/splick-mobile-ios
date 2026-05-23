@@ -20,23 +20,13 @@ public final class UploadMediaUseCase: UploadMediaUseCaseProtocol, Sendable {
     }
 
     public func execute(imageData: Data) async throws -> MediaUploadResult {
-        guard imageData.count <= AppConstants.Media.maxImageSizeBytes else {
-            throw AppError.validation("Image exceeds maximum size of 10 MB")
-        }
-
-        return try await repository.uploadImage(
-            data: imageData,
-            mimeType: "image/jpeg",
-            purpose: .userAvatar,
-            groupId: nil
-        )
+        try await UploadUserAvatarUseCase(repository: repository).execute(imageData: imageData, mimeType: "image/jpeg")
     }
 
     public func execute(imageData: Data, groupId: UUID) async throws -> MediaUploadResult {
-        guard imageData.count <= AppConstants.Media.maxImageSizeBytes else {
-            throw AppError.validation("Image exceeds maximum size of 10 MB")
+        guard imageData.count <= AppConstants.Media.maxAvatarSizeBytes else {
+            throw AppError.validation("Image exceeds maximum size of 5 MB")
         }
-
         return try await repository.uploadImage(
             data: imageData,
             mimeType: "image/jpeg",

@@ -66,9 +66,8 @@ final class EditGroupViewModel: ObservableObject {
                 description: descriptionValue
             )
 
-            if let previewImage,
-               let jpeg = previewImage.jpegData(compressionQuality: 0.85) {
-                let upload = try await uploadGroupAvatarUseCase.execute(imageData: jpeg, groupId: groupId)
+            if let previewImage {
+                let upload = try await uploadGroupAvatarUseCase.execute(image: previewImage, groupId: groupId)
                 updated = try await updateGroupAvatarUseCase.execute(
                     groupId: groupId,
                     avatarURL: upload.url.absoluteString

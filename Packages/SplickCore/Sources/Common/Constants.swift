@@ -39,7 +39,8 @@ public enum AppConstants {
     }
 
     public enum Media {
-        public static let maxImageSizeBytes: Int = 10 * 1024 * 1024 // 10 MB
+        public static let maxImageSizeBytes: Int = 10 * 1024 * 1024 // 10 MB (posts; future)
+        public static let maxAvatarSizeBytes: Int = 5 * 1024 * 1024 // 5 MB — matches media-service USER_AVATAR
         public static let thumbnailSize: CGFloat = 200
         public static let compressionQuality: CGFloat = 0.8
         public static let supportedFormats = ["jpeg", "png", "heic"]
