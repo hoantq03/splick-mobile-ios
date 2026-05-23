@@ -21,6 +21,16 @@ struct AddFriendSheet: View {
                         .textInputAutocapitalization(.never)
                 }
 
+                VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+                    Text("Message (optional)")
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+
+                    TextField("Say hi...", text: $viewModel.message, axis: .vertical)
+                        .textFieldStyle(.roundedBorder)
+                        .lineLimit(3...5)
+                }
+
                 SplickButton(
                     "Add friend",
                     isLoading: viewModel.isLoading,

@@ -4,6 +4,7 @@ import SplickDomain
 @MainActor
 public final class AddFriendViewModel: ObservableObject {
     @Published var username = ""
+    @Published var message = ""
     @Published var isLoading = false
     @Published var successMessage: String?
     @Published var errorMessage: String?
@@ -33,7 +34,11 @@ public final class AddFriendViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let user = try await addFriendUseCase.execute(username: normalized)
+            let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
+            let user = try await addFriendUseCase.execute(
+                username: normalized,
+                message: trimmedMessage.isEmpty ? nil : trimmedMessage
+            )
             successMessage = "Added \(user.displayName)."
             username = ""
             onSuccess()
@@ -49,7 +54,7 @@ public final class AddFriendViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let user = try await addFriendUseCase.executeFromQRCode(payload)
+            let user = try await addFriendUseCase.executeFromQRCode(payload, message: nil)
             successMessage = "Added \(user.displayName)."
             onSuccess()
         } catch {

@@ -2,8 +2,8 @@ import Foundation
 import SplickDomain
 
 public protocol AddFriendUseCaseProtocol: Sendable {
-    func execute(username: String) async throws -> UserSummary
-    func executeFromQRCode(_ payload: String) async throws -> UserSummary
+    func execute(username: String, message: String?) async throws -> UserSummary
+    func executeFromQRCode(_ payload: String, message: String?) async throws -> UserSummary
 }
 
 public struct AddFriendUseCase: AddFriendUseCaseProtocol {
@@ -13,11 +13,11 @@ public struct AddFriendUseCase: AddFriendUseCaseProtocol {
         self.repository = repository
     }
 
-    public func execute(username: String) async throws -> UserSummary {
-        try await repository.addFriend(username: username)
+    public func execute(username: String, message: String? = nil) async throws -> UserSummary {
+        try await repository.addFriend(username: username, message: message)
     }
 
-    public func executeFromQRCode(_ payload: String) async throws -> UserSummary {
+    public func executeFromQRCode(_ payload: String, message: String? = nil) async throws -> UserSummary {
         try await repository.addFriendFromQRCode(payload)
     }
 }

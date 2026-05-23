@@ -97,7 +97,7 @@ final class InviteFriendsToGroupViewModel: ObservableObject {
         defer { sendingFriendRequestUserIds.remove(userId) }
 
         do {
-            _ = try await addFriendUseCase.execute(username: result.user.username)
+            _ = try await addFriendUseCase.execute(username: result.user.username, message: nil)
             updateSearchResult(userId: userId, status: .requestSent)
         } catch {
             alertMessage = error.localizedDescription
