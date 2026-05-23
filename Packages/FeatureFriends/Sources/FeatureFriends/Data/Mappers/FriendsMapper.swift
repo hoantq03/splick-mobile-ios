@@ -104,6 +104,18 @@ enum FriendsMapper {
         )
     }
 
+    static func toGroupMemberItem(_ dto: MemberResponseDTO) -> GroupMemberItem {
+        GroupMemberItem(
+            id: dto.id,
+            userId: dto.userId,
+            username: dto.username,
+            displayName: dto.displayName,
+            avatarURL: dto.avatarUrl.flatMap { URL(string: $0) },
+            role: dto.role ?? "MEMBER",
+            status: dto.status ?? "ACTIVE"
+        )
+    }
+
     static func toGroupInviteCode(_ dto: InviteCodeResponseDTO) -> GroupInviteCode {
         GroupInviteCode(
             id: dto.id,

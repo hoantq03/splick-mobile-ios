@@ -2,7 +2,7 @@ import Foundation
 import SplickDomain
 
 public protocol FetchGroupMembersUseCaseProtocol: Sendable {
-    func execute(groupId: UUID, status: String?) async throws -> [UserSummary]
+    func execute(groupId: UUID, status: String?) async throws -> [GroupMemberItem]
 }
 
 public struct FetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol {
@@ -12,7 +12,7 @@ public struct FetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol {
         self.repository = repository
     }
 
-    public func execute(groupId: UUID, status: String? = "ACTIVE") async throws -> [UserSummary] {
+    public func execute(groupId: UUID, status: String? = "ACTIVE") async throws -> [GroupMemberItem] {
         try await repository.fetchGroupMembers(groupId: groupId, status: status)
     }
 }
