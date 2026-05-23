@@ -11,6 +11,7 @@ public enum AppConstants {
     }
 
     public enum API {
+        /// Gateway root (no version). Endpoints append `/v1/{domain}/...` — see `docs/API_ROUTING.md`.
         #if DEBUG
         public static let baseURL = "http://localhost:8080/api"
         #else
