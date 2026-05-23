@@ -32,6 +32,7 @@ public protocol AuthRepositoryProtocol: Sendable {
     /// Revokes the current device session on the server when possible, then clears local credentials.
     func logout() async
     func getCurrentUser() async throws -> User
+    func updateProfile(displayName: String?, avatarUrl: String?) async throws -> User
     func listSessions() async throws -> [UserSession]
     func revokeSession(id: UUID) async throws
     func revokeAllSessions() async throws

@@ -15,6 +15,7 @@ enum AuthEndpoint: APIEndpoint {
     case changePassword(ChangePasswordRequestDTO)
     case logout(LogoutRequestDTO)
     case me
+    case patchMe(UpdateUserProfileRequestDTO)
     case listSessions(refreshToken: String?)
     case revokeAllSessions
     case revokeSession(UUID)
@@ -41,7 +42,7 @@ enum AuthEndpoint: APIEndpoint {
         case .resetPassword: return "/v1/auth/password/reset"
         case .changePassword: return "/v1/auth/password/change"
         case .logout: return "/v1/auth/logout"
-        case .me: return "/v1/auth/me"
+        case .me, .patchMe: return "/v1/auth/me"
         case .listSessions: return "/v1/auth/sessions"
         case .revokeAllSessions: return "/v1/auth/sessions/revoke-all"
         case .revokeSession(let id): return "/v1/auth/sessions/\(id.uuidString)"
@@ -67,6 +68,8 @@ enum AuthEndpoint: APIEndpoint {
             return .post
         case .me, .listSessions, .connectedAccounts:
             return .get
+        case .patchMe:
+            return .patch
         case .revokeSession, .deleteAccount, .unlinkGoogle:
             return .delete
         }
@@ -94,6 +97,7 @@ enum AuthEndpoint: APIEndpoint {
         case .linkPhone(let dto): return dto
         case .requestLinkEmailOtp(let dto): return dto
         case .linkEmail(let dto): return dto
+        case .patchMe(let dto): return dto
         case .me, .listSessions, .revokeAllSessions, .revokeSession, .connectedAccounts:
             return nil
         }
@@ -115,7 +119,7 @@ enum AuthEndpoint: APIEndpoint {
              .registerEmail, .registerPhone, .refreshToken,
              .forgotPassword, .resetPassword:
             return false
-        case .changePassword, .logout, .me, .listSessions, .revokeAllSessions, .revokeSession,
+        case .changePassword, .logout, .me, .patchMe, .listSessions, .revokeAllSessions, .revokeSession,
              .deactivateAccount, .deleteAccount, .connectedAccounts, .linkGoogle, .unlinkGoogle,
              .requestLinkPhoneOtp, .linkPhone, .requestLinkEmailOtp, .linkEmail:
             return true

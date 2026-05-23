@@ -80,7 +80,13 @@ struct MainTabView: View {
                     rejectGroupMemberUseCase: container.rejectGroupMemberUseCase,
                     removeGroupMemberUseCase: container.removeGroupMemberUseCase,
                     leaveGroupUseCase: container.leaveGroupUseCase,
-                    deleteGroupUseCase: container.deleteGroupUseCase
+                    deleteGroupUseCase: container.deleteGroupUseCase,
+                    updateGroupUseCase: container.updateGroupUseCase,
+                    updateGroupAvatarUseCase: container.updateGroupAvatarUseCase,
+                    uploadMediaUseCase: container.uploadMediaUseCase,
+                    transferGroupOwnershipUseCase: container.transferGroupOwnershipUseCase,
+                    generateGroupQrUseCase: container.generateGroupQrUseCase,
+                    revokeGroupQrUseCase: container.revokeGroupQrUseCase
                 )
 
             case .camera:
@@ -142,6 +148,7 @@ struct ProfileSettingsView: View {
     @State private var showSessions = false
     @State private var showConnectedAccounts = false
     @State private var showAccountSecurity = false
+    @State private var showEditProfile = false
 
     var body: some View {
         NavigationStack {
@@ -168,6 +175,15 @@ struct ProfileSettingsView: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
                 }
+
+                SplickButton(
+                    "Edit profile",
+                    style: .secondary,
+                    isDisabled: appState.currentUser == nil
+                ) {
+                    showEditProfile = true
+                }
+                .padding(.horizontal, SplickTheme.Spacing.xl)
 
                 SplickButton(
                     "Change password",
@@ -224,6 +240,23 @@ struct ProfileSettingsView: View {
             }
             .task {
                 await refreshProfile()
+            }
+            .navigationDestination(isPresented: $showEditProfile) {
+                if let user = appState.currentUser {
+                    EditProfileView(
+                        viewModel: EditProfileViewModel(
+                            user: user,
+                            updateProfileUseCase: container.updateProfileUseCase,
+                            uploadImage: { data in
+                                let result = try await container.uploadMediaUseCase.execute(imageData: data)
+                                return result.url
+                            }
+                        ),
+                        onProfileUpdated: { updated in
+                            appState.updateAuthenticatedUser(updated)
+                        }
+                    )
+                }
             }
             .navigationDestination(isPresented: $showChangePassword) {
                 if let email = appState.currentUser?.email {

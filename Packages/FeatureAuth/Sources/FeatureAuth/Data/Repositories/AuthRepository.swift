@@ -184,6 +184,25 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
         return AuthMapper.toUser(dto)
     }
 
+    public func updateProfile(displayName: String?, avatarUrl: String?) async throws -> User {
+        let trimmedName = displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedName = (trimmedName?.isEmpty == false) ? trimmedName : nil
+        let trimmedAvatar = avatarUrl?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedAvatar = (trimmedAvatar?.isEmpty == false) ? trimmedAvatar : nil
+
+        if resolvedName == nil && resolvedAvatar == nil {
+            throw AppError.validation("Enter a display name or avatar URL to update.")
+        }
+
+        let dto: UserDTO = try await apiClient.request(
+            AuthEndpoint.patchMe(UpdateUserProfileRequestDTO(
+                displayName: resolvedName,
+                avatarUrl: resolvedAvatar
+            ))
+        )
+        return AuthMapper.toUser(dto)
+    }
+
     public func listSessions() async throws -> [UserSession] {
         let refreshToken = try? keychainService.loadString(for: AppConstants.Keychain.refreshTokenKey)
         let dtos: [SessionDTO] = try await apiClient.request(AuthEndpoint.listSessions(refreshToken: refreshToken))

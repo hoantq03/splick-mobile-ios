@@ -72,6 +72,11 @@ struct UserDTO: Decodable {
     let createdAt: Date
 }
 
+struct UpdateUserProfileRequestDTO: Encodable {
+    let displayName: String?
+    let avatarUrl: String?
+}
+
 struct RefreshTokenRequestDTO: Encodable {
     let refreshToken: String
 }

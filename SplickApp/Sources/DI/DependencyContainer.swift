@@ -75,6 +75,10 @@ final class DependencyContainer: ObservableObject {
         RefreshProfileUseCase(repository: authRepository, sessionManager: sessionManager)
     }()
 
+    lazy var updateProfileUseCase: UpdateProfileUseCaseProtocol = {
+        UpdateProfileUseCase(repository: authRepository, sessionManager: sessionManager)
+    }()
+
     lazy var listSessionsUseCase: ListSessionsUseCaseProtocol = {
         ListSessionsUseCase(repository: authRepository)
     }()
@@ -263,6 +267,26 @@ final class DependencyContainer: ObservableObject {
 
     lazy var deleteGroupUseCase: DeleteGroupUseCaseProtocol = {
         DeleteGroupUseCase(repository: groupsRepository)
+    }()
+
+    lazy var updateGroupUseCase: UpdateGroupUseCaseProtocol = {
+        UpdateGroupUseCase(repository: groupsRepository)
+    }()
+
+    lazy var updateGroupAvatarUseCase: UpdateGroupAvatarUseCaseProtocol = {
+        UpdateGroupAvatarUseCase(repository: groupsRepository)
+    }()
+
+    lazy var transferGroupOwnershipUseCase: TransferGroupOwnershipUseCaseProtocol = {
+        TransferGroupOwnershipUseCase(repository: groupsRepository)
+    }()
+
+    lazy var generateGroupQrUseCase: GenerateGroupQrUseCaseProtocol = {
+        GenerateGroupQrUseCase(repository: groupsRepository)
+    }()
+
+    lazy var revokeGroupQrUseCase: RevokeGroupQrUseCaseProtocol = {
+        RevokeGroupQrUseCase(repository: groupsRepository)
     }()
 
     // MARK: - Media
