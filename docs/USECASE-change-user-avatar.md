@@ -30,6 +30,12 @@ ProfileSettingsView → Edit profile
 - Export JPEG, tối đa **5 MB** (`AppConstants.Media.maxAvatarSizeBytes`).
 - Không nhập URL thủ công trên UI production.
 
+## `useMockData` (DEBUG)
+
+`AppConstants.Dev.useMockData = true` chỉ bật fake cho **feed / expense / notification**. **Auth, search, và upload avatar** luôn dùng API thật (`MediaRepository` trong `DependencyContainer`, không qua `FakeMediaRepository`).
+
+Nếu đã từng lưu avatar với URL domain giả trên backend cũ → **đổi avatar lại** sau khi `SHARED_MEDIA_PUBLIC_BASE_URL` trỏ R2 public thật.
+
 ## Kiểm thử
 
 1. Backend: `./gradlew devUp` + `runAuth` + `runMedia` (và `SHARED_MEDIA_PUBLIC_BASE_URL` = URL public R2 thật).
@@ -37,7 +43,13 @@ ProfileSettingsView → Edit profile
 3. Chọn ảnh → **Save** → avatar cập nhật trên Profile và toolbar.
 4. Chỉ đổi display name → Save → tên đổi, avatar giữ nguyên.
 
-Nếu upload lỗi, xem message (vd. R2 CORS / HTTP status). Simulator cần `localhost:8080`; device thật cần IP máy dev.
+| Triệu chứng | Gợi ý |
+|-------------|--------|
+| Upload fail / 5xx | `runMedia` chưa chạy; Kong :8080 |
+| Save OK, ảnh không load (`-1003`) | URL cũ trong DB — upload lại; kiểm tra `SHARED_MEDIA_PUBLIC_BASE_URL` |
+| Simulator không reach API | `AppConstants.API.baseURL` = `http://localhost:8080/api`; device thật dùng IP Mac |
+
+Nếu upload lỗi, xem message (vd. R2 CORS / HTTP status).
 
 ## Backend contract
 
