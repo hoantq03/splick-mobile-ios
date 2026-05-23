@@ -29,8 +29,10 @@ alwaysApply: false
 
 ## API integration
 
-- Base URL (dev): `http://localhost:8080/api` (gateway).
-- Paths and auth headers must match `splick-backend/openapi/openapi.yaml`.
+- Base URL (dev): `http://localhost:8080/api` (Kong gateway — **not** service ports 8081/8082).
+- Paths: **`/v1/{domain}/...`** appended to base URL (e.g. `/v1/auth/login`, `/v1/social/groups`).
+- iOS Google Sign-In: `POST /v1/auth/google` (idToken) — not browser `/v1/auth/oauth2/*`.
+- Paths must match `splick-backend/openapi/openapi.yaml` — see `splick-mobile-ios/docs/API_ROUTING.md`.
 - Do not invent endpoints; extend OpenAPI on backend first.
 
 ## Before finishing
