@@ -284,20 +284,27 @@ FeatureX/
 
 ### 5.2 FeatureSocialFeed
 
-**Responsibility**: Photo feed, post reactions, content discovery.
+**Responsibility**: Photo feed, post reactions, comments (unlimited-depth threads + attachments), content discovery.
 
 | Component | Description |
 |-----------|-------------|
 | `FetchFeedUseCase` | Paginated feed loading |
+| `FetchPostUseCase` | Single post refresh (comments sync) |
+| `AddCommentUseCase` | Create comment / reply with optional attachments |
 | `ReactToPostUseCase` | Add emoji reaction to post |
-| `FeedViewModel` | Manages feed state, pagination, reactions |
+| `FeedViewModel` | Manages feed state, pagination, reactions, comments |
 | `PostCardView` | Renders individual post with image + reactions |
+| `CommentThreadView` | Recursive comment tree UI |
+
+**Docs**: [USECASE-feed-comments.md](docs/USECASE-feed-comments.md)
 
 **API Endpoints**:
 - `GET /v1/feed?page=0&limit=20`
 - `GET /v1/feed/posts/{id}`
+- `POST /v1/feed/posts/{id}/comments`
 - `POST /v1/feed/posts/{id}/reactions`
 - `DELETE /v1/feed/posts/{id}/reactions/{reactionId}`
+- `POST /v1/media/uploads` (comment attachments, `purpose: COMMENT_ATTACHMENT`)
 
 ---
 
