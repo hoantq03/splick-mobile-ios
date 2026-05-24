@@ -46,6 +46,10 @@ struct DebtSummaryDTO: Decodable {
     let currency: String
 }
 
+struct DebtSummaryPageDTO: Decodable {
+    let content: [DebtSummaryDTO]
+}
+
 struct SettleExpenseRequestDTO: Encodable {
     let splitId: UUID
 }
