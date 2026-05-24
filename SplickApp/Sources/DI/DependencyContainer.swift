@@ -9,7 +9,6 @@ import FeatureMedia
 import FeatureExpense
 import FeatureNotification
 import FeatureFriends
-import SimulationKit
 
 @MainActor
 final class DependencyContainer: ObservableObject {
@@ -20,7 +19,6 @@ final class DependencyContainer: ObservableObject {
     let tokenProvider: TokenProvider
     let keychainService: KeychainServiceProtocol
     let userDefaultsService: UserDefaultsServiceProtocol
-    private let simulation: SimulationContainer?
 
     let apiClient: APIClientProtocol
     let sessionManager: SessionManagerProtocol
@@ -119,30 +117,48 @@ final class DependencyContainer: ObservableObject {
         LinkEmailAccountUseCase(repository: authRepository)
     }()
 
+    // MARK: - Media
+
+    private lazy var mediaRepository: MediaRepositoryProtocol = {
+        MediaRepository(apiClient: apiClient)
+    }()
+
+    lazy var uploadMediaUseCase: UploadMediaUseCaseProtocol = {
+        UploadMediaUseCase(repository: mediaRepository)
+    }()
+
+    lazy var uploadUserAvatarUseCase: UploadUserAvatarUseCaseProtocol = {
+        UploadUserAvatarUseCase(repository: mediaRepository)
+    }()
+
+    lazy var uploadGroupAvatarUseCase: UploadGroupAvatarUseCaseProtocol = {
+        UploadGroupAvatarUseCase(repository: mediaRepository)
+    }()
+
     // MARK: - Feed
 
     private lazy var feedRepository: FeedRepositoryProtocol = {
-        FeedRepository(apiClient: apiClient)
+        FeedRepository(apiClient: apiClient, mediaRepository: mediaRepository)
     }()
 
     lazy var fetchFeedUseCase: FetchFeedUseCaseProtocol = {
-        if let simulation { return simulation.fetchFeedUseCase }
-        return FetchFeedUseCase(repository: feedRepository)
+        FetchFeedUseCase(repository: feedRepository)
     }()
 
     lazy var reactToPostUseCase: ReactToPostUseCaseProtocol = {
-        if let simulation { return simulation.reactToPostUseCase }
-        return ReactToPostUseCase(repository: feedRepository)
+        ReactToPostUseCase(repository: feedRepository)
     }()
 
     lazy var deletePostUseCase: DeletePostUseCaseProtocol = {
-        if let simulation { return simulation.deletePostUseCase }
-        return DeletePostUseCase(repository: feedRepository)
+        DeletePostUseCase(repository: feedRepository)
     }()
 
     lazy var createPostUseCase: CreatePostUseCaseProtocol = {
-        if let simulation { return simulation.createPostUseCase }
-        return CreatePostUseCase(repository: feedRepository)
+        CreatePostUseCase(repository: feedRepository)
+    }()
+
+    lazy var addCommentUseCase: AddCommentUseCaseProtocol = {
+        AddCommentUseCase(repository: feedRepository)
     }()
 
     private lazy var friendsManagementRepository: FriendsManagementRepositoryProtocol = {
@@ -289,25 +305,6 @@ final class DependencyContainer: ObservableObject {
         RevokeGroupQrUseCase(repository: groupsRepository)
     }()
 
-    // MARK: - Media
-
-    private lazy var mediaRepository: MediaRepositoryProtocol = {
-        MediaRepository(apiClient: apiClient)
-    }()
-
-    lazy var uploadMediaUseCase: UploadMediaUseCaseProtocol = {
-        UploadMediaUseCase(repository: mediaRepository)
-    }()
-
-  // Avatar uploads always hit media-service (URLs are persisted via auth/social).
-    lazy var uploadUserAvatarUseCase: UploadUserAvatarUseCaseProtocol = {
-        UploadUserAvatarUseCase(repository: mediaRepository)
-    }()
-
-    lazy var uploadGroupAvatarUseCase: UploadGroupAvatarUseCaseProtocol = {
-        UploadGroupAvatarUseCase(repository: mediaRepository)
-    }()
-
     // MARK: - Expense
 
     private lazy var expenseRepository: ExpenseRepositoryProtocol = {
@@ -315,18 +312,15 @@ final class DependencyContainer: ObservableObject {
     }()
 
     lazy var fetchExpensesUseCase: FetchExpensesUseCaseProtocol = {
-        if let simulation { return simulation.fetchExpensesUseCase }
-        return FetchExpensesUseCase(repository: expenseRepository)
+        FetchExpensesUseCase(repository: expenseRepository)
     }()
 
     lazy var createExpenseUseCase: CreateExpenseUseCaseProtocol = {
-        if let simulation { return simulation.createExpenseUseCase }
-        return CreateExpenseUseCase(repository: expenseRepository)
+        CreateExpenseUseCase(repository: expenseRepository)
     }()
 
     lazy var fetchDebtSummaryUseCase: FetchDebtSummaryUseCaseProtocol = {
-        if let simulation { return simulation.fetchDebtSummaryUseCase }
-        return FetchDebtSummaryUseCase(repository: expenseRepository)
+        FetchDebtSummaryUseCase(repository: expenseRepository)
     }()
 
     // MARK: - Notification
@@ -336,13 +330,11 @@ final class DependencyContainer: ObservableObject {
     }()
 
     lazy var fetchNotificationsUseCase: FetchNotificationsUseCaseProtocol = {
-        if let simulation { return simulation.fetchNotificationsUseCase }
-        return FetchNotificationsUseCase(repository: notificationRepository)
+        FetchNotificationsUseCase(repository: notificationRepository)
     }()
 
     lazy var markNotificationReadUseCase: MarkNotificationReadUseCaseProtocol = {
-        if let simulation { return simulation.markNotificationReadUseCase }
-        return MarkNotificationReadUseCase(repository: notificationRepository)
+        MarkNotificationReadUseCase(repository: notificationRepository)
     }()
 
     // MARK: - Init
@@ -380,13 +372,5 @@ final class DependencyContainer: ObservableObject {
             tokenProvider: tokenProvider,
             refreshTokenUseCase: refreshTokenUseCase
         )
-
-        if AppConstants.Dev.useMockData {
-            let simulation = SimulationContainer(loggerModule: "SplickApp")
-            self.simulation = simulation
-            Task { await simulation.seedTestData() }
-        } else {
-            self.simulation = nil
-        }
     }
 }

@@ -1,16 +1,6 @@
 import Foundation
 
 public enum AppConstants {
-    /// When true, feed/expense/notification use in-memory fakes.
-    /// Auth, user search, and media uploads always use the live API.
-    public enum Dev {
-        #if DEBUG
-        public static let useMockData = true
-        #else
-        public static let useMockData = false
-        #endif
-    }
-
     public enum API {
         /// Gateway root (no version). Endpoints append `/v1/{domain}/...` — see `docs/API_ROUTING.md`.
         #if DEBUG
