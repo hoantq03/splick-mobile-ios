@@ -843,9 +843,11 @@ A development-time package that provides:
 - `StateLogger` — Console-based state transition logging
 - `FakeXxxRepository` — In-memory implementations for each feature
 
-### DEBUG: `useMockData` vs live APIs
+### Live APIs (app) vs SimulationKit (CLI)
 
-`AppConstants.Dev.useMockData` (DEBUG default `true`) enables fakes for feed, expense, and notifications only. **Auth, user search, and avatar/group uploads always use the real backend** (`MediaRepository` in `DependencyContainer`). Changing profile avatar requires `runAuth` + `runMedia` and a real `SHARED_MEDIA_PUBLIC_BASE_URL` on the backend — see [docs/USECASE-change-user-avatar.md](docs/USECASE-change-user-avatar.md).
+The main app always uses live HTTP APIs via `DependencyContainer` (feed, expense, notification, auth, media). **SimulationKit** fakes remain for the Sandbox CLI and SwiftUI previews only.
+
+Changing profile avatar requires `runAuth` + `runMedia` and a real `SHARED_MEDIA_PUBLIC_BASE_URL` on the backend — see [docs/USECASE-change-user-avatar.md](docs/USECASE-change-user-avatar.md).
 
 ### Sandbox CLI
 

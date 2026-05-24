@@ -30,9 +30,9 @@ ProfileSettingsView → Edit profile
 - Export JPEG, tối đa **5 MB** (`AppConstants.Media.maxAvatarSizeBytes`).
 - Không nhập URL thủ công trên UI production.
 
-## `useMockData` (DEBUG)
+## Live APIs
 
-`AppConstants.Dev.useMockData = true` chỉ bật fake cho **feed / expense / notification**. **Auth, search, và upload avatar** luôn dùng API thật (`MediaRepository` trong `DependencyContainer`, không qua `FakeMediaRepository`).
+The main app always uses live HTTP for feed, expense, notification, auth, and media (`DependencyContainer`).
 
 Nếu đã từng lưu avatar với URL domain giả trên backend cũ → **đổi avatar lại** sau khi `SHARED_MEDIA_PUBLIC_BASE_URL` trỏ R2 public thật.
 
