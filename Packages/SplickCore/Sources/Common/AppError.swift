@@ -21,7 +21,7 @@ public enum AppError: Error, Equatable {
 public enum NetworkError: Error, Equatable {
     case noConnection
     case timeout
-    case serverError(statusCode: Int)
+    case serverError(statusCode: Int, traceId: String? = nil)
     case decodingFailed
     case invalidURL
     case unauthorized
@@ -29,7 +29,16 @@ public enum NetworkError: Error, Equatable {
     case notFound
     case rateLimited
     case serverUnreachable
-    case unknown(String)
+    case unknown(String, traceId: String? = nil)
+
+    public var supportTraceId: String? {
+        switch self {
+        case .serverError(_, let traceId), .unknown(_, let traceId):
+            return traceId
+        default:
+            return nil
+        }
+    }
 
     /// True for errors where retrying after fixing network may succeed (not credential-related).
     public var isConnectivityIssue: Bool {
@@ -51,15 +60,33 @@ public enum NetworkError: Error, Equatable {
             return "Cannot reach the server. Please try again later."
             #endif
         case .timeout: return "Request timed out. Please try again."
-        case .serverError: return "Something went wrong. Please try again later."
+        case .serverError:
+            return "Something went wrong. Please try again later."
         case .decodingFailed: return "Failed to process server response."
         case .invalidURL: return "Invalid request."
         case .unauthorized: return "Session expired. Please log in again."
         case .forbidden: return "You don't have permission to perform this action."
         case .notFound: return "The requested resource was not found."
         case .rateLimited: return "Too many requests. Please wait a moment."
-        case .unknown(let message):
+        case .unknown(let message, _):
             return message.isEmpty ? "An unexpected error occurred." : message
+        }
+    }
+}
+
+extension NetworkError: LocalizedError {
+    public var errorDescription: String? {
+        SplickErrorFormatting.appendSupportReference(to: userMessage, traceId: supportTraceId)
+    }
+}
+
+extension AppError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .network(let error):
+            return error.errorDescription
+        default:
+            return userMessage
         }
     }
 }

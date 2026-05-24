@@ -126,50 +126,81 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
         switch statusCode {
         case 200...299:
             return
-        case 400:
-            throw mapAPIError(statusCode: statusCode, data: data, fallback: .unknown("Bad request"))
-        case 401:
-            // Parse body: INVALID_OTP vs UNAUTHORIZED vs INVALID_TOKEN (not a blind unauthorized).
-            throw mapAPIError(statusCode: statusCode, data: data, fallback: .unauthorized)
-        case 403:
-            throw mapAPIError(statusCode: statusCode, data: data, fallback: .forbidden)
-        case 404:
-            throw mapAPIError(statusCode: statusCode, data: data, fallback: .notFound)
-        case 409:
-            throw mapAPIError(statusCode: statusCode, data: data, fallback: .unknown("Conflict"))
-        case 423:
-            throw mapAPIError(statusCode: statusCode, data: data, fallback: .forbidden)
-        case 429:
-            throw mapAPIError(statusCode: statusCode, data: data, fallback: .rateLimited)
-        case 503:
-            throw mapAPIError(
-                statusCode: statusCode,
-                data: data,
-                fallback: .serverError(statusCode: statusCode)
-            )
-        case 500...599:
-            throw mapAPIError(
-                statusCode: statusCode,
-                data: data,
-                fallback: .serverError(statusCode: statusCode)
-            )
         default:
-            throw mapAPIError(
-                statusCode: statusCode,
-                data: data,
-                fallback: .unknown("HTTP \(statusCode)")
-            )
+            let traceId = resolveTraceId(from: httpResponse, data: data)
+            logApiFailure(statusCode: statusCode, traceId: traceId)
+            switch statusCode {
+            case 400:
+                throw mapAPIError(statusCode: statusCode, data: data, traceId: traceId, fallback: .unknown("Bad request"))
+            case 401:
+                throw mapAPIError(statusCode: statusCode, data: data, traceId: traceId, fallback: .unauthorized)
+            case 403:
+                throw mapAPIError(statusCode: statusCode, data: data, traceId: traceId, fallback: .forbidden)
+            case 404:
+                throw mapAPIError(statusCode: statusCode, data: data, traceId: traceId, fallback: .notFound)
+            case 409:
+                throw mapAPIError(statusCode: statusCode, data: data, traceId: traceId, fallback: .unknown("Conflict"))
+            case 423:
+                throw mapAPIError(statusCode: statusCode, data: data, traceId: traceId, fallback: .forbidden)
+            case 429:
+                throw mapAPIError(statusCode: statusCode, data: data, traceId: traceId, fallback: .rateLimited)
+            case 503:
+                throw mapAPIError(
+                    statusCode: statusCode,
+                    data: data,
+                    traceId: traceId,
+                    fallback: .serverError(statusCode: statusCode, traceId: traceId)
+                )
+            case 500...599:
+                throw mapAPIError(
+                    statusCode: statusCode,
+                    data: data,
+                    traceId: traceId,
+                    fallback: .serverError(statusCode: statusCode, traceId: traceId)
+                )
+            default:
+                throw mapAPIError(
+                    statusCode: statusCode,
+                    data: data,
+                    traceId: traceId,
+                    fallback: .unknown("HTTP \(statusCode)")
+                )
+            }
+        }
+    }
+
+    private func resolveTraceId(from response: HTTPURLResponse, data: Data) -> String? {
+        if let headerValue = response.value(forHTTPHeaderField: APIRequestCorrelation.headerName),
+           !headerValue.isEmpty {
+            return headerValue
+        }
+        if let body = try? decoder.decode(APIErrorBody.self, from: data),
+           let traceId = body.traceId,
+           !traceId.isEmpty {
+            return traceId
+        }
+        return nil
+    }
+
+    private func logApiFailure(statusCode: Int, traceId: String?) {
+        if let traceId, !traceId.isEmpty {
+            Log.error("API failed status=\(statusCode) traceId=\(traceId)", category: .network)
+        } else {
+            Log.error("API failed status=\(statusCode)", category: .network)
         }
     }
 
     private func mapAPIError(
         statusCode: Int,
         data: Data,
+        traceId: String?,
         fallback: NetworkError
     ) -> Error {
         guard let body = try? decoder.decode(APIErrorBody.self, from: data) else {
-            return fallback
+            return applyTraceId(to: fallback, traceId: traceId)
         }
+
+        let resolvedTraceId = body.traceId ?? traceId
 
         switch body.error.uppercased() {
         case "INVALID_OTP":
@@ -211,12 +242,24 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
         case "NOT_FOUND":
             return NetworkError.notFound
         case "INTERNAL_ERROR":
-            return NetworkError.serverError(statusCode: body.status)
+            return NetworkError.serverError(statusCode: body.status, traceId: resolvedTraceId)
         default:
             if body.message.isEmpty {
-                return fallback
+                return applyTraceId(to: fallback, traceId: resolvedTraceId)
             }
-            return NetworkError.unknown(body.message)
+            return NetworkError.unknown(body.message, traceId: resolvedTraceId)
+        }
+    }
+
+    private func applyTraceId(to error: NetworkError, traceId: String?) -> NetworkError {
+        guard let traceId, !traceId.isEmpty else { return error }
+        switch error {
+        case .serverError(let statusCode, _):
+            return .serverError(statusCode: statusCode, traceId: traceId)
+        case .unknown(let message, _):
+            return .unknown(message, traceId: traceId)
+        default:
+            return error
         }
     }
 
