@@ -62,7 +62,15 @@ public extension Array where Element == PostComment {
         filter { $0.parentCommentId == nil }
     }
 
-    func replies(to parentId: UUID) -> [PostComment] {
+    func children(of parentId: UUID) -> [PostComment] {
         filter { $0.parentCommentId == parentId }
+    }
+
+    func replies(to parentId: UUID) -> [PostComment] {
+        children(of: parentId)
+    }
+
+    func totalCommentCount() -> Int {
+        count
     }
 }

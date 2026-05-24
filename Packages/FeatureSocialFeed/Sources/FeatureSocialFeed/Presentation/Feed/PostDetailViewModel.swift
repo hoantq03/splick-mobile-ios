@@ -7,7 +7,7 @@ final class PostDetailViewModel: ObservableObject {
     @Published private(set) var isLoadingPage = false
 
     let pageSize = 20
-    private var allComments: [PostComment]
+    private(set) var allComments: [PostComment]
     private var loadedTopLevelCount = 0
 
     var canLoadMore: Bool {
@@ -35,8 +35,8 @@ final class PostDetailViewModel: ObservableObject {
         isLoadingPage = false
     }
 
-    func replies(for commentId: UUID) -> [PostComment] {
-        allComments.replies(to: commentId)
+    func children(of commentId: UUID) -> [PostComment] {
+        allComments.children(of: commentId)
     }
 
     func refresh(with comments: [PostComment]) {

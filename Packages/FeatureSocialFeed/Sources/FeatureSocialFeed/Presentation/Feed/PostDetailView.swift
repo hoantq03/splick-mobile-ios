@@ -8,6 +8,8 @@ struct PostDetailView: View {
     @ObservedObject var feedViewModel: FeedViewModel
     let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
 
+    @Environment(\.tabBarScrollState) private var tabBarScrollState
+    @Environment(\.currentUserSummary) private var currentUserSummary
     @StateObject private var commentPager: PostDetailViewModel
     @State private var profileRoute: ProfileRoute?
     @State private var companionsRoute: CompanionsSheetRoute?
@@ -71,23 +73,43 @@ struct PostDetailView: View {
                     if let error = await feedViewModel.addComment(
                         to: post.id,
                         text: text,
-                        attachments: attachments,
+                        submissionAttachments: attachments,
                         parentCommentId: replyParentId
                     ) {
                         feedViewModel.alertMessage = error
                     } else {
                         replyParentId = nil
-                        if let updated = feedViewModel.posts.first(where: { $0.id == post.id }) {
-                            commentPager.refresh(with: updated.comments)
-                        }
                     }
                 }
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
             .padding(.vertical, SplickTheme.Spacing.xs)
+            .padding(.bottom, SplickTabBarMetrics.floatingClearance)
             .background(SplickTheme.Colors.background)
         }
-        .onAppear { commentPager.loadInitial() }
+        .alert(
+            "Thông báo",
+            isPresented: Binding(
+                get: { feedViewModel.alertMessage != nil },
+                set: { if !$0 { feedViewModel.alertMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { feedViewModel.alertMessage = nil }
+        } message: {
+            Text(feedViewModel.alertMessage ?? "")
+        }
+        .task { await feedViewModel.refreshPost(id: post.id) }
+        .onAppear {
+            feedViewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
+            tabBarScrollState?.hide()
+            commentPager.loadInitial()
+        }
+        .onDisappear {
+            tabBarScrollState?.show()
+        }
+        .onChange(of: livePost.comments) { comments in
+            commentPager.refresh(with: comments)
+        }
         .sheet(item: $profileRoute) { route in
             UserProfileView(user: route.user)
         }
@@ -113,13 +135,20 @@ struct PostDetailView: View {
             Text("Bình luận")
                 .font(SplickTheme.Typography.headline)
 
-            ForEach(commentPager.displayedTopLevel) { comment in
-                commentBlock(comment, isReply: false)
-
-                ForEach(commentPager.replies(for: comment.id)) { reply in
-                    commentBlock(reply, isReply: true)
-                }
+            if commentPager.displayedTopLevel.isEmpty {
+                Text("Chưa có bình luận. Hãy là người đầu tiên!")
+                    .font(.system(size: 12))
+                    .foregroundStyle(SplickTheme.Colors.textTertiary)
             }
+
+            CommentThreadView(
+                comments: commentPager.allComments,
+                roots: commentPager.displayedTopLevel,
+                onReply: { comment in
+                    replyParentId = comment.id
+                },
+                onUserTap: { profileRoute = ProfileRoute(user: $0) }
+            )
 
             if commentPager.canLoadMore {
                 Button {
@@ -136,51 +165,6 @@ struct PostDetailView: View {
                 .padding(.vertical, SplickTheme.Spacing.sm)
             }
         }
-    }
-
-    private func commentBlock(_ comment: PostComment, isReply: Bool) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            if isReply {
-                Color.clear.frame(width: 20)
-            }
-
-            Button { profileRoute = ProfileRoute(user: comment.author) } label: {
-                AvatarView(
-                    imageURL: comment.author.avatarURL,
-                    name: comment.author.displayName,
-                    size: .small
-                )
-            }
-            .buttonStyle(.plain)
-
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Button { profileRoute = ProfileRoute(user: comment.author) } label: {
-                        Text(comment.author.displayName)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(SplickTheme.Colors.textPrimary)
-                    }
-                    .buttonStyle(.plain)
-                    Spacer()
-                    Text(comment.createdAt.relativeString)
-                        .font(.system(size: 10))
-                        .foregroundStyle(SplickTheme.Colors.textTertiary)
-                }
-
-                if let text = comment.text, !text.isEmpty {
-                    Text(text)
-                        .font(.system(size: 12))
-                        .foregroundStyle(SplickTheme.Colors.textPrimary)
-                }
-
-                Button("Trả lời") {
-                    replyParentId = isReply ? comment.parentCommentId ?? comment.id : comment.id
-                }
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(SplickTheme.Colors.textTertiary)
-            }
-        }
-        .padding(.vertical, 4)
     }
 }
 
