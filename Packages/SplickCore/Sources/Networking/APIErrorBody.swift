@@ -1,6 +1,6 @@
 import Foundation
 
-enum APIErrorBody: Decodable {
+struct APIErrorBody: Decodable {
     let status: Int
     let error: String
     let message: String
