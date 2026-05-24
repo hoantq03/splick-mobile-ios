@@ -1,12 +1,19 @@
 import Foundation
 
-struct APIErrorBody: Decodable {
-    let status: Int
-    let error: String
-    let message: String
-    let traceId: String?
+public struct APIErrorBody: Decodable, Sendable {
+    public let status: Int
+    public let error: String
+    public let message: String
+    public let traceId: String?
+
+    public init(status: Int, error: String, message: String, traceId: String? = nil) {
+        self.status = status
+        self.error = error
+        self.message = message
+        self.traceId = traceId
+    }
 }
 
-enum APIRequestCorrelation {
-    static let headerName = "X-Request-Id"
+public enum APIRequestCorrelation {
+    public static let headerName = "X-Request-Id"
 }
