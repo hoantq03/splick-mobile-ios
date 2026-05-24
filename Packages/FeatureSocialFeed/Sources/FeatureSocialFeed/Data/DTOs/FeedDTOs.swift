@@ -3,9 +3,20 @@ import Foundation
 struct CommentDTO: Decodable {
     let id: UUID
     let author: AuthorDTO
-    let body: String
+    let body: String?
     let parentCommentId: UUID?
+    let attachments: [CommentAttachmentDTO]?
     let createdAt: Date
+}
+
+struct CommentAttachmentDTO: Decodable {
+    let id: UUID
+    let kind: String
+    let mediaId: UUID?
+    let url: String?
+    let fileName: String?
+    let thumbnailUrl: String?
+    let sizeBytes: Int?
 }
 
 struct PostDTO: Decodable {
@@ -59,8 +70,18 @@ struct CreateReactionRequestDTO: Encodable {
 }
 
 struct CreateCommentRequestDTO: Encodable {
-    let body: String
+    let body: String?
     let parentCommentId: UUID?
+    let attachments: [CreateCommentAttachmentRequestDTO]?
+}
+
+struct CreateCommentAttachmentRequestDTO: Encodable {
+    let kind: String
+    let mediaId: UUID?
+    let url: String
+    let fileName: String?
+    let thumbnailUrl: String?
+    let sizeBytes: Int?
 }
 
 struct CreatePostRequestDTO: Encodable {

@@ -11,6 +11,12 @@ final class MockFetchFeedUseCase: FetchFeedUseCaseProtocol, Sendable {
     }
 }
 
+final class MockFetchPostUseCase: FetchPostUseCaseProtocol, Sendable {
+    func execute(postId: UUID) async throws -> Post {
+        PreviewData.samplePosts.first(where: { $0.id == postId }) ?? PreviewData.samplePost
+    }
+}
+
 final class MockReactToPostUseCase: ReactToPostUseCaseProtocol, Sendable {
     func execute(postId: UUID, emoji: String) async throws -> Reaction {
         Reaction(id: UUID(), emoji: emoji, userId: PreviewData.currentUser.id)
@@ -22,7 +28,12 @@ final class MockDeletePostUseCase: DeletePostUseCaseProtocol, Sendable {
 }
 
 final class MockAddCommentUseCase: AddCommentUseCaseProtocol, Sendable {
-    func execute(postId: UUID, body: String, parentCommentId: UUID?) async throws {}
+    func execute(
+        postId: UUID,
+        body: String?,
+        parentCommentId: UUID?,
+        submissionAttachments: [CommentSubmissionAttachment]
+    ) async throws {}
 }
 
 #Preview("Feed") {
@@ -30,6 +41,7 @@ final class MockAddCommentUseCase: AddCommentUseCaseProtocol, Sendable {
         FeedView(
             viewModel: FeedViewModel(
                 fetchFeedUseCase: MockFetchFeedUseCase(),
+                fetchPostUseCase: MockFetchPostUseCase(),
                 reactToPostUseCase: MockReactToPostUseCase(),
                 deletePostUseCase: MockDeletePostUseCase(),
                 addCommentUseCase: MockAddCommentUseCase(),

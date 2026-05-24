@@ -70,8 +70,39 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
         return FeedMapper.toPost(dto)
     }
 
-    public func addComment(postId: UUID, body: String, parentCommentId: UUID?) async throws {
-        let request = CreateCommentRequestDTO(body: body, parentCommentId: parentCommentId)
+    public func addComment(
+        postId: UUID,
+        body: String?,
+        parentCommentId: UUID?,
+        submissionAttachments: [CommentSubmissionAttachment] = []
+    ) async throws {
+        var attachmentDTOs: [CreateCommentAttachmentRequestDTO] = []
+        for submission in submissionAttachments {
+            let upload = try await mediaRepository.uploadImage(
+                data: submission.data,
+                mimeType: submission.mimeType,
+                purpose: .commentAttachment,
+                groupId: nil
+            )
+            attachmentDTOs.append(
+                CreateCommentAttachmentRequestDTO(
+                    kind: submission.kind.rawValue,
+                    mediaId: upload.id,
+                    url: upload.url.absoluteString,
+                    fileName: submission.fileName,
+                    thumbnailUrl: upload.thumbnailURL?.absoluteString,
+                    sizeBytes: upload.sizeBytes
+                )
+            )
+        }
+
+        let trimmedBody = body?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedBody = (trimmedBody?.isEmpty ?? true) ? nil : trimmedBody
+        let request = CreateCommentRequestDTO(
+            body: normalizedBody,
+            parentCommentId: parentCommentId,
+            attachments: attachmentDTOs.isEmpty ? nil : attachmentDTOs
+        )
         try await apiClient.request(FeedEndpoint.addComment(postId: postId, request))
     }
 

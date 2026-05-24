@@ -10,20 +10,22 @@ public final class FeedViewModel: ObservableObject {
     @Published var isLoadingMore = false
     @Published private(set) var isRefreshing = false
     @Published var alertMessage: String?
-    let currentUserId: UUID?
+    private(set) var currentUserId: UUID?
     var currentUser: UserSummary? { currentUserSummary }
 
     private let fetchFeedUseCase: FetchFeedUseCaseProtocol
+    private let fetchPostUseCase: FetchPostUseCaseProtocol
     private let reactToPostUseCase: ReactToPostUseCaseProtocol
     private let deletePostUseCase: DeletePostUseCaseProtocol
     private let addCommentUseCase: AddCommentUseCaseProtocol
     private var currentPage = 0
     private var canLoadMore = true
 
-    private let currentUserSummary: UserSummary?
+    private var currentUserSummary: UserSummary?
 
     public init(
         fetchFeedUseCase: FetchFeedUseCaseProtocol,
+        fetchPostUseCase: FetchPostUseCaseProtocol,
         reactToPostUseCase: ReactToPostUseCaseProtocol,
         deletePostUseCase: DeletePostUseCaseProtocol,
         addCommentUseCase: AddCommentUseCaseProtocol,
@@ -31,11 +33,17 @@ public final class FeedViewModel: ObservableObject {
         currentUser: UserSummary? = nil
     ) {
         self.fetchFeedUseCase = fetchFeedUseCase
+        self.fetchPostUseCase = fetchPostUseCase
         self.reactToPostUseCase = reactToPostUseCase
         self.deletePostUseCase = deletePostUseCase
         self.addCommentUseCase = addCommentUseCase
         self.currentUserId = currentUserId
         self.currentUserSummary = currentUser
+    }
+
+    func updateSession(user: UserSummary?, userId: UUID?) {
+        currentUserSummary = user
+        currentUserId = userId ?? user?.id
     }
 
     func loadFeed(isPullToRefresh: Bool = false) async {
@@ -86,6 +94,28 @@ public final class FeedViewModel: ObservableObject {
         isLoadingMore = false
     }
 
+    func refreshPost(id: UUID, preservingLocalComment localComment: PostComment? = nil) async {
+        do {
+            var updated = try await fetchPostUseCase.execute(postId: id)
+            if let localComment,
+               !updated.comments.contains(where: { matchesComment($0, localComment) }) {
+                updated = updated.updating(comments: updated.comments + [localComment])
+            }
+            if let index = posts.firstIndex(where: { $0.id == id }) {
+                posts[index] = updated
+                state = .loaded(posts)
+            }
+        } catch {
+            Log.error(error, category: .feed)
+        }
+    }
+
+    private func matchesComment(_ lhs: PostComment, _ rhs: PostComment) -> Bool {
+        lhs.author.id == rhs.author.id
+            && lhs.text == rhs.text
+            && lhs.parentCommentId == rhs.parentCommentId
+    }
+
     @discardableResult
     func react(to postId: UUID, emoji: String) async -> String? {
         guard let userId = currentUserId else { return nil }
@@ -118,24 +148,22 @@ public final class FeedViewModel: ObservableObject {
     func addComment(
         to postId: UUID,
         text: String,
-        attachments: [CommentAttachment],
+        submissionAttachments: [CommentSubmissionAttachment],
         parentCommentId: UUID? = nil
     ) async -> String? {
-        guard let author = currentUserSummary else { return nil }
-
-        if !attachments.isEmpty {
-            return "Đính kèm bình luận chưa được hỗ trợ trên API."
+        guard let author = currentUserSummary else {
+            return "Không xác định được tài khoản. Hãy thử kéo refresh tab Feed."
         }
 
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            return "Nội dung bình luận không được để trống."
+        if trimmed.isEmpty && submissionAttachments.isEmpty {
+            return "Nội dung bình luận hoặc đính kèm không được để trống."
         }
 
         let comment = PostComment(
             author: author,
-            text: trimmed,
-            attachments: attachments,
+            text: trimmed.isEmpty ? nil : trimmed,
+            attachments: [],
             parentCommentId: parentCommentId
         )
 
@@ -150,9 +178,11 @@ public final class FeedViewModel: ObservableObject {
         do {
             try await addCommentUseCase.execute(
                 postId: postId,
-                body: trimmed,
-                parentCommentId: parentCommentId
+                body: trimmed.isEmpty ? nil : trimmed,
+                parentCommentId: parentCommentId,
+                submissionAttachments: submissionAttachments
             )
+            await refreshPost(id: postId, preservingLocalComment: comment)
         } catch {
             posts[index] = post
             state = .loaded(posts)
