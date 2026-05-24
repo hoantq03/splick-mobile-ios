@@ -269,7 +269,7 @@ public final class RegisterViewModel: ObservableObject {
             return
         }
         if let networkError = error as? NetworkError {
-            if case .unknown(let message) = networkError {
+            if case .unknown(let message, _) = networkError {
                 applyValidationMessage(message)
                 return
             }
