@@ -145,6 +145,10 @@ final class DependencyContainer: ObservableObject {
         FetchFeedUseCase(repository: feedRepository)
     }()
 
+    lazy var fetchPostUseCase: FetchPostUseCaseProtocol = {
+        FetchPostUseCase(repository: feedRepository)
+    }()
+
     lazy var reactToPostUseCase: ReactToPostUseCaseProtocol = {
         ReactToPostUseCase(repository: feedRepository)
     }()

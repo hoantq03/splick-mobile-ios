@@ -1,8 +1,9 @@
 import SwiftUI
+import DesignSystem
 
 enum TabBarLayout {
     /// Bottom space reserved so scroll content isn't hidden under the floating tab bar.
-    static let floatingClearance: CGFloat = 88
+    static let floatingClearance: CGFloat = SplickTabBarMetrics.floatingClearance
     static let hiddenClearance: CGFloat = 16
     static let tabBarSlideDistance: CGFloat = 120
 }

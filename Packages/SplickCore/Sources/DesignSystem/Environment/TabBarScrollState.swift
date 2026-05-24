@@ -1,5 +1,10 @@
 import SwiftUI
 
+public enum SplickTabBarMetrics {
+    /// Space reserved above the floating tab bar so bottom controls stay tappable.
+    public static let floatingClearance: CGFloat = 88
+}
+
 @MainActor
 public final class TabBarScrollState: ObservableObject {
     @Published public private(set) var isVisible = true

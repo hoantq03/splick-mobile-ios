@@ -253,14 +253,39 @@ struct PostCardView: View {
     // MARK: - Reactions
 
     private var reactionBarRow: some View {
-        InlineReactionBar(
-            onReact: onReact,
-            onDragRelease: { emoji, sourceGlobal in
-                scheduleFlyingEmoji(emoji: emoji, sourceGlobal: sourceGlobal)
-            },
-            onCustomEmoji: { activeSheet = .emojiPicker }
-        )
+        HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
+            InlineReactionBar(
+                onReact: onReact,
+                onDragRelease: { emoji, sourceGlobal in
+                    scheduleFlyingEmoji(emoji: emoji, sourceGlobal: sourceGlobal)
+                },
+                onCustomEmoji: { activeSheet = .emojiPicker }
+            )
+
+            Spacer(minLength: 0)
+
+            if showsCommentPreview {
+                commentsEntryButton
+            }
+        }
         .padding(.top, SplickTheme.Spacing.xxs)
+    }
+
+    private var commentsEntryButton: some View {
+        NavigationLink(value: post.id) {
+            HStack(spacing: 4) {
+                Image(systemName: "bubble.right")
+                    .font(.system(size: 14))
+                if post.topLevelCommentCount > 0 {
+                    Text("\(post.topLevelCommentCount)")
+                        .font(.system(size: 12, weight: .medium))
+                }
+            }
+            .foregroundStyle(SplickTheme.Colors.textSecondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+        }
+        .buttonStyle(.plain)
     }
 
     private func scheduleFlyingEmoji(emoji: String, sourceGlobal: CGRect) {
@@ -339,13 +364,17 @@ struct PostCardView: View {
 
     @ViewBuilder
     private var commentPreviewRow: some View {
-        if post.topLevelCommentCount > 0 {
-            NavigationLink(value: post.id) {
-                Text("Xem tất cả \(post.topLevelCommentCount) bình luận")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+        NavigationLink(value: post.id) {
+            Group {
+                if post.topLevelCommentCount > 0 {
+                    Text("Xem tất cả \(post.topLevelCommentCount) bình luận")
+                } else {
+                    Text("Viết bình luận...")
+                }
             }
-            .buttonStyle(.plain)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(SplickTheme.Colors.textSecondary)
         }
+        .buttonStyle(.plain)
     }
 }

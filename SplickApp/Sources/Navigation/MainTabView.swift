@@ -31,6 +31,7 @@ struct MainTabView: View {
                 FeedView(
                     viewModel: FeedViewModel(
                         fetchFeedUseCase: container.fetchFeedUseCase,
+                        fetchPostUseCase: container.fetchPostUseCase,
                         reactToPostUseCase: container.reactToPostUseCase,
                         deletePostUseCase: container.deletePostUseCase,
                         addCommentUseCase: container.addCommentUseCase,

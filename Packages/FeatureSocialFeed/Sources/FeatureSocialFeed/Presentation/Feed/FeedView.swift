@@ -11,6 +11,7 @@ private struct ProfileRoute: Identifiable {
 public struct FeedView: View {
     @StateObject private var viewModel: FeedViewModel
     @Environment(\.openPostCaptureFlow) private var openPostCaptureFlow
+    @Environment(\.currentUserSummary) private var currentUserSummary
     private let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
     @State private var profileRoute: ProfileRoute?
     @State private var companionsRoute: CompanionsSheetRoute?
@@ -75,7 +76,11 @@ public struct FeedView: View {
             }
         }
         .onFirstAppear {
+            viewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
             Task { await viewModel.loadFeed() }
+        }
+        .onChange(of: currentUserSummary?.id) { _ in
+            viewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
         }
         .onReceive(
             NotificationCenter.default.publisher(for: FeedScrollLock.notification)
