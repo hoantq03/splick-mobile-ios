@@ -19,7 +19,18 @@ enum FeedMapper {
             feedKind: PostFeedKind(rawValue: dto.feedKind ?? PostFeedKind.checkIn.rawValue) ?? .checkIn,
             checkInPlace: dto.checkInPlace,
             billSplit: dto.billSplit.map(toBillSplit),
-            viewCount: dto.viewCount ?? 0
+            viewCount: dto.viewCount ?? 0,
+            comments: dto.comments?.map(toComment) ?? []
+        )
+    }
+
+    static func toComment(_ dto: CommentDTO) -> PostComment {
+        PostComment(
+            id: dto.id,
+            author: toUserSummary(dto.author),
+            text: dto.body,
+            parentCommentId: dto.parentCommentId,
+            createdAt: dto.createdAt
         )
     }
 
@@ -43,13 +54,13 @@ enum FeedMapper {
 
     static func toBillSplit(_ dto: PostBillSplitDTO) -> PostBillSplit {
         PostBillSplit(
-            totalAmount: dto.totalAmount,
+            totalAmount: Decimal(string: dto.totalAmount) ?? 0,
             currency: dto.currency,
             splits: dto.splits.map { line in
                 PostBillSplitLine(
                     id: line.id ?? UUID(),
                     user: toUserSummary(line.user),
-                    amount: line.amount
+                    amount: Decimal(string: line.amount) ?? 0
                 )
             }
         )

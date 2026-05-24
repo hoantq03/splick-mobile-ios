@@ -1,5 +1,13 @@
 import Foundation
 
+struct CommentDTO: Decodable {
+    let id: UUID
+    let author: AuthorDTO
+    let body: String
+    let parentCommentId: UUID?
+    let createdAt: Date
+}
+
 struct PostDTO: Decodable {
     let id: UUID
     let author: AuthorDTO
@@ -16,11 +24,12 @@ struct PostDTO: Decodable {
     let feedKind: String?
     let checkInPlace: String?
     let billSplit: PostBillSplitDTO?
+    let comments: [CommentDTO]?
     let viewCount: Int?
 }
 
 struct PostBillSplitDTO: Decodable {
-    let totalAmount: Decimal
+    let totalAmount: String
     let currency: String
     let splits: [PostBillSplitLineDTO]
 }
@@ -28,7 +37,7 @@ struct PostBillSplitDTO: Decodable {
 struct PostBillSplitLineDTO: Decodable {
     let id: UUID?
     let user: AuthorDTO
-    let amount: Decimal
+    let amount: String
 }
 
 struct AuthorDTO: Decodable {
