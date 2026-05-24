@@ -269,6 +269,12 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
         return post
     }
 
+    public func addComment(postId: UUID, body: String, parentCommentId: UUID?) async throws {
+        logger.log("Add comment to post \(postId): \(body)")
+        try await Task.sleep(for: .milliseconds(200))
+        logger.success("Comment added")
+    }
+
     public func deletePost(id: UUID) async throws {
         logger.log("Delete post: \(id)")
         try await Task.sleep(for: .milliseconds(200))

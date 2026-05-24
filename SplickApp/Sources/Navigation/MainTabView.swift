@@ -33,6 +33,7 @@ struct MainTabView: View {
                         fetchFeedUseCase: container.fetchFeedUseCase,
                         reactToPostUseCase: container.reactToPostUseCase,
                         deletePostUseCase: container.deletePostUseCase,
+                        addCommentUseCase: container.addCommentUseCase,
                         currentUserId: appState.currentUser?.id,
                         currentUser: currentUserSummary
                     ),

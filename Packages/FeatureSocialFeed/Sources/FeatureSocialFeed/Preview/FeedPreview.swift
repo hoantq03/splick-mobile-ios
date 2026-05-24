@@ -21,6 +21,10 @@ final class MockDeletePostUseCase: DeletePostUseCaseProtocol, Sendable {
     func execute(postId: UUID) async throws {}
 }
 
+final class MockAddCommentUseCase: AddCommentUseCaseProtocol, Sendable {
+    func execute(postId: UUID, body: String, parentCommentId: UUID?) async throws {}
+}
+
 #Preview("Feed") {
     NavigationStack {
         FeedView(
@@ -28,6 +32,7 @@ final class MockDeletePostUseCase: DeletePostUseCaseProtocol, Sendable {
                 fetchFeedUseCase: MockFetchFeedUseCase(),
                 reactToPostUseCase: MockReactToPostUseCase(),
                 deletePostUseCase: MockDeletePostUseCase(),
+                addCommentUseCase: MockAddCommentUseCase(),
                 currentUserId: PreviewData.currentUser.id,
                 currentUser: UserSummary(
                     id: PreviewData.currentUser.id,

@@ -174,7 +174,8 @@ public final class CreatePostComposeViewModel: ObservableObject {
             companionIds: selectedCompanions.map(\.id),
             checkInPlace: location.nilIfBlank,
             feedKind: enableBillSplit ? .shareBill : .checkIn,
-            billSplit: enableBillSplit ? buildBillSplit() : nil
+            billSplit: enableBillSplit ? buildBillSplit() : nil,
+            billSplitType: enableBillSplit ? splitMode.apiSplitType : nil
         )
 
         submitState = .loading
@@ -227,6 +228,16 @@ public final class CreatePostComposeViewModel: ObservableObject {
         }
 
         return PostBillSplit(totalAmount: total, currency: "VND", splits: splits)
+    }
+}
+
+private extension ComposeBillSplitMode {
+    var apiSplitType: String {
+        switch self {
+        case .equal: return "EQUAL"
+        case .percentage: return "PERCENTAGE"
+        case .exact: return "EXACT"
+        }
     }
 }
 

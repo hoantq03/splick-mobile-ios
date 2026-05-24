@@ -49,7 +49,30 @@ struct CreateReactionRequestDTO: Encodable {
     let emoji: String
 }
 
+struct CreateCommentRequestDTO: Encodable {
+    let body: String
+    let parentCommentId: UUID?
+}
+
 struct CreatePostRequestDTO: Encodable {
     let caption: String?
     let groupId: UUID?
+    let feedKind: String
+    let checkInPlace: String?
+    let imageUrl: String
+    let thumbnailUrl: String?
+    let videoUrl: String?
+    let videoDurationSeconds: Int?
+    let mediaType: String
+    let companionIds: [UUID]
+    let mediaId: UUID?
+    let billSplit: CreatePostBillSplitRequestDTO?
+}
+
+struct CreatePostBillSplitRequestDTO: Encodable {
+    let totalAmount: String
+    let currency: String
+    let splitType: String
+    let participants: [UUID]
+    let customAmounts: [String: String]?
 }

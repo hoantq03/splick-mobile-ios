@@ -16,6 +16,7 @@ public final class FeedViewModel: ObservableObject {
     private let fetchFeedUseCase: FetchFeedUseCaseProtocol
     private let reactToPostUseCase: ReactToPostUseCaseProtocol
     private let deletePostUseCase: DeletePostUseCaseProtocol
+    private let addCommentUseCase: AddCommentUseCaseProtocol
     private var currentPage = 0
     private var canLoadMore = true
 
@@ -25,12 +26,14 @@ public final class FeedViewModel: ObservableObject {
         fetchFeedUseCase: FetchFeedUseCaseProtocol,
         reactToPostUseCase: ReactToPostUseCaseProtocol,
         deletePostUseCase: DeletePostUseCaseProtocol,
+        addCommentUseCase: AddCommentUseCaseProtocol,
         currentUserId: UUID? = nil,
         currentUser: UserSummary? = nil
     ) {
         self.fetchFeedUseCase = fetchFeedUseCase
         self.reactToPostUseCase = reactToPostUseCase
         self.deletePostUseCase = deletePostUseCase
+        self.addCommentUseCase = addCommentUseCase
         self.currentUserId = currentUserId
         self.currentUserSummary = currentUser
     }
@@ -120,21 +123,41 @@ public final class FeedViewModel: ObservableObject {
     ) async -> String? {
         guard let author = currentUserSummary else { return nil }
 
-        if let error = CommentAttachmentValidator.validate(attachments) {
-            return error
+        if !attachments.isEmpty {
+            return "Đính kèm bình luận chưa được hỗ trợ trên API."
+        }
+
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return "Nội dung bình luận không được để trống."
         }
 
         let comment = PostComment(
             author: author,
-            text: text.isEmpty ? nil : text,
+            text: trimmed,
             attachments: attachments,
             parentCommentId: parentCommentId
         )
 
-        if let index = posts.firstIndex(where: { $0.id == postId }) {
-            let post = posts[index]
-            posts[index] = post.updating(comments: post.comments + [comment])
+        guard let index = posts.firstIndex(where: { $0.id == postId }) else {
+            return "Không tìm thấy bài viết."
+        }
+
+        let post = posts[index]
+        posts[index] = post.updating(comments: post.comments + [comment])
+        state = .loaded(posts)
+
+        do {
+            try await addCommentUseCase.execute(
+                postId: postId,
+                body: trimmed,
+                parentCommentId: parentCommentId
+            )
+        } catch {
+            posts[index] = post
             state = .loaded(posts)
+            Log.error(error, category: .feed)
+            return error.localizedDescription
         }
         return nil
     }

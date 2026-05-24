@@ -10,6 +10,7 @@ public struct CreatePostInput: Sendable {
     public let checkInPlace: String?
     public let feedKind: PostFeedKind
     public let billSplit: PostBillSplit?
+    public let billSplitType: String?
     public let groupId: UUID?
 
     public init(
@@ -21,6 +22,7 @@ public struct CreatePostInput: Sendable {
         checkInPlace: String? = nil,
         feedKind: PostFeedKind = .checkIn,
         billSplit: PostBillSplit? = nil,
+        billSplitType: String? = nil,
         groupId: UUID? = nil
     ) {
         self.imageData = imageData
@@ -31,6 +33,7 @@ public struct CreatePostInput: Sendable {
         self.checkInPlace = checkInPlace
         self.feedKind = feedKind
         self.billSplit = billSplit
+        self.billSplitType = billSplitType
         self.groupId = groupId
     }
 }

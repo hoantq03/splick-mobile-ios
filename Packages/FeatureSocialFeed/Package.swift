@@ -12,6 +12,7 @@ let package = Package(
         .package(path: "../SplickCore"),
         .package(path: "../SplickDomain"),
         .package(path: "../FeatureFriends"),
+        .package(path: "../FeatureMedia"),
     ],
     targets: [
         .target(
@@ -23,6 +24,7 @@ let package = Package(
                 .product(name: "Common", package: "SplickCore"),
                 .product(name: "SplickDomain", package: "SplickDomain"),
                 .product(name: "FeatureFriends", package: "FeatureFriends"),
+                .product(name: "FeatureMedia", package: "FeatureMedia"),
             ],
             path: "Sources/FeatureSocialFeed"
         ),

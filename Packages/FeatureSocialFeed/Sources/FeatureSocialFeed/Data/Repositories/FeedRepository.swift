@@ -2,12 +2,18 @@ import Foundation
 import Networking
 import Common
 import SplickDomain
+import FeatureMedia
 
 public final class FeedRepository: FeedRepositoryProtocol, Sendable {
     private let apiClient: APIClientProtocol
+    private let mediaRepository: MediaRepositoryProtocol
 
-    public init(apiClient: APIClientProtocol) {
+    public init(
+        apiClient: APIClientProtocol,
+        mediaRepository: MediaRepositoryProtocol
+    ) {
         self.apiClient = apiClient
+        self.mediaRepository = mediaRepository
     }
 
     public func fetchFeed(page: Int, limit: Int) async throws -> [Post] {
@@ -36,15 +42,64 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
         guard let imageData = input.imageData else {
             throw NetworkError.unknown("Missing image data")
         }
-        let dto: PostDTO = try await apiClient.upload(
-            FeedEndpoint.feed(page: 0, limit: 0),
+
+        let upload = try await mediaRepository.uploadImage(
             data: imageData,
-            mimeType: "image/jpeg"
+            mimeType: "image/jpeg",
+            purpose: .postImage,
+            groupId: input.groupId
         )
+
+        let billSplitRequest = buildBillSplitRequest(from: input)
+        let request = CreatePostRequestDTO(
+            caption: input.caption,
+            groupId: input.groupId,
+            feedKind: input.feedKind.rawValue,
+            checkInPlace: input.checkInPlace,
+            imageUrl: upload.url.absoluteString,
+            thumbnailUrl: upload.thumbnailURL?.absoluteString,
+            videoUrl: input.videoURL?.absoluteString,
+            videoDurationSeconds: nil,
+            mediaType: input.mediaType.rawValue,
+            companionIds: input.companionIds,
+            mediaId: upload.id,
+            billSplit: billSplitRequest
+        )
+
+        let dto: PostDTO = try await apiClient.request(FeedEndpoint.createPost(request))
         return FeedMapper.toPost(dto)
+    }
+
+    public func addComment(postId: UUID, body: String, parentCommentId: UUID?) async throws {
+        let request = CreateCommentRequestDTO(body: body, parentCommentId: parentCommentId)
+        try await apiClient.request(FeedEndpoint.addComment(postId: postId, request))
     }
 
     public func deletePost(id: UUID) async throws {
         try await apiClient.request(FeedEndpoint.deletePost(id: id))
+    }
+
+    private func buildBillSplitRequest(from input: CreatePostInput) -> CreatePostBillSplitRequestDTO? {
+        guard input.feedKind == .shareBill, let billSplit = input.billSplit else {
+            return nil
+        }
+
+        let participants = billSplit.splits.map(\.user.id)
+        let splitType = (input.billSplitType ?? "EQUAL").uppercased()
+
+        var customAmounts: [String: String]?
+        if splitType == "EXACT" || splitType == "PERCENTAGE" {
+            customAmounts = Dictionary(
+                uniqueKeysWithValues: billSplit.splits.map { ($0.user.id.uuidString, "\($0.amount)") }
+            )
+        }
+
+        return CreatePostBillSplitRequestDTO(
+            totalAmount: "\(billSplit.totalAmount)",
+            currency: billSplit.currency,
+            splitType: splitType,
+            participants: participants,
+            customAmounts: customAmounts
+        )
     }
 }
