@@ -1,9 +1,10 @@
 import SwiftUI
+import SplickDomain
 
 public struct NotificationInboxView: View {
     @StateObject private var viewModel: NotificationInboxViewModel
     
-    public init(repository: NotificationRepository) {
+    public init(repository: NotificationRepositoryProtocol) {
         _viewModel = StateObject(wrappedValue: NotificationInboxViewModel(repository: repository))
     }
     
@@ -40,20 +41,20 @@ public struct NotificationInboxView: View {
 }
 
 struct NotificationRow: View {
-    let item: NotificationItem
+    let item: AppNotification
     
     var body: some View {
         HStack {
             Circle()
-                .fill(item.readAt == nil ? Color.blue : Color.clear)
+                .fill(!item.isRead ? Color.blue : Color.clear)
                 .frame(width: 8, height: 8)
             
             VStack(alignment: .leading, spacing: 4) {
-                Text(item.type)
+                Text(item.title)
                     .font(.caption)
                     .fontWeight(.bold)
                     .foregroundColor(.secondary)
-                Text(item.message)
+                Text(item.body)
                     .font(.body)
                 Text(item.createdAt, style: .time)
                     .font(.caption2)
