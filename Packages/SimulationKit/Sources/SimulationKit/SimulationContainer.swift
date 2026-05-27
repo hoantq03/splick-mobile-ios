@@ -40,6 +40,7 @@ public final class SimulationContainer: @unchecked Sendable {
 
     public let fetchNotificationsUseCase: FetchNotificationsUseCase
     public let markNotificationReadUseCase: MarkNotificationReadUseCase
+    public let markNotificationClickedUseCase: MarkNotificationClickedUseCase
 
     public let uploadMediaUseCase: UploadMediaUseCase
     public let uploadUserAvatarUseCase: UploadUserAvatarUseCase
@@ -74,6 +75,7 @@ public final class SimulationContainer: @unchecked Sendable {
 
         self.fetchNotificationsUseCase = FetchNotificationsUseCase(repository: notificationRepository)
         self.markNotificationReadUseCase = MarkNotificationReadUseCase(repository: notificationRepository)
+        self.markNotificationClickedUseCase = MarkNotificationClickedUseCase(repository: notificationRepository)
 
         self.uploadMediaUseCase = UploadMediaUseCase(repository: mediaRepository)
         self.uploadUserAvatarUseCase = UploadUserAvatarUseCase(repository: mediaRepository)

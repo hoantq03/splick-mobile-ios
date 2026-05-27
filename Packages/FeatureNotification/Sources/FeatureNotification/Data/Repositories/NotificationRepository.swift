@@ -20,6 +20,10 @@ public final class NotificationRepository: NotificationRepositoryProtocol, Senda
         try await apiClient.request(NotificationEndpoint.markRead(id: id))
     }
 
+    public func markAsClicked(id: UUID) async throws {
+        try await apiClient.request(NotificationEndpoint.markClicked(id: id))
+    }
+
     public func markAllAsRead() async throws {
         try await apiClient.request(NotificationEndpoint.markAllRead)
     }

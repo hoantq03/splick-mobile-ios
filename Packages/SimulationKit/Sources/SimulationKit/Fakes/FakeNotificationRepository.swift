@@ -68,25 +68,22 @@ public actor FakeNotificationRepository: NotificationRepositoryProtocol {
     public func markAsRead(id: UUID) async throws {
         logger.log("Mark read: \(id.uuidString.prefix(8))")
         if let index = notifications.firstIndex(where: { $0.id == id }) {
-            let n = notifications[index]
-            notifications[index] = AppNotification(
-                id: n.id, type: n.type, title: n.title,
-                body: n.body, isRead: true,
-                referenceId: n.referenceId, createdAt: n.createdAt
-            )
+            notifications[index] = notifications[index].markingAsRead()
         }
         logger.success("Notification marked as read")
     }
 
+    public func markAsClicked(id: UUID) async throws {
+        logger.log("Mark clicked: \(id.uuidString.prefix(8))")
+        if let index = notifications.firstIndex(where: { $0.id == id }) {
+            notifications[index] = notifications[index].markingAsRead()
+        }
+        logger.success("Notification marked as clicked")
+    }
+
     public func markAllAsRead() async throws {
         logger.log("Mark all as read")
-        notifications = notifications.map {
-            AppNotification(
-                id: $0.id, type: $0.type, title: $0.title,
-                body: $0.body, isRead: true,
-                referenceId: $0.referenceId, createdAt: $0.createdAt
-            )
-        }
+        notifications = notifications.map { $0.markingAsRead() }
         logger.success("All \(notifications.count) notifications marked as read")
     }
 

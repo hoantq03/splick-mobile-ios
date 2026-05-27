@@ -4,6 +4,7 @@ import Networking
 enum NotificationEndpoint: APIEndpoint {
     case list(page: Int, limit: Int)
     case markRead(id: UUID)
+    case markClicked(id: UUID)
     case markAllRead
     case unreadCount
 
@@ -11,6 +12,7 @@ enum NotificationEndpoint: APIEndpoint {
         switch self {
         case .list: return "/v1/notifications"
         case .markRead(let id): return "/v1/notifications/\(id)/read"
+        case .markClicked(let id): return "/v1/notifications/\(id)/click"
         case .markAllRead: return "/v1/notifications/read-all"
         case .unreadCount: return "/v1/notifications/unread-count"
         }
@@ -19,7 +21,7 @@ enum NotificationEndpoint: APIEndpoint {
     var method: HTTPMethod {
         switch self {
         case .list, .unreadCount: return .get
-        case .markRead, .markAllRead: return .post
+        case .markRead, .markAllRead, .markClicked: return .post
         }
     }
 

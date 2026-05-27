@@ -16,11 +16,16 @@ final class MockMarkNotificationReadUseCase: MarkNotificationReadUseCaseProtocol
     func markAllRead() async throws {}
 }
 
+final class MockMarkNotificationClickedUseCase: MarkNotificationClickedUseCaseProtocol, Sendable {
+    func execute(id: UUID) async throws {}
+}
+
 #Preview("Notifications") {
     NotificationListView(
         viewModel: NotificationListViewModel(
             fetchNotificationsUseCase: MockFetchNotificationsUseCase(),
-            markReadUseCase: MockMarkNotificationReadUseCase()
+            markReadUseCase: MockMarkNotificationReadUseCase(),
+            markClickedUseCase: MockMarkNotificationClickedUseCase()
         )
     )
 }
