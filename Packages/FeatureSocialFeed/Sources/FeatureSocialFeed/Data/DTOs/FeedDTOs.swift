@@ -37,6 +37,7 @@ struct PostDTO: Decodable {
     let billSplit: PostBillSplitDTO?
     let comments: [CommentDTO]?
     let viewCount: Int?
+    let viewers: [AuthorDTO]?
 }
 
 struct PostBillSplitDTO: Decodable {

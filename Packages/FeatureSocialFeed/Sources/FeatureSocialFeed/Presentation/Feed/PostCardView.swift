@@ -63,7 +63,6 @@ struct PostCardView: View {
 
             reactionBarRow
             reactionSummaryRow
-            viewsRow
 
             if showsCommentPreview {
                 commentPreviewRow
@@ -264,28 +263,38 @@ struct PostCardView: View {
 
             Spacer(minLength: 0)
 
-            if showsCommentPreview {
-                commentsEntryButton
+            if displayViewCount > 0 {
+                viewsEntryButton
             }
         }
         .padding(.top, SplickTheme.Spacing.xxs)
     }
 
-    private var commentsEntryButton: some View {
-        NavigationLink(value: post.id) {
+    private var viewsEntryButton: some View {
+        Button { activeSheet = .viewers } label: {
             HStack(spacing: 4) {
-                Image(systemName: "bubble.right")
+                Image(systemName: "eye.fill")
                     .font(.system(size: 14))
-                if post.topLevelCommentCount > 0 {
-                    Text("\(post.topLevelCommentCount)")
-                        .font(.system(size: 12, weight: .medium))
-                }
+                Text("\(displayViewCount)")
+                    .font(.system(size: 12, weight: .medium))
             }
             .foregroundStyle(SplickTheme.Colors.textSecondary)
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
         }
         .buttonStyle(.plain)
+    }
+
+    private var commentIconWithCount: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "bubble.right")
+                .font(.system(size: 12))
+            if post.topLevelCommentCount > 0 {
+                Text("\(post.topLevelCommentCount)")
+                    .font(.system(size: 11, weight: .medium))
+            }
+        }
+        .foregroundStyle(SplickTheme.Colors.textSecondary)
     }
 
     private func scheduleFlyingEmoji(emoji: String, sourceGlobal: CGRect) {
@@ -347,33 +356,23 @@ struct PostCardView: View {
     }
 
     @ViewBuilder
-    private var viewsRow: some View {
-        if displayViewCount > 0 {
-            Button { activeSheet = .viewers } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "eye.fill")
-                        .font(.system(size: 11))
-                    Text("\(displayViewCount) lượt xem")
-                        .font(.system(size: 11))
-                }
-                .foregroundStyle(SplickTheme.Colors.textTertiary)
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    @ViewBuilder
     private var commentPreviewRow: some View {
         NavigationLink(value: post.id) {
-            Group {
-                if post.topLevelCommentCount > 0 {
-                    Text("Xem tất cả \(post.topLevelCommentCount) bình luận")
-                } else {
-                    Text("Viết bình luận...")
+            HStack(spacing: 6) {
+                commentIconWithCount
+
+                Group {
+                    if post.topLevelCommentCount > 0 {
+                        Text("Xem tất cả \(post.topLevelCommentCount) bình luận")
+                    } else {
+                        Text("Viết bình luận...")
+                    }
                 }
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+
+                Spacer(minLength: 0)
             }
-            .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(SplickTheme.Colors.textSecondary)
         }
         .buttonStyle(.plain)
     }

@@ -14,6 +14,7 @@ enum FeedMapper {
         let mediaType = dto.mediaType.flatMap { PostMediaType(rawValue: $0) } ?? .image
         let billSplit = dto.billSplit.map(toBillSplit)
         let viewCount = dto.viewCount ?? 0
+        let viewers = dto.viewers?.map(toUserSummary) ?? []
 
         return Post(
             id: dto.id,
@@ -32,7 +33,8 @@ enum FeedMapper {
             feedKind: feedKind,
             checkInPlace: dto.checkInPlace,
             billSplit: billSplit,
-            viewCount: viewCount
+            viewCount: viewCount,
+            viewers: viewers
         )
     }
 

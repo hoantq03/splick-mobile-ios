@@ -107,7 +107,8 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
     public func updating(
         reactions: [Reaction]? = nil,
         comments: [PostComment]? = nil,
-        viewCount: Int? = nil
+        viewCount: Int? = nil,
+        viewers: [UserSummary]? = nil
     ) -> Post {
         Post(
             id: id,
@@ -127,7 +128,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
             checkInPlace: checkInPlace,
             billSplit: billSplit,
             viewCount: viewCount ?? self.viewCount,
-            viewers: viewers
+            viewers: viewers ?? self.viewers
         )
     }
 
