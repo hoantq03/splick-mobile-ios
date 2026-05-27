@@ -10,14 +10,17 @@ public final class NotificationListViewModel: ObservableObject {
 
     private let fetchNotificationsUseCase: FetchNotificationsUseCaseProtocol
     private let markReadUseCase: MarkNotificationReadUseCaseProtocol
+    private let markClickedUseCase: MarkNotificationClickedUseCaseProtocol
     private var currentPage = 0
 
     public init(
         fetchNotificationsUseCase: FetchNotificationsUseCaseProtocol,
-        markReadUseCase: MarkNotificationReadUseCaseProtocol
+        markReadUseCase: MarkNotificationReadUseCaseProtocol,
+        markClickedUseCase: MarkNotificationClickedUseCaseProtocol
     ) {
         self.fetchNotificationsUseCase = fetchNotificationsUseCase
         self.markReadUseCase = markReadUseCase
+        self.markClickedUseCase = markClickedUseCase
     }
 
     func load() async {
@@ -34,37 +37,26 @@ public final class NotificationListViewModel: ObservableObject {
         }
     }
 
-    func markAsRead(_ notification: AppNotification) async {
-        guard !notification.isRead else { return }
+    func handleTap(_ notification: AppNotification) async -> UUID? {
+        let postId = notification.postNavigationId
 
         do {
-            try await markReadUseCase.execute(id: notification.id)
-            if let index = notifications.firstIndex(where: { $0.id == notification.id }) {
-                notifications[index] = AppNotification(
-                    id: notification.id,
-                    type: notification.type,
-                    title: notification.title,
-                    body: notification.body,
-                    isRead: true,
-                    referenceId: notification.referenceId,
-                    createdAt: notification.createdAt
-                )
-            }
+            try await markClickedUseCase.execute(id: notification.id)
+            markLocalAsRead(notification)
         } catch {
             Log.error(error, category: .notification)
+            if !notification.isRead {
+                await markAsReadFallback(notification)
+            }
         }
+
+        return postId
     }
 
     func markAllAsRead() async {
         do {
             try await markReadUseCase.markAllRead()
-            notifications = notifications.map {
-                AppNotification(
-                    id: $0.id, type: $0.type, title: $0.title,
-                    body: $0.body, isRead: true,
-                    referenceId: $0.referenceId, createdAt: $0.createdAt
-                )
-            }
+            notifications = notifications.map { $0.markingAsRead() }
         } catch {
             Log.error(error, category: .notification)
         }
@@ -72,5 +64,19 @@ public final class NotificationListViewModel: ObservableObject {
 
     var unreadCount: Int {
         notifications.filter { !$0.isRead }.count
+    }
+
+    private func markLocalAsRead(_ notification: AppNotification) {
+        guard let index = notifications.firstIndex(where: { $0.id == notification.id }) else { return }
+        notifications[index] = notification.markingAsRead()
+    }
+
+    private func markAsReadFallback(_ notification: AppNotification) async {
+        do {
+            try await markReadUseCase.execute(id: notification.id)
+            markLocalAsRead(notification)
+        } catch {
+            Log.error(error, category: .notification)
+        }
     }
 }

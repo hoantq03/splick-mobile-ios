@@ -219,4 +219,22 @@ public final class FeedViewModel: ObservableObject {
             Log.error(error, category: .feed)
         }
     }
+
+    @discardableResult
+    func ensurePostLoaded(id: UUID) async -> Bool {
+        if posts.contains(where: { $0.id == id }) {
+            return true
+        }
+
+        do {
+            let post = try await fetchPostUseCase.execute(postId: id)
+            posts.insert(post, at: 0)
+            state = .loaded(posts)
+            return true
+        } catch {
+            alertMessage = "Không thể tải bài viết."
+            Log.error(error, category: .feed)
+            return false
+        }
+    }
 }
