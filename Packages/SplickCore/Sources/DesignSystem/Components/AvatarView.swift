@@ -34,7 +34,7 @@ public struct AvatarView: View {
     public var body: some View {
         Group {
             if let imageURL {
-                AsyncImage(url: imageURL) { phase in
+                RemoteImage(url: imageURL) { phase in
                     switch phase {
                     case .success(let image):
                         image.resizable().scaledToFill()

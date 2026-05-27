@@ -13,6 +13,7 @@ let package = Package(
     ],
     dependencies: [
         .package(path: "../SplickDomain"),
+        .package(url: "https://github.com/kean/Nuke.git", from: "12.8.0"),
     ],
     targets: [
         .target(
@@ -34,6 +35,7 @@ let package = Package(
             dependencies: [
                 "Common",
                 .product(name: "SplickDomain", package: "SplickDomain"),
+                .product(name: "NukeUI", package: "Nuke"),
             ],
             path: "Sources/DesignSystem",
             resources: [.process("Resources")]

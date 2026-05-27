@@ -95,7 +95,7 @@ struct RootView: View {
         if let session = await container.restoreSessionUseCase.execute() {
             appState.setAuthenticated(user: session.user)
         } else {
-            appState.setUnauthenticated()
+            appState.setUnauthenticated(container: container)
         }
     }
 }

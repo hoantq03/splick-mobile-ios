@@ -29,16 +29,13 @@ struct MainTabView: View {
             switch appState.selectedTab {
             case .feed:
                 FeedView(
-                    viewModel: FeedViewModel(
-                        fetchFeedUseCase: container.fetchFeedUseCase,
-                        fetchPostUseCase: container.fetchPostUseCase,
-                        reactToPostUseCase: container.reactToPostUseCase,
-                        deletePostUseCase: container.deletePostUseCase,
-                        addCommentUseCase: container.addCommentUseCase,
-                        currentUserId: appState.currentUser?.id,
-                        currentUser: currentUserSummary
-                    ),
-                    fetchFriendsUseCase: container.fetchFriendsUseCase
+                    viewModel: container.feedViewModel,
+                    fetchFriendsUseCase: container.fetchFriendsUseCase,
+                    navigationPath: $appState.feedNavigationPath,
+                    pendingPostId: appState.pendingPostId,
+                    onPendingPostHandled: {
+                        appState.clearPendingPostNavigation()
+                    }
                 )
 
             case .expenses:
@@ -98,10 +95,10 @@ struct MainTabView: View {
 
             case .notifications:
                 NotificationListView(
-                    viewModel: NotificationListViewModel(
-                        fetchNotificationsUseCase: container.fetchNotificationsUseCase,
-                        markReadUseCase: container.markNotificationReadUseCase
-                    )
+                    viewModel: container.notificationListViewModel,
+                    onNavigateToPost: { postId in
+                        appState.openPostFromNotification(postId)
+                    }
                 )
 
             case .profile:
@@ -223,7 +220,7 @@ struct ProfileSettingsView: View {
                         isSigningOut = true
                         defer { isSigningOut = false }
                         await container.logoutUseCase.execute()
-                        appState.setUnauthenticated()
+                        appState.setUnauthenticated(container: container)
                         dismiss()
                     }
                 }
@@ -284,7 +281,7 @@ struct ProfileSettingsView: View {
                         revokeSessionUseCase: container.revokeSessionUseCase,
                         revokeAllSessionsUseCase: container.revokeAllSessionsUseCase,
                         onSignedOutEverywhere: {
-                            appState.setUnauthenticated()
+                            appState.setUnauthenticated(container: container)
                             dismiss()
                         }
                     )
@@ -314,7 +311,7 @@ struct ProfileSettingsView: View {
                         deactivateAccountUseCase: container.deactivateAccountUseCase,
                         deleteAccountUseCase: container.deleteAccountUseCase,
                         onAccountClosed: {
-                            appState.setUnauthenticated()
+                            appState.setUnauthenticated(container: container)
                             dismiss()
                         }
                     )

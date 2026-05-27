@@ -92,7 +92,7 @@ struct FeedInlineVideoPlayer: View {
             if controller.showsVideoSurface {
                 FeedVideoPlayerLayerView(player: controller.player)
             } else if let posterURL {
-                AsyncImage(url: posterURL) { phase in
+                RemoteImage(url: posterURL) { phase in
                     switch phase {
                     case .success(let image):
                         image.resizable().scaledToFill()

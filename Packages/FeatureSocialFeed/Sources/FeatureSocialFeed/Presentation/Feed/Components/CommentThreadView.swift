@@ -109,7 +109,7 @@ private struct CommentAttachmentsView: View {
                     switch attachment.kind {
                     case .image:
                         if let url = attachment.url {
-                            AsyncImage(url: url) { phase in
+                            RemoteImage(url: url) { phase in
                                 switch phase {
                                 case .success(let image):
                                     image.resizable().scaledToFill()

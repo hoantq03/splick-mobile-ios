@@ -4,10 +4,15 @@ import Common
 import SplickDomain
 
 public struct NotificationListView: View {
-    @StateObject private var viewModel: NotificationListViewModel
+    @ObservedObject private var viewModel: NotificationListViewModel
+    private let onNavigateToPost: ((UUID) -> Void)?
 
-    public init(viewModel: @autoclosure @escaping () -> NotificationListViewModel) {
-        _viewModel = StateObject(wrappedValue: viewModel())
+    public init(
+        viewModel: NotificationListViewModel,
+        onNavigateToPost: ((UUID) -> Void)? = nil
+    ) {
+        self._viewModel = ObservedObject(wrappedValue: viewModel)
+        self.onNavigateToPost = onNavigateToPost
     }
 
     public var body: some View {
@@ -48,6 +53,7 @@ public struct NotificationListView: View {
             .refreshable { await viewModel.load() }
         }
         .onFirstAppear {
+            guard viewModel.notifications.isEmpty else { return }
             Task { await viewModel.load() }
         }
     }
@@ -58,7 +64,11 @@ public struct NotificationListView: View {
                 ForEach(viewModel.notifications) { notification in
                     NotificationRowView(notification: notification)
                         .onTapGesture {
-                            Task { await viewModel.markAsRead(notification) }
+                            Task {
+                                if let postId = await viewModel.handleTap(notification) {
+                                    onNavigateToPost?(postId)
+                                }
+                            }
                         }
                 }
             }

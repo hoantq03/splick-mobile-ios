@@ -18,7 +18,7 @@ struct PostMediaView: View {
     }
 
     private var imageContent: some View {
-        AsyncImage(url: post.thumbnailURL ?? post.imageURL) { phase in
+        RemoteImage(url: post.thumbnailURL ?? post.imageURL) { phase in
             switch phase {
             case .success(let image):
                 image
@@ -44,7 +44,7 @@ struct PostMediaView: View {
                     durationSeconds: post.videoDurationSeconds
                 )
             } else {
-                AsyncImage(url: post.thumbnailURL ?? post.imageURL) { phase in
+                RemoteImage(url: post.thumbnailURL ?? post.imageURL) { phase in
                     if case .success(let image) = phase {
                         image
                             .resizable()

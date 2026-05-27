@@ -341,6 +341,39 @@ final class DependencyContainer: ObservableObject {
         MarkNotificationReadUseCase(repository: notificationRepository)
     }()
 
+    lazy var markNotificationClickedUseCase: MarkNotificationClickedUseCaseProtocol = {
+        MarkNotificationClickedUseCase(repository: notificationRepository)
+    }()
+
+    // MARK: - Tab ViewModels (survive tab switches)
+
+    lazy var feedViewModel: FeedViewModel = makeFeedViewModel()
+
+    lazy var notificationListViewModel: NotificationListViewModel = makeNotificationListViewModel()
+
+    func resetTabViewModels() {
+        feedViewModel = makeFeedViewModel()
+        notificationListViewModel = makeNotificationListViewModel()
+    }
+
+    private func makeFeedViewModel() -> FeedViewModel {
+        FeedViewModel(
+            fetchFeedUseCase: fetchFeedUseCase,
+            fetchPostUseCase: fetchPostUseCase,
+            reactToPostUseCase: reactToPostUseCase,
+            deletePostUseCase: deletePostUseCase,
+            addCommentUseCase: addCommentUseCase
+        )
+    }
+
+    private func makeNotificationListViewModel() -> NotificationListViewModel {
+        NotificationListViewModel(
+            fetchNotificationsUseCase: fetchNotificationsUseCase,
+            markReadUseCase: markNotificationReadUseCase,
+            markClickedUseCase: markNotificationClickedUseCase
+        )
+    }
+
     // MARK: - Init
 
     private init() {

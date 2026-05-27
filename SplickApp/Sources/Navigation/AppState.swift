@@ -14,6 +14,8 @@ final class AppState: ObservableObject {
     @Published var authState: AuthState = .unknown
     @Published var selectedTab: Tab = .feed
     @Published var showProfileSettings = false
+    @Published var feedNavigationPath = NavigationPath()
+    @Published var pendingPostId: UUID?
     @Published private(set) var hasCompletedOnboarding: Bool
 
     init() {
@@ -45,10 +47,22 @@ final class AppState: ObservableObject {
         authState = .authenticated(user)
     }
 
-    func setUnauthenticated() {
+    func setUnauthenticated(container: DependencyContainer) {
+        container.resetTabViewModels()
         authState = .unauthenticated
         selectedTab = .feed
+        feedNavigationPath = NavigationPath()
+        pendingPostId = nil
         Log.info("User signed out", category: .lifecycle)
+    }
+
+    func openPostFromNotification(_ postId: UUID) {
+        pendingPostId = postId
+        selectedTab = .feed
+    }
+
+    func clearPendingPostNavigation() {
+        pendingPostId = nil
     }
 
     func completeOnboarding() {

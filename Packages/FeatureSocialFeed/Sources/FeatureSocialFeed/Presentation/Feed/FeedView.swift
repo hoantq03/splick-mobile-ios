@@ -9,7 +9,10 @@ private struct ProfileRoute: Identifiable {
 }
 
 public struct FeedView: View {
-    @StateObject private var viewModel: FeedViewModel
+    @ObservedObject private var viewModel: FeedViewModel
+    @Binding private var navigationPath: NavigationPath
+    private let pendingPostId: UUID?
+    private let onPendingPostHandled: (() -> Void)?
     @Environment(\.openPostCaptureFlow) private var openPostCaptureFlow
     @Environment(\.currentUserSummary) private var currentUserSummary
     private let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
@@ -19,15 +22,21 @@ public struct FeedView: View {
     @StateObject private var videoCoordinator = FeedVideoPlaybackCoordinator()
 
     public init(
-        viewModel: @autoclosure @escaping () -> FeedViewModel,
-        fetchFriendsUseCase: FetchFriendsUseCaseProtocol? = nil
+        viewModel: FeedViewModel,
+        fetchFriendsUseCase: FetchFriendsUseCaseProtocol? = nil,
+        navigationPath: Binding<NavigationPath> = .constant(NavigationPath()),
+        pendingPostId: UUID? = nil,
+        onPendingPostHandled: (() -> Void)? = nil
     ) {
-        _viewModel = StateObject(wrappedValue: viewModel())
+        self._viewModel = ObservedObject(wrappedValue: viewModel)
+        _navigationPath = navigationPath
         self.fetchFriendsUseCase = fetchFriendsUseCase
+        self.pendingPostId = pendingPostId
+        self.onPendingPostHandled = onPendingPostHandled
     }
 
     public var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             Group {
                 switch viewModel.state {
                 case .idle, .loading:
@@ -77,10 +86,19 @@ public struct FeedView: View {
         }
         .onFirstAppear {
             viewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
+            guard viewModel.posts.isEmpty else { return }
             Task { await viewModel.loadFeed() }
         }
         .onChange(of: currentUserSummary?.id) { _ in
             viewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
+        }
+        .task(id: pendingPostId) {
+            guard let postId = pendingPostId else { return }
+            let loaded = await viewModel.ensurePostLoaded(id: postId)
+            if loaded {
+                navigationPath.append(postId)
+            }
+            onPendingPostHandled?()
         }
         .onReceive(
             NotificationCenter.default.publisher(for: FeedScrollLock.notification)
