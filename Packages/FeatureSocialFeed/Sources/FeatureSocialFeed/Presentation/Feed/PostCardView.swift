@@ -263,9 +263,7 @@ struct PostCardView: View {
 
             Spacer(minLength: 0)
 
-            if displayViewCount > 0 {
-                viewsEntryButton
-            }
+            viewsEntryButton
         }
         .padding(.top, SplickTheme.Spacing.xxs)
     }

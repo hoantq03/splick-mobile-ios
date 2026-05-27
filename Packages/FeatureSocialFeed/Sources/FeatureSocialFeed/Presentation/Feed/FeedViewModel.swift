@@ -20,6 +20,7 @@ public final class FeedViewModel: ObservableObject {
     private let addCommentUseCase: AddCommentUseCaseProtocol
     private var currentPage = 0
     private var canLoadMore = true
+    private var trackedViewPostIds = Set<UUID>()
 
     private var currentUserSummary: UserSummary?
 
@@ -57,6 +58,7 @@ public final class FeedViewModel: ObservableObject {
         isLoadingMore = false
         currentPage = 0
         canLoadMore = true
+        trackedViewPostIds.removeAll()
 
         do {
             let posts = try await fetchFeedUseCase.execute(page: 0)
@@ -108,6 +110,14 @@ public final class FeedViewModel: ObservableObject {
         } catch {
             Log.error(error, category: .feed)
         }
+    }
+
+    func trackViewOnScrollIfNeeded(for post: Post) async {
+        guard let currentUserId, currentUserId != post.author.id else { return }
+        guard !trackedViewPostIds.contains(post.id) else { return }
+
+        trackedViewPostIds.insert(post.id)
+        await refreshPost(id: post.id)
     }
 
     private func matchesComment(_ lhs: PostComment, _ rhs: PostComment) -> Bool {

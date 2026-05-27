@@ -127,6 +127,7 @@ public struct FeedView: View {
                         }
                     )
                     .onAppear {
+                        Task { await viewModel.trackViewOnScrollIfNeeded(for: post) }
                         guard !viewModel.isRefreshing else { return }
                         if post.id == viewModel.posts.last?.id {
                             Task { await viewModel.loadMore() }
