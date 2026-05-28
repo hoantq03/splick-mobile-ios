@@ -4,21 +4,22 @@ import SplickDomain
 enum FeedMapper {
     static func toPost(_ dto: PostDTO) -> Post {
         let author = toUserSummary(dto.author)
-        let sortedMediaItems = (dto.mediaItems ?? []).sorted { ($0.sortOrder ?? 0) < ($1.sortOrder ?? 0) }
-        let firstMediaItem = sortedMediaItems.first
-        let fallbackImageUrl = dto.imageUrl ?? firstMediaItem?.mediaUrl ?? "https://placeholder.splick.local/post.jpg"
+        let sortedMediaDTOs = (dto.mediaItems ?? []).sorted { ($0.sortOrder ?? 0) < ($1.sortOrder ?? 0) }
+        let mappedMediaItems = sortedMediaDTOs.compactMap { toMediaItem($0) }
+
+        let firstMediaItem = mappedMediaItems.first
+        let fallbackImageUrl = dto.imageUrl ?? firstMediaItem?.mediaURL.absoluteString ?? "https://placeholder.splick.local/post.jpg"
         let imageURL = URL(string: fallbackImageUrl) ?? URL(string: "https://placeholder.splick.local/post.jpg")!
-        let thumbnailURL = firstMediaItem?.thumbnailUrl.flatMap(URL.init(string:)) ?? dto.thumbnailUrl.flatMap(URL.init(string:))
+        let thumbnailURL = firstMediaItem?.thumbnailURL ?? dto.thumbnailUrl.flatMap(URL.init(string:))
         let videoURL =
-            (firstMediaItem?.mediaType.lowercased() == PostMediaType.video.rawValue
-                ? firstMediaItem?.mediaUrl
-                : dto.videoUrl).flatMap(URL.init(string:))
+            (firstMediaItem?.mediaType == .video
+                ? firstMediaItem?.mediaURL
+                : dto.videoUrl.flatMap(URL.init(string:)))
         let reactions = dto.reactions.map(toReaction)
         let comments = dto.comments?.map(toComment) ?? []
         let companions = dto.companions?.map(toUserSummary) ?? []
         let feedKind = PostFeedKind(rawValue: dto.feedKind ?? PostFeedKind.checkIn.rawValue) ?? .checkIn
-        let mediaType = firstMediaItem
-            .flatMap { PostMediaType(rawValue: $0.mediaType.lowercased()) }
+        let mediaType = firstMediaItem?.mediaType
             ?? dto.mediaType.flatMap { PostMediaType(rawValue: $0) }
             ?? .image
         let billSplit = dto.billSplit.map(toBillSplit)
@@ -37,13 +38,27 @@ enum FeedMapper {
             createdAt: dto.createdAt,
             mediaType: mediaType,
             videoURL: videoURL,
-            videoDurationSeconds: dto.videoDurationSeconds,
+            videoDurationSeconds: dto.videoDurationSeconds ?? firstMediaItem?.durationSeconds,
+            mediaItems: mappedMediaItems,
             companions: companions,
             feedKind: feedKind,
             checkInPlace: dto.checkInPlace,
             billSplit: billSplit,
             viewCount: viewCount,
             viewers: viewers
+        )
+    }
+
+    static func toMediaItem(_ dto: PostMediaItemDTO) -> PostMediaItem? {
+        guard let mediaURL = URL(string: dto.mediaUrl) else { return nil }
+        let mediaType = PostMediaType(rawValue: dto.mediaType.lowercased()) ?? .image
+        return PostMediaItem(
+            id: dto.id,
+            mediaURL: mediaURL,
+            thumbnailURL: dto.thumbnailUrl.flatMap(URL.init(string:)),
+            mediaType: mediaType,
+            durationSeconds: dto.durationSeconds,
+            sortOrder: dto.sortOrder ?? 0
         )
     }
 

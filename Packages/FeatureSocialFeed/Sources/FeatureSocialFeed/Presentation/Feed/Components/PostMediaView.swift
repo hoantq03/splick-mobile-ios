@@ -5,20 +5,56 @@ import SplickDomain
 struct PostMediaView: View {
     let post: Post
 
+    @State private var selectedIndex = 0
+
+    private var items: [PostMediaItem] {
+        post.displayMediaItems
+    }
+
     var body: some View {
         Group {
-            switch post.mediaType {
-            case .image:
-                imageContent
-            case .video:
-                videoContent
+            if items.count <= 1, let item = items.first {
+                mediaItemView(item)
+            } else {
+                multiMediaCarousel
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small))
     }
 
-    private var imageContent: some View {
-        RemoteImage(url: post.thumbnailURL ?? post.imageURL) { phase in
+    private var multiMediaCarousel: some View {
+        ZStack(alignment: .topTrailing) {
+            TabView(selection: $selectedIndex) {
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                    mediaItemView(item)
+                        .tag(index)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .automatic))
+            .frame(height: 350)
+
+            Text("\(selectedIndex + 1)/\(items.count)")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(.black.opacity(0.55), in: Capsule())
+                .padding(10)
+        }
+    }
+
+    @ViewBuilder
+    private func mediaItemView(_ item: PostMediaItem) -> some View {
+        switch item.mediaType {
+        case .image:
+            imageContent(for: item)
+        case .video:
+            videoContent(for: item)
+        }
+    }
+
+    private func imageContent(for item: PostMediaItem) -> some View {
+        RemoteImage(url: item.thumbnailURL ?? item.mediaURL) { phase in
             switch phase {
             case .success(let image):
                 image
@@ -34,28 +70,14 @@ struct PostMediaView: View {
         }
     }
 
-    private var videoContent: some View {
+    private func videoContent(for item: PostMediaItem) -> some View {
         Group {
-            if let videoURL = post.videoURL {
-                FeedInlineVideoPlayer(
-                    postId: post.id,
-                    url: videoURL,
-                    posterURL: post.thumbnailURL ?? post.imageURL,
-                    durationSeconds: post.videoDurationSeconds
-                )
-            } else {
-                RemoteImage(url: post.thumbnailURL ?? post.imageURL) { phase in
-                    if case .success(let image) = phase {
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(height: 350)
-                            .clipped()
-                    } else {
-                        mediaPlaceholder(icon: "video")
-                    }
-                }
-            }
+            FeedInlineVideoPlayer(
+                postId: post.id,
+                url: item.mediaURL,
+                posterURL: item.thumbnailURL ?? item.mediaURL,
+                durationSeconds: item.durationSeconds
+            )
         }
         .frame(maxHeight: 350)
     }

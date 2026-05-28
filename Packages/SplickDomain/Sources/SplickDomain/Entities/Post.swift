@@ -39,6 +39,8 @@ public struct PostBillSplit: Codable, Equatable, Sendable {
 public struct Post: Identifiable, Codable, Equatable, Sendable {
     public let id: UUID
     public let author: UserSummary
+    /// Ordered gallery from API (`mediaItems`); legacy single-media fields mirror the first item.
+    public let mediaItems: [PostMediaItem]
     public let mediaType: PostMediaType
     public let imageURL: URL
     public let thumbnailURL: URL?
@@ -73,6 +75,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         mediaType: PostMediaType = .image,
         videoURL: URL? = nil,
         videoDurationSeconds: Int? = nil,
+        mediaItems: [PostMediaItem] = [],
         companions: [UserSummary] = [],
         feedKind: PostFeedKind = .checkIn,
         checkInPlace: String? = nil,
@@ -82,6 +85,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
     ) {
         self.id = id
         self.author = author
+        self.mediaItems = mediaItems
         self.mediaType = mediaType
         self.imageURL = imageURL
         self.thumbnailURL = thumbnailURL
@@ -108,7 +112,8 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         reactions: [Reaction]? = nil,
         comments: [PostComment]? = nil,
         viewCount: Int? = nil,
-        viewers: [UserSummary]? = nil
+        viewers: [UserSummary]? = nil,
+        mediaItems: [PostMediaItem]? = nil
     ) -> Post {
         Post(
             id: id,
@@ -123,6 +128,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
             mediaType: mediaType,
             videoURL: videoURL,
             videoDurationSeconds: videoDurationSeconds,
+            mediaItems: mediaItems ?? self.mediaItems,
             companions: companions,
             feedKind: feedKind,
             checkInPlace: checkInPlace,
@@ -130,6 +136,27 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
             viewCount: viewCount ?? self.viewCount,
             viewers: viewers ?? self.viewers
         )
+    }
+
+    /// Items to render in the feed carousel (API gallery or legacy single image/video).
+    public var displayMediaItems: [PostMediaItem] {
+        if !mediaItems.isEmpty {
+            return mediaItems.sorted { $0.sortOrder < $1.sortOrder }
+        }
+        return [
+            PostMediaItem(
+                id: id,
+                mediaURL: videoURL ?? imageURL,
+                thumbnailURL: thumbnailURL,
+                mediaType: mediaType,
+                durationSeconds: videoDurationSeconds,
+                sortOrder: 0
+            ),
+        ]
+    }
+
+    public var hasMultipleMedia: Bool {
+        displayMediaItems.count > 1
     }
 
     public var knownUsers: [UUID: UserSummary] {

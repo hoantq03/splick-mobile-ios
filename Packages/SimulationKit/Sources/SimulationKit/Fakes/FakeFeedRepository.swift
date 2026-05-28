@@ -246,18 +246,32 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
             UserSummary(id: id, username: "friend", displayName: "Friend", avatarURL: nil)
         }
 
-        let primaryMediaType = input.mediaItems.first?.mediaType ?? .image
+        let mappedMediaItems: [PostMediaItem] = input.mediaItems.enumerated().map { index, item in
+            let seed = Int.random(in: 1...999) + index
+            let url = URL(string: "https://picsum.photos/seed/new\(seed)/400/500")!
+            return PostMediaItem(
+                mediaURL: item.mediaType == .video ? Self.sampleVideoURL : url,
+                thumbnailURL: url,
+                mediaType: item.mediaType,
+                durationSeconds: item.videoDurationSeconds,
+                sortOrder: index
+            )
+        }
+        let first = mappedMediaItems.first
+        let primaryMediaType = first?.mediaType ?? .image
         let post = Post(
             id: UUID(),
             author: UserSummary(id: UUID(), username: "namtran", displayName: "Nam Tran", avatarURL: nil),
-            imageURL: URL(string: "https://picsum.photos/seed/new/\(Int.random(in: 1...999))/400/500")!,
+            imageURL: first?.thumbnailURL ?? first?.mediaURL ?? URL(string: "https://picsum.photos/400/500")!,
+            thumbnailURL: first?.thumbnailURL,
             caption: input.caption,
             reactions: [],
             groupId: input.groupId,
             createdAt: .now,
             mediaType: primaryMediaType,
-            videoURL: primaryMediaType == .video ? Self.sampleVideoURL : nil,
-            videoDurationSeconds: primaryMediaType == .video ? (input.mediaItems.first?.videoDurationSeconds ?? 12) : nil,
+            videoURL: primaryMediaType == .video ? first?.mediaURL : nil,
+            videoDurationSeconds: first?.durationSeconds,
+            mediaItems: mappedMediaItems,
             companions: companions,
             feedKind: input.feedKind,
             checkInPlace: input.checkInPlace,
