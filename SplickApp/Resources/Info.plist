@@ -24,6 +24,14 @@
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>103.82.26.28</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+		</dict>
 	</dict>
 	<key>GIDClientID</key>
 	<string>702860718891-59e0chbkkidsbqvclul3d3a0klga4ve3.apps.googleusercontent.com</string>

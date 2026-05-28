@@ -4,7 +4,8 @@ public enum AppConstants {
     public enum API {
         /// Gateway root (no version). Endpoints append `/v1/{domain}/...` — see `docs/API_ROUTING.md`.
         #if DEBUG
-        public static let baseURL = "http://localhost:8080/api"
+        /// Remote staging (VPS). Use `http://localhost:8080/api` when backend runs on Mac via Kong.
+        public static let baseURL = "http://103.82.26.28/api"
         #else
         public static let baseURL = "https://api.splick.app/api"
         #endif
