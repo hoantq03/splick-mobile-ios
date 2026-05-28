@@ -51,7 +51,7 @@ public final class FeedViewModel: ObservableObject {
         if isPullToRefresh {
             guard !isRefreshing else { return }
             isRefreshing = true
-        } else {
+        } else if posts.isEmpty {
             state = .loading
         }
 
@@ -60,21 +60,38 @@ public final class FeedViewModel: ObservableObject {
         canLoadMore = true
         trackedViewPostIds.removeAll()
 
+        defer {
+            if isPullToRefresh {
+                isRefreshing = false
+            }
+        }
+
         do {
             let posts = try await fetchFeedUseCase.execute(page: 0)
             self.posts = posts
             state = .loaded(posts)
             canLoadMore = !posts.isEmpty
         } catch {
-            if isPullToRefresh, !posts.isEmpty {
-                state = .loaded(posts)
-            } else {
-                state = .failed(error.localizedDescription)
-            }
             Log.error(error, category: .feed)
+            if isPullToRefresh {
+                if posts.isEmpty {
+                    state = .failed(error.localizedDescription)
+                } else {
+                    state = .loaded(posts)
+                }
+                alertMessage = "Không thể làm mới feed. Thử lại sau."
+            } else if posts.isEmpty {
+                state = .failed(error.localizedDescription)
+            } else {
+                state = .loaded(posts)
+            }
         }
+    }
 
-        isRefreshing = false
+    /// Show the new post immediately, then sync the first page from the server.
+    public func syncFeedAfterCreatingPost(_ created: Post) async {
+        prependCreatedPost(created)
+        await loadFeed(isPullToRefresh: true)
     }
 
     func loadMore() async {
@@ -218,6 +235,13 @@ public final class FeedViewModel: ObservableObject {
             alertMessage = error.localizedDescription
             Log.error(error, category: .feed)
         }
+    }
+
+    /// Inserts a newly created post at the top of the feed (optimistic UI after create).
+    public func prependCreatedPost(_ post: Post) {
+        guard !posts.contains(where: { $0.id == post.id }) else { return }
+        posts.insert(post, at: 0)
+        state = .loaded(posts)
     }
 
     @discardableResult

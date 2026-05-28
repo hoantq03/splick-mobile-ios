@@ -9,13 +9,13 @@ import SplickDomain
 public struct CreatePostComposeView: View {
     @StateObject private var viewModel: CreatePostComposeViewModel
     @Environment(\.tabBarScrollState) private var tabBarScrollState
-    let onPosted: () -> Void
+    let onPosted: (Post) -> Void
     let onCancel: () -> Void
     @State private var photoPickerItems: [PhotosPickerItem] = []
 
     public init(
         viewModel: @autoclosure @escaping () -> CreatePostComposeViewModel,
-        onPosted: @escaping () -> Void,
+        onPosted: @escaping (Post) -> Void,
         onCancel: @escaping () -> Void
     ) {
         _viewModel = StateObject(wrappedValue: viewModel())
@@ -44,8 +44,8 @@ public struct CreatePostComposeView: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Đăng") {
                     Task {
-                        if await viewModel.submit() {
-                            onPosted()
+                        if let post = await viewModel.submit() {
+                            onPosted(post)
                         }
                     }
                 }

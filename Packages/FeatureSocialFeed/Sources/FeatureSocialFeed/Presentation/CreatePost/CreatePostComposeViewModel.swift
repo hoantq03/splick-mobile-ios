@@ -227,20 +227,20 @@ public final class CreatePostComposeViewModel: ObservableObject {
         exactAmountTexts.removeValue(forKey: user.id)
     }
 
-    func submit() async -> Bool {
+    func submit() async -> Post? {
         guard !selectedMediaItems.isEmpty else {
             submitState = .failed("Chọn ít nhất một ảnh hoặc video.")
-            return false
+            return nil
         }
 
         if enableBillSplit {
             guard buildBillSplit() != nil else {
                 submitState = .failed("Kiểm tra lại thông tin chia bill.")
-                return false
+                return nil
             }
             if billSplitParticipants.isEmpty {
                 submitState = .failed("Chọn ít nhất một người để chia bill.")
-                return false
+                return nil
             }
         }
 
@@ -265,10 +265,10 @@ public final class CreatePostComposeViewModel: ObservableObject {
         do {
             let post = try await createPostUseCase.execute(input)
             submitState = .loaded(post)
-            return true
+            return post
         } catch {
             submitState = .failed(error.localizedDescription)
-            return false
+            return nil
         }
     }
 

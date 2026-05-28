@@ -51,9 +51,12 @@ struct PostCaptureFlowView: View {
                 currentUser: currentUser,
                 currentUserId: currentUser?.id
             ),
-            onPosted: {
-                appState.selectedTab = .feed
-                onDismiss()
+            onPosted: { post in
+                Task {
+                    await container.feedViewModel.syncFeedAfterCreatingPost(post)
+                    appState.selectedTab = .feed
+                    onDismiss()
+                }
             },
             onCancel: { capturedMedia = nil }
         )
