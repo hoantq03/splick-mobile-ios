@@ -1,5 +1,6 @@
 # Xcode — Splick.xcodeproj is generated from project.yml (do not commit)
 Splick.xcodeproj/
+project.local.yml
 build/
 DerivedData/
 *.moved-aside

@@ -1,0 +1,8 @@
+# Copy to project.local.yml (gitignored), then run: bash scripts/generate-xcodeproj.sh
+#
+# Find Team ID: Xcode → Settings → Accounts → your team → Team ID
+# Or: security find-certificate -c "Apple Development" -p | openssl x509 -noout -subject
+#     (look for OU=XXXXXXXXXX)
+settings:
+  base:
+    DEVELOPMENT_TEAM: YOUR_TEAM_ID_HERE
