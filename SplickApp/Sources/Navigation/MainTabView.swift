@@ -117,16 +117,19 @@ struct MainTabView: View {
         .environment(\.currentUserSummary, currentUserSummary)
         .environment(\.tabBarScrollState, tabBarScrollState)
         .overlay(alignment: .bottom) {
-            SplickTabBar(selectedTab: $appState.selectedTab)
-                .offset(y: tabBarScrollState.isVisible ? 0 : TabBarLayout.tabBarSlideDistance)
-                .opacity(tabBarScrollState.isVisible ? 1 : 0)
-                .animation(.easeInOut(duration: 0.28), value: tabBarScrollState.isVisible)
-                .allowsHitTesting(tabBarScrollState.isVisible)
+            if appState.selectedTab != .camera {
+                SplickTabBar(selectedTab: $appState.selectedTab)
+                    .offset(y: tabBarScrollState.isVisible ? 0 : TabBarLayout.tabBarSlideDistance)
+                    .opacity(tabBarScrollState.isVisible ? 1 : 0)
+                    .animation(.easeInOut(duration: 0.28), value: tabBarScrollState.isVisible)
+                    .allowsHitTesting(tabBarScrollState.isVisible)
+            }
         }
         .onChange(of: appState.selectedTab) { tab in
-            tabBarScrollState.reset()
             if tab == .camera {
-                tabBarScrollState.show()
+                tabBarScrollState.hide()
+            } else {
+                tabBarScrollState.reset()
             }
         }
         .sheet(isPresented: $appState.showProfileSettings) {

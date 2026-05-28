@@ -24,9 +24,9 @@ struct PostCaptureFlowView: View {
                         onCancel: onDismiss
                     )
                     .ignoresSafeArea()
-                    .toolbar(.hidden, for: .tabBar)
                 }
             }
+            .toolbar(.hidden, for: .tabBar)
         }
     }
 
