@@ -22,7 +22,7 @@ struct CommentAttachmentDTO: Decodable {
 struct PostDTO: Decodable {
     let id: UUID
     let author: AuthorDTO
-    let imageUrl: String
+    let imageUrl: String?
     let thumbnailUrl: String?
     let caption: String?
     let reactions: [ReactionDTO]
@@ -34,10 +34,28 @@ struct PostDTO: Decodable {
     let companions: [AuthorDTO]?
     let feedKind: String?
     let checkInPlace: String?
+    let location: PostLocationDTO?
+    let mediaItems: [PostMediaItemDTO]?
     let billSplit: PostBillSplitDTO?
     let comments: [CommentDTO]?
     let viewCount: Int?
     let viewers: [AuthorDTO]?
+}
+
+struct PostLocationDTO: Decodable {
+    let placeId: String?
+    let displayName: String?
+    let lat: Double?
+    let lon: Double?
+}
+
+struct PostMediaItemDTO: Decodable {
+    let id: UUID
+    let mediaUrl: String
+    let thumbnailUrl: String?
+    let mediaType: String
+    let durationSeconds: Int?
+    let sortOrder: Int?
 }
 
 struct PostBillSplitDTO: Decodable {
@@ -90,14 +108,26 @@ struct CreatePostRequestDTO: Encodable {
     let groupId: UUID?
     let feedKind: String
     let checkInPlace: String?
-    let imageUrl: String
-    let thumbnailUrl: String?
-    let videoUrl: String?
-    let videoDurationSeconds: Int?
-    let mediaType: String
+    let location: CreatePostLocationRequestDTO?
+    let mediaItems: [CreatePostMediaItemRequestDTO]
     let companionIds: [UUID]
     let mediaId: UUID?
     let billSplit: CreatePostBillSplitRequestDTO?
+}
+
+struct CreatePostLocationRequestDTO: Encodable {
+    let placeId: String?
+    let displayName: String?
+    let lat: Double?
+    let lon: Double?
+}
+
+struct CreatePostMediaItemRequestDTO: Encodable {
+    let mediaUrl: String
+    let thumbnailUrl: String?
+    let mediaType: String
+    let durationSecs: Int?
+    let sortOrder: Int?
 }
 
 struct CreatePostBillSplitRequestDTO: Encodable {

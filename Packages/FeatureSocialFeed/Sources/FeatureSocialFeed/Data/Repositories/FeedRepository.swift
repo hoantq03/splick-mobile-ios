@@ -39,16 +39,32 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
     }
 
     public func createPost(_ input: CreatePostInput) async throws -> Post {
-        guard let imageData = input.imageData else {
-            throw NetworkError.unknown("Missing image data")
+        guard !input.mediaItems.isEmpty else {
+            throw NetworkError.unknown("Missing media items")
         }
 
-        let upload = try await mediaRepository.uploadImage(
-            data: imageData,
-            mimeType: "image/jpeg",
-            purpose: .postImage,
-            groupId: input.groupId
-        )
+        var requestMediaItems: [CreatePostMediaItemRequestDTO] = []
+        var primaryMediaId: UUID?
+        for (index, mediaItem) in input.mediaItems.enumerated() {
+            let upload = try await mediaRepository.uploadImage(
+                data: mediaItem.data,
+                mimeType: mediaItem.mimeType,
+                purpose: .postImage,
+                groupId: input.groupId
+            )
+            if primaryMediaId == nil {
+                primaryMediaId = upload.id
+            }
+            requestMediaItems.append(
+                CreatePostMediaItemRequestDTO(
+                    mediaUrl: upload.url.absoluteString,
+                    thumbnailUrl: upload.thumbnailURL?.absoluteString,
+                    mediaType: mediaItem.mediaType.rawValue,
+                    durationSecs: mediaItem.videoDurationSeconds,
+                    sortOrder: index
+                )
+            )
+        }
 
         let billSplitRequest = buildBillSplitRequest(from: input)
         let request = CreatePostRequestDTO(
@@ -56,13 +72,10 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
             groupId: input.groupId,
             feedKind: input.feedKind.rawValue,
             checkInPlace: input.checkInPlace,
-            imageUrl: upload.url.absoluteString,
-            thumbnailUrl: upload.thumbnailURL?.absoluteString,
-            videoUrl: input.videoURL?.absoluteString,
-            videoDurationSeconds: nil,
-            mediaType: input.mediaType.rawValue,
+            location: nil,
+            mediaItems: requestMediaItems,
             companionIds: input.companionIds,
-            mediaId: upload.id,
+            mediaId: primaryMediaId,
             billSplit: billSplitRequest
         )
 

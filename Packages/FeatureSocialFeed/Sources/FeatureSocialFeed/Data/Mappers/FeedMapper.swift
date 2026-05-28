@@ -4,14 +4,23 @@ import SplickDomain
 enum FeedMapper {
     static func toPost(_ dto: PostDTO) -> Post {
         let author = toUserSummary(dto.author)
-        let imageURL = URL(string: dto.imageUrl)!
-        let thumbnailURL = dto.thumbnailUrl.flatMap(URL.init(string:))
-        let videoURL = dto.videoUrl.flatMap(URL.init(string:))
+        let sortedMediaItems = (dto.mediaItems ?? []).sorted { ($0.sortOrder ?? 0) < ($1.sortOrder ?? 0) }
+        let firstMediaItem = sortedMediaItems.first
+        let fallbackImageUrl = dto.imageUrl ?? firstMediaItem?.mediaUrl ?? "https://placeholder.splick.local/post.jpg"
+        let imageURL = URL(string: fallbackImageUrl) ?? URL(string: "https://placeholder.splick.local/post.jpg")!
+        let thumbnailURL = firstMediaItem?.thumbnailUrl.flatMap(URL.init(string:)) ?? dto.thumbnailUrl.flatMap(URL.init(string:))
+        let videoURL =
+            (firstMediaItem?.mediaType.lowercased() == PostMediaType.video.rawValue
+                ? firstMediaItem?.mediaUrl
+                : dto.videoUrl).flatMap(URL.init(string:))
         let reactions = dto.reactions.map(toReaction)
         let comments = dto.comments?.map(toComment) ?? []
         let companions = dto.companions?.map(toUserSummary) ?? []
         let feedKind = PostFeedKind(rawValue: dto.feedKind ?? PostFeedKind.checkIn.rawValue) ?? .checkIn
-        let mediaType = dto.mediaType.flatMap { PostMediaType(rawValue: $0) } ?? .image
+        let mediaType = firstMediaItem
+            .flatMap { PostMediaType(rawValue: $0.mediaType.lowercased()) }
+            ?? dto.mediaType.flatMap { PostMediaType(rawValue: $0) }
+            ?? .image
         let billSplit = dto.billSplit.map(toBillSplit)
         let viewCount = dto.viewCount ?? 0
         let viewers = dto.viewers?.map(toUserSummary) ?? []

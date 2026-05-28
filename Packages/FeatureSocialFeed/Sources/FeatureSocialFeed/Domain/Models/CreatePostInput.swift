@@ -1,10 +1,22 @@
 import Foundation
 import SplickDomain
 
-public struct CreatePostInput: Sendable {
-    public let imageData: Data?
+public struct CreatePostMediaInput: Sendable {
+    public let data: Data
+    public let mimeType: String
     public let mediaType: PostMediaType
-    public let videoURL: URL?
+    public let videoDurationSeconds: Int?
+
+    public init(data: Data, mimeType: String, mediaType: PostMediaType, videoDurationSeconds: Int? = nil) {
+        self.data = data
+        self.mimeType = mimeType
+        self.mediaType = mediaType
+        self.videoDurationSeconds = videoDurationSeconds
+    }
+}
+
+public struct CreatePostInput: Sendable {
+    public let mediaItems: [CreatePostMediaInput]
     public let caption: String?
     public let companionIds: [UUID]
     public let checkInPlace: String?
@@ -14,9 +26,7 @@ public struct CreatePostInput: Sendable {
     public let groupId: UUID?
 
     public init(
-        imageData: Data?,
-        mediaType: PostMediaType,
-        videoURL: URL? = nil,
+        mediaItems: [CreatePostMediaInput],
         caption: String?,
         companionIds: [UUID] = [],
         checkInPlace: String? = nil,
@@ -25,9 +35,7 @@ public struct CreatePostInput: Sendable {
         billSplitType: String? = nil,
         groupId: UUID? = nil
     ) {
-        self.imageData = imageData
-        self.mediaType = mediaType
-        self.videoURL = videoURL
+        self.mediaItems = mediaItems
         self.caption = caption
         self.companionIds = companionIds
         self.checkInPlace = checkInPlace

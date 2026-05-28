@@ -239,13 +239,14 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
     }
 
     public func createPost(_ input: CreatePostInput) async throws -> Post {
-        logger.log("Create post: \(input.imageData?.count ?? 0) bytes, kind=\(input.feedKind)")
+        logger.log("Create post: \(input.mediaItems.count) media items, kind=\(input.feedKind)")
         try await Task.sleep(for: .milliseconds(800))
 
         let companions = input.companionIds.map { id in
             UserSummary(id: id, username: "friend", displayName: "Friend", avatarURL: nil)
         }
 
+        let primaryMediaType = input.mediaItems.first?.mediaType ?? .image
         let post = Post(
             id: UUID(),
             author: UserSummary(id: UUID(), username: "namtran", displayName: "Nam Tran", avatarURL: nil),
@@ -254,9 +255,9 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
             reactions: [],
             groupId: input.groupId,
             createdAt: .now,
-            mediaType: input.mediaType,
-            videoURL: input.videoURL,
-            videoDurationSeconds: input.mediaType == .video ? 12 : nil,
+            mediaType: primaryMediaType,
+            videoURL: primaryMediaType == .video ? Self.sampleVideoURL : nil,
+            videoDurationSeconds: primaryMediaType == .video ? (input.mediaItems.first?.videoDurationSeconds ?? 12) : nil,
             companions: companions,
             feedKind: input.feedKind,
             checkInPlace: input.checkInPlace,
