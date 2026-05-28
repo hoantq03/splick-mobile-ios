@@ -1,3 +1,4 @@
+import Common
 import Foundation
 import UserNotifications
 
@@ -26,7 +27,7 @@ public class PushNotificationManager: NSObject, ObservableObject, UNUserNotifica
     public func syncTokenWithBackend(fcmToken: String) async {
         self.fcmToken = fcmToken
         // In a real app, use a networking client (e.g. Alamofire or URLSession) to POST to backend
-        let url = URL(string: "http://localhost:8080/api/v1/notifications/tokens")!
+        let url = URL(string: "\(AppConstants.API.baseURL)/v1/notifications/tokens")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
