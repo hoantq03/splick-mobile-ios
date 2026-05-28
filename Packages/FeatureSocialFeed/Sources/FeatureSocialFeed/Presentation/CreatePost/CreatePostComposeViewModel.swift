@@ -2,6 +2,7 @@ import Foundation
 import UIKit
 import Common
 import SplickDomain
+import AVFoundation
 
 public enum ComposeBillSplitMode: String, CaseIterable, Identifiable {
     case equal
@@ -33,16 +34,19 @@ public final class CreatePostComposeViewModel: ObservableObject {
     @Published var exactAmountTexts: [UUID: String] = [:]
     @Published private(set) var isSearchingFriends = false
     @Published private(set) var submitState: LoadingState<Post> = .idle
-
-    public let previewImage: UIImage?
-    public let videoURL: URL?
-    public let mediaType: PostMediaType
+    @Published private(set) var selectedMediaItems: [ComposeMediaDraft] = []
+    @Published private(set) var mentionSuggestions: [UserSummary] = []
+    @Published private(set) var isSearchingMentions = false
 
     private let createPostUseCase: CreatePostUseCaseProtocol
     private let fetchFriendsUseCase: FetchFriendsUseCaseProtocol
     private let currentUser: UserSummary?
     private let currentUserId: UUID?
     private var friendSearchTask: Task<Void, Never>?
+    private var mentionSearchTask: Task<Void, Never>?
+
+    private let maxImages = 5
+    private let maxVideos = 3
 
     public init(
         previewImage: UIImage?,
@@ -53,13 +57,35 @@ public final class CreatePostComposeViewModel: ObservableObject {
         currentUser: UserSummary?,
         currentUserId: UUID?
     ) {
-        self.previewImage = previewImage
-        self.videoURL = videoURL
-        self.mediaType = mediaType
         self.createPostUseCase = createPostUseCase
         self.fetchFriendsUseCase = fetchFriendsUseCase
         self.currentUser = currentUser
         self.currentUserId = currentUserId ?? currentUser?.id
+
+        if let previewImage,
+           let data = previewImage.jpegData(compressionQuality: AppConstants.Media.compressionQuality) {
+            selectedMediaItems = [
+                ComposeMediaDraft(
+                    previewImage: previewImage,
+                    mediaType: mediaType,
+                    data: data,
+                    mimeType: mediaType == .video ? "video/mp4" : "image/jpeg",
+                    videoDurationSeconds: mediaType == .video ? videoURL.flatMap(Self.videoDurationSeconds) : nil
+                )
+            ]
+        } else if mediaType == .video,
+                  let videoURL,
+                  let data = try? Data(contentsOf: videoURL) {
+            selectedMediaItems = [
+                ComposeMediaDraft(
+                    previewImage: Self.videoThumbnail(videoURL),
+                    mediaType: .video,
+                    data: data,
+                    mimeType: "video/mp4",
+                    videoDurationSeconds: Self.videoDurationSeconds(from: videoURL)
+                )
+            ]
+        }
     }
 
     var selectedCompanionIds: Set<UUID> {
@@ -109,6 +135,27 @@ public final class CreatePostComposeViewModel: ObservableObject {
         }
     }
 
+    var canAddMoreMedia: Bool {
+        selectedMediaItems.count < maxImages + maxVideos
+    }
+
+    func removeMediaItem(id: UUID) {
+        selectedMediaItems.removeAll { $0.id == id }
+    }
+
+    func addMediaDraft(_ media: ComposeMediaDraft) {
+        guard canAddMoreMedia else { return }
+        if media.mediaType == .video,
+           selectedMediaItems.filter({ $0.mediaType == .video }).count >= maxVideos {
+            return
+        }
+        if media.mediaType == .image,
+           selectedMediaItems.filter({ $0.mediaType == .image }).count >= maxImages {
+            return
+        }
+        selectedMediaItems.append(media)
+    }
+
     func updateFriendSearch(_ query: String) {
         friendSearchQuery = query
         friendSearchTask?.cancel()
@@ -135,6 +182,37 @@ public final class CreatePostComposeViewModel: ObservableObject {
         }
     }
 
+    func updateCaptionMentions(_ text: String) {
+        caption = text
+        mentionSearchTask?.cancel()
+        guard let context = MentionContext.active(in: text) else {
+            mentionSuggestions = []
+            isSearchingMentions = false
+            return
+        }
+        isSearchingMentions = true
+        mentionSearchTask = Task {
+            try? await Task.sleep(nanoseconds: 180_000_000)
+            guard !Task.isCancelled else { return }
+            do {
+                let users = try await fetchFriendsUseCase.execute(query: context.query, page: 0, limit: 10)
+                guard !Task.isCancelled else { return }
+                mentionSuggestions = users
+                isSearchingMentions = false
+            } catch {
+                mentionSuggestions = []
+                isSearchingMentions = false
+            }
+        }
+    }
+
+    func insertMention(_ user: UserSummary) {
+        guard let context = MentionContext.active(in: caption) else { return }
+        let mention = "@\(user.username) "
+        caption.replaceSubrange(context.replaceRange, with: mention)
+        mentionSuggestions = []
+    }
+
     func addCompanion(_ user: UserSummary) {
         guard !selectedCompanionIds.contains(user.id) else { return }
         selectedCompanions.append(user)
@@ -150,8 +228,8 @@ public final class CreatePostComposeViewModel: ObservableObject {
     }
 
     func submit() async -> Bool {
-        guard let imageData = imagePayload else {
-            submitState = .failed("Không thể xử lý ảnh/video.")
+        guard !selectedMediaItems.isEmpty else {
+            submitState = .failed("Chọn ít nhất một ảnh hoặc video.")
             return false
         }
 
@@ -167,9 +245,14 @@ public final class CreatePostComposeViewModel: ObservableObject {
         }
 
         let input = CreatePostInput(
-            imageData: imageData,
-            mediaType: mediaType,
-            videoURL: videoURL,
+            mediaItems: selectedMediaItems.map {
+                CreatePostMediaInput(
+                    data: $0.data,
+                    mimeType: $0.mimeType,
+                    mediaType: $0.mediaType,
+                    videoDurationSeconds: $0.videoDurationSeconds
+                )
+            },
             caption: caption.nilIfBlank,
             companionIds: selectedCompanions.map(\.id),
             checkInPlace: location.nilIfBlank,
@@ -187,18 +270,6 @@ public final class CreatePostComposeViewModel: ObservableObject {
             submitState = .failed(error.localizedDescription)
             return false
         }
-    }
-
-    private var imagePayload: Data? {
-        if let previewImage,
-           let data = previewImage.jpegData(compressionQuality: AppConstants.Media.compressionQuality) {
-            return data
-        }
-        if mediaType == .video, let videoURL,
-           let data = try? Data(contentsOf: videoURL) {
-            return data
-        }
-        return nil
     }
 
     private func buildBillSplit() -> PostBillSplit? {
@@ -229,6 +300,32 @@ public final class CreatePostComposeViewModel: ObservableObject {
 
         return PostBillSplit(totalAmount: total, currency: "VND", splits: splits)
     }
+
+    private static func videoDurationSeconds(from url: URL) -> Int? {
+        let asset = AVURLAsset(url: url)
+        let seconds = CMTimeGetSeconds(asset.duration)
+        guard seconds.isFinite else { return nil }
+        return Int(seconds.rounded())
+    }
+
+    private static func videoThumbnail(_ url: URL) -> UIImage? {
+        let asset = AVURLAsset(url: url)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        guard let cgImage = try? generator.copyCGImage(at: .zero, actualTime: nil) else {
+            return nil
+        }
+        return UIImage(cgImage: cgImage)
+    }
+}
+
+public struct ComposeMediaDraft: Identifiable {
+    public let id = UUID()
+    public let previewImage: UIImage?
+    public let mediaType: PostMediaType
+    public let data: Data
+    public let mimeType: String
+    public let videoDurationSeconds: Int?
 }
 
 private extension ComposeBillSplitMode {

@@ -1,4 +1,8 @@
 import SwiftUI
+import PhotosUI
+import AVFoundation
+import UniformTypeIdentifiers
+import UIKit
 import DesignSystem
 import SplickDomain
 
@@ -7,6 +11,7 @@ public struct CreatePostComposeView: View {
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     let onPosted: () -> Void
     let onCancel: () -> Void
+    @State private var photoPickerItems: [PhotosPickerItem] = []
 
     public init(
         viewModel: @autoclosure @escaping () -> CreatePostComposeViewModel,
@@ -70,34 +75,120 @@ public struct CreatePostComposeView: View {
 
     @ViewBuilder
     private var mediaPreview: some View {
-        Group {
-            if let image = viewModel.previewImage {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                ZStack {
-                    SplickTheme.Colors.tertiaryBackground
-                    Image(systemName: "play.rectangle.fill")
-                        .font(.system(size: 48))
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: SplickTheme.Spacing.sm) {
+                    ForEach(viewModel.selectedMediaItems) { item in
+                        ZStack(alignment: .topTrailing) {
+                            Group {
+                                if let image = item.previewImage {
+                                    Image(uiImage: image)
+                                        .resizable()
+                                        .scaledToFill()
+                                } else {
+                                    ZStack {
+                                        SplickTheme.Colors.tertiaryBackground
+                                        Image(systemName: "play.rectangle.fill")
+                                            .font(.system(size: 28))
+                                            .foregroundStyle(SplickTheme.Colors.textSecondary)
+                                    }
+                                }
+                            }
+                            .frame(width: 140, height: 180)
+                            .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium))
+
+                            Button {
+                                viewModel.removeMediaItem(id: item.id)
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundStyle(.white, .black.opacity(0.45))
+                            }
+                            .padding(6)
+                        }
+                    }
+
+                    if viewModel.canAddMoreMedia {
+                        PhotosPicker(
+                            selection: $photoPickerItems,
+                            maxSelectionCount: 8,
+                            matching: .any(of: [.images, .videos])
+                        ) {
+                            VStack(spacing: 8) {
+                                Image(systemName: "plus.circle")
+                                    .font(.system(size: 24))
+                                Text("Thêm media")
+                                    .font(SplickTheme.Typography.caption)
+                            }
+                            .foregroundStyle(SplickTheme.Colors.textSecondary)
+                            .frame(width: 140, height: 180)
+                            .background(SplickTheme.Colors.tertiaryBackground)
+                            .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium))
+                        }
+                        .onChange(of: photoPickerItems) { items in
+                            Task {
+                                await importSelectedMediaItems(items)
+                                photoPickerItems = []
+                            }
+                        }
+                    }
                 }
             }
+            Text("Tối đa 5 ảnh và 3 video")
+                .font(SplickTheme.Typography.caption)
+                .foregroundStyle(SplickTheme.Colors.textTertiary)
         }
-        .frame(height: 220)
-        .frame(maxWidth: .infinity)
-        .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium))
     }
 
     private var captionSection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
             Text("Caption")
                 .font(SplickTheme.Typography.headline)
-            TextField("Viết gì đó về khoảnh khắc này...", text: $viewModel.caption, axis: .vertical)
+            TextField(
+                "Viết gì đó về khoảnh khắc này...",
+                text: Binding(
+                    get: { viewModel.caption },
+                    set: { viewModel.updateCaptionMentions($0) }
+                ),
+                axis: .vertical
+            )
                 .lineLimit(3...6)
                 .padding(SplickTheme.Spacing.sm)
                 .background(SplickTheme.Colors.secondaryBackground)
                 .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small))
+
+            if viewModel.isSearchingMentions {
+                ProgressView()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if !viewModel.mentionSuggestions.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(viewModel.mentionSuggestions.prefix(6)) { user in
+                        Button {
+                            viewModel.insertMention(user)
+                        } label: {
+                            HStack(spacing: SplickTheme.Spacing.sm) {
+                                AvatarView(
+                                    imageURL: user.avatarURL,
+                                    name: user.displayName,
+                                    size: .small
+                                )
+                                Text(user.displayName)
+                                    .font(SplickTheme.Typography.callout)
+                                    .foregroundStyle(SplickTheme.Colors.textPrimary)
+                                Spacer()
+                                Text("@\(user.username)")
+                                    .font(SplickTheme.Typography.caption)
+                                    .foregroundStyle(SplickTheme.Colors.textTertiary)
+                            }
+                            .padding(.horizontal, SplickTheme.Spacing.sm)
+                            .padding(.vertical, SplickTheme.Spacing.xs)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .background(SplickTheme.Colors.secondaryBackground)
+                .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small))
+            }
         }
     }
 
@@ -375,6 +466,38 @@ public struct CreatePostComposeView: View {
             get: { viewModel.exactAmountTexts[userId] ?? "" },
             set: { viewModel.exactAmountTexts[userId] = $0 }
         )
+    }
+
+    @MainActor
+    private func importSelectedMediaItems(_ items: [PhotosPickerItem]) async {
+        for item in items {
+            guard viewModel.canAddMoreMedia else { break }
+            let isVideo = item.supportedContentTypes.contains(where: { $0.conforms(to: UTType.movie) })
+            guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
+
+            if isVideo {
+                viewModel.addMediaDraft(
+                    ComposeMediaDraft(
+                        previewImage: nil,
+                        mediaType: .video,
+                        data: data,
+                        mimeType: "video/mp4",
+                        videoDurationSeconds: nil
+                    )
+                )
+            } else {
+                guard let image = UIImage(data: data) else { continue }
+                viewModel.addMediaDraft(
+                    ComposeMediaDraft(
+                        previewImage: image,
+                        mediaType: .image,
+                        data: data,
+                        mimeType: "image/jpeg",
+                        videoDurationSeconds: nil
+                    )
+                )
+            }
+        }
     }
 }
 
