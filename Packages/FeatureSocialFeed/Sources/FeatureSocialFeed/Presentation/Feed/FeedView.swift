@@ -8,10 +8,6 @@ private struct ProfileRoute: Identifiable {
     var id: UUID { user.id }
 }
 
-private enum FeedScrollAnchor {
-    static let top = "feedTop"
-}
-
 public struct FeedView: View {
     @ObservedObject private var viewModel: FeedViewModel
     @Binding private var navigationPath: NavigationPath
@@ -68,10 +64,11 @@ public struct FeedView: View {
             }
             .navigationTitle("Feeds")
             .splickProfileToolbar()
-            .navigationDestination(for: UUID.self) { postId in
-                if let post = viewModel.posts.first(where: { $0.id == postId }) {
+            .navigationDestination(for: FeedPostDestination.self) { destination in
+                if let post = viewModel.posts.first(where: { $0.id == destination.postId }) {
                     PostDetailView(
                         post: post,
+                        initialMediaIndex: destination.mediaIndex,
                         feedViewModel: viewModel,
                         fetchFriendsUseCase: fetchFriendsUseCase
                     )
@@ -101,7 +98,7 @@ public struct FeedView: View {
             guard let postId = pendingPostId else { return }
             let loaded = await viewModel.ensurePostLoaded(id: postId)
             if loaded {
-                navigationPath.append(postId)
+                navigationPath.append(FeedPostDestination(postId: postId, mediaIndex: 0))
             }
             onPendingPostHandled?()
         }
@@ -122,61 +119,62 @@ public struct FeedView: View {
     }
 
     private var feedList: some View {
-        ScrollViewReader { scrollProxy in
-            ScrollView {
-                LazyVStack(spacing: SplickTheme.Spacing.md) {
-                    Color.clear
-                        .frame(height: 0)
-                        .id(FeedScrollAnchor.top)
-
-                    ForEach(viewModel.posts) { post in
-                        PostCardView(
-                            post: post,
-                            currentUser: viewModel.currentUser,
-                            onReact: { emoji in
-                                if let error = viewModel.react(to: post.id, emoji: emoji) {
-                                    viewModel.alertMessage = error
-                                }
-                            },
-                            onDelete: {
-                                Task { await viewModel.deletePost(id: post.id) }
-                            },
-                            onUserTap: { user in
-                                profileRoute = ProfileRoute(user: user)
-                            },
-                            onOpenComments: {},
-                            onShowCompanions: {
-                                companionsRoute = CompanionsSheetRoute(
-                                    id: post.id,
-                                    companions: post.companions
-                                )
-                            },
-                            onOpenDetail: { navigationPath.append(post.id) }
-                        )
-                        .onAppear {
-                            guard !viewModel.isRefreshing else { return }
-                            Task { await viewModel.trackViewOnScrollIfNeeded(for: post) }
-                            if post.id == viewModel.posts.last?.id {
-                                Task { await viewModel.loadMore() }
+        FeedPullToRefreshScrollView(
+            isRefreshing: Binding(
+                get: { viewModel.isRefreshing },
+                set: { _ in }
+            )
+        ) {
+            FeedScrollLock.forceUnlock()
+            feedScrollLocked = false
+            defer {
+                viewModel.endRefreshingIfNeeded()
+                tabBarScrollState?.reset()
+            }
+            return await viewModel.loadFeed(isPullToRefresh: true)
+        } content: {
+            LazyVStack(spacing: SplickTheme.Spacing.md) {
+                ForEach(viewModel.posts) { post in
+                    PostCardView(
+                        post: post,
+                        currentUser: viewModel.currentUser,
+                        onReact: { emoji in
+                            if let error = viewModel.react(to: post.id, emoji: emoji) {
+                                viewModel.alertMessage = error
                             }
+                        },
+                        onDelete: {
+                            Task { await viewModel.deletePost(id: post.id) }
+                        },
+                        onUserTap: { user in
+                            profileRoute = ProfileRoute(user: user)
+                        },
+                        onOpenComments: {},
+                        onShowCompanions: {
+                            companionsRoute = CompanionsSheetRoute(
+                                id: post.id,
+                                companions: post.companions
+                            )
+                        },
+                        onOpenDetail: { mediaIndex in
+                            navigationPath.append(
+                                FeedPostDestination(postId: post.id, mediaIndex: mediaIndex)
+                            )
+                        }
+                    )
+                    .onAppear {
+                        guard !viewModel.isRefreshing else { return }
+                        Task { await viewModel.trackViewOnScrollIfNeeded(for: post) }
+                        if post.id == viewModel.posts.last?.id {
+                            Task { await viewModel.loadMore() }
                         }
                     }
                 }
-                .padding(.horizontal, SplickTheme.Spacing.md)
             }
-            .scrollDisabled(feedScrollLocked)
-            .refreshable {
-                FeedScrollLock.forceUnlock()
-                feedScrollLocked = false
-                let refreshed = await viewModel.loadFeed(isPullToRefresh: true)
-                guard refreshed else { return }
-                tabBarScrollState?.reset()
-                withAnimation(.easeOut(duration: 0.2)) {
-                    scrollProxy.scrollTo(FeedScrollAnchor.top, anchor: .top)
-                }
-            }
-            .environment(\.feedVideoCoordinator, videoCoordinator)
-            .tabBarHideOnScroll()
+            .padding(.horizontal, SplickTheme.Spacing.md)
         }
+        .scrollDisabled(feedScrollLocked)
+        .environment(\.feedVideoCoordinator, videoCoordinator)
+        .tabBarHideOnScroll()
     }
 }
