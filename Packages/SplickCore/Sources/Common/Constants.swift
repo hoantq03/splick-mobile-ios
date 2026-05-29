@@ -3,12 +3,10 @@ import Foundation
 public enum AppConstants {
     public enum API {
         /// Gateway root (no version). Endpoints append `/v1/{domain}/...` — see `docs/API_ROUTING.md`.
-        #if DEBUG
-        /// Remote staging (VPS). Use `http://localhost:8080/api` when backend runs on Mac via Kong.
-        public static let baseURL = "http://103.82.26.28/api"
-        #else
+        /// Production: Cloudflare HTTPS → VPS :80 → Kong. `/api` is the Kong path prefix (not a port).
+        /// Full URL example: `https://api.splick.app/api` + `/v1/auth/login`
+        /// Local Mac backend: `http://localhost:8080/api`
         public static let baseURL = "https://api.splick.app/api"
-        #endif
 
         public static let timeoutInterval: TimeInterval = 30
         public static let maxRetryCount = 3

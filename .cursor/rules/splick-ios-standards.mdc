@@ -29,7 +29,8 @@ alwaysApply: false
 
 ## API integration
 
-- Base URL (dev): `http://localhost:8080/api` (Kong gateway — **not** service ports 8081/8082).
+- Base URL (remote): `https://api.splick.app/api` (Cloudflare Flexible HTTPS → VPS :80 → Kong; `/api` is path prefix).
+- Base URL (local Mac backend): `http://localhost:8080/api` — **not** service ports 8081/8082.
 - Paths: **`/v1/{domain}/...`** appended to base URL (e.g. `/v1/auth/login`, `/v1/social/groups`).
 - iOS Google Sign-In: `POST /v1/auth/google` (idToken) — not browser `/v1/auth/oauth2/*`.
 - Paths must match `splick-backend/openapi/openapi.yaml` — see `splick-mobile-ios/docs/API_ROUTING.md`.
