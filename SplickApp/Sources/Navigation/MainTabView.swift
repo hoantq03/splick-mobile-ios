@@ -1,4 +1,5 @@
 import SwiftUI
+import Common
 import DesignSystem
 import SplickDomain
 import FeatureAuth
@@ -126,6 +127,7 @@ struct MainTabView: View {
             }
         }
         .onChange(of: appState.selectedTab) { tab in
+            Log.debug("Tab selected", category: .ui, metadata: ["tab": tab.rawValue])
             if tab == .camera {
                 tabBarScrollState.hide()
             } else {

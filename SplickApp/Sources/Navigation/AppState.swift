@@ -40,6 +40,7 @@ final class AppState: ObservableObject {
             completeOnboarding()
         }
         Log.info("User authenticated: \(user.username)", category: .lifecycle)
+        Log.debug("Navigate to main tabs", category: .ui)
     }
 
     func updateAuthenticatedUser(_ user: User) {
@@ -59,6 +60,11 @@ final class AppState: ObservableObject {
     func openPostFromNotification(_ postId: UUID) {
         pendingPostId = postId
         selectedTab = .feed
+        Log.debug(
+            "Navigate to post from notification",
+            category: .ui,
+            metadata: ["postId": postId.uuidString, "tab": Tab.feed.rawValue]
+        )
     }
 
     func clearPendingPostNavigation() {
