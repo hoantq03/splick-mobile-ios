@@ -21,8 +21,23 @@ public final class FeedViewModel: ObservableObject {
     private var currentPage = 0
     private var canLoadMore = true
     private var trackedViewPostIds = Set<UUID>()
+    private var loadFeedTask: Task<Bool, Never>?
+    private var loadFeedGeneration = 0
 
     private var currentUserSummary: UserSummary?
+
+    // MARK: - Debounced reactions (optimistic UI → single API per burst)
+
+    private var reactionBatchSnapshots: [UUID: Post] = [:]
+    private var pendingReactionEmojis: [UUID: [String]] = [:]
+    private var reactionFlushTasks: [UUID: Task<Void, Never>] = [:]
+    private static let reactionDebounceNanos: UInt64 = 450_000_000
+
+    // MARK: - Debounced view tracking (scroll → one GET after idle)
+
+    private var pendingViewPostId: UUID?
+    private var viewTrackFlushTask: Task<Void, Never>?
+    private static let viewTrackDebounceNanos: UInt64 = 1_200_000_000
 
     public init(
         fetchFeedUseCase: FetchFeedUseCaseProtocol,
@@ -47,10 +62,39 @@ public final class FeedViewModel: ObservableObject {
         currentUserId = userId ?? user?.id
     }
 
-    func loadFeed(isPullToRefresh: Bool = false) async {
+    @discardableResult
+    func loadFeed(isPullToRefresh: Bool = false) async -> Bool {
         if isPullToRefresh {
-            guard !isRefreshing else { return }
+            // Supersede any in-flight feed fetch (initial load, prior refresh) to avoid duplicate GET /v1/feed.
+            loadFeedTask?.cancel()
+        } else if let existing = loadFeedTask {
+            return await existing.value
+        }
+
+        loadFeedGeneration += 1
+        let generation = loadFeedGeneration
+
+        let task = Task<Bool, Never> { @MainActor in
+            await performLoadFeed(isPullToRefresh: isPullToRefresh)
+        }
+        loadFeedTask = task
+        let succeeded = await task.value
+        if generation == loadFeedGeneration {
+            loadFeedTask = nil
+        }
+        return succeeded
+    }
+
+    /// Ensures refresh UI never stays stuck if a task was cancelled mid-flight.
+    func endRefreshingIfNeeded() {
+        isRefreshing = false
+    }
+
+    @discardableResult
+    private func performLoadFeed(isPullToRefresh: Bool) async -> Bool {
+        if isPullToRefresh {
             isRefreshing = true
+            cancelViewTrackFlush()
         } else if posts.isEmpty {
             state = .loading
         }
@@ -58,7 +102,9 @@ public final class FeedViewModel: ObservableObject {
         isLoadingMore = false
         currentPage = 0
         canLoadMore = true
-        trackedViewPostIds.removeAll()
+        if !isPullToRefresh {
+            trackedViewPostIds.removeAll()
+        }
 
         defer {
             if isPullToRefresh {
@@ -71,7 +117,11 @@ public final class FeedViewModel: ObservableObject {
             self.posts = posts
             state = .loaded(posts)
             canLoadMore = !posts.isEmpty
+            return true
         } catch {
+            if error.isRequestCancellation {
+                return false
+            }
             Log.error(error, category: .feed)
             if isPullToRefresh {
                 if posts.isEmpty {
@@ -85,6 +135,7 @@ public final class FeedViewModel: ObservableObject {
             } else {
                 state = .loaded(posts)
             }
+            return false
         }
     }
 
@@ -106,6 +157,7 @@ public final class FeedViewModel: ObservableObject {
             canLoadMore = !newPosts.isEmpty
             state = .loaded(posts)
         } catch {
+            if error.isRequestCancellation { return }
             currentPage -= 1
             Log.error(error, category: .feed)
         }
@@ -114,6 +166,8 @@ public final class FeedViewModel: ObservableObject {
     }
 
     func refreshPost(id: UUID, preservingLocalComment localComment: PostComment? = nil) async {
+        guard !isRefreshing else { return }
+
         do {
             var updated = try await fetchPostUseCase.execute(postId: id)
             if let localComment,
@@ -125,16 +179,36 @@ public final class FeedViewModel: ObservableObject {
                 state = .loaded(posts)
             }
         } catch {
+            if error.isRequestCancellation { return }
             Log.error(error, category: .feed)
         }
     }
 
     func trackViewOnScrollIfNeeded(for post: Post) async {
+        guard !isRefreshing else { return }
         guard let currentUserId, currentUserId != post.author.id else { return }
         guard !trackedViewPostIds.contains(post.id) else { return }
 
         trackedViewPostIds.insert(post.id)
-        await refreshPost(id: post.id)
+        pendingViewPostId = post.id
+        scheduleViewTrackFlush()
+    }
+
+    private func scheduleViewTrackFlush() {
+        viewTrackFlushTask?.cancel()
+        viewTrackFlushTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: Self.viewTrackDebounceNanos)
+            guard !Task.isCancelled else { return }
+            guard !isRefreshing, let postId = pendingViewPostId else { return }
+            pendingViewPostId = nil
+            await refreshPost(id: postId)
+        }
+    }
+
+    private func cancelViewTrackFlush() {
+        viewTrackFlushTask?.cancel()
+        viewTrackFlushTask = nil
+        pendingViewPostId = nil
     }
 
     private func matchesComment(_ lhs: PostComment, _ rhs: PostComment) -> Bool {
@@ -144,7 +218,7 @@ public final class FeedViewModel: ObservableObject {
     }
 
     @discardableResult
-    func react(to postId: UUID, emoji: String) async -> String? {
+    func react(to postId: UUID, emoji: String) -> String? {
         guard let userId = currentUserId else { return nil }
         guard let index = posts.firstIndex(where: { $0.id == postId }) else { return nil }
 
@@ -156,19 +230,41 @@ public final class FeedViewModel: ObservableObject {
             return "Mỗi bài bạn chỉ được dùng tối đa 5 loại emoji."
         }
 
+        if reactionBatchSnapshots[postId] == nil {
+            reactionBatchSnapshots[postId] = post
+        }
+
         let reaction = Reaction(id: UUID(), emoji: emoji, userId: userId)
         posts[index] = post.updating(reactions: post.reactions + [reaction])
-        state = .loaded(posts)
+
+        var queue = pendingReactionEmojis[postId] ?? []
+        queue.append(emoji)
+        pendingReactionEmojis[postId] = queue
+
+        reactionFlushTasks[postId]?.cancel()
+        reactionFlushTasks[postId] = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: Self.reactionDebounceNanos)
+            guard !Task.isCancelled else { return }
+            await flushPendingReaction(for: postId)
+        }
+        return nil
+    }
+
+    private func flushPendingReaction(for postId: UUID) async {
+        reactionFlushTasks[postId] = nil
+        let emojis = pendingReactionEmojis.removeValue(forKey: postId) ?? []
+        let baseline = reactionBatchSnapshots.removeValue(forKey: postId)
+        guard let emoji = emojis.last else { return }
 
         do {
             _ = try await reactToPostUseCase.execute(postId: postId, emoji: emoji)
         } catch {
-            posts[index] = post
-            state = .loaded(posts)
+            if let baseline, let rollbackIndex = posts.firstIndex(where: { $0.id == postId }) {
+                posts[rollbackIndex] = baseline
+            }
             Log.error(error, category: .feed)
-            return error.localizedDescription
+            alertMessage = error.localizedDescription
         }
-        return nil
     }
 
     @discardableResult

@@ -11,4 +11,8 @@ enum FeedScrollLock {
             userInfo: ["locked": locked]
         )
     }
+
+    static func forceUnlock() {
+        setLocked(false)
+    }
 }
