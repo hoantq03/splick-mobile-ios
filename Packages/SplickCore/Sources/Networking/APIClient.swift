@@ -68,7 +68,17 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
         body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
         request.httpBody = body
 
+        let start = Date()
         let (responseData, response) = try await session.data(for: request)
+        if let httpResponse = response as? HTTPURLResponse {
+            let durationMs = Int(Date().timeIntervalSince(start) * 1000)
+            let traceId = httpResponse.value(forHTTPHeaderField: APIRequestCorrelation.headerName) ?? "-"
+            Log.debug(
+                "UPLOAD \(endpoint.path) → \(httpResponse.statusCode) (\(durationMs)ms)",
+                category: .network,
+                metadata: ["traceId": traceId]
+            )
+        }
         try validateResponse(response, data: responseData)
         return try decoder.decode(T.self, from: responseData)
     }
@@ -84,6 +94,7 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
 
         Log.debug("\(endpoint.method.rawValue) \(endpoint.path)", category: .network)
 
+        let start = Date()
         let (data, response): (Data, URLResponse)
         do {
             try Task.checkCancellation()
@@ -93,6 +104,16 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
             throw CancellationError()
         } catch let error as URLError {
             throw mapURLError(error)
+        }
+
+        if let httpResponse = response as? HTTPURLResponse {
+            let durationMs = Int(Date().timeIntervalSince(start) * 1000)
+            let traceId = httpResponse.value(forHTTPHeaderField: APIRequestCorrelation.headerName) ?? "-"
+            Log.debug(
+                "\(endpoint.method.rawValue) \(endpoint.path) → \(httpResponse.statusCode) (\(durationMs)ms)",
+                category: .network,
+                metadata: ["traceId": traceId]
+            )
         }
 
         if let httpResponse = response as? HTTPURLResponse,
@@ -187,11 +208,11 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
     }
 
     private func logApiFailure(statusCode: Int, traceId: String?) {
+        var metadata: [String: String] = ["status": String(statusCode)]
         if let traceId, !traceId.isEmpty {
-            Log.error("API failed status=\(statusCode) traceId=\(traceId)", category: .network)
-        } else {
-            Log.error("API failed status=\(statusCode)", category: .network)
+            metadata["traceId"] = traceId
         }
+        Log.error("API request failed", category: .network, metadata: metadata)
     }
 
     private func mapAPIError(
