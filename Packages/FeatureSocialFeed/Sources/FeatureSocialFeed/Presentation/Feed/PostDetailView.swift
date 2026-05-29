@@ -5,6 +5,7 @@ import SplickDomain
 
 struct PostDetailView: View {
     let post: Post
+    let initialMediaIndex: Int
     @ObservedObject var feedViewModel: FeedViewModel
     let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
 
@@ -15,15 +16,16 @@ struct PostDetailView: View {
     @State private var companionsRoute: CompanionsSheetRoute?
     @State private var replyParentId: UUID?
     @State private var showEmojiPicker = false
-    @State private var showMediaViewer = false
-    @State private var viewerInitialIndex = 0
+    @State private var mediaViewerRoute: MediaViewerRoute?
 
     init(
         post: Post,
+        initialMediaIndex: Int = 0,
         feedViewModel: FeedViewModel,
         fetchFriendsUseCase: FetchFriendsUseCaseProtocol? = nil
     ) {
         self.post = post
+        self.initialMediaIndex = initialMediaIndex
         self.feedViewModel = feedViewModel
         self.fetchFriendsUseCase = fetchFriendsUseCase
         _commentPager = StateObject(wrappedValue: PostDetailViewModel(comments: post.comments))
@@ -57,9 +59,9 @@ struct PostDetailView: View {
                     },
                     showsCommentPreview: false,
                     onMediaTap: { index in
-                        viewerInitialIndex = index
-                        showMediaViewer = true
-                    }
+                        mediaViewerRoute = MediaViewerRoute(index: index)
+                    },
+                    initialMediaIndex: initialMediaIndex
                 )
 
                 commentsSection
@@ -68,7 +70,7 @@ struct PostDetailView: View {
         }
         .navigationTitle("Bình luận")
         .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .bottom) {
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             CommentComposerView(
                 placeholder: replyParentId == nil ? "Viết bình luận..." : "Trả lời...",
                 fetchFriendsUseCase: fetchFriendsUseCase
@@ -87,9 +89,12 @@ struct PostDetailView: View {
                 }
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
-            .padding(.vertical, SplickTheme.Spacing.xs)
-            .padding(.bottom, SplickTabBarMetrics.hiddenClearance)
-            .background(SplickTheme.Colors.background)
+            .padding(.top, SplickTheme.Spacing.xs)
+            .padding(.bottom, SplickTheme.Spacing.xs)
+            .background {
+                SplickTheme.Colors.background
+                    .ignoresSafeArea(edges: .bottom)
+            }
         }
         .alert(
             "Thông báo",
@@ -105,7 +110,7 @@ struct PostDetailView: View {
         .task { await feedViewModel.refreshPost(id: post.id) }
         .onAppear {
             feedViewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
-            tabBarScrollState?.hide()
+            tabBarScrollState?.hide(flushToBottom: true)
             commentPager.loadInitial()
         }
         .onDisappear {
@@ -130,13 +135,16 @@ struct PostDetailView: View {
                 }
             }
         }
-        .fullScreenCover(isPresented: $showMediaViewer) {
+        .fullScreenCover(item: $mediaViewerRoute) { route in
             let mediaItems = livePost.displayMediaItems
             if !mediaItems.isEmpty {
                 MediaViewerView(
                     items: mediaItems,
-                    initialIndex: min(viewerInitialIndex, mediaItems.count - 1),
-                    isPresented: $showMediaViewer
+                    initialIndex: min(route.index, mediaItems.count - 1),
+                    isPresented: Binding(
+                        get: { mediaViewerRoute != nil },
+                        set: { if !$0 { mediaViewerRoute = nil } }
+                    )
                 )
             }
         }
@@ -167,7 +175,7 @@ struct PostDetailView: View {
                     commentPager.loadNextPage()
                 } label: {
                     if commentPager.isLoadingPage {
-                        ProgressView()
+                        SplickSpinner(size: .small)
                     } else {
                         Text("Xem thêm bình luận")
                             .font(.system(size: 12, weight: .medium))

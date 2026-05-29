@@ -29,11 +29,15 @@ struct PostCardView: View {
     let onShowCompanions: () -> Void
     /// When false (e.g. post detail), reactions/views still show; only the comment preview link is hidden.
     var showsCommentPreview: Bool = true
-    /// Tap on caption or comment row (in feed context) navigates to post detail.
-    var onOpenDetail: (() -> Void)? = nil
-    /// Tap on a media item. Receives the item index. Used in detail to open fullscreen viewer.
+    /// Tap on caption/media (feed) navigates to post detail with the current media page index.
+    var onOpenDetail: ((Int) -> Void)? = nil
+    /// Tap on a media item in detail opens fullscreen viewer at that index.
     var onMediaTap: ((Int) -> Void)? = nil
+    /// Restores carousel position when opening detail after swiping media in the feed.
+    var initialMediaIndex: Int = 0
 
+    @State private var mediaPageIndex = 0
+    @State private var appliedInitialMediaIndex = false
     @State private var activeSheet: PostCardSheet?
     @State private var reminderSentMessage: String?
     @State private var cardFrameInGlobal: CGRect = .zero
@@ -62,7 +66,7 @@ struct PostCardView: View {
             }
 
             companionsSection
-            PostMediaView(post: post, onTap: resolvedMediaTap)
+            PostMediaView(post: post, selectedIndex: $mediaPageIndex, onTap: resolvedMediaTap)
             contextSection
 
             reactionBarRow
@@ -73,6 +77,11 @@ struct PostCardView: View {
             }
         }
         .splickCard()
+        .onAppear {
+            guard !appliedInitialMediaIndex, initialMediaIndex > 0 else { return }
+            mediaPageIndex = min(initialMediaIndex, max(post.displayMediaItems.count - 1, 0))
+            appliedInitialMediaIndex = true
+        }
         .coordinateSpace(name: "postCard")
         .background(
             GeometryReader { geo in
@@ -189,12 +198,12 @@ struct PostCardView: View {
             .foregroundStyle(SplickTheme.Colors.textPrimary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
-            .onTapGesture { onOpenDetail?() }
+            .onTapGesture { onOpenDetail?(mediaPageIndex) }
     }
 
     private var resolvedMediaTap: ((Int) -> Void)? {
         if let onMediaTap { return onMediaTap }
-        if let onOpenDetail { return { _ in onOpenDetail() } }
+        if let onOpenDetail { return onOpenDetail }
         return nil
     }
 
