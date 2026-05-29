@@ -33,7 +33,7 @@ struct BlockedUsersSheet: View {
                                     } label: {
                                         Group {
                                             if viewModel.processingUserIds.contains(blocked.user.id) {
-                                                ProgressView()
+                                                SplickSpinner(size: .small)
                                                     .controlSize(.small)
                                             } else {
                                                 Text("Unblock")

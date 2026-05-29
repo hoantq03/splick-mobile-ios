@@ -41,7 +41,7 @@ public struct AvatarView: View {
                     case .failure:
                         initialsView
                     default:
-                        ProgressView()
+                        SplickSpinner(size: .small)
                     }
                 }
             } else {

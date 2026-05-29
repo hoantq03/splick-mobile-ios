@@ -116,7 +116,7 @@ private struct CommentAttachmentsView: View {
                                 default:
                                     RoundedRectangle(cornerRadius: 8)
                                         .fill(SplickTheme.Colors.tertiaryBackground)
-                                        .overlay { ProgressView() }
+                                        .overlay { SplickSpinner(size: .small) }
                                 }
                             }
                             .frame(maxWidth: 220, maxHeight: 160)

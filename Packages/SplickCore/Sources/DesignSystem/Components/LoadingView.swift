@@ -9,8 +9,7 @@ public struct LoadingView: View {
 
     public var body: some View {
         VStack(spacing: SplickTheme.Spacing.md) {
-            ProgressView()
-                .scaleEffect(1.2)
+            SplickSpinner(size: .large)
 
             if let message {
                 Text(message)

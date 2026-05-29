@@ -158,7 +158,7 @@ public struct CreatePostComposeView: View {
                 .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small))
 
             if viewModel.isSearchingMentions {
-                ProgressView()
+                SplickSpinner(size: .small)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else if !viewModel.mentionSuggestions.isEmpty {
                 VStack(spacing: 0) {
@@ -234,7 +234,7 @@ public struct CreatePostComposeView: View {
             }
 
             if viewModel.isSearchingFriends {
-                ProgressView()
+                SplickSpinner(size: .small)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else if !viewModel.friendSearchQuery.trimmingCharacters(in: .whitespaces).isEmpty {
                 friendSearchResultsList

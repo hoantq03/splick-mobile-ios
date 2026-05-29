@@ -66,7 +66,7 @@ public struct SessionsView: View {
         }
         .overlay {
             if viewModel.loadingState == .loading && viewModel.sessions.isEmpty {
-                ProgressView()
+                SplickSpinner(size: .medium)
             }
         }
         .task { await viewModel.load() }

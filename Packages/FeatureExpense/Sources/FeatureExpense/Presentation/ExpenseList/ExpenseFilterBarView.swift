@@ -195,7 +195,7 @@ struct ExpenseFilterBarView: View {
     private var userResultsList: some View {
         Group {
             if userSearchViewModel.isLoading && userSearchViewModel.users.isEmpty {
-                ProgressView()
+                SplickSpinner(size: .small)
                     .scaleEffect(0.7)
                     .frame(maxWidth: .infinity)
                     .frame(height: 28)

@@ -91,7 +91,7 @@ private struct IncomingFriendRequestRowView: View {
             Spacer(minLength: SplickTheme.Spacing.xs)
 
             if isProcessing {
-                ProgressView()
+                SplickSpinner(size: .medium)
             } else {
                 VStack(spacing: SplickTheme.Spacing.xxxs) {
                     Button("Chấp nhận", action: onAccept)

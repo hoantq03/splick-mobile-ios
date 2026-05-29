@@ -49,6 +49,15 @@ import SwiftUI
     LoadingView(message: "Loading your feed...")
 }
 
+#Preview("Spinner sizes") {
+    HStack(spacing: 24) {
+        SplickSpinner(size: .small)
+        SplickSpinner(size: .medium)
+        SplickSpinner(size: .large)
+    }
+    .padding()
+}
+
 #Preview("Card Modifier") {
     VStack(spacing: 16) {
         Text("This is a card")

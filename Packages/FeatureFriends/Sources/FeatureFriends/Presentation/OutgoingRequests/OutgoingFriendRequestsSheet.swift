@@ -82,7 +82,7 @@ private struct OutgoingFriendRequestRowView: View {
             Spacer(minLength: SplickTheme.Spacing.xs)
 
             if isProcessing {
-                ProgressView()
+                SplickSpinner(size: .medium)
             } else {
                 Button("Hủy", action: onCancel)
                     .font(SplickTheme.Typography.caption.weight(.semibold))

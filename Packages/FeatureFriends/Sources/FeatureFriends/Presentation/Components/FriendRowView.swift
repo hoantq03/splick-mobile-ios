@@ -59,8 +59,7 @@ struct FriendRowView: View {
             } label: {
                 Group {
                     if isSendingRequest {
-                        ProgressView()
-                            .controlSize(.small)
+                        SplickSpinner(size: .small)
                     } else {
                         Text("Chấp nhận")
                             .font(SplickTheme.Typography.caption.weight(.semibold))
@@ -83,8 +82,7 @@ struct FriendRowView: View {
             } label: {
                 Group {
                     if isSendingRequest {
-                        ProgressView()
-                            .controlSize(.small)
+                        SplickSpinner(size: .small)
                     } else {
                         Text("Kết bạn")
                             .font(SplickTheme.Typography.caption.weight(.semibold))

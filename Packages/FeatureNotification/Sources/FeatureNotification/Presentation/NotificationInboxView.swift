@@ -1,4 +1,5 @@
 import SwiftUI
+import DesignSystem
 import SplickDomain
 
 public struct NotificationInboxView: View {
@@ -12,7 +13,7 @@ public struct NotificationInboxView: View {
         NavigationView {
             List {
                 if viewModel.isLoading && viewModel.notifications.isEmpty {
-                    ProgressView()
+                    SplickSpinner(size: .medium)
                 } else if let error = viewModel.errorMessage {
                     Text(error).foregroundColor(.red)
                 } else if viewModel.notifications.isEmpty {

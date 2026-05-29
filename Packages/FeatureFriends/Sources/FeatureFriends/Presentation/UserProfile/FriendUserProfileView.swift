@@ -120,7 +120,7 @@ public struct FriendUserProfileView: View {
             }
 
             if viewModel.isProcessing {
-                ProgressView()
+                SplickSpinner(size: .medium)
             }
         }
     }

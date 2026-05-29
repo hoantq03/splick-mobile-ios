@@ -45,8 +45,7 @@ struct RootView: View {
                 Text("Splick")
                     .font(.system(size: 32, weight: .bold, design: .rounded))
                     .foregroundStyle(SplickTheme.Colors.primaryGradient)
-                ProgressView()
-                    .tint(SplickTheme.Colors.primaryGradientStart)
+                SplickSpinner(size: .large)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

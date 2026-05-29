@@ -23,9 +23,12 @@ public struct MediaCaptureView: View {
 
             switch camera.phase {
             case .preparing:
-                ProgressView("Đang mở camera...")
-                    .tint(.white)
-                    .foregroundStyle(.white)
+                VStack(spacing: SplickTheme.Spacing.sm) {
+                    SplickSpinner(size: .medium)
+                    Text("Đang mở camera...")
+                        .font(SplickTheme.Typography.callout)
+                        .foregroundStyle(.white)
+                }
 
             case .permissionDenied:
                 permissionDeniedView

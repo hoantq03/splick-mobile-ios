@@ -78,7 +78,7 @@ struct MyQRPreviewSection: View {
     private var previewImage: some View {
         switch viewModel.state {
         case .idle, .loading:
-            ProgressView()
+            SplickSpinner(size: .medium)
         case .failed:
             Image(systemName: "qrcode")
                 .font(.system(size: 32))
