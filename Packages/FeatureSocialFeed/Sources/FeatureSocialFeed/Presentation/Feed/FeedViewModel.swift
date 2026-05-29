@@ -75,7 +75,7 @@ public final class FeedViewModel: ObservableObject {
         let generation = loadFeedGeneration
 
         let task = Task<Bool, Never> { @MainActor in
-            await performLoadFeed(isPullToRefresh: isPullToRefresh)
+            await performLoadFeed(isPullToRefresh: isPullToRefresh, generation: generation)
         }
         loadFeedTask = task
         let succeeded = await task.value
@@ -91,7 +91,7 @@ public final class FeedViewModel: ObservableObject {
     }
 
     @discardableResult
-    private func performLoadFeed(isPullToRefresh: Bool) async -> Bool {
+    private func performLoadFeed(isPullToRefresh: Bool, generation: Int) async -> Bool {
         if isPullToRefresh {
             isRefreshing = true
             cancelViewTrackFlush()
@@ -107,16 +107,20 @@ public final class FeedViewModel: ObservableObject {
         }
 
         defer {
-            if isPullToRefresh {
+            // Only clear when this request is still the latest refresh (avoids race when a prior pull was cancelled).
+            if isPullToRefresh, generation == loadFeedGeneration {
                 isRefreshing = false
             }
         }
+
+        Log.info("Loading feed", category: .feed, metadata: ["pullToRefresh": String(isPullToRefresh)])
 
         do {
             let posts = try await fetchFeedUseCase.execute(page: 0)
             self.posts = posts
             state = .loaded(posts)
             canLoadMore = !posts.isEmpty
+            Log.info("Loaded feed", category: .feed, metadata: ["count": String(posts.count)])
             return true
         } catch {
             if error.isRequestCancellation {

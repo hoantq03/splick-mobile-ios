@@ -72,6 +72,7 @@ public final class ExpenseListViewModel: ObservableObject {
         }
 
         currentPage = 0
+        Log.info("Loading expenses", category: .expense, metadata: ["pullToRefresh": String(isPullToRefresh)])
 
         do {
             async let expensesTask = fetchExpensesUseCase.execute(groupId: groupId, page: 0)
@@ -82,6 +83,11 @@ public final class ExpenseListViewModel: ObservableObject {
             debts = fetchedDebts
             state = .loaded(fetchedExpenses)
             objectWillChange.send()
+            Log.info(
+                "Loaded expenses",
+                category: .expense,
+                metadata: ["expenseCount": String(fetchedExpenses.count), "debtCount": String(fetchedDebts.count)]
+            )
         } catch {
             if isPullToRefresh, !expenses.isEmpty {
                 state = .loaded(expenses)

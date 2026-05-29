@@ -26,11 +26,17 @@ public final class NotificationListViewModel: ObservableObject {
     func load() async {
         state = .loading
         currentPage = 0
+        Log.info("Loading notifications", category: .notification)
 
         do {
             let notifications = try await fetchNotificationsUseCase.execute(page: 0)
             self.notifications = notifications
             state = .loaded(notifications)
+            Log.info(
+                "Loaded notifications",
+                category: .notification,
+                metadata: ["count": String(notifications.count)]
+            )
         } catch {
             state = .failed(error.localizedDescription)
             Log.error(error, category: .notification)

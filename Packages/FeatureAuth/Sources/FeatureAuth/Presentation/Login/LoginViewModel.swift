@@ -76,6 +76,7 @@ public final class LoginViewModel: ObservableObject {
         state = .loading
         otpError = nil
         otpInfoMessage = nil
+        Log.info("Requesting phone OTP", category: .auth)
         do {
             try await requestPhoneOtpUseCase.execute(phoneNumber: normalizedPhone)
             phoneNumber = normalizedPhone
@@ -166,6 +167,7 @@ public final class LoginViewModel: ObservableObject {
         guard validateEmailLogin() else { return }
 
         state = .loading
+        Log.info("Logging in with email", category: .auth)
         do {
             let session = try await loginUseCase.execute(
                 email: email.trimmed,

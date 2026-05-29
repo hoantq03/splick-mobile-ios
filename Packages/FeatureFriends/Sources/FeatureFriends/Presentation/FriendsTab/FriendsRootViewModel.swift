@@ -56,6 +56,7 @@ public final class FriendsRootViewModel: ObservableObject {
     }
 
     func load() async {
+        Log.info("Loading friends tab", category: .friends)
         await loadFriends(isPullToRefresh: false)
         await loadGroups(isPullToRefresh: false)
         await refreshIncomingRequestCount()
@@ -101,12 +102,14 @@ public final class FriendsRootViewModel: ObservableObject {
             let items = try await fetchMyFriendsUseCase.execute()
             friends = items
             friendsState = .loaded(items)
+            Log.info("Loaded friends", category: .friends, metadata: ["count": String(items.count)])
         } catch {
             if isPullToRefresh, !friends.isEmpty {
                 friendsState = .loaded(friends)
             } else {
                 friendsState = .failed(error.localizedDescription)
             }
+            Log.error(error, category: .friends)
         }
     }
 
@@ -118,12 +121,14 @@ public final class FriendsRootViewModel: ObservableObject {
             let items = try await fetchMyGroupsUseCase.execute()
             groups = items
             groupsState = .loaded(items)
+            Log.info("Loaded groups", category: .friends, metadata: ["count": String(items.count)])
         } catch {
             if isPullToRefresh, !groups.isEmpty {
                 groupsState = .loaded(groups)
             } else {
                 groupsState = .failed(error.localizedDescription)
             }
+            Log.error(error, category: .friends)
         }
     }
 
@@ -170,6 +175,7 @@ public final class FriendsRootViewModel: ObservableObject {
                 guard !Task.isCancelled else { return }
                 searchResults = []
                 searchState = .failed(error.localizedDescription)
+                Log.error(error, category: .friends, metadata: ["query": trimmed])
             }
         }
     }
@@ -188,6 +194,7 @@ public final class FriendsRootViewModel: ObservableObject {
             onFriendAdded()
         } catch {
             alertMessage = error.localizedDescription
+            Log.error(error, category: .friends, metadata: ["action": "sendFriendRequest"])
         }
     }
 
@@ -210,6 +217,7 @@ public final class FriendsRootViewModel: ObservableObject {
             onFriendAdded()
         } catch {
             alertMessage = error.localizedDescription
+            Log.error(error, category: .friends, metadata: ["action": "acceptFriendRequest"])
         }
     }
 
