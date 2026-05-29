@@ -128,7 +128,6 @@ public struct FeedView: View {
             FeedScrollLock.forceUnlock()
             feedScrollLocked = false
             defer {
-                viewModel.endRefreshingIfNeeded()
                 tabBarScrollState?.reset()
             }
             return await viewModel.loadFeed(isPullToRefresh: true)
@@ -149,7 +148,11 @@ public struct FeedView: View {
                         onUserTap: { user in
                             profileRoute = ProfileRoute(user: user)
                         },
-                        onOpenComments: {},
+                        onOpenComments: {
+                            navigationPath.append(
+                                FeedPostDestination(postId: post.id, mediaIndex: 0)
+                            )
+                        },
                         onShowCompanions: {
                             companionsRoute = CompanionsSheetRoute(
                                 id: post.id,

@@ -14,25 +14,25 @@ struct PostCaptureFlowView: View {
     @State private var capturedMedia: CapturedMedia?
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if let media = capturedMedia {
+        Group {
+            if let media = capturedMedia {
+                NavigationStack {
                     composeScreen(for: media)
-                } else {
-                    MediaCaptureView(
-                        onMediaCaptured: { capturedMedia = $0 },
-                        onCancel: onDismiss
-                    )
-                    .ignoresSafeArea()
+                        .toolbar(.hidden, for: .tabBar)
                 }
+            } else {
+                MediaCaptureView(
+                    onMediaCaptured: { capturedMedia = $0 },
+                    onCancel: onDismiss
+                )
+                .ignoresSafeArea()
             }
-            .toolbar(.hidden, for: .tabBar)
         }
     }
 
     @ViewBuilder
     private func composeScreen(for media: CapturedMedia) -> some View {
-        let (preview, videoURL, mediaType) = mediaPayload(media)
+        let payload = mediaPayload(media)
         let currentUser = appState.currentUser.map {
             UserSummary(
                 id: $0.id,
@@ -43,9 +43,9 @@ struct PostCaptureFlowView: View {
         }
         CreatePostComposeView(
             viewModel: CreatePostComposeViewModel(
-                previewImage: preview,
-                videoURL: videoURL,
-                mediaType: mediaType,
+                previewImages: payload.images,
+                videoURL: payload.videoURL,
+                mediaType: payload.mediaType,
                 createPostUseCase: container.createPostUseCase,
                 fetchFriendsUseCase: container.fetchFriendsUseCase,
                 currentUser: currentUser,
@@ -62,22 +62,14 @@ struct PostCaptureFlowView: View {
         )
     }
 
-    private func mediaPayload(_ media: CapturedMedia) -> (UIImage?, URL?, PostMediaType) {
+    private func mediaPayload(_ media: CapturedMedia) -> (images: [UIImage], videoURL: URL?, mediaType: PostMediaType) {
         switch media {
         case .image(let image):
-            return (image, nil, .image)
+            return ([image], nil, .image)
+        case .images(let images):
+            return (images, nil, .image)
         case .video(let url):
-            return (videoThumbnail(url), url, .video)
+            return ([], url, .video)
         }
-    }
-
-    private func videoThumbnail(_ url: URL) -> UIImage? {
-        let asset = AVURLAsset(url: url)
-        let generator = AVAssetImageGenerator(asset: asset)
-        generator.appliesPreferredTrackTransform = true
-        guard let cgImage = try? generator.copyCGImage(at: .zero, actualTime: nil) else {
-            return nil
-        }
-        return UIImage(cgImage: cgImage)
     }
 }

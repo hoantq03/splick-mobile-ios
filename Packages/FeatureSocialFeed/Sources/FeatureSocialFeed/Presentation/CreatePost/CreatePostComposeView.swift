@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 import UIKit
 import DesignSystem
 import SplickDomain
+import FeatureMedia
 
 public struct CreatePostComposeView: View {
     @StateObject private var viewModel: CreatePostComposeViewModel
@@ -12,6 +13,7 @@ public struct CreatePostComposeView: View {
     let onPosted: (Post) -> Void
     let onCancel: () -> Void
     @State private var photoPickerItems: [PhotosPickerItem] = []
+    @State private var showPhotoLibraryPicker = false
 
     public init(
         viewModel: @autoclosure @escaping () -> CreatePostComposeViewModel,
@@ -71,6 +73,18 @@ public struct CreatePostComposeView: View {
         }
         .onAppear { tabBarScrollState?.hide() }
         .onDisappear { tabBarScrollState?.show() }
+        .fullScreenCover(isPresented: $showPhotoLibraryPicker) {
+            MultiPhotoLibraryPickerView(
+                maxSelectionCount: viewModel.remainingImageSlots,
+                onConfirm: { images in
+                    showPhotoLibraryPicker = false
+                    viewModel.addImages(images)
+                },
+                onCancel: {
+                    showPhotoLibraryPicker = false
+                }
+            )
+        }
     }
 
     @ViewBuilder
@@ -109,11 +123,24 @@ public struct CreatePostComposeView: View {
                     }
 
                     if viewModel.canAddMoreMedia {
-                        PhotosPicker(
-                            selection: $photoPickerItems,
-                            maxSelectionCount: 8,
-                            matching: .any(of: [.images, .videos])
-                        ) {
+                        Menu {
+                            if viewModel.remainingImageSlots > 0 {
+                                Button {
+                                    showPhotoLibraryPicker = true
+                                } label: {
+                                    Label("Chọn ảnh", systemImage: "photo.on.rectangle")
+                                }
+                            }
+                            if viewModel.remainingVideoSlots > 0 {
+                                PhotosPicker(
+                                    selection: $photoPickerItems,
+                                    maxSelectionCount: 1,
+                                    matching: .videos
+                                ) {
+                                    Label("Chọn video", systemImage: "video")
+                                }
+                            }
+                        } label: {
                             VStack(spacing: 8) {
                                 Image(systemName: "plus.circle")
                                     .font(.system(size: 24))

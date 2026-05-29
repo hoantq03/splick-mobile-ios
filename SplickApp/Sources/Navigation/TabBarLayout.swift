@@ -9,9 +9,11 @@ enum TabBarLayout {
 }
 
 struct FloatingTabBarContentPadding: ViewModifier {
+    var isEnabled: Bool = true
     @Environment(\.tabBarScrollState) private var tabBarScrollState
 
     private var bottomInset: CGFloat {
+        guard isEnabled else { return 0 }
         guard let tabBarScrollState else { return TabBarLayout.floatingClearance }
         if tabBarScrollState.isVisible {
             return TabBarLayout.floatingClearance

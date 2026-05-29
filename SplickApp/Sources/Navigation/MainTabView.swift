@@ -93,6 +93,7 @@ struct MainTabView: View {
                 PostCaptureFlowView(onDismiss: {
                     appState.selectedTab = .feed
                 })
+                .ignoresSafeArea()
 
             case .notifications:
                 NotificationListView(
@@ -108,7 +109,7 @@ struct MainTabView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea(edges: .bottom)
-        .modifier(FloatingTabBarContentPadding())
+        .modifier(FloatingTabBarContentPadding(isEnabled: appState.selectedTab != .camera))
         .environment(\.openProfileSettings) {
             appState.showProfileSettings = true
         }
@@ -129,7 +130,7 @@ struct MainTabView: View {
         .onChange(of: appState.selectedTab) { tab in
             Log.debug("Tab selected", category: .ui, metadata: ["tab": tab.rawValue])
             if tab == .camera {
-                tabBarScrollState.hide()
+                tabBarScrollState.hide(flushToBottom: true)
             } else {
                 tabBarScrollState.reset()
             }

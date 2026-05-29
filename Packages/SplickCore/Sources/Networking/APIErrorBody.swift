@@ -13,7 +13,3 @@ public struct APIErrorBody: Decodable, Sendable {
         self.traceId = traceId
     }
 }
-
-public enum APIRequestCorrelation {
-    public static let headerName = "X-Request-Id"
-}

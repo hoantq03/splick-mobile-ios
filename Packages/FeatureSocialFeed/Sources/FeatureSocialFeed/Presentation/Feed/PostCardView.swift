@@ -360,7 +360,7 @@ struct PostCardView: View {
         let preview = reactionPreview
         if !preview.top.isEmpty {
             Button { activeSheet = .reactions } label: {
-                HStack(spacing: 10) {
+                HStack(spacing: 6) {
                     ForEach(preview.top, id: \.userId) { summary in
                         UserReactionBadgeView(summary: summary)
                             .id(summary.userId)
@@ -374,9 +374,14 @@ struct PostCardView: View {
         }
     }
 
-    @ViewBuilder
     private var commentPreviewRow: some View {
-        NavigationLink(value: post.id) {
+        Button {
+            if let onOpenDetail {
+                onOpenDetail(mediaPageIndex)
+            } else {
+                onOpenComments()
+            }
+        } label: {
             HStack(spacing: 6) {
                 commentIconWithCount
 

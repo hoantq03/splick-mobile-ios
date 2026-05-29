@@ -2,142 +2,99 @@ import DesignSystem
 import SwiftUI
 
 struct EditorToolbar: View {
-    @Bindable var viewModel: PhotoEditorViewModel
+    @ObservedObject var viewModel: PhotoEditorViewModel
     let onDone: () -> Void
     let onCancel: () -> Void
 
-    @Namespace private var glassNamespace
-
     var body: some View {
-        VStack(spacing: SplickTheme.Spacing.md) {
-            toolBar
-            actionBar
-        }
-        .padding(.horizontal, SplickTheme.Spacing.md)
-        .padding(.bottom, SplickTheme.Spacing.sm)
-    }
-
-    private var toolBar: some View {
-        Group {
-            if #available(iOS 26.0, *) {
-                GlassEffectContainer(spacing: 0) {
-                    HStack(spacing: 0) {
-                        ForEach(EditorTool.allCases) { tool in
-                            toolButton(tool)
-                                .glassEffectID(tool.id, in: glassNamespace)
-                        }
-
-                        Divider()
-                            .frame(height: 28)
-                            .padding(.horizontal, SplickTheme.Spacing.xs)
-
-                        undoButton
-                            .glassEffectID("undo", in: glassNamespace)
-                    }
-                    .padding(.horizontal, SplickTheme.Spacing.xs)
-                    .padding(.vertical, SplickTheme.Spacing.xs)
-                }
-            } else {
-                HStack(spacing: SplickTheme.Spacing.xs) {
-                    ForEach(EditorTool.allCases) { tool in
-                        toolButton(tool)
-                    }
-                    undoButton
-                }
-                .padding(.horizontal, SplickTheme.Spacing.sm)
-                .padding(.vertical, SplickTheme.Spacing.xs)
-                .background(.ultraThinMaterial, in: Capsule())
+        VStack(spacing: 0) {
+            topBar
+            Spacer()
+            if viewModel.isChromeVisible, viewModel.activeTool == .draw {
+                drawOptionsBar
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+            if viewModel.isChromeVisible, viewModel.activeTool == .sticker {
+                EditorStickerPickerBar(viewModel: viewModel)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            EditorToolScrollBar(
+                viewModel: viewModel,
+                onUndo: viewModel.undo,
+                onRedo: viewModel.redo
+            )
         }
     }
 
-    private var actionBar: some View {
-        HStack(spacing: SplickTheme.Spacing.md) {
-            Button("Huỷ", action: onCancel)
-                .font(SplickTheme.Typography.callout.weight(.semibold))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, SplickTheme.Spacing.sm)
-                .background(fallbackGlassBackground)
+    private var topBar: some View {
+        HStack {
+            Button(action: onCancel) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 40, height: 40)
+                    .background(Circle().fill(Color.white.opacity(0.14)))
+            }
+
+            Spacer()
+
+            Text("Chỉnh sửa")
+                .font(SplickTheme.Typography.headline)
+                .foregroundStyle(.white)
+
+            Spacer()
 
             Button(action: onDone) {
-                Label("Xong", systemImage: "checkmark")
-                    .font(SplickTheme.Typography.callout.weight(.semibold))
-                    .frame(maxWidth: .infinity)
+                Text("Xong")
+                    .font(SplickTheme.Typography.callout.weight(.bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, SplickTheme.Spacing.md)
+                    .padding(.vertical, SplickTheme.Spacing.xs)
+                    .background(
+                        Capsule().fill(SplickTheme.Colors.primaryGradient)
+                    )
             }
-            .padding(.vertical, SplickTheme.Spacing.sm)
-            .background(fallbackGlassBackground)
         }
+        .padding(.horizontal, SplickTheme.Spacing.md)
+        .padding(.top, SplickTheme.Spacing.sm)
+        .padding(.bottom, SplickTheme.Spacing.xs)
     }
 
-    @ViewBuilder
-    private func toolButton(_ tool: EditorTool) -> some View {
-        let isActive = viewModel.activeTool == tool
+    private var drawOptionsBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: SplickTheme.Spacing.md) {
+                ForEach(Array(PhotoEditorViewModel.inkPalette.enumerated()), id: \.offset) { _, color in
+                    Button {
+                        viewModel.inkColor = color
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    } label: {
+                        Circle()
+                            .fill(Color(color))
+                            .frame(width: 30, height: 30)
+                            .overlay {
+                                if viewModel.inkColor.isEqual(color) {
+                                    Circle().strokeBorder(Color.white, lineWidth: 2.5)
+                                }
+                            }
+                            .shadow(color: .black.opacity(0.2), radius: 2, y: 1)
+                    }
+                }
 
-        Button {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                viewModel.setActiveTool(tool)
-            }
-        } label: {
-            VStack(spacing: 4) {
-                Image(systemName: tool.icon)
-                    .font(.system(size: 18, weight: .semibold))
-                Text(tool.label)
-                    .font(SplickTheme.Typography.caption)
-            }
-            .foregroundStyle(isActive ? SplickTheme.Colors.primaryGradientStart : SplickTheme.Colors.textPrimary)
-            .frame(minWidth: 64)
-            .padding(.vertical, SplickTheme.Spacing.xs)
-            .padding(.horizontal, SplickTheme.Spacing.xs)
-            .background {
-                if isActive {
-                    fallbackGlassBackground
+                Divider().frame(height: 28).overlay(Color.white.opacity(0.25))
+
+                ForEach([3, 5, 8, 12], id: \.self) { width in
+                    Button {
+                        viewModel.inkWidth = CGFloat(width)
+                    } label: {
+                        Circle()
+                            .fill(viewModel.inkWidth == CGFloat(width) ? Color.white : Color.white.opacity(0.35))
+                            .frame(width: CGFloat(width + 6), height: CGFloat(width + 6))
+                    }
                 }
             }
+            .padding(.horizontal, SplickTheme.Spacing.md)
+            .padding(.vertical, SplickTheme.Spacing.sm)
         }
-        .buttonStyle(.plain)
-        .modifier(LiquidGlassToolModifier(isActive: isActive))
-    }
-
-    private var undoButton: some View {
-        Button {
-            viewModel.undo()
-        } label: {
-            VStack(spacing: 4) {
-                Image(systemName: "arrow.uturn.backward")
-                    .font(.system(size: 18, weight: .semibold))
-                Text("Undo")
-                    .font(SplickTheme.Typography.caption)
-            }
-            .foregroundStyle(viewModel.canUndo ? SplickTheme.Colors.textPrimary : SplickTheme.Colors.textTertiary)
-            .frame(minWidth: 64)
-            .padding(.vertical, SplickTheme.Spacing.xs)
-            .padding(.horizontal, SplickTheme.Spacing.xs)
-        }
-        .buttonStyle(.plain)
-        .disabled(!viewModel.canUndo)
-    }
-
-    @ViewBuilder
-    private var fallbackGlassBackground: some View {
-        if #available(iOS 26.0, *) {
-            Capsule().fill(.clear)
-        } else {
-            Capsule().fill(.ultraThinMaterial)
-        }
-    }
-}
-
-private struct LiquidGlassToolModifier: ViewModifier {
-    let isActive: Bool
-
-    func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content.glassEffect(
-                isActive ? .regular.interactive() : .regular,
-                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-            )
-        } else {
-            content
-        }
+        .background(.ultraThinMaterial.opacity(0.85))
     }
 }

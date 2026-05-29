@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 
+/// System camera UI (`UIImagePickerController`) — edge-to-edge preview and native controls.
 struct CameraPickerView: UIViewControllerRepresentable {
     enum Result: Equatable {
         case image(UIImage)
@@ -17,11 +18,17 @@ struct CameraPickerView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
         picker.sourceType = .camera
-        picker.mediaTypes = ["public.image", "public.movie"]
+        picker.mediaTypes = UIImagePickerController.availableMediaTypes(for: .camera) ?? ["public.image"]
         picker.videoMaximumDuration = 60
         picker.videoQuality = .typeHigh
         picker.delegate = context.coordinator
         picker.allowsEditing = false
+        picker.showsCameraControls = true
+        picker.cameraDevice = .rear
+        picker.cameraCaptureMode = .photo
+        picker.modalPresentationStyle = .fullScreen
+        picker.view.isOpaque = true
+        picker.view.backgroundColor = .black
         return picker
     }
 
@@ -35,34 +42,35 @@ struct CameraPickerView: UIViewControllerRepresentable {
         }
 
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            picker.dismiss(animated: true) {
-                self.onResult(.cancelled)
-            }
+            finish(picker, result: .cancelled)
         }
 
         func imagePickerController(
             _ picker: UIImagePickerController,
             didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
         ) {
-            let deliver: (Result) -> Void = { result in
-                picker.dismiss(animated: true) {
-                    self.onResult(result)
-                }
-            }
-
-            if let mediaType = info[.mediaType] as? String {
-                if mediaType == "public.movie", let url = info[.mediaURL] as? URL {
-                    deliver(.video(MediaCaptureHelpers.copyVideoToTemporaryDirectory(url)))
-                    return
-                }
-            }
-
-            if let image = info[.originalImage] as? UIImage {
-                deliver(.image(image))
+            if let mediaType = info[.mediaType] as? String, mediaType == "public.movie",
+               let url = info[.mediaURL] as? URL {
+                finish(picker, result: .video(MediaCaptureHelpers.copyVideoToTemporaryDirectory(url)))
                 return
             }
 
-            deliver(.cancelled)
+            if let image = info[.originalImage] as? UIImage {
+                let normalized = PhotoEditorImageProcessor.normalizeOrientation(image)
+                finish(picker, result: .image(normalized))
+                return
+            }
+
+            finish(picker, result: .cancelled)
+        }
+
+        private func finish(_ picker: UIImagePickerController, result: Result) {
+            let deliver = { self.onResult(result) }
+            if picker.presentingViewController != nil {
+                picker.dismiss(animated: true, completion: deliver)
+            } else {
+                deliver()
+            }
         }
     }
 }

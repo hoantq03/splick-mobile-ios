@@ -1,17 +1,17 @@
-import PhotosUI
+import DesignSystem
 import SwiftUI
 import UIKit
-import UniformTypeIdentifiers
 
-/// Presents native capture (camera / library) and a Splick photo editor for images.
+/// Opens the system camera immediately; multi-select library is available from preview flow.
 public struct MediaCaptureView: View {
     let onMediaCaptured: (CapturedMedia) -> Void
     let onCancel: () -> Void
 
-    @State private var showSourceSheet = true
-    @State private var showCamera = false
-    @State private var photoPickerItems: [PhotosPickerItem] = []
-    @State private var editingImage: UIImage?
+    @State private var route: CaptureRoute = .camera
+    @State private var workingImage: UIImage?
+    @State private var cameraSessionID = UUID()
+
+    private let maxLibrarySelection = 5
 
     public init(
         onMediaCaptured: @escaping (CapturedMedia) -> Void,
@@ -22,88 +22,116 @@ public struct MediaCaptureView: View {
     }
 
     public var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
+        Group {
+            switch route {
+            case .camera:
+                if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                    CameraPickerView(onResult: { handleCameraResult($0) })
+                        .id(cameraSessionID)
+                        .ignoresSafeArea()
+                        .transition(.opacity)
+                } else {
+                    cameraUnavailableView
+                }
 
-            if let editingImage {
-                PhotoEditorView(
-                    sourceImage: editingImage,
-                    onDone: { edited in
-                        self.editingImage = nil
-                        onMediaCaptured(.image(edited))
+            case .library:
+                MultiPhotoLibraryPickerView(
+                    maxSelectionCount: maxLibrarySelection,
+                    onConfirm: { images in
+                        handleLibraryImages(images)
                     },
                     onCancel: {
-                        self.editingImage = nil
-                        showSourceSheet = true
+                        route = .camera
                     }
                 )
-            }
-        }
-        .sheet(isPresented: $showSourceSheet) {
-            MediaSourceSheet(
-                onCamera: {
-                    showSourceSheet = false
-                    showCamera = true
-                },
-                onCancel: onCancel,
-                photoPickerItems: $photoPickerItems,
-                onPhotoPicked: { items in
-                    photoPickerItems = []
-                    Task { await handlePhotoPickerItems(items) }
+                .transition(.opacity)
+
+            case .preview:
+                if let workingImage {
+                    CapturePreviewView(
+                        image: workingImage,
+                        onRetake: { reopenCamera() },
+                        onChooseAnother: {
+                            self.workingImage = nil
+                            route = .library
+                        },
+                        onEdit: {
+                            route = .editor
+                        },
+                        onUsePhoto: {
+                            onMediaCaptured(.image(workingImage))
+                        },
+                        onCancel: {
+                            self.workingImage = nil
+                            reopenCamera()
+                        }
+                    )
+                    .transition(.opacity)
                 }
-            )
-        }
-        .fullScreenCover(isPresented: $showCamera) {
-            CameraPickerView { result in
-                showCamera = false
-                handleCameraResult(result)
+
+            case .editor:
+                if let workingImage {
+                    PhotoEditorView(
+                        sourceImage: workingImage,
+                        onDone: { edited in
+                            onMediaCaptured(.image(edited))
+                        },
+                        onCancel: {
+                            route = .preview
+                        }
+                    )
+                    .transition(.opacity)
+                }
             }
-            .ignoresSafeArea()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black.ignoresSafeArea())
+        .animation(.easeInOut(duration: 0.2), value: route)
+        .editorStatusBarHidden(true)
+    }
+
+    private var cameraUnavailableView: some View {
+        VStack(spacing: SplickTheme.Spacing.md) {
+            Image(systemName: "camera.fill")
+                .font(.system(size: 48))
+                .foregroundStyle(.white.opacity(0.5))
+            Text("Camera không khả dụng")
+                .font(SplickTheme.Typography.headline)
+                .foregroundStyle(.white)
+            Button("Quay lại", action: onCancel)
+                .foregroundStyle(.white.opacity(0.7))
         }
     }
 
-    @MainActor
-    private func handlePhotoPickerItems(_ items: [PhotosPickerItem]) async {
-        guard let item = items.first else { return }
-        showSourceSheet = false
+    private func reopenCamera() {
+        cameraSessionID = UUID()
+        route = .camera
+    }
 
-        let isVideo = item.supportedContentTypes.contains(where: { $0.conforms(to: .movie) })
-        if isVideo {
-            if let data = try? await item.loadTransferable(type: Data.self) {
-                let url = writeTemporaryVideo(data)
-                onMediaCaptured(.video(url))
-            } else {
-                showSourceSheet = true
-            }
+    private func handleLibraryImages(_ images: [UIImage]) {
+        guard !images.isEmpty else {
+            reopenCamera()
             return
         }
-
-        if let data = try? await item.loadTransferable(type: Data.self),
-           let image = UIImage(data: data) {
-            editingImage = image
-            return
-        }
-
-        showSourceSheet = true
+        onMediaCaptured(images.count == 1 ? .image(images[0]) : .images(images))
     }
 
     private func handleCameraResult(_ result: CameraPickerView.Result) {
         switch result {
         case .image(let image):
-            editingImage = image
+            workingImage = image
+            route = .preview
         case .video(let url):
             onMediaCaptured(.video(url))
         case .cancelled:
-            showSourceSheet = true
+            onCancel()
         }
     }
+}
 
-    private func writeTemporaryVideo(_ data: Data) -> URL {
-        let destination = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString)
-            .appendingPathExtension("mp4")
-
-        try? data.write(to: destination)
-        return destination
-    }
+private enum CaptureRoute: Equatable {
+    case camera
+    case library
+    case preview
+    case editor
 }

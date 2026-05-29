@@ -34,6 +34,7 @@ struct FeedPullToRefreshScrollView<Content: View>: View {
     private let triggerDistance: CGFloat = 72
     private let loadingSlotHeight: CGFloat = 52
     private let maxPullDistance: CGFloat = 120
+    private let pullCooldown: TimeInterval = 0.45
 
     @State private var phase: FeedPullRefreshPhase = .idle
     @State private var peakPull: CGFloat = 0
@@ -44,6 +45,10 @@ struct FeedPullToRefreshScrollView<Content: View>: View {
     @State private var restMinY: CGFloat?
     @State private var scrollPull: CGFloat = 0
     @State private var minYPull: CGFloat = 0
+    @State private var refreshGeneration = 0
+    @State private var refreshTask: Task<Void, Never>?
+    @State private var ignoresPullUntil = Date.distantPast
+    @State private var lastScrollOffset: CGFloat = 0
 
     var body: some View {
         ScrollViewReader { scrollProxy in
@@ -71,6 +76,11 @@ struct FeedPullToRefreshScrollView<Content: View>: View {
             .applyFeedScrollPhaseRelease {
                 handleScrollRelease(scrollProxy: scrollProxy)
             }
+            .onChange(of: isRefreshing) { refreshing in
+                if !refreshing {
+                    finishRefreshUI(animated: true)
+                }
+            }
         }
     }
 
@@ -87,41 +97,61 @@ struct FeedPullToRefreshScrollView<Content: View>: View {
             }
     }
 
+    /// Same ring as `LoadingView` / shell — continuous spin while loading or past pull threshold.
     private var refreshHeader: some View {
-        ZStack {
+        let readyToRefresh = peakPull >= triggerDistance
+        let spinContinuously = phase == .loading || readyToRefresh
+
+        return ZStack {
             SplickSpinner(
-                size: .medium,
-                rotation: dragRotation,
-                isAnimating: phase == .loading
+                size: .large,
+                rotation: spinContinuously ? 0 : dragRotation,
+                isAnimating: spinContinuously
             )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .opacity(phase == .idle && headerHeight < 4 ? 0 : 1)
     }
 
-  // MARK: - Pull distance
+    // MARK: - Pull distance
 
     private func applyPullFromScrollOffset(_ offsetY: CGFloat, scrollProxy: ScrollViewProxy) {
+        lastScrollOffset = offsetY
+
         if restScrollOffset == nil {
             restScrollOffset = offsetY
         }
-        let delta = (restScrollOffset ?? offsetY) - offsetY
-        scrollPull = max(0, max(delta, -delta))
-        if scrollPull < 1, abs(offsetY - (restScrollOffset ?? offsetY)) < 2 {
+        // Only overscroll past the top counts — scrolling down must not register as pull.
+        let overscroll = (restScrollOffset ?? offsetY) - offsetY
+        scrollPull = max(0, overscroll)
+
+        if overscroll < 1, offsetY <= (restScrollOffset ?? offsetY) + 2 {
             restScrollOffset = offsetY
         }
         syncCombinedPull(scrollProxy: scrollProxy)
     }
 
     private func applyPullFromMinY(_ minY: CGFloat, scrollProxy: ScrollViewProxy) {
-        if restMinY == nil {
-            restMinY = minY
-        }
-        minYPull = max(0, minY - (restMinY ?? minY))
-        if minYPull < 1 {
-            restMinY = minY
+        // Re-anchor only while the feed top anchor is on screen; avoids false pull after scrolling back up.
+        let topAnchorVisible = minY > -48
+        if topAnchorVisible {
+            if restMinY == nil {
+                restMinY = minY
+            }
+            minYPull = max(0, minY - (restMinY ?? minY))
+            if minYPull < 1 {
+                restMinY = minY
+            }
+        } else {
+            minYPull = 0
+            restMinY = nil
         }
         syncCombinedPull(scrollProxy: scrollProxy)
+    }
+
+    /// Pull-to-refresh only when the list is at (or bouncing above) the top.
+    private var isScrolledToTop: Bool {
+        lastScrollOffset <= 12
     }
 
     private func syncCombinedPull(scrollProxy: ScrollViewProxy) {
@@ -130,6 +160,13 @@ struct FeedPullToRefreshScrollView<Content: View>: View {
 
     private func updatePull(_ pull: CGFloat, scrollProxy: ScrollViewProxy) {
         guard phase != .loading else { return }
+        guard Date() >= ignoresPullUntil else { return }
+        guard isScrolledToTop else {
+            if phase != .idle {
+                resetPullState(animated: true)
+            }
+            return
+        }
 
         let clampedPull = min(pull, maxPullDistance)
 
@@ -140,7 +177,8 @@ struct FeedPullToRefreshScrollView<Content: View>: View {
             headerHeight = clampedPull
             dragRotation = Double(clampedPull / triggerDistance) * 360
         } else if phase == .pulling {
-            if !releaseHandled, peakPull >= triggerDistance {
+            // iOS 16–17: no `onScrollPhaseChange` — finger release appears as pull collapse at top.
+            if #unavailable(iOS 18.0), !releaseHandled, peakPull >= triggerDistance {
                 releaseHandled = true
                 beginLoading(scrollProxy: scrollProxy)
                 return
@@ -151,6 +189,11 @@ struct FeedPullToRefreshScrollView<Content: View>: View {
 
     private func handleScrollRelease(scrollProxy: ScrollViewProxy) {
         guard phase == .pulling, !releaseHandled else { return }
+        guard Date() >= ignoresPullUntil else { return }
+        guard isScrolledToTop else {
+            resetPullState(animated: true)
+            return
+        }
         releaseHandled = true
 
         if peakPull >= triggerDistance {
@@ -161,6 +204,14 @@ struct FeedPullToRefreshScrollView<Content: View>: View {
     }
 
     private func beginLoading(scrollProxy: ScrollViewProxy) {
+        guard isScrolledToTop, peakPull >= triggerDistance else {
+            resetPullState(animated: true)
+            return
+        }
+        refreshGeneration += 1
+        let generation = refreshGeneration
+        refreshTask?.cancel()
+
         phase = .loading
         peakPull = 0
         scrollPull = 0
@@ -171,21 +222,42 @@ struct FeedPullToRefreshScrollView<Content: View>: View {
             headerHeight = loadingSlotHeight
         }
 
-        Task { @MainActor in
+        refreshTask = Task { @MainActor in
             let succeeded = await onRefresh()
 
+            guard generation == refreshGeneration else { return }
+            refreshTask = nil
+
+            finishRefreshUI(animated: true)
+
+            // Scroll to top only after an explicit pull-to-refresh (not on accidental triggers).
             if succeeded {
+                try? await Task.sleep(nanoseconds: 120_000_000)
                 withAnimation(.easeOut(duration: 0.28)) {
                     scrollProxy.scrollTo(FeedScrollAnchor.top, anchor: .top)
                 }
-                restScrollOffset = nil
-                restMinY = nil
             }
+        }
+    }
 
+    private func finishRefreshUI(animated: Bool) {
+        ignoresPullUntil = Date().addingTimeInterval(pullCooldown)
+        releaseHandled = true
+        peakPull = 0
+        scrollPull = 0
+        minYPull = 0
+        dragRotation = 0
+        restScrollOffset = nil
+        restMinY = nil
+
+        if animated {
             withAnimation(.spring(response: 0.38, dampingFraction: 0.88)) {
                 phase = .idle
                 headerHeight = 0
             }
+        } else {
+            phase = .idle
+            headerHeight = 0
         }
     }
 
@@ -201,7 +273,6 @@ struct FeedPullToRefreshScrollView<Content: View>: View {
             headerHeight = 0
         }
     }
-
 }
 
 // MARK: - Scroll tracking

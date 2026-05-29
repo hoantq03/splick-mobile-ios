@@ -1,36 +1,38 @@
-import DesignSystem
 import SwiftUI
 
-struct PhotoEditorTextLayer: View {
+struct PhotoEditorStickerLayer: View {
     @ObservedObject var viewModel: PhotoEditorViewModel
     let displayMetrics: ImageDisplayMetrics
+    let isEditing: Bool
 
     var body: some View {
         ZStack {
-            ForEach(viewModel.textItems) { item in
-                TextOverlayItemView(
+            ForEach(viewModel.stickerItems) { item in
+                StickerOverlayItemView(
                     item: item,
                     center: displayMetrics.imageNormalizedToView(item.normalizedPosition),
-                    isSelected: viewModel.selectedTextID == item.id,
-                    isInteractive: viewModel.activeTool == .text,
+                    isSelected: viewModel.selectedStickerID == item.id,
+                    isInteractive: isEditing,
                     displayFrame: displayMetrics.displayFrame,
-                    onSelect: { viewModel.selectedTextID = item.id },
-                    onMove: { viewModel.updateTextItemPosition(id: item.id, normalizedPosition: $0) },
-                    onScale: { viewModel.updateTextItemScale(id: item.id, scale: $0) },
-                    onRotate: { viewModel.updateTextItemRotation(id: item.id, rotation: $0) },
-                    onTransformEnd: { viewModel.commitTextTransform() }
+                    gifData: viewModel.gifData(for: item.kind),
+                    onSelect: { viewModel.selectedStickerID = item.id },
+                    onMove: { viewModel.updateStickerPosition(id: item.id, normalizedPosition: $0) },
+                    onScale: { viewModel.updateStickerScale(id: item.id, scale: $0) },
+                    onRotate: { viewModel.updateStickerRotation(id: item.id, rotation: $0) },
+                    onTransformEnd: { viewModel.commitStickerTransform() }
                 )
             }
         }
     }
 }
 
-private struct TextOverlayItemView: View {
-    let item: EditorTextItem
+private struct StickerOverlayItemView: View {
+    let item: EditorStickerItem
     let center: CGPoint
     let isSelected: Bool
     let isInteractive: Bool
     let displayFrame: CGRect
+    let gifData: Data?
     let onSelect: () -> Void
     let onMove: (CGPoint) -> Void
     let onScale: (CGFloat) -> Void
@@ -41,31 +43,20 @@ private struct TextOverlayItemView: View {
     @State private var liveScale: CGFloat = 1
     @State private var liveRotation: Angle = .zero
 
-    private var displayText: String {
-        let trimmed = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty, isSelected {
-            return "Nhập chữ"
-        }
-        return item.text
-    }
-
     var body: some View {
-        Text(displayText)
-            .font(.system(size: 32 * item.scale * liveScale, weight: .bold, design: .rounded))
-            .foregroundStyle(Color(item.color))
-            .opacity(displayText == "Nhập chữ" && isSelected ? 0.55 : 1)
-            .shadow(color: .black.opacity(0.45), radius: 3, y: 1)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background {
-                if isSelected {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+        EditorStickerContentView(kind: item.kind, gifData: gifData)
+            .fixedSize(horizontal: true, vertical: true)
+            .scaleEffect(item.scale * liveScale)
+            .rotationEffect(item.rotation + liveRotation)
+            .overlay {
+                if isSelected, isInteractive {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .strokeBorder(Color.white.opacity(0.9), lineWidth: 2)
+                        .padding(-6)
                 }
             }
-            .rotationEffect(item.rotation + liveRotation)
             .position(x: center.x + dragOffset.width, y: center.y + dragOffset.height)
-            .allowsHitTesting(isInteractive && !isSelected)
+            .allowsHitTesting(isInteractive)
             .gesture(dragGesture)
             .simultaneousGesture(magnifyGesture)
             .simultaneousGesture(rotateGesture)
@@ -93,7 +84,7 @@ private struct TextOverlayItemView: View {
         MagnificationGesture()
             .onChanged { liveScale = $0 }
             .onEnded { scale in
-                onScale(max(0.5, min(item.scale * scale, 3.5)))
+                onScale(max(0.4, min(item.scale * scale, 3)))
                 liveScale = 1
                 onTransformEnd()
             }

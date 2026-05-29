@@ -49,9 +49,9 @@ public final class CreatePostComposeViewModel: ObservableObject {
     private let maxVideos = 3
 
     public init(
-        previewImage: UIImage?,
-        videoURL: URL?,
-        mediaType: PostMediaType,
+        previewImages: [UIImage] = [],
+        videoURL: URL? = nil,
+        mediaType: PostMediaType = .image,
         createPostUseCase: CreatePostUseCaseProtocol,
         fetchFriendsUseCase: FetchFriendsUseCaseProtocol,
         currentUser: UserSummary?,
@@ -62,20 +62,9 @@ public final class CreatePostComposeViewModel: ObservableObject {
         self.currentUser = currentUser
         self.currentUserId = currentUserId ?? currentUser?.id
 
-        if let previewImage,
-           let data = previewImage.jpegData(compressionQuality: AppConstants.Media.compressionQuality) {
-            selectedMediaItems = [
-                ComposeMediaDraft(
-                    previewImage: previewImage,
-                    mediaType: mediaType,
-                    data: data,
-                    mimeType: mediaType == .video ? "video/mp4" : "image/jpeg",
-                    videoDurationSeconds: mediaType == .video ? videoURL.flatMap(Self.videoDurationSeconds) : nil
-                )
-            ]
-        } else if mediaType == .video,
-                  let videoURL,
-                  let data = try? Data(contentsOf: videoURL) {
+        if mediaType == .video,
+           let videoURL,
+           let data = try? Data(contentsOf: videoURL) {
             selectedMediaItems = [
                 ComposeMediaDraft(
                     previewImage: Self.videoThumbnail(videoURL),
@@ -85,6 +74,24 @@ public final class CreatePostComposeViewModel: ObservableObject {
                     videoDurationSeconds: Self.videoDurationSeconds(from: videoURL)
                 )
             ]
+        } else {
+            selectedMediaItems = previewImages.compactMap(Self.makeImageDraft)
+        }
+    }
+
+    var remainingImageSlots: Int {
+        max(0, maxImages - selectedMediaItems.filter { $0.mediaType == .image }.count)
+    }
+
+    var remainingVideoSlots: Int {
+        max(0, maxVideos - selectedMediaItems.filter { $0.mediaType == .video }.count)
+    }
+
+    func addImages(_ images: [UIImage]) {
+        for image in images {
+            guard remainingImageSlots > 0 else { break }
+            guard let draft = Self.makeImageDraft(from: image) else { continue }
+            selectedMediaItems.append(draft)
         }
     }
 
@@ -299,6 +306,19 @@ public final class CreatePostComposeViewModel: ObservableObject {
         }
 
         return PostBillSplit(totalAmount: total, currency: "VND", splits: splits)
+    }
+
+    private static func makeImageDraft(from previewImage: UIImage) -> ComposeMediaDraft? {
+        let jpegData = previewImage.jpegData(compressionQuality: AppConstants.Media.compressionQuality)
+        let pngData = jpegData == nil ? previewImage.pngData() : nil
+        guard let data = jpegData ?? pngData else { return nil }
+        return ComposeMediaDraft(
+            previewImage: previewImage,
+            mediaType: .image,
+            data: data,
+            mimeType: jpegData != nil ? "image/jpeg" : "image/png",
+            videoDurationSeconds: nil
+        )
     }
 
     private static func videoDurationSeconds(from url: URL) -> Int? {

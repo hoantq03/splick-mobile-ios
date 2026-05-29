@@ -2,14 +2,16 @@ import PencilKit
 import SwiftUI
 
 struct PhotoEditorDrawCanvas: UIViewRepresentable {
-    @Binding var drawing: PKDrawing
+    let drawing: PKDrawing
     let isEnabled: Bool
     let inkColor: UIColor
     let inkWidth: CGFloat
-    let onDrawingEnded: () -> Void
+    var flushToken: Int = 0
+    var drawingSyncRevision: Int = 0
+    let onStrokeEnded: (PKDrawing) -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onDrawingEnded: onDrawingEnded)
+        Coordinator(onStrokeEnded: onStrokeEnded)
     }
 
     func makeUIView(context: Context) -> PKCanvasView {
@@ -18,28 +20,56 @@ struct PhotoEditorDrawCanvas: UIViewRepresentable {
         canvas.isOpaque = false
         canvas.drawingPolicy = .anyInput
         canvas.delegate = context.coordinator
-        canvas.tool = makeTool()
+        canvas.drawing = drawing
+        canvas.tool = PKInkingTool(.pen, color: inkColor, width: inkWidth)
+        context.coordinator.wasEnabled = isEnabled
+        context.coordinator.lastAppliedSyncRevision = drawingSyncRevision
         return canvas
     }
 
-    func updateUIView(_ canvas: PKCanvasView, context: Context) {
-        if canvas.drawing != drawing {
-            canvas.drawing = drawing
-        }
-        canvas.isUserInteractionEnabled = isEnabled
-        canvas.tool = makeTool()
+    static func dismantleUIView(_ canvas: PKCanvasView, coordinator: Coordinator) {
+        coordinator.flush(canvas)
     }
 
-    private func makeTool() -> PKInkingTool {
-        PKInkingTool(.pen, color: inkColor, width: inkWidth)
+    func updateUIView(_ canvas: PKCanvasView, context: Context) {
+        let coordinator = context.coordinator
+        coordinator.onStrokeEnded = onStrokeEnded
+
+        if coordinator.lastFlushToken != flushToken {
+            coordinator.lastFlushToken = flushToken
+            coordinator.flush(canvas)
+        }
+
+        if coordinator.lastAppliedSyncRevision != drawingSyncRevision,
+           !coordinator.isStrokeActive {
+            canvas.drawing = drawing
+            coordinator.lastAppliedSyncRevision = drawingSyncRevision
+        }
+
+        let wasEnabled = coordinator.wasEnabled
+        if wasEnabled, !isEnabled, !coordinator.isStrokeActive {
+            coordinator.flush(canvas)
+        }
+        coordinator.wasEnabled = isEnabled
+
+        // While the draw tool is active, PKCanvasView owns live strokes — never overwrite from SwiftUI.
+        if !isEnabled, !coordinator.isStrokeActive, canvas.drawing != drawing {
+            canvas.drawing = drawing
+        }
+
+        canvas.isUserInteractionEnabled = isEnabled
+        canvas.tool = PKInkingTool(.pen, color: inkColor, width: inkWidth)
     }
 
     final class Coordinator: NSObject, PKCanvasViewDelegate {
-        let onDrawingEnded: () -> Void
-        private var isStrokeActive = false
+        var onStrokeEnded: (PKDrawing) -> Void
+        var isStrokeActive = false
+        var wasEnabled = true
+        var lastFlushToken = 0
+        var lastAppliedSyncRevision = 0
 
-        init(onDrawingEnded: @escaping () -> Void) {
-            self.onDrawingEnded = onDrawingEnded
+        init(onStrokeEnded: @escaping (PKDrawing) -> Void) {
+            self.onStrokeEnded = onStrokeEnded
         }
 
         func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
@@ -49,26 +79,19 @@ struct PhotoEditorDrawCanvas: UIViewRepresentable {
         func canvasViewDidEndUsingTool(_ canvasView: PKCanvasView) {
             guard isStrokeActive else { return }
             isStrokeActive = false
-            onDrawingEnded()
+            commit(canvasView.drawing)
         }
-    }
-}
 
-extension PhotoEditorDrawCanvas {
-    init(
-        viewModel: PhotoEditorViewModel,
-        isEnabled: Bool,
-        onDrawingEnded: @escaping () -> Void
-    ) {
-        self.init(
-            drawing: Binding(
-                get: { viewModel.drawing },
-                set: { viewModel.drawing = $0 }
-            ),
-            isEnabled: isEnabled,
-            inkColor: viewModel.inkColor,
-            inkWidth: viewModel.inkWidth,
-            onDrawingEnded: onDrawingEnded
-        )
+        func flush(_ canvasView: PKCanvasView) {
+            if !canvasView.drawing.bounds.isEmpty {
+                isStrokeActive = false
+                commit(canvasView.drawing)
+            }
+        }
+
+        private func commit(_ drawing: PKDrawing) {
+            guard !drawing.bounds.isEmpty else { return }
+            onStrokeEnded(drawing)
+        }
     }
 }
