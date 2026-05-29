@@ -54,6 +54,8 @@ private final class InlineReactionBarControl: UIView {
     private var slotStack: UIStackView!
     private var highlightedIndex: Int?
     private var isDragSelecting = false
+    private let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+    private let selectionFeedback = UISelectionFeedbackGenerator()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -150,6 +152,8 @@ private final class InlineReactionBarControl: UIView {
         case .began:
             guard slotIndex(at: location, in: slotStack) != nil else { return }
             isDragSelecting = true
+            impactFeedback.prepare()
+            selectionFeedback.prepare()
             FeedScrollLock.setLocked(true)
             updateHighlight(at: location)
         case .changed:
@@ -180,7 +184,7 @@ private final class InlineReactionBarControl: UIView {
         highlightedIndex = index
         if let index {
             animateSlot(at: index, highlighted: true)
-            UISelectionFeedbackGenerator().selectionChanged()
+            selectionFeedback.selectionChanged()
         }
     }
 
@@ -212,10 +216,10 @@ private final class InlineReactionBarControl: UIView {
         guard let view else { return }
 
         UIView.animate(
-            withDuration: 0.2,
+            withDuration: 0.12,
             delay: 0,
-            usingSpringWithDamping: 0.62,
-            initialSpringVelocity: 0.8
+            usingSpringWithDamping: 0.68,
+            initialSpringVelocity: 0.9
         ) {
             if highlighted {
                 view.transform = CGAffineTransform(scaleX: 1.5, y: 1.5).translatedBy(x: 0, y: -10)
@@ -228,18 +232,18 @@ private final class InlineReactionBarControl: UIView {
     private func bounceSlot(at index: Int) {
         guard index < emojiViews.count else { return }
         let view = emojiViews[index]
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        impactFeedback.impactOccurred()
         view.layer.removeAllAnimations()
         UIView.animate(
-            withDuration: 0.1,
+            withDuration: 0.07,
             delay: 0,
-            usingSpringWithDamping: 0.65,
+            usingSpringWithDamping: 0.7,
             initialSpringVelocity: 1.2,
             animations: {
                 view.transform = CGAffineTransform(scaleX: 1.35, y: 1.35).translatedBy(x: 0, y: -6)
             },
             completion: { _ in
-                UIView.animate(withDuration: 0.08) {
+                UIView.animate(withDuration: 0.05) {
                     if self.highlightedIndex != index {
                         view.transform = .identity
                     }
@@ -255,7 +259,7 @@ private final class InlineReactionBarControl: UIView {
         } else if emojis.indices.contains(index) {
             commitReaction(at: index)
         }
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        impactFeedback.impactOccurred()
     }
 
     private func commitReaction(at index: Int) {

@@ -26,7 +26,7 @@ struct FlyingEmojiFlight: Identifiable {
     }
 }
 
-/// Pop in a random upward direction, then arc toward target while shrinking.
+/// Pop upward, arc toward target, shrink and fade (~0.32s total).
 struct FlyingEmojiView: View {
     let flight: FlyingEmojiFlight
     let onComplete: () -> Void
@@ -73,30 +73,30 @@ struct FlyingEmojiView: View {
     }
 
     private func runAnimation() {
-        withAnimation(.spring(response: 0.16, dampingFraction: 0.5)) {
+        withAnimation(.spring(response: 0.08, dampingFraction: 0.55)) {
             scale = 1.7
             position = popEnd
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
-            withAnimation(.easeOut(duration: 0.22)) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            withAnimation(.easeOut(duration: 0.14)) {
                 position = arcMid
                 scale = 0.55
             }
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.34) {
-            withAnimation(.easeIn(duration: 0.28)) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+            withAnimation(.easeIn(duration: 0.10)) {
                 position = landPoint
                 scale = 0.26
             }
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.58) {
-            withAnimation(.easeOut(duration: 0.12)) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.32) {
+            withAnimation(.easeOut(duration: 0.08)) {
                 opacity = 0
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
                 onComplete()
             }
         }
