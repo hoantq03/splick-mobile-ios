@@ -1,13 +1,17 @@
+import PhotosUI
 import SwiftUI
-import DesignSystem
+import UIKit
+import UniformTypeIdentifiers
 
+/// Presents native capture (camera / library) and a Splick photo editor for images.
 public struct MediaCaptureView: View {
     let onMediaCaptured: (CapturedMedia) -> Void
     let onCancel: () -> Void
 
-    @StateObject private var camera = CameraSessionModel()
-    @State private var showAlbum = false
-    @State private var previewSize: CGSize = .zero
+    @State private var showSourceSheet = true
+    @State private var showCamera = false
+    @State private var photoPickerItems: [PhotosPickerItem] = []
+    @State private var editingImage: UIImage?
 
     public init(
         onMediaCaptured: @escaping (CapturedMedia) -> Void,
@@ -21,178 +25,85 @@ public struct MediaCaptureView: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            switch camera.phase {
-            case .preparing:
-                VStack(spacing: SplickTheme.Spacing.sm) {
-                    SplickSpinner(size: .medium)
-                    Text("Đang mở camera...")
-                        .font(SplickTheme.Typography.callout)
-                        .foregroundStyle(.white)
-                }
-
-            case .permissionDenied:
-                permissionDeniedView
-
-            case .unavailable(let message):
-                unavailableView(message: message)
-
-            case .ready:
-                if camera.isLivePreviewAvailable {
-                    cameraPreview
-                    controlsOverlay
-                } else {
-                    unavailableView(message: "Không thể khởi động camera.")
-                }
+            if let editingImage {
+                PhotoEditorView(
+                    sourceImage: editingImage,
+                    onDone: { edited in
+                        self.editingImage = nil
+                        onMediaCaptured(.image(edited))
+                    },
+                    onCancel: {
+                        self.editingImage = nil
+                        showSourceSheet = true
+                    }
+                )
             }
         }
-        .task {
-            await camera.prepare()
-        }
-        .onDisappear { camera.stop() }
-        .sheet(isPresented: $showAlbum) {
-            MediaAlbumPicker(
-                onPick: { media in
-                    showAlbum = false
-                    onMediaCaptured(media)
+        .sheet(isPresented: $showSourceSheet) {
+            MediaSourceSheet(
+                onCamera: {
+                    showSourceSheet = false
+                    showCamera = true
                 },
-                onCancel: { showAlbum = false }
+                onCancel: onCancel,
+                photoPickerItems: $photoPickerItems,
+                onPhotoPicked: { items in
+                    photoPickerItems = []
+                    Task { await handlePhotoPickerItems(items) }
+                }
             )
         }
-    }
-
-    private var cameraPreview: some View {
-        GeometryReader { geo in
-            CameraPreviewView(session: camera.session)
-                .ignoresSafeArea()
-                .onAppear { previewSize = geo.size }
-                .onChange(of: geo.size) { previewSize = $0 }
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onEnded { value in
-                            camera.focus(at: value.location, in: previewSize)
-                        }
-                )
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraPickerView { result in
+                showCamera = false
+                handleCameraResult(result)
+            }
+            .ignoresSafeArea()
         }
     }
 
-    private var controlsOverlay: some View {
-        VStack {
-            HStack {
-                Button(action: onCancel) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 44, height: 44)
-                }
+    @MainActor
+    private func handlePhotoPickerItems(_ items: [PhotosPickerItem]) async {
+        guard let item = items.first else { return }
+        showSourceSheet = false
 
-                Spacer()
-
-                Button {
-                    camera.cycleFlash()
-                } label: {
-                    Image(systemName: camera.flashIconName)
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 44, height: 44)
-                }
-                .disabled(camera.cameraPosition == .front)
-                .opacity(camera.cameraPosition == .front ? 0.35 : 1)
+        let isVideo = item.supportedContentTypes.contains(where: { $0.conforms(to: .movie) })
+        if isVideo {
+            if let data = try? await item.loadTransferable(type: Data.self) {
+                let url = writeTemporaryVideo(data)
+                onMediaCaptured(.video(url))
+            } else {
+                showSourceSheet = true
             }
-            .padding(.horizontal, SplickTheme.Spacing.md)
-            .padding(.top, SplickTheme.Spacing.sm)
+            return
+        }
 
-            Spacer()
+        if let data = try? await item.loadTransferable(type: Data.self),
+           let image = UIImage(data: data) {
+            editingImage = image
+            return
+        }
 
-            HStack(alignment: .center) {
-                Button {
-                    showAlbum = true
-                } label: {
-                    Image(systemName: "photo.on.rectangle")
-                        .font(.system(size: 26))
-                        .foregroundStyle(.white)
-                        .frame(width: 56, height: 56)
-                }
+        showSourceSheet = true
+    }
 
-                Spacer()
-
-                Button {
-                    Task {
-                        if let image = await camera.capturePhoto() {
-                            onMediaCaptured(.image(image))
-                        }
-                    }
-                } label: {
-                    ZStack {
-                        Circle()
-                            .strokeBorder(.white, lineWidth: 4)
-                            .frame(width: 76, height: 76)
-                        Circle()
-                            .fill(.white)
-                            .frame(width: 62, height: 62)
-                    }
-                }
-                .disabled(camera.isCapturing)
-                .opacity(camera.isCapturing ? 0.6 : 1)
-
-                Spacer()
-
-                Button {
-                    camera.toggleCamera()
-                } label: {
-                    Image(systemName: "arrow.triangle.2.circlepath.camera")
-                        .font(.system(size: 26))
-                        .foregroundStyle(.white)
-                        .frame(width: 56, height: 56)
-                }
-            }
-            .padding(.horizontal, SplickTheme.Spacing.xl)
-            .padding(.bottom, SplickTheme.Spacing.xl)
+    private func handleCameraResult(_ result: CameraPickerView.Result) {
+        switch result {
+        case .image(let image):
+            editingImage = image
+        case .video(let url):
+            onMediaCaptured(.video(url))
+        case .cancelled:
+            showSourceSheet = true
         }
     }
 
-    private func unavailableView(message: String) -> some View {
-        VStack(spacing: SplickTheme.Spacing.lg) {
-            Image(systemName: "camera.fill")
-                .font(.system(size: 48))
-                .foregroundStyle(.white.opacity(0.7))
+    private func writeTemporaryVideo(_ data: Data) -> URL {
+        let destination = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("mp4")
 
-            Text(message)
-                .font(SplickTheme.Typography.callout)
-                .foregroundStyle(.white.opacity(0.85))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, SplickTheme.Spacing.xl)
-
-            SplickButton("Chọn từ Album", style: .primary) {
-                showAlbum = true
-            }
-            .padding(.horizontal, SplickTheme.Spacing.xl)
-
-            SplickButton("Đóng", style: .secondary, action: onCancel)
-                .padding(.horizontal, SplickTheme.Spacing.xl)
-        }
-    }
-
-    private var permissionDeniedView: some View {
-        VStack(spacing: SplickTheme.Spacing.md) {
-            Image(systemName: "camera.fill")
-                .font(.system(size: 48))
-                .foregroundStyle(.white.opacity(0.7))
-            Text("Cần quyền Camera")
-                .font(SplickTheme.Typography.title)
-                .foregroundStyle(.white)
-            Text("Bật quyền Camera trong Cài đặt để chụp ảnh và đăng bài.")
-                .font(SplickTheme.Typography.callout)
-                .foregroundStyle(.white.opacity(0.75))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, SplickTheme.Spacing.xl)
-
-            SplickButton("Chọn từ Album", style: .primary) {
-                showAlbum = true
-            }
-            .padding(.horizontal, SplickTheme.Spacing.xl)
-
-            SplickButton("Đóng", style: .secondary, action: onCancel)
-                .padding(.horizontal, SplickTheme.Spacing.xl)
-        }
+        try? data.write(to: destination)
+        return destination
     }
 }
