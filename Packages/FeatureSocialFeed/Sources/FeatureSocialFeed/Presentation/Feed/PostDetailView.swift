@@ -15,6 +15,8 @@ struct PostDetailView: View {
     @State private var companionsRoute: CompanionsSheetRoute?
     @State private var replyParentId: UUID?
     @State private var showEmojiPicker = false
+    @State private var showMediaViewer = false
+    @State private var viewerInitialIndex = 0
 
     init(
         post: Post,
@@ -38,10 +40,8 @@ struct PostDetailView: View {
                     post: livePost,
                     currentUser: feedViewModel.currentUser,
                     onReact: { emoji in
-                        Task {
-                            if let error = await feedViewModel.react(to: post.id, emoji: emoji) {
-                                feedViewModel.alertMessage = error
-                            }
+                        if let error = feedViewModel.react(to: post.id, emoji: emoji) {
+                            feedViewModel.alertMessage = error
                         }
                     },
                     onDelete: {
@@ -55,7 +55,11 @@ struct PostDetailView: View {
                             companions: livePost.companions
                         )
                     },
-                    showsCommentPreview: false
+                    showsCommentPreview: false,
+                    onMediaTap: { index in
+                        viewerInitialIndex = index
+                        showMediaViewer = true
+                    }
                 )
 
                 commentsSection
@@ -84,7 +88,7 @@ struct PostDetailView: View {
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
             .padding(.vertical, SplickTheme.Spacing.xs)
-            .padding(.bottom, SplickTabBarMetrics.floatingClearance)
+            .padding(.bottom, SplickTabBarMetrics.hiddenClearance)
             .background(SplickTheme.Colors.background)
         }
         .alert(
@@ -121,11 +125,19 @@ struct PostDetailView: View {
         }
         .sheet(isPresented: $showEmojiPicker) {
             EmojiPickerSheet { emoji in
-                Task {
-                    if let error = await feedViewModel.react(to: post.id, emoji: emoji) {
-                        feedViewModel.alertMessage = error
-                    }
+                if let error = feedViewModel.react(to: post.id, emoji: emoji) {
+                    feedViewModel.alertMessage = error
                 }
+            }
+        }
+        .fullScreenCover(isPresented: $showMediaViewer) {
+            let mediaItems = livePost.displayMediaItems
+            if !mediaItems.isEmpty {
+                MediaViewerView(
+                    items: mediaItems,
+                    initialIndex: min(viewerInitialIndex, mediaItems.count - 1),
+                    isPresented: $showMediaViewer
+                )
             }
         }
     }

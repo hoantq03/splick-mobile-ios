@@ -4,6 +4,8 @@ import SplickDomain
 
 struct PostMediaView: View {
     let post: Post
+    /// Called with the index of the tapped item. Nil = not tappable.
+    var onTap: ((Int) -> Void)?
 
     @State private var selectedIndex = 0
 
@@ -15,6 +17,8 @@ struct PostMediaView: View {
         Group {
             if items.count <= 1, let item = items.first {
                 mediaItemView(item)
+                    .contentShape(Rectangle())
+                    .onTapGesture { onTap?(0) }
             } else {
                 multiMediaCarousel
             }
@@ -32,6 +36,9 @@ struct PostMediaView: View {
             }
             .tabViewStyle(.page(indexDisplayMode: .automatic))
             .frame(height: 350)
+            .simultaneousGesture(
+                TapGesture().onEnded { onTap?(selectedIndex) }
+            )
 
             Text("\(selectedIndex + 1)/\(items.count)")
                 .font(.system(size: 11, weight: .semibold))

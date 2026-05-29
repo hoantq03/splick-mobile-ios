@@ -8,6 +8,10 @@ private struct ProfileRoute: Identifiable {
     var id: UUID { user.id }
 }
 
+private enum FeedScrollAnchor {
+    static let top = "feedTop"
+}
+
 public struct FeedView: View {
     @ObservedObject private var viewModel: FeedViewModel
     @Binding private var navigationPath: NavigationPath
@@ -15,6 +19,7 @@ public struct FeedView: View {
     private let onPendingPostHandled: (() -> Void)?
     @Environment(\.openPostCaptureFlow) private var openPostCaptureFlow
     @Environment(\.currentUserSummary) private var currentUserSummary
+    @Environment(\.tabBarScrollState) private var tabBarScrollState
     private let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
     @State private var profileRoute: ProfileRoute?
     @State private var companionsRoute: CompanionsSheetRoute?
@@ -117,47 +122,61 @@ public struct FeedView: View {
     }
 
     private var feedList: some View {
-        ScrollView {
-            LazyVStack(spacing: SplickTheme.Spacing.md) {
-                ForEach(viewModel.posts) { post in
-                    PostCardView(
-                        post: post,
-                        currentUser: viewModel.currentUser,
-                        onReact: { emoji in
-                            Task {
-                                if let error = await viewModel.react(to: post.id, emoji: emoji) {
+        ScrollViewReader { scrollProxy in
+            ScrollView {
+                LazyVStack(spacing: SplickTheme.Spacing.md) {
+                    Color.clear
+                        .frame(height: 0)
+                        .id(FeedScrollAnchor.top)
+
+                    ForEach(viewModel.posts) { post in
+                        PostCardView(
+                            post: post,
+                            currentUser: viewModel.currentUser,
+                            onReact: { emoji in
+                                if let error = viewModel.react(to: post.id, emoji: emoji) {
                                     viewModel.alertMessage = error
                                 }
+                            },
+                            onDelete: {
+                                Task { await viewModel.deletePost(id: post.id) }
+                            },
+                            onUserTap: { user in
+                                profileRoute = ProfileRoute(user: user)
+                            },
+                            onOpenComments: {},
+                            onShowCompanions: {
+                                companionsRoute = CompanionsSheetRoute(
+                                    id: post.id,
+                                    companions: post.companions
+                                )
+                            },
+                            onOpenDetail: { navigationPath.append(post.id) }
+                        )
+                        .onAppear {
+                            guard !viewModel.isRefreshing else { return }
+                            Task { await viewModel.trackViewOnScrollIfNeeded(for: post) }
+                            if post.id == viewModel.posts.last?.id {
+                                Task { await viewModel.loadMore() }
                             }
-                        },
-                        onDelete: {
-                            Task { await viewModel.deletePost(id: post.id) }
-                        },
-                        onUserTap: { user in
-                            profileRoute = ProfileRoute(user: user)
-                        },
-                        onOpenComments: {},
-                        onShowCompanions: {
-                            companionsRoute = CompanionsSheetRoute(
-                                id: post.id,
-                                companions: post.companions
-                            )
-                        }
-                    )
-                    .onAppear {
-                        Task { await viewModel.trackViewOnScrollIfNeeded(for: post) }
-                        guard !viewModel.isRefreshing else { return }
-                        if post.id == viewModel.posts.last?.id {
-                            Task { await viewModel.loadMore() }
                         }
                     }
                 }
+                .padding(.horizontal, SplickTheme.Spacing.md)
             }
-            .padding(.horizontal, SplickTheme.Spacing.md)
+            .scrollDisabled(feedScrollLocked)
+            .refreshable {
+                FeedScrollLock.forceUnlock()
+                feedScrollLocked = false
+                let refreshed = await viewModel.loadFeed(isPullToRefresh: true)
+                guard refreshed else { return }
+                tabBarScrollState?.reset()
+                withAnimation(.easeOut(duration: 0.2)) {
+                    scrollProxy.scrollTo(FeedScrollAnchor.top, anchor: .top)
+                }
+            }
+            .environment(\.feedVideoCoordinator, videoCoordinator)
+            .tabBarHideOnScroll()
         }
-        .scrollDisabled(feedScrollLocked)
-        .refreshable { await viewModel.loadFeed(isPullToRefresh: true) }
-        .environment(\.feedVideoCoordinator, videoCoordinator)
-        .tabBarHideOnScroll()
     }
 }

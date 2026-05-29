@@ -29,6 +29,10 @@ struct PostCardView: View {
     let onShowCompanions: () -> Void
     /// When false (e.g. post detail), reactions/views still show; only the comment preview link is hidden.
     var showsCommentPreview: Bool = true
+    /// Tap on caption or comment row (in feed context) navigates to post detail.
+    var onOpenDetail: (() -> Void)? = nil
+    /// Tap on a media item. Receives the item index. Used in detail to open fullscreen viewer.
+    var onMediaTap: ((Int) -> Void)? = nil
 
     @State private var activeSheet: PostCardSheet?
     @State private var reminderSentMessage: String?
@@ -58,7 +62,7 @@ struct PostCardView: View {
             }
 
             companionsSection
-            PostMediaView(post: post)
+            PostMediaView(post: post, onTap: resolvedMediaTap)
             contextSection
 
             reactionBarRow
@@ -184,6 +188,14 @@ struct PostCardView: View {
             .font(SplickTheme.Typography.callout)
             .foregroundStyle(SplickTheme.Colors.textPrimary)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture { onOpenDetail?() }
+    }
+
+    private var resolvedMediaTap: ((Int) -> Void)? {
+        if let onMediaTap { return onMediaTap }
+        if let onOpenDetail { return { _ in onOpenDetail() } }
+        return nil
     }
 
     // MARK: - Companions
@@ -305,10 +317,8 @@ struct PostCardView: View {
         )
         let end = flyTargetPoint()
         let flight = FlyingEmojiFlight.make(emoji: emoji, start: start, end: end)
+        guard flyingEmojis.count < 8 else { return }
         flyingEmojis.append(flight)
-        if flyingEmojis.count > 40 {
-            flyingEmojis.removeFirst(flyingEmojis.count - 40)
-        }
     }
 
     /// Avatar in top 3, otherwise the "+N người…" chip, otherwise below the bar.
