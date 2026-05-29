@@ -3,11 +3,15 @@ import SwiftUI
 public enum SplickTabBarMetrics {
     /// Space reserved above the floating tab bar so bottom controls stay tappable.
     public static let floatingClearance: CGFloat = 88
+    /// Bottom inset when the tab bar is hidden (e.g. post detail).
+    public static let hiddenClearance: CGFloat = 16
 }
 
 @MainActor
 public final class TabBarScrollState: ObservableObject {
     @Published public private(set) var isVisible = true
+    /// When true (e.g. post detail), no extra bottom inset — composer can sit on the screen edge.
+    @Published public private(set) var suppressesBottomInset = false
 
     private var lastOffset: CGFloat = 0
     private let hideThreshold: CGFloat = 8
@@ -33,14 +37,18 @@ public final class TabBarScrollState: ObservableObject {
 
     public func reset() {
         lastOffset = 0
+        suppressesBottomInset = false
         setVisible(true)
     }
 
     public func show() {
+        suppressesBottomInset = false
         setVisible(true)
     }
 
-    public func hide() {
+    /// Hides the tab bar. Set `flushToBottom` on detail screens so bottom inset becomes zero.
+    public func hide(flushToBottom: Bool = false) {
+        suppressesBottomInset = flushToBottom
         setVisible(false)
     }
 

@@ -4,7 +4,7 @@ import DesignSystem
 enum TabBarLayout {
     /// Bottom space reserved so scroll content isn't hidden under the floating tab bar.
     static let floatingClearance: CGFloat = SplickTabBarMetrics.floatingClearance
-    static let hiddenClearance: CGFloat = 16
+    static let hiddenClearance: CGFloat = SplickTabBarMetrics.hiddenClearance
     static let tabBarSlideDistance: CGFloat = 120
 }
 
@@ -13,7 +13,10 @@ struct FloatingTabBarContentPadding: ViewModifier {
 
     private var bottomInset: CGFloat {
         guard let tabBarScrollState else { return TabBarLayout.floatingClearance }
-        return tabBarScrollState.isVisible ? TabBarLayout.floatingClearance : TabBarLayout.hiddenClearance
+        if tabBarScrollState.isVisible {
+            return TabBarLayout.floatingClearance
+        }
+        return tabBarScrollState.suppressesBottomInset ? 0 : TabBarLayout.hiddenClearance
     }
 
     func body(content: Content) -> some View {
