@@ -19,7 +19,7 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
         baseURL: String = AppConstants.API.baseURL,
         tokenProvider: TokenProvider,
         tokenRefresher: TokenRefreshHandling? = nil,
-        session: URLSession = .shared
+        session: URLSession = .splick
     ) {
         self.baseURL = baseURL
         self.tokenProvider = tokenProvider
@@ -86,7 +86,11 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
 
         let (data, response): (Data, URLResponse)
         do {
+            try Task.checkCancellation()
             (data, response) = try await session.data(for: request)
+            try Task.checkCancellation()
+        } catch is CancellationError {
+            throw CancellationError()
         } catch let error as URLError {
             throw mapURLError(error)
         }
@@ -272,16 +276,18 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
         return NetworkError.unknown(message.isEmpty ? "Validation failed." : message)
     }
 
-    private func mapURLError(_ error: URLError) -> NetworkError {
+    private func mapURLError(_ error: URLError) -> Error {
         switch error.code {
+        case .cancelled:
+            return CancellationError()
         case .notConnectedToInternet, .networkConnectionLost:
-            return .noConnection
+            return NetworkError.noConnection
         case .timedOut:
-            return .timeout
+            return NetworkError.timeout
         case .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed:
-            return .serverUnreachable
+            return NetworkError.serverUnreachable
         default:
-            return .unknown(error.localizedDescription)
+            return NetworkError.unknown(error.localizedDescription)
         }
     }
 }
