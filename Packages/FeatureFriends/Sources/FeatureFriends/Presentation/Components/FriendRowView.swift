@@ -1,8 +1,10 @@
 import SwiftUI
 import DesignSystem
+import Localization
 import SplickDomain
 
 struct FriendRowView: View {
+    @EnvironmentObject private var languageService: LanguageService
     let user: UserSummary
     var friendStatus: FriendRelationStatus?
     var isSendingRequest = false
@@ -50,9 +52,9 @@ struct FriendRowView: View {
     private func relationAction(for status: FriendRelationStatus) -> some View {
         switch status {
         case .friends:
-            relationBadge("Bạn bè", foreground: SplickTheme.Colors.textSecondary)
+            relationBadge(languageService.text(.friendsRelationFriend), foreground: SplickTheme.Colors.textSecondary)
         case .requestSent:
-            relationBadge("Đã gửi", foreground: SplickTheme.Colors.textSecondary)
+            relationBadge(languageService.text(.friendsRelationSent), foreground: SplickTheme.Colors.textSecondary)
         case .requestReceived:
             Button {
                 onAddFriend?()
@@ -61,7 +63,7 @@ struct FriendRowView: View {
                     if isSendingRequest {
                         SplickSpinner(size: .small)
                     } else {
-                        Text("Chấp nhận")
+                        Text(languageService.text(.friendsAccept))
                             .font(SplickTheme.Typography.caption.weight(.semibold))
                     }
                 }
@@ -84,7 +86,7 @@ struct FriendRowView: View {
                     if isSendingRequest {
                         SplickSpinner(size: .small)
                     } else {
-                        Text("Kết bạn")
+                        Text(languageService.text(.friendsAddFriendAction))
                             .font(SplickTheme.Typography.caption.weight(.semibold))
                     }
                 }
