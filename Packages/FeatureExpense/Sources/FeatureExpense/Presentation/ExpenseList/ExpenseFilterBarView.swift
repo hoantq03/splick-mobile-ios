@@ -1,5 +1,6 @@
 import SwiftUI
 import DesignSystem
+import Localization
 import SplickDomain
 
 private enum FilterMetrics {
@@ -13,6 +14,7 @@ private enum FilterMetrics {
 struct ExpenseFilterBarView: View {
     @ObservedObject var viewModel: ExpenseListViewModel
     @ObservedObject var userSearchViewModel: ExpenseUserSearchViewModel
+    @EnvironmentObject private var languageService: LanguageService
 
     @State private var captionQuery = ""
     @State private var userQuery = ""
@@ -49,7 +51,7 @@ struct ExpenseFilterBarView: View {
 
     private var captionSearchSection: some View {
         compactTextField(
-            placeholder: "Search by caption",
+            placeholder: languageService.text(.expenseFilterSearchCaption),
             text: $captionQuery,
             icon: "magnifyingglass",
             onChange: { scheduleCaptionSearch(captionQuery) },
@@ -78,7 +80,7 @@ struct ExpenseFilterBarView: View {
             HStack(spacing: 4) {
                 Image(systemName: "line.3.horizontal.decrease.circle")
                     .font(.system(size: 11, weight: .semibold))
-                Text("More filters")
+                Text(languageService.text(.expenseFilterMore))
                     .font(.system(size: 11, weight: .semibold))
                 if filters.hasAdvancedFilters {
                     Circle()
@@ -108,7 +110,7 @@ struct ExpenseFilterBarView: View {
             dateFilterSection
 
             if filters.hasAdvancedFilters {
-                Button("Clear filters") {
+                Button(languageService.text(.expenseFilterClear)) {
                     clearAdvancedFilters()
                 }
                 .font(.system(size: 11, weight: .semibold))
@@ -121,14 +123,14 @@ struct ExpenseFilterBarView: View {
 
     private var statusSection: some View {
         VStack(alignment: .leading, spacing: 3) {
-            filterLabel("Status")
+            filterLabel(languageService.text(.expenseFilterStatus))
 
-            Picker("Status", selection: Binding(
+            Picker(languageService.text(.expenseFilterStatus), selection: Binding(
                 get: { filters.debtStatus },
                 set: { viewModel.setDebtStatus($0) }
             )) {
                 ForEach(ExpenseDebtFilter.allCases) { status in
-                    Text(status.title).tag(status)
+                    Text(status.title(using: languageService)).tag(status)
                 }
             }
             .pickerStyle(.segmented)
@@ -140,13 +142,13 @@ struct ExpenseFilterBarView: View {
 
     private var userFilterSection: some View {
         VStack(alignment: .leading, spacing: 3) {
-            filterLabel("User")
+            filterLabel(languageService.text(.expenseFilterUser))
 
             if let user = filters.selectedUser {
                 selectedUserChip(user)
             } else {
                 compactTextField(
-                    placeholder: "Search user",
+                    placeholder: languageService.text(.expenseFilterSearchUser),
                     text: $userQuery,
                     icon: "person.fill",
                     onChange: {
@@ -200,7 +202,7 @@ struct ExpenseFilterBarView: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 28)
             } else if userSearchViewModel.users.isEmpty {
-                Text("No users found")
+                Text(languageService.text(.expenseFilterNoUsers))
                     .font(.system(size: 10))
                     .foregroundStyle(SplickTheme.Colors.textTertiary)
             } else {
@@ -245,9 +247,9 @@ struct ExpenseFilterBarView: View {
 
     private var dateFilterSection: some View {
         VStack(alignment: .leading, spacing: 3) {
-            filterLabel("Date range")
-            dateRow(field: .from, label: "From", date: filters.dateFrom)
-            dateRow(field: .to, label: "To", date: filters.dateTo)
+            filterLabel(languageService.text(.expenseFilterDateRange))
+            dateRow(field: .from, label: languageService.text(.expenseFilterFrom), date: filters.dateFrom)
+            dateRow(field: .to, label: languageService.text(.expenseFilterTo), date: filters.dateTo)
         }
     }
 
@@ -338,10 +340,11 @@ struct ExpenseFilterBarView: View {
     }
 
     private func datePickerSheet(field: DatePickerField) -> some View {
-        NavigationStack {
+        let title = field.title(using: languageService)
+        return NavigationStack {
             VStack {
                 DatePicker(
-                    field.title,
+                    title,
                     selection: Binding(
                         get: { currentDate(for: field) ?? Date() },
                         set: { setDate($0, for: field) }
@@ -353,17 +356,17 @@ struct ExpenseFilterBarView: View {
 
                 Spacer()
             }
-            .navigationTitle(field.title)
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Clear") {
+                    Button(languageService.text(.commonClear)) {
                         setDate(nil, for: field)
                         activeDatePicker = nil
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { activeDatePicker = nil }
+                    Button(languageService.text(.commonDone)) { activeDatePicker = nil }
                 }
             }
         }
@@ -371,7 +374,7 @@ struct ExpenseFilterBarView: View {
     }
 
     private func dateLabel(_ date: Date?) -> String {
-        guard let date else { return "Any time" }
+        guard let date else { return languageService.text(.expenseFilterAnyTime) }
         return date.formatted(date: .abbreviated, time: .omitted)
     }
 
@@ -408,10 +411,11 @@ private enum DatePickerField: String, Identifiable {
 
     var id: String { rawValue }
 
-    var title: String {
+    @MainActor
+    func title(using languageService: LanguageService) -> String {
         switch self {
-        case .from: return "From date"
-        case .to: return "To date"
+        case .from: return languageService.text(.expenseFilterFromDate)
+        case .to: return languageService.text(.expenseFilterToDate)
         }
     }
 }
