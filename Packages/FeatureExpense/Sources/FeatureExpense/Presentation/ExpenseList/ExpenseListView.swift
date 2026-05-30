@@ -1,11 +1,13 @@
 import SwiftUI
 import DesignSystem
 import Common
+import Localization
 import SplickDomain
 
 public struct ExpenseListView: View {
     @StateObject private var viewModel: ExpenseListViewModel
     @StateObject private var userSearchViewModel: ExpenseUserSearchViewModel
+    @EnvironmentObject private var languageService: LanguageService
     @Environment(\.openPostCaptureFlow) private var openPostCaptureFlow
     private let currentUserId: UUID?
 
@@ -26,14 +28,14 @@ public struct ExpenseListView: View {
             Group {
                 switch viewModel.state {
                 case .idle, .loading:
-                    LoadingView(message: "Loading expenses...")
+                    LoadingView(message: languageService.text(.expenseLoading))
 
                 case .loaded where viewModel.expenses.isEmpty:
                     EmptyStateView(
                         icon: "dollarsign.circle",
-                        title: "No Expenses",
-                        message: "Create your first shared expense to start splitting bills.",
-                        actionTitle: "Add Expense"
+                        title: languageService.text(.expenseEmptyTitle),
+                        message: languageService.text(.expenseEmptyMessage),
+                        actionTitle: languageService.text(.expenseEmptyAction)
                     ) {
                         openPostCapture()
                     }
@@ -47,7 +49,7 @@ public struct ExpenseListView: View {
                     }
                 }
             }
-            .navigationTitle("Expenses")
+            .navigationTitle(languageService.text(.expenseTitle))
             .splickProfileToolbar()
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
@@ -100,10 +102,10 @@ public struct ExpenseListView: View {
             Image(systemName: "line.3.horizontal.decrease.circle")
                 .font(.system(size: 36))
                 .foregroundStyle(SplickTheme.Colors.textTertiary)
-            Text("No matching expenses")
+            Text(languageService.text(.expenseFilteredEmptyTitle))
                 .font(SplickTheme.Typography.headline)
                 .foregroundStyle(SplickTheme.Colors.textPrimary)
-            Text("Try changing filters or clearing them.")
+            Text(languageService.text(.expenseFilteredEmptyMessage))
                 .font(SplickTheme.Typography.caption)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
@@ -116,7 +118,7 @@ public struct ExpenseListView: View {
     private var debtSummaryCard: some View {
         HStack {
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxs) {
-                Text("You are owed")
+                Text(languageService.text(.expenseYouAreOwed))
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
                 Text(formatAmount(viewModel.totalOwed))
@@ -127,7 +129,7 @@ public struct ExpenseListView: View {
             Spacer()
 
             VStack(alignment: .trailing, spacing: SplickTheme.Spacing.xxs) {
-                Text("You owe")
+                Text(languageService.text(.expenseYouOwe))
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
                 Text(formatAmount(viewModel.totalOwing))
@@ -160,6 +162,7 @@ public struct ExpenseListView: View {
 }
 
 struct ExpenseRowView: View {
+    @EnvironmentObject private var languageService: LanguageService
     let expense: Expense
 
     var body: some View {
@@ -177,18 +180,33 @@ struct ExpenseRowView: View {
                     .foregroundStyle(SplickTheme.Colors.textPrimary)
                     .lineLimit(1)
 
-                Text("Paid by \(expense.paidBy.displayName)")
-                    .font(SplickTheme.Typography.caption)
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                Text(
+                    String(
+                        format: languageService.text(.expensePaidBy),
+                        expense.paidBy.displayName
+                    )
+                )
+                .font(SplickTheme.Typography.caption)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
 
-                Text("Created \(expense.createdAt.formatted(date: .abbreviated, time: .shortened))")
-                    .font(SplickTheme.Typography.caption)
-                    .foregroundStyle(SplickTheme.Colors.textTertiary)
+                Text(
+                    String(
+                        format: languageService.text(.expenseCreatedAt),
+                        expense.createdAt.formatted(date: .abbreviated, time: .shortened)
+                    )
+                )
+                .font(SplickTheme.Typography.caption)
+                .foregroundStyle(SplickTheme.Colors.textTertiary)
 
                 if let settledAt = expense.displaySettledAt {
-                    Text("Settled \(settledAt.formatted(date: .abbreviated, time: .shortened))")
-                        .font(SplickTheme.Typography.caption)
-                        .foregroundStyle(SplickTheme.Colors.success.opacity(0.85))
+                    Text(
+                        String(
+                            format: languageService.text(.expenseSettledAt),
+                            settledAt.formatted(date: .abbreviated, time: .shortened)
+                        )
+                    )
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.success.opacity(0.85))
                 }
             }
 
@@ -219,9 +237,12 @@ struct ExpenseRowView: View {
 
     private var statusInfo: (String, Color) {
         switch expense.status {
-        case .pending: return ("Pending", SplickTheme.Colors.warning)
-        case .partiallySettled: return ("Partial", SplickTheme.Colors.info)
-        case .settled: return ("Settled", SplickTheme.Colors.success)
+        case .pending:
+            return (languageService.text(.expenseStatusPending), SplickTheme.Colors.warning)
+        case .partiallySettled:
+            return (languageService.text(.expenseStatusPartial), SplickTheme.Colors.info)
+        case .settled:
+            return (languageService.text(.expenseStatusSettled), SplickTheme.Colors.success)
         }
     }
 
