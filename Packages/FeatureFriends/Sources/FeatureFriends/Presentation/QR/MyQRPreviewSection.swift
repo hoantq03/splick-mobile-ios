@@ -1,6 +1,7 @@
 import SwiftUI
 import DesignSystem
 import Common
+import Localization
 
 /// Compact “my QR” block for the scan screen (below camera).
 struct MyQRPreviewSection: View {
@@ -11,6 +12,7 @@ struct MyQRPreviewSection: View {
     private let generateMyQrUseCase: GenerateMyQrUseCaseProtocol
 
     @StateObject private var viewModel: MyQRViewModel
+    @EnvironmentObject private var languageService: LanguageService
     @State private var showFullSheet = false
 
     init(
@@ -28,7 +30,7 @@ struct MyQRPreviewSection: View {
 
     var body: some View {
         VStack(spacing: SplickTheme.Spacing.sm) {
-            Text("Mã QR của tôi")
+            Text(languageService.text(.friendsMyQRPreviewTitle))
                 .font(SplickTheme.Typography.caption)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -49,7 +51,7 @@ struct MyQRPreviewSection: View {
                         Text("@\(username)")
                             .font(SplickTheme.Typography.caption)
                             .foregroundStyle(SplickTheme.Colors.textSecondary)
-                        Text("Chạm để phóng to hoặc chia sẻ")
+                        Text(languageService.text(.friendsMyQRPreviewHint))
                             .font(SplickTheme.Typography.caption)
                             .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
                     }
