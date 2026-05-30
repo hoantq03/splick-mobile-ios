@@ -2,10 +2,12 @@ import SwiftUI
 import DesignSystem
 import Common
 import FeatureMedia
+import Localization
 import SplickDomain
 
 struct GroupDetailView: View {
     @StateObject private var viewModel: GroupDetailViewModel
+    @EnvironmentObject private var languageService: LanguageService
     let onUserTap: (UserSummary) -> Void
     let onGroupLeft: () -> Void
     let onGroupDeleted: () -> Void
@@ -155,15 +157,15 @@ struct GroupDetailView: View {
             get: { viewModel.actionMessage != nil },
             set: { if !$0 { viewModel.actionMessage = nil } }
         )) {
-            Button("OK", role: .cancel) { viewModel.actionMessage = nil }
+            Button(languageService.text(.commonOK), role: .cancel) { viewModel.actionMessage = nil }
         } message: {
             Text(viewModel.actionMessage ?? "")
         }
-        .alert("Lỗi", isPresented: Binding(
+        .alert(languageService.text(.commonError), isPresented: Binding(
             get: { viewModel.actionError != nil },
             set: { if !$0 { viewModel.actionError = nil } }
         )) {
-            Button("OK", role: .cancel) { viewModel.actionError = nil }
+            Button(languageService.text(.commonOK), role: .cancel) { viewModel.actionError = nil }
         } message: {
             Text(viewModel.actionError ?? "")
         }
@@ -194,7 +196,7 @@ struct GroupDetailView: View {
     @ViewBuilder
     private var pendingMembersSection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-            Text("Chờ duyệt (\(viewModel.pendingMembers.count))")
+            Text(languageService.format(.friendsGroupPending, viewModel.pendingMembers.count))
                 .font(SplickTheme.Typography.headline)
                 .foregroundStyle(SplickTheme.Colors.textPrimary)
 
@@ -228,7 +230,7 @@ struct GroupDetailView: View {
     @ViewBuilder
     private var membersSection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-            Text("Thành viên (\(viewModel.displayedMemberCount))")
+            Text(languageService.format(.friendsGroupMembers, viewModel.displayedMemberCount))
                 .font(SplickTheme.Typography.headline)
                 .foregroundStyle(SplickTheme.Colors.textPrimary)
 
@@ -316,7 +318,7 @@ struct GroupDetailView: View {
                 VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
                     Text(viewModel.group.name)
                         .font(SplickTheme.Typography.title)
-                    Text("\(viewModel.displayedMemberCount) thành viên")
+                    Text(languageService.format(.friendsGroupMemberCount, viewModel.displayedMemberCount))
                         .font(SplickTheme.Typography.caption)
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
                 }
@@ -330,7 +332,7 @@ struct GroupDetailView: View {
 
             if !viewModel.displayedInviteCode.isEmpty {
                 HStack {
-                    Text("Mã mời: \(viewModel.displayedInviteCode)")
+                    Text(languageService.format(.friendsGroupInviteCodeLabel, viewModel.displayedInviteCode))
                         .font(SplickTheme.Typography.caption)
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
                     Spacer()
