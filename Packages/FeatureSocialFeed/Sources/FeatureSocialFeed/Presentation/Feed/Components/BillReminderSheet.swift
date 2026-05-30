@@ -1,5 +1,6 @@
 import SwiftUI
 import DesignSystem
+import Localization
 import SplickDomain
 
 enum BillReminderMessages {
@@ -17,6 +18,7 @@ enum BillReminderMessages {
 }
 
 struct BillReminderSheet: View {
+    @EnvironmentObject private var languageService: LanguageService
     let user: UserSummary
     @Binding var message: String
     let onSend: () -> Void
@@ -60,11 +62,11 @@ struct BillReminderSheet: View {
                 Spacer()
             }
             .padding(SplickTheme.Spacing.md)
-            .navigationTitle("Nhắc nhở")
+            .navigationTitle(languageService.text(.feedBillRemindTitle))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Hủy") { dismiss() }
+                    Button(languageService.text(.commonCancel)) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Gửi") {
@@ -81,6 +83,7 @@ struct BillReminderSheet: View {
 }
 
 struct BillReminderAllSheet: View {
+    @EnvironmentObject private var languageService: LanguageService
     let users: [UserSummary]
     @Binding var message: String
     let onSend: () -> Void
@@ -90,7 +93,7 @@ struct BillReminderAllSheet: View {
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
-                Text("Gửi nhắc tới \(users.count) người chưa thanh toán")
+                Text(languageService.format(.feedBillRemindAllMessage, users.count))
                     .font(SplickTheme.Typography.callout)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
 
@@ -131,11 +134,11 @@ struct BillReminderAllSheet: View {
                 Spacer()
             }
             .padding(SplickTheme.Spacing.md)
-            .navigationTitle("Nhắc tất cả")
+            .navigationTitle(languageService.text(.feedBillRemindAllTitle))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Hủy") { dismiss() }
+                    Button(languageService.text(.commonCancel)) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Gửi") {
