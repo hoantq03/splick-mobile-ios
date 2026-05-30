@@ -1,8 +1,10 @@
 import SwiftUI
 import DesignSystem
+import Localization
 import SplickDomain
 
 public struct UserProfileView: View {
+    @EnvironmentObject private var languageService: LanguageService
     public let user: UserSummary
 
     @Environment(\.dismiss) private var dismiss
@@ -38,9 +40,9 @@ public struct UserProfileView: View {
 
                 Spacer()
 
-                SplickButton("Nhắn tin", style: .secondary) {}
+                SplickButton(languageService.text(.feedProfileMessage), style: .secondary) {}
                     .padding(.horizontal, SplickTheme.Spacing.xl)
-                SplickButton("Thêm bạn") {}
+                SplickButton(languageService.text(.feedProfileAddFriend)) {}
                     .padding(.horizontal, SplickTheme.Spacing.xl)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -48,7 +50,7 @@ public struct UserProfileView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Xong") { dismiss() }
+                    Button(languageService.text(.commonDone)) { dismiss() }
                 }
             }
         }
