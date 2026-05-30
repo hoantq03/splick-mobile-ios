@@ -7,6 +7,7 @@ import DesignSystem
 @MainActor
 public final class PhotoAlbumViewModel: ObservableObject {
     @Published private(set) var photos: [AlbumPhoto] = []
+    @Published private(set) var filters = PhotoAlbumFilters()
     @Published var state: LoadingState<[AlbumPhoto]> = .idle
     @Published private(set) var isLoadingMore = false
     @Published private(set) var isRefreshing = false
@@ -15,11 +16,16 @@ public final class PhotoAlbumViewModel: ObservableObject {
         AlbumPhotoSectionBuilder.daySections(from: photos)
     }
 
+    var hasActiveFilters: Bool {
+        filters.hasAnyFilter
+    }
+
     private let fetchPhotoAlbumUseCase: FetchPhotoAlbumUseCaseProtocol
     private var currentPage = 0
     private var canLoadMore = true
     private var fetchedPages = Set<Int>()
     private var loadTask: Task<Void, Never>?
+    private var captionSearchTask: Task<Void, Never>?
 
     private static let pageSize = 50
 
@@ -45,7 +51,7 @@ public final class PhotoAlbumViewModel: ObservableObject {
         guard !fetchedPages.contains(nextPage) else { return }
 
         do {
-            let batch = try await fetchPhotoAlbumUseCase.execute(page: nextPage)
+            let batch = try await fetchPhotoAlbumUseCase.execute(page: nextPage, filters: filters)
             fetchedPages.insert(nextPage)
             currentPage = nextPage
             canLoadMore = batch.count >= Self.pageSize
@@ -57,6 +63,28 @@ public final class PhotoAlbumViewModel: ObservableObject {
                 Log.error(error, category: .feed)
             }
         }
+    }
+
+    func applyFilters(_ newFilters: PhotoAlbumFilters) async {
+        guard newFilters != filters else { return }
+        filters = newFilters
+        await loadAlbum(isPullToRefresh: false)
+    }
+
+    func setCaptionQuery(_ query: String) {
+        captionSearchTask?.cancel()
+        captionSearchTask = Task {
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard !Task.isCancelled else { return }
+            var updated = filters
+            updated.captionQuery = query
+            guard updated != filters else { return }
+            await applyFilters(updated)
+        }
+    }
+
+    func clearFilters() async {
+        await applyFilters(PhotoAlbumFilters())
     }
 
     private func loadAlbum(isPullToRefresh: Bool) async {
@@ -86,7 +114,7 @@ public final class PhotoAlbumViewModel: ObservableObject {
         fetchedPages.removeAll()
 
         do {
-            let batch = try await fetchPhotoAlbumUseCase.execute(page: 0)
+            let batch = try await fetchPhotoAlbumUseCase.execute(page: 0, filters: filters)
             guard !Task.isCancelled else { return }
             fetchedPages.insert(0)
             photos = batch

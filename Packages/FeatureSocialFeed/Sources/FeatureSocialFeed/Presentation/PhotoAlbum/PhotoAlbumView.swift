@@ -10,6 +10,7 @@ public struct PhotoAlbumView: View {
     @ObservedObject private var feedViewModel: FeedViewModel
     @Binding private var navigationPath: NavigationPath
     private let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
+    private let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
 
     private static let gridSpacing = SplickTheme.Spacing.xs
     private static let cellCornerRadius = SplickTheme.CornerRadius.small
@@ -23,12 +24,14 @@ public struct PhotoAlbumView: View {
         viewModel: PhotoAlbumViewModel,
         feedViewModel: FeedViewModel,
         navigationPath: Binding<NavigationPath>,
-        fetchFriendsUseCase: FetchFriendsUseCaseProtocol? = nil
+        fetchFriendsUseCase: FetchFriendsUseCaseProtocol? = nil,
+        fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol? = nil
     ) {
         _viewModel = ObservedObject(wrappedValue: viewModel)
         _feedViewModel = ObservedObject(wrappedValue: feedViewModel)
         _navigationPath = navigationPath
         self.fetchFriendsUseCase = fetchFriendsUseCase
+        self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
     }
 
     public var body: some View {
@@ -41,7 +44,9 @@ public struct PhotoAlbumView: View {
                 EmptyStateView(
                     icon: "photo.on.rectangle.angled",
                     title: "Chưa có ảnh",
-                    message: "Ảnh từ bạn và bạn bè sẽ hiện ở đây."
+                    message: viewModel.hasActiveFilters
+                        ? "Không có ảnh phù hợp với bộ lọc hiện tại."
+                        : "Ảnh từ bạn và bạn bè sẽ hiện ở đây."
                 )
 
             case .loaded, .loading:
@@ -66,6 +71,12 @@ public struct PhotoAlbumView: View {
     private var photoGrid: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
+                PhotoAlbumFilterBarView(
+                    viewModel: viewModel,
+                    fetchFriendsUseCase: fetchFriendsUseCase,
+                    fetchMyGroupsUseCase: fetchMyGroupsUseCase
+                )
+
                 ForEach(viewModel.daySections) { section in
                     VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
                         Text(section.title)

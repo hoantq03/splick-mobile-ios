@@ -17,6 +17,7 @@ public struct FeedView: View {
     @Environment(\.currentUserSummary) private var currentUserSummary
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     private let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
+    private let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
     private let photoAlbumViewModel: PhotoAlbumViewModel
     @State private var profileRoute: ProfileRoute?
     @State private var companionsRoute: CompanionsSheetRoute?
@@ -27,6 +28,7 @@ public struct FeedView: View {
         viewModel: FeedViewModel,
         photoAlbumViewModel: PhotoAlbumViewModel,
         fetchFriendsUseCase: FetchFriendsUseCaseProtocol? = nil,
+        fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol? = nil,
         navigationPath: Binding<NavigationPath> = .constant(NavigationPath()),
         pendingPostId: UUID? = nil,
         onPendingPostHandled: (() -> Void)? = nil
@@ -35,6 +37,7 @@ public struct FeedView: View {
         self.photoAlbumViewModel = photoAlbumViewModel
         _navigationPath = navigationPath
         self.fetchFriendsUseCase = fetchFriendsUseCase
+        self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
         self.pendingPostId = pendingPostId
         self.onPendingPostHandled = onPendingPostHandled
     }
@@ -81,7 +84,8 @@ public struct FeedView: View {
                     viewModel: photoAlbumViewModel,
                     feedViewModel: viewModel,
                     navigationPath: $navigationPath,
-                    fetchFriendsUseCase: fetchFriendsUseCase
+                    fetchFriendsUseCase: fetchFriendsUseCase,
+                    fetchMyGroupsUseCase: fetchMyGroupsUseCase
                 )
             }
             .navigationDestination(for: FeedPostDestination.self) { destination in

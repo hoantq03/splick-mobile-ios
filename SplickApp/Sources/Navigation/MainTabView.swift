@@ -33,6 +33,7 @@ struct MainTabView: View {
                     viewModel: container.feedViewModel,
                     photoAlbumViewModel: container.photoAlbumViewModel,
                     fetchFriendsUseCase: container.fetchFriendsUseCase,
+                    fetchMyGroupsUseCase: container.fetchMyGroupsUseCase,
                     navigationPath: $appState.feedNavigationPath,
                     pendingPostId: appState.pendingPostId,
                     onPendingPostHandled: {
