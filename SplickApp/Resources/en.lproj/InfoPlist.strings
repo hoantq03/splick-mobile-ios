@@ -1,0 +1,9 @@
+/* Camera */
+"NSCameraUsageDescription" = "Splick needs camera access to capture and share moments with friends.";
+
+/* Microphone */
+"NSMicrophoneUsageDescription" = "Splick needs microphone access to record audio when capturing videos.";
+
+/* Photo library */
+"NSPhotoLibraryUsageDescription" = "Splick needs photo library access to share photos with friends.";
+"NSPhotoLibraryAddUsageDescription" = "Splick needs permission to save edited photos to your photo library.";
