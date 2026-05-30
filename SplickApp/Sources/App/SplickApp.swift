@@ -1,5 +1,6 @@
 import SwiftUI
 import GoogleSignIn
+import DesignSystem
 
 @main
 struct SplickApp: App {
@@ -7,6 +8,7 @@ struct SplickApp: App {
     @StateObject private var container = DependencyContainer.shared
 
     init() {
+        ImagePipelineConfigurator.configureIfNeeded()
         GoogleSignInConfiguration.configureIfNeeded()
     }
 
