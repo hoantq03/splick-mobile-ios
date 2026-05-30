@@ -37,6 +37,7 @@ Requires: Xcode 15+, macOS. XcodeGen is downloaded automatically by the script (
 16. [CI/CD Pipeline](#16-cicd-pipeline)
 17. [Coding Standards](#17-coding-standards)
 18. [Future Roadmap](#18-future-roadmap)
+19. [Localization (vi / en)](#19-localization-vi--en)
 
 ---
 
@@ -987,7 +988,23 @@ Push → Build → Test → Archive → TestFlight → iPhone/iPad
 - [ ] Smart split suggestions
 - [ ] Widget support (iOS 17+)
 - [ ] App Clips for quick expense sharing
-- [ ] Localization (Vietnamese + English)
+- [x] Localization (Vietnamese + English) — see [docs/localization-ios.md](docs/localization-ios.md)
+
+---
+
+## 19. Localization (vi / en)
+
+In-app copy uses `SplickCore/Localization` (`L10nKey`, `LanguageService`, one Swift file per locale). System permission dialogs use `InfoPlist.strings` under `SplickApp/Resources/{en,vi}.lproj/`.
+
+**Adding a string or a new language:** [docs/localization-ios.md](docs/localization-ios.md)
+
+Quick usage:
+
+```swift
+Text(languageService.text(.expenseTitle))
+```
+
+User language is chosen in Profile, persisted locally, synced via `preferredLocale` API, and sent as `Accept-Language` on HTTP requests.
 
 ---
 
