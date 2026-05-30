@@ -1,9 +1,11 @@
 import SwiftUI
 import DesignSystem
+import Localization
 import SplickDomain
 
 public struct FriendUserProfileView: View {
     @StateObject private var viewModel: FriendUserProfileViewModel
+    @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
 
     public init(viewModel: FriendUserProfileViewModel) {
@@ -38,23 +40,23 @@ public struct FriendUserProfileView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Xong") { dismiss() }
+                    Button(languageService.text(.commonDone)) { dismiss() }
                 }
             }
             .alert("Profile", isPresented: Binding(
                 get: { viewModel.alertMessage != nil },
                 set: { if !$0 { viewModel.alertMessage = nil } }
             )) {
-                Button("OK", role: .cancel) { viewModel.alertMessage = nil }
+                Button(languageService.text(.commonOK), role: .cancel) { viewModel.alertMessage = nil }
             } message: {
                 Text(viewModel.alertMessage ?? "")
             }
             .confirmationDialog(
-                "Remove friend?",
+                languageService.text(.friendsRemoveFriendConfirmTitle),
                 isPresented: $viewModel.showRemoveConfirm,
                 titleVisibility: .visible
             ) {
-                Button("Remove friend", role: .destructive) {
+                Button(languageService.text(.friendsRemoveFriendConfirmAction), role: .destructive) {
                     Task {
                         await viewModel.removeFriend()
                         dismiss()
@@ -62,11 +64,11 @@ public struct FriendUserProfileView: View {
                 }
             }
             .confirmationDialog(
-                "Block this user?",
+                languageService.text(.friendsBlockConfirmTitle),
                 isPresented: $viewModel.showBlockConfirm,
                 titleVisibility: .visible
             ) {
-                Button("Block", role: .destructive) {
+                Button(languageService.text(.friendsBlockConfirmAction), role: .destructive) {
                     Task {
                         await viewModel.blockUser()
                         dismiss()
@@ -84,17 +86,17 @@ public struct FriendUserProfileView: View {
         VStack(spacing: SplickTheme.Spacing.sm) {
             switch viewModel.mode {
             case .friend:
-                SplickButton("Đặt biệt danh", style: .secondary) {
+                SplickButton(languageService.text(.friendsSetNickname), style: .secondary) {
                     viewModel.showNicknameEditor = true
                 }
                 .disabled(viewModel.isProcessing)
 
-                SplickButton("Xóa bạn", style: .secondary) {
+                SplickButton(languageService.text(.friendsRemoveFriend), style: .secondary) {
                     viewModel.showRemoveConfirm = true
                 }
                 .disabled(viewModel.isProcessing)
 
-                Button("Chặn người dùng") {
+                Button(languageService.text(.friendsBlockUser)) {
                     viewModel.showBlockConfirm = true
                 }
                 .font(SplickTheme.Typography.callout.weight(.semibold))
@@ -102,7 +104,7 @@ public struct FriendUserProfileView: View {
                 .disabled(viewModel.isProcessing)
 
             case .stranger:
-                Button("Chặn người dùng") {
+                Button(languageService.text(.friendsBlockUser)) {
                     viewModel.showBlockConfirm = true
                 }
                 .font(SplickTheme.Typography.callout.weight(.semibold))
@@ -110,7 +112,7 @@ public struct FriendUserProfileView: View {
                 .disabled(viewModel.isProcessing)
 
             case .blocked:
-                SplickButton("Bỏ chặn", style: .secondary) {
+                SplickButton(languageService.text(.friendsUnblock), style: .secondary) {
                     Task {
                         await viewModel.unblockUser()
                         dismiss()
@@ -128,17 +130,17 @@ public struct FriendUserProfileView: View {
     private var nicknameEditorSheet: some View {
         NavigationStack {
             Form {
-                TextField("Nickname (only you see this)", text: $viewModel.nicknameDraft)
+                TextField(languageService.text(.friendsNicknamePlaceholder), text: $viewModel.nicknameDraft)
                     .autocorrectionDisabled()
             }
-            .navigationTitle("Nickname")
+            .navigationTitle(languageService.text(.friendsNicknameTitle))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { viewModel.showNicknameEditor = false }
+                    Button(languageService.text(.commonCancel)) { viewModel.showNicknameEditor = false }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button(languageService.text(.commonSave)) {
                         Task { await viewModel.saveNickname() }
                     }
                     .disabled(viewModel.isProcessing)
