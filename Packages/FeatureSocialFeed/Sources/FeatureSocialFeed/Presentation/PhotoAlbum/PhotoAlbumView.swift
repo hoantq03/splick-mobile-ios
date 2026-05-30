@@ -65,14 +65,25 @@ public struct PhotoAlbumView: View {
 
     private var photoGrid: some View {
         ScrollView {
-            LazyVGrid(columns: columns, spacing: Self.gridSpacing) {
-                ForEach(viewModel.photos) { photo in
-                    AlbumPhotoCell(photo: photo, cornerRadius: Self.cellCornerRadius) {
-                        openPost(for: photo)
-                    }
-                    .onAppear {
-                        if photo.id == viewModel.photos.last?.id {
-                            Task { await viewModel.loadMore() }
+            LazyVStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
+                ForEach(viewModel.daySections) { section in
+                    VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+                        Text(section.title)
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(SplickTheme.Colors.textPrimary)
+                            .padding(.leading, SplickTheme.Spacing.xxs)
+
+                        LazyVGrid(columns: columns, spacing: Self.gridSpacing) {
+                            ForEach(section.photos) { photo in
+                                AlbumPhotoCell(photo: photo, cornerRadius: Self.cellCornerRadius) {
+                                    openPost(for: photo)
+                                }
+                                .onAppear {
+                                    if photo.id == viewModel.photos.last?.id {
+                                        Task { await viewModel.loadMore() }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

@@ -11,6 +11,10 @@ public final class PhotoAlbumViewModel: ObservableObject {
     @Published private(set) var isLoadingMore = false
     @Published private(set) var isRefreshing = false
 
+    var daySections: [AlbumPhotoDaySection] {
+        AlbumPhotoSectionBuilder.daySections(from: photos)
+    }
+
     private let fetchPhotoAlbumUseCase: FetchPhotoAlbumUseCaseProtocol
     private var currentPage = 0
     private var canLoadMore = true
