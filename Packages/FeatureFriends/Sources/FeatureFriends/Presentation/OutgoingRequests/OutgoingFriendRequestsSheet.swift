@@ -1,9 +1,11 @@
 import SwiftUI
 import DesignSystem
 import Common
+import Localization
 
 struct OutgoingFriendRequestsSheet: View {
     @ObservedObject var viewModel: OutgoingFriendRequestsViewModel
+    @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -11,7 +13,7 @@ struct OutgoingFriendRequestsSheet: View {
             Group {
                 switch viewModel.state {
                 case .idle, .loading:
-                    LoadingView(message: "Loading sent requests...")
+                    LoadingView(message: languageService.text(.friendsOutgoingLoading))
                 case .failed(let message):
                     ErrorView(message: message) {
                         Task { await viewModel.load() }
@@ -19,8 +21,8 @@ struct OutgoingFriendRequestsSheet: View {
                 case .loaded(let items) where items.isEmpty:
                     EmptyStateView(
                         icon: "paperplane",
-                        title: "No sent requests",
-                        message: "Friend requests you send will appear here until they accept or you cancel."
+                        title: languageService.text(.friendsOutgoingEmptyTitle),
+                        message: languageService.text(.friendsOutgoingEmptyMessage)
                     )
                 case .loaded:
                     ScrollView {
@@ -38,18 +40,18 @@ struct OutgoingFriendRequestsSheet: View {
                     }
                 }
             }
-            .navigationTitle("Sent requests")
+            .navigationTitle(languageService.text(.friendsOutgoingTitle))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
+                    Button(languageService.text(.friendsClose)) { dismiss() }
                 }
             }
-            .alert("Sent requests", isPresented: Binding(
+            .alert(languageService.text(.friendsOutgoingTitle), isPresented: Binding(
                 get: { viewModel.alertMessage != nil },
                 set: { if !$0 { viewModel.alertMessage = nil } }
             )) {
-                Button("OK", role: .cancel) { viewModel.alertMessage = nil }
+                Button(languageService.text(.commonOK), role: .cancel) { viewModel.alertMessage = nil }
             } message: {
                 Text(viewModel.alertMessage ?? "")
             }
@@ -59,6 +61,7 @@ struct OutgoingFriendRequestsSheet: View {
 }
 
 private struct OutgoingFriendRequestRowView: View {
+    @EnvironmentObject private var languageService: LanguageService
     let request: OutgoingFriendRequest
     let isProcessing: Bool
     let onCancel: () -> Void
@@ -84,7 +87,7 @@ private struct OutgoingFriendRequestRowView: View {
             if isProcessing {
                 SplickSpinner(size: .medium)
             } else {
-                Button("Hủy", action: onCancel)
+                Button(languageService.text(.friendsCancel), action: onCancel)
                     .font(SplickTheme.Typography.caption.weight(.semibold))
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
                     .buttonStyle(.plain)
