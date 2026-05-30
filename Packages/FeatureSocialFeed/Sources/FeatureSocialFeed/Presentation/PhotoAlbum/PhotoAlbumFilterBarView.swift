@@ -1,11 +1,13 @@
 import SwiftUI
 import DesignSystem
+import Localization
 import SplickDomain
 import FeatureFriends
 
 struct PhotoAlbumFilterBarView: View {
+    @EnvironmentObject private var languageService: LanguageService
     @ObservedObject var viewModel: PhotoAlbumViewModel
-    let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
+    let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol?
     let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
 
     @State private var captionQuery = ""
@@ -31,9 +33,9 @@ struct PhotoAlbumFilterBarView: View {
         }
         .splickCard(padding: SplickTheme.Spacing.sm)
         .sheet(isPresented: $showFriendPicker) {
-            if let fetchFriendsUseCase {
+            if let fetchMyFriendsUseCase {
                 PhotoAlbumFriendPickerSheet(
-                    fetchFriendsUseCase: fetchFriendsUseCase,
+                    fetchMyFriendsUseCase: fetchMyFriendsUseCase,
                     selectedAuthor: filters.author
                 ) { author in
                     Task {
@@ -61,6 +63,11 @@ struct PhotoAlbumFilterBarView: View {
         .onAppear {
             if captionQuery.isEmpty {
                 captionQuery = filters.captionQuery
+            }
+        }
+        .onChange(of: viewModel.filters.captionQuery) { newValue in
+            if captionQuery != newValue {
+                captionQuery = newValue
             }
         }
         .onDisappear {
@@ -103,7 +110,7 @@ struct PhotoAlbumFilterBarView: View {
             HStack(spacing: 4) {
                 Image(systemName: "line.3.horizontal.decrease.circle")
                     .font(.system(size: 12, weight: .semibold))
-                Text("Bộ lọc")
+                Text(languageService.text(.feedFilterTitle))
                     .font(.system(size: 13, weight: .semibold))
                 Spacer()
                 Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
@@ -120,7 +127,7 @@ struct PhotoAlbumFilterBarView: View {
                 title: filters.author?.displayName ?? "Chọn bạn bè",
                 systemImage: "person",
                 isActive: filters.author != nil,
-                isEnabled: fetchFriendsUseCase != nil
+                isEnabled: fetchMyFriendsUseCase != nil
             ) {
                 showFriendPicker = true
             }
@@ -186,64 +193,82 @@ struct PhotoAlbumFilterBarView: View {
 }
 
 private struct PhotoAlbumFriendPickerSheet: View {
+    @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var friendsViewModel: MentionFriendsViewModel
 
+    let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol
     let selectedAuthor: UserSummary?
     let onSelect: (UserSummary?) -> Void
 
-    init(
-        fetchFriendsUseCase: FetchFriendsUseCaseProtocol,
-        selectedAuthor: UserSummary?,
-        onSelect: @escaping (UserSummary?) -> Void
-    ) {
-        self.selectedAuthor = selectedAuthor
-        self.onSelect = onSelect
-        _friendsViewModel = StateObject(
-            wrappedValue: MentionFriendsViewModel(useCase: fetchFriendsUseCase, pageSize: 30)
-        )
+    @State private var friends: [UserSummary] = []
+    @State private var searchQuery = ""
+    @State private var isLoading = true
+
+    private var filteredFriends: [UserSummary] {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return friends }
+        return friends.filter {
+            $0.displayName.lowercased().contains(query)
+                || $0.username.lowercased().contains(query)
+        }
     }
 
     var body: some View {
         NavigationStack {
-            List {
-                if selectedAuthor != nil {
-                    Button("Tất cả bạn bè") {
-                        onSelect(nil)
-                        dismiss()
-                    }
-                }
-                ForEach(friendsViewModel.friends) { friend in
-                    Button {
-                        onSelect(friend)
-                        dismiss()
-                    } label: {
-                        HStack {
-                            Text(friend.displayName)
-                            Spacer()
-                            if friend.id == selectedAuthor?.id {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(SplickTheme.Colors.primary)
+            SwiftUI.Group {
+                if isLoading {
+                    ProgressView()
+                } else if friends.isEmpty {
+                    Text(languageService.text(.feedFilterNoFriends))
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+                } else if filteredFriends.isEmpty {
+                    Text(languageService.text(.feedFilterFriendsNotFound))
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+                } else {
+                    List {
+                        if selectedAuthor != nil {
+                            Button("Tất cả bạn bè") {
+                                onSelect(nil)
+                                dismiss()
+                            }
+                        }
+                        ForEach(filteredFriends) { friend in
+                            Button {
+                                onSelect(friend)
+                                dismiss()
+                            } label: {
+                                HStack {
+                                    Text(friend.displayName)
+                                    Spacer()
+                                    if friend.id == selectedAuthor?.id {
+                                        Image(systemName: "checkmark")
+                                            .foregroundStyle(SplickTheme.Colors.primary)
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
-            .navigationTitle("Lọc theo bạn bè")
+            .navigationTitle(languageService.text(.feedFilterByFriends))
             .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $searchQuery, prompt: "Tìm bạn bè")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Đóng") { dismiss() }
+                    Button(languageService.text(.commonClose)) { dismiss() }
                 }
             }
             .task {
-                friendsViewModel.reset(query: "")
+                isLoading = true
+                defer { isLoading = false }
+                friends = (try? await fetchMyFriendsUseCase.execute()) ?? []
             }
         }
     }
 }
 
 private struct PhotoAlbumGroupPickerSheet: View {
+    @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
 
     let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol
@@ -259,7 +284,7 @@ private struct PhotoAlbumGroupPickerSheet: View {
                 if isLoading {
                     ProgressView()
                 } else if groups.isEmpty {
-                    Text("Bạn chưa tham gia nhóm nào")
+                    Text(languageService.text(.feedFilterNoGroups))
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
                 } else {
                     List {
@@ -287,11 +312,11 @@ private struct PhotoAlbumGroupPickerSheet: View {
                     }
                 }
             }
-            .navigationTitle("Lọc theo nhóm")
+            .navigationTitle(languageService.text(.feedFilterByGroups))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Đóng") { dismiss() }
+                    Button(languageService.text(.commonClose)) { dismiss() }
                 }
             }
             .task {
