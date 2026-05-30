@@ -1,8 +1,10 @@
 import SwiftUI
 import DesignSystem
+import Localization
 
 struct AddFriendSheet: View {
     @ObservedObject var viewModel: AddFriendViewModel
+    @EnvironmentObject private var languageService: LanguageService
     @State private var showQRScanner = false
 
     @Environment(\.dismiss) private var dismiss
@@ -11,7 +13,7 @@ struct AddFriendSheet: View {
         NavigationStack {
             VStack(spacing: SplickTheme.Spacing.lg) {
                 VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
-                    Text("Username")
+                    Text(languageService.text(.friendsUsername))
                         .font(SplickTheme.Typography.caption)
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
 
@@ -22,7 +24,7 @@ struct AddFriendSheet: View {
                 }
 
                 VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
-                    Text("Message (optional)")
+                    Text(languageService.text(.friendsMessageOptional))
                         .font(SplickTheme.Typography.caption)
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
 
@@ -32,7 +34,7 @@ struct AddFriendSheet: View {
                 }
 
                 SplickButton(
-                    "Add friend",
+                    languageService.text(.friendsAddFriendAction),
                     isLoading: viewModel.isLoading,
                     isDisabled: viewModel.username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ) {
@@ -42,7 +44,7 @@ struct AddFriendSheet: View {
                 Button {
                     showQRScanner = true
                 } label: {
-                    Label("Scan QR code", systemImage: "qrcode.viewfinder")
+                    Label(languageService.text(.friendsScanQRAddFriend), systemImage: "qrcode.viewfinder")
                         .font(SplickTheme.Typography.headline)
                         .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
                         .frame(maxWidth: .infinity)
@@ -67,11 +69,11 @@ struct AddFriendSheet: View {
                 Spacer()
             }
             .padding(SplickTheme.Spacing.md)
-            .navigationTitle("Add friend")
+            .navigationTitle(languageService.text(.friendsAddFriendTitle))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
+                    Button(languageService.text(.friendsClose)) { dismiss() }
                 }
             }
             .sheet(isPresented: $showQRScanner) {
