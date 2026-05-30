@@ -1,5 +1,6 @@
 import SwiftUI
 import DesignSystem
+import Localization
 import SplickDomain
 
 struct CompanionsSheetRoute: Identifiable {
@@ -8,6 +9,7 @@ struct CompanionsSheetRoute: Identifiable {
 }
 
 struct CompanionsListSheet: View {
+    @EnvironmentObject private var languageService: LanguageService
     let companions: [UserSummary]
     let onUserTap: (UserSummary) -> Void
 
@@ -21,7 +23,7 @@ struct CompanionsListSheet: View {
                         Image(systemName: "person.2.slash")
                             .font(.largeTitle)
                             .foregroundStyle(SplickTheme.Colors.textTertiary)
-                        Text("Không tìm thấy người đi cùng")
+                        Text(languageService.text(.feedCompanionsEmpty))
                             .font(SplickTheme.Typography.callout)
                             .foregroundStyle(SplickTheme.Colors.textSecondary)
                     }
@@ -53,11 +55,11 @@ struct CompanionsListSheet: View {
                     }
                 }
             }
-            .navigationTitle("Đang ở cùng (\(companions.count))")
+            .navigationTitle(languageService.format(.feedCompanionsTitle, companions.count))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                    Button(languageService.text(.commonDone)) { dismiss() }
                 }
             }
         }
