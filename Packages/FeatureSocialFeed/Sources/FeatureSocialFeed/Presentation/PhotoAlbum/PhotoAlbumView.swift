@@ -11,11 +11,13 @@ public struct PhotoAlbumView: View {
     @Binding private var navigationPath: NavigationPath
     private let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
 
-    private let columns = [
-        GridItem(.flexible(), spacing: 2),
-        GridItem(.flexible(), spacing: 2),
-        GridItem(.flexible(), spacing: 2),
-    ]
+    private static let gridSpacing = SplickTheme.Spacing.xs
+    private static let cellCornerRadius = SplickTheme.CornerRadius.small
+
+    private let columns = Array(
+        repeating: GridItem(.flexible(), spacing: Self.gridSpacing),
+        count: 4
+    )
 
     public init(
         viewModel: PhotoAlbumViewModel,
@@ -63,9 +65,9 @@ public struct PhotoAlbumView: View {
 
     private var photoGrid: some View {
         ScrollView {
-            LazyVGrid(columns: columns, spacing: 2) {
+            LazyVGrid(columns: columns, spacing: Self.gridSpacing) {
                 ForEach(viewModel.photos) { photo in
-                    AlbumPhotoCell(photo: photo) {
+                    AlbumPhotoCell(photo: photo, cornerRadius: Self.cellCornerRadius) {
                         openPost(for: photo)
                     }
                     .onAppear {
@@ -75,6 +77,8 @@ public struct PhotoAlbumView: View {
                     }
                 }
             }
+            .padding(.horizontal, SplickTheme.Spacing.md)
+            .padding(.top, SplickTheme.Spacing.xs)
 
             if viewModel.isLoadingMore {
                 ProgressView()
@@ -100,34 +104,34 @@ public struct PhotoAlbumView: View {
 
 private struct AlbumPhotoCell: View {
     let photo: AlbumPhoto
+    let cornerRadius: CGFloat
     let onTap: () -> Void
+
+    private var cellShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+    }
 
     var body: some View {
         Button(action: onTap) {
-            RemoteImage(url: photo.thumbnailURL ?? photo.mediaURL) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    placeholder
-                default:
-                    placeholder
-                        .overlay { SplickSpinner(size: .small) }
-                }
-            }
-            .frame(minWidth: 0, maxWidth: .infinity)
-            .aspectRatio(1, contentMode: .fill)
-            .clipped()
+            Color.clear
+                .aspectRatio(1, contentMode: .fit)
+                .overlay { photoContent }
+                .clipShape(cellShape)
+                .contentShape(cellShape)
         }
         .buttonStyle(.plain)
     }
 
-    private var placeholder: some View {
-        Rectangle()
+    @ViewBuilder
+    private var photoContent: some View {
+        GridThumbnailImage(url: photo.thumbnailURL ?? photo.mediaURL) {
+            placeholderContent
+        }
+    }
+
+    private var placeholderContent: some View {
+        cellShape
             .fill(SplickTheme.Colors.tertiaryBackground)
-            .aspectRatio(1, contentMode: .fill)
             .overlay {
                 Image(systemName: "photo")
                     .foregroundStyle(SplickTheme.Colors.textTertiary)
