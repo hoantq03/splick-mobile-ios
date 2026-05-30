@@ -1,8 +1,10 @@
 import SwiftUI
 import DesignSystem
+import Localization
 import SplickDomain
 
 struct BillSplitSectionView: View {
+    @EnvironmentObject private var languageService: LanguageService
     let bill: PostBillSplit
     let onUserTap: (UserSummary) -> Void
     var onSendReminder: ((UserSummary, String) -> Void)?
@@ -28,7 +30,7 @@ struct BillSplitSectionView: View {
                     Image(systemName: "dollarsign.circle.fill")
                         .font(.body)
                         .foregroundStyle(SplickTheme.Colors.success)
-                    Text("Chia bill")
+                    Text(languageService.text(.feedBillSplitTitle))
                         .font(SplickTheme.Typography.caption)
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
                     Text(formatMoney(bill.totalAmount, currency: bill.currency))
@@ -61,7 +63,7 @@ struct BillSplitSectionView: View {
                             HStack(spacing: 6) {
                                 Image(systemName: "bell.badge.fill")
                                     .font(.system(size: 13, weight: .semibold))
-                                Text("Nhắc tất cả (\(unpaidSplits.count))")
+                                Text(languageService.format(.feedBillRemindAll, unpaidSplits.count))
                                     .font(.system(size: 12, weight: .semibold))
                             }
                             .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
@@ -133,7 +135,7 @@ struct BillSplitSectionView: View {
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(SplickTheme.Colors.success)
                     .frame(width: 32, height: 32)
-                    .accessibilityLabel("Đã thanh toán")
+                    .accessibilityLabel(languageService.text(.feedBillPaidAccessibility))
             } else {
                 Button {
                     reminderMessage = BillReminderMessages.random()
@@ -145,7 +147,7 @@ struct BillSplitSectionView: View {
                         .frame(width: 32, height: 32)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Nhắc \(line.user.displayName)")
+                .accessibilityLabel(languageService.format(.feedBillRemindUserAccessibility, line.user.displayName))
             }
         }
     }
