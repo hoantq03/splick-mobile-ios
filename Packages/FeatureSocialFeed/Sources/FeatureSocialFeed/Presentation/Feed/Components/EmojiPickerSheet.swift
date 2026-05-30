@@ -1,8 +1,10 @@
 import SwiftUI
 import DesignSystem
+import Localization
 
 /// Opens the system emoji keyboard via a focused text field.
 struct EmojiPickerSheet: View {
+    @EnvironmentObject private var languageService: LanguageService
     let onPick: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -12,7 +14,7 @@ struct EmojiPickerSheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: SplickTheme.Spacing.lg) {
-                Text("Chọn emoji")
+                Text(languageService.text(.feedEmojiPickerTitle))
                     .font(SplickTheme.Typography.title)
 
                 TextField("Tap to open emoji keyboard", text: $draft)
@@ -25,7 +27,7 @@ struct EmojiPickerSheet: View {
                         dismiss()
                     }
 
-                Text("Bàn phím emoji của iPhone sẽ hiện khi bạn chạm vào ô trên.")
+                Text(languageService.text(.feedEmojiPickerHint))
                     .font(SplickTheme.Typography.callout)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
                     .multilineTextAlignment(.center)
@@ -35,7 +37,7 @@ struct EmojiPickerSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button(languageService.text(.commonCancel)) { dismiss() }
                 }
             }
             .onAppear {
