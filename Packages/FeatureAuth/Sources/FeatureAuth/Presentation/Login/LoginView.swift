@@ -1,9 +1,11 @@
 import SwiftUI
 import DesignSystem
 import Common
+import Localization
 import SplickDomain
 
 public struct LoginView: View {
+    @EnvironmentObject private var languageService: LanguageService
     @StateObject private var viewModel: LoginViewModel
     private let registerViewModelFactory: () -> RegisterViewModel
     private let forgotPasswordViewModelFactory: () -> ForgotPasswordViewModel
@@ -34,9 +36,12 @@ public struct LoginView: View {
                 case .phoneOtp:
                     OtpVerificationView(
                         otpCode: $viewModel.otpCode,
-                        title: "Verify your phone",
-                        subtitle: "Enter the code sent to \(viewModel.phoneNumber)",
-                        submitTitle: "Sign In",
+                        title: languageService.text(.authVerifyPhoneTitle),
+                        subtitle: String(
+                            format: languageService.text(.authVerifyPhoneSubtitle),
+                            viewModel.phoneNumber
+                        ),
+                        submitTitle: languageService.text(.authSignIn),
                         otpError: viewModel.otpError,
                         otpInfoMessage: viewModel.otpInfoMessage,
                         isLoading: viewModel.state.isLoading,
@@ -117,7 +122,7 @@ public struct LoginView: View {
     private var emailCredentialsForm: some View {
         VStack(spacing: SplickTheme.Spacing.md) {
             SplickTextField(
-                "Email",
+                languageService.text(.authEmail),
                 text: $viewModel.email,
                 errorMessage: viewModel.emailError,
                 icon: "envelope"
@@ -128,7 +133,7 @@ public struct LoginView: View {
             .textInputAutocapitalization(.never)
 
             SplickTextField(
-                "Password",
+                languageService.text(.authPassword),
                 text: $viewModel.password,
                 isSecure: true,
                 errorMessage: viewModel.passwordError,
@@ -138,7 +143,7 @@ public struct LoginView: View {
 
             HStack {
                 Spacer()
-                Button("Forgot password?") {
+                Button(languageService.text(.authForgotPassword)) {
                     showForgotPassword = true
                 }
                 .font(SplickTheme.Typography.caption)
@@ -163,7 +168,9 @@ public struct LoginView: View {
 
     private var credentialsActions: some View {
         SplickButton(
-            viewModel.signInMethod == .email ? "Sign In" : "Send code",
+            viewModel.signInMethod == .email
+                ? languageService.text(.authSignIn)
+                : languageService.text(.authSendCode),
             isLoading: viewModel.state.isLoading,
             isDisabled: credentialsSubmitDisabled
         ) {
@@ -202,7 +209,7 @@ public struct LoginView: View {
             }
 
             SplickButton(
-                "Continue with Google",
+                languageService.text(.authContinueWithGoogle),
                 style: .secondary,
                 isLoading: viewModel.state.isLoading,
                 isDisabled: viewModel.state.isLoading
@@ -215,11 +222,11 @@ public struct LoginView: View {
 
     private var footerSection: some View {
         HStack {
-            Text("Don't have an account?")
+            Text(languageService.text(.authNoAccount))
                 .font(SplickTheme.Typography.callout)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
 
-            Button("Sign Up") {
+            Button(languageService.text(.authSignUp)) {
                 viewModel.showRegistration = true
             }
             .font(SplickTheme.Typography.callout)

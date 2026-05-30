@@ -1,5 +1,6 @@
 import SwiftUI
 import SplickDomain
+import Localization
 
 private struct OpenProfileActionKey: EnvironmentKey {
     static let defaultValue: (() -> Void)? = nil
@@ -31,6 +32,7 @@ extension View {
 private struct SplickProfileToolbarModifier: ViewModifier {
     @Environment(\.openProfileSettings) private var openProfileSettings
     @Environment(\.currentUserSummary) private var currentUserSummary
+    @Environment(\.languageService) private var languageService
 
     func body(content: Content) -> some View {
         content
@@ -47,7 +49,10 @@ private struct SplickProfileToolbarModifier: ViewModifier {
                             .frame(width: 34, height: 34)
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Profile settings")
+                        .accessibilityLabel(
+                            languageService?.text(.profileSettingsAccessibility)
+                                ?? L10n.string(.profileSettingsAccessibility, locale: .default)
+                        )
                     }
                 }
             }

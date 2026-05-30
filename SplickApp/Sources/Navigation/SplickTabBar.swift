@@ -1,5 +1,6 @@
 import SwiftUI
 import DesignSystem
+import Localization
 
 // MARK: - Mask (trailing geometry mirrored for leading)
 
@@ -46,6 +47,7 @@ private struct SidePanelMask: View {
 
 struct SplickTabBar: View {
     @Binding var selectedTab: Tab
+    @EnvironmentObject private var languageService: LanguageService
     @Environment(\.tabBarScrollState) private var tabBarScrollState
 
     private let cameraSize: CGFloat = 63
@@ -140,7 +142,7 @@ struct SplickTabBar: View {
         }
         .buttonStyle(.plain)
         .contentShape(Circle())
-        .accessibilityLabel(Tab.camera.rawValue)
+        .accessibilityLabel(Tab.camera.localizedTitle(using: languageService))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
@@ -154,7 +156,7 @@ struct SplickTabBar: View {
                 Image(systemName: isSelected ? tab.selectedIcon : tab.icon)
                     .font(.system(size: 21, weight: .medium))
                     .symbolRenderingMode(.monochrome)
-                Text(tab.rawValue)
+                Text(tab.localizedTitle(using: languageService))
                     .font(.system(size: 10, weight: isSelected ? .semibold : .medium))
                     .lineLimit(1)
                     .minimumScaleFactor(0.65)
@@ -170,7 +172,7 @@ struct SplickTabBar: View {
         .buttonStyle(.plain)
         .frame(maxWidth: .infinity, minHeight: 48)
         .contentShape(Rectangle())
-        .accessibilityLabel(tab.rawValue)
+        .accessibilityLabel(tab.localizedTitle(using: languageService))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

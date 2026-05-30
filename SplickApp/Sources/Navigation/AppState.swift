@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import SplickDomain
 import Common
+import Localization
 
 @MainActor
 final class AppState: ObservableObject {
@@ -79,12 +80,23 @@ final class AppState: ObservableObject {
 }
 
 enum Tab: String, CaseIterable {
-    case feed = "Feeds"
-    case expenses = "Expenses"
-    case friends = "Friends"
-    case camera = "Camera"
-    case notifications = "Notifications"
-    case profile = "Profile"
+    case feed
+    case expenses
+    case friends
+    case camera
+    case notifications
+    case profile
+
+    func localizedTitle(using languageService: LanguageService) -> String {
+        switch self {
+        case .feed: return languageService.text(.tabFeed)
+        case .expenses: return languageService.text(.tabExpenses)
+        case .friends: return languageService.text(.tabFriends)
+        case .camera: return languageService.text(.tabCamera)
+        case .notifications: return languageService.text(.tabNotifications)
+        case .profile: return languageService.text(.profileTitle)
+        }
+    }
 
     var icon: String {
         switch self {

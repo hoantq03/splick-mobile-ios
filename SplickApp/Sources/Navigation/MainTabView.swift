@@ -1,6 +1,7 @@
 import SwiftUI
 import Common
 import DesignSystem
+import Localization
 import SplickDomain
 import FeatureAuth
 import FeatureSocialFeed
@@ -33,6 +34,7 @@ struct MainTabView: View {
                     viewModel: container.feedViewModel,
                     photoAlbumViewModel: container.photoAlbumViewModel,
                     fetchFriendsUseCase: container.fetchFriendsUseCase,
+                    fetchMyFriendsUseCase: container.fetchMyFriendsUseCase,
                     fetchMyGroupsUseCase: container.fetchMyGroupsUseCase,
                     navigationPath: $appState.feedNavigationPath,
                     pendingPostId: appState.pendingPostId,
@@ -147,9 +149,11 @@ struct MainTabView: View {
 struct ProfileSettingsView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var container: DependencyContainer
+    @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
     @State private var isSigningOut = false
     @State private var isRefreshingProfile = false
+    @State private var isUpdatingLanguage = false
     @State private var profileError: String?
     @State private var showChangePassword = false
     @State private var showSessions = false
@@ -184,7 +188,7 @@ struct ProfileSettingsView: View {
                 }
 
                 SplickButton(
-                    "Edit profile",
+                    languageService.text(.profileEdit),
                     style: .secondary,
                     isDisabled: appState.currentUser == nil
                 ) {
@@ -192,8 +196,10 @@ struct ProfileSettingsView: View {
                 }
                 .padding(.horizontal, SplickTheme.Spacing.xl)
 
+                languageSection
+
                 SplickButton(
-                    "Change password",
+                    languageService.text(.profileChangePassword),
                     style: .secondary,
                     isDisabled: appState.currentUser == nil
                 ) {
@@ -201,17 +207,17 @@ struct ProfileSettingsView: View {
                 }
                 .padding(.horizontal, SplickTheme.Spacing.xl)
 
-                SplickButton("Devices & sessions", style: .secondary) {
+                SplickButton(languageService.text(.profileDevicesSessions), style: .secondary) {
                     showSessions = true
                 }
                 .padding(.horizontal, SplickTheme.Spacing.xl)
 
-                SplickButton("Connected accounts", style: .secondary) {
+                SplickButton(languageService.text(.profileConnectedAccounts), style: .secondary) {
                     showConnectedAccounts = true
                 }
                 .padding(.horizontal, SplickTheme.Spacing.xl)
 
-                SplickButton("Deactivate or delete account", style: .secondary) {
+                SplickButton(languageService.text(.profileDeactivateDelete), style: .secondary) {
                     showAccountSecurity = true
                 }
                 .padding(.horizontal, SplickTheme.Spacing.xl)
@@ -219,7 +225,7 @@ struct ProfileSettingsView: View {
                 Spacer()
 
                 SplickButton(
-                    "Sign Out",
+                    languageService.text(.profileSignOut),
                     style: .destructive,
                     isLoading: isSigningOut,
                     isDisabled: isSigningOut
@@ -235,11 +241,11 @@ struct ProfileSettingsView: View {
                 .padding(.horizontal, SplickTheme.Spacing.xl)
             }
             .padding(.top, SplickTheme.Spacing.xxl)
-            .navigationTitle("Profile")
+            .navigationTitle(languageService.text(.profileTitle))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                    Button(languageService.text(.commonDone)) { dismiss() }
                 }
             }
             .refreshable {
@@ -328,6 +334,50 @@ struct ProfileSettingsView: View {
         }
     }
 
+    private var languageSection: some View {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+            Text(languageService.text(.profileLanguage))
+                .font(SplickTheme.Typography.caption)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                .padding(.horizontal, SplickTheme.Spacing.xl)
+
+            Picker(languageService.text(.profileLanguage), selection: Binding(
+                get: { languageService.locale },
+                set: { newLocale in
+                    Task { await updateLanguage(newLocale) }
+                }
+            )) {
+                ForEach(AppLocale.allCases) { locale in
+                    Text(languageService.text(locale.displayNameKey)).tag(locale)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, SplickTheme.Spacing.xl)
+            .disabled(isUpdatingLanguage || appState.currentUser == nil)
+        }
+    }
+
+    private func updateLanguage(_ locale: AppLocale) async {
+        guard !isUpdatingLanguage else { return }
+        guard languageService.locale != locale else { return }
+        isUpdatingLanguage = true
+        defer { isUpdatingLanguage = false }
+        profileError = nil
+        languageService.setLocale(locale)
+        guard appState.currentUser != nil else { return }
+        do {
+            let user = try await container.updateProfileUseCase.execute(
+                displayName: nil,
+                avatarUrl: nil,
+                preferredLocale: locale.apiCode
+            )
+            appState.updateAuthenticatedUser(user)
+            languageService.applyFromServer(user.preferredLocale)
+        } catch {
+            profileError = languageService.localizedMessage(for: error)
+        }
+    }
+
     private func refreshProfile() async {
         guard !isRefreshingProfile else { return }
         isRefreshingProfile = true
@@ -336,8 +386,9 @@ struct ProfileSettingsView: View {
         do {
             let user = try await container.refreshProfileUseCase.execute()
             appState.updateAuthenticatedUser(user)
+            languageService.applyFromServer(user.preferredLocale)
         } catch {
-            profileError = "Could not refresh profile."
+            profileError = languageService.text(.profileRefreshFailed)
         }
     }
 }
