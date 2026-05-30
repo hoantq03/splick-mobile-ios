@@ -1,14 +1,16 @@
 import SwiftUI
 import DesignSystem
+import Localization
 import SplickDomain
 
 public struct NotificationInboxView: View {
     @StateObject private var viewModel: NotificationInboxViewModel
-    
+    @EnvironmentObject private var languageService: LanguageService
+
     public init(repository: NotificationRepositoryProtocol) {
         _viewModel = StateObject(wrappedValue: NotificationInboxViewModel(repository: repository))
     }
-    
+
     public var body: some View {
         NavigationView {
             List {
@@ -17,20 +19,19 @@ public struct NotificationInboxView: View {
                 } else if let error = viewModel.errorMessage {
                     Text(error).foregroundColor(.red)
                 } else if viewModel.notifications.isEmpty {
-                    Text("No notifications yet").foregroundColor(.gray)
+                    Text(languageService.text(.notificationInboxEmpty)).foregroundColor(.gray)
                 } else {
                     ForEach(viewModel.notifications) { item in
-                        NotificationRow(item: item)
+                        NotificationInboxRow(item: item)
                             .onTapGesture {
                                 Task {
                                     await viewModel.markAsClicked(notification: item)
-                                    // Navigate to specific feature based on item.type here...
                                 }
                             }
                     }
                 }
             }
-            .navigationTitle("Inbox")
+            .navigationTitle(languageService.text(.notificationInboxTitle))
             .refreshable {
                 await viewModel.fetchNotifications()
             }
@@ -41,15 +42,15 @@ public struct NotificationInboxView: View {
     }
 }
 
-struct NotificationRow: View {
+struct NotificationInboxRow: View {
     let item: AppNotification
-    
+
     var body: some View {
         HStack {
             Circle()
                 .fill(!item.isRead ? Color.blue : Color.clear)
                 .frame(width: 8, height: 8)
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.title)
                     .font(.caption)
