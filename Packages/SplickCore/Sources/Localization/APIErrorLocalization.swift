@@ -24,7 +24,9 @@ public enum APIErrorLocalization {
             return message(for: authError, locale: locale)
         case .validation(let message):
             return message
-        case .storage, .unknown(let message):
+        case .storage(let storageError):
+            return storageError.userMessage
+        case .unknown(let message):
             return message
         }
     }
