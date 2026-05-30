@@ -1,10 +1,12 @@
 import SwiftUI
 import DesignSystem
 import Common
+import Localization
 import SplickDomain
 
 public struct NotificationListView: View {
     @ObservedObject private var viewModel: NotificationListViewModel
+    @EnvironmentObject private var languageService: LanguageService
     private let onNavigateToPost: ((UUID) -> Void)?
 
     public init(
@@ -20,13 +22,13 @@ public struct NotificationListView: View {
             Group {
                 switch viewModel.state {
                 case .idle, .loading:
-                    LoadingView(message: "Loading notifications...")
+                    LoadingView(message: languageService.text(.notificationLoading))
 
                 case .loaded(let items) where items.isEmpty:
                     EmptyStateView(
                         icon: "bell.slash",
-                        title: "No Notifications",
-                        message: "You're all caught up! Notifications will appear here."
+                        title: languageService.text(.notificationEmptyTitle),
+                        message: languageService.text(.notificationEmptyMessage)
                     )
 
                 case .loaded:
@@ -38,12 +40,12 @@ public struct NotificationListView: View {
                     }
                 }
             }
-            .navigationTitle("Notifications")
+            .navigationTitle(languageService.text(.notificationTitle))
             .splickProfileToolbar()
             .toolbar {
                 if viewModel.unreadCount > 0 {
                     ToolbarItem(placement: .primaryAction) {
-                        Button("Read All") {
+                        Button(languageService.text(.notificationReadAll)) {
                             Task { await viewModel.markAllAsRead() }
                         }
                         .font(SplickTheme.Typography.callout)
