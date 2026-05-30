@@ -26,12 +26,15 @@ public final class FeedViewModel: ObservableObject {
 
     private var currentUserSummary: UserSummary?
 
-    // MARK: - Debounced reactions (optimistic UI → single API per burst)
+    // MARK: - Reaction sync (optimistic UI → one API call per tap, serialized per post)
 
-    private var reactionBatchSnapshots: [UUID: Post] = [:]
-    private var pendingReactionEmojis: [UUID: [String]] = [:]
-    private var reactionFlushTasks: [UUID: Task<Void, Never>] = [:]
-    private static let reactionDebounceNanos: UInt64 = 450_000_000
+    private struct PendingReactionSend: Equatable {
+        let emoji: String
+        let optimisticId: UUID
+    }
+
+    private var pendingReactionSends: [UUID: [PendingReactionSend]] = [:]
+    private var reactionSyncTasks: [UUID: Task<Void, Never>] = [:]
 
     // MARK: - Debounced view tracking (scroll → one GET after idle)
 
@@ -234,41 +237,68 @@ public final class FeedViewModel: ObservableObject {
             return "Mỗi bài bạn chỉ được dùng tối đa 5 loại emoji."
         }
 
-        if reactionBatchSnapshots[postId] == nil {
-            reactionBatchSnapshots[postId] = post
-        }
-
-        let reaction = Reaction(id: UUID(), emoji: emoji, userId: userId)
+        let optimisticId = UUID()
+        let reaction = Reaction(id: optimisticId, emoji: emoji, userId: userId)
         posts[index] = post.updating(reactions: post.reactions + [reaction])
 
-        var queue = pendingReactionEmojis[postId] ?? []
-        queue.append(emoji)
-        pendingReactionEmojis[postId] = queue
-
-        reactionFlushTasks[postId]?.cancel()
-        reactionFlushTasks[postId] = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: Self.reactionDebounceNanos)
-            guard !Task.isCancelled else { return }
-            await flushPendingReaction(for: postId)
-        }
+        pendingReactionSends[postId, default: []].append(
+            PendingReactionSend(emoji: emoji, optimisticId: optimisticId)
+        )
+        startReactionSyncIfNeeded(for: postId)
         return nil
     }
 
-    private func flushPendingReaction(for postId: UUID) async {
-        reactionFlushTasks[postId] = nil
-        let emojis = pendingReactionEmojis.removeValue(forKey: postId) ?? []
-        let baseline = reactionBatchSnapshots.removeValue(forKey: postId)
-        guard let emoji = emojis.last else { return }
-
-        do {
-            _ = try await reactToPostUseCase.execute(postId: postId, emoji: emoji)
-        } catch {
-            if let baseline, let rollbackIndex = posts.firstIndex(where: { $0.id == postId }) {
-                posts[rollbackIndex] = baseline
+    private func startReactionSyncIfNeeded(for postId: UUID) {
+        guard reactionSyncTasks[postId] == nil else { return }
+        reactionSyncTasks[postId] = Task { @MainActor in
+            await processReactionQueue(for: postId)
+            reactionSyncTasks[postId] = nil
+            if !(pendingReactionSends[postId]?.isEmpty ?? true) {
+                startReactionSyncIfNeeded(for: postId)
             }
-            Log.error(error, category: .feed)
-            alertMessage = error.localizedDescription
         }
+    }
+
+    private func processReactionQueue(for postId: UUID) async {
+        while let pending = pendingReactionSends[postId]?.first {
+            pendingReactionSends[postId]?.removeFirst()
+            if pendingReactionSends[postId]?.isEmpty == true {
+                pendingReactionSends[postId] = nil
+            }
+
+            do {
+                let serverReaction = try await reactToPostUseCase.execute(
+                    postId: postId,
+                    emoji: pending.emoji
+                )
+                reconcileReaction(
+                    postId: postId,
+                    optimisticId: pending.optimisticId,
+                    with: serverReaction
+                )
+            } catch {
+                removeReaction(postId: postId, reactionId: pending.optimisticId)
+                Log.error(error, category: .feed)
+                alertMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func reconcileReaction(postId: UUID, optimisticId: UUID, with server: Reaction) {
+        guard let index = posts.firstIndex(where: { $0.id == postId }) else { return }
+        let post = posts[index]
+        let reactions = post.reactions.map { reaction in
+            reaction.id == optimisticId ? server : reaction
+        }
+        posts[index] = post.updating(reactions: reactions)
+    }
+
+    private func removeReaction(postId: UUID, reactionId: UUID) {
+        guard let index = posts.firstIndex(where: { $0.id == postId }) else { return }
+        let post = posts[index]
+        posts[index] = post.updating(
+            reactions: post.reactions.filter { $0.id != reactionId }
+        )
     }
 
     @discardableResult
