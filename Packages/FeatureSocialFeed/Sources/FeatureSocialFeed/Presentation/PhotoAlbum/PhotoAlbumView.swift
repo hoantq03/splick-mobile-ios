@@ -1,16 +1,18 @@
 import SwiftUI
 import DesignSystem
 import Common
+import Localization
 import SplickDomain
 import FeatureFriends
 
 struct PhotoAlbumRoute: Hashable {}
 
 public struct PhotoAlbumView: View {
+    @EnvironmentObject private var languageService: LanguageService
     @ObservedObject private var viewModel: PhotoAlbumViewModel
     @ObservedObject private var feedViewModel: FeedViewModel
     @Binding private var navigationPath: NavigationPath
-    private let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
+    private let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol?
     private let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
 
     private static let gridSpacing = SplickTheme.Spacing.xs
@@ -25,41 +27,31 @@ public struct PhotoAlbumView: View {
         viewModel: PhotoAlbumViewModel,
         feedViewModel: FeedViewModel,
         navigationPath: Binding<NavigationPath>,
-        fetchFriendsUseCase: FetchFriendsUseCaseProtocol? = nil,
+        fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol? = nil,
         fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol? = nil
     ) {
         _viewModel = ObservedObject(wrappedValue: viewModel)
         _feedViewModel = ObservedObject(wrappedValue: feedViewModel)
         _navigationPath = navigationPath
-        self.fetchFriendsUseCase = fetchFriendsUseCase
+        self.fetchMyFriendsUseCase = fetchMyFriendsUseCase
         self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
     }
 
     public var body: some View {
-        Group {
-            switch viewModel.state {
-            case .idle, .loading where viewModel.photos.isEmpty:
-                LoadingView(message: "Đang tải album...")
+        VStack(spacing: 0) {
+            PhotoAlbumFilterBarView(
+                viewModel: viewModel,
+                fetchMyFriendsUseCase: fetchMyFriendsUseCase,
+                fetchMyGroupsUseCase: fetchMyGroupsUseCase
+            )
+            .padding(.horizontal, SplickTheme.Spacing.md)
+            .padding(.top, SplickTheme.Spacing.xs)
+            .padding(.bottom, SplickTheme.Spacing.sm)
 
-            case .loaded where viewModel.photos.isEmpty:
-                EmptyStateView(
-                    icon: "photo.on.rectangle.angled",
-                    title: "Chưa có ảnh",
-                    message: viewModel.hasActiveFilters
-                        ? "Không có ảnh phù hợp với bộ lọc hiện tại."
-                        : "Ảnh từ bạn và bạn bè sẽ hiện ở đây."
-                )
-
-            case .loaded, .loading:
-                photoGrid
-
-            case .failed(let message):
-                ErrorView(message: message) {
-                    Task { await viewModel.refresh() }
-                }
-            }
+            albumContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .navigationTitle("Album")
+        .navigationTitle(languageService.text(.feedAlbumTitle))
         .navigationBarTitleDisplayMode(.large)
         .task {
             await viewModel.loadInitialIfNeeded()
@@ -69,15 +61,32 @@ public struct PhotoAlbumView: View {
         }
     }
 
-    private var photoGrid: some View {
+    @ViewBuilder
+    private var albumContent: some View {
+        switch viewModel.state {
+        case .idle, .loading where viewModel.photos.isEmpty:
+            LoadingView(message: languageService.text(.feedAlbumLoading))
+
+        case .loaded where viewModel.photos.isEmpty:
+            EmptyStateView(
+                icon: "photo.on.rectangle.angled",
+                title: languageService.text(.feedAlbumEmptyTitle),
+                message: languageService.text(.feedAlbumEmptyMessage)
+            )
+
+        case .loaded, .loading:
+            photoScrollView
+
+        case .failed(let message):
+            ErrorView(message: message) {
+                Task { await viewModel.refresh() }
+            }
+        }
+    }
+
+    private var photoScrollView: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
-                PhotoAlbumFilterBarView(
-                    viewModel: viewModel,
-                    fetchFriendsUseCase: fetchFriendsUseCase,
-                    fetchMyGroupsUseCase: fetchMyGroupsUseCase
-                )
-
                 ForEach(viewModel.daySections) { section in
                     VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
                         Text(section.title)
