@@ -12,6 +12,7 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
     private let baseURL: String
     private let tokenProvider: TokenProvider
     private let tokenRefresher: TokenRefreshHandling?
+    private let localeProvider: LocaleHeaderProviding?
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
 
@@ -19,11 +20,13 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
         baseURL: String = AppConstants.API.baseURL,
         tokenProvider: TokenProvider,
         tokenRefresher: TokenRefreshHandling? = nil,
+        localeProvider: LocaleHeaderProviding? = nil,
         session: URLSession = .splick
     ) {
         self.baseURL = baseURL
         self.tokenProvider = tokenProvider
         self.tokenRefresher = tokenRefresher
+        self.localeProvider = localeProvider
         self.session = session
         self.decoder = .apiDecoder
         self.encoder = .apiEncoder
@@ -52,6 +55,7 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
         mimeType: String
     ) async throws -> T {
         var request = try endpoint.asURLRequest(baseURL: baseURL, encoder: encoder)
+        request = try await applyLocale(to: request)
         request = try await applyAuth(to: request, requiresAuth: endpoint.requiresAuth)
 
         let boundary = UUID().uuidString
@@ -90,6 +94,7 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
         didRetryAfterRefresh: Bool
     ) async throws -> Data {
         var request = try endpoint.asURLRequest(baseURL: baseURL, encoder: encoder)
+        request = try await applyLocale(to: request)
         request = try await applyAuth(to: request, requiresAuth: endpoint.requiresAuth)
 
         Log.debug("\(endpoint.method.rawValue) \(endpoint.path)", category: .network)
@@ -127,6 +132,16 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
 
         try validateResponse(response, data: data)
         return data
+    }
+
+    private func applyLocale(to request: URLRequest) async throws -> URLRequest {
+        guard let localeProvider else { return request }
+        var localizedRequest = request
+        localizedRequest.setValue(
+            await localeProvider.acceptLanguageHeader(),
+            forHTTPHeaderField: "Accept-Language"
+        )
+        return localizedRequest
     }
 
     private func applyAuth(to request: URLRequest, requiresAuth: Bool) async throws -> URLRequest {

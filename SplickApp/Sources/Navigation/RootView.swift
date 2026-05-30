@@ -84,6 +84,7 @@ struct RootView: View {
                     )
                 },
                 onAuthenticated: { user in
+                    container.languageService.applyFromServer(user.preferredLocale)
                     appState.setAuthenticated(user: user)
                 }
             )
@@ -92,6 +93,7 @@ struct RootView: View {
 
     private func checkExistingSession() async {
         if let session = await container.restoreSessionUseCase.execute() {
+            container.languageService.applyFromServer(session.user.preferredLocale)
             appState.setAuthenticated(user: session.user)
         } else {
             appState.setUnauthenticated(container: container)

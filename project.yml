@@ -62,6 +62,8 @@ targets:
         product: DesignSystem
       - package: SplickCore
         product: Common
+      - package: SplickCore
+        product: Localization
       - package: SplickDomain
         product: SplickDomain
       - package: FeatureAuth

@@ -2,6 +2,7 @@ import Foundation
 import Networking
 import Storage
 import Common
+import Localization
 import SplickDomain
 import FeatureAuth
 import FeatureSocialFeed
@@ -19,6 +20,7 @@ final class DependencyContainer: ObservableObject {
     let tokenProvider: TokenProvider
     let keychainService: KeychainServiceProtocol
     let userDefaultsService: UserDefaultsServiceProtocol
+    let languageService: LanguageService
 
     let apiClient: APIClientProtocol
     let sessionManager: SessionManagerProtocol
@@ -392,10 +394,15 @@ final class DependencyContainer: ObservableObject {
         self.tokenProvider = tokenProvider
         self.keychainService = KeychainService()
         self.userDefaultsService = UserDefaultsService()
+        self.languageService = LanguageService(userDefaults: userDefaultsService)
         self.sessionManager = SessionManager()
 
         let refreshCoordinator = TokenRefreshCoordinator()
-        let apiClient = APIClient(tokenProvider: tokenProvider, tokenRefresher: refreshCoordinator)
+        let apiClient = APIClient(
+            tokenProvider: tokenProvider,
+            tokenRefresher: refreshCoordinator,
+            localeProvider: languageService
+        )
         let authRepository = AuthRepository(
             apiClient: apiClient,
             keychainService: keychainService,
