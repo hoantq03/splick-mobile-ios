@@ -1,8 +1,10 @@
 import SwiftUI
 import DesignSystem
+import Localization
 import SplickDomain
 
 struct ReactionDetailSheet: View {
+    @EnvironmentObject private var languageService: LanguageService
     let summaries: [UserReactionSummary]
 
     @Environment(\.dismiss) private var dismiss
@@ -39,14 +41,14 @@ struct ReactionDetailSheet: View {
                         .padding(.vertical, 2)
                     }
                 } header: {
-                    Text("\(summary.totalCount) cảm xúc")
+                    Text(languageService.format(.feedReactionsCount, summary.totalCount))
                 }
             }
-            .navigationTitle("Cảm xúc")
+            .navigationTitle(languageService.text(.feedReactionsTitle))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Xong") { dismiss() }
+                    Button(languageService.text(.commonDone)) { dismiss() }
                 }
             }
         }
