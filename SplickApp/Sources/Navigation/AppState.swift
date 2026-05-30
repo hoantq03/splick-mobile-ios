@@ -87,6 +87,7 @@ enum Tab: String, CaseIterable {
     case notifications
     case profile
 
+    @MainActor
     func localizedTitle(using languageService: LanguageService) -> String {
         switch self {
         case .feed: return languageService.text(.tabFeed)
