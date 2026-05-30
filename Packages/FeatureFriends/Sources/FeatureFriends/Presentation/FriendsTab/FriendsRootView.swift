@@ -2,6 +2,7 @@ import SwiftUI
 import DesignSystem
 import Common
 import FeatureMedia
+import Localization
 import SplickDomain
 
 private struct UserProfileRoute: Identifiable {
@@ -18,6 +19,7 @@ public struct FriendsRootView: View {
     @StateObject private var incomingRequestsViewModel: IncomingFriendRequestsViewModel
     @StateObject private var outgoingRequestsViewModel: OutgoingFriendRequestsViewModel
     @StateObject private var blockedUsersViewModel: BlockedUsersViewModel
+    @EnvironmentObject private var languageService: LanguageService
     @Environment(\.currentUserSummary) private var currentUserSummary
 
     private let fetchOutgoingFriendRequestsUseCase: FetchOutgoingFriendRequestsUseCaseProtocol
@@ -173,7 +175,7 @@ public struct FriendsRootView: View {
 
                 Picker("Section", selection: $viewModel.segment) {
                     ForEach(FriendsRootViewModel.Segment.allCases, id: \.self) { segment in
-                        Text(segment.rawValue).tag(segment)
+                        Text(segment.localizedTitle(using: languageService)).tag(segment)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -198,7 +200,7 @@ public struct FriendsRootView: View {
                     }
                 }
             }
-            .navigationTitle("Friends")
+            .navigationTitle(languageService.text(.friendsTitle))
             .onChange(of: viewModel.searchQuery) { newValue in
                 viewModel.onSearchQueryChanged(newValue)
             }
@@ -305,11 +307,11 @@ public struct FriendsRootView: View {
                 }
             }
         }
-        .alert("Friends", isPresented: Binding(
+        .alert(languageService.text(.friendsTitle), isPresented: Binding(
             get: { viewModel.alertMessage != nil },
             set: { if !$0 { viewModel.alertMessage = nil } }
         )) {
-            Button("OK", role: .cancel) { viewModel.alertMessage = nil }
+            Button(languageService.text(.commonOK), role: .cancel) { viewModel.alertMessage = nil }
         } message: {
             Text(viewModel.alertMessage ?? "")
         }
@@ -326,9 +328,9 @@ public struct FriendsRootView: View {
             HStack {
                 Image(systemName: "paperplane")
                 if viewModel.outgoingRequestCount > 0 {
-                    Text("Lời mời đã gửi (\(viewModel.outgoingRequestCount))")
+                    Text(languageService.format(.friendsOutgoingRequests, viewModel.outgoingRequestCount))
                 } else {
-                    Text("Lời mời đã gửi")
+                    Text(languageService.text(.friendsOutgoingRequestsPlain))
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
@@ -351,7 +353,7 @@ public struct FriendsRootView: View {
         } label: {
             HStack {
                 Image(systemName: "hand.raised")
-                Text("Blocked users")
+                Text(languageService.text(.friendsBlockedUsers))
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
@@ -374,7 +376,7 @@ public struct FriendsRootView: View {
             } label: {
                 HStack {
                     Image(systemName: "person.crop.circle.badge.plus")
-                    Text("Lời mời kết bạn (\(viewModel.incomingRequestCount))")
+                    Text(languageService.format(.friendsIncomingRequests, viewModel.incomingRequestCount))
                         .font(SplickTheme.Typography.callout.weight(.semibold))
                     Spacer()
                     Image(systemName: "chevron.right")
@@ -461,7 +463,7 @@ public struct FriendsRootView: View {
                 .clipShape(Circle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Quét mã QR")
+        .accessibilityLabel(languageService.text(.friendsScanQRAddFriend))
     }
 
     private var addMenuButton: some View {
@@ -616,6 +618,18 @@ public struct FriendsRootView: View {
                 .padding(.bottom, SplickTheme.Spacing.md)
             }
             .tabBarHideOnScroll()
+        }
+    }
+}
+
+private extension FriendsRootViewModel.Segment {
+    @MainActor
+    func localizedTitle(using languageService: LanguageService) -> String {
+        switch self {
+        case .friends:
+            return languageService.text(.friendsTabFriends)
+        case .groups:
+            return languageService.text(.friendsTabGroups)
         }
     }
 }
