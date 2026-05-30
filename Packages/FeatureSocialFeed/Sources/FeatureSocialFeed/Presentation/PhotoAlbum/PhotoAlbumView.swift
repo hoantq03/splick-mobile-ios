@@ -2,6 +2,7 @@ import SwiftUI
 import DesignSystem
 import Common
 import SplickDomain
+import FeatureFriends
 
 struct PhotoAlbumRoute: Hashable {}
 
