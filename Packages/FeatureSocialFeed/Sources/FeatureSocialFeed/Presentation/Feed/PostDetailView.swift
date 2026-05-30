@@ -1,9 +1,11 @@
 import SwiftUI
 import DesignSystem
 import Common
+import Localization
 import SplickDomain
 
 struct PostDetailView: View {
+    @EnvironmentObject private var languageService: LanguageService
     let post: Post
     let initialMediaIndex: Int
     @ObservedObject var feedViewModel: FeedViewModel
@@ -68,11 +70,13 @@ struct PostDetailView: View {
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
         }
-        .navigationTitle("Bình luận")
+        .navigationTitle(languageService.text(.feedPostCommentsTitle))
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             CommentComposerView(
-                placeholder: replyParentId == nil ? "Viết bình luận..." : "Trả lời...",
+                placeholder: replyParentId == nil
+                    ? languageService.text(.feedPostWriteComment)
+                    : "Trả lời...",
                 fetchFriendsUseCase: fetchFriendsUseCase
             ) { text, attachments in
                 Task {
@@ -97,13 +101,13 @@ struct PostDetailView: View {
             }
         }
         .alert(
-            "Thông báo",
+            languageService.text(.commonError),
             isPresented: Binding(
                 get: { feedViewModel.alertMessage != nil },
                 set: { if !$0 { feedViewModel.alertMessage = nil } }
             )
         ) {
-            Button("OK", role: .cancel) { feedViewModel.alertMessage = nil }
+            Button(languageService.text(.commonOK), role: .cancel) { feedViewModel.alertMessage = nil }
         } message: {
             Text(feedViewModel.alertMessage ?? "")
         }
@@ -152,11 +156,11 @@ struct PostDetailView: View {
 
     private var commentsSection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-            Text("Bình luận")
+            Text(languageService.text(.feedPostCommentsHeader))
                 .font(SplickTheme.Typography.headline)
 
             if commentPager.displayedTopLevel.isEmpty {
-                Text("Chưa có bình luận. Hãy là người đầu tiên!")
+                Text(languageService.text(.feedPostCommentsEmpty))
                     .font(.system(size: 12))
                     .foregroundStyle(SplickTheme.Colors.textTertiary)
             }
@@ -177,7 +181,7 @@ struct PostDetailView: View {
                     if commentPager.isLoadingPage {
                         SplickSpinner(size: .small)
                     } else {
-                        Text("Xem thêm bình luận")
+                        Text(languageService.text(.feedPostCommentsLoadMore))
                             .font(.system(size: 12, weight: .medium))
                     }
                 }
