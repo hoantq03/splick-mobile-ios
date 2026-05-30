@@ -1,15 +1,15 @@
 import Foundation
 
-enum AlbumPhotoCursor {
+public enum AlbumPhotoCursor {
     private static let separator = "|"
 
-    static func encode(createdAt: Date, mediaItemId: UUID) -> String {
+    public static func encode(createdAt: Date, mediaItemId: UUID) -> String {
         let instant = formatInstant(createdAt)
         let raw = "\(instant)\(separator)\(mediaItemId.uuidString)"
         return base64UrlEncode(raw)
     }
 
-    static func decode(_ cursor: String) -> (createdAt: Date, mediaItemId: UUID)? {
+    public static func decode(_ cursor: String) -> (createdAt: Date, mediaItemId: UUID)? {
         guard let raw = base64UrlDecode(cursor) else { return nil }
         let parts = raw.split(separator: "|", maxSplits: 1).map(String.init)
         guard parts.count == 2,
