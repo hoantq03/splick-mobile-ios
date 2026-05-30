@@ -20,6 +20,7 @@ let package = Package(
                 .product(name: "Storage", package: "SplickCore"),
                 .product(name: "DesignSystem", package: "SplickCore"),
                 .product(name: "Common", package: "SplickCore"),
+                .product(name: "Localization", package: "SplickCore"),
                 .product(name: "SplickDomain", package: "SplickDomain"),
             ],
             path: "Sources/FeatureNotification"
