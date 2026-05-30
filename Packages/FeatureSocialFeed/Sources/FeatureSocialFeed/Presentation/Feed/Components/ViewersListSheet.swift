@@ -1,8 +1,10 @@
 import SwiftUI
 import DesignSystem
+import Localization
 import SplickDomain
 
 struct ViewersListSheet: View {
+    @EnvironmentObject private var languageService: LanguageService
     let viewers: [UserSummary]
     let onUserTap: (UserSummary) -> Void
 
@@ -33,11 +35,11 @@ struct ViewersListSheet: View {
                 }
                 .buttonStyle(.plain)
             }
-            .navigationTitle("Đã xem (\(viewers.count))")
+            .navigationTitle(languageService.format(.feedViewersTitle, viewers.count))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Xong") { dismiss() }
+                    Button(languageService.text(.commonDone)) { dismiss() }
                 }
             }
         }
