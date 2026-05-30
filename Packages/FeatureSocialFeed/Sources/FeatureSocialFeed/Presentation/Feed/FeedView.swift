@@ -1,6 +1,7 @@
 import SwiftUI
 import DesignSystem
 import Common
+import Localization
 import SplickDomain
 import FeatureFriends
 
@@ -10,6 +11,7 @@ private struct ProfileRoute: Identifiable {
 }
 
 public struct FeedView: View {
+    @EnvironmentObject private var languageService: LanguageService
     @ObservedObject private var viewModel: FeedViewModel
     @Binding private var navigationPath: NavigationPath
     private let pendingPostId: UUID?
@@ -18,6 +20,7 @@ public struct FeedView: View {
     @Environment(\.currentUserSummary) private var currentUserSummary
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     private let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
+    private let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol?
     private let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
     private let photoAlbumViewModel: PhotoAlbumViewModel
     @State private var profileRoute: ProfileRoute?
@@ -29,6 +32,7 @@ public struct FeedView: View {
         viewModel: FeedViewModel,
         photoAlbumViewModel: PhotoAlbumViewModel,
         fetchFriendsUseCase: FetchFriendsUseCaseProtocol? = nil,
+        fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol? = nil,
         fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol? = nil,
         navigationPath: Binding<NavigationPath> = .constant(NavigationPath()),
         pendingPostId: UUID? = nil,
@@ -38,6 +42,7 @@ public struct FeedView: View {
         self.photoAlbumViewModel = photoAlbumViewModel
         _navigationPath = navigationPath
         self.fetchFriendsUseCase = fetchFriendsUseCase
+        self.fetchMyFriendsUseCase = fetchMyFriendsUseCase
         self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
         self.pendingPostId = pendingPostId
         self.onPendingPostHandled = onPendingPostHandled
@@ -48,14 +53,14 @@ public struct FeedView: View {
             Group {
                 switch viewModel.state {
                 case .idle, .loading:
-                    LoadingView(message: "Loading your feed...")
+                    LoadingView(message: languageService.text(.feedLoading))
 
                 case .loaded(let posts) where posts.isEmpty:
                     EmptyStateView(
                         icon: "photo.on.rectangle.angled",
-                        title: "No Posts Yet",
-                        message: "Share a moment with your friends to get started!",
-                        actionTitle: "Take a Photo"
+                        title: languageService.text(.feedEmptyTitle),
+                        message: languageService.text(.feedEmptyMessage),
+                        actionTitle: languageService.text(.feedEmptyAction)
                     ) {
                         openPostCaptureFlow?()
                     }
@@ -69,7 +74,7 @@ public struct FeedView: View {
                     }
                 }
             }
-            .navigationTitle("Feeds")
+            .navigationTitle(languageService.text(.feedTitle))
             .splickProfileToolbar()
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -77,7 +82,7 @@ public struct FeedView: View {
                         Image(systemName: "square.grid.2x2")
                             .font(.system(size: 17, weight: .medium))
                     }
-                    .accessibilityLabel("Album ảnh")
+                    .accessibilityLabel(languageService.text(.feedPhotoAlbumAccessibility))
                 }
             }
             .navigationDestination(for: PhotoAlbumRoute.self) { _ in
@@ -85,7 +90,7 @@ public struct FeedView: View {
                     viewModel: photoAlbumViewModel,
                     feedViewModel: viewModel,
                     navigationPath: $navigationPath,
-                    fetchFriendsUseCase: fetchFriendsUseCase,
+                    fetchMyFriendsUseCase: fetchMyFriendsUseCase,
                     fetchMyGroupsUseCase: fetchMyGroupsUseCase
                 )
             }
@@ -100,13 +105,13 @@ public struct FeedView: View {
                 }
             }
             .alert(
-                "Thông báo",
+                languageService.text(.commonError),
                 isPresented: Binding(
                     get: { viewModel.alertMessage != nil },
                     set: { if !$0 { viewModel.alertMessage = nil } }
                 )
             ) {
-                Button("OK", role: .cancel) { viewModel.alertMessage = nil }
+                Button(languageService.text(.commonOK), role: .cancel) { viewModel.alertMessage = nil }
             } message: {
                 Text(viewModel.alertMessage ?? "")
             }
