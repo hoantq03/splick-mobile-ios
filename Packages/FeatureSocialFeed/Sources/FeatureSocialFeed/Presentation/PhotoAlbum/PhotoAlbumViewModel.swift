@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import Common
 import SplickDomain
+import DesignSystem
 
 @MainActor
 public final class PhotoAlbumViewModel: ObservableObject {
@@ -46,6 +47,7 @@ public final class PhotoAlbumViewModel: ObservableObject {
             canLoadMore = batch.count >= Self.pageSize
             appendUnique(batch)
             state = .loaded(photos)
+            prefetchThumbnails(in: batch)
         } catch {
             if !error.isRequestCancellation {
                 Log.error(error, category: .feed)
@@ -86,6 +88,7 @@ public final class PhotoAlbumViewModel: ObservableObject {
             photos = batch
             canLoadMore = batch.count >= Self.pageSize
             state = .loaded(photos)
+            prefetchThumbnails(in: batch)
         } catch {
             guard !Task.isCancelled else { return }
             if error.isRequestCancellation { return }
@@ -102,5 +105,10 @@ public final class PhotoAlbumViewModel: ObservableObject {
         let existingIds = Set(photos.map(\.id))
         let newItems = batch.filter { !existingIds.contains($0.id) }
         photos.append(contentsOf: newItems)
+    }
+
+    private func prefetchThumbnails(in photos: [AlbumPhoto]) {
+        let urls = photos.compactMap { $0.thumbnailURL ?? $0.mediaURL }
+        ImagePrefetching.prefetch(urls: urls)
     }
 }
