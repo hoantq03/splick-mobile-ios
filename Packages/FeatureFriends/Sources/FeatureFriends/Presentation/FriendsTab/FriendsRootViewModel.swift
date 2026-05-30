@@ -5,8 +5,8 @@ import SplickDomain
 @MainActor
 public final class FriendsRootViewModel: ObservableObject {
     enum Segment: String, CaseIterable {
-        case friends = "Friends"
-        case groups = "Groups"
+        case friends
+        case groups
     }
 
     @Published var segment: Segment = .friends
