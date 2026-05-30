@@ -1,8 +1,10 @@
 import SwiftUI
 import DesignSystem
+import Localization
 
 struct JoinGroupSheet: View {
     @ObservedObject var viewModel: JoinGroupViewModel
+    @EnvironmentObject private var languageService: LanguageService
     @State private var showQRScanner = false
 
     @Environment(\.dismiss) private var dismiss
@@ -11,7 +13,7 @@ struct JoinGroupSheet: View {
         NavigationStack {
             VStack(spacing: SplickTheme.Spacing.lg) {
                 VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
-                    Text("Group invite code")
+                    Text(languageService.text(.friendsGroupInviteCode))
                         .font(SplickTheme.Typography.caption)
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
 
@@ -22,7 +24,7 @@ struct JoinGroupSheet: View {
                 }
 
                 SplickButton(
-                    "Join group",
+                    languageService.text(.friendsJoinGroupAction),
                     isLoading: viewModel.isLoading,
                     isDisabled: viewModel.inviteCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ) {
@@ -32,7 +34,7 @@ struct JoinGroupSheet: View {
                 Button {
                     showQRScanner = true
                 } label: {
-                    Label("Scan QR code", systemImage: "qrcode.viewfinder")
+                    Label(languageService.text(.friendsScanGroupQR), systemImage: "qrcode.viewfinder")
                         .font(SplickTheme.Typography.headline)
                         .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
                         .frame(maxWidth: .infinity)
@@ -57,11 +59,11 @@ struct JoinGroupSheet: View {
                 Spacer()
             }
             .padding(SplickTheme.Spacing.md)
-            .navigationTitle("Join group")
+            .navigationTitle(languageService.text(.friendsJoinGroupTitle))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
+                    Button(languageService.text(.friendsClose)) { dismiss() }
                 }
             }
             .sheet(isPresented: $showQRScanner) {
