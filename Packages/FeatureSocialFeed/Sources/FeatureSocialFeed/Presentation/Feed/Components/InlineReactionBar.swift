@@ -234,16 +234,20 @@ private final class InlineReactionBarControl: UIView {
         let view = emojiViews[index]
         impactFeedback.impactOccurred()
         view.layer.removeAllAnimations()
+        view.transform = .identity
         UIView.animate(
-            withDuration: 0.07,
+            withDuration: 0.05,
             delay: 0,
-            usingSpringWithDamping: 0.7,
-            initialSpringVelocity: 1.2,
+            options: [.allowUserInteraction, .beginFromCurrentState],
             animations: {
-                view.transform = CGAffineTransform(scaleX: 1.35, y: 1.35).translatedBy(x: 0, y: -6)
+                view.transform = CGAffineTransform(scaleX: 1.28, y: 1.28).translatedBy(x: 0, y: -4)
             },
             completion: { _ in
-                UIView.animate(withDuration: 0.05) {
+                UIView.animate(
+                    withDuration: 0.04,
+                    delay: 0,
+                    options: [.allowUserInteraction, .beginFromCurrentState]
+                ) {
                     if self.highlightedIndex != index {
                         view.transform = .identity
                     }

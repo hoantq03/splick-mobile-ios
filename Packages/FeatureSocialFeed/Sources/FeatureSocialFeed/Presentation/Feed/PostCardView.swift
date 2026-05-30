@@ -326,7 +326,10 @@ struct PostCardView: View {
         )
         let end = flyTargetPoint()
         let flight = FlyingEmojiFlight.make(emoji: emoji, start: start, end: end)
-        guard flyingEmojis.count < 8 else { return }
+        let maxConcurrentFlights = 16
+        if flyingEmojis.count >= maxConcurrentFlights {
+            flyingEmojis.removeFirst(flyingEmojis.count - maxConcurrentFlights + 1)
+        }
         flyingEmojis.append(flight)
     }
 
