@@ -26,6 +26,7 @@ public enum AppConstants {
         public static let lastSyncTimestamp = "lastSyncTimestamp"
         public static let selectedTheme = "selectedTheme"
         public static let pushNotificationsEnabled = "pushNotificationsEnabled"
+        public static let preferredLocale = "preferredLocale"
     }
 
     public enum Media {

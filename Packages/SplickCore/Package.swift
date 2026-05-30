@@ -10,6 +10,7 @@ let package = Package(
         .library(name: "Storage", targets: ["Storage"]),
         .library(name: "DesignSystem", targets: ["DesignSystem"]),
         .library(name: "Common", targets: ["Common"]),
+        .library(name: "Localization", targets: ["Localization"]),
     ],
     dependencies: [
         .package(path: "../SplickDomain"),
@@ -19,6 +20,11 @@ let package = Package(
         .target(
             name: "Common",
             path: "Sources/Common"
+        ),
+        .target(
+            name: "Localization",
+            dependencies: ["Common", "Storage"],
+            path: "Sources/Localization"
         ),
         .target(
             name: "Networking",
@@ -34,11 +40,17 @@ let package = Package(
             name: "DesignSystem",
             dependencies: [
                 "Common",
+                "Localization",
                 .product(name: "SplickDomain", package: "SplickDomain"),
                 .product(name: "NukeUI", package: "Nuke"),
             ],
             path: "Sources/DesignSystem",
             resources: [.process("Resources")]
+        ),
+        .testTarget(
+            name: "LocalizationTests",
+            dependencies: ["Localization"],
+            path: "Tests/LocalizationTests"
         ),
     ]
 )
