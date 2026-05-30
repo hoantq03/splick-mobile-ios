@@ -1,9 +1,11 @@
 import SwiftUI
 import DesignSystem
 import Common
+import Localization
 
 struct BlockedUsersSheet: View {
     @ObservedObject var viewModel: BlockedUsersViewModel
+    @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -11,7 +13,7 @@ struct BlockedUsersSheet: View {
             Group {
                 switch viewModel.state {
                 case .idle, .loading:
-                    LoadingView(message: "Loading blocked users...")
+                    LoadingView(message: languageService.text(.friendsBlockedLoading))
                 case .failed(let message):
                     ErrorView(message: message) {
                         Task { await viewModel.load() }
@@ -19,8 +21,8 @@ struct BlockedUsersSheet: View {
                 case .loaded where viewModel.blockedUsers.isEmpty:
                     EmptyStateView(
                         icon: "hand.raised",
-                        title: "No blocked users",
-                        message: "Users you block will appear here. You can unblock them anytime."
+                        title: languageService.text(.friendsBlockedEmptyTitle),
+                        message: languageService.text(.friendsBlockedEmptyMessage)
                     )
                 case .loaded:
                     ScrollView {
@@ -36,7 +38,7 @@ struct BlockedUsersSheet: View {
                                                 SplickSpinner(size: .small)
                                                     .controlSize(.small)
                                             } else {
-                                                Text("Unblock")
+                                                Text(languageService.text(.friendsUnblock))
                                                     .font(SplickTheme.Typography.caption.weight(.semibold))
                                             }
                                         }
@@ -58,18 +60,18 @@ struct BlockedUsersSheet: View {
                     }
                 }
             }
-            .navigationTitle("Blocked users")
+            .navigationTitle(languageService.text(.friendsBlockedTitle))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
+                    Button(languageService.text(.friendsClose)) { dismiss() }
                 }
             }
-            .alert("Blocked users", isPresented: Binding(
+            .alert(languageService.text(.friendsBlockedTitle), isPresented: Binding(
                 get: { viewModel.alertMessage != nil },
                 set: { if !$0 { viewModel.alertMessage = nil } }
             )) {
-                Button("OK", role: .cancel) { viewModel.alertMessage = nil }
+                Button(languageService.text(.commonOK), role: .cancel) { viewModel.alertMessage = nil }
             } message: {
                 Text(viewModel.alertMessage ?? "")
             }
