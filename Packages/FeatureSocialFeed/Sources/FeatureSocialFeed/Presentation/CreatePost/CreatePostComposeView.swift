@@ -4,10 +4,12 @@ import AVFoundation
 import UniformTypeIdentifiers
 import UIKit
 import DesignSystem
+import Localization
 import SplickDomain
 import FeatureMedia
 
 public struct CreatePostComposeView: View {
+    @EnvironmentObject private var languageService: LanguageService
     @StateObject private var viewModel: CreatePostComposeViewModel
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     let onPosted: (Post) -> Void
@@ -37,11 +39,11 @@ public struct CreatePostComposeView: View {
             .padding(SplickTheme.Spacing.md)
             .padding(.bottom, SplickTheme.Spacing.xl)
         }
-        .navigationTitle("Đăng Feeds")
+        .navigationTitle(languageService.text(.feedCreateTitle))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Huỷ", action: onCancel)
+                Button(languageService.text(.commonCancel), action: onCancel)
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Đăng") {
@@ -56,7 +58,7 @@ public struct CreatePostComposeView: View {
         }
         .overlay {
             if viewModel.submitState.isLoading {
-                LoadingView(message: "Đang đăng...")
+                LoadingView(message: languageService.text(.feedCreatePosting))
                     .background(.ultraThinMaterial)
             }
         }
@@ -67,7 +69,7 @@ public struct CreatePostComposeView: View {
                 set: { if !$0 { viewModel.clearSubmitError() } }
             )
         ) {
-            Button("OK", role: .cancel) { viewModel.clearSubmitError() }
+            Button(languageService.text(.commonOK), role: .cancel) { viewModel.clearSubmitError() }
         } message: {
             Text(viewModel.submitState.error ?? "")
         }
@@ -144,7 +146,7 @@ public struct CreatePostComposeView: View {
                             VStack(spacing: 8) {
                                 Image(systemName: "plus.circle")
                                     .font(.system(size: 24))
-                                Text("Thêm media")
+                                Text(languageService.text(.feedCreateAddMedia))
                                     .font(SplickTheme.Typography.caption)
                             }
                             .foregroundStyle(SplickTheme.Colors.textSecondary)
@@ -161,7 +163,7 @@ public struct CreatePostComposeView: View {
                     }
                 }
             }
-            Text("Tối đa 5 ảnh và 3 video")
+            Text(languageService.text(.feedCreateMediaLimit))
                 .font(SplickTheme.Typography.caption)
                 .foregroundStyle(SplickTheme.Colors.textTertiary)
         }
@@ -169,7 +171,7 @@ public struct CreatePostComposeView: View {
 
     private var captionSection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
-            Text("Caption")
+            Text(languageService.text(.feedCreateCaption))
                 .font(SplickTheme.Typography.headline)
             TextField(
                 "Viết gì đó về khoảnh khắc này...",
@@ -221,7 +223,7 @@ public struct CreatePostComposeView: View {
 
     private var tagFriendsSection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-            Text("Gắn thẻ bạn bè")
+            Text(languageService.text(.feedCreateTagFriends))
                 .font(SplickTheme.Typography.headline)
 
             HStack(spacing: SplickTheme.Spacing.xs) {
@@ -273,7 +275,7 @@ public struct CreatePostComposeView: View {
     private var friendSearchResultsList: some View {
         VStack(spacing: 0) {
             if viewModel.friendSearchResults.isEmpty {
-                Text("Không tìm thấy bạn bè")
+                Text(languageService.text(.feedCreateFriendsNotFound))
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textTertiary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -317,7 +319,7 @@ public struct CreatePostComposeView: View {
 
     private var locationSection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
-            Text("Vị trí")
+            Text(languageService.text(.feedCreateLocation))
                 .font(SplickTheme.Typography.headline)
             SplickTextField("Quán, địa điểm, thành phố...", text: $viewModel.location)
         }
@@ -339,7 +341,7 @@ public struct CreatePostComposeView: View {
                 .pickerStyle(.segmented)
 
                 if viewModel.billSplitParticipants.isEmpty {
-                    Text("Gắn thẻ bạn bè để chia bill cùng người khác.")
+                    Text(languageService.text(.feedCreateTagFriendsHint))
                         .font(SplickTheme.Typography.caption)
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
                 } else {
@@ -352,7 +354,7 @@ public struct CreatePostComposeView: View {
 
     private var totalAmountField: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxs) {
-            Text("Tổng tiền")
+            Text(languageService.text(.feedCreateTotalAmount))
                 .font(SplickTheme.Typography.caption)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
 
@@ -363,7 +365,7 @@ public struct CreatePostComposeView: View {
                     textColor: UIColor(SplickTheme.Colors.primaryGradientStart)
                 )
 
-                Text("đ")
+                Text(languageService.text(.feedCreateCurrencySymbol))
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
             }
@@ -466,7 +468,7 @@ public struct CreatePostComposeView: View {
                 )
                 .frame(minWidth: 100)
 
-                Text("đ")
+                Text(languageService.text(.feedCreateCurrencySymbol))
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
             }
