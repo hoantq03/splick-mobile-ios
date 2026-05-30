@@ -2,6 +2,7 @@ enum StringsVi {
     static let values: [L10nKey: String] = [
         .commonDone: "Xong",
         .commonCancel: "Huỷ",
+        .commonClear: "Xoá",
         .commonTryAgain: "Thử lại",
         .commonReferenceId: "Mã tham chiếu",
 

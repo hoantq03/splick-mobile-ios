@@ -2,6 +2,7 @@ enum StringsEn {
     static let values: [L10nKey: String] = [
         .commonDone: "Done",
         .commonCancel: "Cancel",
+        .commonClear: "Clear",
         .commonTryAgain: "Try Again",
         .commonReferenceId: "Reference ID",
 
