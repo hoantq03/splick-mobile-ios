@@ -21,15 +21,33 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
         return dtos.map(FeedMapper.toPost)
     }
 
-    public func fetchPhotoAlbum(
-        page: Int,
+    public func fetchPhotoAlbumFirstPage(
         limit: Int,
         filters: PhotoAlbumFilters = PhotoAlbumFilters()
-    ) async throws -> [AlbumPhoto] {
+    ) async throws -> AlbumPhotoPage {
         let dtos: [AlbumPhotoDTO] = try await apiClient.request(
-            FeedEndpoint.photoAlbum(page: page, limit: limit, filters: filters)
+            FeedEndpoint.photoAlbumFirstPage(limit: limit, filters: filters)
         )
-        return dtos.compactMap(FeedMapper.toAlbumPhoto)
+        let photos = dtos.compactMap(FeedMapper.toAlbumPhoto)
+        let nextCursor = makeNextCursor(from: photos, limit: limit)
+        return AlbumPhotoPage(photos: photos, nextCursor: nextCursor)
+    }
+
+    public func fetchPhotoAlbumNextPage(
+        limit: Int,
+        filters: PhotoAlbumFilters,
+        cursor: String
+    ) async throws -> AlbumPhotoPage {
+        let pageDTO: AlbumPhotoPageDTO = try await apiClient.request(
+            FeedEndpoint.photoAlbumCursor(cursor: cursor, limit: limit, filters: filters)
+        )
+        let photos = pageDTO.items.compactMap(FeedMapper.toAlbumPhoto)
+        return AlbumPhotoPage(photos: photos, nextCursor: pageDTO.nextCursor)
+    }
+
+    private func makeNextCursor(from photos: [AlbumPhoto], limit: Int) -> String? {
+        guard photos.count >= limit, let last = photos.last else { return nil }
+        return AlbumPhotoCursor.encode(createdAt: last.createdAt, mediaItemId: last.id)
     }
 
     public func fetchPost(id: UUID) async throws -> Post {

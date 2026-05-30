@@ -2,7 +2,8 @@ import Foundation
 import SplickDomain
 
 public protocol FetchPhotoAlbumUseCaseProtocol: Sendable {
-    func execute(page: Int, filters: PhotoAlbumFilters) async throws -> [AlbumPhoto]
+    func fetchFirstPage(filters: PhotoAlbumFilters) async throws -> AlbumPhotoPage
+    func fetchNextPage(filters: PhotoAlbumFilters, cursor: String) async throws -> AlbumPhotoPage
 }
 
 public final class FetchPhotoAlbumUseCase: FetchPhotoAlbumUseCaseProtocol, Sendable {
@@ -14,7 +15,11 @@ public final class FetchPhotoAlbumUseCase: FetchPhotoAlbumUseCaseProtocol, Senda
         self.pageSize = pageSize
     }
 
-    public func execute(page: Int, filters: PhotoAlbumFilters) async throws -> [AlbumPhoto] {
-        try await repository.fetchPhotoAlbum(page: page, limit: pageSize, filters: filters)
+    public func fetchFirstPage(filters: PhotoAlbumFilters) async throws -> AlbumPhotoPage {
+        try await repository.fetchPhotoAlbumFirstPage(limit: pageSize, filters: filters)
+    }
+
+    public func fetchNextPage(filters: PhotoAlbumFilters, cursor: String) async throws -> AlbumPhotoPage {
+        try await repository.fetchPhotoAlbumNextPage(limit: pageSize, filters: filters, cursor: cursor)
     }
 }

@@ -208,14 +208,50 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
         return result
     }
 
-    public func fetchPhotoAlbum(
-        page: Int,
+    public func fetchPhotoAlbumFirstPage(
         limit: Int,
         filters: PhotoAlbumFilters = PhotoAlbumFilters()
-    ) async throws -> [AlbumPhoto] {
-        logger.log("Fetch photo album: page=\(page), limit=\(limit)")
+    ) async throws -> AlbumPhotoPage {
+        logger.log("Fetch photo album first page: limit=\(limit)")
         try await Task.sleep(for: .milliseconds(350))
 
+        let allPhotos = filteredAlbumPhotos(filters: filters)
+        let slice = Array(allPhotos.prefix(limit))
+        let nextCursor = makeNextCursor(from: slice, limit: limit)
+        logger.success("Photo album loaded: \(slice.count) photos (first page)")
+        return AlbumPhotoPage(photos: slice, nextCursor: nextCursor)
+    }
+
+    public func fetchPhotoAlbumNextPage(
+        limit: Int,
+        filters: PhotoAlbumFilters,
+        cursor: String
+    ) async throws -> AlbumPhotoPage {
+        logger.log("Fetch photo album cursor page: limit=\(limit)")
+        try await Task.sleep(for: .milliseconds(350))
+
+        let allPhotos = filteredAlbumPhotos(filters: filters)
+        guard let anchor = AlbumPhotoCursor.decode(cursor),
+              let startIndex = allPhotos.firstIndex(where: {
+                  $0.id == anchor.mediaItemId && $0.createdAt == anchor.createdAt
+              }) else {
+            logger.log("Photo album: invalid or stale cursor")
+            return AlbumPhotoPage(photos: [], nextCursor: nil)
+        }
+
+        let nextStart = allPhotos.index(after: startIndex)
+        guard nextStart < allPhotos.count else {
+            return AlbumPhotoPage(photos: [], nextCursor: nil)
+        }
+
+        let end = min(nextStart + limit, allPhotos.count)
+        let slice = Array(allPhotos[nextStart..<end])
+        let nextCursor = makeNextCursor(from: slice, limit: limit)
+        logger.success("Photo album loaded: \(slice.count) photos (cursor page)")
+        return AlbumPhotoPage(photos: slice, nextCursor: nextCursor)
+    }
+
+    private func filteredAlbumPhotos(filters: PhotoAlbumFilters) -> [AlbumPhoto] {
         var allPhotos: [AlbumPhoto] = posts.flatMap { post in
             post.displayMediaItems
                 .filter { $0.mediaType == .image }
@@ -238,29 +274,26 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
         if let authorId = filters.author?.id {
             allPhotos = allPhotos.filter { $0.author.id == authorId }
         }
+        if let groupId = filters.group?.id {
+            allPhotos = allPhotos.filter { $0.groupId == groupId }
+        }
         if let captionQuery = filters.apiCaptionQuery?.lowercased() {
             allPhotos = allPhotos.filter {
                 ($0.caption ?? "").lowercased().contains(captionQuery)
             }
         }
 
-        allPhotos.sort { lhs, rhs in
+        return allPhotos.sorted { lhs, rhs in
             if lhs.createdAt != rhs.createdAt {
                 return lhs.createdAt > rhs.createdAt
             }
-            return lhs.sortOrder < rhs.sortOrder
+            return lhs.id.uuidString > rhs.id.uuidString
         }
+    }
 
-        let start = page * limit
-        guard start < allPhotos.count else {
-            logger.log("Photo album: no more pages")
-            return []
-        }
-
-        let end = min(start + limit, allPhotos.count)
-        let result = Array(allPhotos[start..<end])
-        logger.success("Photo album loaded: \(result.count) photos (page \(page))")
-        return result
+    private func makeNextCursor(from photos: [AlbumPhoto], limit: Int) -> String? {
+        guard photos.count >= limit, let last = photos.last else { return nil }
+        return AlbumPhotoCursor.encode(createdAt: last.createdAt, mediaItemId: last.id)
     }
 
     public func fetchPost(id: UUID) async throws -> Post {

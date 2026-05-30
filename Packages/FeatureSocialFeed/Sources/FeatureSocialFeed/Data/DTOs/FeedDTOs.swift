@@ -84,6 +84,11 @@ struct ReactionDTO: Decodable {
     let createdAt: Date
 }
 
+struct AlbumPhotoPageDTO: Decodable {
+    let items: [AlbumPhotoDTO]
+    let nextCursor: String?
+}
+
 struct AlbumPhotoDTO: Decodable {
     let mediaItemId: UUID
     let postId: UUID

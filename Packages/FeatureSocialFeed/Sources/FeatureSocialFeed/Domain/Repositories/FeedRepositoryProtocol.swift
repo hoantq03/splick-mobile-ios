@@ -3,7 +3,12 @@ import SplickDomain
 
 public protocol FeedRepositoryProtocol: Sendable {
     func fetchFeed(page: Int, limit: Int) async throws -> [Post]
-    func fetchPhotoAlbum(page: Int, limit: Int, filters: PhotoAlbumFilters) async throws -> [AlbumPhoto]
+    func fetchPhotoAlbumFirstPage(limit: Int, filters: PhotoAlbumFilters) async throws -> AlbumPhotoPage
+    func fetchPhotoAlbumNextPage(
+        limit: Int,
+        filters: PhotoAlbumFilters,
+        cursor: String
+    ) async throws -> AlbumPhotoPage
     func fetchPost(id: UUID) async throws -> Post
     func addReaction(postId: UUID, emoji: String) async throws -> Reaction
     func removeReaction(postId: UUID, reactionId: UUID) async throws
