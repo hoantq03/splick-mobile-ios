@@ -1,6 +1,13 @@
 name: Splick
+
+# Per-developer signing (Team ID). Copy project.local.yml.example → project.local.yml
+include:
+  - path: project.local.yml
+    optional: true
+
 options:
   bundleIdPrefix: com.splick
+  developmentLanguage: vi
   deploymentTarget:
     iOS: "16.0"
   xcodeVersion: "15.0"
@@ -10,10 +17,14 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.9"
+    DEVELOPMENT_LANGUAGE: vi
     MARKETING_VERSION: "1.0.0"
     CURRENT_PROJECT_VERSION: 1
-    DEVELOPMENT_TEAM: ""
+    # DEVELOPMENT_TEAM: set in project.local.yml (see project.local.yml.example)
     CODE_SIGN_STYLE: Automatic
+    ONLY_ACTIVE_ARCH: YES
+    # Apple Silicon simulators are arm64-only; avoid x86_64 SplickApp vs arm64 SPM mismatch
+    EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
 
 packages:
   SplickCore:
@@ -30,6 +41,13 @@ packages:
     path: Packages/FeatureExpense
   FeatureNotification:
     path: Packages/FeatureNotification
+  FeatureFriends:
+    path: Packages/FeatureFriends
+  SimulationKit:
+    path: Packages/SimulationKit
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    from: "8.0.0"
 
 targets:
   SplickApp:
@@ -37,8 +55,6 @@ targets:
     platform: iOS
     sources:
       - path: SplickApp/Sources
-    resources:
-      - path: SplickApp/Resources
     dependencies:
       - package: SplickCore
         product: Networking
@@ -48,6 +64,8 @@ targets:
         product: DesignSystem
       - package: SplickCore
         product: Common
+      - package: SplickCore
+        product: Localization
       - package: SplickDomain
         product: SplickDomain
       - package: FeatureAuth
@@ -60,23 +78,23 @@ targets:
         product: FeatureExpense
       - package: FeatureNotification
         product: FeatureNotification
+      - package: FeatureFriends
+        product: FeatureFriends
+      - package: SimulationKit
+        product: SimulationKit
+      - package: GoogleSignIn
+        product: GoogleSignIn
     settings:
       base:
+        PRODUCT_NAME: SplickApp
         INFOPLIST_FILE: SplickApp/Resources/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
         PRODUCT_BUNDLE_IDENTIFIER: com.splick.app
         TARGETED_DEVICE_FAMILY: 1
-    info:
-      path: SplickApp/Resources/Info.plist
-      properties:
-        CFBundleName: Splick
-        CFBundleDisplayName: Splick
-        CFBundleShortVersionString: "$(MARKETING_VERSION)"
-        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
-        UILaunchScreen: {}
-        UISupportedInterfaceOrientations:
-          - UIInterfaceOrientationPortrait
-        NSCameraUsageDescription: "Splick needs camera access to capture and share moments with friends."
-        NSPhotoLibraryUsageDescription: "Splick needs photo library access to share photos with friends."
+    resources:
+      - path: SplickApp/Resources
+        excludes:
+          - Info.plist
 
 schemes:
   SplickApp:

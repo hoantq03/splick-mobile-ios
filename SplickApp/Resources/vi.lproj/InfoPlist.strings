@@ -1,0 +1,9 @@
+/* Camera */
+"NSCameraUsageDescription" = "Splick cần quyền camera để chụp và chia sẻ khoảnh khắc với bạn bè.";
+
+/* Microphone */
+"NSMicrophoneUsageDescription" = "Splick cần quyền micro để ghi âm khi quay video.";
+
+/* Photo library */
+"NSPhotoLibraryUsageDescription" = "Splick cần quyền thư viện ảnh để chia sẻ ảnh với bạn bè.";
+"NSPhotoLibraryAddUsageDescription" = "Splick cần quyền lưu ảnh đã chỉnh sửa vào thư viện ảnh của bạn.";

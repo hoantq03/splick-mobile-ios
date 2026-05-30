@@ -1,8 +1,16 @@
 import Foundation
+import Common
 import SplickDomain
 
 public protocol RegisterUseCaseProtocol: Sendable {
-    func execute(email: String, username: String, password: String) async throws -> AuthSession
+    func execute(
+        channel: AuthRegistrationChannel,
+        identifier: String,
+        username: String,
+        password: String,
+        otpCode: String,
+        displayName: String?
+    ) async throws -> AuthSession
 }
 
 public final class RegisterUseCase: RegisterUseCaseProtocol, Sendable {
@@ -14,12 +22,36 @@ public final class RegisterUseCase: RegisterUseCaseProtocol, Sendable {
         self.sessionManager = sessionManager
     }
 
-    public func execute(email: String, username: String, password: String) async throws -> AuthSession {
-        let session = try await repository.register(
-            email: email,
-            username: username,
-            password: password
-        )
+    public func execute(
+        channel: AuthRegistrationChannel,
+        identifier: String,
+        username: String,
+        password: String,
+        otpCode: String,
+        displayName: String?
+    ) async throws -> AuthSession {
+        let session: AuthSession
+        switch channel {
+        case .email:
+            session = try await repository.registerWithEmail(
+                email: identifier,
+                username: username,
+                password: password,
+                otpCode: otpCode,
+                displayName: displayName
+            )
+        case .phone:
+            session = try await repository.registerWithPhone(
+                phoneNumber: identifier,
+                username: username,
+                password: password,
+                otpCode: otpCode,
+                displayName: displayName
+            )
+        }
+        guard session.user.status.allowsSignIn else {
+            throw AuthError.accountLocked
+        }
         await sessionManager.setSession(session)
         return session
     }

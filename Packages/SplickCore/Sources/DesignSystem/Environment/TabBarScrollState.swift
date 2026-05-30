@@ -1,0 +1,98 @@
+import SwiftUI
+
+public enum SplickTabBarMetrics {
+    /// Space reserved above the floating tab bar so bottom controls stay tappable.
+    public static let floatingClearance: CGFloat = 88
+    /// Bottom inset when the tab bar is hidden (e.g. post detail).
+    public static let hiddenClearance: CGFloat = 16
+}
+
+@MainActor
+public final class TabBarScrollState: ObservableObject {
+    @Published public private(set) var isVisible = true
+    /// When true (e.g. post detail), no extra bottom inset — composer can sit on the screen edge.
+    @Published public private(set) var suppressesBottomInset = false
+
+    private var lastOffset: CGFloat = 0
+    private let hideThreshold: CGFloat = 8
+    private let showAtTopThreshold: CGFloat = 24
+
+    public init() {}
+
+    public func updateScrollOffset(_ offset: CGFloat) {
+        if offset <= showAtTopThreshold {
+            setVisible(true)
+            lastOffset = offset
+            return
+        }
+
+        let delta = offset - lastOffset
+        if delta > hideThreshold {
+            setVisible(false)
+        } else if delta < -hideThreshold {
+            setVisible(true)
+        }
+        lastOffset = offset
+    }
+
+    public func reset() {
+        lastOffset = 0
+        suppressesBottomInset = false
+        setVisible(true)
+    }
+
+    public func show() {
+        suppressesBottomInset = false
+        setVisible(true)
+    }
+
+    /// Hides the tab bar. Set `flushToBottom` on detail screens so bottom inset becomes zero.
+    public func hide(flushToBottom: Bool = false) {
+        suppressesBottomInset = flushToBottom
+        setVisible(false)
+    }
+
+    private func setVisible(_ visible: Bool) {
+        guard isVisible != visible else { return }
+        isVisible = visible
+    }
+}
+
+private struct TabBarScrollStateKey: EnvironmentKey {
+    static let defaultValue: TabBarScrollState? = nil
+}
+
+extension EnvironmentValues {
+    public var tabBarScrollState: TabBarScrollState? {
+        get { self[TabBarScrollStateKey.self] }
+        set { self[TabBarScrollStateKey.self] = newValue }
+    }
+}
+
+public struct TabBarHideOnScrollModifier: ViewModifier {
+    @Environment(\.tabBarScrollState) private var tabBarScrollState
+
+    public init() {}
+
+    public func body(content: Content) -> some View {
+        if let tabBarScrollState {
+            if #available(iOS 18.0, *) {
+                content.onScrollGeometryChange(for: CGFloat.self) { geometry in
+                    geometry.contentOffset.y + geometry.contentInsets.top
+                } action: { _, offset in
+                    tabBarScrollState.updateScrollOffset(offset)
+                }
+            } else {
+                content
+            }
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    public func tabBarHideOnScroll() -> some View {
+        modifier(TabBarHideOnScrollModifier())
+    }
+}

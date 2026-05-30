@@ -1,48 +1,128 @@
 import SwiftUI
 import DesignSystem
 import Common
+import Localization
+import SplickDomain
 
 public struct LoginView: View {
+    @EnvironmentObject private var languageService: LanguageService
     @StateObject private var viewModel: LoginViewModel
+    private let registerViewModelFactory: () -> RegisterViewModel
+    private let forgotPasswordViewModelFactory: () -> ForgotPasswordViewModel
+    private let onAuthenticated: ((User) -> Void)?
+    @State private var showForgotPassword = false
 
-    public init(viewModel: @autoclosure @escaping () -> LoginViewModel) {
+    public init(
+        viewModel: @autoclosure @escaping () -> LoginViewModel,
+        registerViewModelFactory: @escaping () -> RegisterViewModel,
+        forgotPasswordViewModelFactory: @escaping () -> ForgotPasswordViewModel,
+        onAuthenticated: ((User) -> Void)? = nil
+    ) {
         _viewModel = StateObject(wrappedValue: viewModel())
+        self.registerViewModelFactory = registerViewModelFactory
+        self.forgotPasswordViewModelFactory = forgotPasswordViewModelFactory
+        self.onAuthenticated = onAuthenticated
     }
 
     public var body: some View {
         ScrollView {
             VStack(spacing: SplickTheme.Spacing.lg) {
                 headerSection
-                formSection
-                actionSection
-                footerSection
+
+                switch viewModel.step {
+                case .credentials:
+                    credentialsSection
+                    credentialsActions
+                case .phoneOtp:
+                    OtpVerificationView(
+                        otpCode: $viewModel.otpCode,
+                        title: languageService.text(.authVerifyPhoneTitle),
+                        subtitle: String(
+                            format: languageService.text(.authVerifyPhoneSubtitle),
+                            viewModel.phoneNumber
+                        ),
+                        submitTitle: languageService.text(.authSignIn),
+                        otpError: viewModel.otpError,
+                        otpInfoMessage: viewModel.otpInfoMessage,
+                        isLoading: viewModel.state.isLoading,
+                        onResend: { Task { await viewModel.resendPhoneOtp() } },
+                        onSubmit: { Task { await viewModel.verifyPhoneOtp() } },
+                        onBack: { viewModel.goBackToCredentials() }
+                    )
+                }
+
+                if viewModel.step == .credentials, let error = viewModel.state.error {
+                    Text(error)
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.error)
+                        .multilineTextAlignment(.center)
+                }
+
+                if viewModel.step == .credentials {
+                    if viewModel.isGoogleSignInAvailable {
+                        googleSignInSection
+                    }
+                    footerSection
+                }
             }
             .padding(.horizontal, SplickTheme.Spacing.lg)
             .padding(.top, SplickTheme.Spacing.xxl)
         }
         .scrollDismissesKeyboard(.interactively)
         .background(SplickTheme.Colors.background)
+        .navigationDestination(isPresented: $viewModel.showRegistration) {
+            RegisterView(
+                viewModel: registerViewModelFactory(),
+                onAuthenticated: onAuthenticated
+            )
+        }
+        .sheet(isPresented: $showForgotPassword) {
+            ForgotPasswordView(
+                viewModel: forgotPasswordViewModelFactory(),
+                onAuthenticated: onAuthenticated
+            )
+        }
+        .onChange(of: viewModel.state) { state in
+            if case .loaded(let session) = state {
+                onAuthenticated?(session.user)
+            }
+        }
     }
 
-    // MARK: - Sections
-
     private var headerSection: some View {
-        VStack(spacing: SplickTheme.Spacing.xs) {
+        VStack(spacing: SplickTheme.Spacing.sm) {
+            SplickLogoMark(size: 96, layout: .markOnly, style: .fullColor)
             Text("Splick")
                 .font(SplickTheme.Typography.largeTitle)
                 .foregroundStyle(SplickTheme.Colors.primaryGradient)
-
-            Text("Share moments. Split bills.")
+            Text("Click moments, Split bills, Keep relations.")
                 .font(SplickTheme.Typography.callout)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
         }
         .padding(.bottom, SplickTheme.Spacing.xl)
     }
 
-    private var formSection: some View {
+    private var credentialsSection: some View {
+        VStack(spacing: SplickTheme.Spacing.md) {
+            AuthMethodPicker(
+                selection: $viewModel.signInMethod,
+                methods: AuthSignInMethod.allCases,
+                title: { $0.title }
+            )
+
+            switch viewModel.signInMethod {
+            case .email:
+                emailCredentialsForm
+            case .phone:
+                phoneCredentialsForm
+            }
+        }
+    }
+
+    private var emailCredentialsForm: some View {
         VStack(spacing: SplickTheme.Spacing.md) {
             SplickTextField(
-                "Email",
+                languageService.text(.authEmail),
                 text: $viewModel.email,
                 errorMessage: viewModel.emailError,
                 icon: "envelope"
@@ -53,42 +133,100 @@ public struct LoginView: View {
             .textInputAutocapitalization(.never)
 
             SplickTextField(
-                "Password",
+                languageService.text(.authPassword),
                 text: $viewModel.password,
                 isSecure: true,
                 errorMessage: viewModel.passwordError,
                 icon: "lock"
             )
             .textContentType(.password)
+
+            HStack {
+                Spacer()
+                Button(languageService.text(.authForgotPassword)) {
+                    showForgotPassword = true
+                }
+                .font(SplickTheme.Typography.caption)
+                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+            }
         }
     }
 
-    private var actionSection: some View {
+    private var phoneCredentialsForm: some View {
+        SplickTextField(
+            "Phone number",
+            text: $viewModel.phoneNumber,
+            errorMessage: viewModel.phoneError,
+            icon: "phone",
+            validationStatus: viewModel.phoneStatus
+        )
+        .textContentType(.telephoneNumber)
+        .keyboardType(.phonePad)
+        .autocorrectionDisabled()
+        .onChange(of: viewModel.phoneNumber) { _ in viewModel.validatePhoneField() }
+    }
+
+    private var credentialsActions: some View {
+        SplickButton(
+            viewModel.signInMethod == .email
+                ? languageService.text(.authSignIn)
+                : languageService.text(.authSendCode),
+            isLoading: viewModel.state.isLoading,
+            isDisabled: credentialsSubmitDisabled
+        ) {
+            Task {
+                switch viewModel.signInMethod {
+                case .email:
+                    await viewModel.login()
+                case .phone:
+                    await viewModel.requestPhoneOtpAndContinue()
+                }
+            }
+        }
+    }
+
+    private var credentialsSubmitDisabled: Bool {
+        switch viewModel.signInMethod {
+        case .email:
+            return viewModel.email.isEmpty || viewModel.password.isEmpty
+        case .phone:
+            return viewModel.phoneNumber.isEmpty || viewModel.phoneError != nil
+        }
+    }
+
+    private var googleSignInSection: some View {
         VStack(spacing: SplickTheme.Spacing.md) {
-            if let error = viewModel.state.error {
-                Text(error)
+            HStack {
+                Rectangle()
+                    .fill(SplickTheme.Colors.textSecondary.opacity(0.35))
+                    .frame(height: 1)
+                Text("or")
                     .font(SplickTheme.Typography.caption)
-                    .foregroundStyle(SplickTheme.Colors.error)
-                    .multilineTextAlignment(.center)
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                Rectangle()
+                    .fill(SplickTheme.Colors.textSecondary.opacity(0.35))
+                    .frame(height: 1)
             }
 
             SplickButton(
-                "Sign In",
+                languageService.text(.authContinueWithGoogle),
+                style: .secondary,
                 isLoading: viewModel.state.isLoading,
-                isDisabled: viewModel.email.isEmpty || viewModel.password.isEmpty
+                isDisabled: viewModel.state.isLoading
             ) {
-                Task { await viewModel.login() }
+                Task { await viewModel.signInWithGoogle() }
             }
         }
+        .padding(.top, SplickTheme.Spacing.sm)
     }
 
     private var footerSection: some View {
         HStack {
-            Text("Don't have an account?")
+            Text(languageService.text(.authNoAccount))
                 .font(SplickTheme.Typography.callout)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
 
-            Button("Sign Up") {
+            Button(languageService.text(.authSignUp)) {
                 viewModel.showRegistration = true
             }
             .font(SplickTheme.Typography.callout)

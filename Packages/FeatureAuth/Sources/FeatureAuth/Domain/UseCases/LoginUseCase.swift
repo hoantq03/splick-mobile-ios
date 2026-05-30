@@ -1,4 +1,5 @@
 import Foundation
+import Common
 import SplickDomain
 
 public protocol LoginUseCaseProtocol: Sendable {
@@ -15,8 +16,22 @@ public final class LoginUseCase: LoginUseCaseProtocol, Sendable {
     }
 
     public func execute(email: String, password: String) async throws -> AuthSession {
-        let session = try await repository.login(email: email, password: password)
-        await sessionManager.setSession(session)
-        return session
+        do {
+            let session = try await repository.login(email: email, password: password)
+            if session.user.status == .inactive {
+                throw AuthError.accountInactive
+            }
+            guard session.user.status.allowsSignIn else {
+                throw AuthError.accountLocked
+            }
+            await sessionManager.setSession(session)
+            return session
+        } catch let error as AuthError {
+            throw error
+        } catch let error as NetworkError where error.isConnectivityIssue {
+            throw error
+        } catch {
+            throw AuthError.invalidCredentials
+        }
     }
 }

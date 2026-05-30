@@ -33,9 +33,9 @@ public final class ExpenseRepository: ExpenseRepositoryProtocol, Sendable {
     }
 
     public func fetchDebtSummary(groupId: UUID?) async throws -> [DebtSummary] {
-        let dtos: [DebtSummaryDTO] = try await apiClient.request(
+        let page: DebtSummaryPageDTO = try await apiClient.request(
             ExpenseEndpoint.debtSummary(groupId: groupId)
         )
-        return dtos.map(ExpenseMapper.toDebtSummary)
+        return page.content.map(ExpenseMapper.toDebtSummary)
     }
 }

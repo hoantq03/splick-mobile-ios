@@ -1,0 +1,43 @@
+---
+description: Splick iOS — Swift, MVVM, Clean Architecture, module boundaries
+globs: splick-mobile-ios/**,**/*.swift
+alwaysApply: false
+---
+
+> Monorepo rules: `splick/.cursor/rules/mobile.mdc` · Human docs: `splick-mobile-ios/README.md`
+
+# Splick iOS — Engineering Standards
+
+## Architecture
+
+- **MVVM + Clean Architecture** per feature module (SPM).
+- **Domain** must not import UIKit/SwiftUI or concrete networking.
+- Features depend on **protocols** (repositories, use cases), not other feature implementations.
+- Shared: `SplickDomain`, `SplickCore` (networking, storage, design system).
+
+## Code quality
+
+- Prefer **composition** over deep inheritance.
+- ViewModels: orchestration + `@Published` state; no business rules duplicated from domain.
+- Async: `async/await`; handle cancellation; never block main thread for I/O.
+- Naming: match existing feature prefixes (`FeatureAuth`, etc.).
+
+## Security
+
+- Tokens in **Keychain** — not UserDefaults.
+- No JWT/password logging in release builds.
+
+## API integration
+
+- Base URL (remote): `https://api.splick.app/api` (Cloudflare Flexible HTTPS → VPS :80 → Kong; `/api` is path prefix).
+- Base URL (local Mac backend): `http://localhost:8080/api` — **not** service ports 8081/8082.
+- Paths: **`/v1/{domain}/...`** appended to base URL (e.g. `/v1/auth/login`, `/v1/social/groups`).
+- iOS Google Sign-In: `POST /v1/auth/google` (idToken) — not browser `/v1/auth/oauth2/*`.
+- Paths must match `splick-backend/openapi/openapi.yaml` — see `splick-mobile-ios/docs/API_ROUTING.md`.
+- Do not invent endpoints; extend OpenAPI on backend first.
+
+## Before finishing
+
+- Loading + error states for network screens.
+- Match existing DI pattern (`DependencyContainer` / module factories).
+- Run Swift build for affected schemes when possible.

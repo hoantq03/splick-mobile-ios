@@ -1,0 +1,329 @@
+import SwiftUI
+import DesignSystem
+import Localization
+import SplickDomain
+import FeatureFriends
+
+struct PhotoAlbumFilterBarView: View {
+    @EnvironmentObject private var languageService: LanguageService
+    @ObservedObject var viewModel: PhotoAlbumViewModel
+    let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol?
+    let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
+
+    @State private var captionQuery = ""
+    @State private var isExpanded = false
+    @State private var showFriendPicker = false
+    @State private var showGroupPicker = false
+    @State private var captionSearchTask: Task<Void, Never>?
+
+    private var filters: PhotoAlbumFilters { viewModel.filters }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+            captionSearchField
+            filterHeader
+
+            if isExpanded {
+                advancedFilters
+            }
+
+            if filters.hasAnyFilter {
+                clearButton
+            }
+        }
+        .splickCard(padding: SplickTheme.Spacing.sm)
+        .sheet(isPresented: $showFriendPicker) {
+            if let fetchMyFriendsUseCase {
+                PhotoAlbumFriendPickerSheet(
+                    fetchMyFriendsUseCase: fetchMyFriendsUseCase,
+                    selectedAuthor: filters.author
+                ) { author in
+                    Task {
+                        var updated = filters
+                        updated.author = author
+                        await viewModel.applyFilters(updated)
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showGroupPicker) {
+            if let fetchMyGroupsUseCase {
+                PhotoAlbumGroupPickerSheet(
+                    fetchMyGroupsUseCase: fetchMyGroupsUseCase,
+                    selectedGroup: filters.group
+                ) { group in
+                    Task {
+                        var updated = filters
+                        updated.group = group
+                        await viewModel.applyFilters(updated)
+                    }
+                }
+            }
+        }
+        .onAppear {
+            if captionQuery.isEmpty {
+                captionQuery = filters.captionQuery
+            }
+        }
+        .onChange(of: viewModel.filters.captionQuery) { newValue in
+            if captionQuery != newValue {
+                captionQuery = newValue
+            }
+        }
+        .onDisappear {
+            captionSearchTask?.cancel()
+        }
+    }
+
+    private var captionSearchField: some View {
+        HStack(spacing: SplickTheme.Spacing.xs) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(SplickTheme.Colors.textTertiary)
+            TextField("Tìm theo caption", text: $captionQuery)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .onChange(of: captionQuery) { newValue in
+                    scheduleCaptionSearch(newValue)
+                }
+            if !captionQuery.isEmpty {
+                Button {
+                    captionQuery = ""
+                    viewModel.setCaptionQuery("")
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(SplickTheme.Colors.textTertiary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, SplickTheme.Spacing.sm)
+        .padding(.vertical, SplickTheme.Spacing.xs)
+        .background(SplickTheme.Colors.tertiaryBackground, in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var filterHeader: some View {
+        Button {
+            withAnimation(.easeOut(duration: 0.18)) {
+                isExpanded.toggle()
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "line.3.horizontal.decrease.circle")
+                    .font(.system(size: 12, weight: .semibold))
+                Text(languageService.text(.feedFilterTitle))
+                    .font(.system(size: 13, weight: .semibold))
+                Spacer()
+                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .foregroundStyle(SplickTheme.Colors.textSecondary)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var advancedFilters: some View {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+            filterChip(
+                title: filters.author?.displayName ?? "Chọn bạn bè",
+                systemImage: "person",
+                isActive: filters.author != nil,
+                isEnabled: fetchMyFriendsUseCase != nil
+            ) {
+                showFriendPicker = true
+            }
+
+            filterChip(
+                title: filters.group?.name ?? "Chọn nhóm",
+                systemImage: "person.3",
+                isActive: filters.group != nil,
+                isEnabled: fetchMyGroupsUseCase != nil
+            ) {
+                showGroupPicker = true
+            }
+        }
+    }
+
+    private var clearButton: some View {
+        Button("Xóa bộ lọc") {
+            captionQuery = ""
+            Task { await viewModel.clearFilters() }
+        }
+        .font(.system(size: 13, weight: .semibold))
+        .foregroundStyle(SplickTheme.Colors.primary)
+    }
+
+    private func filterChip(
+        title: String,
+        systemImage: String,
+        isActive: Bool,
+        isEnabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: SplickTheme.Spacing.xs) {
+                Image(systemName: systemImage)
+                Text(title)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(isActive ? SplickTheme.Colors.primary : SplickTheme.Colors.textPrimary)
+            .padding(.horizontal, SplickTheme.Spacing.sm)
+            .padding(.vertical, SplickTheme.Spacing.xs)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isActive ? SplickTheme.Colors.primary.opacity(0.12) : SplickTheme.Colors.tertiaryBackground)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.5)
+    }
+
+    private func scheduleCaptionSearch(_ query: String) {
+        captionSearchTask?.cancel()
+        captionSearchTask = Task {
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                viewModel.setCaptionQuery(query)
+            }
+        }
+    }
+}
+
+private struct PhotoAlbumFriendPickerSheet: View {
+    @EnvironmentObject private var languageService: LanguageService
+    @Environment(\.dismiss) private var dismiss
+
+    let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol
+    let selectedAuthor: UserSummary?
+    let onSelect: (UserSummary?) -> Void
+
+    @State private var friends: [UserSummary] = []
+    @State private var searchQuery = ""
+    @State private var isLoading = true
+
+    private var filteredFriends: [UserSummary] {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return friends }
+        return friends.filter {
+            $0.displayName.lowercased().contains(query)
+                || $0.username.lowercased().contains(query)
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            SwiftUI.Group {
+                if isLoading {
+                    ProgressView()
+                } else if friends.isEmpty {
+                    Text(languageService.text(.feedFilterNoFriends))
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+                } else if filteredFriends.isEmpty {
+                    Text(languageService.text(.feedFilterFriendsNotFound))
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+                } else {
+                    List {
+                        if selectedAuthor != nil {
+                            Button("Tất cả bạn bè") {
+                                onSelect(nil)
+                                dismiss()
+                            }
+                        }
+                        ForEach(filteredFriends) { friend in
+                            Button {
+                                onSelect(friend)
+                                dismiss()
+                            } label: {
+                                HStack {
+                                    Text(friend.displayName)
+                                    Spacer()
+                                    if friend.id == selectedAuthor?.id {
+                                        Image(systemName: "checkmark")
+                                            .foregroundStyle(SplickTheme.Colors.primary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle(languageService.text(.feedFilterByFriends))
+            .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $searchQuery, prompt: "Tìm bạn bè")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(languageService.text(.commonClose)) { dismiss() }
+                }
+            }
+            .task {
+                isLoading = true
+                defer { isLoading = false }
+                friends = (try? await fetchMyFriendsUseCase.execute()) ?? []
+            }
+        }
+    }
+}
+
+private struct PhotoAlbumGroupPickerSheet: View {
+    @EnvironmentObject private var languageService: LanguageService
+    @Environment(\.dismiss) private var dismiss
+
+    let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol
+    let selectedGroup: SplickDomain.Group?
+    let onSelect: (SplickDomain.Group?) -> Void
+
+    @State private var groups: [SplickDomain.Group] = []
+    @State private var isLoading = true
+
+    var body: some View {
+        NavigationStack {
+            SwiftUI.Group {
+                if isLoading {
+                    ProgressView()
+                } else if groups.isEmpty {
+                    Text(languageService.text(.feedFilterNoGroups))
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+                } else {
+                    List {
+                        if selectedGroup != nil {
+                            Button("Tất cả nhóm") {
+                                onSelect(nil)
+                                dismiss()
+                            }
+                        }
+                        ForEach(groups) { group in
+                            Button {
+                                onSelect(group)
+                                dismiss()
+                            } label: {
+                                HStack {
+                                    Text(group.name)
+                                    Spacer()
+                                    if group.id == selectedGroup?.id {
+                                        Image(systemName: "checkmark")
+                                            .foregroundStyle(SplickTheme.Colors.primary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle(languageService.text(.feedFilterByGroups))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(languageService.text(.commonClose)) { dismiss() }
+                }
+            }
+            .task {
+                isLoading = true
+                defer { isLoading = false }
+                groups = (try? await fetchMyGroupsUseCase.execute()) ?? []
+            }
+        }
+    }
+}

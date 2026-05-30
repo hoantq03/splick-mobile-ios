@@ -11,6 +11,8 @@ public struct Expense: Identifiable, Codable, Equatable, Sendable {
     public let category: ExpenseCategory
     public let status: ExpenseStatus
     public let createdAt: Date
+    /// When the expense was fully settled (nil if still open).
+    public let settledAt: Date?
 
     public init(
         id: UUID,
@@ -22,7 +24,8 @@ public struct Expense: Identifiable, Codable, Equatable, Sendable {
         groupId: UUID? = nil,
         category: ExpenseCategory = .general,
         status: ExpenseStatus = .pending,
-        createdAt: Date = .now
+        createdAt: Date = .now,
+        settledAt: Date? = nil
     ) {
         self.id = id
         self.description = description
@@ -34,6 +37,14 @@ public struct Expense: Identifiable, Codable, Equatable, Sendable {
         self.category = category
         self.status = status
         self.createdAt = createdAt
+        self.settledAt = settledAt
+    }
+
+    /// Latest payment timestamp across splits, or explicit `settledAt`.
+    public var displaySettledAt: Date? {
+        if let settledAt { return settledAt }
+        let paidDates = splits.compactMap(\.paidAt)
+        return paidDates.max()
     }
 }
 
@@ -42,12 +53,20 @@ public struct ExpenseSplit: Codable, Equatable, Sendable, Identifiable {
     public let user: UserSummary
     public let amount: Decimal
     public let isPaid: Bool
+    public let paidAt: Date?
 
-    public init(id: UUID, user: UserSummary, amount: Decimal, isPaid: Bool = false) {
+    public init(
+        id: UUID,
+        user: UserSummary,
+        amount: Decimal,
+        isPaid: Bool = false,
+        paidAt: Date? = nil
+    ) {
         self.id = id
         self.user = user
         self.amount = amount
         self.isPaid = isPaid
+        self.paidAt = paidAt
     }
 }
 

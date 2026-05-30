@@ -1,5 +1,6 @@
 import SwiftUI
 import DesignSystem
+import Common
 import FeatureAuth
 
 struct RootView: View {
@@ -13,7 +14,11 @@ struct RootView: View {
                 splashView
 
             case .unauthenticated:
-                authFlow
+                if appState.hasCompletedOnboarding {
+                    authFlow
+                } else {
+                    onboardingFlow
+                }
 
             case .authenticated:
                 MainTabView()
@@ -23,42 +28,75 @@ struct RootView: View {
     }
 
     private var splashView: some View {
-        VStack(spacing: SplickTheme.Spacing.md) {
-            Text("Splick")
-                .font(SplickTheme.Typography.largeTitle)
-                .foregroundStyle(SplickTheme.Colors.primaryGradient)
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(hex: 0x5B6CFF).opacity(0.12),
+                    SplickTheme.Colors.background,
+                    Color(hex: 0x2A9D8F).opacity(0.1),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
 
-            ProgressView()
+            VStack(spacing: SplickTheme.Spacing.md) {
+                SplickLogoMark(size: 128, layout: .markOnly, style: .fullColor)
+                Text("Splick")
+                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .foregroundStyle(SplickTheme.Colors.primaryGradient)
+                SplickSpinner(size: .large)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(SplickTheme.Colors.background)
         .task {
             await checkExistingSession()
+        }
+    }
+
+    private var onboardingFlow: some View {
+        OnboardingView {
+            appState.completeOnboarding()
         }
     }
 
     private var authFlow: some View {
         NavigationStack {
             LoginView(
-                viewModel: LoginViewModel(loginUseCase: container.loginUseCase)
+                viewModel: LoginViewModel(
+                    loginUseCase: container.loginUseCase,
+                    requestPhoneOtpUseCase: container.requestPhoneOtpUseCase,
+                    verifyPhoneOtpUseCase: container.verifyPhoneOtpUseCase,
+                    googleSignInUseCase: container.googleSignInUseCase,
+                    googleSignInPresenter: GoogleSignInClient.shared
+                ),
+                registerViewModelFactory: {
+                    RegisterViewModel(
+                        registerUseCase: container.registerUseCase,
+                        requestEmailOtpUseCase: container.requestEmailOtpUseCase,
+                        requestPhoneOtpUseCase: container.requestPhoneOtpUseCase
+                    )
+                },
+                forgotPasswordViewModelFactory: {
+                    ForgotPasswordViewModel(
+                        forgotPasswordUseCase: container.forgotPasswordUseCase,
+                        resetPasswordUseCase: container.resetPasswordUseCase
+                    )
+                },
+                onAuthenticated: { user in
+                    container.languageService.applyFromServer(user.preferredLocale)
+                    appState.setAuthenticated(user: user)
+                }
             )
-            .navigationDestination(isPresented: .constant(false)) {
-                RegisterView(
-                    viewModel: RegisterViewModel(registerUseCase: container.registerUseCase)
-                )
-            }
         }
-        .onChange(of: appState.authState) { _ in }
     }
 
     private func checkExistingSession() async {
-        try? await Task.sleep(for: .seconds(1))
-
-        if await container.sessionManager.isAuthenticated(),
-           let session = await container.sessionManager.currentSession() {
+        if let session = await container.restoreSessionUseCase.execute() {
+            container.languageService.applyFromServer(session.user.preferredLocale)
             appState.setAuthenticated(user: session.user)
         } else {
-            appState.setUnauthenticated()
+            appState.setUnauthenticated(container: container)
         }
     }
 }

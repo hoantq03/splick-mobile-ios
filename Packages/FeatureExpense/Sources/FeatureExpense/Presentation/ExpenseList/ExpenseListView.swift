@@ -1,13 +1,26 @@
 import SwiftUI
 import DesignSystem
 import Common
+import Localization
 import SplickDomain
 
 public struct ExpenseListView: View {
     @StateObject private var viewModel: ExpenseListViewModel
+    @StateObject private var userSearchViewModel: ExpenseUserSearchViewModel
+    @EnvironmentObject private var languageService: LanguageService
+    @Environment(\.openPostCaptureFlow) private var openPostCaptureFlow
+    private let currentUserId: UUID?
 
-    public init(viewModel: @autoclosure @escaping () -> ExpenseListViewModel) {
+    public init(
+        viewModel: @autoclosure @escaping () -> ExpenseListViewModel,
+        userSearchUseCase: UserSearchUseCaseProtocol? = nil,
+        currentUserId: UUID? = nil
+    ) {
         _viewModel = StateObject(wrappedValue: viewModel())
+        _userSearchViewModel = StateObject(
+            wrappedValue: ExpenseUserSearchViewModel(useCase: userSearchUseCase)
+        )
+        self.currentUserId = currentUserId
     }
 
     public var body: some View {
@@ -15,16 +28,16 @@ public struct ExpenseListView: View {
             Group {
                 switch viewModel.state {
                 case .idle, .loading:
-                    LoadingView(message: "Loading expenses...")
+                    LoadingView(message: languageService.text(.expenseLoading))
 
-                case .loaded(let expenses) where expenses.isEmpty:
+                case .loaded where viewModel.expenses.isEmpty:
                     EmptyStateView(
                         icon: "dollarsign.circle",
-                        title: "No Expenses",
-                        message: "Create your first shared expense to start splitting bills.",
-                        actionTitle: "Add Expense"
+                        title: languageService.text(.expenseEmptyTitle),
+                        message: languageService.text(.expenseEmptyMessage),
+                        actionTitle: languageService.text(.expenseEmptyAction)
                     ) {
-                        viewModel.showCreateExpense = true
+                        openPostCapture()
                     }
 
                 case .loaded:
@@ -36,38 +49,76 @@ public struct ExpenseListView: View {
                     }
                 }
             }
-            .navigationTitle("Expenses")
+            .navigationTitle(languageService.text(.expenseTitle))
+            .splickProfileToolbar()
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
-                        viewModel.showCreateExpense = true
+                        openPostCapture()
                     } label: {
                         Image(systemName: "plus.circle.fill")
                             .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
                     }
                 }
             }
-            .refreshable { await viewModel.load() }
+            .refreshable { await viewModel.load(isPullToRefresh: true) }
         }
         .onFirstAppear {
+            viewModel.updateCurrentUserId(currentUserId)
             Task { await viewModel.load() }
+        }
+        .onChange(of: currentUserId) { userId in
+            viewModel.updateCurrentUserId(userId)
         }
     }
 
     private var expenseContent: some View {
-        ScrollView {
+        let displayed = viewModel.filteredExpenses
+        return ScrollView {
             VStack(spacing: SplickTheme.Spacing.md) {
-                debtSummaryCard
-                expensesList
+                ExpenseFilterBarView(
+                    viewModel: viewModel,
+                    userSearchViewModel: userSearchViewModel
+                )
+
+                VStack(spacing: SplickTheme.Spacing.md) {
+                    debtSummaryCard
+
+                    if displayed.isEmpty {
+                        filteredEmptyState
+                    } else {
+                        expensesList(displayed)
+                    }
+                }
+                .id(viewModel.filterSignature)
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
         }
+        .tabBarHideOnScroll()
+    }
+
+    private var filteredEmptyState: some View {
+        VStack(spacing: SplickTheme.Spacing.sm) {
+            Image(systemName: "line.3.horizontal.decrease.circle")
+                .font(.system(size: 36))
+                .foregroundStyle(SplickTheme.Colors.textTertiary)
+            Text(languageService.text(.expenseFilteredEmptyTitle))
+                .font(SplickTheme.Typography.headline)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
+            Text(languageService.text(.expenseFilteredEmptyMessage))
+                .font(SplickTheme.Typography.caption)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, SplickTheme.Spacing.xl)
+        .splickCard()
     }
 
     private var debtSummaryCard: some View {
         HStack {
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxs) {
-                Text("You are owed")
+                Text(languageService.text(.expenseYouAreOwed))
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
                 Text(formatAmount(viewModel.totalOwed))
@@ -78,7 +129,7 @@ public struct ExpenseListView: View {
             Spacer()
 
             VStack(alignment: .trailing, spacing: SplickTheme.Spacing.xxs) {
-                Text("You owe")
+                Text(languageService.text(.expenseYouOwe))
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
                 Text(formatAmount(viewModel.totalOwing))
@@ -89,12 +140,16 @@ public struct ExpenseListView: View {
         .splickCard()
     }
 
-    private var expensesList: some View {
+    private func expensesList(_ expenses: [Expense]) -> some View {
         LazyVStack(spacing: SplickTheme.Spacing.xs) {
-            ForEach(viewModel.expenses) { expense in
+            ForEach(expenses) { expense in
                 ExpenseRowView(expense: expense)
             }
         }
+    }
+
+    private func openPostCapture() {
+        openPostCaptureFlow?()
     }
 
     private func formatAmount(_ amount: Decimal) -> String {
@@ -107,6 +162,7 @@ public struct ExpenseListView: View {
 }
 
 struct ExpenseRowView: View {
+    @EnvironmentObject private var languageService: LanguageService
     let expense: Expense
 
     var body: some View {
@@ -124,9 +180,34 @@ struct ExpenseRowView: View {
                     .foregroundStyle(SplickTheme.Colors.textPrimary)
                     .lineLimit(1)
 
-                Text("Paid by \(expense.paidBy.displayName)")
+                Text(
+                    String(
+                        format: languageService.text(.expensePaidBy),
+                        expense.paidBy.displayName
+                    )
+                )
+                .font(SplickTheme.Typography.caption)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+
+                Text(
+                    String(
+                        format: languageService.text(.expenseCreatedAt),
+                        expense.createdAt.formatted(date: .abbreviated, time: .shortened)
+                    )
+                )
+                .font(SplickTheme.Typography.caption)
+                .foregroundStyle(SplickTheme.Colors.textTertiary)
+
+                if let settledAt = expense.displaySettledAt {
+                    Text(
+                        String(
+                            format: languageService.text(.expenseSettledAt),
+                            settledAt.formatted(date: .abbreviated, time: .shortened)
+                        )
+                    )
                     .font(SplickTheme.Typography.caption)
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    .foregroundStyle(SplickTheme.Colors.success.opacity(0.85))
+                }
             }
 
             Spacer()
@@ -156,9 +237,12 @@ struct ExpenseRowView: View {
 
     private var statusInfo: (String, Color) {
         switch expense.status {
-        case .pending: return ("Pending", SplickTheme.Colors.warning)
-        case .partiallySettled: return ("Partial", SplickTheme.Colors.info)
-        case .settled: return ("Settled", SplickTheme.Colors.success)
+        case .pending:
+            return (languageService.text(.expenseStatusPending), SplickTheme.Colors.warning)
+        case .partiallySettled:
+            return (languageService.text(.expenseStatusPartial), SplickTheme.Colors.info)
+        case .settled:
+            return (languageService.text(.expenseStatusSettled), SplickTheme.Colors.success)
         }
     }
 

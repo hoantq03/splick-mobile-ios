@@ -1,72 +1,165 @@
 import SwiftUI
+import Common
 import DesignSystem
+import Localization
+import SplickDomain
+import FeatureAuth
 import FeatureSocialFeed
 import FeatureExpense
 import FeatureMedia
 import FeatureNotification
+import FeatureFriends
 
 struct MainTabView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var container: DependencyContainer
+    @StateObject private var tabBarScrollState = TabBarScrollState()
+
+    private var currentUserSummary: UserSummary? {
+        appState.currentUser.map {
+            UserSummary(
+                id: $0.id,
+                username: $0.username,
+                displayName: $0.displayName,
+                avatarURL: $0.avatarURL
+            )
+        }
+    }
 
     var body: some View {
-        TabView(selection: $appState.selectedTab) {
-            FeedView(
-                viewModel: FeedViewModel(
-                    fetchFeedUseCase: container.fetchFeedUseCase,
-                    reactToPostUseCase: container.reactToPostUseCase
+        Group {
+            switch appState.selectedTab {
+            case .feed:
+                FeedView(
+                    viewModel: container.feedViewModel,
+                    photoAlbumViewModel: container.photoAlbumViewModel,
+                    fetchFriendsUseCase: container.fetchFriendsUseCase,
+                    fetchMyFriendsUseCase: container.fetchMyFriendsUseCase,
+                    fetchMyGroupsUseCase: container.fetchMyGroupsUseCase,
+                    navigationPath: $appState.feedNavigationPath,
+                    pendingPostId: appState.pendingPostId,
+                    onPendingPostHandled: {
+                        appState.clearPendingPostNavigation()
+                    }
                 )
-            )
-            .tabItem {
-                Label(Tab.feed.rawValue, systemImage: appState.selectedTab == .feed ? Tab.feed.selectedIcon : Tab.feed.icon)
-            }
-            .tag(Tab.feed)
 
-            ExpenseListView(
-                viewModel: ExpenseListViewModel(
-                    fetchExpensesUseCase: container.fetchExpensesUseCase,
-                    fetchDebtSummaryUseCase: container.fetchDebtSummaryUseCase
+            case .expenses:
+                ExpenseListView(
+                    viewModel: ExpenseListViewModel(
+                        fetchExpensesUseCase: container.fetchExpensesUseCase,
+                        fetchDebtSummaryUseCase: container.fetchDebtSummaryUseCase,
+                        currentUserId: appState.currentUser?.id
+                    ),
+                    userSearchUseCase: FriendsUserSearchAdapter(
+                        fetchFriendsUseCase: container.fetchFriendsUseCase
+                    ),
+                    currentUserId: appState.currentUser?.id
                 )
-            )
-            .tabItem {
-                Label(Tab.expenses.rawValue, systemImage: appState.selectedTab == .expenses ? Tab.expenses.selectedIcon : Tab.expenses.icon)
-            }
-            .tag(Tab.expenses)
 
-            CameraView(
-                viewModel: CameraViewModel(
-                    uploadMediaUseCase: container.uploadMediaUseCase
+            case .friends:
+                FriendsRootView(
+                    fetchMyFriendsUseCase: container.fetchMyFriendsUseCase,
+                    fetchMyGroupsUseCase: container.fetchMyGroupsUseCase,
+                    searchUsersUseCase: container.searchUsersUseCase,
+                    generateMyQrUseCase: container.generateMyQrUseCase,
+                    addFriendUseCase: container.addFriendUseCase,
+                    fetchIncomingFriendRequestsUseCase: container.fetchIncomingFriendRequestsUseCase,
+                    acceptFriendRequestUseCase: container.acceptFriendRequestUseCase,
+                    rejectFriendRequestUseCase: container.rejectFriendRequestUseCase,
+                    fetchOutgoingFriendRequestsUseCase: container.fetchOutgoingFriendRequestsUseCase,
+                    cancelFriendRequestUseCase: container.cancelFriendRequestUseCase,
+                    removeFriendUseCase: container.removeFriendUseCase,
+                    setFriendNicknameUseCase: container.setFriendNicknameUseCase,
+                    blockUserUseCase: container.blockUserUseCase,
+                    unblockUserUseCase: container.unblockUserUseCase,
+                    fetchBlockedUsersUseCase: container.fetchBlockedUsersUseCase,
+                    joinGroupUseCase: container.joinGroupUseCase,
+                    createGroupUseCase: container.createGroupUseCase,
+                    fetchGroupMembersUseCase: container.fetchGroupMembersUseCase,
+                    fetchGroupInviteCodeUseCase: container.fetchGroupInviteCodeUseCase,
+                    generateGroupInviteCodeUseCase: container.generateGroupInviteCodeUseCase,
+                    inviteFriendsToGroupUseCase: container.inviteFriendsToGroupUseCase,
+                    fetchGroupUseCase: container.fetchGroupUseCase,
+                    approveGroupMemberUseCase: container.approveGroupMemberUseCase,
+                    rejectGroupMemberUseCase: container.rejectGroupMemberUseCase,
+                    removeGroupMemberUseCase: container.removeGroupMemberUseCase,
+                    leaveGroupUseCase: container.leaveGroupUseCase,
+                    deleteGroupUseCase: container.deleteGroupUseCase,
+                    updateGroupUseCase: container.updateGroupUseCase,
+                    updateGroupAvatarUseCase: container.updateGroupAvatarUseCase,
+                    uploadGroupAvatarUseCase: container.uploadGroupAvatarUseCase,
+                    transferGroupOwnershipUseCase: container.transferGroupOwnershipUseCase,
+                    generateGroupQrUseCase: container.generateGroupQrUseCase,
+                    revokeGroupQrUseCase: container.revokeGroupQrUseCase
                 )
-            )
-            .tabItem {
-                Label(Tab.camera.rawValue, systemImage: appState.selectedTab == .camera ? Tab.camera.selectedIcon : Tab.camera.icon)
-            }
-            .tag(Tab.camera)
 
-            NotificationListView(
-                viewModel: NotificationListViewModel(
-                    fetchNotificationsUseCase: container.fetchNotificationsUseCase,
-                    markReadUseCase: container.markNotificationReadUseCase
+            case .camera:
+                PostCaptureFlowView(onDismiss: {
+                    appState.selectedTab = .feed
+                })
+                .ignoresSafeArea()
+
+            case .notifications:
+                NotificationListView(
+                    viewModel: container.notificationListViewModel,
+                    onNavigateToPost: { postId in
+                        appState.openPostFromNotification(postId)
+                    }
                 )
-            )
-            .tabItem {
-                Label(Tab.notifications.rawValue, systemImage: appState.selectedTab == .notifications ? Tab.notifications.selectedIcon : Tab.notifications.icon)
-            }
-            .tag(Tab.notifications)
 
-            ProfilePlaceholderView()
-                .tabItem {
-                    Label(Tab.profile.rawValue, systemImage: appState.selectedTab == .profile ? Tab.profile.selectedIcon : Tab.profile.icon)
-                }
-                .tag(Tab.profile)
+            case .profile:
+                EmptyView()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea(edges: .bottom)
+        .modifier(FloatingTabBarContentPadding(isEnabled: appState.selectedTab != .camera))
+        .environment(\.openProfileSettings) {
+            appState.showProfileSettings = true
+        }
+        .environment(\.openPostCaptureFlow) {
+            appState.selectedTab = .camera
+        }
+        .environment(\.currentUserSummary, currentUserSummary)
+        .environment(\.tabBarScrollState, tabBarScrollState)
+        .overlay(alignment: .bottom) {
+            if appState.selectedTab != .camera {
+                SplickTabBar(selectedTab: $appState.selectedTab)
+                    .offset(y: tabBarScrollState.isVisible ? 0 : TabBarLayout.tabBarSlideDistance)
+                    .opacity(tabBarScrollState.isVisible ? 1 : 0)
+                    .animation(.easeInOut(duration: 0.28), value: tabBarScrollState.isVisible)
+                    .allowsHitTesting(tabBarScrollState.isVisible)
+            }
+        }
+        .onChange(of: appState.selectedTab) { tab in
+            Log.debug("Tab selected", category: .ui, metadata: ["tab": tab.rawValue])
+            if tab == .camera {
+                tabBarScrollState.hide(flushToBottom: true)
+            } else {
+                tabBarScrollState.reset()
+            }
+        }
+        .sheet(isPresented: $appState.showProfileSettings) {
+            ProfileSettingsView()
         }
         .tint(SplickTheme.Colors.primaryGradientStart)
     }
 }
 
-struct ProfilePlaceholderView: View {
+struct ProfileSettingsView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var container: DependencyContainer
+    @EnvironmentObject private var languageService: LanguageService
+    @Environment(\.dismiss) private var dismiss
+    @State private var isSigningOut = false
+    @State private var isRefreshingProfile = false
+    @State private var isUpdatingLanguage = false
+    @State private var profileError: String?
+    @State private var showChangePassword = false
+    @State private var showSessions = false
+    @State private var showConnectedAccounts = false
+    @State private var showAccountSecurity = false
+    @State private var showEditProfile = false
 
     var body: some View {
         NavigationStack {
@@ -80,20 +173,222 @@ struct ProfilePlaceholderView: View {
                     Text("@\(user.username)")
                         .font(SplickTheme.Typography.callout)
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
+
+                    Text(user.email)
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
                 }
+
+                if let profileError {
+                    Text(profileError)
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.error)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+
+                SplickButton(
+                    languageService.text(.profileEdit),
+                    style: .secondary,
+                    isDisabled: appState.currentUser == nil
+                ) {
+                    showEditProfile = true
+                }
+                .padding(.horizontal, SplickTheme.Spacing.xl)
+
+                languageSection
+
+                SplickButton(
+                    languageService.text(.profileChangePassword),
+                    style: .secondary,
+                    isDisabled: appState.currentUser == nil
+                ) {
+                    showChangePassword = true
+                }
+                .padding(.horizontal, SplickTheme.Spacing.xl)
+
+                SplickButton(languageService.text(.profileDevicesSessions), style: .secondary) {
+                    showSessions = true
+                }
+                .padding(.horizontal, SplickTheme.Spacing.xl)
+
+                SplickButton(languageService.text(.profileConnectedAccounts), style: .secondary) {
+                    showConnectedAccounts = true
+                }
+                .padding(.horizontal, SplickTheme.Spacing.xl)
+
+                SplickButton(languageService.text(.profileDeactivateDelete), style: .secondary) {
+                    showAccountSecurity = true
+                }
+                .padding(.horizontal, SplickTheme.Spacing.xl)
 
                 Spacer()
 
-                SplickButton("Sign Out", style: .destructive) {
+                SplickButton(
+                    languageService.text(.profileSignOut),
+                    style: .destructive,
+                    isLoading: isSigningOut,
+                    isDisabled: isSigningOut
+                ) {
                     Task {
-                        try? await container.logoutUseCase.execute()
-                        appState.setUnauthenticated()
+                        isSigningOut = true
+                        defer { isSigningOut = false }
+                        await container.logoutUseCase.execute()
+                        appState.setUnauthenticated(container: container)
+                        dismiss()
                     }
                 }
                 .padding(.horizontal, SplickTheme.Spacing.xl)
             }
             .padding(.top, SplickTheme.Spacing.xxl)
-            .navigationTitle("Profile")
+            .navigationTitle(languageService.text(.profileTitle))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(languageService.text(.commonDone)) { dismiss() }
+                }
+            }
+            .refreshable {
+                await refreshProfile()
+            }
+            .task {
+                await refreshProfile()
+            }
+            .sheet(isPresented: $showEditProfile) {
+                if let user = appState.currentUser {
+                    NavigationStack {
+                        EditProfileView(
+                            viewModel: EditProfileViewModel(
+                                user: user,
+                                updateProfileUseCase: container.updateProfileUseCase,
+                                uploadAvatar: { image in
+                                    let result = try await container.uploadUserAvatarUseCase.execute(image: image)
+                                    return result.url
+                                }
+                            ),
+                            onProfileUpdated: { updated in
+                                appState.updateAuthenticatedUser(updated)
+                                showEditProfile = false
+                            }
+                        )
+                    }
+                }
+            }
+            .navigationDestination(isPresented: $showChangePassword) {
+                if let email = appState.currentUser?.email {
+                    ChangePasswordView(
+                        viewModel: ChangePasswordViewModel(
+                            accountEmail: email,
+                            changePasswordUseCase: container.changePasswordUseCase,
+                            requestEmailOtpUseCase: container.requestEmailOtpUseCase
+                        ),
+                        onPasswordChanged: { user in
+                            appState.updateAuthenticatedUser(user)
+                        }
+                    )
+                }
+            }
+            .navigationDestination(isPresented: $showSessions) {
+                SessionsView(
+                    viewModel: SessionsViewModel(
+                        listSessionsUseCase: container.listSessionsUseCase,
+                        revokeSessionUseCase: container.revokeSessionUseCase,
+                        revokeAllSessionsUseCase: container.revokeAllSessionsUseCase,
+                        onSignedOutEverywhere: {
+                            appState.setUnauthenticated(container: container)
+                            dismiss()
+                        }
+                    )
+                )
+            }
+            .navigationDestination(isPresented: $showConnectedAccounts) {
+                if let email = appState.currentUser?.email {
+                    ConnectedAccountsView(
+                        viewModel: ConnectedAccountsViewModel(
+                            accountEmail: email,
+                            getConnectedAccountsUseCase: container.getConnectedAccountsUseCase,
+                            linkGoogleAccountUseCase: container.linkGoogleAccountUseCase,
+                            unlinkGoogleAccountUseCase: container.unlinkGoogleAccountUseCase,
+                            linkPhoneAccountUseCase: container.linkPhoneAccountUseCase,
+                            linkEmailAccountUseCase: container.linkEmailAccountUseCase,
+                            requestEmailOtpUseCase: container.requestEmailOtpUseCase,
+                            googleSignInPresenter: GoogleSignInClient.shared
+                        )
+                    )
+                }
+            }
+            .navigationDestination(isPresented: $showAccountSecurity) {
+                if let email = appState.currentUser?.email {
+                    AccountSecurityView(
+                        accountEmail: email,
+                        requestEmailOtpUseCase: container.requestEmailOtpUseCase,
+                        deactivateAccountUseCase: container.deactivateAccountUseCase,
+                        deleteAccountUseCase: container.deleteAccountUseCase,
+                        onAccountClosed: {
+                            appState.setUnauthenticated(container: container)
+                            dismiss()
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    private var languageSection: some View {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+            Text(languageService.text(.profileLanguage))
+                .font(SplickTheme.Typography.caption)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                .padding(.horizontal, SplickTheme.Spacing.xl)
+
+            Picker(languageService.text(.profileLanguage), selection: Binding(
+                get: { languageService.locale },
+                set: { newLocale in
+                    Task { await updateLanguage(newLocale) }
+                }
+            )) {
+                ForEach(AppLocale.allCases) { locale in
+                    Text(languageService.text(locale.displayNameKey)).tag(locale)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, SplickTheme.Spacing.xl)
+            .disabled(isUpdatingLanguage || appState.currentUser == nil)
+        }
+    }
+
+    private func updateLanguage(_ locale: AppLocale) async {
+        guard !isUpdatingLanguage else { return }
+        guard languageService.locale != locale else { return }
+        isUpdatingLanguage = true
+        defer { isUpdatingLanguage = false }
+        profileError = nil
+        languageService.setLocale(locale)
+        guard appState.currentUser != nil else { return }
+        do {
+            let user = try await container.updateProfileUseCase.execute(
+                displayName: nil,
+                avatarUrl: nil,
+                preferredLocale: locale.apiCode
+            )
+            appState.updateAuthenticatedUser(user)
+            languageService.applyFromServer(user.preferredLocale)
+        } catch {
+            profileError = languageService.localizedMessage(for: error)
+        }
+    }
+
+    private func refreshProfile() async {
+        guard !isRefreshingProfile else { return }
+        isRefreshingProfile = true
+        defer { isRefreshingProfile = false }
+        profileError = nil
+        do {
+            let user = try await container.refreshProfileUseCase.execute()
+            appState.updateAuthenticatedUser(user)
+            languageService.applyFromServer(user.preferredLocale)
+        } catch {
+            profileError = languageService.text(.profileRefreshFailed)
         }
     }
 }

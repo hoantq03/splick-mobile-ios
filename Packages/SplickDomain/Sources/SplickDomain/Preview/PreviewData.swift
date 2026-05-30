@@ -10,7 +10,8 @@ public enum PreviewData {
         email: "nam@splick.app",
         username: "namtran",
         displayName: "Nam Tran",
-        avatarURL: nil,
+        avatarURL: URL(string: "https://cdn.splick.app/avatars/preview-nam.png"),
+        status: .active,
         createdAt: .now
     )
 
@@ -36,13 +37,40 @@ public enum PreviewData {
         imageURL: URL(string: "https://picsum.photos/400/500")!,
         thumbnailURL: nil,
         caption: "Coffee time with the crew ☕️",
-        reactions: [
-            Reaction(id: UUID(), emoji: "❤️", userId: currentUser.id),
-            Reaction(id: UUID(), emoji: "🔥", userId: friend2.id),
+        reactions: (0..<5).map { _ in Reaction(id: UUID(), emoji: "❤️", userId: currentUser.id) }
+            + (0..<10).map { _ in Reaction(id: UUID(), emoji: "😂", userId: currentUser.id) }
+            + (0..<3).map { _ in Reaction(id: UUID(), emoji: "🔥", userId: friend2.id) },
+        comments: [
+            PostComment(
+                author: friend2,
+                text: "Hẹn cuối tuần nhé!",
+                attachments: [CommentAttachment(kind: .file, fileName: "menu.pdf")]
+            )
         ],
         groupId: nil,
-        createdAt: Date().addingTimeInterval(-3600)
+        createdAt: Date().addingTimeInterval(-3600),
+        companions: [currentUserSummary, friend2],
+        feedKind: .shareBill,
+        billSplit: PostBillSplit(
+            totalAmount: 280_000,
+            currency: "VND",
+            splits: [
+                PostBillSplitLine(user: friendUser, amount: 140_000),
+                PostBillSplitLine(user: currentUserSummary, amount: 140_000),
+            ]
+        ),
+        viewCount: 5,
+        viewers: [friendUser, friend2, currentUserSummary]
     )
+
+    private static var currentUserSummary: UserSummary {
+        UserSummary(
+            id: currentUser.id,
+            username: currentUser.username,
+            displayName: currentUser.displayName,
+            avatarURL: currentUser.avatarURL
+        )
+    }
 
     public static let samplePosts: [Post] = [
         samplePost,
@@ -55,7 +83,14 @@ public enum PreviewData {
             imageURL: URL(string: "https://picsum.photos/400/600")!,
             caption: "Sunset vibes 🌅",
             reactions: [],
-            createdAt: Date().addingTimeInterval(-7200)
+            createdAt: Date().addingTimeInterval(-7200),
+            mediaType: .video,
+            videoURL: URL(string: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4")!,
+            videoDurationSeconds: 18,
+            companions: [friendUser],
+            feedKind: .checkIn,
+            checkInPlace: "My Khe Beach",
+            viewCount: 0
         ),
         Post(
             id: UUID(),
@@ -63,7 +98,10 @@ public enum PreviewData {
             imageURL: URL(string: "https://picsum.photos/400/400")!,
             caption: nil,
             reactions: [Reaction(id: UUID(), emoji: "😍", userId: currentUser.id)],
-            createdAt: Date().addingTimeInterval(-86400)
+            createdAt: Date().addingTimeInterval(-86400),
+            feedKind: .checkIn,
+            checkInPlace: "Landmark 81",
+            viewCount: 0
         ),
     ]
 
@@ -76,7 +114,10 @@ public enum PreviewData {
         currency: "VND",
         paidBy: friendUser,
         splits: [
-            ExpenseSplit(id: UUID(), user: friendUser, amount: 150000, isPaid: true),
+            ExpenseSplit(
+                id: UUID(), user: friendUser, amount: 150000, isPaid: true,
+                paidAt: Date().addingTimeInterval(-3500)
+            ),
             ExpenseSplit(id: UUID(), user: friend2, amount: 150000, isPaid: false),
             ExpenseSplit(
                 id: UUID(),
@@ -105,11 +146,15 @@ public enum PreviewData {
                 displayName: currentUser.displayName, avatarURL: nil
             ),
             splits: [
-                ExpenseSplit(id: UUID(), user: friendUser, amount: 42500, isPaid: true),
+                ExpenseSplit(
+                    id: UUID(), user: friendUser, amount: 42500, isPaid: true,
+                    paidAt: Date().addingTimeInterval(-82800)
+                ),
             ],
             category: .transport,
             status: .settled,
-            createdAt: Date().addingTimeInterval(-86400)
+            createdAt: Date().addingTimeInterval(-86400),
+            settledAt: Date().addingTimeInterval(-82800)
         ),
         Expense(
             id: UUID(),
@@ -161,6 +206,7 @@ public enum PreviewData {
     public static let sampleGroup = Group(
         id: UUID(),
         name: "Roommates Q7",
+        inviteCode: "roommates-q7",
         description: "Sharing expenses for apartment",
         members: [friendUser, friend2],
         createdBy: currentUser.id

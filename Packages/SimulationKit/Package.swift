@@ -12,11 +12,11 @@ let package = Package(
     dependencies: [
         .package(path: "../SplickCore"),
         .package(path: "../SplickDomain"),
-        .package(path: "../FeatureAuth"),
         .package(path: "../FeatureSocialFeed"),
         .package(path: "../FeatureExpense"),
         .package(path: "../FeatureNotification"),
         .package(path: "../FeatureMedia"),
+        .package(path: "../FeatureFriends"),
     ],
     targets: [
         .target(
@@ -26,11 +26,11 @@ let package = Package(
                 .product(name: "Storage", package: "SplickCore"),
                 .product(name: "Common", package: "SplickCore"),
                 .product(name: "SplickDomain", package: "SplickDomain"),
-                .product(name: "FeatureAuth", package: "FeatureAuth"),
                 .product(name: "FeatureSocialFeed", package: "FeatureSocialFeed"),
                 .product(name: "FeatureExpense", package: "FeatureExpense"),
                 .product(name: "FeatureNotification", package: "FeatureNotification"),
                 .product(name: "FeatureMedia", package: "FeatureMedia"),
+                .product(name: "FeatureFriends", package: "FeatureFriends"),
             ],
             path: "Sources/SimulationKit"
         ),

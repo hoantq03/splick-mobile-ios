@@ -24,12 +24,30 @@ final class MockCreateExpenseUseCase: CreateExpenseUseCaseProtocol, Sendable {
     }
 }
 
+final class MockUserSearchUseCase: UserSearchUseCaseProtocol, Sendable {
+    func execute(query: String, page: Int, limit: Int) async throws -> [UserSummary] {
+        let all = [PreviewData.friendUser, PreviewData.friend2]
+        let filtered = query.isEmpty
+            ? all
+            : all.filter {
+                $0.displayName.localizedCaseInsensitiveContains(query)
+                    || $0.username.localizedCaseInsensitiveContains(query)
+            }
+        let start = page * limit
+        guard start < filtered.count else { return [] }
+        return Array(filtered[start..<min(start + limit, filtered.count)])
+    }
+}
+
 #Preview("Expense List") {
     ExpenseListView(
         viewModel: ExpenseListViewModel(
             fetchExpensesUseCase: MockFetchExpensesUseCase(),
-            fetchDebtSummaryUseCase: MockFetchDebtSummaryUseCase()
-        )
+            fetchDebtSummaryUseCase: MockFetchDebtSummaryUseCase(),
+            currentUserId: PreviewData.currentUser.id
+        ),
+        userSearchUseCase: MockUserSearchUseCase(),
+        currentUserId: PreviewData.currentUser.id
     )
 }
 

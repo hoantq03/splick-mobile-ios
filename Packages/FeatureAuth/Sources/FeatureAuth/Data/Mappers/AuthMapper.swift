@@ -3,12 +3,19 @@ import SplickDomain
 
 enum AuthMapper {
     static func toUser(_ dto: UserDTO) -> User {
-        User(
+        let resolvedDisplayName = dto.displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayName = (resolvedDisplayName?.isEmpty == false)
+            ? resolvedDisplayName!
+            : dto.username
+
+        return User(
             id: dto.id,
             email: dto.email,
             username: dto.username,
-            displayName: dto.displayName,
+            displayName: displayName,
             avatarURL: dto.avatarUrl.flatMap(URL.init(string:)),
+            status: UserAccountStatus.from(apiValue: dto.status),
+            preferredLocale: dto.preferredLocale ?? "vi",
             createdAt: dto.createdAt
         )
     }
@@ -18,17 +25,34 @@ enum AuthMapper {
             accessToken: dto.accessToken,
             refreshToken: dto.refreshToken,
             expiresIn: dto.expiresIn,
-            tokenType: dto.tokenType
+            tokenType: dto.tokenType,
+            sessionId: dto.sessionId
         )
     }
 
-    static func toAuthToken(_ dto: TokenResponseDTO) -> AuthToken {
-        AuthToken(
-            accessToken: dto.accessToken,
-            refreshToken: dto.refreshToken,
-            expiresIn: dto.expiresIn,
-            tokenType: dto.tokenType
+    static func toUserSession(_ dto: SessionDTO) -> UserSession {
+        UserSession(
+            id: dto.id,
+            deviceInfo: dto.deviceInfo,
+            deviceName: dto.deviceName,
+            loginIp: dto.loginIp,
+            loginLocation: dto.loginLocation,
+            createdAt: dto.createdAt,
+            expiresAt: dto.expiresAt,
+            isCurrent: dto.current
         )
+    }
+
+    static func toConnectedAccounts(_ dto: ConnectedAccountsDTO) -> ConnectedAccounts {
+        ConnectedAccounts(
+            google: toProvider(dto.google),
+            emailPassword: toProvider(dto.emailPassword),
+            phone: toProvider(dto.phone)
+        )
+    }
+
+    private static func toProvider(_ dto: ConnectedAccountsDTO.ProviderDTO) -> ConnectedProvider {
+        ConnectedProvider(isLinked: dto.linked, detail: dto.detail)
     }
 
     static func toAuthSession(_ dto: AuthResponseDTO) -> AuthSession {

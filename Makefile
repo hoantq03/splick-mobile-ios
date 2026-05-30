@@ -1,13 +1,14 @@
-.PHONY: generate setup clean build
+.PHONY: generate setup clean build stubs
 
-# Generate Xcode project using XcodeGen
+API_STUB_PORT ?= 8080
+
+# Generate Xcode project using XcodeGen (installs binary if needed)
 generate:
-	xcodegen generate
+	./scripts/generate-xcodeproj.sh
 
 # Install dependencies and generate project
-setup:
-	brew install xcodegen || true
-	$(MAKE) generate
+setup: generate
+	@echo "Splick.xcodeproj ready. Open Splick.xcodeproj in Xcode."
 
 # Clean build artifacts
 clean:
@@ -19,7 +20,7 @@ build: generate
 	xcodebuild build \
 		-project Splick.xcodeproj \
 		-scheme SplickApp \
-		-destination 'platform=iOS Simulator,name=iPhone 15' \
+		-destination 'platform=iOS Simulator,name=iPhone 17' \
 		-configuration Debug
 
 # Run tests
@@ -27,9 +28,17 @@ test: generate
 	xcodebuild test \
 		-project Splick.xcodeproj \
 		-scheme SplickApp \
-		-destination 'platform=iOS Simulator,name=iPhone 15' \
+		-destination 'platform=iOS Simulator,name=iPhone 17' \
 		-configuration Debug
 
 # Format Swift code
 format:
 	swift-format format -i -r SplickApp/ Packages/
+
+# Local mock API for simulator (requires Node.js: brew install node)
+stubs:
+	@if ! command -v npx >/dev/null 2>&1; then \
+		echo "Error: npx not found. Install Node.js: brew install node"; \
+		exit 1; \
+	fi
+	cd api-stubs && npx --yes json-server --watch db.json --routes routes.json --port $(API_STUB_PORT)

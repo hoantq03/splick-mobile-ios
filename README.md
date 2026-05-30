@@ -1,5 +1,22 @@
 # Splick iOS — Architecture & Technical Documentation
 
+## Open in Xcode (required first step)
+
+`Splick.xcodeproj` is **generated** from `project.yml` (XcodeGen) and is not in git. After clone:
+
+```bash
+cd splick-mobile-ios
+make setup
+# or: ./scripts/generate-xcodeproj.sh
+open Splick.xcodeproj
+```
+
+If Xcode says *missing project.pbxproj*, run `make setup` again.
+
+Requires: Xcode 15+, macOS. XcodeGen is downloaded automatically by the script (or `brew install xcodegen`).
+
+---
+
 ## Table of Contents
 
 1. [Product Overview](#1-product-overview)
@@ -20,6 +37,7 @@
 16. [CI/CD Pipeline](#16-cicd-pipeline)
 17. [Coding Standards](#17-coding-standards)
 18. [Future Roadmap](#18-future-roadmap)
+19. [Localization (vi / en)](#19-localization-vi--en)
 
 ---
 
@@ -267,20 +285,27 @@ FeatureX/
 
 ### 5.2 FeatureSocialFeed
 
-**Responsibility**: Photo feed, post reactions, content discovery.
+**Responsibility**: Photo feed, post reactions, comments (unlimited-depth threads + attachments), content discovery.
 
 | Component | Description |
 |-----------|-------------|
 | `FetchFeedUseCase` | Paginated feed loading |
+| `FetchPostUseCase` | Single post refresh (comments sync) |
+| `AddCommentUseCase` | Create comment / reply with optional attachments |
 | `ReactToPostUseCase` | Add emoji reaction to post |
-| `FeedViewModel` | Manages feed state, pagination, reactions |
+| `FeedViewModel` | Manages feed state, pagination, reactions, comments |
 | `PostCardView` | Renders individual post with image + reactions |
+| `CommentThreadView` | Recursive comment tree UI |
+
+**Docs**: [USECASE-feed-comments.md](docs/USECASE-feed-comments.md)
 
 **API Endpoints**:
 - `GET /v1/feed?page=0&limit=20`
 - `GET /v1/feed/posts/{id}`
+- `POST /v1/feed/posts/{id}/comments`
 - `POST /v1/feed/posts/{id}/reactions`
 - `DELETE /v1/feed/posts/{id}/reactions/{reactionId}`
+- `POST /v1/media/uploads` (comment attachments, `purpose: COMMENT_ATTACHMENT`)
 
 ---
 
@@ -826,6 +851,12 @@ A development-time package that provides:
 - `StateLogger` — Console-based state transition logging
 - `FakeXxxRepository` — In-memory implementations for each feature
 
+### Live APIs (app) vs SimulationKit (CLI)
+
+The main app always uses live HTTP APIs via `DependencyContainer` (feed, expense, notification, auth, media). **SimulationKit** fakes remain for the Sandbox CLI and SwiftUI previews only.
+
+Changing profile avatar requires `runAuth` + `runMedia` and a real `SHARED_MEDIA_PUBLIC_BASE_URL` on the backend — see [docs/USECASE-change-user-avatar.md](docs/USECASE-change-user-avatar.md).
+
 ### Sandbox CLI
 
 Run feature flow simulations from terminal:
@@ -957,7 +988,23 @@ Push → Build → Test → Archive → TestFlight → iPhone/iPad
 - [ ] Smart split suggestions
 - [ ] Widget support (iOS 17+)
 - [ ] App Clips for quick expense sharing
-- [ ] Localization (Vietnamese + English)
+- [x] Localization (Vietnamese + English) — see [docs/localization-ios.md](docs/localization-ios.md)
+
+---
+
+## 19. Localization (vi / en)
+
+In-app copy uses `SplickCore/Localization` (`L10nKey`, `LanguageService`, one Swift file per locale). System permission dialogs use `InfoPlist.strings` under `SplickApp/Resources/{en,vi}.lproj/`.
+
+**Adding a string or a new language:** [docs/localization-ios.md](docs/localization-ios.md)
+
+Quick usage:
+
+```swift
+Text(languageService.text(.expenseTitle))
+```
+
+User language is chosen in Profile, persisted locally, synced via `preferredLocale` API, and sent as `Accept-Language` on HTTP requests.
 
 ---
 

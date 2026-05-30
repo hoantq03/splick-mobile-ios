@@ -1,13 +1,20 @@
 import SwiftUI
 import DesignSystem
 import Common
+import Localization
 import SplickDomain
 
 public struct NotificationListView: View {
-    @StateObject private var viewModel: NotificationListViewModel
+    @ObservedObject private var viewModel: NotificationListViewModel
+    @EnvironmentObject private var languageService: LanguageService
+    private let onNavigateToPost: ((UUID) -> Void)?
 
-    public init(viewModel: @autoclosure @escaping () -> NotificationListViewModel) {
-        _viewModel = StateObject(wrappedValue: viewModel())
+    public init(
+        viewModel: NotificationListViewModel,
+        onNavigateToPost: ((UUID) -> Void)? = nil
+    ) {
+        self._viewModel = ObservedObject(wrappedValue: viewModel)
+        self.onNavigateToPost = onNavigateToPost
     }
 
     public var body: some View {
@@ -15,13 +22,13 @@ public struct NotificationListView: View {
             Group {
                 switch viewModel.state {
                 case .idle, .loading:
-                    LoadingView(message: "Loading notifications...")
+                    LoadingView(message: languageService.text(.notificationLoading))
 
                 case .loaded(let items) where items.isEmpty:
                     EmptyStateView(
                         icon: "bell.slash",
-                        title: "No Notifications",
-                        message: "You're all caught up! Notifications will appear here."
+                        title: languageService.text(.notificationEmptyTitle),
+                        message: languageService.text(.notificationEmptyMessage)
                     )
 
                 case .loaded:
@@ -33,11 +40,12 @@ public struct NotificationListView: View {
                     }
                 }
             }
-            .navigationTitle("Notifications")
+            .navigationTitle(languageService.text(.notificationTitle))
+            .splickProfileToolbar()
             .toolbar {
                 if viewModel.unreadCount > 0 {
                     ToolbarItem(placement: .primaryAction) {
-                        Button("Read All") {
+                        Button(languageService.text(.notificationReadAll)) {
                             Task { await viewModel.markAllAsRead() }
                         }
                         .font(SplickTheme.Typography.callout)
@@ -47,6 +55,7 @@ public struct NotificationListView: View {
             .refreshable { await viewModel.load() }
         }
         .onFirstAppear {
+            guard viewModel.notifications.isEmpty else { return }
             Task { await viewModel.load() }
         }
     }
@@ -57,12 +66,17 @@ public struct NotificationListView: View {
                 ForEach(viewModel.notifications) { notification in
                     NotificationRowView(notification: notification)
                         .onTapGesture {
-                            Task { await viewModel.markAsRead(notification) }
+                            Task {
+                                if let postId = await viewModel.handleTap(notification) {
+                                    onNavigateToPost?(postId)
+                                }
+                            }
                         }
                 }
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
         }
+        .tabBarHideOnScroll()
     }
 }
 

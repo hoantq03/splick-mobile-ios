@@ -1,10 +1,12 @@
 import SwiftUI
 import DesignSystem
 import Common
+import Localization
 import SplickDomain
 
 public struct CreateExpenseView: View {
     @StateObject private var viewModel: CreateExpenseViewModel
+    @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
 
     public init(viewModel: @autoclosure @escaping () -> CreateExpenseViewModel) {
@@ -25,11 +27,11 @@ public struct CreateExpenseView: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .background(SplickTheme.Colors.background)
-            .navigationTitle("New Expense")
+            .navigationTitle(languageService.text(.expenseCreateTitle))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button(languageService.text(.commonCancel)) { dismiss() }
                 }
             }
             .onChange(of: viewModel.state) { newState in
@@ -40,12 +42,12 @@ public struct CreateExpenseView: View {
 
     private var amountSection: some View {
         VStack(spacing: SplickTheme.Spacing.xs) {
-            Text("How much?")
+            Text(languageService.text(.expenseCreateHowMuch))
                 .font(SplickTheme.Typography.callout)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
 
             HStack(alignment: .firstTextBaseline, spacing: SplickTheme.Spacing.xxs) {
-                Text("₫")
+                Text(languageService.text(.feedCreateCurrencySymbol))
                     .font(.system(size: 32, weight: .bold, design: .rounded))
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
 
@@ -68,7 +70,7 @@ public struct CreateExpenseView: View {
 
     private var detailsSection: some View {
         SplickTextField(
-            "What's this for?",
+            languageService.text(.expenseCreateDescription),
             text: $viewModel.description,
             errorMessage: viewModel.descriptionError,
             icon: "text.alignleft"
@@ -77,7 +79,7 @@ public struct CreateExpenseView: View {
 
     private var categorySection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
-            Text("Category")
+            Text(languageService.text(.expenseCreateCategory))
                 .font(SplickTheme.Typography.headline)
                 .foregroundStyle(SplickTheme.Colors.textPrimary)
 
@@ -111,13 +113,13 @@ public struct CreateExpenseView: View {
 
     private var splitTypeSection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
-            Text("Split Type")
+            Text(languageService.text(.expenseCreateSplitType))
                 .font(SplickTheme.Typography.headline)
                 .foregroundStyle(SplickTheme.Colors.textPrimary)
 
-            Picker("Split Type", selection: $viewModel.splitType) {
+            Picker(languageService.text(.expenseCreateSplitType), selection: $viewModel.splitType) {
                 ForEach(SplitType.allCases, id: \.self) { type in
-                    Text(type.displayName).tag(type)
+                    Text(type.title(using: languageService)).tag(type)
                 }
             }
             .pickerStyle(.segmented)
@@ -133,7 +135,7 @@ public struct CreateExpenseView: View {
             }
 
             SplickButton(
-                "Create Expense",
+                languageService.text(.expenseCreateAction),
                 isLoading: viewModel.state.isLoading,
                 isDisabled: viewModel.description.isEmpty || viewModel.amount.isEmpty
             ) {

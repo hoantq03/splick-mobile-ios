@@ -6,8 +6,10 @@ public enum SplickTheme {
 
     public enum Colors {
         public static let primary = Color("AccentColor", bundle: .module)
-        public static let primaryGradientStart = Color(hex: 0x6C63FF)
-        public static let primaryGradientEnd = Color(hex: 0x4ECDC4)
+        /// Brand blue → teal (refined for logo depth / tech feel).
+        public static let primaryGradientStart = Color(hex: 0x5B6CFF)
+        public static let primaryGradientMid = Color(hex: 0x4ECDC4)
+        public static let primaryGradientEnd = Color(hex: 0x2A9D8F)
 
         public static let background = Color(.systemBackground)
         public static let secondaryBackground = Color(.secondarySystemBackground)
@@ -17,6 +19,7 @@ public enum SplickTheme {
         public static let textSecondary = Color(.secondaryLabel)
         public static let textTertiary = Color(.tertiaryLabel)
 
+        public static let tabCameraRing = Color(hex: 0x6FCF97)
         public static let success = Color(hex: 0x27AE60)
         public static let warning = Color(hex: 0xF2994A)
         public static let error = Color(hex: 0xEB5757)
@@ -27,7 +30,7 @@ public enum SplickTheme {
 
         public static var primaryGradient: LinearGradient {
             LinearGradient(
-                colors: [primaryGradientStart, primaryGradientEnd],
+                colors: [primaryGradientStart, primaryGradientMid, primaryGradientEnd],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
