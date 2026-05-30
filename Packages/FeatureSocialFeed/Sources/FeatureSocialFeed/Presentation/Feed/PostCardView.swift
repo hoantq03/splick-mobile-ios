@@ -1,6 +1,7 @@
 import SwiftUI
 import DesignSystem
 import Common
+import Localization
 import SplickDomain
 
 private enum PostCardSheet: Identifiable {
@@ -20,6 +21,7 @@ private enum PostCardSheet: Identifiable {
 }
 
 struct PostCardView: View {
+    @EnvironmentObject private var languageService: LanguageService
     let post: Post
     let currentUser: UserSummary?
     let onReact: (String) -> Void
@@ -121,7 +123,7 @@ struct PostCardView: View {
                 set: { if !$0 { reminderSentMessage = nil } }
             )
         ) {
-            Button("OK", role: .cancel) { reminderSentMessage = nil }
+            Button(languageService.text(.commonOK), role: .cancel) { reminderSentMessage = nil }
         } message: {
             Text(reminderSentMessage ?? "")
         }
@@ -219,7 +221,7 @@ struct PostCardView: View {
                         .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
 
                     HStack(alignment: .center, spacing: 5) {
-                        Text("Đang ở cùng \(summary)")
+                        Text(languageService.format(.feedCompanionsSummary, summary))
                             .font(.system(size: 11))
                             .foregroundStyle(SplickTheme.Colors.textSecondary)
                             .lineLimit(2)
@@ -249,7 +251,7 @@ struct PostCardView: View {
                     Image(systemName: "mappin.and.ellipse")
                         .font(.caption)
                         .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                    Text("Check-in tại \(place)")
+                    Text(languageService.format(.feedCheckInAt, place))
                         .font(.system(size: 11))
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
                 }
@@ -390,9 +392,9 @@ struct PostCardView: View {
 
                 Group {
                     if post.topLevelCommentCount > 0 {
-                        Text("Xem tất cả \(post.topLevelCommentCount) bình luận")
+                        Text(languageService.format(.feedPostViewAllComments, post.topLevelCommentCount))
                     } else {
-                        Text("Viết bình luận...")
+                        Text(languageService.text(.feedPostWriteComment))
                     }
                 }
                 .font(.system(size: 11, weight: .medium))
