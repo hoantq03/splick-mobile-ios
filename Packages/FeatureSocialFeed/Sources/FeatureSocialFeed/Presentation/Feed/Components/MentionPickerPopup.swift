@@ -1,8 +1,10 @@
 import SwiftUI
 import DesignSystem
+import Localization
 import SplickDomain
 
 struct MentionPickerPopup: View {
+    @EnvironmentObject private var languageService: LanguageService
     @ObservedObject var viewModel: MentionFriendsViewModel
     let onSelect: (UserSummary) -> Void
 
@@ -11,7 +13,7 @@ struct MentionPickerPopup: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Gợi ý bạn bè")
+            Text(languageService.text(.feedMentionSuggestions))
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
                 .padding(.horizontal, 12)
@@ -21,7 +23,7 @@ struct MentionPickerPopup: View {
             ScrollView {
                 LazyVStack(spacing: 0) {
                     if viewModel.friends.isEmpty, !viewModel.isLoading {
-                        Text("Không tìm thấy bạn bè")
+                        Text(languageService.text(.feedCreateFriendsNotFound))
                             .font(.system(size: 12))
                             .foregroundStyle(SplickTheme.Colors.textTertiary)
                             .frame(maxWidth: .infinity, alignment: .leading)
