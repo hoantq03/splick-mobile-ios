@@ -75,7 +75,7 @@ struct PhotoAlbumFilterBarView: View {
             TextField("Tìm theo caption", text: $captionQuery)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .onChange(of: captionQuery) { _, newValue in
+                .onChange(of: captionQuery) { newValue in
                     scheduleCaptionSearch(newValue)
                 }
             if !captionQuery.isEmpty {
@@ -247,15 +247,15 @@ private struct PhotoAlbumGroupPickerSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol
-    let selectedGroup: Group?
-    let onSelect: (Group?) -> Void
+    let selectedGroup: SplickDomain.Group?
+    let onSelect: (SplickDomain.Group?) -> Void
 
-    @State private var groups: [Group] = []
+    @State private var groups: [SplickDomain.Group] = []
     @State private var isLoading = true
 
     var body: some View {
         NavigationStack {
-            Group {
+            SwiftUI.Group {
                 if isLoading {
                     ProgressView()
                 } else if groups.isEmpty {
