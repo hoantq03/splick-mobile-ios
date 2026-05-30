@@ -41,9 +41,9 @@ enum FeedEndpoint: APIEndpoint {
                 URLQueryItem(name: "limit", value: "\(limit)"),
             ]
         case .photoAlbumFirstPage(let limit, let filters):
-            return photoAlbumQueryItems(page: 0, limit: limit, filters: filters)
+            return Self.photoAlbumQueryItems(page: 0, limit: limit, filters: filters)
         case .photoAlbumCursor(let cursor, let limit, let filters):
-            return photoAlbumQueryItems(cursor: cursor, limit: limit, filters: filters)
+            return Self.photoAlbumQueryItems(cursor: cursor, limit: limit, filters: filters)
         default:
             return nil
         }
