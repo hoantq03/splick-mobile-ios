@@ -21,6 +21,13 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
         return dtos.map(FeedMapper.toPost)
     }
 
+    public func fetchPhotoAlbum(page: Int, limit: Int) async throws -> [AlbumPhoto] {
+        let dtos: [AlbumPhotoDTO] = try await apiClient.request(
+            FeedEndpoint.photoAlbum(page: page, limit: limit)
+        )
+        return dtos.compactMap(FeedMapper.toAlbumPhoto)
+    }
+
     public func fetchPost(id: UUID) async throws -> Post {
         let dto: PostDTO = try await apiClient.request(FeedEndpoint.post(id: id))
         return FeedMapper.toPost(dto)

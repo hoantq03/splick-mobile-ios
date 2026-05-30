@@ -93,6 +93,21 @@ enum FeedMapper {
         )
     }
 
+    static func toAlbumPhoto(_ dto: AlbumPhotoDTO) -> AlbumPhoto? {
+        guard let mediaURL = URL(string: dto.mediaUrl) else { return nil }
+        let mediaType = PostMediaType(rawValue: dto.mediaType.lowercased()) ?? .image
+        return AlbumPhoto(
+            id: dto.mediaItemId,
+            postId: dto.postId,
+            author: toUserSummary(dto.author),
+            mediaURL: mediaURL,
+            thumbnailURL: dto.thumbnailUrl.flatMap(URL.init(string:)),
+            mediaType: mediaType,
+            sortOrder: dto.sortOrder,
+            createdAt: dto.createdAt
+        )
+    }
+
     static func toUserSummary(_ dto: AuthorDTO) -> UserSummary {
         UserSummary(
             id: dto.id,

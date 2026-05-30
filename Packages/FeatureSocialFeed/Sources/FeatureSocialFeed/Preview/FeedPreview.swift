@@ -36,6 +36,27 @@ final class MockAddCommentUseCase: AddCommentUseCaseProtocol, Sendable {
     ) async throws {}
 }
 
+final class MockFetchPhotoAlbumUseCase: FetchPhotoAlbumUseCaseProtocol, Sendable {
+    func execute(page: Int) async throws -> [AlbumPhoto] {
+        PreviewData.samplePosts.flatMap { post in
+            post.displayMediaItems
+                .filter { $0.mediaType == .image }
+                .map { item in
+                    AlbumPhoto(
+                        id: item.id,
+                        postId: post.id,
+                        author: post.author,
+                        mediaURL: item.mediaURL,
+                        thumbnailURL: item.thumbnailURL,
+                        mediaType: item.mediaType,
+                        sortOrder: item.sortOrder,
+                        createdAt: post.createdAt
+                    )
+                }
+        }
+    }
+}
+
 #Preview("Feed") {
     NavigationStack {
         FeedView(
@@ -52,6 +73,9 @@ final class MockAddCommentUseCase: AddCommentUseCaseProtocol, Sendable {
                     displayName: PreviewData.currentUser.displayName,
                     avatarURL: PreviewData.currentUser.avatarURL
                 )
+            ),
+            photoAlbumViewModel: PhotoAlbumViewModel(
+                fetchPhotoAlbumUseCase: MockFetchPhotoAlbumUseCase()
             )
         )
     }

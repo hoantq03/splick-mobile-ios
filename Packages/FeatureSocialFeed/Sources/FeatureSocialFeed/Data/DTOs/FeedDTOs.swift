@@ -84,6 +84,17 @@ struct ReactionDTO: Decodable {
     let createdAt: Date
 }
 
+struct AlbumPhotoDTO: Decodable {
+    let mediaItemId: UUID
+    let postId: UUID
+    let author: AuthorDTO
+    let mediaUrl: String
+    let thumbnailUrl: String?
+    let mediaType: String
+    let sortOrder: Int
+    let createdAt: Date
+}
+
 struct CreateReactionRequestDTO: Encodable {
     let emoji: String
 }

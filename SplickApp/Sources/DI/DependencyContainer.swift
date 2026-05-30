@@ -145,6 +145,10 @@ final class DependencyContainer: ObservableObject {
         FetchFeedUseCase(repository: feedRepository)
     }()
 
+    lazy var fetchPhotoAlbumUseCase: FetchPhotoAlbumUseCaseProtocol = {
+        FetchPhotoAlbumUseCase(repository: feedRepository)
+    }()
+
     lazy var fetchPostUseCase: FetchPostUseCaseProtocol = {
         FetchPostUseCase(repository: feedRepository)
     }()
@@ -349,11 +353,18 @@ final class DependencyContainer: ObservableObject {
 
     lazy var feedViewModel: FeedViewModel = makeFeedViewModel()
 
+    lazy var photoAlbumViewModel: PhotoAlbumViewModel = makePhotoAlbumViewModel()
+
     lazy var notificationListViewModel: NotificationListViewModel = makeNotificationListViewModel()
 
     func resetTabViewModels() {
         feedViewModel = makeFeedViewModel()
+        photoAlbumViewModel = makePhotoAlbumViewModel()
         notificationListViewModel = makeNotificationListViewModel()
+    }
+
+    private func makePhotoAlbumViewModel() -> PhotoAlbumViewModel {
+        PhotoAlbumViewModel(fetchPhotoAlbumUseCase: fetchPhotoAlbumUseCase)
     }
 
     private func makeFeedViewModel() -> FeedViewModel {

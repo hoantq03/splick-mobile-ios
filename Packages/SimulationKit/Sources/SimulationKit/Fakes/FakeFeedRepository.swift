@@ -208,6 +208,45 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
         return result
     }
 
+    public func fetchPhotoAlbum(page: Int, limit: Int) async throws -> [AlbumPhoto] {
+        logger.log("Fetch photo album: page=\(page), limit=\(limit)")
+        try await Task.sleep(for: .milliseconds(350))
+
+        let allPhotos: [AlbumPhoto] = posts.flatMap { post in
+            post.displayMediaItems
+                .filter { $0.mediaType == .image }
+                .map { item in
+                    AlbumPhoto(
+                        id: item.id,
+                        postId: post.id,
+                        author: post.author,
+                        mediaURL: item.mediaURL,
+                        thumbnailURL: item.thumbnailURL,
+                        mediaType: item.mediaType,
+                        sortOrder: item.sortOrder,
+                        createdAt: post.createdAt
+                    )
+                }
+        }
+        .sorted { lhs, rhs in
+            if lhs.createdAt != rhs.createdAt {
+                return lhs.createdAt > rhs.createdAt
+            }
+            return lhs.sortOrder < rhs.sortOrder
+        }
+
+        let start = page * limit
+        guard start < allPhotos.count else {
+            logger.log("Photo album: no more pages")
+            return []
+        }
+
+        let end = min(start + limit, allPhotos.count)
+        let result = Array(allPhotos[start..<end])
+        logger.success("Photo album loaded: \(result.count) photos (page \(page))")
+        return result
+    }
+
     public func fetchPost(id: UUID) async throws -> Post {
         logger.log("Fetch post: \(id)")
         guard let post = posts.first(where: { $0.id == id }) else {

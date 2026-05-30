@@ -17,6 +17,7 @@ public struct FeedView: View {
     @Environment(\.currentUserSummary) private var currentUserSummary
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     private let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
+    private let photoAlbumViewModel: PhotoAlbumViewModel
     @State private var profileRoute: ProfileRoute?
     @State private var companionsRoute: CompanionsSheetRoute?
     @State private var feedScrollLocked = false
@@ -24,12 +25,14 @@ public struct FeedView: View {
 
     public init(
         viewModel: FeedViewModel,
+        photoAlbumViewModel: PhotoAlbumViewModel,
         fetchFriendsUseCase: FetchFriendsUseCaseProtocol? = nil,
         navigationPath: Binding<NavigationPath> = .constant(NavigationPath()),
         pendingPostId: UUID? = nil,
         onPendingPostHandled: (() -> Void)? = nil
     ) {
         self._viewModel = ObservedObject(wrappedValue: viewModel)
+        self.photoAlbumViewModel = photoAlbumViewModel
         _navigationPath = navigationPath
         self.fetchFriendsUseCase = fetchFriendsUseCase
         self.pendingPostId = pendingPostId
@@ -64,6 +67,23 @@ public struct FeedView: View {
             }
             .navigationTitle("Feeds")
             .splickProfileToolbar()
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink(value: PhotoAlbumRoute()) {
+                        Image(systemName: "square.grid.2x2")
+                            .font(.system(size: 17, weight: .medium))
+                    }
+                    .accessibilityLabel("Album ảnh")
+                }
+            }
+            .navigationDestination(for: PhotoAlbumRoute.self) { _ in
+                PhotoAlbumView(
+                    viewModel: photoAlbumViewModel,
+                    feedViewModel: viewModel,
+                    navigationPath: $navigationPath,
+                    fetchFriendsUseCase: fetchFriendsUseCase
+                )
+            }
             .navigationDestination(for: FeedPostDestination.self) { destination in
                 if let post = viewModel.posts.first(where: { $0.id == destination.postId }) {
                     PostDetailView(
