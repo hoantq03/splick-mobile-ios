@@ -1,6 +1,7 @@
 import SwiftUI
 import DesignSystem
 import Common
+import Localization
 
 struct MyQRSheet: View {
     let username: String
@@ -8,6 +9,7 @@ struct MyQRSheet: View {
     let avatarURL: URL?
 
     @StateObject private var viewModel: MyQRViewModel
+    @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
 
     init(
@@ -35,7 +37,7 @@ struct MyQRSheet: View {
                         .font(SplickTheme.Typography.callout)
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
                     if let version = viewModel.version {
-                        Text("Phiên bản mã \(version)")
+                        Text(languageService.format(.friendsMyQRVersion, version))
                             .font(SplickTheme.Typography.caption)
                             .foregroundStyle(SplickTheme.Colors.textSecondary)
                     }
@@ -43,7 +45,7 @@ struct MyQRSheet: View {
 
                 qrContent
 
-                Text("Bạn bè quét mã này để gửi lời mời kết bạn trên Splick.")
+                Text(languageService.text(.friendsMyQRHint))
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
                     .multilineTextAlignment(.center)
@@ -51,7 +53,7 @@ struct MyQRSheet: View {
 
                 if let payload = viewModel.payload {
                     ShareLink(item: payload) {
-                        Label("Chia sẻ mã", systemImage: "square.and.arrow.up")
+                        Label(languageService.text(.friendsMyQRShare), systemImage: "square.and.arrow.up")
                             .font(SplickTheme.Typography.headline)
                             .frame(maxWidth: .infinity)
                             .padding(SplickTheme.Spacing.sm)
@@ -62,7 +64,7 @@ struct MyQRSheet: View {
                     .padding(.horizontal, SplickTheme.Spacing.xl)
                 }
 
-                SplickButton("Làm mới mã", style: .secondary, isDisabled: viewModel.state == .loading) {
+                SplickButton(languageService.text(.friendsMyQRRefresh), style: .secondary, isDisabled: viewModel.state == .loading) {
                     Task { await viewModel.refresh() }
                 }
                 .padding(.horizontal, SplickTheme.Spacing.xl)
@@ -71,19 +73,19 @@ struct MyQRSheet: View {
             }
             .frame(maxWidth: .infinity)
             .background(SplickTheme.Colors.background)
-            .navigationTitle("Mã QR của tôi")
+            .navigationTitle(languageService.text(.friendsMyQRTitle))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Xong") { dismiss() }
+                    Button(languageService.text(.commonDone)) { dismiss() }
                 }
             }
             .task { await viewModel.load() }
-            .alert("Lỗi", isPresented: Binding(
+            .alert(languageService.text(.commonError), isPresented: Binding(
                 get: { viewModel.alertMessage != nil },
                 set: { if !$0 { viewModel.alertMessage = nil } }
             )) {
-                Button("OK", role: .cancel) {}
+                Button(languageService.text(.commonOK), role: .cancel) {}
             } message: {
                 Text(viewModel.alertMessage ?? "")
             }
@@ -94,7 +96,7 @@ struct MyQRSheet: View {
     private var qrContent: some View {
         switch viewModel.state {
         case .idle, .loading:
-            LoadingView(message: "Đang tạo mã QR...")
+            LoadingView(message: languageService.text(.friendsMyQRGenerating))
                 .frame(height: 260)
         case .failed(let message):
             ErrorView(message: message) {
@@ -112,7 +114,7 @@ struct MyQRSheet: View {
                     .background(Color.white)
                     .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium))
             } else {
-                Text("Không thể tạo mã QR")
+                Text(languageService.text(.friendsMyQRFailed))
                     .font(SplickTheme.Typography.callout)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
             }
