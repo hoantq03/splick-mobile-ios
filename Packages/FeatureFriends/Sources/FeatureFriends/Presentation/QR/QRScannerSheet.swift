@@ -1,5 +1,6 @@
 import SwiftUI
 import DesignSystem
+import Localization
 
 enum QRScannerMode {
     case addFriend
@@ -18,6 +19,7 @@ struct QRScannerSheet: View {
     let onScan: (String) -> Void
     var myQrContext: QRScannerMyQrContext?
 
+    @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
     @State private var errorMessage: String?
     @State private var manualCode = ""
@@ -46,7 +48,7 @@ struct QRScannerSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Đóng") { dismiss() }
+                    Button(languageService.text(.friendsClose)) { dismiss() }
                 }
             }
         }
@@ -87,7 +89,7 @@ struct QRScannerSheet: View {
                 .multilineTextAlignment(.center)
 
             #if targetEnvironment(simulator)
-            Text("Trên Simulator không có camera. Dán mã QR bên dưới hoặc dùng máy thật để quét.")
+            Text(languageService.text(.friendsScanSimulatorHint))
                 .font(SplickTheme.Typography.caption)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
@@ -99,7 +101,7 @@ struct QRScannerSheet: View {
 
     private var manualEntrySection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
-            Text("Hoặc dán mã thủ công")
+            Text(languageService.text(.friendsScanManualHint))
                 .font(SplickTheme.Typography.caption)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
 
@@ -108,7 +110,10 @@ struct QRScannerSheet: View {
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
 
-            SplickButton("Dùng mã này", isDisabled: manualCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
+            SplickButton(
+                languageService.text(.friendsScanUseCode),
+                isDisabled: manualCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ) {
                 onScan(manualCode)
                 dismiss()
             }
@@ -118,8 +123,8 @@ struct QRScannerSheet: View {
 
     private var navigationTitle: String {
         switch mode {
-        case .addFriend: return "Quét mã QR"
-        case .joinGroup: return "Quét mã nhóm"
+        case .addFriend: return languageService.text(.friendsScanQRAddFriend)
+        case .joinGroup: return languageService.text(.friendsScanQRJoinGroup)
         }
     }
 
