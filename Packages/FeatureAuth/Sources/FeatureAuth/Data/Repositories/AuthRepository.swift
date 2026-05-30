@@ -184,20 +184,27 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
         return AuthMapper.toUser(dto)
     }
 
-    public func updateProfile(displayName: String?, avatarUrl: String?) async throws -> User {
+    public func updateProfile(
+        displayName: String?,
+        avatarUrl: String?,
+        preferredLocale: String? = nil
+    ) async throws -> User {
         let trimmedName = displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedName = (trimmedName?.isEmpty == false) ? trimmedName : nil
         let trimmedAvatar = avatarUrl?.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedAvatar = (trimmedAvatar?.isEmpty == false) ? trimmedAvatar : nil
+        let resolvedLocale = preferredLocale?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedLocale = (resolvedLocale?.isEmpty == false) ? resolvedLocale : nil
 
-        if resolvedName == nil && resolvedAvatar == nil {
+        if resolvedName == nil && resolvedAvatar == nil && normalizedLocale == nil {
             throw AppError.validation("Enter a display name or avatar URL to update.")
         }
 
         let dto: UserDTO = try await apiClient.request(
             AuthEndpoint.patchMe(UpdateUserProfileRequestDTO(
                 displayName: resolvedName,
-                avatarUrl: resolvedAvatar
+                avatarUrl: resolvedAvatar,
+                preferredLocale: normalizedLocale
             ))
         )
         return AuthMapper.toUser(dto)

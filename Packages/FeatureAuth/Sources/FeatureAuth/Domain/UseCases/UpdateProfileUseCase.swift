@@ -2,7 +2,7 @@ import Foundation
 import SplickDomain
 
 public protocol UpdateProfileUseCaseProtocol: Sendable {
-    func execute(displayName: String?, avatarUrl: String?) async throws -> User
+    func execute(displayName: String?, avatarUrl: String?, preferredLocale: String?) async throws -> User
 }
 
 public final class UpdateProfileUseCase: UpdateProfileUseCaseProtocol, Sendable {
@@ -14,8 +14,16 @@ public final class UpdateProfileUseCase: UpdateProfileUseCaseProtocol, Sendable 
         self.sessionManager = sessionManager
     }
 
-    public func execute(displayName: String?, avatarUrl: String?) async throws -> User {
-        let user = try await repository.updateProfile(displayName: displayName, avatarUrl: avatarUrl)
+    public func execute(
+        displayName: String?,
+        avatarUrl: String?,
+        preferredLocale: String? = nil
+    ) async throws -> User {
+        let user = try await repository.updateProfile(
+            displayName: displayName,
+            avatarUrl: avatarUrl,
+            preferredLocale: preferredLocale
+        )
         if let session = await sessionManager.currentSession() {
             await sessionManager.setSession(AuthSession(user: user, token: session.token))
         }

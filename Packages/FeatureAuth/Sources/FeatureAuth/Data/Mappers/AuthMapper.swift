@@ -15,6 +15,7 @@ enum AuthMapper {
             displayName: displayName,
             avatarURL: dto.avatarUrl.flatMap(URL.init(string:)),
             status: UserAccountStatus.from(apiValue: dto.status),
+            preferredLocale: dto.preferredLocale ?? "vi",
             createdAt: dto.createdAt
         )
     }
