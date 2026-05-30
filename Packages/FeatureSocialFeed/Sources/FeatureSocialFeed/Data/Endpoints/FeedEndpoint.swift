@@ -3,7 +3,7 @@ import Networking
 
 enum FeedEndpoint: APIEndpoint {
     case feed(page: Int, limit: Int)
-    case photoAlbum(page: Int, limit: Int)
+    case photoAlbum(page: Int, limit: Int, filters: PhotoAlbumFilters)
     case post(id: UUID)
     case createPost(CreatePostRequestDTO)
     case addReaction(postId: UUID, CreateReactionRequestDTO)
@@ -34,12 +34,28 @@ enum FeedEndpoint: APIEndpoint {
 
     var queryItems: [URLQueryItem]? {
         switch self {
-        case .feed(let page, let limit), .photoAlbum(let page, let limit):
+        case .feed(let page, let limit):
             return [
                 URLQueryItem(name: "page", value: "\(page)"),
                 URLQueryItem(name: "limit", value: "\(limit)"),
             ]
-        default: return nil
+        case .photoAlbum(let page, let limit, let filters):
+            var items = [
+                URLQueryItem(name: "page", value: "\(page)"),
+                URLQueryItem(name: "limit", value: "\(limit)"),
+            ]
+            if let authorId = filters.author?.id {
+                items.append(URLQueryItem(name: "authorId", value: authorId.uuidString))
+            }
+            if let groupId = filters.group?.id {
+                items.append(URLQueryItem(name: "groupId", value: groupId.uuidString))
+            }
+            if let query = filters.apiCaptionQuery {
+                items.append(URLQueryItem(name: "q", value: query))
+            }
+            return items
+        default:
+            return nil
         }
     }
 

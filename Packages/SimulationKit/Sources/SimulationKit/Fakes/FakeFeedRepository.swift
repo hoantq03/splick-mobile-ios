@@ -208,11 +208,15 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
         return result
     }
 
-    public func fetchPhotoAlbum(page: Int, limit: Int) async throws -> [AlbumPhoto] {
+    public func fetchPhotoAlbum(
+        page: Int,
+        limit: Int,
+        filters: PhotoAlbumFilters = PhotoAlbumFilters()
+    ) async throws -> [AlbumPhoto] {
         logger.log("Fetch photo album: page=\(page), limit=\(limit)")
         try await Task.sleep(for: .milliseconds(350))
 
-        let allPhotos: [AlbumPhoto] = posts.flatMap { post in
+        var allPhotos: [AlbumPhoto] = posts.flatMap { post in
             post.displayMediaItems
                 .filter { $0.mediaType == .image }
                 .map { item in
@@ -220,6 +224,8 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
                         id: item.id,
                         postId: post.id,
                         author: post.author,
+                        groupId: post.groupId,
+                        caption: post.caption,
                         mediaURL: item.mediaURL,
                         thumbnailURL: item.thumbnailURL,
                         mediaType: item.mediaType,
@@ -228,7 +234,17 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
                     )
                 }
         }
-        .sorted { lhs, rhs in
+
+        if let authorId = filters.author?.id {
+            allPhotos = allPhotos.filter { $0.author.id == authorId }
+        }
+        if let captionQuery = filters.apiCaptionQuery?.lowercased() {
+            allPhotos = allPhotos.filter {
+                ($0.caption ?? "").lowercased().contains(captionQuery)
+            }
+        }
+
+        allPhotos.sort { lhs, rhs in
             if lhs.createdAt != rhs.createdAt {
                 return lhs.createdAt > rhs.createdAt
             }

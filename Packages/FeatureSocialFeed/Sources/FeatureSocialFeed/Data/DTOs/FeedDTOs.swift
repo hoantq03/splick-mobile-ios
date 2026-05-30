@@ -88,6 +88,8 @@ struct AlbumPhotoDTO: Decodable {
     let mediaItemId: UUID
     let postId: UUID
     let author: AuthorDTO
+    let groupId: UUID?
+    let caption: String?
     let mediaUrl: String
     let thumbnailUrl: String?
     let mediaType: String

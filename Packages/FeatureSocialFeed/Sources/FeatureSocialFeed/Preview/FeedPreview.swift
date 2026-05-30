@@ -37,8 +37,10 @@ final class MockAddCommentUseCase: AddCommentUseCaseProtocol, Sendable {
 }
 
 final class MockFetchPhotoAlbumUseCase: FetchPhotoAlbumUseCaseProtocol, Sendable {
-    func execute(page: Int) async throws -> [AlbumPhoto] {
-        PreviewData.samplePosts.flatMap { post in
+    func execute(page: Int, filters: PhotoAlbumFilters) async throws -> [AlbumPhoto] {
+        _ = filters
+        _ = page
+        return PreviewData.samplePosts.flatMap { post in
             post.displayMediaItems
                 .filter { $0.mediaType == .image }
                 .map { item in

@@ -100,6 +100,8 @@ enum FeedMapper {
             id: dto.mediaItemId,
             postId: dto.postId,
             author: toUserSummary(dto.author),
+            groupId: dto.groupId,
+            caption: dto.caption,
             mediaURL: mediaURL,
             thumbnailURL: dto.thumbnailUrl.flatMap(URL.init(string:)),
             mediaType: mediaType,
