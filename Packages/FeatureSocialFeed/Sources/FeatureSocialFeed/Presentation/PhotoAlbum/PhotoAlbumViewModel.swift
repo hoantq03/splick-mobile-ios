@@ -21,9 +21,7 @@ public final class PhotoAlbumViewModel: ObservableObject {
     }
 
     private let fetchPhotoAlbumUseCase: FetchPhotoAlbumUseCaseProtocol
-    private var currentPage = 0
-    private var canLoadMore = true
-    private var fetchedPages = Set<Int>()
+    private var nextCursor: String?
     private var loadTask: Task<Void, Never>?
     private var captionSearchTask: Task<Void, Never>?
 
@@ -43,21 +41,19 @@ public final class PhotoAlbumViewModel: ObservableObject {
     }
 
     func loadMore() async {
-        guard canLoadMore, !isLoadingMore, !isRefreshing else { return }
+        guard let cursor = nextCursor, !isLoadingMore, !isRefreshing else { return }
         isLoadingMore = true
         defer { isLoadingMore = false }
 
-        let nextPage = currentPage + 1
-        guard !fetchedPages.contains(nextPage) else { return }
-
         do {
-            let batch = try await fetchPhotoAlbumUseCase.execute(page: nextPage, filters: filters)
-            fetchedPages.insert(nextPage)
-            currentPage = nextPage
-            canLoadMore = batch.count >= Self.pageSize
-            appendUnique(batch)
+            let page = try await fetchPhotoAlbumUseCase.fetchNextPage(
+                filters: filters,
+                cursor: cursor
+            )
+            nextCursor = page.nextCursor
+            appendUnique(page.photos)
             state = .loaded(photos)
-            prefetchThumbnails(in: batch)
+            prefetchThumbnails(in: page.photos)
         } catch {
             if !error.isRequestCancellation {
                 Log.error(error, category: .feed)
@@ -109,18 +105,15 @@ public final class PhotoAlbumViewModel: ObservableObject {
             }
         }
 
-        currentPage = 0
-        canLoadMore = true
-        fetchedPages.removeAll()
+        nextCursor = nil
 
         do {
-            let batch = try await fetchPhotoAlbumUseCase.execute(page: 0, filters: filters)
+            let page = try await fetchPhotoAlbumUseCase.fetchFirstPage(filters: filters)
             guard !Task.isCancelled else { return }
-            fetchedPages.insert(0)
-            photos = batch
-            canLoadMore = batch.count >= Self.pageSize
+            photos = page.photos
+            nextCursor = page.nextCursor
             state = .loaded(photos)
-            prefetchThumbnails(in: batch)
+            prefetchThumbnails(in: page.photos)
         } catch {
             guard !Task.isCancelled else { return }
             if error.isRequestCancellation { return }
