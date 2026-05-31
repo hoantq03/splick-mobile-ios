@@ -269,6 +269,33 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
         try await apiClient.request(AuthEndpoint.linkEmail(dto))
     }
 
+    public func fetchMyPaymentProfile() async throws -> PaymentProfile {
+        let dto: PaymentProfileResponseDTO = try await apiClient.request(AuthEndpoint.paymentProfile)
+        return AuthMapper.toPaymentProfile(dto)
+    }
+
+    public func upsertMyPaymentProfile(
+        qrImageUrl: String?,
+        accountName: String?,
+        accountNumber: String?,
+        bankName: String?
+    ) async throws -> PaymentProfile {
+        let dto = UpsertPaymentProfileRequestDTO(
+            qrImageUrl: qrImageUrl,
+            accountName: accountName,
+            accountNumber: accountNumber,
+            bankName: bankName
+        )
+        let response: PaymentProfileResponseDTO = try await apiClient.request(
+            AuthEndpoint.upsertPaymentProfile(dto)
+        )
+        return AuthMapper.toPaymentProfile(response)
+    }
+
+    public func deleteMyPaymentProfile() async throws {
+        try await apiClient.request(AuthEndpoint.deletePaymentProfile)
+    }
+
     // MARK: - Private
 
     private func clearLocalCredentials() async {

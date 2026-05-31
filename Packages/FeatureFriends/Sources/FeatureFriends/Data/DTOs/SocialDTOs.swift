@@ -1,5 +1,31 @@
 import Foundation
 
+struct UserProfileStatsResponseDTO: Decodable {
+    let friendCount: Int
+    let postCount: Int
+    let groupCount: Int
+}
+
+struct UserProfileResponseDTO: Decodable {
+    let userId: UUID
+    let username: String
+    let displayName: String
+    let avatarUrl: String?
+    let nickname: String?
+    let subtitle: String?
+    let friendStatus: String?
+    let stats: UserProfileStatsResponseDTO
+}
+
+struct PaymentProfileResponseDTO: Decodable {
+    let userId: UUID
+    let qrImageUrl: String?
+    let accountName: String?
+    let accountNumber: String?
+    let bankName: String?
+    let updatedAt: Date
+}
+
 struct UserSearchResponseDTO: Decodable {
     let userId: UUID
     let username: String

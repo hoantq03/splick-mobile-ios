@@ -22,9 +22,14 @@ struct FloatingTabBarContentPadding: ViewModifier {
     }
 
     func body(content: Content) -> some View {
-        content
-            .animation(.easeInOut(duration: 0.28), value: bottomInset)
-            .modifier(BottomInsetModifier(inset: bottomInset))
+        if #available(iOS 26.0, *) {
+            content
+                .animation(.easeInOut(duration: 0.28), value: bottomInset)
+                .modifier(BottomInsetModifier(inset: bottomInset))
+        } else {
+            content
+                .modifier(BottomInsetModifier(inset: bottomInset))
+        }
     }
 }
 

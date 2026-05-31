@@ -23,6 +23,7 @@ struct FeedInlineVideoPlayer: View {
     let durationSeconds: Int?
 
     @Environment(\.feedVideoCoordinator) private var autoplayCoordinator
+    @Environment(\.feedTabIsActive) private var feedTabIsActive
     @StateObject private var controller: FeedVideoPlaybackController
     @State private var isScrubbing = false
     @State private var scrubProgress: Double = 0
@@ -39,7 +40,7 @@ struct FeedInlineVideoPlayer: View {
     }
 
     private var isAutoplayActive: Bool {
-        autoplayCoordinator?.activePostId == postId
+        feedTabIsActive && autoplayCoordinator?.activePostId == postId
     }
 
     private var sliderProgress: Binding<Double> {
@@ -77,6 +78,7 @@ struct FeedInlineVideoPlayer: View {
             controller.setAutoplayActive(active)
         }
         .onAppear {
+            guard feedTabIsActive else { return }
             autoplayCoordinator?.updateVisibility(postId: postId, ratio: 0.85)
             controller.setAutoplayActive(isAutoplayActive)
         }

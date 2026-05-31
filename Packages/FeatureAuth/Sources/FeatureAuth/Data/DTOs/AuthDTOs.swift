@@ -79,6 +79,22 @@ struct UpdateUserProfileRequestDTO: Encodable {
     let preferredLocale: String?
 }
 
+struct PaymentProfileResponseDTO: Decodable {
+    let userId: UUID
+    let qrImageUrl: String?
+    let accountName: String?
+    let accountNumber: String?
+    let bankName: String?
+    let updatedAt: Date
+}
+
+struct UpsertPaymentProfileRequestDTO: Encodable {
+    let qrImageUrl: String?
+    let accountName: String?
+    let accountNumber: String?
+    let bankName: String?
+}
+
 struct RefreshTokenRequestDTO: Encodable {
     let refreshToken: String
 }

@@ -16,6 +16,9 @@ enum AuthEndpoint: APIEndpoint {
     case logout(LogoutRequestDTO)
     case me
     case patchMe(UpdateUserProfileRequestDTO)
+    case paymentProfile
+    case upsertPaymentProfile(UpsertPaymentProfileRequestDTO)
+    case deletePaymentProfile
     case listSessions(refreshToken: String?)
     case revokeAllSessions
     case revokeSession(UUID)
@@ -43,6 +46,8 @@ enum AuthEndpoint: APIEndpoint {
         case .changePassword: return "/v1/auth/password/change"
         case .logout: return "/v1/auth/logout"
         case .me, .patchMe: return "/v1/auth/me"
+        case .paymentProfile, .upsertPaymentProfile, .deletePaymentProfile:
+            return "/v1/auth/me/payment-profile"
         case .listSessions: return "/v1/auth/sessions"
         case .revokeAllSessions: return "/v1/auth/sessions/revoke-all"
         case .revokeSession(let id): return "/v1/auth/sessions/\(id.uuidString)"
@@ -66,11 +71,13 @@ enum AuthEndpoint: APIEndpoint {
              .deactivateAccount, .linkGoogle, .requestLinkPhoneOtp, .linkPhone,
              .requestLinkEmailOtp, .linkEmail:
             return .post
-        case .me, .listSessions, .connectedAccounts:
+        case .me, .listSessions, .connectedAccounts, .paymentProfile:
             return .get
         case .patchMe:
             return .patch
-        case .revokeSession, .deleteAccount, .unlinkGoogle:
+        case .upsertPaymentProfile:
+            return .put
+        case .revokeSession, .deleteAccount, .unlinkGoogle, .deletePaymentProfile:
             return .delete
         }
     }
@@ -98,7 +105,9 @@ enum AuthEndpoint: APIEndpoint {
         case .requestLinkEmailOtp(let dto): return dto
         case .linkEmail(let dto): return dto
         case .patchMe(let dto): return dto
-        case .me, .listSessions, .revokeAllSessions, .revokeSession, .connectedAccounts:
+        case .upsertPaymentProfile(let dto): return dto
+        case .me, .listSessions, .revokeAllSessions, .revokeSession, .connectedAccounts, .paymentProfile,
+             .deletePaymentProfile:
             return nil
         }
     }
@@ -121,7 +130,8 @@ enum AuthEndpoint: APIEndpoint {
             return false
         case .changePassword, .logout, .me, .patchMe, .listSessions, .revokeAllSessions, .revokeSession,
              .deactivateAccount, .deleteAccount, .connectedAccounts, .linkGoogle, .unlinkGoogle,
-             .requestLinkPhoneOtp, .linkPhone, .requestLinkEmailOtp, .linkEmail:
+             .requestLinkPhoneOtp, .linkPhone, .requestLinkEmailOtp, .linkEmail, .paymentProfile,
+             .upsertPaymentProfile, .deletePaymentProfile:
             return true
         }
     }

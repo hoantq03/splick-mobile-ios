@@ -2,6 +2,35 @@ import Foundation
 import SplickDomain
 
 enum FriendsMapper {
+    static func toPublicUserProfile(_ dto: UserProfileResponseDTO) -> PublicUserProfile {
+        PublicUserProfile(
+            user: UserSummary(
+                id: dto.userId,
+                username: dto.username,
+                displayName: dto.displayName,
+                subtitle: dto.subtitle,
+                avatarURL: dto.avatarUrl.flatMap { URL(string: $0) }
+            ),
+            friendStatus: mapFriendStatus(dto.friendStatus),
+            stats: UserProfileStats(
+                friendCount: dto.stats.friendCount,
+                postCount: dto.stats.postCount,
+                groupCount: dto.stats.groupCount
+            )
+        )
+    }
+
+    static func toPaymentProfile(_ dto: PaymentProfileResponseDTO) -> PaymentProfile {
+        PaymentProfile(
+            userId: dto.userId,
+            qrImageURL: dto.qrImageUrl.flatMap(URL.init(string:)),
+            accountName: dto.accountName,
+            accountNumber: dto.accountNumber,
+            bankName: dto.bankName,
+            updatedAt: dto.updatedAt
+        )
+    }
+
     static func toUserSearchResult(_ dto: UserSearchResponseDTO) -> UserSearchResult {
         UserSearchResult(
             user: toUserSummary(dto),

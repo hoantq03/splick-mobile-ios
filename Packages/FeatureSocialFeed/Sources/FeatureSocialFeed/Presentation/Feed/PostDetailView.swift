@@ -3,6 +3,7 @@ import DesignSystem
 import Common
 import Localization
 import SplickDomain
+import FeatureFriends
 
 struct PostDetailView: View {
     @EnvironmentObject private var languageService: LanguageService
@@ -10,6 +11,7 @@ struct PostDetailView: View {
     let initialMediaIndex: Int
     @ObservedObject var feedViewModel: FeedViewModel
     let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
+    let profileDependencies: FriendUserProfileDependencies?
 
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.currentUserSummary) private var currentUserSummary
@@ -26,12 +28,14 @@ struct PostDetailView: View {
         post: Post,
         initialMediaIndex: Int = 0,
         feedViewModel: FeedViewModel,
-        fetchFriendsUseCase: FetchFriendsUseCaseProtocol? = nil
+        fetchFriendsUseCase: FetchFriendsUseCaseProtocol? = nil,
+        profileDependencies: FriendUserProfileDependencies? = nil
     ) {
         self.post = post
         self.initialMediaIndex = initialMediaIndex
         self.feedViewModel = feedViewModel
         self.fetchFriendsUseCase = fetchFriendsUseCase
+        self.profileDependencies = profileDependencies
         _commentPager = StateObject(wrappedValue: PostDetailViewModel(comments: post.comments))
     }
 
@@ -58,7 +62,7 @@ struct PostDetailView: View {
                         onDelete: {
                             Task { await feedViewModel.deletePost(id: post.id) }
                         },
-                        onUserTap: { profileRoute = ProfileRoute(user: $0) },
+                        onUserTap: { openProfile(for: $0) },
                         onOpenComments: {},
                         onShowCompanions: {
                             companionsRoute = CompanionsSheetRoute(
@@ -120,12 +124,16 @@ struct PostDetailView: View {
             }
         }
         .sheet(item: $profileRoute) { route in
-            UserProfileView(user: route.user)
+            if let profileDependencies {
+                FriendUserProfileView(
+                    viewModel: profileDependencies.makeViewModel(user: route.user)
+                )
+            }
         }
         .sheet(item: $companionsRoute) { route in
             CompanionsListSheet(companions: route.companions) { user in
                 companionsRoute = nil
-                profileRoute = ProfileRoute(user: user)
+                openProfile(for: user)
             }
         }
         .sheet(isPresented: $showEmojiPicker) {
@@ -238,7 +246,7 @@ struct PostDetailView: View {
                     replyTarget = comment
                     composerFocused = true
                 },
-                onUserTap: { profileRoute = ProfileRoute(user: $0) },
+                onUserTap: { openProfile(for: $0) },
                 onViewMoreReplies: { parentId in
                     commentPager.expandReplies(for: parentId)
                 }
@@ -259,6 +267,11 @@ struct PostDetailView: View {
                 .padding(.vertical, SplickTheme.Spacing.sm)
             }
         }
+    }
+
+    private func openProfile(for user: UserSummary) {
+        guard user.id != currentUserSummary?.id else { return }
+        profileRoute = ProfileRoute(user: user)
     }
 }
 

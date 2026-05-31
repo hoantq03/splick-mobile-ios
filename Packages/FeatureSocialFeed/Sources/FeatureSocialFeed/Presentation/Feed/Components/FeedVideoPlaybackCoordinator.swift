@@ -25,6 +25,12 @@ final class FeedVideoPlaybackCoordinator: ObservableObject {
         pickActivePost()
     }
 
+    /// Stops autoplay when the feed tab is hidden (other tabs / background).
+    func suspendPlayback() {
+        visibilityByPost.removeAll()
+        activePostId = nil
+    }
+
     private func pickActivePost() {
         guard let best = visibilityByPost.max(by: { $0.value < $1.value }),
               best.value >= activationThreshold else {
@@ -46,21 +52,41 @@ extension EnvironmentValues {
     }
 }
 
+private struct FeedTabIsActiveKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    /// When false, feed video visibility reporting and autoplay are disabled.
+    var feedTabIsActive: Bool {
+        get { self[FeedTabIsActiveKey.self] }
+        set { self[FeedTabIsActiveKey.self] = newValue }
+    }
+}
+
 struct FeedVideoVisibilityReporter: View {
     let postId: UUID
     @Environment(\.feedVideoCoordinator) private var coordinator
+    @Environment(\.feedTabIsActive) private var feedTabIsActive
 
     var body: some View {
         GeometryReader { proxy in
             Color.clear
                 .onAppear { report(proxy) }
                 .onChange(of: proxy.frame(in: .global)) { _ in report(proxy) }
+                .onChange(of: feedTabIsActive) { isActive in
+                    if isActive {
+                        report(proxy)
+                    } else {
+                        coordinator?.clearPost(postId)
+                    }
+                }
                 .onDisappear { coordinator?.clearPost(postId) }
         }
     }
 
     private func report(_ proxy: GeometryProxy) {
-        guard let coordinator else { return }
+        guard feedTabIsActive, let coordinator else { return }
         let frame = proxy.frame(in: .global)
         let bounds = UIScreen.main.bounds
         let intersection = frame.intersection(bounds)

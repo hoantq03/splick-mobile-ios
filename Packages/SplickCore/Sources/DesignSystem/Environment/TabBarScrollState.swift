@@ -1,4 +1,5 @@
 import SwiftUI
+import Common
 
 public enum SplickTabBarMetrics {
     /// Space reserved above the floating tab bar so bottom controls stay tappable.

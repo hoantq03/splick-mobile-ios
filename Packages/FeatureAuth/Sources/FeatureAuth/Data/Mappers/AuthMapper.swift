@@ -61,4 +61,15 @@ enum AuthMapper {
             token: toAuthToken(dto)
         )
     }
+
+    static func toPaymentProfile(_ dto: PaymentProfileResponseDTO) -> PaymentProfile {
+        PaymentProfile(
+            userId: dto.userId,
+            qrImageURL: dto.qrImageUrl.flatMap(URL.init(string:)),
+            accountName: dto.accountName,
+            accountNumber: dto.accountNumber,
+            bankName: dto.bankName,
+            updatedAt: dto.updatedAt
+        )
+    }
 }

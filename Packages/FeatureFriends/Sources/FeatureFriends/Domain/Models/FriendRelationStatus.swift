@@ -1,6 +1,12 @@
 import Foundation
 import SplickDomain
 
+public enum FriendProfileMode: Sendable {
+    case friend
+    case stranger
+    case blocked
+}
+
 public enum FriendRelationStatus: String, Sendable, Equatable {
     case none = "NONE"
     case friends = "FRIENDS"
@@ -18,5 +24,18 @@ public struct UserSearchResult: Identifiable, Sendable, Equatable {
     public init(user: UserSummary, friendStatus: FriendRelationStatus) {
         self.user = user
         self.friendStatus = friendStatus
+    }
+}
+
+public extension FriendRelationStatus {
+    var profileMode: FriendProfileMode {
+        switch self {
+        case .friends:
+            return .friend
+        case .blocked:
+            return .blocked
+        case .none, .requestSent, .requestReceived:
+            return .stranger
+        }
     }
 }

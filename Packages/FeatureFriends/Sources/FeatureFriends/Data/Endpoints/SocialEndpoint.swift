@@ -2,6 +2,8 @@ import Foundation
 import Networking
 
 enum SocialEndpoint: APIEndpoint {
+    case getUserProfile(userId: UUID)
+    case getFriendPaymentProfile(userId: UUID)
     case searchUsers(query: String, page: Int, size: Int)
     case sendFriendRequest(username: String, message: String?)
     case sendFriendRequestByQr(qrPayload: String, message: String?)
@@ -41,6 +43,10 @@ enum SocialEndpoint: APIEndpoint {
 
     var path: String {
         switch self {
+        case .getUserProfile(let userId):
+            return "/v1/social/users/\(userId.uuidString)"
+        case .getFriendPaymentProfile(let userId):
+            return "/v1/social/users/\(userId.uuidString)/payment-profile"
         case .searchUsers:
             return "/v1/social/users/search"
         case .listFriends:
@@ -108,7 +114,7 @@ enum SocialEndpoint: APIEndpoint {
 
     var method: HTTPMethod {
         switch self {
-        case .searchUsers, .listFriends, .listIncomingFriendRequests, .listOutgoingFriendRequests,
+        case .getUserProfile, .getFriendPaymentProfile, .searchUsers, .listFriends, .listIncomingFriendRequests, .listOutgoingFriendRequests,
              .listBlockedUsers, .listMyGroups, .listGroupMembers, .getActiveGroupInviteCode, .getGroup:
             return .get
         case .sendFriendRequest, .sendFriendRequestByQr, .generateMyQr, .acceptFriendRequest,

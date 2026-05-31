@@ -50,6 +50,16 @@ public actor FakeFriendsRepository: FriendsRepositoryProtocol, FriendsManagement
 
     public func fetchMyFriends() async throws -> [UserSummary] { [] }
 
+    public func fetchUserProfile(userId: UUID) async throws -> PublicUserProfile {
+        _ = userId
+        throw FriendsError.notImplemented
+    }
+
+    public func fetchFriendPaymentProfile(userId: UUID) async throws -> PaymentProfile {
+        _ = userId
+        throw FriendsError.notImplemented
+    }
+
     public func searchUsers(query: String, page: Int, size: Int) async throws -> [UserSearchResult] {
         _ = query
         _ = page

@@ -1,41 +1,40 @@
 import SwiftUI
+import Common
 import DesignSystem
 import Localization
 import FeatureNotification
 
-// MARK: - Mask (trailing geometry mirrored for leading)
+// MARK: - Mask shape (replaces per-frame Canvas — cheaper on iOS 17 / older GPUs)
 
-private struct SidePanelMask: View {
+private struct SidePanelMaskShape: Shape {
     enum Side { case leading, trailing }
 
     let side: Side
     let notchRadius: CGFloat
     let cornerRadius: CGFloat
 
-    var body: some View {
-        Canvas { context, size in
-            var path = trailingMaskPath(in: size)
-            if side == .leading {
-                path = path.applying(
-                    CGAffineTransform(translationX: size.width, y: 0)
-                        .scaledBy(x: -1, y: 1)
-                )
-            }
-            context.fill(path, with: .color(.white), style: FillStyle(eoFill: true))
+    func path(in rect: CGRect) -> Path {
+        var path = trailingMaskPath(in: rect)
+        if side == .leading {
+            path = path.applying(
+                CGAffineTransform(translationX: rect.width, y: 0)
+                    .scaledBy(x: -1, y: 1)
+            )
         }
+        return path
     }
 
     /// Bite on the left inner edge; circle center sits `notchRadius` outside the panel.
-    private func trailingMaskPath(in size: CGSize) -> Path {
+    private func trailingMaskPath(in rect: CGRect) -> Path {
         var path = Path()
         path.addRoundedRect(
-            in: CGRect(origin: .zero, size: size),
+            in: rect,
             cornerSize: CGSize(width: cornerRadius, height: cornerRadius)
         )
 
-        let cy = size.height / 2
+        let cy = rect.midY
         path.addEllipse(in: CGRect(
-            x: -2 * notchRadius,
+            x: rect.minX - 2 * notchRadius,
             y: cy - notchRadius,
             width: notchRadius * 2,
             height: notchRadius * 2
@@ -46,9 +45,11 @@ private struct SidePanelMask: View {
 
 // MARK: - Tab bar
 
-struct SplickTabBar: View {
+struct SplickTabBar: View, Equatable {
     @Binding var selectedTab: Tab
-    @EnvironmentObject private var badgeCountService: BadgeCountService
+    let badgeCounts: TabBadgeCounts
+    let tabBarIsVisible: Bool
+
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.tabBarScrollState) private var tabBarScrollState
 
@@ -61,40 +62,44 @@ struct SplickTabBar: View {
     private let cameraIconSize: CGFloat = 27
     private let panelOuterPadding: CGFloat = 6
 
+    static func == (lhs: SplickTabBar, rhs: SplickTabBar) -> Bool {
+        lhs.selectedTab == rhs.selectedTab
+            && lhs.badgeCounts == rhs.badgeCounts
+            && lhs.tabBarIsVisible == rhs.tabBarIsVisible
+    }
+
     var body: some View {
-        GeometryReader { geo in
-            let centerLaneWidth = notchRadius * 2
-            let sideWidth = max(0, (geo.size.width - centerLaneWidth) / 2)
+        let centerLaneWidth = notchRadius * 2
 
-            ZStack {
-                HStack(alignment: .center, spacing: 0) {
-                    sidePanel(side: .leading) {
-                        tabButton(.feed)
-                        tabButton(.expenses, badge: badgeCountService.counts.expenses)
-                    }
-                    .frame(width: sideWidth)
-
-                    Color.clear
-                        .frame(width: centerLaneWidth)
-                        .allowsHitTesting(false)
-
-                    sidePanel(side: .trailing) {
-                        tabButton(.friends, badge: badgeCountService.counts.friends)
-                        tabButton(.notifications, badge: badgeCountService.counts.notifications)
-                    }
-                    .frame(width: sideWidth)
+        ZStack {
+            HStack(alignment: .center, spacing: 0) {
+                sidePanel(side: .leading) {
+                    tabButton(.feed)
+                    tabButton(.expenses, badge: badgeCounts.expenses)
                 }
+                .frame(maxWidth: .infinity)
 
-                cameraButton
+                Color.clear
+                    .frame(width: centerLaneWidth)
+                    .allowsHitTesting(false)
+
+                sidePanel(side: .trailing) {
+                    tabButton(.friends, badge: badgeCounts.friends)
+                    tabButton(.notifications, badge: badgeCounts.notifications)
+                }
+                .frame(maxWidth: .infinity)
             }
+
+            cameraButton
         }
         .frame(height: barHeight)
         .padding(.horizontal, SplickTheme.Spacing.md)
         .padding(.bottom, SplickTheme.Spacing.xxs)
+        .compositingGroup()
     }
 
     private func sidePanel<Content: View>(
-        side: SidePanelMask.Side,
+        side: SidePanelMaskShape.Side,
         @ViewBuilder content: () -> Content
     ) -> some View {
         HStack(spacing: 0) {
@@ -104,25 +109,27 @@ struct SplickTabBar: View {
         .padding(.trailing, side == .leading ? cameraGap : panelOuterPadding)
         .frame(height: barHeight)
         .frame(maxWidth: .infinity)
-        .background { sideGlassBackground }
-        .mask {
-            SidePanelMask(
+        .background { sidePanelBackground }
+        .clipShape(
+            SidePanelMaskShape(
                 side: side,
                 notchRadius: notchRadius,
                 cornerRadius: cornerRadius
-            )
-        }
+            ),
+            style: FillStyle(eoFill: true)
+        )
     }
 
     @ViewBuilder
-    private var sideGlassBackground: some View {
+    private var sidePanelBackground: some View {
         if #available(iOS 26.0, *) {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(.clear)
                 .glassEffect(.regular)
         } else {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(.ultraThinMaterial)
+                .fill(SplickTheme.Colors.secondaryBackground.opacity(0.96))
+                .shadow(color: .black.opacity(0.06), radius: 8, y: 2)
         }
     }
 

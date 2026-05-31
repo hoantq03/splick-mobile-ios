@@ -22,7 +22,9 @@ public struct FeedView: View {
     private let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
     private let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol?
     private let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
+    private let profileDependencies: FriendUserProfileDependencies?
     private let photoAlbumViewModel: PhotoAlbumViewModel
+    private let isTabActive: Bool
     @State private var profileRoute: ProfileRoute?
     @State private var companionsRoute: CompanionsSheetRoute?
     @State private var feedScrollLocked = false
@@ -34,9 +36,11 @@ public struct FeedView: View {
         fetchFriendsUseCase: FetchFriendsUseCaseProtocol? = nil,
         fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol? = nil,
         fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol? = nil,
+        profileDependencies: FriendUserProfileDependencies? = nil,
         navigationPath: Binding<NavigationPath> = .constant(NavigationPath()),
         pendingPostId: UUID? = nil,
-        onPendingPostHandled: (() -> Void)? = nil
+        onPendingPostHandled: (() -> Void)? = nil,
+        isTabActive: Bool = true
     ) {
         self._viewModel = ObservedObject(wrappedValue: viewModel)
         self.photoAlbumViewModel = photoAlbumViewModel
@@ -44,8 +48,10 @@ public struct FeedView: View {
         self.fetchFriendsUseCase = fetchFriendsUseCase
         self.fetchMyFriendsUseCase = fetchMyFriendsUseCase
         self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
+        self.profileDependencies = profileDependencies
         self.pendingPostId = pendingPostId
         self.onPendingPostHandled = onPendingPostHandled
+        self.isTabActive = isTabActive
     }
 
     public var body: some View {
@@ -98,7 +104,8 @@ public struct FeedView: View {
                 PostDetailContainerView(
                     destination: destination,
                     feedViewModel: viewModel,
-                    fetchFriendsUseCase: fetchFriendsUseCase
+                    fetchFriendsUseCase: fetchFriendsUseCase,
+                    profileDependencies: profileDependencies
                 )
             }
             .alert(
@@ -134,13 +141,23 @@ public struct FeedView: View {
         ) { notification in
             feedScrollLocked = notification.userInfo?["locked"] as? Bool ?? false
         }
+        .onChange(of: isTabActive) { active in
+            if !active {
+                videoCoordinator.suspendPlayback()
+            }
+        }
+        .environment(\.feedTabIsActive, isTabActive)
         .sheet(item: $profileRoute) { route in
-            UserProfileView(user: route.user)
+            if let profileDependencies {
+                FriendUserProfileView(
+                    viewModel: profileDependencies.makeViewModel(user: route.user)
+                )
+            }
         }
         .sheet(item: $companionsRoute) { route in
             CompanionsListSheet(companions: route.companions) { user in
                 companionsRoute = nil
-                profileRoute = ProfileRoute(user: user)
+                openProfile(for: user)
             }
         }
     }
@@ -173,7 +190,7 @@ public struct FeedView: View {
                             Task { await viewModel.deletePost(id: post.id) }
                         },
                         onUserTap: { user in
-                            profileRoute = ProfileRoute(user: user)
+                            openProfile(for: user)
                         },
                         onOpenComments: {
                             navigationPath.append(
@@ -206,5 +223,10 @@ public struct FeedView: View {
         .scrollDisabled(feedScrollLocked)
         .environment(\.feedVideoCoordinator, videoCoordinator)
         .tabBarHideOnScroll()
+    }
+
+    private func openProfile(for user: UserSummary) {
+        guard user.id != currentUserSummary?.id else { return }
+        profileRoute = ProfileRoute(user: user)
     }
 }

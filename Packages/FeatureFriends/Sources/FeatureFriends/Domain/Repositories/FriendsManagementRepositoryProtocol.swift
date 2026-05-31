@@ -3,6 +3,8 @@ import SplickDomain
 
 public protocol FriendsManagementRepositoryProtocol: Sendable {
     func fetchMyFriends() async throws -> [UserSummary]
+    func fetchUserProfile(userId: UUID) async throws -> PublicUserProfile
+    func fetchFriendPaymentProfile(userId: UUID) async throws -> PaymentProfile
     func searchUsers(query: String, page: Int, size: Int) async throws -> [UserSearchResult]
     func searchUser(username: String) async throws -> UserSummary?
     func addFriend(username: String, message: String?) async throws -> UserSummary

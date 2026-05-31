@@ -133,6 +133,22 @@ final class DependencyContainer: ObservableObject {
         UploadUserAvatarUseCase(repository: mediaRepository)
     }()
 
+    lazy var uploadPaymentQrUseCase: UploadPaymentQrUseCaseProtocol = {
+        UploadPaymentQrUseCase(repository: mediaRepository)
+    }()
+
+    lazy var fetchMyPaymentProfileUseCase: FetchMyPaymentProfileUseCaseProtocol = {
+        FetchMyPaymentProfileUseCase(repository: authRepository)
+    }()
+
+    lazy var upsertMyPaymentProfileUseCase: UpsertMyPaymentProfileUseCaseProtocol = {
+        UpsertMyPaymentProfileUseCase(repository: authRepository)
+    }()
+
+    lazy var deleteMyPaymentProfileUseCase: DeleteMyPaymentProfileUseCaseProtocol = {
+        DeleteMyPaymentProfileUseCase(repository: authRepository)
+    }()
+
     lazy var uploadGroupAvatarUseCase: UploadGroupAvatarUseCaseProtocol = {
         UploadGroupAvatarUseCase(repository: mediaRepository)
     }()
@@ -189,6 +205,28 @@ final class DependencyContainer: ObservableObject {
 
     lazy var fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol = {
         FetchMyFriendsUseCase(repository: friendsManagementRepository)
+    }()
+
+    lazy var fetchUserProfileUseCase: FetchUserProfileUseCaseProtocol = {
+        FetchUserProfileUseCase(repository: friendsManagementRepository)
+    }()
+
+    lazy var fetchFriendPaymentProfileUseCase: FetchFriendPaymentProfileUseCaseProtocol = {
+        FetchFriendPaymentProfileUseCase(repository: friendsManagementRepository)
+    }()
+
+    lazy var friendUserProfileDependencies: FriendUserProfileDependencies = {
+        FriendUserProfileDependencies(
+            fetchUserProfileUseCase: fetchUserProfileUseCase,
+            fetchFriendPaymentProfileUseCase: fetchFriendPaymentProfileUseCase,
+            addFriendUseCase: addFriendUseCase,
+            fetchIncomingFriendRequestsUseCase: fetchIncomingFriendRequestsUseCase,
+            acceptFriendRequestUseCase: acceptFriendRequestUseCase,
+            removeFriendUseCase: removeFriendUseCase,
+            setFriendNicknameUseCase: setFriendNicknameUseCase,
+            blockUserUseCase: blockUserUseCase,
+            unblockUserUseCase: unblockUserUseCase
+        )
     }()
 
     lazy var searchUsersUseCase: SearchUsersUseCaseProtocol = {
@@ -367,10 +405,13 @@ final class DependencyContainer: ObservableObject {
 
     lazy var notificationListViewModel: NotificationListViewModel = makeNotificationListViewModel()
 
+    lazy var expenseListViewModel: ExpenseListViewModel = makeExpenseListViewModel()
+
     func resetTabViewModels() {
         feedViewModel = makeFeedViewModel()
         photoAlbumViewModel = makePhotoAlbumViewModel()
         notificationListViewModel = makeNotificationListViewModel()
+        expenseListViewModel = makeExpenseListViewModel()
     }
 
     private func makePhotoAlbumViewModel() -> PhotoAlbumViewModel {
@@ -384,6 +425,16 @@ final class DependencyContainer: ObservableObject {
             reactToPostUseCase: reactToPostUseCase,
             deletePostUseCase: deletePostUseCase,
             addCommentUseCase: addCommentUseCase
+        )
+    }
+
+    private func makeExpenseListViewModel() -> ExpenseListViewModel {
+        ExpenseListViewModel(
+            fetchExpensesUseCase: fetchExpensesUseCase,
+            fetchDebtSummaryUseCase: fetchDebtSummaryUseCase,
+            onBadgeCountsChanged: { [weak self] in
+                await self?.badgeCountService.refresh()
+            }
         )
     }
 

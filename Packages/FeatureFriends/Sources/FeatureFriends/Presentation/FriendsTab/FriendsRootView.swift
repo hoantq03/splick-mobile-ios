@@ -7,7 +7,7 @@ import SplickDomain
 
 private struct UserProfileRoute: Identifiable {
     let user: UserSummary
-    let mode: FriendProfileMode
+    let initialFriendStatus: FriendRelationStatus
     var id: UUID { user.id }
 }
 
@@ -60,12 +60,15 @@ public struct FriendsRootView: View {
     private let transferGroupOwnershipUseCase: TransferGroupOwnershipUseCaseProtocol
     private let generateGroupQrUseCase: GenerateGroupQrUseCaseProtocol
     private let revokeGroupQrUseCase: RevokeGroupQrUseCaseProtocol
+    private let profileDependencies: FriendUserProfileDependencies
     private let onBadgeCountsChanged: (() async -> Void)?
 
     public init(
         fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol,
         fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol,
         searchUsersUseCase: SearchUsersUseCaseProtocol,
+        fetchUserProfileUseCase: FetchUserProfileUseCaseProtocol,
+        fetchFriendPaymentProfileUseCase: FetchFriendPaymentProfileUseCaseProtocol,
         generateMyQrUseCase: GenerateMyQrUseCaseProtocol,
         addFriendUseCase: AddFriendUseCaseProtocol,
         fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol,
@@ -135,6 +138,17 @@ public struct FriendsRootView: View {
         self.transferGroupOwnershipUseCase = transferGroupOwnershipUseCase
         self.generateGroupQrUseCase = generateGroupQrUseCase
         self.revokeGroupQrUseCase = revokeGroupQrUseCase
+        self.profileDependencies = FriendUserProfileDependencies(
+            fetchUserProfileUseCase: fetchUserProfileUseCase,
+            fetchFriendPaymentProfileUseCase: fetchFriendPaymentProfileUseCase,
+            addFriendUseCase: addFriendUseCase,
+            fetchIncomingFriendRequestsUseCase: fetchIncomingFriendRequestsUseCase,
+            acceptFriendRequestUseCase: acceptFriendRequestUseCase,
+            removeFriendUseCase: removeFriendUseCase,
+            setFriendNicknameUseCase: setFriendNicknameUseCase,
+            blockUserUseCase: blockUserUseCase,
+            unblockUserUseCase: unblockUserUseCase
+        )
         _viewModel = StateObject(wrappedValue: rootVM)
         _addFriendViewModel = StateObject(
             wrappedValue: AddFriendViewModel(addFriendUseCase: addFriendUseCase) {
@@ -227,7 +241,7 @@ public struct FriendsRootView: View {
                     GroupDetailView(
                         group: group,
                         onUserTap: { user in
-                            profileRoute = UserProfileRoute(user: user, mode: .stranger)
+                            profileRoute = UserProfileRoute(user: user, initialFriendStatus: .none)
                         },
                         onGroupLeft: { viewModel.onGroupJoined() },
                         onGroupDeleted: { viewModel.onGroupJoined() },
@@ -253,13 +267,9 @@ public struct FriendsRootView: View {
             }
             .sheet(item: $profileRoute) { route in
                 FriendUserProfileView(
-                    viewModel: FriendUserProfileViewModel(
+                    viewModel: profileDependencies.makeViewModel(
                         user: route.user,
-                        mode: route.mode,
-                        removeFriendUseCase: removeFriendUseCase,
-                        setNicknameUseCase: setFriendNicknameUseCase,
-                        blockUserUseCase: blockUserUseCase,
-                        unblockUserUseCase: unblockUserUseCase,
+                        initialFriendStatus: route.initialFriendStatus,
                         onRelationshipChanged: { viewModel.onFriendAdded() }
                     )
                 )
@@ -399,17 +409,6 @@ public struct FriendsRootView: View {
         }
     }
 
-    private func profileMode(for status: FriendRelationStatus) -> FriendProfileMode {
-        switch status {
-        case .friends:
-            return .friend
-        case .blocked:
-            return .blocked
-        case .none, .requestSent, .requestReceived:
-            return .stranger
-        }
-    }
-
     private func actionForSearchResult(_ result: UserSearchResult) -> (() -> Void)? {
         switch result.friendStatus {
         case .none:
@@ -541,7 +540,7 @@ public struct FriendsRootView: View {
                             onProfileTap: {
                                 profileRoute = UserProfileRoute(
                                     user: result.user,
-                                    mode: profileMode(for: result.friendStatus)
+                                    initialFriendStatus: result.friendStatus
                                 )
                             },
                             onAddFriend: actionForSearchResult(result)
@@ -578,7 +577,7 @@ public struct FriendsRootView: View {
                 LazyVStack(spacing: SplickTheme.Spacing.xs) {
                     ForEach(viewModel.friends) { friend in
                         Button {
-                            profileRoute = UserProfileRoute(user: friend, mode: .friend)
+                            profileRoute = UserProfileRoute(user: friend, initialFriendStatus: .friends)
                         } label: {
                             FriendRowView(user: friend)
                         }

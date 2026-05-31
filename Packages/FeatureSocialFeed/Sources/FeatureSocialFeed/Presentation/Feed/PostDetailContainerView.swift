@@ -2,6 +2,7 @@ import SwiftUI
 import DesignSystem
 import Localization
 import SplickDomain
+import FeatureFriends
 
 /// Loads post data if needed, then shows `PostDetailView` (avoids blank navigation).
 struct PostDetailContainerView: View {
@@ -9,6 +10,7 @@ struct PostDetailContainerView: View {
     let destination: FeedPostDestination
     @ObservedObject var feedViewModel: FeedViewModel
     let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
+    let profileDependencies: FriendUserProfileDependencies?
 
     @State private var loadAttemptFinished = false
 
@@ -23,7 +25,8 @@ struct PostDetailContainerView: View {
                     post: post,
                     initialMediaIndex: destination.mediaIndex,
                     feedViewModel: feedViewModel,
-                    fetchFriendsUseCase: fetchFriendsUseCase
+                    fetchFriendsUseCase: fetchFriendsUseCase,
+                    profileDependencies: profileDependencies
                 )
             } else if !loadAttemptFinished {
                 LoadingView(message: languageService.text(.feedLoading))

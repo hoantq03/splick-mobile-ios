@@ -19,6 +19,20 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
         return friends.map(FriendsMapper.toUserSummary)
     }
 
+    public func fetchUserProfile(userId: UUID) async throws -> PublicUserProfile {
+        let response: UserProfileResponseDTO = try await apiClient.request(
+            SocialEndpoint.getUserProfile(userId: userId)
+        )
+        return FriendsMapper.toPublicUserProfile(response)
+    }
+
+    public func fetchFriendPaymentProfile(userId: UUID) async throws -> PaymentProfile {
+        let response: PaymentProfileResponseDTO = try await apiClient.request(
+            SocialEndpoint.getFriendPaymentProfile(userId: userId)
+        )
+        return FriendsMapper.toPaymentProfile(response)
+    }
+
     public func searchUsers(query: String, page: Int, size: Int) async throws -> [UserSearchResult] {
         let normalized = query
             .trimmingCharacters(in: .whitespacesAndNewlines)

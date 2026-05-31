@@ -55,6 +55,8 @@ targets:
     platform: iOS
     sources:
       - path: SplickApp/Sources
+      - path: SplickApp/Resources/Assets.xcassets
+        buildPhase: resources
     dependencies:
       - package: SplickCore
         product: Networking
@@ -91,10 +93,8 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         PRODUCT_BUNDLE_IDENTIFIER: com.splick.app
         TARGETED_DEVICE_FAMILY: 1
-    resources:
-      - path: SplickApp/Resources
-        excludes:
-          - Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
 
 schemes:
   SplickApp:
