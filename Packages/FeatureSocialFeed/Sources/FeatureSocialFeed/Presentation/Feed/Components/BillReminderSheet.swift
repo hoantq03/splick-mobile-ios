@@ -43,14 +43,17 @@ struct BillReminderSheet: View {
                     }
                 }
 
-                TextField("Lời nhắn", text: $message, axis: .vertical)
-                    .lineLimit(3...6)
-                    .font(SplickTheme.Typography.body)
-                    .padding(SplickTheme.Spacing.sm)
-                    .background(
-                        RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small)
-                            .fill(SplickTheme.Colors.tertiaryBackground)
-                    )
+                MentionTextField(
+                    "Lời nhắn",
+                    text: $message,
+                    fontSize: 15,
+                    minHeight: 88
+                )
+                .padding(SplickTheme.Spacing.sm)
+                .background(
+                    RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small)
+                        .fill(SplickTheme.Colors.tertiaryBackground)
+                )
 
                 Button {
                     message = BillReminderMessages.random()
@@ -115,14 +118,17 @@ struct BillReminderAllSheet: View {
                     }
                 }
 
-                TextField("Lời nhắn", text: $message, axis: .vertical)
-                    .lineLimit(3...6)
-                    .font(SplickTheme.Typography.body)
-                    .padding(SplickTheme.Spacing.sm)
-                    .background(
-                        RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small)
-                            .fill(SplickTheme.Colors.tertiaryBackground)
-                    )
+                MentionTextField(
+                    "Lời nhắn",
+                    text: $message,
+                    fontSize: 15,
+                    minHeight: 88
+                )
+                .padding(SplickTheme.Spacing.sm)
+                .background(
+                    RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small)
+                        .fill(SplickTheme.Colors.tertiaryBackground)
+                )
 
                 Button {
                     message = BillReminderMessages.random()
