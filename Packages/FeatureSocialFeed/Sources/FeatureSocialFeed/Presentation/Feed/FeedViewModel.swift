@@ -42,6 +42,9 @@ public final class FeedViewModel: ObservableObject {
     private var viewTrackFlushTask: Task<Void, Never>?
     private static let viewTrackDebounceNanos: UInt64 = 1_200_000_000
 
+    /// Optimistic comment ids not yet confirmed by the server — block reply to avoid invalid parent ids.
+    private var pendingCommentIds = Set<UUID>()
+
     public init(
         fetchFeedUseCase: FetchFeedUseCaseProtocol,
         fetchPostUseCase: FetchPostUseCaseProtocol,
@@ -172,15 +175,13 @@ public final class FeedViewModel: ObservableObject {
         isLoadingMore = false
     }
 
-    func refreshPost(id: UUID, preservingLocalComment localComment: PostComment? = nil) async {
-        guard !isRefreshing else { return }
+    func refreshPost(id: UUID, allowingConcurrentFeedRefresh: Bool = false) async {
+        if !allowingConcurrentFeedRefresh {
+            guard !isRefreshing else { return }
+        }
 
         do {
-            var updated = try await fetchPostUseCase.execute(postId: id)
-            if let localComment,
-               !updated.comments.contains(where: { matchesComment($0, localComment) }) {
-                updated = updated.updating(comments: updated.comments + [localComment])
-            }
+            let updated = try await fetchPostUseCase.execute(postId: id)
             if let index = posts.firstIndex(where: { $0.id == id }) {
                 posts[index] = updated
                 state = .loaded(posts)
@@ -189,6 +190,10 @@ public final class FeedViewModel: ObservableObject {
             if error.isRequestCancellation { return }
             Log.error(error, category: .feed)
         }
+    }
+
+    func canReply(to comment: PostComment) -> Bool {
+        !pendingCommentIds.contains(comment.id)
     }
 
     func trackViewOnScrollIfNeeded(for post: Post) async {
@@ -220,8 +225,38 @@ public final class FeedViewModel: ObservableObject {
 
     private func matchesComment(_ lhs: PostComment, _ rhs: PostComment) -> Bool {
         lhs.author.id == rhs.author.id
-            && lhs.text == rhs.text
+            && normalizedCommentBody(lhs.text) == normalizedCommentBody(rhs.text)
             && lhs.parentCommentId == rhs.parentCommentId
+    }
+
+    private func normalizedCommentBody(_ text: String?) -> String? {
+        guard let text else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func resolveCreatedCommentId(
+        postId: UUID,
+        authorId: UUID,
+        text: String?,
+        parentCommentId: UUID?,
+        fallbackId: UUID
+    ) -> UUID {
+        guard let post = posts.first(where: { $0.id == postId }) else { return fallbackId }
+        let normalizedText = normalizedCommentBody(text)
+        let byAuthorAndBody = post.comments.filter {
+            $0.author.id == authorId && normalizedCommentBody($0.text) == normalizedText
+        }
+        if let exact = byAuthorAndBody.first(where: { $0.parentCommentId == parentCommentId }) {
+            return exact.id
+        }
+        if let latest = byAuthorAndBody.max(by: { $0.createdAt < $1.createdAt }) {
+            return latest.id
+        }
+        return post.comments
+            .filter { $0.author.id == authorId && $0.parentCommentId == parentCommentId }
+            .max(by: { $0.createdAt < $1.createdAt })?
+            .id ?? fallbackId
     }
 
     @discardableResult
@@ -301,20 +336,31 @@ public final class FeedViewModel: ObservableObject {
         )
     }
 
+    struct AddCommentResult: Equatable {
+        let error: String?
+        let createdCommentId: UUID?
+    }
+
     @discardableResult
     func addComment(
         to postId: UUID,
         text: String,
         submissionAttachments: [CommentSubmissionAttachment],
         parentCommentId: UUID? = nil
-    ) async -> String? {
+    ) async -> AddCommentResult {
         guard let author = currentUserSummary else {
-            return "Không xác định được tài khoản. Hãy thử kéo refresh tab Feed."
+            return AddCommentResult(
+                error: "Không xác định được tài khoản. Hãy thử kéo refresh tab Feed.",
+                createdCommentId: nil
+            )
         }
 
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty && submissionAttachments.isEmpty {
-            return "Nội dung bình luận hoặc đính kèm không được để trống."
+            return AddCommentResult(
+                error: "Nội dung bình luận hoặc đính kèm không được để trống.",
+                createdCommentId: nil
+            )
         }
 
         let comment = PostComment(
@@ -323,12 +369,14 @@ public final class FeedViewModel: ObservableObject {
             attachments: [],
             parentCommentId: parentCommentId
         )
+        let optimisticId = comment.id
 
         guard let index = posts.firstIndex(where: { $0.id == postId }) else {
-            return "Không tìm thấy bài viết."
+            return AddCommentResult(error: "Không tìm thấy bài viết.", createdCommentId: nil)
         }
 
         let post = posts[index]
+        pendingCommentIds.insert(optimisticId)
         posts[index] = post.updating(comments: post.comments + [comment])
         state = .loaded(posts)
 
@@ -339,14 +387,37 @@ public final class FeedViewModel: ObservableObject {
                 parentCommentId: parentCommentId,
                 submissionAttachments: submissionAttachments
             )
-            await refreshPost(id: postId, preservingLocalComment: comment)
+            await refreshPost(id: postId, allowingConcurrentFeedRefresh: true)
+            pendingCommentIds.remove(optimisticId)
+            removeCommentFromPost(postId: postId, commentId: optimisticId)
+            let resolvedId = resolveCreatedCommentId(
+                postId: postId,
+                authorId: author.id,
+                text: comment.text,
+                parentCommentId: parentCommentId,
+                fallbackId: optimisticId
+            )
+            return AddCommentResult(error: nil, createdCommentId: resolvedId)
         } catch {
+            pendingCommentIds.remove(optimisticId)
             posts[index] = post
             state = .loaded(posts)
             Log.error(error, category: .feed)
-            return error.localizedDescription
+            return AddCommentResult(
+                error: error.localizedDescription,
+                createdCommentId: nil
+            )
         }
-        return nil
+    }
+
+    private func removeCommentFromPost(postId: UUID, commentId: UUID) {
+        guard let index = posts.firstIndex(where: { $0.id == postId }) else { return }
+        let post = posts[index]
+        guard post.comments.contains(where: { $0.id == commentId }) else { return }
+        posts[index] = post.updating(
+            comments: post.comments.filter { $0.id != commentId }
+        )
+        state = .loaded(posts)
     }
 
     func deletePost(id: UUID) async {
