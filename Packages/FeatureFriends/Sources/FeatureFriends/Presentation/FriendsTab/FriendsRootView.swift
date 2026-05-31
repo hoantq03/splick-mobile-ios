@@ -60,6 +60,7 @@ public struct FriendsRootView: View {
     private let transferGroupOwnershipUseCase: TransferGroupOwnershipUseCaseProtocol
     private let generateGroupQrUseCase: GenerateGroupQrUseCaseProtocol
     private let revokeGroupQrUseCase: RevokeGroupQrUseCaseProtocol
+    private let onBadgeCountsChanged: (() async -> Void)?
 
     public init(
         fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol,
@@ -94,8 +95,10 @@ public struct FriendsRootView: View {
         uploadGroupAvatarUseCase: UploadGroupAvatarUseCaseProtocol,
         transferGroupOwnershipUseCase: TransferGroupOwnershipUseCaseProtocol,
         generateGroupQrUseCase: GenerateGroupQrUseCaseProtocol,
-        revokeGroupQrUseCase: RevokeGroupQrUseCaseProtocol
+        revokeGroupQrUseCase: RevokeGroupQrUseCaseProtocol,
+        onBadgeCountsChanged: (() async -> Void)? = nil
     ) {
+        self.onBadgeCountsChanged = onBadgeCountsChanged
         let rootVM = FriendsRootViewModel(
             fetchMyFriendsUseCase: fetchMyFriendsUseCase,
             fetchMyGroupsUseCase: fetchMyGroupsUseCase,
@@ -148,7 +151,10 @@ public struct FriendsRootView: View {
                 fetchIncomingUseCase: fetchIncomingFriendRequestsUseCase,
                 acceptUseCase: acceptFriendRequestUseCase,
                 rejectUseCase: rejectFriendRequestUseCase,
-                onFriendshipChanged: { rootVM.onFriendAdded() }
+                onFriendshipChanged: {
+                    rootVM.onFriendAdded()
+                    Task { await onBadgeCountsChanged?() }
+                }
             )
         )
         _outgoingRequestsViewModel = StateObject(

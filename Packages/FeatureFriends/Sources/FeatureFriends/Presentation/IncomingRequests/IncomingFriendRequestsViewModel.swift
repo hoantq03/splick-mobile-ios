@@ -47,8 +47,11 @@ public final class IncomingFriendRequestsViewModel: ObservableObject {
     }
 
     func reject(_ request: IncomingFriendRequest) async {
-        await respond(to: request) {
+        let rejected = await respond(to: request) {
             try await rejectUseCase.execute(requestId: request.id)
+        }
+        if rejected {
+            onFriendshipChanged()
         }
     }
 
