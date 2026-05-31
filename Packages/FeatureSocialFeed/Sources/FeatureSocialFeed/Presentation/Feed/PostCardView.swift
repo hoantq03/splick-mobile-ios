@@ -195,9 +195,7 @@ struct PostCardView: View {
     }
 
     private func captionSection(_ caption: String) -> some View {
-        Text(caption)
-            .font(SplickTheme.Typography.callout)
-            .foregroundStyle(SplickTheme.Colors.textPrimary)
+        MentionText(caption, fontSize: 16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .onTapGesture { onOpenDetail?(mediaPageIndex) }
@@ -312,8 +310,8 @@ struct PostCardView: View {
         HStack(spacing: 4) {
             Image(systemName: "bubble.right")
                 .font(.system(size: 12))
-            if post.topLevelCommentCount > 0 {
-                Text("\(post.topLevelCommentCount)")
+            if post.commentCount > 0 {
+                Text("\(post.commentCount)")
                     .font(.system(size: 11, weight: .medium))
             }
         }
@@ -391,8 +389,8 @@ struct PostCardView: View {
                 commentIconWithCount
 
                 Group {
-                    if post.topLevelCommentCount > 0 {
-                        Text(languageService.format(.feedPostViewAllComments, post.topLevelCommentCount))
+                    if post.commentCount > 0 {
+                        Text(languageService.format(.feedPostViewAllComments, post.commentCount))
                     } else {
                         Text(languageService.text(.feedPostWriteComment))
                     }
