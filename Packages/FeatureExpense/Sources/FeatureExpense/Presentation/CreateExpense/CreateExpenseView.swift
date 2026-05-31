@@ -69,12 +69,27 @@ public struct CreateExpenseView: View {
     }
 
     private var detailsSection: some View {
-        SplickTextField(
-            languageService.text(.expenseCreateDescription),
-            text: $viewModel.description,
-            errorMessage: viewModel.descriptionError,
-            icon: "text.alignleft"
-        )
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+            Text(languageService.text(.expenseCreateDescription))
+                .font(SplickTheme.Typography.headline)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
+
+            MentionTextField(
+                languageService.text(.expenseCreateDescription),
+                text: $viewModel.description,
+                fontSize: 15,
+                minHeight: 44
+            )
+            .padding(SplickTheme.Spacing.sm)
+            .background(SplickTheme.Colors.secondaryBackground)
+            .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small))
+
+            if let descriptionError = viewModel.descriptionError {
+                Text(descriptionError)
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.error)
+            }
+        }
     }
 
     private var categorySection: some View {
