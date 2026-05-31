@@ -100,10 +100,12 @@ struct NotificationRowView: View {
                     .font(notification.isRead ? SplickTheme.Typography.callout : SplickTheme.Typography.headline)
                     .foregroundStyle(SplickTheme.Colors.textPrimary)
 
-                Text(notification.body)
-                    .font(SplickTheme.Typography.caption)
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
-                    .lineLimit(2)
+                MentionText(
+                    notification.body,
+                    fontSize: 12,
+                    plainColor: SplickTheme.Colors.textSecondary
+                )
+                .lineLimit(2)
 
                 Text(notification.createdAt.relativeString)
                     .font(SplickTheme.Typography.caption)
