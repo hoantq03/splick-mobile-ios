@@ -7,6 +7,8 @@ struct CommentDTO: Decodable {
     let parentCommentId: UUID?
     let attachments: [CommentAttachmentDTO]?
     let createdAt: Date
+    let updatedAt: Date?
+    let deletedAt: Date?
 }
 
 struct CommentAttachmentDTO: Decodable {

@@ -69,7 +69,9 @@ enum FeedMapper {
             text: dto.body,
             attachments: dto.attachments?.map(toCommentAttachment) ?? [],
             parentCommentId: dto.parentCommentId,
-            createdAt: dto.createdAt
+            createdAt: dto.createdAt,
+            updatedAt: dto.updatedAt,
+            deletedAt: dto.deletedAt
         )
     }
 
