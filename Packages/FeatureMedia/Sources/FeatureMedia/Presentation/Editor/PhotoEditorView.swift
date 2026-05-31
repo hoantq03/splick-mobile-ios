@@ -18,6 +18,7 @@ struct PhotoEditorView: View {
     @StateObject private var viewModel: PhotoEditorViewModel
     @State private var layoutMetrics = ImageDisplayMetrics(imageSize: .zero, displayFrame: .zero)
     @State private var editingText = ""
+    @State private var isEditingNewItem = false
     @FocusState private var isTextFieldFocused: Bool
 
     let onDone: (UIImage) -> Void
@@ -71,7 +72,11 @@ struct PhotoEditorView: View {
                 isTextFieldFocused = false
                 return
             }
-            editingText = item.text
+            // New items have the sentinel placeholder — start with empty field so
+            // the user types from scratch without having to clear "Nhập chữ" first.
+            let isNew = item.text == EditorTextItem.placeholderText
+            isEditingNewItem = isNew
+            editingText = isNew ? "" : item.text
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 isTextFieldFocused = true
             }
@@ -87,7 +92,12 @@ struct PhotoEditorView: View {
                 .onSubmit(commitTextEditing)
                 .onChange(of: editingText) { newValue in
                     guard let id = viewModel.selectedTextID else { return }
-                    viewModel.updateText(id, text: newValue)
+                    // Show live preview in overlay: if field is empty and this is a
+                    // new item, keep sentinel placeholder visible on canvas.
+                    let displayText = newValue.isEmpty && isEditingNewItem
+                        ? EditorTextItem.placeholderText
+                        : newValue
+                    viewModel.updateText(id, text: displayText)
                 }
 
             Button("Xong", action: commitTextEditing)
@@ -103,10 +113,17 @@ struct PhotoEditorView: View {
 
     private func commitTextEditing() {
         guard let id = viewModel.selectedTextID else { return }
-        viewModel.updateText(id, text: editingText.isEmpty ? "Nhập chữ" : editingText)
-        viewModel.commitTextEdit()
+        // If user didn't type anything, remove the item instead of leaving placeholder on canvas.
+        if editingText.isEmpty && isEditingNewItem {
+            viewModel.removeTextItem(id)
+        } else {
+            let finalText = editingText.isEmpty ? EditorTextItem.placeholderText : editingText
+            viewModel.updateText(id, text: finalText)
+            viewModel.commitTextEdit()
+        }
         viewModel.selectedTextID = nil
         isTextFieldFocused = false
+        isEditingNewItem = false
     }
 }
 
@@ -138,26 +155,33 @@ private struct EditorCanvasView: View {
                         onTap: { viewModel.toggleChromeFromImageTap() }
                     ))
 
-                if viewModel.activeTool == .draw {
-                    PhotoEditorDrawCanvas(
-                        drawing: viewModel.drawing,
-                        isEnabled: true,
-                        inkColor: viewModel.inkColor,
-                        inkWidth: viewModel.inkWidth,
-                        flushToken: viewModel.finalizeFlushToken,
-                        drawingSyncRevision: viewModel.drawingSyncRevision,
-                        onStrokeEnded: { viewModel.commitDrawing($0) }
-                    )
-                    .frame(width: metrics.displayFrame.width, height: metrics.displayFrame.height)
-                    .position(x: metrics.displayFrame.midX, y: metrics.displayFrame.midY)
-                } else if !viewModel.drawing.bounds.isEmpty {
+                // DrawCanvas is always in the tree; opacity controls visibility.
+                // Keeps the PKCanvasView mounted during tool switches so strokes
+                // never flash-disappear when switching to text/sticker/crop.
+                PhotoEditorDrawCanvas(
+                    drawing: viewModel.drawing,
+                    isEnabled: viewModel.activeTool == .draw,
+                    inkColor: viewModel.inkColor,
+                    inkWidth: viewModel.inkWidth,
+                    flushToken: viewModel.finalizeFlushToken,
+                    drawingSyncRevision: viewModel.drawingSyncRevision,
+                    onStrokeEnded: { viewModel.commitDrawing($0) }
+                )
+                .frame(width: metrics.displayFrame.width, height: metrics.displayFrame.height)
+                .position(x: metrics.displayFrame.midX, y: metrics.displayFrame.midY)
+                .opacity(viewModel.activeTool == .draw ? 1 : 0)
+                .allowsHitTesting(viewModel.activeTool == .draw)
+
+                // Overlay shows the frozen drawing snapshot when draw tool is inactive.
+                if !viewModel.drawing.bounds.isEmpty && viewModel.activeTool != .draw {
                     PhotoEditorDrawingOverlay(
                         drawing: viewModel.drawing,
                         canvasSize: metrics.displayFrame.size
                     )
-                        .frame(width: metrics.displayFrame.width, height: metrics.displayFrame.height)
-                        .position(x: metrics.displayFrame.midX, y: metrics.displayFrame.midY)
-                        .allowsHitTesting(false)
+                    .frame(width: metrics.displayFrame.width, height: metrics.displayFrame.height)
+                    .position(x: metrics.displayFrame.midX, y: metrics.displayFrame.midY)
+                    .allowsHitTesting(false)
+                    .transition(.identity)
                 }
 
                 if !viewModel.textItems.isEmpty || viewModel.activeTool == .text {

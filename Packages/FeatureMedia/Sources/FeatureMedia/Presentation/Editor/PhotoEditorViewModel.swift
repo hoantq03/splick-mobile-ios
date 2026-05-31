@@ -31,6 +31,8 @@ enum EditorTool: String, CaseIterable, Identifiable {
 }
 
 struct EditorTextItem: Identifiable, Equatable {
+    static let placeholderText = "Nhập chữ"
+
     let id: UUID
     var text: String
     var normalizedPosition: CGPoint
@@ -40,7 +42,7 @@ struct EditorTextItem: Identifiable, Equatable {
 
     init(
         id: UUID = UUID(),
-        text: String = "Nhập chữ",
+        text: String = EditorTextItem.placeholderText,
         normalizedPosition: CGPoint = CGPoint(x: 0.5, y: 0.5),
         scale: CGFloat = 1,
         rotation: Angle = .zero,
@@ -168,9 +170,10 @@ final class PhotoEditorViewModel: ObservableObject {
             selectedStickerID = nil
         }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        DispatchQueue.main.async { [weak self] in
-            self?.bakeAllOverlaysIntoBaseImage()
-        }
+        // Intentionally NOT baking on tool switch: baking clears `drawing` async,
+        // which removes PhotoEditorDrawingOverlay before EditorImageView can show
+        // the baked result — causing the last stroke to appear to vanish.
+        // All layers are baked together only in finalize() / prepareForFinalize().
     }
 
     func toggleChromeFromImageTap() {
@@ -201,9 +204,7 @@ final class PhotoEditorViewModel: ObservableObject {
         selectedStickerID = nil
         isChromeVisible = false
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        DispatchQueue.main.async { [weak self] in
-            self?.bakeAllOverlaysIntoBaseImage()
-        }
+        // Same reasoning as selectTool — defer baking to finalize().
     }
 
     func showChrome() {
@@ -274,6 +275,11 @@ final class PhotoEditorViewModel: ObservableObject {
         var items = textItems
         items[index].text = text
         textItems = items
+    }
+
+    func removeTextItem(_ id: UUID) {
+        textItems.removeAll { $0.id == id }
+        pushSnapshotIfNeeded()
     }
 
     func commitTextEdit() {
