@@ -16,9 +16,11 @@ struct PostDetailView: View {
     @StateObject private var commentPager: PostDetailViewModel
     @State private var profileRoute: ProfileRoute?
     @State private var companionsRoute: CompanionsSheetRoute?
-    @State private var replyParentId: UUID?
+    @State private var replyTarget: PostComment?
+    @State private var scrollToCommentId: UUID?
     @State private var showEmojiPicker = false
     @State private var mediaViewerRoute: MediaViewerRoute?
+    @State private var composerFocused = false
 
     init(
         post: Post,
@@ -37,68 +39,56 @@ struct PostDetailView: View {
         feedViewModel.posts.first(where: { $0.id == post.id }) ?? post
     }
 
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
-                PostCardView(
-                    post: livePost,
-                    currentUser: feedViewModel.currentUser,
-                    onReact: { emoji in
-                        if let error = feedViewModel.react(to: post.id, emoji: emoji) {
-                            feedViewModel.alertMessage = error
-                        }
-                    },
-                    onDelete: {
-                        Task { await feedViewModel.deletePost(id: post.id) }
-                    },
-                    onUserTap: { profileRoute = ProfileRoute(user: $0) },
-                    onOpenComments: {},
-                    onShowCompanions: {
-                        companionsRoute = CompanionsSheetRoute(
-                            id: livePost.id,
-                            companions: livePost.companions
-                        )
-                    },
-                    showsCommentPreview: false,
-                    onMediaTap: { index in
-                        mediaViewerRoute = MediaViewerRoute(index: index)
-                    },
-                    initialMediaIndex: initialMediaIndex
-                )
+    private var highlightedCommentId: UUID? {
+        replyTarget?.id
+    }
 
-                commentsSection
+    var body: some View {
+        ScrollViewReader { scrollProxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
+                    PostCardView(
+                        post: livePost,
+                        currentUser: feedViewModel.currentUser,
+                        onReact: { emoji in
+                            if let error = feedViewModel.react(to: post.id, emoji: emoji) {
+                                feedViewModel.alertMessage = error
+                            }
+                        },
+                        onDelete: {
+                            Task { await feedViewModel.deletePost(id: post.id) }
+                        },
+                        onUserTap: { profileRoute = ProfileRoute(user: $0) },
+                        onOpenComments: {},
+                        onShowCompanions: {
+                            companionsRoute = CompanionsSheetRoute(
+                                id: livePost.id,
+                                companions: livePost.companions
+                            )
+                        },
+                        showsCommentPreview: false,
+                        onMediaTap: { index in
+                            mediaViewerRoute = MediaViewerRoute(index: index)
+                        },
+                        initialMediaIndex: initialMediaIndex
+                    )
+
+                    commentsSection
+                }
+                .padding(.horizontal, SplickTheme.Spacing.md)
             }
-            .padding(.horizontal, SplickTheme.Spacing.md)
+            .refreshable {
+                await feedViewModel.refreshPost(id: post.id, allowingConcurrentFeedRefresh: true)
+            }
+            .onChange(of: scrollToCommentId) { commentId in
+                guard let commentId else { return }
+                scrollToComment(commentId, proxy: scrollProxy)
+            }
         }
         .navigationTitle(languageService.text(.feedPostCommentsTitle))
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            CommentComposerView(
-                placeholder: replyParentId == nil
-                    ? languageService.text(.feedPostWriteComment)
-                    : "Trả lời...",
-                fetchFriendsUseCase: fetchFriendsUseCase
-            ) { text, attachments in
-                Task {
-                    if let error = await feedViewModel.addComment(
-                        to: post.id,
-                        text: text,
-                        submissionAttachments: attachments,
-                        parentCommentId: replyParentId
-                    ) {
-                        feedViewModel.alertMessage = error
-                    } else {
-                        replyParentId = nil
-                    }
-                }
-            }
-            .padding(.horizontal, SplickTheme.Spacing.md)
-            .padding(.top, SplickTheme.Spacing.xs)
-            .padding(.bottom, SplickTheme.Spacing.xs)
-            .background {
-                SplickTheme.Colors.background
-                    .ignoresSafeArea(edges: .bottom)
-            }
+            commentComposerInset
         }
         .alert(
             languageService.text(.commonError),
@@ -111,10 +101,11 @@ struct PostDetailView: View {
         } message: {
             Text(feedViewModel.alertMessage ?? "")
         }
-        .task { await feedViewModel.refreshPost(id: post.id) }
+        .task { await feedViewModel.refreshPost(id: post.id, allowingConcurrentFeedRefresh: true) }
         .onAppear {
             feedViewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
             tabBarScrollState?.hide(flushToBottom: true)
+            commentPager.refresh(with: livePost.comments)
             commentPager.loadInitial()
         }
         .onDisappear {
@@ -122,6 +113,11 @@ struct PostDetailView: View {
         }
         .onChange(of: livePost.comments) { comments in
             commentPager.refresh(with: comments)
+        }
+        .onChange(of: replyTarget) { target in
+            if target != nil {
+                composerFocused = true
+            }
         }
         .sheet(item: $profileRoute) { route in
             UserProfileView(user: route.user)
@@ -154,6 +150,70 @@ struct PostDetailView: View {
         }
     }
 
+    private var commentComposerInset: some View {
+        VStack(spacing: SplickTheme.Spacing.xs) {
+            if let replyTarget {
+                CommentReplyBanner(replyingTo: replyTarget.author) {
+                    self.replyTarget = nil
+                }
+            }
+
+            CommentComposerView(
+                placeholder: composerPlaceholder,
+                prefillMentionUsername: replyTarget?.author.username,
+                isFocused: $composerFocused,
+                fetchFriendsUseCase: fetchFriendsUseCase
+            ) { text, attachments in
+                Task { await submitComment(text: text, attachments: attachments) }
+            }
+            .id(replyTarget?.id ?? post.id)
+        }
+        .padding(.horizontal, SplickTheme.Spacing.md)
+        .padding(.top, SplickTheme.Spacing.xs)
+        .padding(.bottom, SplickTheme.Spacing.xs)
+        .background {
+            SplickTheme.Colors.background
+                .ignoresSafeArea(edges: .bottom)
+        }
+    }
+
+    private var composerPlaceholder: String {
+        if let replyTarget {
+            return "Trả lời \(replyTarget.author.displayName)..."
+        }
+        return languageService.text(.feedPostWriteComment)
+    }
+
+    private func submitComment(text: String, attachments: [CommentSubmissionAttachment]) async {
+        let parentId = replyTarget?.id
+
+        let result = await feedViewModel.addComment(
+            to: post.id,
+            text: text,
+            submissionAttachments: attachments,
+            parentCommentId: parentId
+        )
+        if let error = result.error {
+            feedViewModel.alertMessage = error
+        } else {
+            if let parentId {
+                commentPager.expandReplies(for: parentId)
+            }
+            replyTarget = nil
+            scrollToCommentId = result.createdCommentId
+        }
+    }
+
+    private func scrollToComment(_ commentId: UUID, proxy: ScrollViewProxy) {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 120_000_000)
+            withAnimation(.easeInOut(duration: 0.35)) {
+                proxy.scrollTo(commentId, anchor: .center)
+            }
+            scrollToCommentId = nil
+        }
+    }
+
     private var commentsSection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
             Text(languageService.text(.feedPostCommentsHeader))
@@ -168,10 +228,20 @@ struct PostDetailView: View {
             CommentThreadView(
                 comments: commentPager.allComments,
                 roots: commentPager.displayedTopLevel,
+                expandedParents: commentPager.expandedParents,
+                highlightedCommentId: highlightedCommentId,
+                repliesPreviewCount: commentPager.repliesPreviewCount,
+                canReplyToComment: { feedViewModel.canReply(to: $0) },
                 onReply: { comment in
-                    replyParentId = comment.id
+                    guard feedViewModel.canReply(to: comment) else { return }
+                    commentPager.expandAncestorChain(of: comment)
+                    replyTarget = comment
+                    composerFocused = true
                 },
-                onUserTap: { profileRoute = ProfileRoute(user: $0) }
+                onUserTap: { profileRoute = ProfileRoute(user: $0) },
+                onViewMoreReplies: { parentId in
+                    commentPager.expandReplies(for: parentId)
+                }
             )
 
             if commentPager.canLoadMore {
