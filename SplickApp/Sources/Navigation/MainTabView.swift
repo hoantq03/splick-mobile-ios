@@ -49,7 +49,8 @@ struct MainTabView: View {
                     viewModel: ExpenseListViewModel(
                         fetchExpensesUseCase: container.fetchExpensesUseCase,
                         fetchDebtSummaryUseCase: container.fetchDebtSummaryUseCase,
-                        currentUserId: appState.currentUser?.id
+                        currentUserId: appState.currentUser?.id,
+                        onBadgeCountsChanged: { await container.badgeCountService.refresh() }
                     ),
                     userSearchUseCase: FriendsUserSearchAdapter(
                         fetchFriendsUseCase: container.fetchFriendsUseCase
@@ -141,7 +142,7 @@ struct MainTabView: View {
             } else {
                 tabBarScrollState.reset()
             }
-            if tab == .notifications || tab == .friends {
+            if tab == .notifications || tab == .friends || tab == .expenses {
                 Task { await container.badgeCountService.refresh() }
             }
         }
