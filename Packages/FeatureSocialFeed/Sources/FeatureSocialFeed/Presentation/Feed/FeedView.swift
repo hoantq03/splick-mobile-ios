@@ -95,14 +95,11 @@ public struct FeedView: View {
                 )
             }
             .navigationDestination(for: FeedPostDestination.self) { destination in
-                if let post = viewModel.posts.first(where: { $0.id == destination.postId }) {
-                    PostDetailView(
-                        post: post,
-                        initialMediaIndex: destination.mediaIndex,
-                        feedViewModel: viewModel,
-                        fetchFriendsUseCase: fetchFriendsUseCase
-                    )
-                }
+                PostDetailContainerView(
+                    destination: destination,
+                    feedViewModel: viewModel,
+                    fetchFriendsUseCase: fetchFriendsUseCase
+                )
             }
             .alert(
                 languageService.text(.commonError),
