@@ -11,16 +11,19 @@ public final class NotificationListViewModel: ObservableObject {
     private let fetchNotificationsUseCase: FetchNotificationsUseCaseProtocol
     private let markReadUseCase: MarkNotificationReadUseCaseProtocol
     private let markClickedUseCase: MarkNotificationClickedUseCaseProtocol
+    private let onBadgeCountsChanged: (() async -> Void)?
     private var currentPage = 0
 
     public init(
         fetchNotificationsUseCase: FetchNotificationsUseCaseProtocol,
         markReadUseCase: MarkNotificationReadUseCaseProtocol,
-        markClickedUseCase: MarkNotificationClickedUseCaseProtocol
+        markClickedUseCase: MarkNotificationClickedUseCaseProtocol,
+        onBadgeCountsChanged: (() async -> Void)? = nil
     ) {
         self.fetchNotificationsUseCase = fetchNotificationsUseCase
         self.markReadUseCase = markReadUseCase
         self.markClickedUseCase = markClickedUseCase
+        self.onBadgeCountsChanged = onBadgeCountsChanged
     }
 
     func load() async {
@@ -49,6 +52,7 @@ public final class NotificationListViewModel: ObservableObject {
         do {
             try await markClickedUseCase.execute(id: notification.id)
             markLocalAsRead(notification)
+            await onBadgeCountsChanged?()
         } catch {
             Log.error(error, category: .notification)
             if !notification.isRead {
@@ -63,6 +67,7 @@ public final class NotificationListViewModel: ObservableObject {
         do {
             try await markReadUseCase.markAllRead()
             notifications = notifications.map { $0.markingAsRead() }
+            await onBadgeCountsChanged?()
         } catch {
             Log.error(error, category: .notification)
         }
