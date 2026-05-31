@@ -19,3 +19,9 @@ struct NotificationResponseDTO: Decodable {
 struct UnreadCountDTO: Decodable {
     let count: Int
 }
+
+struct BadgeCountsDTO: Decodable {
+    let notifications: Int
+    let friends: Int
+    let expenses: Int
+}

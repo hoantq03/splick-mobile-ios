@@ -32,4 +32,13 @@ public final class NotificationRepository: NotificationRepositoryProtocol, Senda
         let dto: UnreadCountDTO = try await apiClient.request(NotificationEndpoint.unreadCount)
         return dto.count
     }
+
+    public func fetchBadgeCounts() async throws -> TabBadgeCounts {
+        let dto: BadgeCountsDTO = try await apiClient.request(NotificationEndpoint.badgeCounts)
+        return TabBadgeCounts(
+            notifications: dto.notifications,
+            friends: dto.friends,
+            expenses: dto.expenses
+        )
+    }
 }

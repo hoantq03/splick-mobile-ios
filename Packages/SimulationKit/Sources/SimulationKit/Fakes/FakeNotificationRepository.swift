@@ -92,4 +92,26 @@ public actor FakeNotificationRepository: NotificationRepositoryProtocol {
         logger.log("Unread count: \(count)")
         return count
     }
+
+    public func fetchBadgeCounts() async throws -> TabBadgeCounts {
+        let unread = notifications.filter { !$0.isRead }
+        var notificationsCount = 0
+        var friends = 0
+        var expenses = 0
+        for item in unread {
+            switch item.type {
+            case .friendRequest, .friendRequestSent, .groupInvite:
+                friends += 1
+            case .expenseCreated, .expenseSplitBill, .expenseReminder, .expenseSettled:
+                expenses += 1
+            default:
+                notificationsCount += 1
+            }
+        }
+        return TabBadgeCounts(
+            notifications: notificationsCount,
+            friends: friends,
+            expenses: expenses
+        )
+    }
 }
