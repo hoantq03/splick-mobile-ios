@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import DesignSystem
 import Common
 import SplickDomain
 import AVFoundation
