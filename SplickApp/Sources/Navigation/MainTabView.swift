@@ -91,7 +91,8 @@ struct MainTabView: View {
                     uploadGroupAvatarUseCase: container.uploadGroupAvatarUseCase,
                     transferGroupOwnershipUseCase: container.transferGroupOwnershipUseCase,
                     generateGroupQrUseCase: container.generateGroupQrUseCase,
-                    revokeGroupQrUseCase: container.revokeGroupQrUseCase
+                    revokeGroupQrUseCase: container.revokeGroupQrUseCase,
+                    onBadgeCountsChanged: { await container.badgeCountService.refresh() }
                 )
 
             case .camera:
@@ -140,7 +141,7 @@ struct MainTabView: View {
             } else {
                 tabBarScrollState.reset()
             }
-            if tab == .notifications {
+            if tab == .notifications || tab == .friends {
                 Task { await container.badgeCountService.refresh() }
             }
         }
