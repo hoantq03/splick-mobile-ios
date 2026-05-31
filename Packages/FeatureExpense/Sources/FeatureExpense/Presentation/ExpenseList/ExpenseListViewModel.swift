@@ -16,6 +16,7 @@ public final class ExpenseListViewModel: ObservableObject {
 
     private let fetchExpensesUseCase: FetchExpensesUseCaseProtocol
     private let fetchDebtSummaryUseCase: FetchDebtSummaryUseCaseProtocol
+    private let onBadgeCountsChanged: (() async -> Void)?
     private let groupId: UUID?
     private(set) var currentUserId: UUID?
     private var currentPage = 0
@@ -24,10 +25,12 @@ public final class ExpenseListViewModel: ObservableObject {
         fetchExpensesUseCase: FetchExpensesUseCaseProtocol,
         fetchDebtSummaryUseCase: FetchDebtSummaryUseCaseProtocol,
         groupId: UUID? = nil,
-        currentUserId: UUID? = nil
+        currentUserId: UUID? = nil,
+        onBadgeCountsChanged: (() async -> Void)? = nil
     ) {
         self.fetchExpensesUseCase = fetchExpensesUseCase
         self.fetchDebtSummaryUseCase = fetchDebtSummaryUseCase
+        self.onBadgeCountsChanged = onBadgeCountsChanged
         self.groupId = groupId
         self.currentUserId = currentUserId
     }
@@ -88,6 +91,7 @@ public final class ExpenseListViewModel: ObservableObject {
                 category: .expense,
                 metadata: ["expenseCount": String(fetchedExpenses.count), "debtCount": String(fetchedDebts.count)]
             )
+            await onBadgeCountsChanged?()
         } catch {
             if isPullToRefresh, !expenses.isEmpty {
                 state = .loaded(expenses)
