@@ -4,7 +4,6 @@ import SwiftUI
 struct CapturePreviewView: View {
     let image: UIImage
     let onRetake: () -> Void
-    let onChooseAnother: () -> Void
     let onEdit: () -> Void
     let onUsePhoto: () -> Void
     let onCancel: () -> Void
@@ -64,8 +63,7 @@ struct CapturePreviewView: View {
             }
 
             HStack(spacing: SplickTheme.Spacing.sm) {
-                secondaryButton(title: "Chụp lại", icon: "camera.fill", action: onRetake)
-                secondaryButton(title: "Thư viện", icon: "photo.on.rectangle", action: onChooseAnother)
+                secondaryButton(title: "Chụp lại", icon: "arrow.counterclockwise", action: onRetake)
                 secondaryButton(title: "Chỉnh sửa", icon: "slider.horizontal.3", action: onEdit)
             }
         }

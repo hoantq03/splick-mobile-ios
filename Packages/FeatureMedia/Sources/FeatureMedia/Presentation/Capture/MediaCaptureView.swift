@@ -1,8 +1,9 @@
+import AVFoundation
 import DesignSystem
 import SwiftUI
 import UIKit
 
-/// Opens the system camera immediately; multi-select library is available from preview flow.
+/// Orchestrates camera capture, album picker, photo preview, and editor.
 public struct MediaCaptureView: View {
     let onMediaCaptured: (CapturedMedia) -> Void
     let onCancel: () -> Void
@@ -25,7 +26,7 @@ public struct MediaCaptureView: View {
         Group {
             switch route {
             case .camera:
-                if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                if isCameraAccessible {
                     CameraPickerView(onResult: { handleCameraResult($0) })
                         .id(cameraSessionID)
                         .ignoresSafeArea()
@@ -37,11 +38,13 @@ public struct MediaCaptureView: View {
             case .library:
                 MultiPhotoLibraryPickerView(
                     maxSelectionCount: maxLibrarySelection,
-                    onConfirm: { images in
-                        handleLibraryImages(images)
-                    },
+                    onConfirm: { images in handleLibraryImages(images) },
                     onCancel: {
-                        route = .camera
+                        if isCameraAccessible {
+                            reopenCamera()
+                        } else {
+                            route = .camera
+                        }
                     }
                 )
                 .transition(.opacity)
@@ -50,14 +53,11 @@ public struct MediaCaptureView: View {
                 if let workingImage {
                     CapturePreviewView(
                         image: workingImage,
-                        onRetake: { reopenCamera() },
-                        onChooseAnother: {
+                        onRetake: {
                             self.workingImage = nil
-                            route = .library
+                            reopenCamera()
                         },
-                        onEdit: {
-                            route = .editor
-                        },
+                        onEdit: { route = .editor },
                         onUsePhoto: {
                             onMediaCaptured(.image(workingImage))
                         },
@@ -73,12 +73,8 @@ public struct MediaCaptureView: View {
                 if let workingImage {
                     PhotoEditorView(
                         sourceImage: workingImage,
-                        onDone: { edited in
-                            onMediaCaptured(.image(edited))
-                        },
-                        onCancel: {
-                            route = .preview
-                        }
+                        onDone: { edited in onMediaCaptured(.image(edited)) },
+                        onCancel: { route = .preview }
                     )
                     .transition(.opacity)
                 }
@@ -90,17 +86,50 @@ public struct MediaCaptureView: View {
         .editorStatusBarHidden(true)
     }
 
+    /// Hardware camera exists and user has not denied camera permission.
+    private var isCameraAccessible: Bool {
+        guard UIImagePickerController.isSourceTypeAvailable(.camera) else { return false }
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized, .notDetermined:
+            return true
+        default:
+            return false
+        }
+    }
+
     private var cameraUnavailableView: some View {
-        VStack(spacing: SplickTheme.Spacing.md) {
+        VStack(spacing: SplickTheme.Spacing.lg) {
             Image(systemName: "camera.fill")
                 .font(.system(size: 48))
                 .foregroundStyle(.white.opacity(0.5))
-            Text("Camera không khả dụng")
-                .font(SplickTheme.Typography.headline)
-                .foregroundStyle(.white)
+
+            VStack(spacing: SplickTheme.Spacing.sm) {
+                Text("Camera không khả dụng")
+                    .font(SplickTheme.Typography.headline)
+                    .foregroundStyle(.white)
+                Text("Bạn vẫn có thể chọn ảnh từ thư viện để tiếp tục.")
+                    .font(SplickTheme.Typography.callout)
+                    .foregroundStyle(.white.opacity(0.65))
+                    .multilineTextAlignment(.center)
+            }
+
+            Button {
+                route = .library
+            } label: {
+                Label("Chọn từ thư viện ảnh", systemImage: "photo.on.rectangle.angled")
+                    .font(SplickTheme.Typography.callout.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, SplickTheme.Spacing.sm)
+                    .background(Capsule().fill(SplickTheme.Colors.primaryGradient))
+            }
+            .buttonStyle(.plain)
+
             Button("Quay lại", action: onCancel)
+                .font(SplickTheme.Typography.callout)
                 .foregroundStyle(.white.opacity(0.7))
         }
+        .padding(SplickTheme.Spacing.xl)
     }
 
     private func reopenCamera() {
@@ -110,7 +139,7 @@ public struct MediaCaptureView: View {
 
     private func handleLibraryImages(_ images: [UIImage]) {
         guard !images.isEmpty else {
-            reopenCamera()
+            if isCameraAccessible { reopenCamera() } else { route = .camera }
             return
         }
         onMediaCaptured(images.count == 1 ? .image(images[0]) : .images(images))
@@ -125,6 +154,8 @@ public struct MediaCaptureView: View {
             onMediaCaptured(.video(url))
         case .cancelled:
             onCancel()
+        case .openLibrary:
+            route = .library
         }
     }
 }
