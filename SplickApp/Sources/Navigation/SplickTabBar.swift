@@ -1,6 +1,7 @@
 import SwiftUI
 import DesignSystem
 import Localization
+import FeatureNotification
 
 // MARK: - Mask (trailing geometry mirrored for leading)
 
@@ -47,6 +48,7 @@ private struct SidePanelMask: View {
 
 struct SplickTabBar: View {
     @Binding var selectedTab: Tab
+    @EnvironmentObject private var badgeCountService: BadgeCountService
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.tabBarScrollState) private var tabBarScrollState
 
@@ -68,7 +70,7 @@ struct SplickTabBar: View {
                 HStack(alignment: .center, spacing: 0) {
                     sidePanel(side: .leading) {
                         tabButton(.feed)
-                        tabButton(.expenses)
+                        tabButton(.expenses, badge: badgeCountService.counts.expenses)
                     }
                     .frame(width: sideWidth)
 
@@ -77,8 +79,8 @@ struct SplickTabBar: View {
                         .allowsHitTesting(false)
 
                     sidePanel(side: .trailing) {
-                        tabButton(.friends)
-                        tabButton(.notifications)
+                        tabButton(.friends, badge: badgeCountService.counts.friends)
+                        tabButton(.notifications, badge: badgeCountService.counts.notifications)
                     }
                     .frame(width: sideWidth)
                 }
@@ -146,27 +148,32 @@ struct SplickTabBar: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    private func tabButton(_ tab: Tab) -> some View {
+    private func tabButton(_ tab: Tab, badge: Int = 0) -> some View {
         let isSelected = selectedTab == tab
         return Button {
             selectedTab = tab
             tabBarScrollState?.show()
         } label: {
-            VStack(spacing: 3) {
-                Image(systemName: isSelected ? tab.selectedIcon : tab.icon)
-                    .font(.system(size: 21, weight: .medium))
-                    .symbolRenderingMode(.monochrome)
-                Text(tab.localizedTitle(using: languageService))
-                    .font(.system(size: 10, weight: isSelected ? .semibold : .medium))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.65)
-                    .allowsTightening(true)
+            ZStack(alignment: .topTrailing) {
+                VStack(spacing: 3) {
+                    Image(systemName: isSelected ? tab.selectedIcon : tab.icon)
+                        .font(.system(size: 21, weight: .medium))
+                        .symbolRenderingMode(.monochrome)
+                    Text(tab.localizedTitle(using: languageService))
+                        .font(.system(size: 10, weight: isSelected ? .semibold : .medium))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.65)
+                        .allowsTightening(true)
+                }
+                .foregroundStyle(
+                    isSelected
+                        ? SplickTheme.Colors.primaryGradientStart
+                        : SplickTheme.Colors.textTertiary
+                )
+
+                TabBarBadgeView(count: badge)
+                    .offset(x: 10, y: -6)
             }
-            .foregroundStyle(
-                isSelected
-                    ? SplickTheme.Colors.primaryGradientStart
-                    : SplickTheme.Colors.textTertiary
-            )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .buttonStyle(.plain)

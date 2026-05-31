@@ -351,6 +351,14 @@ final class DependencyContainer: ObservableObject {
         MarkNotificationClickedUseCase(repository: notificationRepository)
     }()
 
+    lazy var fetchBadgeCountsUseCase: FetchBadgeCountsUseCaseProtocol = {
+        FetchBadgeCountsUseCase(repository: notificationRepository)
+    }()
+
+    lazy var badgeCountService: BadgeCountService = {
+        BadgeCountService(fetchBadgeCountsUseCase: fetchBadgeCountsUseCase)
+    }()
+
     // MARK: - Tab ViewModels (survive tab switches)
 
     lazy var feedViewModel: FeedViewModel = makeFeedViewModel()
@@ -383,7 +391,10 @@ final class DependencyContainer: ObservableObject {
         NotificationListViewModel(
             fetchNotificationsUseCase: fetchNotificationsUseCase,
             markReadUseCase: markNotificationReadUseCase,
-            markClickedUseCase: markNotificationClickedUseCase
+            markClickedUseCase: markNotificationClickedUseCase,
+            onBadgeCountsChanged: { [weak self] in
+                await self?.badgeCountService.refresh()
+            }
         )
     }
 

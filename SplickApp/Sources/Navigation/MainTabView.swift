@@ -13,6 +13,7 @@ import FeatureFriends
 struct MainTabView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var container: DependencyContainer
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var tabBarScrollState = TabBarScrollState()
 
     private var currentUserSummary: UserSummary? {
@@ -122,6 +123,7 @@ struct MainTabView: View {
         }
         .environment(\.currentUserSummary, currentUserSummary)
         .environment(\.tabBarScrollState, tabBarScrollState)
+        .environmentObject(container.badgeCountService)
         .overlay(alignment: .bottom) {
             if appState.selectedTab != .camera {
                 SplickTabBar(selectedTab: $appState.selectedTab)
@@ -137,6 +139,25 @@ struct MainTabView: View {
                 tabBarScrollState.hide(flushToBottom: true)
             } else {
                 tabBarScrollState.reset()
+            }
+            if tab == .notifications {
+                Task { await container.badgeCountService.refresh() }
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .active:
+                container.badgeCountService.startPolling()
+            case .background, .inactive:
+                container.badgeCountService.stopPolling()
+            @unknown default:
+                break
+            }
+        }
+        .task {
+            await container.badgeCountService.refresh()
+            if scenePhase == .active {
+                container.badgeCountService.startPolling()
             }
         }
         .sheet(isPresented: $appState.showProfileSettings) {
