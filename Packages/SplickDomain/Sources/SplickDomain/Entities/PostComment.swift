@@ -38,6 +38,8 @@ public struct PostComment: Identifiable, Codable, Equatable, Sendable {
     public let attachments: [CommentAttachment]
     public let parentCommentId: UUID?
     public let createdAt: Date
+    public let updatedAt: Date?
+    public let deletedAt: Date?
 
     public init(
         id: UUID = UUID(),
@@ -45,7 +47,9 @@ public struct PostComment: Identifiable, Codable, Equatable, Sendable {
         text: String? = nil,
         attachments: [CommentAttachment] = [],
         parentCommentId: UUID? = nil,
-        createdAt: Date = .now
+        createdAt: Date = .now,
+        updatedAt: Date? = nil,
+        deletedAt: Date? = nil
     ) {
         self.id = id
         self.author = author
@@ -53,11 +57,26 @@ public struct PostComment: Identifiable, Codable, Equatable, Sendable {
         self.attachments = attachments
         self.parentCommentId = parentCommentId
         self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.deletedAt = deletedAt
+    }
+
+    public var isDeleted: Bool { deletedAt != nil }
+
+    public var isEdited: Bool {
+        guard let updatedAt, !isDeleted else { return false }
+        return updatedAt.timeIntervalSince(createdAt) > 1
+    }
+
+    /// Text shown in the thread (tombstone when soft-deleted).
+    public var displayText: String? {
+        if isDeleted { return nil }
+        return text
     }
 }
 
 public extension Array where Element == PostComment {
-    /// Top-level comments only.
+    /// Top-level comments only (legacy flat list).
     var topLevel: [PostComment] {
         filter { $0.parentCommentId == nil }
     }
@@ -70,7 +89,8 @@ public extension Array where Element == PostComment {
         children(of: parentId)
     }
 
-    func totalCommentCount() -> Int {
-        count
+    /// All non-deleted comments in the flat list (root + nested).
+    var activeCount: Int {
+        filter { !$0.isDeleted }.count
     }
 }
