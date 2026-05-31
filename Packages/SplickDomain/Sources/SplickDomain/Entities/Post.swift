@@ -168,8 +168,9 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         return map
     }
 
-    public var topLevelCommentCount: Int {
-        comments.topLevel.count
+    /// All non-deleted comments on the post (root + nested replies).
+    public var commentCount: Int {
+        comments.filter { !$0.isDeleted }.count
     }
 }
 
