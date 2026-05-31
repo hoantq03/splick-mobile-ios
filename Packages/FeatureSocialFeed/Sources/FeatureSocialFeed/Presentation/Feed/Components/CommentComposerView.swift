@@ -6,10 +6,14 @@ import SplickDomain
 
 struct CommentComposerView: View {
     let placeholder: String
+    /// When set (e.g. user tapped Reply), pre-fills `@username ` for mention + server push.
+    let prefillMentionUsername: String?
+    @Binding var isFocused: Bool
     let onSubmit: (String, [CommentSubmissionAttachment]) -> Void
     private let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
 
     @State private var draft = ""
+    @State private var appliedPrefillUsername: String?
     @State private var pendingAttachments: [CommentSubmissionAttachment] = []
     @State private var validationMessage: String?
     @State private var showMentionPicker = false
@@ -22,10 +26,14 @@ struct CommentComposerView: View {
 
     init(
         placeholder: String,
+        prefillMentionUsername: String? = nil,
+        isFocused: Binding<Bool> = .constant(false),
         fetchFriendsUseCase: FetchFriendsUseCaseProtocol? = nil,
         onSubmit: @escaping (String, [CommentSubmissionAttachment]) -> Void
     ) {
         self.placeholder = placeholder
+        self.prefillMentionUsername = prefillMentionUsername
+        _isFocused = isFocused
         self.fetchFriendsUseCase = fetchFriendsUseCase
         self.onSubmit = onSubmit
     }
@@ -93,20 +101,22 @@ struct CommentComposerView: View {
                     }
                 }
 
-                TextField(placeholder, text: $draft, axis: .vertical)
-                    .lineLimit(1...4)
-                    .font(.system(size: 13))
-                    .padding(.horizontal, 10)
-                    .frame(minHeight: composerHeight)
-                    .background(
-                        RoundedRectangle(cornerRadius: 18)
-                            .fill(SplickTheme.Colors.tertiaryBackground)
-                    )
-                    .submitLabel(.send)
-                    .onSubmit(submit)
-                    .onChange(of: draft) { newValue in
-                        syncMentionPicker(with: newValue)
-                    }
+                MentionTextField(
+                    placeholder,
+                    text: $draft,
+                    isFocused: $isFocused,
+                    fontSize: 13,
+                    minHeight: composerHeight
+                )
+                .frame(minHeight: composerHeight)
+                .layoutPriority(1)
+                .background(
+                    RoundedRectangle(cornerRadius: 18)
+                        .fill(SplickTheme.Colors.tertiaryBackground)
+                )
+                .onChange(of: draft) { newValue in
+                    syncMentionPicker(with: newValue)
+                }
 
                 Button(action: submit) {
                     Image(systemName: "paperplane.fill")
@@ -122,6 +132,12 @@ struct CommentComposerView: View {
             }
         }
         .animation(.easeOut(duration: 0.18), value: showMentionPicker)
+        .onChange(of: prefillMentionUsername) { username in
+            applyPrefillMention(username)
+        }
+        .onAppear {
+            applyPrefillMention(prefillMentionUsername)
+        }
         .fileImporter(
             isPresented: $showFileImporter,
             allowedContentTypes: [.pdf, .data, .item],
@@ -129,6 +145,18 @@ struct CommentComposerView: View {
         ) { result in
             importFiles(result)
         }
+    }
+
+    private func applyPrefillMention(_ username: String?) {
+        guard let username, !username.isEmpty else {
+            appliedPrefillUsername = nil
+            return
+        }
+        let mention = "@\(username) "
+        appliedPrefillUsername = username
+        guard draft != mention else { return }
+        draft = mention
+        syncMentionPicker(with: draft)
     }
 
     private func syncMentionPicker(with text: String) {
@@ -204,6 +232,7 @@ struct CommentComposerView: View {
         pendingAttachments = []
         photoPickerItems = []
         showMentionPicker = false
+        appliedPrefillUsername = nil
     }
 
     @MainActor
