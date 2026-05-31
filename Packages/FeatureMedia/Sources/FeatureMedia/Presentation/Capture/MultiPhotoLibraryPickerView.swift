@@ -11,12 +11,6 @@ public struct MultiPhotoLibraryPickerView: View {
 
     @StateObject private var viewModel: MultiPhotoLibraryPickerViewModel
 
-    private let columns = [
-        GridItem(.flexible(), spacing: 1.5),
-        GridItem(.flexible(), spacing: 1.5),
-        GridItem(.flexible(), spacing: 1.5),
-    ]
-
     public init(
         maxSelectionCount: Int = 5,
         onConfirm: @escaping ([UIImage]) -> Void,
@@ -115,7 +109,7 @@ public struct MultiPhotoLibraryPickerView: View {
                         .foregroundStyle(.white.opacity(0.55))
                 }
 
-                Spacer()
+                Spacer(minLength: SplickTheme.Spacing.sm)
 
                 Button {
                     Task { await confirmSelection() }
@@ -133,9 +127,10 @@ public struct MultiPhotoLibraryPickerView: View {
                 }
                 .disabled(viewModel.isImporting)
             }
-            .padding(.horizontal, SplickTheme.Spacing.lg)
+            .padding(.horizontal, PhotoGridLayout.screenHorizontalInset)
             .padding(.vertical, SplickTheme.Spacing.md)
-            .background {
+            .frame(maxWidth: .infinity)
+            .background(alignment: .bottom) {
                 Rectangle()
                     .fill(.ultraThinMaterial)
                     .overlay(alignment: .top) {
@@ -161,27 +156,42 @@ public struct MultiPhotoLibraryPickerView: View {
     }
 
     private var photoGrid: some View {
-        ScrollView {
-            if viewModel.isLimitedLibraryAccess {
-                limitedAccessBanner
-                    .padding(.horizontal, SplickTheme.Spacing.md)
-                    .padding(.top, SplickTheme.Spacing.sm)
-                    .padding(.bottom, SplickTheme.Spacing.xs)
-            }
+        GeometryReader { proxy in
+            let horizontalInset = PhotoGridLayout.horizontalInset(for: proxy.safeAreaInsets)
+            let cellSide = PhotoGridLayout.cellSide(
+                containerWidth: proxy.size.width,
+                horizontalInset: horizontalInset
+            )
 
-            LazyVGrid(columns: columns, spacing: 1.5) {
-                ForEach(viewModel.assets, id: \.localIdentifier) { asset in
-                    PhotoGridCell(
-                        asset: asset,
-                        selectionIndex: viewModel.selectionIndex(for: asset.localIdentifier),
-                        imageManager: viewModel.imageManager,
-                        onTap: { viewModel.toggleSelection(for: asset.localIdentifier) }
-                    )
-                    .aspectRatio(1, contentMode: .fill)
+            ScrollView {
+                VStack(spacing: 0) {
+                    if viewModel.isLimitedLibraryAccess {
+                        limitedAccessBanner
+                            .padding(.top, SplickTheme.Spacing.sm)
+                            .padding(.bottom, SplickTheme.Spacing.xs)
+                    }
+
+                    LazyVGrid(
+                        columns: PhotoGridLayout.gridColumns(cellSide: cellSide),
+                        spacing: PhotoGridLayout.cellSpacing
+                    ) {
+                        ForEach(viewModel.assets, id: \.localIdentifier) { asset in
+                            PhotoGridCell(
+                                asset: asset,
+                                cellSide: cellSide,
+                                selectionIndex: viewModel.selectionIndex(for: asset.localIdentifier),
+                                imageManager: viewModel.imageManager,
+                                onToggleSelection: {
+                                    viewModel.toggleSelection(for: asset.localIdentifier)
+                                }
+                            )
+                        }
+                    }
+                    .padding(.top, PhotoGridLayout.cellSpacing)
+                    .padding(.bottom, SplickTheme.Spacing.sm)
                 }
+                .padding(.horizontal, horizontalInset)
             }
-            .padding(.horizontal, 1.5)
-            .padding(.bottom, SplickTheme.Spacing.sm)
         }
     }
 
@@ -379,55 +389,96 @@ final class MultiPhotoLibraryPickerViewModel: ObservableObject {
     }
 }
 
+/// Layout constants for a stable, edge-safe 3-column album grid.
+private enum PhotoGridLayout {
+    static let columnCount = 3
+    static let cellSpacing = SplickTheme.Spacing.xs
+    static let screenHorizontalInset = SplickTheme.Spacing.lg + SplickTheme.Spacing.xxs
+    static let cornerRadius = SplickTheme.CornerRadius.small
+
+    static func gridColumns(cellSide: CGFloat) -> [GridItem] {
+        Array(
+            repeating: GridItem(.fixed(cellSide), spacing: cellSpacing),
+            count: columnCount
+        )
+    }
+
+    static var cellShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+    }
+
+    static func horizontalInset(for safeInsets: EdgeInsets) -> CGFloat {
+        max(screenHorizontalInset, safeInsets.leading + SplickTheme.Spacing.xs)
+    }
+
+    static func cellSide(containerWidth: CGFloat, horizontalInset: CGFloat) -> CGFloat {
+        let contentWidth = containerWidth - horizontalInset * 2
+        let totalSpacing = cellSpacing * CGFloat(columnCount - 1)
+        let available = max(1, contentWidth - totalSpacing)
+        return max(1, floor(available / CGFloat(columnCount)))
+    }
+}
+
 private struct PhotoGridCell: View {
     let asset: PHAsset
+    let cellSide: CGFloat
     let selectionIndex: Int?
     let imageManager: PHCachingImageManager
-    let onTap: () -> Void
+    let onToggleSelection: () -> Void
 
     @State private var thumbnail: UIImage?
+    @State private var requestID: PHImageRequestID = PHInvalidImageRequestID
 
     private var isSelected: Bool { selectionIndex != nil }
 
     var body: some View {
-        Button(action: onTap) {
-            GeometryReader { proxy in
-                ZStack(alignment: .topTrailing) {
-                    thumbnailContent(size: proxy.size)
+        Button(action: onToggleSelection) {
+            ZStack(alignment: .topTrailing) {
+                thumbnailContent
 
-                    if isSelected {
-                        Color.black.opacity(0.35)
-                    }
+                if isSelected {
+                    Color.black.opacity(0.35)
+                }
 
-                    selectionBadge
-                }
-                .onAppear {
-                    loadThumbnail(targetSize: proxy.size)
-                }
-                .onChange(of: proxy.size.width) { _ in
-                    loadThumbnail(targetSize: proxy.size)
-                }
+                selectionBadge
+                    .padding(SplickTheme.Spacing.xs)
             }
+            .frame(width: cellSide, height: cellSide)
+            .clipShape(PhotoGridLayout.cellShape)
+            .contentShape(PhotoGridLayout.cellShape)
         }
         .buttonStyle(.plain)
+        // task(id:) cancels and restarts automatically when asset or cellSide changes
+        .task(id: asset.localIdentifier) {
+            await loadThumbnail()
+        }
+        .onDisappear {
+            // Cancel in-flight request when cell scrolls out of view
+            if requestID != PHInvalidImageRequestID {
+                imageManager.cancelImageRequest(requestID)
+                requestID = PHInvalidImageRequestID
+            }
+        }
     }
 
     @ViewBuilder
-    private func thumbnailContent(size: CGSize) -> some View {
-        Group {
-            if let thumbnail {
-                Image(uiImage: thumbnail)
-                    .resizable()
-                    .scaledToFill()
-            } else {
+    private var thumbnailContent: some View {
+        if let thumbnail {
+            // Image is already square-cropped; scaledToFill + clipped is belt-and-suspenders.
+            Image(uiImage: thumbnail)
+                .resizable()
+                .scaledToFill()
+                .frame(width: cellSide, height: cellSide)
+                .clipped()
+        } else {
+            ZStack {
                 Color.white.opacity(0.06)
                 ProgressView()
                     .tint(.white.opacity(0.5))
                     .scaleEffect(0.7)
             }
+            .frame(width: cellSide, height: cellSide)
         }
-        .frame(width: size.width, height: size.height)
-        .clipped()
     }
 
     private var selectionBadge: some View {
@@ -449,25 +500,71 @@ private struct PhotoGridCell: View {
                     .foregroundStyle(.white)
             }
         }
-        .padding(6)
+        .allowsHitTesting(false)
     }
 
-    private func loadThumbnail(targetSize: CGSize) {
-        guard targetSize.width > 1, targetSize.height > 1 else { return }
+    @MainActor
+    private func loadThumbnail() async {
+        thumbnail = nil
+
         let scale = UIScreen.main.scale
-        let pixelSize = CGSize(width: targetSize.width * scale, height: targetSize.height * scale)
+        let pixelSide = cellSide * scale
+        let targetSize = CGSize(width: pixelSide, height: pixelSide)
+
         let options = PHImageRequestOptions()
         options.deliveryMode = .opportunistic
         options.isNetworkAccessAllowed = true
         options.resizeMode = .fast
 
-        imageManager.requestImage(
-            for: asset,
-            targetSize: pixelSize,
-            contentMode: .aspectFill,
-            options: options
-        ) { image, _ in
-            thumbnail = image
+        // Use AsyncStream so both the low-res (degraded) and final deliveries are handled
+        // safely. The stream finishes when PHImageManager sends the final non-degraded result.
+        let assetRef = asset
+        let stream = AsyncStream<UIImage> { continuation in
+            let reqID = imageManager.requestImage(
+                for: assetRef,
+                targetSize: targetSize,
+                contentMode: .aspectFill,
+                options: options
+            ) { image, info in
+                guard let image else {
+                    continuation.finish()
+                    return
+                }
+                continuation.yield(image)
+                let isDegraded = (info?[PHImageResultIsDegradedKey] as? Bool) == true
+                if !isDegraded {
+                    continuation.finish()
+                }
+            }
+            continuation.onTermination = { [weak imageManager] _ in
+                imageManager?.cancelImageRequest(reqID)
+            }
+            requestID = reqID
         }
+
+        for await image in stream {
+            guard !Task.isCancelled else { break }
+            let squared = Self.squareCrop(image, side: pixelSide, scale: scale)
+            thumbnail = squared
+        }
+        requestID = PHInvalidImageRequestID
+    }
+
+    /// Center-crops `image` to a square of `side` pixels at `scale`.
+    private static func squareCrop(_ image: UIImage, side: CGFloat, scale: CGFloat) -> UIImage {
+        let src = image.size
+        let srcScale = image.scale
+        // Physical pixel dimensions
+        let pw = src.width * srcScale
+        let ph = src.height * srcScale
+        let smallerSide = min(pw, ph)
+        let cropRect = CGRect(
+            x: (pw - smallerSide) / 2,
+            y: (ph - smallerSide) / 2,
+            width: smallerSide,
+            height: smallerSide
+        )
+        guard let cgImage = image.cgImage?.cropping(to: cropRect) else { return image }
+        return UIImage(cgImage: cgImage, scale: srcScale, orientation: image.imageOrientation)
     }
 }
