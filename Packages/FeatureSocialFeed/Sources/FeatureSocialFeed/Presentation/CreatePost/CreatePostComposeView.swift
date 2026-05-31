@@ -16,6 +16,7 @@ public struct CreatePostComposeView: View {
     let onCancel: () -> Void
     @State private var photoPickerItems: [PhotosPickerItem] = []
     @State private var showPhotoLibraryPicker = false
+    @State private var showCameraCapture = false
 
     public init(
         viewModel: @autoclosure @escaping () -> CreatePostComposeViewModel,
@@ -87,6 +88,24 @@ public struct CreatePostComposeView: View {
                 }
             )
         }
+        .fullScreenCover(isPresented: $showCameraCapture) {
+            MediaCaptureView(
+                onMediaCaptured: { media in
+                    showCameraCapture = false
+                    switch media {
+                    case .image(let image):
+                        viewModel.addImages([image])
+                    case .images(let images):
+                        viewModel.addImages(images)
+                    case .video:
+                        break
+                    }
+                },
+                onCancel: {
+                    showCameraCapture = false
+                }
+            )
+        }
     }
 
     @ViewBuilder
@@ -128,9 +147,14 @@ public struct CreatePostComposeView: View {
                         Menu {
                             if viewModel.remainingImageSlots > 0 {
                                 Button {
+                                    showCameraCapture = true
+                                } label: {
+                                    Label("Chụp ảnh", systemImage: "camera")
+                                }
+                                Button {
                                     showPhotoLibraryPicker = true
                                 } label: {
-                                    Label("Chọn ảnh", systemImage: "photo.on.rectangle")
+                                    Label("Chọn từ thư viện", systemImage: "photo.on.rectangle")
                                 }
                             }
                             if viewModel.remainingVideoSlots > 0 {
@@ -173,18 +197,18 @@ public struct CreatePostComposeView: View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
             Text(languageService.text(.feedCreateCaption))
                 .font(SplickTheme.Typography.headline)
-            TextField(
+            MentionTextField(
                 "Viết gì đó về khoảnh khắc này...",
                 text: Binding(
                     get: { viewModel.caption },
                     set: { viewModel.updateCaptionMentions($0) }
                 ),
-                axis: .vertical
+                fontSize: 15,
+                minHeight: 88
             )
-                .lineLimit(3...6)
-                .padding(SplickTheme.Spacing.sm)
-                .background(SplickTheme.Colors.secondaryBackground)
-                .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small))
+            .padding(SplickTheme.Spacing.sm)
+            .background(SplickTheme.Colors.secondaryBackground)
+            .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small))
 
             if viewModel.isSearchingMentions {
                 SplickSpinner(size: .small)
