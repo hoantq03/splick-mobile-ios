@@ -175,9 +175,7 @@ struct ExpenseRowView: View {
                 .clipShape(Circle())
 
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
-                Text(expense.description)
-                    .font(SplickTheme.Typography.headline)
-                    .foregroundStyle(SplickTheme.Colors.textPrimary)
+                MentionText(expense.description, fontSize: 16)
                     .lineLimit(1)
 
                 Text(
