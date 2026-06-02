@@ -38,6 +38,7 @@ public struct FriendsRootView: View {
     @State private var showIncomingRequests = false
     @State private var showOutgoingRequests = false
     @State private var showBlockedUsers = false
+    @State private var showAddActions = false
     @State private var profileRoute: UserProfileRoute?
 
     private let fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol
@@ -472,45 +473,81 @@ public struct FriendsRootView: View {
     }
 
     private var addMenuButton: some View {
-        Menu {
-            Button {
-                showAddFriend = true
-            } label: {
-                Label("Add friend by username", systemImage: "person.badge.plus")
+        Group {
+            if #available(iOS 26.0, *) {
+                Menu {
+                    addMenuActions
+                } label: {
+                    addMenuLabel
+                }
+            } else {
+                Button {
+                    showAddActions = true
+                } label: {
+                    addMenuLabel
+                }
+                .confirmationDialog(
+                    "Add",
+                    isPresented: $showAddActions,
+                    titleVisibility: .visible
+                ) {
+                    addMenuConfirmationActions
+                }
             }
-
-            Button {
-                showAddFriendQR = true
-            } label: {
-                Label("Add friend by QR", systemImage: "qrcode.viewfinder")
-            }
-
-            Button {
-                showCreateGroup = true
-            } label: {
-                Label("Tạo nhóm", systemImage: "plus.circle")
-            }
-
-            Divider()
-
-            Button {
-                showJoinGroup = true
-            } label: {
-                Label("Join group by code", systemImage: "person.3.fill")
-            }
-
-            Button {
-                showJoinGroupQR = true
-            } label: {
-                Label("Join group by QR", systemImage: "qrcode")
-            }
-        } label: {
-            Image(systemName: "plus.circle.fill")
-                .font(.system(size: 28))
-                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Add")
+    }
+
+    private var addMenuLabel: some View {
+        Image(systemName: "plus.circle.fill")
+            .font(.system(size: 28))
+            .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+    }
+
+    @ViewBuilder
+    private var addMenuActions: some View {
+        Button {
+            showAddFriend = true
+        } label: {
+            Label("Add friend by username", systemImage: "person.badge.plus")
+        }
+
+        Button {
+            showAddFriendQR = true
+        } label: {
+            Label("Add friend by QR", systemImage: "qrcode.viewfinder")
+        }
+
+        Button {
+            showCreateGroup = true
+        } label: {
+            Label("Tạo nhóm", systemImage: "plus.circle")
+        }
+
+        Divider()
+
+        Button {
+            showJoinGroup = true
+        } label: {
+            Label("Join group by code", systemImage: "person.3.fill")
+        }
+
+        Button {
+            showJoinGroupQR = true
+        } label: {
+            Label("Join group by QR", systemImage: "qrcode")
+        }
+    }
+
+    @ViewBuilder
+    private var addMenuConfirmationActions: some View {
+        Button("Add friend by username") { showAddFriend = true }
+        Button("Add friend by QR") { showAddFriendQR = true }
+        Button("Tạo nhóm") { showCreateGroup = true }
+        Button("Join group by code") { showJoinGroup = true }
+        Button("Join group by QR") { showJoinGroupQR = true }
+        Button("Cancel", role: .cancel) {}
     }
 
     @ViewBuilder
