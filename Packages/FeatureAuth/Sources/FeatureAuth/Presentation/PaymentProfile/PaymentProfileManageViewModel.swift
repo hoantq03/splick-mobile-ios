@@ -18,17 +18,20 @@ public final class PaymentProfileManageViewModel: ObservableObject {
     private let upsertMyPaymentProfileUseCase: UpsertMyPaymentProfileUseCaseProtocol
     private let deleteMyPaymentProfileUseCase: DeleteMyPaymentProfileUseCaseProtocol
     private let uploadPaymentQr: (UIImage) async throws -> URL
+    private let onProfileChanged: ((PaymentProfile?) -> Void)?
 
     public init(
         fetchMyPaymentProfileUseCase: FetchMyPaymentProfileUseCaseProtocol,
         upsertMyPaymentProfileUseCase: UpsertMyPaymentProfileUseCaseProtocol,
         deleteMyPaymentProfileUseCase: DeleteMyPaymentProfileUseCaseProtocol,
-        uploadPaymentQr: @escaping (UIImage) async throws -> URL
+        uploadPaymentQr: @escaping (UIImage) async throws -> URL,
+        onProfileChanged: ((PaymentProfile?) -> Void)? = nil
     ) {
         self.fetchMyPaymentProfileUseCase = fetchMyPaymentProfileUseCase
         self.upsertMyPaymentProfileUseCase = upsertMyPaymentProfileUseCase
         self.deleteMyPaymentProfileUseCase = deleteMyPaymentProfileUseCase
         self.uploadPaymentQr = uploadPaymentQr
+        self.onProfileChanged = onProfileChanged
     }
 
     func load() async {
@@ -78,6 +81,7 @@ public final class PaymentProfileManageViewModel: ObservableObject {
                 )
             )
             apply(profile)
+            onProfileChanged?(profile.hasAnyContent ? profile : nil)
             return true
         } catch let formError as PaymentProfileFormError {
             errorMessage = formError.localizedDescription
@@ -96,6 +100,7 @@ public final class PaymentProfileManageViewModel: ObservableObject {
         do {
             try await deleteMyPaymentProfileUseCase.execute()
             clearForm()
+            onProfileChanged?(nil)
             return true
         } catch {
             errorMessage = error.localizedDescription
