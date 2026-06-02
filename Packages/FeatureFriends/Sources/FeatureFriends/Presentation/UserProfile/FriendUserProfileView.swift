@@ -14,54 +14,55 @@ public struct FriendUserProfileView: View {
 
     public var body: some View {
         NavigationStack {
-            VStack(spacing: SplickTheme.Spacing.lg) {
-                AvatarView(
-                    imageURL: viewModel.user.avatarURL,
-                    name: viewModel.user.displayName,
-                    size: .large
-                )
-                .padding(.top, SplickTheme.Spacing.xl)
+            ScrollView {
+                VStack(spacing: SplickTheme.Spacing.lg) {
+                    AvatarView(
+                        imageURL: viewModel.user.avatarURL,
+                        name: viewModel.user.displayName,
+                        size: .large
+                    )
+                    .padding(.top, SplickTheme.Spacing.xl)
 
-                VStack(spacing: SplickTheme.Spacing.xxs) {
-                    Text(viewModel.user.displayName)
-                        .font(SplickTheme.Typography.largeTitle)
-                    if let subtitle = viewModel.user.subtitle {
-                        Text(subtitle)
+                    VStack(spacing: SplickTheme.Spacing.xxs) {
+                        Text(viewModel.user.displayName)
+                            .font(SplickTheme.Typography.largeTitle)
+                        if let subtitle = viewModel.user.subtitle {
+                            Text(subtitle)
+                                .font(SplickTheme.Typography.callout)
+                                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                        }
+                        Text("@\(viewModel.user.username)")
                             .font(SplickTheme.Typography.callout)
                             .foregroundStyle(SplickTheme.Colors.textSecondary)
                     }
-                    Text("@\(viewModel.user.username)")
-                        .font(SplickTheme.Typography.callout)
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
-                }
 
-                if let stats = viewModel.stats {
-                    statsRow(stats)
-                        .padding(.top, SplickTheme.Spacing.md)
-                }
-
-                if let profileError = viewModel.profileError {
-                    Text(profileError)
-                        .font(SplickTheme.Typography.caption)
-                        .foregroundStyle(SplickTheme.Colors.error)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, SplickTheme.Spacing.xl)
-
-                    SplickButton(languageService.text(.profileRetry), style: .secondary) {
-                        Task { await viewModel.loadProfile() }
+                    if let stats = viewModel.stats {
+                        statsRow(stats)
+                            .padding(.top, SplickTheme.Spacing.md)
                     }
-                    .padding(.horizontal, SplickTheme.Spacing.xl)
-                } else {
-                    relationshipActions
-                        .padding(.horizontal, SplickTheme.Spacing.xl)
 
-                    if let paymentProfile = viewModel.paymentProfile {
-                        friendPaymentSection(paymentProfile)
+                    if let profileError = viewModel.profileError {
+                        Text(profileError)
+                            .font(SplickTheme.Typography.caption)
+                            .foregroundStyle(SplickTheme.Colors.error)
+                            .multilineTextAlignment(.center)
                             .padding(.horizontal, SplickTheme.Spacing.xl)
+
+                        SplickButton(languageService.text(.profileRetry), style: .secondary) {
+                            Task { await viewModel.loadProfile() }
+                        }
+                        .padding(.horizontal, SplickTheme.Spacing.xl)
+                    } else {
+                        relationshipActions
+                            .padding(.horizontal, SplickTheme.Spacing.xl)
+
+                        if viewModel.mode == .friend {
+                            friendPaymentContent
+                                .padding(.horizontal, SplickTheme.Spacing.xl)
+                        }
                     }
                 }
-
-                Spacer()
+                .padding(.bottom, SplickTheme.Spacing.xxl)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(SplickTheme.Colors.background)
@@ -202,49 +203,45 @@ public struct FriendUserProfileView: View {
         }
     }
 
-    private func friendPaymentSection(_ profile: PaymentProfile) -> some View {
-        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-            Text(languageService.text(.profilePaymentFriendSection))
-                .font(SplickTheme.Typography.headline)
-
-            if let url = profile.qrImageURL {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFit()
-                            .frame(maxHeight: 180)
-                            .frame(maxWidth: .infinity)
-                    default:
-                        ProgressView()
-                            .frame(maxWidth: .infinity)
-                    }
-                }
+    @ViewBuilder
+    private var friendPaymentContent: some View {
+        if viewModel.isLoadingFriendPayment {
+            HStack {
+                Spacer()
+                ProgressView()
+                Spacer()
             }
-
-            if profile.hasBankDetails {
-                VStack(alignment: .leading, spacing: 4) {
-                    if let accountName = profile.accountName {
-                        Text(accountName)
-                            .font(SplickTheme.Typography.body)
-                    }
-                    if let accountNumber = profile.accountNumber {
-                        Text(accountNumber)
-                            .font(SplickTheme.Typography.callout.monospaced())
-                    }
-                    if let bankName = profile.bankName {
-                        Text(bankName)
-                            .font(SplickTheme.Typography.caption)
-                            .foregroundStyle(SplickTheme.Colors.textSecondary)
-                    }
-                }
+            .padding(SplickTheme.Spacing.md)
+        } else if let paymentProfile = viewModel.paymentProfile {
+            PaymentProfileSummaryView(
+                profile: paymentProfile,
+                title: languageService.text(.profilePaymentFriendSection)
+            )
+        } else if let error = viewModel.paymentProfileError {
+            VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+                Text(languageService.text(.profilePaymentFriendSection))
+                    .font(SplickTheme.Typography.headline)
+                Text(error)
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.error)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(SplickTheme.Spacing.md)
+            .background(SplickTheme.Colors.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium))
+        } else if viewModel.friendPaymentNotConfigured {
+            VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+                Text(languageService.text(.profilePaymentFriendSection))
+                    .font(SplickTheme.Typography.headline)
+                Text(languageService.text(.profilePaymentEmptyFriend))
+                    .font(SplickTheme.Typography.callout)
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(SplickTheme.Spacing.md)
+            .background(SplickTheme.Colors.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium))
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(SplickTheme.Spacing.md)
-        .background(SplickTheme.Colors.cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium))
     }
 
     private var nicknameEditorSheet: some View {
