@@ -1,10 +1,9 @@
 import SwiftUI
-import Common
 import DesignSystem
 import Localization
 import FeatureNotification
 
-// MARK: - Mask shape (replaces per-frame Canvas — cheaper on iOS 17 / older GPUs)
+// MARK: - iOS 26+ floating notch tab bar
 
 private struct SidePanelMaskShape: Shape {
     enum Side { case leading, trailing }
@@ -24,14 +23,12 @@ private struct SidePanelMaskShape: Shape {
         return path
     }
 
-    /// Bite on the left inner edge; circle center sits `notchRadius` outside the panel.
     private func trailingMaskPath(in rect: CGRect) -> Path {
         var path = Path()
         path.addRoundedRect(
             in: rect,
             cornerSize: CGSize(width: cornerRadius, height: cornerRadius)
         )
-
         let cy = rect.midY
         path.addEllipse(in: CGRect(
             x: rect.minX - 2 * notchRadius,
@@ -43,30 +40,21 @@ private struct SidePanelMaskShape: Shape {
     }
 }
 
-// MARK: - Tab bar
-
-struct SplickTabBar: View, Equatable {
+@available(iOS 26.0, *)
+private struct ModernSplickTabBar: View {
     @Binding var selectedTab: Tab
     let badgeCounts: TabBadgeCounts
-    let tabBarIsVisible: Bool
 
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.tabBarScrollState) private var tabBarScrollState
 
     private let cameraSize: CGFloat = 63
     private let cameraGap: CGFloat = 5
-    private var cameraRadius: CGFloat { cameraSize / 2 }
-    private var notchRadius: CGFloat { cameraRadius + cameraGap }
+    private var notchRadius: CGFloat { cameraSize / 2 + cameraGap }
     private let barHeight: CGFloat = 56
     private let cornerRadius: CGFloat = 26
     private let cameraIconSize: CGFloat = 27
     private let panelOuterPadding: CGFloat = 6
-
-    static func == (lhs: SplickTabBar, rhs: SplickTabBar) -> Bool {
-        lhs.selectedTab == rhs.selectedTab
-            && lhs.badgeCounts == rhs.badgeCounts
-            && lhs.tabBarIsVisible == rhs.tabBarIsVisible
-    }
 
     var body: some View {
         let centerLaneWidth = notchRadius * 2
@@ -95,42 +83,26 @@ struct SplickTabBar: View, Equatable {
         .frame(height: barHeight)
         .padding(.horizontal, SplickTheme.Spacing.md)
         .padding(.bottom, SplickTheme.Spacing.xxs)
-        .compositingGroup()
     }
 
     private func sidePanel<Content: View>(
         side: SidePanelMaskShape.Side,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        HStack(spacing: 0) {
-            content()
-        }
-        .padding(.leading, side == .leading ? panelOuterPadding : cameraGap)
-        .padding(.trailing, side == .leading ? cameraGap : panelOuterPadding)
-        .frame(height: barHeight)
-        .frame(maxWidth: .infinity)
-        .background { sidePanelBackground }
-        .clipShape(
-            SidePanelMaskShape(
-                side: side,
-                notchRadius: notchRadius,
-                cornerRadius: cornerRadius
-            ),
-            style: FillStyle(eoFill: true)
-        )
-    }
-
-    @ViewBuilder
-    private var sidePanelBackground: some View {
-        if #available(iOS 26.0, *) {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(.clear)
-                .glassEffect(.regular)
-        } else {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(SplickTheme.Colors.secondaryBackground.opacity(0.96))
-                .shadow(color: .black.opacity(0.06), radius: 8, y: 2)
-        }
+        HStack(spacing: 0) { content() }
+            .padding(.leading, side == .leading ? panelOuterPadding : cameraGap)
+            .padding(.trailing, side == .leading ? cameraGap : panelOuterPadding)
+            .frame(height: barHeight)
+            .frame(maxWidth: .infinity)
+            .background {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(.clear)
+                    .glassEffect(.regular)
+            }
+            .clipShape(
+                SidePanelMaskShape(side: side, notchRadius: notchRadius, cornerRadius: cornerRadius),
+                style: FillStyle(eoFill: true)
+            )
     }
 
     private var cameraButton: some View {
@@ -147,7 +119,6 @@ struct SplickTabBar: View, Equatable {
                         .font(.system(size: cameraIconSize, weight: .semibold))
                         .foregroundStyle(.white)
                 }
-                .shadow(color: SplickTheme.Colors.tabCameraRing.opacity(0.35), radius: 8, y: 3)
         }
         .buttonStyle(.plain)
         .contentShape(Circle())
@@ -161,32 +132,130 @@ struct SplickTabBar: View, Equatable {
             selectedTab = tab
             tabBarScrollState?.show()
         } label: {
-            ZStack(alignment: .topTrailing) {
-                VStack(spacing: 3) {
-                    Image(systemName: isSelected ? tab.selectedIcon : tab.icon)
-                        .font(.system(size: 21, weight: .medium))
-                        .symbolRenderingMode(.monochrome)
-                    Text(tab.localizedTitle(using: languageService))
-                        .font(.system(size: 10, weight: isSelected ? .semibold : .medium))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.65)
-                        .allowsTightening(true)
-                }
-                .foregroundStyle(
-                    isSelected
-                        ? SplickTheme.Colors.primaryGradientStart
-                        : SplickTheme.Colors.textTertiary
-                )
-
-                TabBarBadgeView(count: badge)
-                    .offset(x: 10, y: -6)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            tabLabel(tab: tab, isSelected: isSelected, badge: badge)
         }
         .buttonStyle(.plain)
         .frame(maxWidth: .infinity, minHeight: 48)
         .contentShape(Rectangle())
         .accessibilityLabel(tab.localizedTitle(using: languageService))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private func tabLabel(tab: Tab, isSelected: Bool, badge: Int) -> some View {
+        ZStack(alignment: .topTrailing) {
+            VStack(spacing: 3) {
+                Image(systemName: isSelected ? tab.selectedIcon : tab.icon)
+                    .font(.system(size: 21, weight: .medium))
+                Text(tab.localizedTitle(using: languageService))
+                    .font(.system(size: 10, weight: isSelected ? .semibold : .medium))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(
+                isSelected
+                    ? SplickTheme.Colors.primaryGradientStart
+                    : SplickTheme.Colors.textTertiary
+            )
+            TabBarBadgeView(count: badge)
+                .offset(x: 10, y: -6)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - iOS 17–25 lightweight tab bar (no notch mask / glass)
+
+private struct LegacySplickTabBar: View {
+    @Binding var selectedTab: Tab
+    let badgeCounts: TabBadgeCounts
+
+    @EnvironmentObject private var languageService: LanguageService
+    @Environment(\.tabBarScrollState) private var tabBarScrollState
+
+    private let barHeight: CGFloat = 56
+
+    var body: some View {
+        HStack(spacing: 0) {
+            tabButton(.feed)
+            tabButton(.expenses, badge: badgeCounts.expenses)
+            cameraButton
+            tabButton(.friends, badge: badgeCounts.friends)
+            tabButton(.notifications, badge: badgeCounts.notifications)
+        }
+        .frame(height: barHeight)
+        .padding(.horizontal, SplickTheme.Spacing.sm)
+        .padding(.vertical, SplickTheme.Spacing.xxs)
+        .background {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(SplickTheme.Colors.secondaryBackground)
+        }
+        .padding(.horizontal, SplickTheme.Spacing.md)
+        .padding(.bottom, SplickTheme.Spacing.xxs)
+    }
+
+    private var cameraButton: some View {
+        Button {
+            selectedTab = .camera
+            tabBarScrollState?.show()
+        } label: {
+            Image(systemName: "camera.fill")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 48, height: 48)
+                .background(SplickTheme.Colors.tabCameraRing, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .contentShape(Circle())
+        .frame(maxWidth: .infinity)
+    }
+
+    private func tabButton(_ tab: Tab, badge: Int = 0) -> some View {
+        let isSelected = selectedTab == tab
+        return Button {
+            selectedTab = tab
+            tabBarScrollState?.show()
+        } label: {
+            VStack(spacing: 2) {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: isSelected ? tab.selectedIcon : tab.icon)
+                        .font(.system(size: 20, weight: .medium))
+                    TabBarBadgeView(count: badge)
+                        .offset(x: 8, y: -6)
+                }
+                Text(tab.localizedTitle(using: languageService))
+                    .font(.system(size: 9, weight: isSelected ? .semibold : .medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .foregroundStyle(
+                isSelected
+                    ? SplickTheme.Colors.primaryGradientStart
+                    : SplickTheme.Colors.textTertiary
+            )
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+        .contentShape(Rectangle())
+    }
+}
+
+// MARK: - Public entry
+
+struct SplickTabBar: View, Equatable {
+    @Binding var selectedTab: Tab
+    let badgeCounts: TabBadgeCounts
+
+    static func == (lhs: SplickTabBar, rhs: SplickTabBar) -> Bool {
+        lhs.selectedTab == rhs.selectedTab
+            && lhs.badgeCounts == rhs.badgeCounts
+    }
+
+    var body: some View {
+        Group {
+            if #available(iOS 26.0, *) {
+                ModernSplickTabBar(selectedTab: $selectedTab, badgeCounts: badgeCounts)
+            } else {
+                LegacySplickTabBar(selectedTab: $selectedTab, badgeCounts: badgeCounts)
+            }
+        }
     }
 }
