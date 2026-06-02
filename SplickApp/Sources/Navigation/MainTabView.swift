@@ -17,8 +17,6 @@ struct MainTabView: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var tabBarScrollState = TabBarScrollState()
     @State private var badgeCounts: TabBadgeCounts = .zero
-    /// Tabs instantiated at least once — avoids keeping every root view in memory on older devices.
-    @State private var mountedTabs: Set<Tab> = [.feed]
     @State private var badgeRefreshTask: Task<Void, Never>?
 
     private var currentUserSummary: UserSummary? {
@@ -33,39 +31,31 @@ struct MainTabView: View {
     }
 
     var body: some View {
-        ZStack {
-            keptTabContent
-            cameraTabContent
-        }
-        .onAppear { badgeCounts = container.badgeCountService.counts }
-        .onReceive(container.badgeCountService.$counts) { badgeCounts = $0 }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .ignoresSafeArea(edges: .bottom)
-        .modifier(FloatingTabBarContentPadding(isEnabled: appState.selectedTab != .camera))
-        .environment(\.openProfileSettings) {
-            appState.showProfileSettings = true
-        }
-        .environment(\.openPostCaptureFlow) {
-            appState.selectedTab = .camera
-        }
-        .environment(\.currentUserSummary, currentUserSummary)
-        .environment(\.tabBarScrollState, tabBarScrollState)
-        .overlay(alignment: .bottom) {
-            if appState.selectedTab != .camera {
-                SplickTabBar(
-                    selectedTab: $appState.selectedTab,
-                    badgeCounts: badgeCounts,
-                    tabBarIsVisible: tabBarScrollState.isVisible
-                )
-                    .equatable()
-                    .offset(y: tabBarScrollState.isVisible ? 0 : TabBarLayout.tabBarSlideDistance)
-                    .opacity(tabBarScrollState.isVisible ? 1 : 0)
-                    .modifier(TabBarVisibilityAnimationModifier(isVisible: tabBarScrollState.isVisible))
-                    .allowsHitTesting(tabBarScrollState.isVisible)
-                    .zIndex(50)
+        selectedTabContent
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onAppear { badgeCounts = container.badgeCountService.counts }
+            .onReceive(container.badgeCountService.$counts) { badgeCounts = $0 }
+            .environment(\.openProfileSettings) {
+                appState.showProfileSettings = true
             }
-        }
-        .onChange(of: appState.selectedTab, perform: handleSelectedTabChange)
+            .environment(\.openPostCaptureFlow) {
+                appState.selectedTab = .camera
+            }
+            .environment(\.currentUserSummary, currentUserSummary)
+            .environment(\.tabBarScrollState, tabBarScrollState)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if appState.selectedTab != .camera, tabBarScrollState.isVisible {
+                    SplickTabBar(
+                        selectedTab: $appState.selectedTab,
+                        badgeCounts: badgeCounts
+                    )
+                    .equatable()
+                } else if appState.selectedTab != .camera,
+                          !tabBarScrollState.suppressesBottomInset {
+                    Color.clear.frame(height: TabBarLayout.hiddenClearance)
+                }
+            }
+            .onChange(of: appState.selectedTab, perform: handleSelectedTabChange)
         .task(id: scenePhase) {
             switch scenePhase {
             case .active:
@@ -88,30 +78,10 @@ struct MainTabView: View {
         .tint(SplickTheme.Colors.primaryGradientStart)
     }
 
-    // Keep tab roots alive so switching tabs does not tear down heavy SwiftUI trees (iPhone 11).
     @ViewBuilder
-    private var keptTabContent: some View {
-        ZStack {
-            feedTabRoot
-            expensesTabRoot
-            friendsTabRoot
-            notificationsTabRoot
-        }
-    }
-
-    @ViewBuilder
-    private var cameraTabContent: some View {
-        if appState.selectedTab == .camera {
-            PostCaptureFlowView(onDismiss: {
-                appState.selectedTab = .feed
-            })
-            .ignoresSafeArea()
-        }
-    }
-
-    @ViewBuilder
-    private var feedTabRoot: some View {
-        if mountedTabs.contains(.feed) {
+    private var selectedTabContent: some View {
+        switch appState.selectedTab {
+        case .feed:
             FeedView(
                 viewModel: container.feedViewModel,
                 photoAlbumViewModel: container.photoAlbumViewModel,
@@ -124,17 +94,10 @@ struct MainTabView: View {
                 onPendingPostHandled: {
                     appState.clearPendingPostNavigation()
                 },
-                isTabActive: appState.selectedTab == .feed
+                isTabActive: true
             )
-            .opacity(appState.selectedTab == .feed ? 1 : 0)
-            .allowsHitTesting(appState.selectedTab == .feed)
-            .accessibilityHidden(appState.selectedTab != .feed)
-        }
-    }
 
-    @ViewBuilder
-    private var expensesTabRoot: some View {
-        if mountedTabs.contains(.expenses) {
+        case .expenses:
             ExpenseListView(
                 viewModel: container.expenseListViewModel,
                 userSearchUseCase: FriendsUserSearchAdapter(
@@ -142,78 +105,67 @@ struct MainTabView: View {
                 ),
                 currentUserId: appState.currentUser?.id
             )
-            .opacity(appState.selectedTab == .expenses ? 1 : 0)
-            .allowsHitTesting(appState.selectedTab == .expenses)
-            .accessibilityHidden(appState.selectedTab != .expenses)
-        }
-    }
 
-    @ViewBuilder
-    private var friendsTabRoot: some View {
-        if mountedTabs.contains(.friends) {
+        case .friends:
             FriendsRootView(
-            fetchMyFriendsUseCase: container.fetchMyFriendsUseCase,
-            fetchMyGroupsUseCase: container.fetchMyGroupsUseCase,
-            searchUsersUseCase: container.searchUsersUseCase,
-            fetchUserProfileUseCase: container.fetchUserProfileUseCase,
-            fetchFriendPaymentProfileUseCase: container.fetchFriendPaymentProfileUseCase,
-            generateMyQrUseCase: container.generateMyQrUseCase,
-            addFriendUseCase: container.addFriendUseCase,
-            fetchIncomingFriendRequestsUseCase: container.fetchIncomingFriendRequestsUseCase,
-            acceptFriendRequestUseCase: container.acceptFriendRequestUseCase,
-            rejectFriendRequestUseCase: container.rejectFriendRequestUseCase,
-            fetchOutgoingFriendRequestsUseCase: container.fetchOutgoingFriendRequestsUseCase,
-            cancelFriendRequestUseCase: container.cancelFriendRequestUseCase,
-            removeFriendUseCase: container.removeFriendUseCase,
-            setFriendNicknameUseCase: container.setFriendNicknameUseCase,
-            blockUserUseCase: container.blockUserUseCase,
-            unblockUserUseCase: container.unblockUserUseCase,
-            fetchBlockedUsersUseCase: container.fetchBlockedUsersUseCase,
-            joinGroupUseCase: container.joinGroupUseCase,
-            createGroupUseCase: container.createGroupUseCase,
-            fetchGroupMembersUseCase: container.fetchGroupMembersUseCase,
-            fetchGroupInviteCodeUseCase: container.fetchGroupInviteCodeUseCase,
-            generateGroupInviteCodeUseCase: container.generateGroupInviteCodeUseCase,
-            inviteFriendsToGroupUseCase: container.inviteFriendsToGroupUseCase,
-            fetchGroupUseCase: container.fetchGroupUseCase,
-            approveGroupMemberUseCase: container.approveGroupMemberUseCase,
-            rejectGroupMemberUseCase: container.rejectGroupMemberUseCase,
-            removeGroupMemberUseCase: container.removeGroupMemberUseCase,
-            leaveGroupUseCase: container.leaveGroupUseCase,
-            deleteGroupUseCase: container.deleteGroupUseCase,
-            updateGroupUseCase: container.updateGroupUseCase,
-            updateGroupAvatarUseCase: container.updateGroupAvatarUseCase,
-            uploadGroupAvatarUseCase: container.uploadGroupAvatarUseCase,
-            transferGroupOwnershipUseCase: container.transferGroupOwnershipUseCase,
-            generateGroupQrUseCase: container.generateGroupQrUseCase,
-            revokeGroupQrUseCase: container.revokeGroupQrUseCase,
-            onBadgeCountsChanged: { await container.badgeCountService.refresh() }
+                fetchMyFriendsUseCase: container.fetchMyFriendsUseCase,
+                fetchMyGroupsUseCase: container.fetchMyGroupsUseCase,
+                searchUsersUseCase: container.searchUsersUseCase,
+                fetchUserProfileUseCase: container.fetchUserProfileUseCase,
+                fetchFriendPaymentProfileUseCase: container.fetchFriendPaymentProfileUseCase,
+                generateMyQrUseCase: container.generateMyQrUseCase,
+                addFriendUseCase: container.addFriendUseCase,
+                fetchIncomingFriendRequestsUseCase: container.fetchIncomingFriendRequestsUseCase,
+                acceptFriendRequestUseCase: container.acceptFriendRequestUseCase,
+                rejectFriendRequestUseCase: container.rejectFriendRequestUseCase,
+                fetchOutgoingFriendRequestsUseCase: container.fetchOutgoingFriendRequestsUseCase,
+                cancelFriendRequestUseCase: container.cancelFriendRequestUseCase,
+                removeFriendUseCase: container.removeFriendUseCase,
+                setFriendNicknameUseCase: container.setFriendNicknameUseCase,
+                blockUserUseCase: container.blockUserUseCase,
+                unblockUserUseCase: container.unblockUserUseCase,
+                fetchBlockedUsersUseCase: container.fetchBlockedUsersUseCase,
+                joinGroupUseCase: container.joinGroupUseCase,
+                createGroupUseCase: container.createGroupUseCase,
+                fetchGroupMembersUseCase: container.fetchGroupMembersUseCase,
+                fetchGroupInviteCodeUseCase: container.fetchGroupInviteCodeUseCase,
+                generateGroupInviteCodeUseCase: container.generateGroupInviteCodeUseCase,
+                inviteFriendsToGroupUseCase: container.inviteFriendsToGroupUseCase,
+                fetchGroupUseCase: container.fetchGroupUseCase,
+                approveGroupMemberUseCase: container.approveGroupMemberUseCase,
+                rejectGroupMemberUseCase: container.rejectGroupMemberUseCase,
+                removeGroupMemberUseCase: container.removeGroupMemberUseCase,
+                leaveGroupUseCase: container.leaveGroupUseCase,
+                deleteGroupUseCase: container.deleteGroupUseCase,
+                updateGroupUseCase: container.updateGroupUseCase,
+                updateGroupAvatarUseCase: container.updateGroupAvatarUseCase,
+                uploadGroupAvatarUseCase: container.uploadGroupAvatarUseCase,
+                transferGroupOwnershipUseCase: container.transferGroupOwnershipUseCase,
+                generateGroupQrUseCase: container.generateGroupQrUseCase,
+                revokeGroupQrUseCase: container.revokeGroupQrUseCase,
+                onBadgeCountsChanged: { await container.badgeCountService.refresh() }
             )
-            .opacity(appState.selectedTab == .friends ? 1 : 0)
-            .allowsHitTesting(appState.selectedTab == .friends)
-            .accessibilityHidden(appState.selectedTab != .friends)
-        }
-    }
 
-    @ViewBuilder
-    private var notificationsTabRoot: some View {
-        if mountedTabs.contains(.notifications) {
+        case .camera:
+            PostCaptureFlowView(onDismiss: {
+                appState.selectedTab = .feed
+            })
+            .ignoresSafeArea()
+
+        case .notifications:
             NotificationListView(
                 viewModel: container.notificationListViewModel,
                 onNavigateToPost: { postId in
                     appState.openPostFromNotification(postId)
                 }
             )
-            .opacity(appState.selectedTab == .notifications ? 1 : 0)
-            .allowsHitTesting(appState.selectedTab == .notifications)
-            .accessibilityHidden(appState.selectedTab != .notifications)
+
+        case .profile:
+            EmptyView()
         }
     }
 
     private func handleSelectedTabChange(_ tab: Tab) {
-        if tab != .camera && tab != .profile {
-            mountedTabs.insert(tab)
-        }
         Log.debug("Tab selected", category: .ui, metadata: ["tab": tab.rawValue])
         if tab == .camera {
             tabBarScrollState.hide(flushToBottom: true)
@@ -235,19 +187,6 @@ struct MainTabView: View {
     }
 }
 
-/// Tab bar slide animation only on iOS 26+; older devices use instant updates for responsiveness.
-private struct TabBarVisibilityAnimationModifier: ViewModifier {
-    let isVisible: Bool
-
-    func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content.animation(.easeInOut(duration: 0.28), value: isVisible)
-        } else {
-            content
-        }
-    }
-}
-
 struct ProfileSettingsView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var container: DependencyContainer
@@ -263,10 +202,14 @@ struct ProfileSettingsView: View {
     @State private var showAccountSecurity = false
     @State private var showEditProfile = false
     @State private var showPaymentProfile = false
+    @State private var myPaymentProfile: PaymentProfile?
+    @State private var isLoadingPaymentProfile = false
+    @State private var paymentProfileLoadError: String?
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: SplickTheme.Spacing.lg) {
+            ScrollView {
+                VStack(spacing: SplickTheme.Spacing.lg) {
                 if let user = appState.currentUser {
                     AvatarView(imageURL: user.avatarURL, name: user.displayName, size: .large)
 
@@ -289,6 +232,8 @@ struct ProfileSettingsView: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
                 }
+
+                myPaymentProfileSection
 
                 SplickButton(
                     languageService.text(.profileEdit),
@@ -334,8 +279,6 @@ struct ProfileSettingsView: View {
                 }
                 .padding(.horizontal, SplickTheme.Spacing.xl)
 
-                Spacer()
-
                 SplickButton(
                     languageService.text(.profileSignOut),
                     style: .destructive,
@@ -351,8 +294,10 @@ struct ProfileSettingsView: View {
                     }
                 }
                 .padding(.horizontal, SplickTheme.Spacing.xl)
+                }
+                .padding(.top, SplickTheme.Spacing.xxl)
+                .padding(.bottom, SplickTheme.Spacing.xl)
             }
-            .padding(.top, SplickTheme.Spacing.xxl)
             .navigationTitle(languageService.text(.profileTitle))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -365,6 +310,31 @@ struct ProfileSettingsView: View {
             }
             .task {
                 await refreshProfile()
+            }
+            .onChange(of: showPaymentProfile) { isShowing in
+                if !isShowing {
+                    Task { await loadMyPaymentProfile() }
+                }
+            }
+            .sheet(isPresented: $showPaymentProfile) {
+                NavigationStack {
+                    PaymentProfileManageView(
+                        viewModel: PaymentProfileManageViewModel(
+                            fetchMyPaymentProfileUseCase: container.fetchMyPaymentProfileUseCase,
+                            upsertMyPaymentProfileUseCase: container.upsertMyPaymentProfileUseCase,
+                            deleteMyPaymentProfileUseCase: container.deleteMyPaymentProfileUseCase,
+                            uploadPaymentQr: { image in
+                                let result = try await container.uploadPaymentQrUseCase.execute(image: image)
+                                return result.url
+                            },
+                            onProfileChanged: { profile in
+                                myPaymentProfile = profile
+                                paymentProfileLoadError = nil
+                            }
+                        )
+                    )
+                    .environmentObject(languageService)
+                }
             }
             .sheet(isPresented: $showEditProfile) {
                 if let user = appState.currentUser {
@@ -386,20 +356,7 @@ struct ProfileSettingsView: View {
                     }
                 }
             }
-            .navigationDestination(isPresented: $showPaymentProfile) {
-                PaymentProfileManageView(
-                    viewModel: PaymentProfileManageViewModel(
-                        fetchMyPaymentProfileUseCase: container.fetchMyPaymentProfileUseCase,
-                        upsertMyPaymentProfileUseCase: container.upsertMyPaymentProfileUseCase,
-                        deleteMyPaymentProfileUseCase: container.deleteMyPaymentProfileUseCase,
-                        uploadPaymentQr: { image in
-                            let result = try await container.uploadPaymentQrUseCase.execute(image: image)
-                            return result.url
-                        }
-                    )
-                )
-            }
-            .navigationDestination(isPresented: $showChangePassword) {
+            .sheet(isPresented: $showChangePassword) {
                 if let email = appState.currentUser?.email {
                     ChangePasswordView(
                         viewModel: ChangePasswordViewModel(
@@ -459,6 +416,50 @@ struct ProfileSettingsView: View {
         }
     }
 
+    @ViewBuilder
+    private var myPaymentProfileSection: some View {
+        Group {
+            if isLoadingPaymentProfile {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                    Spacer()
+                }
+                .padding(.vertical, SplickTheme.Spacing.md)
+            } else if let myPaymentProfile {
+                PaymentProfileSummaryView(
+                    profile: myPaymentProfile,
+                    title: languageService.text(.profilePaymentFriendSection)
+                )
+            } else if let paymentProfileLoadError {
+                VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+                    Text(languageService.text(.profilePaymentFriendSection))
+                        .font(SplickTheme.Typography.headline)
+                    Text(paymentProfileLoadError)
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.error)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(SplickTheme.Spacing.md)
+                .background(SplickTheme.Colors.cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium))
+            } else {
+                VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+                    Text(languageService.text(.profilePaymentFriendSection))
+                        .font(SplickTheme.Typography.headline)
+                    Text(languageService.text(.profilePaymentEmptySelf))
+                        .font(SplickTheme.Typography.callout)
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(SplickTheme.Spacing.md)
+                .background(SplickTheme.Colors.cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium))
+            }
+        }
+        .padding(.horizontal, SplickTheme.Spacing.xl)
+    }
+
     private var languageSection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
             Text(languageService.text(.profileLanguage))
@@ -514,6 +515,22 @@ struct ProfileSettingsView: View {
             languageService.applyFromServer(user.preferredLocale)
         } catch {
             profileError = languageService.text(.profileRefreshFailed)
+        }
+        await loadMyPaymentProfile()
+    }
+
+    private func loadMyPaymentProfile() async {
+        isLoadingPaymentProfile = true
+        paymentProfileLoadError = nil
+        defer { isLoadingPaymentProfile = false }
+
+        do {
+            let profile = try await container.fetchMyPaymentProfileUseCase.execute()
+            myPaymentProfile = profile.hasAnyContent ? profile : nil
+        } catch NetworkError.notFound {
+            myPaymentProfile = nil
+        } catch {
+            paymentProfileLoadError = error.localizedDescription
         }
     }
 }
