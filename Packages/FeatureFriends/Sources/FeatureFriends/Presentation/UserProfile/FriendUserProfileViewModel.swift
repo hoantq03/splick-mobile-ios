@@ -1,4 +1,5 @@
 import Foundation
+import Common
 import SplickDomain
 
 @MainActor
@@ -7,6 +8,9 @@ public final class FriendUserProfileViewModel: ObservableObject {
     @Published var friendStatus: FriendRelationStatus
     @Published var stats: UserProfileStats?
     @Published var paymentProfile: PaymentProfile?
+    @Published var friendPaymentNotConfigured = false
+    @Published var isLoadingFriendPayment = false
+    @Published var paymentProfileError: String?
     @Published var nicknameDraft = ""
     @Published var isProcessing = false
     @Published var isLoadingProfile = false
@@ -78,11 +82,24 @@ public final class FriendUserProfileViewModel: ObservableObject {
 
     private func loadPaymentProfileIfFriend() async {
         paymentProfile = nil
+        friendPaymentNotConfigured = false
+        paymentProfileError = nil
         guard friendStatus == .friends, let fetchFriendPaymentProfileUseCase else { return }
+
+        isLoadingFriendPayment = true
+        defer { isLoadingFriendPayment = false }
+
         do {
-            paymentProfile = try await fetchFriendPaymentProfileUseCase.execute(userId: user.id)
+            let profile = try await fetchFriendPaymentProfileUseCase.execute(userId: user.id)
+            if profile.hasAnyContent {
+                paymentProfile = profile
+            } else {
+                friendPaymentNotConfigured = true
+            }
+        } catch NetworkError.notFound {
+            friendPaymentNotConfigured = true
         } catch {
-            paymentProfile = nil
+            paymentProfileError = error.localizedDescription
         }
     }
 
