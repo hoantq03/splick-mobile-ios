@@ -93,6 +93,21 @@ struct UpsertPaymentProfileRequestDTO: Encodable {
     let accountName: String?
     let accountNumber: String?
     let bankName: String?
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(qrImageUrl, forKey: .qrImageUrl)
+        try container.encodeIfPresent(accountName, forKey: .accountName)
+        try container.encodeIfPresent(accountNumber, forKey: .accountNumber)
+        try container.encodeIfPresent(bankName, forKey: .bankName)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case qrImageUrl
+        case accountName
+        case accountNumber
+        case bankName
+    }
 }
 
 struct RefreshTokenRequestDTO: Encodable {
