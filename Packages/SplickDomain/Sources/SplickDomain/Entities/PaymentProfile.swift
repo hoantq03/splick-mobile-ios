@@ -30,4 +30,17 @@ public struct PaymentProfile: Equatable, Sendable {
             && !(accountNumber?.isEmpty ?? true)
             && !(bankName?.isEmpty ?? true)
     }
+
+    public var hasPartialBankDetails: Bool {
+        hasBankDetails == false
+            && (
+                !(accountName?.isEmpty ?? true)
+                    || !(accountNumber?.isEmpty ?? true)
+                    || !(bankName?.isEmpty ?? true)
+            )
+    }
+
+    public var hasAnyContent: Bool { hasQrImage || hasBankDetails || hasPartialBankDetails }
+
+    public var hasDisplayableBankFields: Bool { hasBankDetails || hasPartialBankDetails }
 }
