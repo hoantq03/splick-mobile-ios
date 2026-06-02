@@ -3,14 +3,14 @@ import Networking
 
 enum MediaEndpoint: APIEndpoint {
     case initiateUpload(InitiateUploadRequestDTO)
-    case completeUpload(uploadId: UUID, body: CompleteUploadRequestDTO?)
+    case completeUpload(uploadId: UUID)
     case delete(id: UUID)
 
     var path: String {
         switch self {
         case .initiateUpload:
             return "/v1/media/uploads"
-        case .completeUpload(let uploadId, _):
+        case .completeUpload(let uploadId):
             return "/v1/media/uploads/\(uploadId)/complete"
         case .delete(let id):
             return "/v1/media/\(id)"
@@ -30,9 +30,7 @@ enum MediaEndpoint: APIEndpoint {
         switch self {
         case .initiateUpload(let request):
             return request
-        case .completeUpload(_, let body):
-            return body
-        case .delete:
+        case .completeUpload, .delete:
             return nil
         }
     }

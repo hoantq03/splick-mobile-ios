@@ -12,16 +12,25 @@ struct InitiateUploadRequestDTO: Encodable {
     let contentType: String
     let contentLength: Int
     let context: UploadContextDTO?
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(purpose, forKey: .purpose)
+        try container.encode(contentType, forKey: .contentType)
+        try container.encode(contentLength, forKey: .contentLength)
+        try container.encodeIfPresent(context, forKey: .context)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case purpose
+        case contentType
+        case contentLength
+        case context
+    }
 }
 
 struct UploadContextDTO: Encodable {
-    let type: String
     let groupId: UUID
-
-    init(groupId: UUID) {
-        self.type = "GROUP"
-        self.groupId = groupId
-    }
 }
 
 struct InitiateUploadResponseDTO: Decodable {
@@ -33,4 +42,13 @@ struct InitiateUploadResponseDTO: Decodable {
 
 struct CompleteUploadRequestDTO: Encodable {
     let etag: String?
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(etag, forKey: .etag)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case etag
+    }
 }

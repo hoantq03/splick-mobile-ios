@@ -40,10 +40,7 @@ public final class MediaRepository: MediaRepositoryProtocol, Sendable {
         )
 
         let completed: MediaUploadResponseDTO = try await apiClient.request(
-            MediaEndpoint.completeUpload(
-                uploadId: initiated.uploadId,
-                body: CompleteUploadRequestDTO(etag: nil)
-            )
+            MediaEndpoint.completeUpload(uploadId: initiated.uploadId)
         )
 
         return MediaUploadResult(
