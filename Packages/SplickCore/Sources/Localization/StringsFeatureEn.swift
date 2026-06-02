@@ -71,6 +71,8 @@ enum StringsFeatureEn {
         .profilePaymentDeleteConfirm: "Remove your payment QR and bank details?",
         .profilePaymentUploadQr: "Upload QR image",
         .profilePaymentFriendSection: "Receive money",
+        .profilePaymentEmptySelf: "No payment info yet. Tap Receive money to add your QR or bank details.",
+        .profilePaymentEmptyFriend: "This friend hasn't added payment info yet.",
 
         // Friends
         .friendsTitle: "Friends",

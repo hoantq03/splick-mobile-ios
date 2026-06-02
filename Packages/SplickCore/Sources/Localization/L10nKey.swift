@@ -148,6 +148,8 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case profilePaymentDeleteConfirm = "profile.payment.delete_confirm"
     case profilePaymentUploadQr = "profile.payment.upload_qr"
     case profilePaymentFriendSection = "profile.payment.friend_section"
+    case profilePaymentEmptySelf = "profile.payment.empty_self"
+    case profilePaymentEmptyFriend = "profile.payment.empty_friend"
 
     // Friends
     case friendsTitle = "friends.title"

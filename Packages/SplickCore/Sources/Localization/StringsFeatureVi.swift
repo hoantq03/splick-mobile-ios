@@ -71,6 +71,8 @@ enum StringsFeatureVi {
         .profilePaymentDeleteConfirm: "Xóa mã QR và thông tin ngân hàng?",
         .profilePaymentUploadQr: "Tải ảnh QR lên",
         .profilePaymentFriendSection: "Thông tin nhận tiền",
+        .profilePaymentEmptySelf: "Chưa có thông tin nhận tiền. Nhấn Nhận tiền để thêm QR hoặc tài khoản ngân hàng.",
+        .profilePaymentEmptyFriend: "Bạn bè này chưa thiết lập thông tin nhận tiền.",
 
         // Friends
         .friendsTitle: "Bạn bè",
