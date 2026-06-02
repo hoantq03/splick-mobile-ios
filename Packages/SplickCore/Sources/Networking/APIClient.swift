@@ -279,6 +279,13 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
             )
         case "VALIDATION_ERROR":
             return mapValidationError(body.message)
+        case "VALIDATION_FAILED":
+            return NetworkError.unknown(
+                body.message.isEmpty ? "Validation failed." : body.message,
+                traceId: resolvedTraceId
+            )
+        case "PAYMENT_PROFILE_NOT_FOUND", "RESOURCE_NOT_FOUND":
+            return NetworkError.notFound
         case "NOT_FOUND":
             return NetworkError.notFound
         case "INTERNAL_ERROR":
