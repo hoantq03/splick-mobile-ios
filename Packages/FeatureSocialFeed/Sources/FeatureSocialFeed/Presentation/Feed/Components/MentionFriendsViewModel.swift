@@ -42,6 +42,10 @@ final class MentionFriendsViewModel: ObservableObject {
             let batch = try await useCase.execute(query: query, page: page, limit: pageSize)
             guard !Task.isCancelled else { return }
             friends.append(contentsOf: batch)
+            friends.sort {
+                $0.displayName.localizedCaseInsensitiveCompare($1.displayName)
+                    == .orderedAscending
+            }
             hasMore = batch.count == pageSize
             page += 1
         } catch {

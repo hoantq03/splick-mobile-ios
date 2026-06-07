@@ -29,22 +29,33 @@ public final class CreatePostComposeViewModel: ObservableObject {
     @Published private(set) var friendSearchResults: [UserSummary] = []
     @Published private(set) var selectedCompanions: [UserSummary] = []
     @Published var enableBillSplit = false
+    @Published var autoReminderEnabled = false
     @Published var billTotalText = ""
     @Published var splitMode: ComposeBillSplitMode = .equal
     @Published var percentageTexts: [UUID: String] = [:]
     @Published var exactAmountTexts: [UUID: String] = [:]
     @Published private(set) var isSearchingFriends = false
+    @Published private(set) var hasMoreFriendSearch = true
+    @Published private(set) var isFriendSearchActive = false
     @Published private(set) var submitState: LoadingState<Post> = .idle
     @Published private(set) var selectedMediaItems: [ComposeMediaDraft] = []
-    @Published private(set) var mentionSuggestions: [UserSummary] = []
-    @Published private(set) var isSearchingMentions = false
+    @Published private(set) var mentionPickerViewModel: MentionFriendsViewModel?
 
     private let createPostUseCase: CreatePostUseCaseProtocol
     private let fetchFriendsUseCase: FetchFriendsUseCaseProtocol
     private let currentUser: UserSummary?
     private let currentUserId: UUID?
     private var friendSearchTask: Task<Void, Never>?
-    private var mentionSearchTask: Task<Void, Never>?
+    private var activeMentionQuery = ""
+    private var friendSearchPage = 0
+    private var friendSearchActiveQuery = ""
+
+    private let friendSearchPageSize = 10
+
+    var shouldShowFriendSuggestions: Bool {
+        isFriendSearchActive
+            || !friendSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     private let maxImages = 5
     private let maxVideos = 3
@@ -164,53 +175,51 @@ public final class CreatePostComposeViewModel: ObservableObject {
         selectedMediaItems.append(media)
     }
 
-    func updateFriendSearch(_ query: String) {
-        friendSearchQuery = query
-        friendSearchTask?.cancel()
-
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            friendSearchResults = []
-            isSearchingFriends = false
-            return
-        }
-
-        isSearchingFriends = true
-        friendSearchTask = Task {
-            try? await Task.sleep(nanoseconds: 250_000_000)
-            guard !Task.isCancelled else { return }
-            do {
-                let results = try await fetchFriendsUseCase.execute(query: trimmed, page: 0, limit: 12)
-                guard !Task.isCancelled else { return }
-                friendSearchResults = results.filter { !selectedCompanionIds.contains($0.id) }
-            } catch {
-                friendSearchResults = []
-            }
-            isSearchingFriends = false
+    func setFriendSearchActive(_ active: Bool) {
+        isFriendSearchActive = active
+        if active {
+            scheduleFriendSearch(reset: true)
+        } else if friendSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            cancelFriendSearch()
         }
     }
 
-    func updateCaptionMentions(_ text: String) {
-        caption = text
-        mentionSearchTask?.cancel()
-        guard let context = MentionContext.active(in: text) else {
-            mentionSuggestions = []
-            isSearchingMentions = false
+    func updateFriendSearch(_ query: String) {
+        friendSearchQuery = query
+        guard shouldShowFriendSuggestions else {
+            cancelFriendSearch()
             return
         }
-        isSearchingMentions = true
-        mentionSearchTask = Task {
-            try? await Task.sleep(nanoseconds: 180_000_000)
-            guard !Task.isCancelled else { return }
-            do {
-                let users = try await fetchFriendsUseCase.execute(query: context.query, page: 0, limit: 10)
-                guard !Task.isCancelled else { return }
-                mentionSuggestions = users
-                isSearchingMentions = false
-            } catch {
-                mentionSuggestions = []
-                isSearchingMentions = false
-            }
+        scheduleFriendSearch(reset: true, debounce: true)
+    }
+
+    func loadMoreFriendSearchIfNeeded(currentFriend: UserSummary?) {
+        guard let currentFriend, currentFriend.id == friendSearchResults.last?.id else { return }
+        guard hasMoreFriendSearch, !isSearchingFriends else { return }
+        friendSearchTask?.cancel()
+        friendSearchTask = Task {
+            await fetchFriendSearchPage(page: friendSearchPage + 1, reset: false)
+        }
+    }
+
+    func syncMentionPicker(with text: String) {
+        guard let context = MentionContext.active(in: text) else {
+            activeMentionQuery = ""
+            mentionPickerViewModel = nil
+            return
+        }
+
+        let openingPicker = mentionPickerViewModel == nil
+        if openingPicker {
+            mentionPickerViewModel = MentionFriendsViewModel(
+                useCase: fetchFriendsUseCase,
+                pageSize: friendSearchPageSize
+            )
+        }
+
+        if openingPicker || context.query != activeMentionQuery {
+            activeMentionQuery = context.query
+            mentionPickerViewModel?.reset(query: context.query)
         }
     }
 
@@ -218,7 +227,8 @@ public final class CreatePostComposeViewModel: ObservableObject {
         guard let context = MentionContext.active(in: caption) else { return }
         let mention = "@\(user.username) "
         caption.replaceSubrange(context.replaceRange, with: mention)
-        mentionSuggestions = []
+        activeMentionQuery = ""
+        mentionPickerViewModel = nil
     }
 
     func addCompanion(_ user: UserSummary) {
@@ -226,7 +236,11 @@ public final class CreatePostComposeViewModel: ObservableObject {
         selectedCompanions.append(user)
         friendSearchResults.removeAll { $0.id == user.id }
         friendSearchQuery = ""
-        friendSearchResults = []
+        if isFriendSearchActive {
+            scheduleFriendSearch(reset: true)
+        } else {
+            friendSearchResults = []
+        }
     }
 
     func removeCompanion(_ user: UserSummary) {
@@ -266,7 +280,8 @@ public final class CreatePostComposeViewModel: ObservableObject {
             checkInPlace: location.nilIfBlank,
             feedKind: enableBillSplit ? .shareBill : .checkIn,
             billSplit: enableBillSplit ? buildBillSplit() : nil,
-            billSplitType: enableBillSplit ? splitMode.apiSplitType : nil
+            billSplitType: enableBillSplit ? splitMode.apiSplitType : nil,
+            autoReminderEnabled: enableBillSplit && autoReminderEnabled
         )
 
         submitState = .loading
@@ -307,6 +322,70 @@ public final class CreatePostComposeViewModel: ObservableObject {
         }
 
         return PostBillSplit(totalAmount: total, currency: "VND", splits: splits)
+    }
+
+    private func cancelFriendSearch() {
+        friendSearchTask?.cancel()
+        friendSearchResults = []
+        friendSearchPage = 0
+        friendSearchActiveQuery = ""
+        hasMoreFriendSearch = true
+        isSearchingFriends = false
+    }
+
+    private func scheduleFriendSearch(reset: Bool, debounce: Bool = false) {
+        friendSearchTask?.cancel()
+        let trimmed = friendSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        friendSearchActiveQuery = trimmed.replacingOccurrences(of: "@", with: "")
+        if reset {
+            friendSearchPage = 0
+            hasMoreFriendSearch = true
+        }
+        isSearchingFriends = true
+        friendSearchTask = Task {
+            if debounce {
+                try? await Task.sleep(nanoseconds: 250_000_000)
+            }
+            guard !Task.isCancelled else { return }
+            await fetchFriendSearchPage(page: reset ? 0 : friendSearchPage + 1, reset: reset)
+        }
+    }
+
+    private func fetchFriendSearchPage(page: Int, reset: Bool) async {
+        isSearchingFriends = true
+        defer { isSearchingFriends = false }
+
+        do {
+            let results = try await fetchFriendsUseCase.execute(
+                query: friendSearchActiveQuery,
+                page: page,
+                limit: friendSearchPageSize
+            )
+            guard !Task.isCancelled else { return }
+            let filtered = results
+                .filter { !selectedCompanionIds.contains($0.id) }
+                .sorted {
+                    $0.displayName.localizedCaseInsensitiveCompare($1.displayName)
+                        == .orderedAscending
+                }
+            if reset {
+                friendSearchResults = filtered
+            } else {
+                let existingIds = Set(friendSearchResults.map(\.id))
+                friendSearchResults.append(contentsOf: filtered.filter { !existingIds.contains($0.id) })
+                friendSearchResults.sort {
+                    $0.displayName.localizedCaseInsensitiveCompare($1.displayName)
+                        == .orderedAscending
+                }
+            }
+            friendSearchPage = page
+            hasMoreFriendSearch = results.count == friendSearchPageSize
+        } catch {
+            if reset {
+                friendSearchResults = []
+            }
+            hasMoreFriendSearch = false
+        }
     }
 
     private static func makeImageDraft(from previewImage: UIImage) -> ComposeMediaDraft? {

@@ -17,6 +17,7 @@ public struct CreatePostComposeView: View {
     @State private var photoPickerItems: [PhotosPickerItem] = []
     @State private var showPhotoLibraryPicker = false
     @State private var showCameraCapture = false
+    @FocusState private var isFriendSearchFocused: Bool
 
     public init(
         viewModel: @autoclosure @escaping () -> CreatePostComposeViewModel,
@@ -199,48 +200,21 @@ public struct CreatePostComposeView: View {
                 .font(SplickTheme.Typography.headline)
             MentionTextField(
                 "Viết gì đó về khoảnh khắc này...",
-                text: Binding(
-                    get: { viewModel.caption },
-                    set: { viewModel.updateCaptionMentions($0) }
-                ),
+                text: $viewModel.caption,
                 fontSize: 15,
                 minHeight: 88
             )
             .padding(SplickTheme.Spacing.sm)
             .background(SplickTheme.Colors.secondaryBackground)
             .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small))
+            .onChange(of: viewModel.caption) { newValue in
+                viewModel.syncMentionPicker(with: newValue)
+            }
 
-            if viewModel.isSearchingMentions {
-                SplickSpinner(size: .small)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } else if !viewModel.mentionSuggestions.isEmpty {
-                VStack(spacing: 0) {
-                    ForEach(viewModel.mentionSuggestions.prefix(6)) { user in
-                        Button {
-                            viewModel.insertMention(user)
-                        } label: {
-                            HStack(spacing: SplickTheme.Spacing.sm) {
-                                AvatarView(
-                                    imageURL: user.avatarURL,
-                                    name: user.displayName,
-                                    size: .small
-                                )
-                                Text(user.displayName)
-                                    .font(SplickTheme.Typography.callout)
-                                    .foregroundStyle(SplickTheme.Colors.textPrimary)
-                                Spacer()
-                                Text("@\(user.username)")
-                                    .font(SplickTheme.Typography.caption)
-                                    .foregroundStyle(SplickTheme.Colors.textTertiary)
-                            }
-                            .padding(.horizontal, SplickTheme.Spacing.sm)
-                            .padding(.vertical, SplickTheme.Spacing.xs)
-                        }
-                        .buttonStyle(.plain)
-                    }
+            if let mentionViewModel = viewModel.mentionPickerViewModel {
+                MentionPickerPopup(viewModel: mentionViewModel) { user in
+                    viewModel.insertMention(user)
                 }
-                .background(SplickTheme.Colors.secondaryBackground)
-                .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small))
             }
         }
     }
@@ -256,6 +230,10 @@ public struct CreatePostComposeView: View {
                 TextField("Tìm bạn bè...", text: $viewModel.friendSearchQuery)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+                    .focused($isFriendSearchFocused)
+                    .onChange(of: isFriendSearchFocused) { focused in
+                        viewModel.setFriendSearchActive(focused)
+                    }
                     .onChange(of: viewModel.friendSearchQuery) { query in
                         viewModel.updateFriendSearch(query)
                     }
@@ -286,10 +264,10 @@ public struct CreatePostComposeView: View {
                 }
             }
 
-            if viewModel.isSearchingFriends {
+            if viewModel.isSearchingFriends, viewModel.friendSearchResults.isEmpty {
                 SplickSpinner(size: .small)
                     .frame(maxWidth: .infinity, alignment: .leading)
-            } else if !viewModel.friendSearchQuery.trimmingCharacters(in: .whitespaces).isEmpty {
+            } else if viewModel.shouldShowFriendSuggestions {
                 friendSearchResultsList
             }
         }
@@ -298,7 +276,7 @@ public struct CreatePostComposeView: View {
     @ViewBuilder
     private var friendSearchResultsList: some View {
         VStack(spacing: 0) {
-            if viewModel.friendSearchResults.isEmpty {
+            if viewModel.friendSearchResults.isEmpty, !viewModel.isSearchingFriends {
                 Text(languageService.text(.feedCreateFriendsNotFound))
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textTertiary)
@@ -330,10 +308,19 @@ public struct CreatePostComposeView: View {
                         .padding(.vertical, SplickTheme.Spacing.xs)
                     }
                     .buttonStyle(.plain)
+                    .onAppear {
+                        viewModel.loadMoreFriendSearchIfNeeded(currentFriend: friend)
+                    }
 
                     if friend.id != viewModel.friendSearchResults.last?.id {
                         Divider().padding(.leading, 48)
                     }
+                }
+
+                if viewModel.isSearchingFriends {
+                    SplickSpinner(size: .small)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, SplickTheme.Spacing.sm)
                 }
             }
         }
@@ -371,6 +358,9 @@ public struct CreatePostComposeView: View {
                 } else {
                     billSplitDetailFields
                 }
+
+                Toggle("Nhắc nhở tự động hàng ngày", isOn: $viewModel.autoReminderEnabled)
+                    .font(SplickTheme.Typography.callout)
             }
         }
         .splickCard()
