@@ -74,6 +74,13 @@ struct PostDetailView: View {
                         onMediaTap: { index in
                             mediaViewerRoute = MediaViewerRoute(index: index)
                         },
+                        onSendBillReminder: { postId, targetUserIds, message in
+                            try await feedViewModel.sendBillReminder(
+                                postId: postId,
+                                targetUserIds: targetUserIds,
+                                message: message
+                            )
+                        },
                         initialMediaIndex: initialMediaIndex
                     )
 

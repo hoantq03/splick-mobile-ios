@@ -398,4 +398,18 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
         posts.remove(at: index)
         logger.success("Post deleted")
     }
+
+    public func sendBillReminder(
+        postId: UUID,
+        targetUserIds: [UUID]?,
+        message: String
+    ) async throws -> SendBillReminderResult {
+        logger.log("Send bill reminder postId=\(postId) targets=\(targetUserIds?.count ?? 0)")
+        try await Task.sleep(for: .milliseconds(200))
+        logger.success("Bill reminder sent")
+        return SendBillReminderResult(
+            sentCount: targetUserIds?.count ?? 1,
+            skippedCount: 0
+        )
+    }
 }

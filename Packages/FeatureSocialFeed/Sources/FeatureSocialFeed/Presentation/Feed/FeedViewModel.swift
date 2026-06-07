@@ -18,6 +18,7 @@ public final class FeedViewModel: ObservableObject {
     private let reactToPostUseCase: ReactToPostUseCaseProtocol
     private let deletePostUseCase: DeletePostUseCaseProtocol
     private let addCommentUseCase: AddCommentUseCaseProtocol
+    private let sendBillReminderUseCase: SendBillReminderUseCaseProtocol
     private var currentPage = 0
     private var canLoadMore = true
     private var trackedViewPostIds = Set<UUID>()
@@ -51,6 +52,7 @@ public final class FeedViewModel: ObservableObject {
         reactToPostUseCase: ReactToPostUseCaseProtocol,
         deletePostUseCase: DeletePostUseCaseProtocol,
         addCommentUseCase: AddCommentUseCaseProtocol,
+        sendBillReminderUseCase: SendBillReminderUseCaseProtocol,
         currentUserId: UUID? = nil,
         currentUser: UserSummary? = nil
     ) {
@@ -59,6 +61,7 @@ public final class FeedViewModel: ObservableObject {
         self.reactToPostUseCase = reactToPostUseCase
         self.deletePostUseCase = deletePostUseCase
         self.addCommentUseCase = addCommentUseCase
+        self.sendBillReminderUseCase = sendBillReminderUseCase
         self.currentUserId = currentUserId
         self.currentUserSummary = currentUser
     }
@@ -461,5 +464,17 @@ public final class FeedViewModel: ObservableObject {
             Log.error(error, category: .feed)
             return false
         }
+    }
+
+    func sendBillReminder(
+        postId: UUID,
+        targetUserIds: [UUID]?,
+        message: String
+    ) async throws -> SendBillReminderResult {
+        try await sendBillReminderUseCase.execute(
+            postId: postId,
+            targetUserIds: targetUserIds,
+            message: message
+        )
     }
 }

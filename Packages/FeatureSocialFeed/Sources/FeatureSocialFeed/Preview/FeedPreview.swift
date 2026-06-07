@@ -36,6 +36,12 @@ final class MockAddCommentUseCase: AddCommentUseCaseProtocol, Sendable {
     ) async throws {}
 }
 
+final class MockSendBillReminderUseCase: SendBillReminderUseCaseProtocol, Sendable {
+    func execute(postId: UUID, targetUserIds: [UUID]?, message: String) async throws -> SendBillReminderResult {
+        SendBillReminderResult(sentCount: targetUserIds?.count ?? 1, skippedCount: 0)
+    }
+}
+
 final class MockFetchPhotoAlbumUseCase: FetchPhotoAlbumUseCaseProtocol, Sendable {
     func fetchFirstPage(filters: PhotoAlbumFilters) async throws -> AlbumPhotoPage {
         _ = filters
@@ -74,6 +80,7 @@ final class MockFetchPhotoAlbumUseCase: FetchPhotoAlbumUseCaseProtocol, Sendable
                 reactToPostUseCase: MockReactToPostUseCase(),
                 deletePostUseCase: MockDeletePostUseCase(),
                 addCommentUseCase: MockAddCommentUseCase(),
+                sendBillReminderUseCase: MockSendBillReminderUseCase(),
                 currentUserId: PreviewData.currentUser.id,
                 currentUser: UserSummary(
                     id: PreviewData.currentUser.id,

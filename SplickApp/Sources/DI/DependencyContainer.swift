@@ -187,6 +187,10 @@ final class DependencyContainer: ObservableObject {
         AddCommentUseCase(repository: feedRepository)
     }()
 
+    lazy var sendBillReminderUseCase: SendBillReminderUseCaseProtocol = {
+        SendBillReminderUseCase(repository: feedRepository)
+    }()
+
     private lazy var friendsManagementRepository: FriendsManagementRepositoryProtocol = {
         FriendsManagementRepository(apiClient: apiClient)
     }()
@@ -424,7 +428,8 @@ final class DependencyContainer: ObservableObject {
             fetchPostUseCase: fetchPostUseCase,
             reactToPostUseCase: reactToPostUseCase,
             deletePostUseCase: deletePostUseCase,
-            addCommentUseCase: addCommentUseCase
+            addCommentUseCase: addCommentUseCase,
+            sendBillReminderUseCase: sendBillReminderUseCase
         )
     }
 

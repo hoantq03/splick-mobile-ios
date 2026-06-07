@@ -35,6 +35,7 @@ struct PostCardView: View {
     var onOpenDetail: ((Int) -> Void)? = nil
     /// Tap on a media item in detail opens fullscreen viewer at that index.
     var onMediaTap: ((Int) -> Void)? = nil
+    var onSendBillReminder: ((UUID, [UUID]?, String) async throws -> SendBillReminderResult)? = nil
     /// Restores carousel position when opening detail after swiping media in the feed.
     var initialMediaIndex: Int = 0
 
@@ -259,11 +260,16 @@ struct PostCardView: View {
                 BillSplitSectionView(
                     bill: bill,
                     onUserTap: onUserTap,
-                    onSendReminder: { user, _ in
-                        reminderSentMessage = "Đã gửi nhắc nhở tới \(user.displayName)"
+                    onSendReminder: { user, message in
+                        sendReminder(to: [user], message: message, singleName: user.displayName)
                     },
-                    onSendAllReminders: { users, _ in
-                        reminderSentMessage = "Đã gửi nhắc nhở tới \(users.count) người"
+                    onSendAllReminders: { users, message in
+                        sendReminder(
+                            to: users,
+                            message: message,
+                            singleName: nil,
+                            count: users.count
+                        )
                     }
                 )
             }
@@ -402,5 +408,30 @@ struct PostCardView: View {
             }
         }
         .buttonStyle(.plain)
+    }
+
+    private func sendReminder(
+        to users: [UserSummary],
+        message: String,
+        singleName: String?,
+        count: Int? = nil
+    ) {
+        guard let onSendBillReminder else { return }
+        Task {
+            do {
+                let result = try await onSendBillReminder(
+                    post.id,
+                    users.map(\.id),
+                    message
+                )
+                if let singleName {
+                    reminderSentMessage = "Đã gửi nhắc nhở tới \(singleName)"
+                } else if let count {
+                    reminderSentMessage = "Đã gửi nhắc nhở tới \(result.sentCount)/\(count) người"
+                }
+            } catch {
+                reminderSentMessage = error.localizedDescription
+            }
+        }
     }
 }
