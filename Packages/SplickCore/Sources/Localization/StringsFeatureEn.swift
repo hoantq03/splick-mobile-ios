@@ -7,7 +7,7 @@ enum StringsFeatureEn {
         .feedEmptyMessage: "Share a moment with your friends to get started!",
         .feedEmptyAction: "Take a Photo",
         .feedPhotoAlbumAccessibility: "Photo album",
-        .feedAlbumTitle: "Album",
+        .feedAlbumTitle: "Collection",
         .feedAlbumLoading: "Loading album...",
         .feedAlbumEmptyTitle: "No photos yet",
         .feedAlbumEmptyMessage: "Photos from your posts will appear here.",

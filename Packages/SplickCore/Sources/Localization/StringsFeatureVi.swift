@@ -7,7 +7,7 @@ enum StringsFeatureVi {
         .feedEmptyMessage: "Chia sẻ khoảnh khắc với bạn bè để bắt đầu!",
         .feedEmptyAction: "Chụp ảnh",
         .feedPhotoAlbumAccessibility: "Album ảnh",
-        .feedAlbumTitle: "Album",
+        .feedAlbumTitle: "Bộ sưu tập",
         .feedAlbumLoading: "Đang tải album...",
         .feedAlbumEmptyTitle: "Chưa có ảnh",
         .feedAlbumEmptyMessage: "Ảnh từ bài đăng của bạn sẽ hiện ở đây.",
