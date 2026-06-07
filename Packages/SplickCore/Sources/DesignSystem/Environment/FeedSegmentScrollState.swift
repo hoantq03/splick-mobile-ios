@@ -1,39 +1,63 @@
 import SwiftUI
 
+// MARK: - Chrome metrics
+
+public enum FeedSegmentChromeMetrics {
+    public static let navigationBarHeight: CGFloat = 44
+    /// Capsule row: 28pt buttons + 8pt vertical padding.
+    public static let segmentRowHeight: CGFloat = 36
+}
+
+// MARK: - Scroll-driven collapse
+
 @MainActor
 public final class FeedSegmentScrollState: ObservableObject {
-    @Published public private(set) var isExpanded = true
+    /// 0 = pill tabs visible below nav bar; 1 = pills hidden, active label centered under notch.
+    @Published public private(set) var collapseProgress: CGFloat = 0
+
+    public var isExpanded: Bool { collapseProgress < 0.5 }
 
     private var lastOffset: CGFloat = 0
-    private let hideThreshold: CGFloat = 8
     private let showAtTopThreshold: CGFloat = 24
+    private let collapseDistance: CGFloat = 72
 
     public init() {}
 
     public func updateScrollOffset(_ offset: CGFloat) {
         if offset <= showAtTopThreshold {
-            setExpanded(true)
+            setCollapseProgress(0)
             lastOffset = offset
             return
         }
 
         let delta = offset - lastOffset
-        if delta > hideThreshold {
-            setExpanded(false)
-        } else if delta < -hideThreshold {
-            setExpanded(true)
+        if abs(delta) > 0.5 {
+            let next = min(1, max(0, collapseProgress + delta / collapseDistance))
+            setCollapseProgress(next)
         }
         lastOffset = offset
     }
 
-    public func reset() {
-        lastOffset = 0
-        setExpanded(true)
+    public func snapCollapseProgress() {
+        let target: CGFloat = collapseProgress >= 0.5 ? 1 : 0
+        setCollapseProgress(target, animated: true)
     }
 
-    private func setExpanded(_ expanded: Bool) {
-        guard isExpanded != expanded else { return }
-        isExpanded = expanded
+    public func reset() {
+        lastOffset = 0
+        setCollapseProgress(0, animated: false)
+    }
+
+    private func setCollapseProgress(_ value: CGFloat, animated: Bool = false) {
+        let clamped = min(1, max(0, value))
+        guard abs(collapseProgress - clamped) > 0.001 else { return }
+        if animated {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) {
+                collapseProgress = clamped
+            }
+        } else {
+            collapseProgress = clamped
+        }
     }
 }
 
@@ -56,11 +80,17 @@ public struct FeedSegmentHideOnScrollModifier: ViewModifier {
     public func body(content: Content) -> some View {
         if let feedSegmentScrollState {
             if #available(iOS 18.0, *) {
-                content.onScrollGeometryChange(for: CGFloat.self) { geometry in
-                    geometry.contentOffset.y + geometry.contentInsets.top
-                } action: { _, offset in
-                    feedSegmentScrollState.updateScrollOffset(offset)
-                }
+                content
+                    .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                        geometry.contentOffset.y + geometry.contentInsets.top
+                    } action: { _, offset in
+                        feedSegmentScrollState.updateScrollOffset(offset)
+                    }
+                    .onScrollPhaseChange { oldPhase, newPhase in
+                        if oldPhase == .interacting, newPhase != .interacting {
+                            feedSegmentScrollState.snapCollapseProgress()
+                        }
+                    }
             } else {
                 content
             }
