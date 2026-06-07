@@ -24,19 +24,23 @@ extension EnvironmentValues {
 
 extension View {
     /// Avatar button top-leading; use with `.navigationTitle(...)` for the screen title.
-    public func splickProfileToolbar() -> some View {
-        modifier(SplickProfileToolbarModifier())
+    public func splickProfileToolbar(
+        titleDisplayMode: NavigationBarItem.TitleDisplayMode = .large
+    ) -> some View {
+        modifier(SplickProfileToolbarModifier(titleDisplayMode: titleDisplayMode))
     }
 }
 
 private struct SplickProfileToolbarModifier: ViewModifier {
+    let titleDisplayMode: NavigationBarItem.TitleDisplayMode
+
     @Environment(\.openProfileSettings) private var openProfileSettings
     @Environment(\.currentUserSummary) private var currentUserSummary
     @Environment(\.languageService) private var languageService
 
     func body(content: Content) -> some View {
         content
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(titleDisplayMode)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     if let openProfileSettings, let user = currentUserSummary {
