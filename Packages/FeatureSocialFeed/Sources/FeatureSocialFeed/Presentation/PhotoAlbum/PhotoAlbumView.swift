@@ -14,6 +14,7 @@ public struct PhotoAlbumView: View {
     @Binding private var navigationPath: NavigationPath
     private let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol?
     private let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
+    private let isEmbedded: Bool
 
     private static let gridSpacing = SplickTheme.Spacing.xs
     private static let cellCornerRadius = SplickTheme.CornerRadius.small
@@ -28,13 +29,15 @@ public struct PhotoAlbumView: View {
         feedViewModel: FeedViewModel,
         navigationPath: Binding<NavigationPath>,
         fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol? = nil,
-        fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol? = nil
+        fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol? = nil,
+        isEmbedded: Bool = false
     ) {
         _viewModel = ObservedObject(wrappedValue: viewModel)
         _feedViewModel = ObservedObject(wrappedValue: feedViewModel)
         _navigationPath = navigationPath
         self.fetchMyFriendsUseCase = fetchMyFriendsUseCase
         self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
+        self.isEmbedded = isEmbedded
     }
 
     public var body: some View {
@@ -51,8 +54,7 @@ public struct PhotoAlbumView: View {
             albumContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .navigationTitle(languageService.text(.feedAlbumTitle))
-        .navigationBarTitleDisplayMode(.large)
+        .modifier(PhotoAlbumNavigationModifier(isEmbedded: isEmbedded, title: languageService.text(.feedAlbumTitle)))
         .task {
             await viewModel.loadInitialIfNeeded()
         }
@@ -119,6 +121,7 @@ public struct PhotoAlbumView: View {
             }
         }
         .tabBarHideOnScroll()
+        .feedSegmentHideOnScroll()
     }
 
     private func openPost(for photo: AlbumPhoto) {
@@ -130,6 +133,21 @@ public struct PhotoAlbumView: View {
             navigationPath.append(
                 FeedPostDestination(postId: photo.postId, mediaIndex: mediaIndex)
             )
+        }
+    }
+}
+
+private struct PhotoAlbumNavigationModifier: ViewModifier {
+    let isEmbedded: Bool
+    let title: String
+
+    func body(content: Content) -> some View {
+        if isEmbedded {
+            content
+        } else {
+            content
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.large)
         }
     }
 }

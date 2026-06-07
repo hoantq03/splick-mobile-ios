@@ -50,6 +50,8 @@ struct FeedPullToRefreshScrollView<Content: View>: View {
     @State private var ignoresPullUntil = Date.distantPast
     @State private var lastScrollOffset: CGFloat = 0
 
+    @Environment(\.feedSegmentScrollState) private var feedSegmentScrollState
+
     var body: some View {
         ScrollViewReader { scrollProxy in
             ScrollView {
@@ -117,6 +119,7 @@ struct FeedPullToRefreshScrollView<Content: View>: View {
 
     private func applyPullFromScrollOffset(_ offsetY: CGFloat, scrollProxy: ScrollViewProxy) {
         lastScrollOffset = offsetY
+        feedSegmentScrollState?.updateScrollOffset(offsetY)
 
         if restScrollOffset == nil {
             restScrollOffset = offsetY
