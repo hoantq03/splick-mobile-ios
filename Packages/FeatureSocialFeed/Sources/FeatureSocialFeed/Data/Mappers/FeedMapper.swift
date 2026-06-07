@@ -136,7 +136,8 @@ enum FeedMapper {
         return PostBillSplitLine(
             id: line.id ?? UUID(),
             user: toUserSummary(line.user),
-            amount: amount
+            amount: amount,
+            isPaid: line.isPaid ?? false
         )
     }
 }

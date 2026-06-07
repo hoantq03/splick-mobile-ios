@@ -20,4 +20,9 @@ public protocol FeedRepositoryProtocol: Sendable {
         submissionAttachments: [CommentSubmissionAttachment]
     ) async throws
     func deletePost(id: UUID) async throws
+    func sendBillReminder(
+        postId: UUID,
+        targetUserIds: [UUID]?,
+        message: String
+    ) async throws -> SendBillReminderResult
 }

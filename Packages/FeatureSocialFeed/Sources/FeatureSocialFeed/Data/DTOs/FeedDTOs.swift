@@ -70,6 +70,7 @@ struct PostBillSplitLineDTO: Decodable {
     let id: UUID?
     let user: AuthorDTO
     let amount: String
+    let isPaid: Bool?
 }
 
 struct AuthorDTO: Decodable {
@@ -156,4 +157,15 @@ struct CreatePostBillSplitRequestDTO: Encodable {
     let splitType: String
     let participants: [UUID]
     let customAmounts: [String: String]?
+    let autoReminderEnabled: Bool?
+}
+
+struct SendPostBillReminderRequestDTO: Encodable {
+    let targetUserIds: [UUID]?
+    let message: String
+}
+
+struct SendPostBillReminderResponseDTO: Decodable {
+    let sentCount: Int
+    let skippedCount: Int
 }

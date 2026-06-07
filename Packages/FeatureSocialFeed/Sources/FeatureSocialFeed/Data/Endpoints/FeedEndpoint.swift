@@ -11,6 +11,7 @@ enum FeedEndpoint: APIEndpoint {
     case removeReaction(postId: UUID, reactionId: UUID)
     case addComment(postId: UUID, CreateCommentRequestDTO)
     case deletePost(id: UUID)
+    case sendBillReminder(postId: UUID, SendPostBillReminderRequestDTO)
 
     var path: String {
         switch self {
@@ -22,13 +23,14 @@ enum FeedEndpoint: APIEndpoint {
         case .removeReaction(let postId, let reactionId):
             return "/v1/feed/posts/\(postId)/reactions/\(reactionId)"
         case .addComment(let postId, _): return "/v1/feed/posts/\(postId)/comments"
+        case .sendBillReminder(let postId, _): return "/v1/feed/posts/\(postId)/reminders"
         }
     }
 
     var method: HTTPMethod {
         switch self {
         case .feed, .post, .photoAlbumFirstPage, .photoAlbumCursor: return .get
-        case .createPost, .addReaction, .addComment: return .post
+        case .createPost, .addReaction, .addComment, .sendBillReminder: return .post
         case .removeReaction, .deletePost: return .delete
         }
     }
@@ -81,6 +83,7 @@ enum FeedEndpoint: APIEndpoint {
         case .createPost(let dto): return dto
         case .addReaction(_, let dto): return dto
         case .addComment(_, let dto): return dto
+        case .sendBillReminder(_, let dto): return dto
         default: return nil
         }
     }

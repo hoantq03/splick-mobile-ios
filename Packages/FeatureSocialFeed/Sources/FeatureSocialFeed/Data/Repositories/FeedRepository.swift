@@ -172,7 +172,26 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
             currency: billSplit.currency,
             splitType: splitType,
             participants: participants,
-            customAmounts: customAmounts
+            customAmounts: customAmounts,
+            autoReminderEnabled: input.autoReminderEnabled ? true : nil
+        )
+    }
+
+    public func sendBillReminder(
+        postId: UUID,
+        targetUserIds: [UUID]?,
+        message: String
+    ) async throws -> SendBillReminderResult {
+        let request = SendPostBillReminderRequestDTO(
+            targetUserIds: targetUserIds,
+            message: message
+        )
+        let response: SendPostBillReminderResponseDTO = try await apiClient.request(
+            FeedEndpoint.sendBillReminder(postId: postId, request)
+        )
+        return SendBillReminderResult(
+            sentCount: response.sentCount,
+            skippedCount: response.skippedCount
         )
     }
 }
