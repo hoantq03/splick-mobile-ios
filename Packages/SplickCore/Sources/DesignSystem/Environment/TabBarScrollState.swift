@@ -95,4 +95,49 @@ extension View {
     public func tabBarHideOnScroll() -> some View {
         modifier(TabBarHideOnScrollModifier())
     }
+
+    /// Reserves space above the floating tab bar so scroll content is not clipped underneath it.
+    public func tabBarContentPadding(isEnabled: Bool = true) -> some View {
+        modifier(TabBarContentPaddingModifier(isEnabled: isEnabled))
+    }
+}
+
+public struct TabBarContentPaddingModifier: ViewModifier {
+    private let isEnabled: Bool
+    @Environment(\.tabBarScrollState) private var tabBarScrollState
+
+    public init(isEnabled: Bool = true) {
+        self.isEnabled = isEnabled
+    }
+
+    private var bottomInset: CGFloat {
+        guard isEnabled else { return 0 }
+        guard let tabBarScrollState else { return SplickTabBarMetrics.floatingClearance }
+        if tabBarScrollState.isVisible {
+            return SplickTabBarMetrics.floatingClearance
+        }
+        return tabBarScrollState.suppressesBottomInset ? 0 : SplickTabBarMetrics.hiddenClearance
+    }
+
+    public func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .animation(.easeInOut(duration: 0.28), value: bottomInset)
+                .modifier(TabBarBottomInsetModifier(inset: bottomInset))
+        } else {
+            content.modifier(TabBarBottomInsetModifier(inset: bottomInset))
+        }
+    }
+}
+
+private struct TabBarBottomInsetModifier: ViewModifier {
+    let inset: CGFloat
+
+    func body(content: Content) -> some View {
+        if #available(iOS 17.0, *) {
+            content.safeAreaPadding(.bottom, inset)
+        } else {
+            content.padding(.bottom, inset)
+        }
+    }
 }
