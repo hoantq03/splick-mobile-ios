@@ -1,8 +1,16 @@
 import DesignSystem
 import SwiftUI
 
+enum CapturePreviewStyle {
+    /// After camera capture: confirm, retake, or edit before adding media.
+    case capture
+    /// Review already-selected media: preview and edit only.
+    case review
+}
+
 struct CapturePreviewView: View {
     let image: UIImage
+    var style: CapturePreviewStyle = .capture
     let onRetake: () -> Void
     let onEdit: () -> Void
     let onUsePhoto: () -> Void
@@ -53,18 +61,30 @@ struct CapturePreviewView: View {
 
     private var actionButtons: some View {
         VStack(spacing: SplickTheme.Spacing.sm) {
-            Button(action: onUsePhoto) {
-                Text("Dùng ảnh này")
-                    .font(SplickTheme.Typography.callout.weight(.bold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Capsule().fill(SplickTheme.Colors.primaryGradient))
-            }
+            if style == .capture {
+                Button(action: onUsePhoto) {
+                    Text("Dùng ảnh này")
+                        .font(SplickTheme.Typography.callout.weight(.bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Capsule().fill(SplickTheme.Colors.primaryGradient))
+                }
 
-            HStack(spacing: SplickTheme.Spacing.sm) {
-                secondaryButton(title: "Chụp lại", icon: "arrow.counterclockwise", action: onRetake)
-                secondaryButton(title: "Chỉnh sửa", icon: "slider.horizontal.3", action: onEdit)
+                HStack(spacing: SplickTheme.Spacing.sm) {
+                    secondaryButton(title: "Chụp lại", icon: "arrow.counterclockwise", action: onRetake)
+                    secondaryButton(title: "Chỉnh sửa", icon: "slider.horizontal.3", action: onEdit)
+                }
+            } else {
+                Button(action: onEdit) {
+                    Label("Chỉnh sửa", systemImage: "slider.horizontal.3")
+                        .font(SplickTheme.Typography.callout.weight(.bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Capsule().fill(SplickTheme.Colors.primaryGradient))
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding(.horizontal, SplickTheme.Spacing.md)
