@@ -37,7 +37,18 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
         let normalized = query
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "@", with: "")
-        guard !normalized.isEmpty else { return [] }
+
+        if normalized.isEmpty {
+            let response: SocialPageFriendResponseDTO = try await apiClient.request(
+                SocialEndpoint.listFriends(page: page, size: size)
+            )
+            return response.content
+                .map { UserSearchResult(user: FriendsMapper.toUserSummary($0), friendStatus: .friends) }
+                .sorted {
+                    $0.user.displayName.localizedCaseInsensitiveCompare($1.user.displayName)
+                        == .orderedAscending
+                }
+        }
 
         let response: SocialPageUserSearchResponseDTO = try await apiClient.request(
             SocialEndpoint.searchUsers(query: normalized, page: page, size: size)
