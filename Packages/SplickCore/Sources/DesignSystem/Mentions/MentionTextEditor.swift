@@ -49,9 +49,12 @@ public struct MentionTextEditor: UIViewRepresentable {
             context.coordinator.applyStyles(to: uiView, text: text)
         }
 
-        if isFocused, !uiView.isFirstResponder {
-            uiView.becomeFirstResponder()
-        } else if !isFocused, uiView.isFirstResponder {
+        if isFocused {
+            context.coordinator.managesExternalFocus = true
+            if !uiView.isFirstResponder {
+                uiView.becomeFirstResponder()
+            }
+        } else if context.coordinator.managesExternalFocus, uiView.isFirstResponder {
             uiView.resignFirstResponder()
         }
     }
@@ -68,6 +71,8 @@ public struct MentionTextEditor: UIViewRepresentable {
         var parent: MentionTextEditor
         var lastSyncedText: String = ""
         private var isApplyingStyles = false
+        /// Tracks whether SwiftUI ever requested external focus control (avoids dismissing keyboard on default `.constant(false)`).
+        var managesExternalFocus = false
 
         init(parent: MentionTextEditor) {
             self.parent = parent
