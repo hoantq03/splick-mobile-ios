@@ -58,34 +58,32 @@ public struct FeedView: View {
 
     public var body: some View {
         NavigationStack(path: $navigationPath) {
-            VStack(spacing: 0) {
-                FeedSegmentSwitcher(
-                    selection: $selectedSegment,
-                    isExpanded: feedSegmentScrollState.isExpanded,
-                    feedLabel: languageService.text(.feedTitle),
-                    albumLabel: languageService.text(.feedAlbumTitle)
+            FeedContentPager(selection: $selectedSegment) {
+                feedPane
+            } album: {
+                PhotoAlbumView(
+                    viewModel: photoAlbumViewModel,
+                    feedViewModel: viewModel,
+                    navigationPath: $navigationPath,
+                    fetchMyFriendsUseCase: fetchMyFriendsUseCase,
+                    fetchMyGroupsUseCase: fetchMyGroupsUseCase,
+                    isEmbedded: true
                 )
-                .padding(.horizontal, SplickTheme.Spacing.md)
-                .padding(.bottom, SplickTheme.Spacing.sm)
-
-                TabView(selection: $selectedSegment) {
-                    feedPane
-                        .tag(FeedContentSegment.feed)
-
-                    PhotoAlbumView(
-                        viewModel: photoAlbumViewModel,
-                        feedViewModel: viewModel,
-                        navigationPath: $navigationPath,
-                        fetchMyFriendsUseCase: fetchMyFriendsUseCase,
-                        fetchMyGroupsUseCase: fetchMyGroupsUseCase,
-                        isEmbedded: true
-                    )
-                    .tag(FeedContentSegment.album)
-                }
-                .tabViewStyle(.page(indexDisplayMode: .never))
             }
-            .navigationTitle(languageService.text(.feedTitle))
-            .splickProfileToolbar()
+            .background(SplickTheme.Colors.background.ignoresSafeArea())
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .splickProfileToolbar(titleDisplayMode: .inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    FeedNavPills(
+                        selection: $selectedSegment,
+                        collapseProgress: feedSegmentScrollState.collapseProgress,
+                        feedLabel: languageService.text(.feedTitle),
+                        albumLabel: languageService.text(.feedAlbumTitle)
+                    )
+                }
+            }
             .navigationDestination(for: FeedPostDestination.self) { destination in
                 PostDetailContainerView(
                     destination: destination,
@@ -161,6 +159,7 @@ public struct FeedView: View {
         switch viewModel.state {
         case .idle, .loading:
             LoadingView(message: languageService.text(.feedLoading))
+                .feedPagerPageTopInset(isEnabled: true)
 
         case .loaded(let posts) where posts.isEmpty:
             EmptyStateView(
@@ -171,6 +170,7 @@ public struct FeedView: View {
             ) {
                 openPostCaptureFlow?()
             }
+            .feedPagerPageTopInset(isEnabled: true)
 
         case .loaded:
             feedList
@@ -179,6 +179,7 @@ public struct FeedView: View {
             ErrorView(message: message) {
                 Task { await viewModel.loadFeed() }
             }
+            .feedPagerPageTopInset(isEnabled: true)
         }
     }
 
@@ -194,6 +195,7 @@ public struct FeedView: View {
             defer {
                 tabBarScrollState?.reset()
                 feedSegmentScrollState.reset()
+                viewModel.endRefreshingIfNeeded()
             }
             return await viewModel.loadFeed(isPullToRefresh: true)
         } content: {

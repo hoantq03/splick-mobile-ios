@@ -54,6 +54,8 @@ public struct PhotoAlbumView: View {
             albumContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .feedPagerPageTopInset(isEnabled: isEmbedded)
+        .background(SplickTheme.Colors.background)
         .modifier(PhotoAlbumNavigationModifier(isEmbedded: isEmbedded, title: languageService.text(.feedAlbumTitle)))
         .task {
             await viewModel.loadInitialIfNeeded()
@@ -120,6 +122,8 @@ public struct PhotoAlbumView: View {
                     .padding(.vertical, SplickTheme.Spacing.md)
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(SplickTheme.Colors.background)
         .tabBarHideOnScroll()
         .feedSegmentHideOnScroll()
     }
