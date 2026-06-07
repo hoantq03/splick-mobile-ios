@@ -28,6 +28,8 @@ public struct FeedView: View {
     @State private var profileRoute: ProfileRoute?
     @State private var companionsRoute: CompanionsSheetRoute?
     @State private var feedScrollLocked = false
+    @State private var selectedSegment: FeedContentSegment = .feed
+    @StateObject private var feedSegmentScrollState = FeedSegmentScrollState()
     @StateObject private var videoCoordinator = FeedVideoPlaybackCoordinator()
 
     public init(
@@ -56,50 +58,34 @@ public struct FeedView: View {
 
     public var body: some View {
         NavigationStack(path: $navigationPath) {
-            Group {
-                switch viewModel.state {
-                case .idle, .loading:
-                    LoadingView(message: languageService.text(.feedLoading))
+            VStack(spacing: 0) {
+                FeedSegmentSwitcher(
+                    selection: $selectedSegment,
+                    isExpanded: feedSegmentScrollState.isExpanded,
+                    feedLabel: languageService.text(.feedTitle),
+                    albumLabel: languageService.text(.feedAlbumTitle)
+                )
+                .padding(.horizontal, SplickTheme.Spacing.md)
+                .padding(.bottom, SplickTheme.Spacing.sm)
 
-                case .loaded(let posts) where posts.isEmpty:
-                    EmptyStateView(
-                        icon: "photo.on.rectangle.angled",
-                        title: languageService.text(.feedEmptyTitle),
-                        message: languageService.text(.feedEmptyMessage),
-                        actionTitle: languageService.text(.feedEmptyAction)
-                    ) {
-                        openPostCaptureFlow?()
-                    }
+                TabView(selection: $selectedSegment) {
+                    feedPane
+                        .tag(FeedContentSegment.feed)
 
-                case .loaded:
-                    feedList
-
-                case .failed(let message):
-                    ErrorView(message: message) {
-                        Task { await viewModel.loadFeed() }
-                    }
+                    PhotoAlbumView(
+                        viewModel: photoAlbumViewModel,
+                        feedViewModel: viewModel,
+                        navigationPath: $navigationPath,
+                        fetchMyFriendsUseCase: fetchMyFriendsUseCase,
+                        fetchMyGroupsUseCase: fetchMyGroupsUseCase,
+                        isEmbedded: true
+                    )
+                    .tag(FeedContentSegment.album)
                 }
+                .tabViewStyle(.page(indexDisplayMode: .never))
             }
             .navigationTitle(languageService.text(.feedTitle))
             .splickProfileToolbar()
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink(value: PhotoAlbumRoute()) {
-                        Image(systemName: "square.grid.2x2")
-                            .font(.system(size: 17, weight: .medium))
-                    }
-                    .accessibilityLabel(languageService.text(.feedPhotoAlbumAccessibility))
-                }
-            }
-            .navigationDestination(for: PhotoAlbumRoute.self) { _ in
-                PhotoAlbumView(
-                    viewModel: photoAlbumViewModel,
-                    feedViewModel: viewModel,
-                    navigationPath: $navigationPath,
-                    fetchMyFriendsUseCase: fetchMyFriendsUseCase,
-                    fetchMyGroupsUseCase: fetchMyGroupsUseCase
-                )
-            }
             .navigationDestination(for: FeedPostDestination.self) { destination in
                 PostDetailContainerView(
                     destination: destination,
@@ -120,6 +106,7 @@ public struct FeedView: View {
                 Text(viewModel.alertMessage ?? "")
             }
         }
+        .environment(\.feedSegmentScrollState, feedSegmentScrollState)
         .onFirstAppear {
             viewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
             guard viewModel.posts.isEmpty else { return }
@@ -146,7 +133,14 @@ public struct FeedView: View {
                 videoCoordinator.suspendPlayback()
             }
         }
-        .environment(\.feedTabIsActive, isTabActive)
+        .onChange(of: selectedSegment) { segment in
+            feedSegmentScrollState.reset()
+            tabBarScrollState?.reset()
+            if segment != .feed {
+                videoCoordinator.suspendPlayback()
+            }
+        }
+        .environment(\.feedTabIsActive, isTabActive && selectedSegment == .feed)
         .sheet(item: $profileRoute) { route in
             if let profileDependencies {
                 FriendUserProfileView(
@@ -162,6 +156,32 @@ public struct FeedView: View {
         }
     }
 
+    @ViewBuilder
+    private var feedPane: some View {
+        switch viewModel.state {
+        case .idle, .loading:
+            LoadingView(message: languageService.text(.feedLoading))
+
+        case .loaded(let posts) where posts.isEmpty:
+            EmptyStateView(
+                icon: "photo.on.rectangle.angled",
+                title: languageService.text(.feedEmptyTitle),
+                message: languageService.text(.feedEmptyMessage),
+                actionTitle: languageService.text(.feedEmptyAction)
+            ) {
+                openPostCaptureFlow?()
+            }
+
+        case .loaded:
+            feedList
+
+        case .failed(let message):
+            ErrorView(message: message) {
+                Task { await viewModel.loadFeed() }
+            }
+        }
+    }
+
     private var feedList: some View {
         FeedPullToRefreshScrollView(
             isRefreshing: Binding(
@@ -173,6 +193,7 @@ public struct FeedView: View {
             feedScrollLocked = false
             defer {
                 tabBarScrollState?.reset()
+                feedSegmentScrollState.reset()
             }
             return await viewModel.loadFeed(isPullToRefresh: true)
         } content: {
@@ -206,6 +227,13 @@ public struct FeedView: View {
                         onOpenDetail: { mediaIndex in
                             navigationPath.append(
                                 FeedPostDestination(postId: post.id, mediaIndex: mediaIndex)
+                            )
+                        },
+                        onSendBillReminder: { postId, targetUserIds, message in
+                            try await viewModel.sendBillReminder(
+                                postId: postId,
+                                targetUserIds: targetUserIds,
+                                message: message
                             )
                         }
                     )
