@@ -1,0 +1,81 @@
+import SwiftUI
+import DesignSystem
+
+enum FeedPagerTopInsetMetrics {
+    /// Counteracts system scroll inset so feed sits tight under the segment pills.
+    private static let contentLift: CGFloat = SplickTheme.Spacing.sm + 30
+
+    static func resolvedTopMargin(for geometry: GeometryProxy) -> CGFloat {
+        let globalMinY = geometry.frame(in: .global).minY
+        let safeTop = geometry.safeAreaInsets.top
+        let navBarBottom = safeTop + FeedSegmentChromeMetrics.navigationBarHeight
+
+        if globalMinY >= navBarBottom - SplickTheme.Spacing.sm {
+            return -contentLift
+        }
+
+        return max(-contentLift, navBarBottom - globalMinY - contentLift)
+    }
+}
+
+extension View {
+    /// Restores navigation spacing for scroll views nested inside the feed/album pager `TabView`.
+    func feedPagerScrollInsets() -> some View {
+        modifier(FeedPagerScrollInsetsModifier())
+    }
+
+    /// Restores navigation spacing for non-scroll pager pages (e.g. album filter header stack).
+    func feedPagerPageTopInset(isEnabled: Bool) -> some View {
+        modifier(FeedPagerPageTopInsetModifier(isEnabled: isEnabled))
+    }
+}
+
+private struct FeedPagerScrollInsetsModifier: ViewModifier {
+    @State private var topMargin: CGFloat = -(SplickTheme.Spacing.sm + 30)
+
+    func body(content: Content) -> some View {
+        Group {
+            if #available(iOS 17.0, *) {
+                content.contentMargins(.top, topMargin, for: .scrollContent)
+            } else {
+                content.padding(.top, topMargin)
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(SplickTheme.Colors.background)
+        .background {
+            GeometryReader { geometry in
+                Color.clear
+                    .onAppear {
+                        topMargin = FeedPagerTopInsetMetrics.resolvedTopMargin(for: geometry)
+                    }
+                    .onChange(of: geometry.frame(in: .global).minY) { _ in
+                        topMargin = FeedPagerTopInsetMetrics.resolvedTopMargin(for: geometry)
+                    }
+            }
+        }
+    }
+}
+
+private struct FeedPagerPageTopInsetModifier: ViewModifier {
+    let isEnabled: Bool
+    @State private var topPadding: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.top, isEnabled ? topPadding : 0)
+            .background {
+                if isEnabled {
+                    GeometryReader { geometry in
+                        Color.clear
+                            .onAppear {
+                                topPadding = FeedPagerTopInsetMetrics.resolvedTopMargin(for: geometry)
+                            }
+                            .onChange(of: geometry.frame(in: .global).minY) { _ in
+                                topPadding = FeedPagerTopInsetMetrics.resolvedTopMargin(for: geometry)
+                            }
+                    }
+                }
+            }
+    }
+}
