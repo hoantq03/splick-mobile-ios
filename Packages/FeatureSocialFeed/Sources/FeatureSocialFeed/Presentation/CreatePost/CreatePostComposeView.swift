@@ -17,6 +17,7 @@ public struct CreatePostComposeView: View {
     @State private var photoPickerItems: [PhotosPickerItem] = []
     @State private var showPhotoLibraryPicker = false
     @State private var showCameraCapture = false
+    @State private var reviewingMediaID: UUID?
     @FocusState private var isFriendSearchFocused: Bool
 
     public init(
@@ -107,6 +108,23 @@ public struct CreatePostComposeView: View {
                 }
             )
         }
+        .fullScreenCover(isPresented: reviewCoverPresented) {
+            if let id = reviewingMediaID,
+               let image = viewModel.selectedMediaItems.first(where: { $0.id == id })?.previewImage {
+                SelectedPhotoReviewView(
+                    image: image,
+                    onImageUpdated: { viewModel.updateMediaImage(id: id, image: $0) },
+                    onDismiss: { reviewingMediaID = nil }
+                )
+            }
+        }
+    }
+
+    private var reviewCoverPresented: Binding<Bool> {
+        Binding(
+            get: { reviewingMediaID != nil },
+            set: { if !$0 { reviewingMediaID = nil } }
+        )
     }
 
     @ViewBuilder
@@ -118,9 +136,15 @@ public struct CreatePostComposeView: View {
                         ZStack(alignment: .topTrailing) {
                             Group {
                                 if let image = item.previewImage {
-                                    Image(uiImage: image)
-                                        .resizable()
-                                        .scaledToFill()
+                                    Button {
+                                        reviewingMediaID = item.id
+                                    } label: {
+                                        Image(uiImage: image)
+                                            .resizable()
+                                            .scaledToFill()
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("Xem và chỉnh sửa ảnh")
                                 } else {
                                     ZStack {
                                         SplickTheme.Colors.tertiaryBackground

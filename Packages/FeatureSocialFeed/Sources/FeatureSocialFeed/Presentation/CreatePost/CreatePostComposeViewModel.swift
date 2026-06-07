@@ -162,6 +162,23 @@ public final class CreatePostComposeViewModel: ObservableObject {
         selectedMediaItems.removeAll { $0.id == id }
     }
 
+    func updateMediaImage(id: UUID, image: UIImage) {
+        guard let index = selectedMediaItems.firstIndex(where: { $0.id == id }),
+              selectedMediaItems[index].mediaType == .image,
+              let draft = Self.makeImageDraft(from: image)
+        else { return }
+
+        let existingId = selectedMediaItems[index].id
+        selectedMediaItems[index] = ComposeMediaDraft(
+            id: existingId,
+            previewImage: draft.previewImage,
+            mediaType: draft.mediaType,
+            data: draft.data,
+            mimeType: draft.mimeType,
+            videoDurationSeconds: draft.videoDurationSeconds
+        )
+    }
+
     func addMediaDraft(_ media: ComposeMediaDraft) {
         guard canAddMoreMedia else { return }
         if media.mediaType == .video,
@@ -420,12 +437,28 @@ public final class CreatePostComposeViewModel: ObservableObject {
 }
 
 public struct ComposeMediaDraft: Identifiable {
-    public let id = UUID()
+    public let id: UUID
     public let previewImage: UIImage?
     public let mediaType: PostMediaType
     public let data: Data
     public let mimeType: String
     public let videoDurationSeconds: Int?
+
+    public init(
+        id: UUID = UUID(),
+        previewImage: UIImage?,
+        mediaType: PostMediaType,
+        data: Data,
+        mimeType: String,
+        videoDurationSeconds: Int?
+    ) {
+        self.id = id
+        self.previewImage = previewImage
+        self.mediaType = mediaType
+        self.data = data
+        self.mimeType = mimeType
+        self.videoDurationSeconds = videoDurationSeconds
+    }
 }
 
 private extension ComposeBillSplitMode {
