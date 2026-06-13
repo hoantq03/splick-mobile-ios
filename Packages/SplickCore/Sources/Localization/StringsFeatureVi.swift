@@ -1,16 +1,29 @@
 enum StringsFeatureVi {
     static let values: [L10nKey: String] = [
         // Feed
-        .feedTitle: "Bảng tin",
+        .feedTitle: "Tin",
         .feedLoading: "Đang tải bảng tin...",
         .feedEmptyTitle: "Chưa có bài đăng",
         .feedEmptyMessage: "Chia sẻ khoảnh khắc với bạn bè để bắt đầu!",
         .feedEmptyAction: "Chụp ảnh",
         .feedPhotoAlbumAccessibility: "Album ảnh",
-        .feedAlbumTitle: "Bộ sưu tập",
+        .feedAlbumTitle: "Album",
         .feedAlbumLoading: "Đang tải album...",
         .feedAlbumEmptyTitle: "Chưa có ảnh",
         .feedAlbumEmptyMessage: "Ảnh từ bài đăng của bạn sẽ hiện ở đây.",
+
+        // Streak
+        .feedStreakTitle: "Chuỗi",
+        .feedStreakCurrentStreak: "Chuỗi hiện tại",
+        .feedStreakDays: "ngày liên tiếp",
+        .feedStreakEmptyDay: "Không có ảnh",
+        .feedStreakNoPhotosToday: "Đăng ảnh hôm nay để giữ chuỗi!",
+        .feedStreakQuoteZero: "Chuỗi 0 ngày — máy ảnh đang xin nghỉ phép có lương.",
+        .feedStreakQuoteGrowing: "Mới lót đường thôi, đừng để chiếc tủ lạnh vượt streak bạn.",
+        .feedStreakQuoteSolid: "Streak ngon lành — thuật toán chưa kịp hiểu bạn đang làm gì.",
+        .feedStreakQuoteLegend: "Huyền thoại thật sự. NASA gọi mà bạn bận chụp ảnh.",
+        .feedStreakLoading: "Đang tải chuỗi...",
+        .feedStreakError: "Không tải được chuỗi",
         .feedFilterTitle: "Bộ lọc",
         .feedFilterNoFriends: "Bạn chưa có bạn bè",
         .feedFilterFriendsNotFound: "Không tìm thấy bạn bè",
@@ -51,6 +64,9 @@ enum StringsFeatureVi {
         .feedCreateCurrencySymbol: "đ",
         .feedMentionSuggestions: "Gợi ý bạn bè",
         .feedEmojiPickerTitle: "Chọn emoji",
+        .feedEmojiPickerQuickBarTitle: "Thanh nhanh",
+        .feedEmojiPickerQuickBarHint: "Chạm một ô rồi chọn emoji bên dưới để gán. Chạm emoji trực tiếp để gửi cảm xúc.",
+        .feedEmojiPickerAllTitle: "Tất cả emoji",
         .feedEmojiPickerHint: "Bàn phím emoji của iPhone sẽ hiện khi bạn chạm vào ô trên.",
         .feedProfileMessage: "Nhắn tin",
         .feedProfileAddFriend: "Thêm bạn",
@@ -187,6 +203,26 @@ enum StringsFeatureVi {
         .notificationReadAll: "Đọc tất cả",
         .notificationInboxTitle: "Hộp thư",
         .notificationInboxEmpty: "Chưa có thông báo",
+        .notificationBellAccessibility: "Thông báo",
+
+        // Tab
+        .tabMessages: "Tin nhắn",
+
+        // Messaging
+        .messagingTitle: "Tin nhắn",
+        .messagingLoading: "Đang tải tin nhắn...",
+        .messagingEmptyTitle: "Chưa có cuộc trò chuyện",
+        .messagingEmptyMessage: "Bắt đầu nhắn tin với bạn bè của bạn!",
+        .messagingNewConversation: "Tin nhắn mới",
+        .messagingInputPlaceholder: "Nhắn tin...",
+        .messagingSend: "Gửi",
+        .messagingYou: "Bạn",
+        .messagingChatLoading: "Đang tải tin nhắn...",
+        .messagingChatEmptyTitle: "Chưa có tin nhắn",
+        .messagingChatEmptyMessage: "Gửi lời chào nào!",
+        .messagingSelectFriend: "Chọn bạn bè để nhắn tin",
+        .messagingBellAccessibility: "Thông báo",
+        .messagingMessageButton: "Nhắn tin",
 
         // Common extras
         .commonClose: "Đóng",

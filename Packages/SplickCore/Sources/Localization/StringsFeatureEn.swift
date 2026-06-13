@@ -11,6 +11,19 @@ enum StringsFeatureEn {
         .feedAlbumLoading: "Loading album...",
         .feedAlbumEmptyTitle: "No photos yet",
         .feedAlbumEmptyMessage: "Photos from your posts will appear here.",
+
+        // Streak
+        .feedStreakTitle: "Streak",
+        .feedStreakCurrentStreak: "Current streak",
+        .feedStreakDays: "days in a row",
+        .feedStreakEmptyDay: "No photo",
+        .feedStreakNoPhotosToday: "Post a photo today to keep your streak!",
+        .feedStreakQuoteZero: "Zero-day streak — your camera requested paid leave.",
+        .feedStreakQuoteGrowing: "Just warming up. Don't let your fridge out-streak you.",
+        .feedStreakQuoteSolid: "Solid streak — the algorithm still hasn't figured you out.",
+        .feedStreakQuoteLegend: "True legend. NASA called but you were busy taking photos.",
+        .feedStreakLoading: "Loading streak...",
+        .feedStreakError: "Failed to load streak",
         .feedFilterTitle: "Filters",
         .feedFilterNoFriends: "You have no friends yet",
         .feedFilterFriendsNotFound: "No friends found",
@@ -51,6 +64,9 @@ enum StringsFeatureEn {
         .feedCreateCurrencySymbol: "₫",
         .feedMentionSuggestions: "Friend suggestions",
         .feedEmojiPickerTitle: "Choose emoji",
+        .feedEmojiPickerQuickBarTitle: "Quick bar",
+        .feedEmojiPickerQuickBarHint: "Tap a slot, then pick an emoji below to assign. Tap an emoji to react instantly.",
+        .feedEmojiPickerAllTitle: "All emojis",
         .feedEmojiPickerHint: "The iPhone emoji keyboard appears when you tap the field above.",
         .feedProfileMessage: "Message",
         .feedProfileAddFriend: "Add friend",
@@ -187,6 +203,26 @@ enum StringsFeatureEn {
         .notificationReadAll: "Read All",
         .notificationInboxTitle: "Inbox",
         .notificationInboxEmpty: "No notifications yet",
+        .notificationBellAccessibility: "Notifications",
+
+        // Tab
+        .tabMessages: "Messages",
+
+        // Messaging
+        .messagingTitle: "Messages",
+        .messagingLoading: "Loading messages...",
+        .messagingEmptyTitle: "No Conversations",
+        .messagingEmptyMessage: "Start a conversation with a friend!",
+        .messagingNewConversation: "New Message",
+        .messagingInputPlaceholder: "Message...",
+        .messagingSend: "Send",
+        .messagingYou: "You",
+        .messagingChatLoading: "Loading messages...",
+        .messagingChatEmptyTitle: "No messages yet",
+        .messagingChatEmptyMessage: "Say hello!",
+        .messagingSelectFriend: "Select a friend to message",
+        .messagingBellAccessibility: "Notifications",
+        .messagingMessageButton: "Message",
 
         // Common extras
         .commonClose: "Close",
