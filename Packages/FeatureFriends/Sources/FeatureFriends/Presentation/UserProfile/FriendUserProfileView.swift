@@ -7,6 +7,7 @@ public struct FriendUserProfileView: View {
     @StateObject private var viewModel: FriendUserProfileViewModel
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openDirectMessage) private var openDirectMessage
 
     public init(viewModel: FriendUserProfileViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -141,6 +142,13 @@ public struct FriendUserProfileView: View {
         VStack(spacing: SplickTheme.Spacing.sm) {
             switch viewModel.mode {
             case .friend:
+                if let openDM = openDirectMessage {
+                    SplickButton(languageService.text(.messagingMessageButton), style: .primary) {
+                        Task { _ = await openDM(viewModel.user.id) }
+                    }
+                    .disabled(viewModel.isProcessing)
+                }
+
                 SplickButton(languageService.text(.friendsSetNickname), style: .secondary) {
                     viewModel.showNicknameEditor = true
                 }
