@@ -24,6 +24,7 @@ public struct FeedView: View {
     private let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
     private let profileDependencies: FriendUserProfileDependencies?
     private let photoAlbumViewModel: PhotoAlbumViewModel
+    private let streakViewModel: StreakViewModel
     private let isTabActive: Bool
     @State private var profileRoute: ProfileRoute?
     @State private var companionsRoute: CompanionsSheetRoute?
@@ -35,6 +36,7 @@ public struct FeedView: View {
     public init(
         viewModel: FeedViewModel,
         photoAlbumViewModel: PhotoAlbumViewModel,
+        streakViewModel: StreakViewModel,
         fetchFriendsUseCase: FetchFriendsUseCaseProtocol? = nil,
         fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol? = nil,
         fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol? = nil,
@@ -46,6 +48,7 @@ public struct FeedView: View {
     ) {
         self._viewModel = ObservedObject(wrappedValue: viewModel)
         self.photoAlbumViewModel = photoAlbumViewModel
+        self.streakViewModel = streakViewModel
         _navigationPath = navigationPath
         self.fetchFriendsUseCase = fetchFriendsUseCase
         self.fetchMyFriendsUseCase = fetchMyFriendsUseCase
@@ -69,6 +72,12 @@ public struct FeedView: View {
                     fetchMyGroupsUseCase: fetchMyGroupsUseCase,
                     isEmbedded: true
                 )
+            } streak: {
+                StreakView(
+                    viewModel: streakViewModel,
+                    feedViewModel: viewModel,
+                    navigationPath: $navigationPath
+                )
             }
             .background(SplickTheme.Colors.background.ignoresSafeArea())
             .navigationTitle("")
@@ -80,7 +89,8 @@ public struct FeedView: View {
                         selection: $selectedSegment,
                         collapseProgress: feedSegmentScrollState.collapseProgress,
                         feedLabel: languageService.text(.feedTitle),
-                        albumLabel: languageService.text(.feedAlbumTitle)
+                        albumLabel: languageService.text(.feedAlbumTitle),
+                        streakLabel: languageService.text(.feedStreakTitle)
                     )
                 }
             }
@@ -216,6 +226,7 @@ public struct FeedView: View {
                             openProfile(for: user)
                         },
                         onOpenComments: {
+                            guard viewModel.postUploadState(for: post.id) == nil else { return }
                             navigationPath.append(
                                 FeedPostDestination(postId: post.id, mediaIndex: 0)
                             )
@@ -227,6 +238,7 @@ public struct FeedView: View {
                             )
                         },
                         onOpenDetail: { mediaIndex in
+                            guard viewModel.postUploadState(for: post.id) == nil else { return }
                             navigationPath.append(
                                 FeedPostDestination(postId: post.id, mediaIndex: mediaIndex)
                             )
@@ -237,7 +249,8 @@ public struct FeedView: View {
                                 targetUserIds: targetUserIds,
                                 message: message
                             )
-                        }
+                        },
+                        uploadState: viewModel.postUploadState(for: post.id)
                     )
                     .onAppear {
                         guard !viewModel.isRefreshing else { return }

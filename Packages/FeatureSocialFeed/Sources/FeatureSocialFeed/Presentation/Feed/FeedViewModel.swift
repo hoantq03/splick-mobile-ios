@@ -19,6 +19,7 @@ public final class FeedViewModel: ObservableObject {
     private let deletePostUseCase: DeletePostUseCaseProtocol
     private let addCommentUseCase: AddCommentUseCaseProtocol
     private let sendBillReminderUseCase: SendBillReminderUseCaseProtocol
+    private let createPostUseCase: CreatePostUseCaseProtocol
     private var currentPage = 0
     private var canLoadMore = true
     private var trackedViewPostIds = Set<UUID>()
@@ -46,6 +47,11 @@ public final class FeedViewModel: ObservableObject {
     /// Optimistic comment ids not yet confirmed by the server — block reply to avoid invalid parent ids.
     private var pendingCommentIds = Set<UUID>()
 
+    // MARK: - Lazy post upload (optimistic feed card → background upload)
+
+    @Published private(set) var postUploadStates: [UUID: PostUploadState] = [:]
+    private var postUploadTasks: [UUID: Task<Void, Never>] = [:]
+
     public init(
         fetchFeedUseCase: FetchFeedUseCaseProtocol,
         fetchPostUseCase: FetchPostUseCaseProtocol,
@@ -53,6 +59,7 @@ public final class FeedViewModel: ObservableObject {
         deletePostUseCase: DeletePostUseCaseProtocol,
         addCommentUseCase: AddCommentUseCaseProtocol,
         sendBillReminderUseCase: SendBillReminderUseCaseProtocol,
+        createPostUseCase: CreatePostUseCaseProtocol,
         currentUserId: UUID? = nil,
         currentUser: UserSummary? = nil
     ) {
@@ -62,8 +69,17 @@ public final class FeedViewModel: ObservableObject {
         self.deletePostUseCase = deletePostUseCase
         self.addCommentUseCase = addCommentUseCase
         self.sendBillReminderUseCase = sendBillReminderUseCase
+        self.createPostUseCase = createPostUseCase
         self.currentUserId = currentUserId
         self.currentUserSummary = currentUser
+    }
+
+    public func postUploadState(for postId: UUID) -> PostUploadState? {
+        postUploadStates[postId]
+    }
+
+    public var hasPendingPostUploads: Bool {
+        !postUploadStates.isEmpty
     }
 
     func updateSession(user: UserSummary?, userId: UUID?) {
@@ -126,8 +142,8 @@ public final class FeedViewModel: ObservableObject {
 
         do {
             let posts = try await fetchFeedUseCase.execute(page: 0)
-            self.posts = posts
-            state = .loaded(posts)
+            self.posts = mergeFeedPreservingPendingUploads(with: posts)
+            state = .loaded(self.posts)
             canLoadMore = !posts.isEmpty
             Log.info("Loaded feed", category: .feed, metadata: ["count": String(posts.count)])
             return true
@@ -156,6 +172,18 @@ public final class FeedViewModel: ObservableObject {
     public func syncFeedAfterCreatingPost(_ created: Post) async {
         prependCreatedPost(created)
         await loadFeed(isPullToRefresh: true)
+    }
+
+    /// Inserts an optimistic post and uploads media + creates the post in the background.
+    public func enqueuePostUpload(optimisticPost: Post, input: CreatePostInput) {
+        let localPostId = optimisticPost.id
+        prependCreatedPost(optimisticPost)
+        postUploadStates[localPostId] = .uploading
+
+        postUploadTasks[localPostId]?.cancel()
+        postUploadTasks[localPostId] = Task { [weak self] in
+            await self?.performBackgroundPostUpload(localPostId: localPostId, input: input)
+        }
     }
 
     func loadMore() async {
@@ -201,6 +229,7 @@ public final class FeedViewModel: ObservableObject {
 
     func trackViewOnScrollIfNeeded(for post: Post) async {
         guard !isRefreshing else { return }
+        guard postUploadStates[post.id] == nil else { return }
         guard let currentUserId, currentUserId != post.author.id else { return }
         guard !trackedViewPostIds.contains(post.id) else { return }
 
@@ -264,6 +293,9 @@ public final class FeedViewModel: ObservableObject {
 
     @discardableResult
     func react(to postId: UUID, emoji: String) -> String? {
+        guard postUploadStates[postId] == nil else {
+            return "Bài viết đang được đăng."
+        }
         guard let userId = currentUserId else { return nil }
         guard let index = posts.firstIndex(where: { $0.id == postId }) else { return nil }
 
@@ -378,6 +410,10 @@ public final class FeedViewModel: ObservableObject {
             return AddCommentResult(error: "Không tìm thấy bài viết.", createdCommentId: nil)
         }
 
+        if postUploadStates[postId] != nil {
+            return AddCommentResult(error: "Bài viết đang được đăng.", createdCommentId: nil)
+        }
+
         let post = posts[index]
         pendingCommentIds.insert(optimisticId)
         posts[index] = post.updating(comments: post.comments + [comment])
@@ -426,6 +462,13 @@ public final class FeedViewModel: ObservableObject {
     func deletePost(id: UUID) async {
         guard let post = posts.first(where: { $0.id == id }) else { return }
 
+        if postUploadStates[id] != nil {
+            cancelPendingPostUpload(postId: id)
+            posts.removeAll { $0.id == id }
+            state = .loaded(posts)
+            return
+        }
+
         guard post.canDelete else {
             alertMessage = "Không thể xóa vì đã có người xem bài viết."
             return
@@ -446,6 +489,47 @@ public final class FeedViewModel: ObservableObject {
         guard !posts.contains(where: { $0.id == post.id }) else { return }
         posts.insert(post, at: 0)
         state = .loaded(posts)
+    }
+
+    private func performBackgroundPostUpload(localPostId: UUID, input: CreatePostInput) async {
+        defer { postUploadTasks[localPostId] = nil }
+
+        do {
+            let serverPost = try await createPostUseCase.execute(input)
+            replaceOptimisticPost(localId: localPostId, with: serverPost)
+            postUploadStates.removeValue(forKey: localPostId)
+            OptimisticPostBuilder.cleanupPendingMedia(postId: localPostId)
+        } catch {
+            if error.isRequestCancellation { return }
+            postUploadStates[localPostId] = .failed(message: error.localizedDescription)
+            Log.error(error, category: .feed)
+            alertMessage = "Không thể đăng bài. Thử lại sau."
+        }
+    }
+
+    private func replaceOptimisticPost(localId: UUID, with serverPost: Post) {
+        if let index = posts.firstIndex(where: { $0.id == localId }) {
+            posts[index] = serverPost
+        } else {
+            prependCreatedPost(serverPost)
+        }
+        state = .loaded(posts)
+    }
+
+    private func mergeFeedPreservingPendingUploads(with fetched: [Post]) -> [Post] {
+        let pendingIds = Set(postUploadStates.keys)
+        guard !pendingIds.isEmpty else { return fetched }
+
+        let pendingPosts = posts.filter { pendingIds.contains($0.id) }
+        let rest = fetched.filter { !pendingIds.contains($0.id) }
+        return pendingPosts + rest
+    }
+
+    private func cancelPendingPostUpload(postId: UUID) {
+        postUploadTasks[postId]?.cancel()
+        postUploadTasks[postId] = nil
+        postUploadStates.removeValue(forKey: postId)
+        OptimisticPostBuilder.cleanupPendingMedia(postId: postId)
     }
 
     @discardableResult

@@ -32,30 +32,8 @@ struct MentionPickerPopup: View {
                     }
 
                     ForEach(viewModel.friends) { friend in
-                        Button {
-                            onSelect(friend)
-                        } label: {
-                            HStack(spacing: 10) {
-                                AvatarView(
-                                    imageURL: friend.avatarURL,
-                                    name: friend.displayName,
-                                    size: .small
-                                )
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(friend.displayName)
-                                        .font(.system(size: 13, weight: .medium))
-                                        .foregroundStyle(SplickTheme.Colors.textPrimary)
-                                    Text("@\(friend.username)")
-                                        .font(.system(size: 11))
-                                        .foregroundStyle(SplickTheme.Colors.textTertiary)
-                                }
-                                Spacer()
-                            }
-                            .padding(.horizontal, 12)
+                        FriendTagRow(friend: friend, onTap: { onSelect(friend) }, horizontalPadding: 12)
                             .frame(height: rowHeight)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
                         .onAppear {
                             Task { await viewModel.loadMoreIfNeeded(currentFriend: friend) }
                         }

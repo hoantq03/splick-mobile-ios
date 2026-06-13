@@ -38,6 +38,7 @@ struct PostCardView: View {
     var onSendBillReminder: ((UUID, [UUID]?, String) async throws -> SendBillReminderResult)? = nil
     /// Restores carousel position when opening detail after swiping media in the feed.
     var initialMediaIndex: Int = 0
+    var uploadState: PostUploadState? = nil
 
     @State private var mediaPageIndex = 0
     @State private var appliedInitialMediaIndex = false
@@ -60,6 +61,10 @@ struct PostCardView: View {
         max(post.viewCount, post.viewers.count)
     }
 
+    private var isUploadPending: Bool {
+        uploadState != nil
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
             authorHeader
@@ -80,6 +85,15 @@ struct PostCardView: View {
             }
         }
         .splickCard()
+        .blur(radius: uploadState == .uploading ? 2.5 : 0)
+        .opacity(isUploadPending ? 0.55 : 1)
+        .allowsHitTesting(uploadState != .uploading)
+        .overlay {
+            if let uploadState {
+                PostUploadOverlay(state: uploadState)
+                    .allowsHitTesting(uploadState == .uploading)
+            }
+        }
         .onAppear {
             guard !appliedInitialMediaIndex, initialMediaIndex > 0 else { return }
             mediaPageIndex = min(initialMediaIndex, max(post.displayMediaItems.count - 1, 0))
