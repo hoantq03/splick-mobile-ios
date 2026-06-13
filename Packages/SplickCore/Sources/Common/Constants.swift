@@ -8,6 +8,13 @@ public enum AppConstants {
         /// Local Mac backend: `http://localhost:8080/api`
         public static let baseURL = "https://api.splick.app/api"
 
+        /// WebSocket base URL — derived from `baseURL` so local dev automatically uses `ws://`.
+        public static var wsBaseURL: String {
+            baseURL
+                .replacingOccurrences(of: "https://", with: "wss://")
+                .replacingOccurrences(of: "http://", with: "ws://")
+        }
+
         public static let timeoutInterval: TimeInterval = 30
         public static let maxRetryCount = 3
         public static let paginationDefaultLimit = 20
