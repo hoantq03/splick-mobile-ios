@@ -25,4 +25,9 @@ public protocol FeedRepositoryProtocol: Sendable {
         targetUserIds: [UUID]?,
         message: String
     ) async throws -> SendBillReminderResult
+
+    // MARK: - Streak
+    func fetchStreakSummary() async throws -> StreakSummary
+    func fetchStreakCalendar(year: Int, month: Int) async throws -> [StreakDay]
+    func fetchStreakDayPhotos(date: String) async throws -> [AlbumPhoto]
 }

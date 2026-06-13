@@ -131,6 +131,23 @@ enum FeedMapper {
         )
     }
 
+    static func toStreakSummary(_ dto: StreakSummaryDTO) -> StreakSummary {
+        StreakSummary(currentStreak: dto.currentStreak, hasTodayPhoto: dto.hasTodayPhoto)
+    }
+
+    static func toStreakDay(_ dto: StreakDayDTO) -> StreakDay? {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        guard let date = formatter.date(from: dto.date) else { return nil }
+        return StreakDay(
+            date: date,
+            firstPhotoURL: dto.firstPhotoUrl.flatMap(URL.init(string:)),
+            firstThumbnailURL: dto.firstThumbnailUrl.flatMap(URL.init(string:)),
+            photoCount: dto.photoCount
+        )
+    }
+
     private static func toBillSplitLine(_ line: PostBillSplitLineDTO) -> PostBillSplitLine {
         let amount = Decimal(string: line.amount) ?? 0
         return PostBillSplitLine(

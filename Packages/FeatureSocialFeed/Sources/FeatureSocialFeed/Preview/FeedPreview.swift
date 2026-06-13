@@ -42,6 +42,56 @@ final class MockSendBillReminderUseCase: SendBillReminderUseCaseProtocol, Sendab
     }
 }
 
+final class MockCreatePostUseCase: CreatePostUseCaseProtocol, Sendable {
+    func execute(_ input: CreatePostInput) async throws -> Post {
+        _ = input
+        return PreviewData.samplePost
+    }
+}
+
+final class MockFetchStreakUseCase: FetchStreakUseCaseProtocol, Sendable {
+    func fetchSummary() async throws -> StreakSummary {
+        StreakSummary(currentStreak: 5, hasTodayPhoto: true)
+    }
+
+    func fetchCalendar(year: Int, month: Int) async throws -> [StreakDay] {
+        let cal = Calendar.current
+        var components = DateComponents()
+        components.year = year
+        components.month = month
+        guard let start = cal.date(from: components),
+              let range = cal.range(of: .day, in: .month, for: start) else { return [] }
+        return range.compactMap { day -> StreakDay? in
+            components.day = day
+            guard let date = cal.date(from: components) else { return nil }
+            let hasPhoto = day % 3 != 0
+            return StreakDay(
+                date: date,
+                firstPhotoURL: hasPhoto ? URL(string: "https://picsum.photos/seed/\(day)/200") : nil,
+                firstThumbnailURL: nil,
+                photoCount: hasPhoto ? 1 : 0
+            )
+        }
+    }
+
+    func fetchDayPhotos(date: String) async throws -> [AlbumPhoto] {
+        PreviewData.samplePosts.prefix(3).flatMap { post in
+            post.displayMediaItems.filter { $0.mediaType == .image }.map { item in
+                AlbumPhoto(
+                    id: item.id,
+                    postId: post.id,
+                    author: post.author,
+                    mediaURL: item.mediaURL,
+                    thumbnailURL: item.thumbnailURL,
+                    mediaType: item.mediaType,
+                    sortOrder: item.sortOrder,
+                    createdAt: post.createdAt
+                )
+            }
+        }
+    }
+}
+
 final class MockFetchPhotoAlbumUseCase: FetchPhotoAlbumUseCaseProtocol, Sendable {
     func fetchFirstPage(filters: PhotoAlbumFilters) async throws -> AlbumPhotoPage {
         _ = filters
@@ -81,6 +131,7 @@ final class MockFetchPhotoAlbumUseCase: FetchPhotoAlbumUseCaseProtocol, Sendable
                 deletePostUseCase: MockDeletePostUseCase(),
                 addCommentUseCase: MockAddCommentUseCase(),
                 sendBillReminderUseCase: MockSendBillReminderUseCase(),
+                createPostUseCase: MockCreatePostUseCase(),
                 currentUserId: PreviewData.currentUser.id,
                 currentUser: UserSummary(
                     id: PreviewData.currentUser.id,
@@ -91,6 +142,9 @@ final class MockFetchPhotoAlbumUseCase: FetchPhotoAlbumUseCaseProtocol, Sendable
             ),
             photoAlbumViewModel: PhotoAlbumViewModel(
                 fetchPhotoAlbumUseCase: MockFetchPhotoAlbumUseCase()
+            ),
+            streakViewModel: StreakViewModel(
+                fetchStreakUseCase: MockFetchStreakUseCase()
             )
         )
     }

@@ -12,6 +12,9 @@ enum FeedEndpoint: APIEndpoint {
     case addComment(postId: UUID, CreateCommentRequestDTO)
     case deletePost(id: UUID)
     case sendBillReminder(postId: UUID, SendPostBillReminderRequestDTO)
+    case streakSummary
+    case streakCalendar(year: Int, month: Int)
+    case streakDayPhotos(date: String)
 
     var path: String {
         switch self {
@@ -24,12 +27,17 @@ enum FeedEndpoint: APIEndpoint {
             return "/v1/feed/posts/\(postId)/reactions/\(reactionId)"
         case .addComment(let postId, _): return "/v1/feed/posts/\(postId)/comments"
         case .sendBillReminder(let postId, _): return "/v1/feed/posts/\(postId)/reminders"
+        case .streakSummary: return "/v1/feed/streak"
+        case .streakCalendar: return "/v1/feed/streak/calendar"
+        case .streakDayPhotos(let date): return "/v1/feed/streak/days/\(date)/photos"
         }
     }
 
     var method: HTTPMethod {
         switch self {
-        case .feed, .post, .photoAlbumFirstPage, .photoAlbumCursor: return .get
+        case .feed, .post, .photoAlbumFirstPage, .photoAlbumCursor,
+             .streakSummary, .streakCalendar, .streakDayPhotos:
+            return .get
         case .createPost, .addReaction, .addComment, .sendBillReminder: return .post
         case .removeReaction, .deletePost: return .delete
         }
@@ -46,6 +54,11 @@ enum FeedEndpoint: APIEndpoint {
             return Self.photoAlbumQueryItems(page: 0, limit: limit, filters: filters)
         case .photoAlbumCursor(let cursor, let limit, let filters):
             return Self.photoAlbumQueryItems(cursor: cursor, limit: limit, filters: filters)
+        case .streakCalendar(let year, let month):
+            return [
+                URLQueryItem(name: "year", value: "\(year)"),
+                URLQueryItem(name: "month", value: "\(month)"),
+            ]
         default:
             return nil
         }

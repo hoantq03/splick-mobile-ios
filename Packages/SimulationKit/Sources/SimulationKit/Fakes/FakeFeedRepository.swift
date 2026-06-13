@@ -412,4 +412,61 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
             skippedCount: 0
         )
     }
+
+    public func fetchStreakSummary() async throws -> StreakSummary {
+        logger.log("Fetch streak summary")
+        try await Task.sleep(for: .milliseconds(200))
+
+        let todayPhotos = streakPhotos(on: Date())
+        return StreakSummary(
+            currentStreak: todayPhotos.isEmpty ? 0 : 3,
+            hasTodayPhoto: !todayPhotos.isEmpty
+        )
+    }
+
+    public func fetchStreakCalendar(year: Int, month: Int) async throws -> [StreakDay] {
+        logger.log("Fetch streak calendar: \(year)-\(month)")
+        try await Task.sleep(for: .milliseconds(300))
+
+        let calendar = Calendar.current
+        var components = DateComponents()
+        components.year = year
+        components.month = month
+        components.day = 1
+        guard let monthStart = calendar.date(from: components),
+              let dayRange = calendar.range(of: .day, in: .month, for: monthStart) else {
+            return []
+        }
+
+        return dayRange.compactMap { day -> StreakDay? in
+            components.day = day
+            guard let date = calendar.date(from: components) else { return nil }
+            let photos = streakPhotos(on: date)
+            let first = photos.sorted { $0.sortOrder < $1.sortOrder }.first
+            return StreakDay(
+                date: date,
+                firstPhotoURL: first?.mediaURL,
+                firstThumbnailURL: first?.thumbnailURL,
+                photoCount: photos.count
+            )
+        }
+    }
+
+    public func fetchStreakDayPhotos(date: String) async throws -> [AlbumPhoto] {
+        logger.log("Fetch streak day photos: \(date)")
+        try await Task.sleep(for: .milliseconds(250))
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        guard let dayDate = formatter.date(from: date) else { return [] }
+        return streakPhotos(on: dayDate)
+    }
+
+    private func streakPhotos(on date: Date) -> [AlbumPhoto] {
+        let calendar = Calendar.current
+        return filteredAlbumPhotos(filters: PhotoAlbumFilters()).filter {
+            calendar.isDate($0.createdAt, inSameDayAs: date)
+        }
+    }
 }

@@ -194,4 +194,23 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
             skippedCount: response.skippedCount
         )
     }
+
+    public func fetchStreakSummary() async throws -> StreakSummary {
+        let dto: StreakSummaryDTO = try await apiClient.request(FeedEndpoint.streakSummary)
+        return FeedMapper.toStreakSummary(dto)
+    }
+
+    public func fetchStreakCalendar(year: Int, month: Int) async throws -> [StreakDay] {
+        let dtos: [StreakDayDTO] = try await apiClient.request(
+            FeedEndpoint.streakCalendar(year: year, month: month)
+        )
+        return dtos.compactMap(FeedMapper.toStreakDay)
+    }
+
+    public func fetchStreakDayPhotos(date: String) async throws -> [AlbumPhoto] {
+        let dtos: [AlbumPhotoDTO] = try await apiClient.request(
+            FeedEndpoint.streakDayPhotos(date: date)
+        )
+        return dtos.compactMap(FeedMapper.toAlbumPhoto)
+    }
 }

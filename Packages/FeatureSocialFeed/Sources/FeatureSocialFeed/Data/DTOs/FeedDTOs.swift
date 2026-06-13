@@ -169,3 +169,15 @@ struct SendPostBillReminderResponseDTO: Decodable {
     let sentCount: Int
     let skippedCount: Int
 }
+
+struct StreakSummaryDTO: Decodable {
+    let currentStreak: Int
+    let hasTodayPhoto: Bool
+}
+
+struct StreakDayDTO: Decodable {
+    let date: String
+    let firstPhotoUrl: String?
+    let firstThumbnailUrl: String?
+    let photoCount: Int
+}
