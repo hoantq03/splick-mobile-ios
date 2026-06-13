@@ -111,7 +111,8 @@ public actor FakeNotificationRepository: NotificationRepositoryProtocol {
         return TabBadgeCounts(
             notifications: notificationsCount,
             friends: friends,
-            expenses: expenses
+            expenses: expenses,
+            messages: 0
         )
     }
 }

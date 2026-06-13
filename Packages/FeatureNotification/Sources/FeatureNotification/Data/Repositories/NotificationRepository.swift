@@ -38,7 +38,8 @@ public final class NotificationRepository: NotificationRepositoryProtocol, Senda
         return TabBadgeCounts(
             notifications: dto.notifications,
             friends: dto.friends,
-            expenses: dto.expenses
+            expenses: dto.expenses,
+            messages: dto.messages
         )
     }
 }

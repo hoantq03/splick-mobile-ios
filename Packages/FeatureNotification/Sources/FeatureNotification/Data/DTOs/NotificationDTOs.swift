@@ -24,4 +24,5 @@ struct BadgeCountsDTO: Decodable {
     let notifications: Int
     let friends: Int
     let expenses: Int
+    let messages: Int
 }

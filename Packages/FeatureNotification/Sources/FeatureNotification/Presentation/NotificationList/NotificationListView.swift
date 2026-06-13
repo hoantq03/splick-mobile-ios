@@ -7,14 +7,18 @@ import SplickDomain
 public struct NotificationListView: View {
     @ObservedObject private var viewModel: NotificationListViewModel
     @EnvironmentObject private var languageService: LanguageService
+    @Environment(\.dismiss) private var dismiss
     private let onNavigateToPost: ((UUID) -> Void)?
+    private let presentedAsSheet: Bool
 
     public init(
         viewModel: NotificationListViewModel,
-        onNavigateToPost: ((UUID) -> Void)? = nil
+        onNavigateToPost: ((UUID) -> Void)? = nil,
+        presentedAsSheet: Bool = false
     ) {
         self._viewModel = ObservedObject(wrappedValue: viewModel)
         self.onNavigateToPost = onNavigateToPost
+        self.presentedAsSheet = presentedAsSheet
     }
 
     public var body: some View {
@@ -41,8 +45,14 @@ public struct NotificationListView: View {
                 }
             }
             .navigationTitle(languageService.text(.notificationTitle))
-            .splickProfileToolbar()
+            .navigationBarTitleDisplayMode(.inline)
+            .modifier(NotificationToolbarModifier(presentedAsSheet: presentedAsSheet))
             .toolbar {
+                if presentedAsSheet {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(languageService.text(.commonDone)) { dismiss() }
+                    }
+                }
                 if viewModel.unreadCount > 0 {
                     ToolbarItem(placement: .primaryAction) {
                         Button(languageService.text(.notificationReadAll)) {
@@ -77,6 +87,17 @@ public struct NotificationListView: View {
             .padding(.horizontal, SplickTheme.Spacing.md)
         }
         .tabBarHideOnScroll()
+    }
+}
+
+private struct NotificationToolbarModifier: ViewModifier {
+    let presentedAsSheet: Bool
+    func body(content: Content) -> some View {
+        if presentedAsSheet {
+            content
+        } else {
+            content.splickProfileToolbar(titleDisplayMode: .inline)
+        }
     }
 }
 
