@@ -15,6 +15,7 @@ final class AppState: ObservableObject {
     @Published var authState: AuthState = .unknown
     @Published var selectedTab: Tab = .feed
     @Published var showProfileSettings = false
+    @Published var showNotifications = false
     @Published var feedNavigationPath = NavigationPath()
     @Published var pendingPostId: UUID?
     @Published private(set) var hasCompletedOnboarding: Bool
@@ -53,6 +54,7 @@ final class AppState: ObservableObject {
         container.resetTabViewModels()
         authState = .unauthenticated
         selectedTab = .feed
+        showNotifications = false
         feedNavigationPath = NavigationPath()
         pendingPostId = nil
         Log.info("User signed out", category: .lifecycle)
@@ -84,7 +86,7 @@ enum Tab: String, CaseIterable {
     case expenses
     case friends
     case camera
-    case notifications
+    case messages
     case profile
 
     @MainActor
@@ -94,7 +96,7 @@ enum Tab: String, CaseIterable {
         case .expenses: return languageService.text(.tabExpenses)
         case .friends: return languageService.text(.tabFriends)
         case .camera: return languageService.text(.tabCamera)
-        case .notifications: return languageService.text(.tabNotifications)
+        case .messages: return languageService.text(.tabMessages)
         case .profile: return languageService.text(.profileTitle)
         }
     }
@@ -105,7 +107,7 @@ enum Tab: String, CaseIterable {
         case .expenses: return "dollarsign.circle"
         case .friends: return "person.2"
         case .camera: return "camera"
-        case .notifications: return "bell"
+        case .messages: return "message"
         case .profile: return "person.circle"
         }
     }
@@ -116,7 +118,7 @@ enum Tab: String, CaseIterable {
         case .expenses: return "dollarsign.circle.fill"
         case .friends: return "person.2.fill"
         case .camera: return "camera.fill"
-        case .notifications: return "bell.fill"
+        case .messages: return "message.fill"
         case .profile: return "person.circle.fill"
         }
     }

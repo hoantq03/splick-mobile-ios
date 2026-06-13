@@ -10,6 +10,7 @@ import FeatureExpense
 import FeatureMedia
 import FeatureNotification
 import FeatureFriends
+import FeatureMessaging
 
 struct MainTabView: View {
     @EnvironmentObject private var appState: AppState
@@ -35,12 +36,24 @@ struct MainTabView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .onAppear { badgeCounts = container.badgeCountService.counts }
             .onReceive(container.badgeCountService.$counts) { badgeCounts = $0 }
+            .onReceive(container.messagingWebSocketClient.eventSubject) { event in
+                if case .newMessage = event {
+                    Task { await container.badgeCountService.refresh() }
+                }
+            }
             .environment(\.openProfileSettings) {
                 appState.showProfileSettings = true
             }
+            .environment(\.openNotifications) {
+                appState.showNotifications = true
+            }
+            .environment(\.notificationUnreadCount, badgeCounts.notifications)
             .environment(\.openPostCaptureFlow) {
                 appState.selectedTab = .camera
             }
+            .environment(\.openDirectMessage) { friendUserId in
+                    await container.getOrCreateConversationId(friendUserId: friendUserId)
+                }
             .environment(\.currentUserSummary, currentUserSummary)
             .environment(\.tabBarScrollState, tabBarScrollState)
             .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -60,8 +73,10 @@ struct MainTabView: View {
             switch scenePhase {
             case .active:
                 container.badgeCountService.startPolling()
+                container.messagingWebSocketClient.connect()
             case .background, .inactive:
                 container.badgeCountService.stopPolling()
+                container.messagingWebSocketClient.disconnect()
             @unknown default:
                 break
             }
@@ -70,10 +85,22 @@ struct MainTabView: View {
             await container.badgeCountService.refresh()
             if scenePhase == .active {
                 container.badgeCountService.startPolling()
+                container.messagingWebSocketClient.connect()
             }
         }
         .sheet(isPresented: $appState.showProfileSettings) {
             ProfileSettingsView()
+        }
+        .sheet(isPresented: $appState.showNotifications) {
+            NotificationListView(
+                viewModel: container.notificationListViewModel,
+                onNavigateToPost: { postId in
+                    appState.showNotifications = false
+                    appState.openPostFromNotification(postId)
+                },
+                presentedAsSheet: true
+            )
+            .environmentObject(container.languageService)
         }
         .tint(SplickTheme.Colors.primaryGradientStart)
     }
@@ -85,6 +112,7 @@ struct MainTabView: View {
             FeedView(
                 viewModel: container.feedViewModel,
                 photoAlbumViewModel: container.photoAlbumViewModel,
+                streakViewModel: container.streakViewModel,
                 fetchFriendsUseCase: container.fetchFriendsUseCase,
                 fetchMyFriendsUseCase: container.fetchMyFriendsUseCase,
                 fetchMyGroupsUseCase: container.fetchMyGroupsUseCase,
@@ -152,13 +180,16 @@ struct MainTabView: View {
             })
             .ignoresSafeArea()
 
-        case .notifications:
-            NotificationListView(
-                viewModel: container.notificationListViewModel,
-                onNavigateToPost: { postId in
-                    appState.openPostFromNotification(postId)
+        case .messages:
+            ConversationListView(
+                viewModel: container.conversationListViewModel,
+                newConversationViewModelFactory: { onCreated in
+                    container.makeNewConversationViewModel(onConversationCreated: onCreated)
                 }
             )
+            .environmentObject(container.makeChatThreadViewModelFactory(
+                currentUserId: appState.currentUser?.id ?? UUID()
+            ))
 
         case .profile:
             EmptyView()
@@ -172,7 +203,7 @@ struct MainTabView: View {
         } else {
             tabBarScrollState.reset()
         }
-        if tab == .notifications || tab == .friends || tab == .expenses {
+        if tab == .messages || tab == .friends || tab == .expenses {
             scheduleBadgeRefresh()
         }
     }

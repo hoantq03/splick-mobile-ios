@@ -43,6 +43,8 @@ packages:
     path: Packages/FeatureNotification
   FeatureFriends:
     path: Packages/FeatureFriends
+  FeatureMessaging:
+    path: Packages/FeatureMessaging
   SimulationKit:
     path: Packages/SimulationKit
   GoogleSignIn:
@@ -82,6 +84,8 @@ targets:
         product: FeatureNotification
       - package: FeatureFriends
         product: FeatureFriends
+      - package: FeatureMessaging
+        product: FeatureMessaging
       - package: SimulationKit
         product: SimulationKit
       - package: GoogleSignIn

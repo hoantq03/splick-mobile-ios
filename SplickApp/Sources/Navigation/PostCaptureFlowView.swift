@@ -46,17 +46,17 @@ struct PostCaptureFlowView: View {
                 previewImages: payload.images,
                 videoURL: payload.videoURL,
                 mediaType: payload.mediaType,
-                createPostUseCase: container.createPostUseCase,
                 fetchFriendsUseCase: container.fetchFriendsUseCase,
                 currentUser: currentUser,
                 currentUserId: currentUser?.id
             ),
-            onPosted: { post in
-                Task {
-                    await container.feedViewModel.syncFeedAfterCreatingPost(post)
-                    appState.selectedTab = .feed
-                    onDismiss()
-                }
+            onPostSubmit: { prepared in
+                container.feedViewModel.enqueuePostUpload(
+                    optimisticPost: prepared.optimisticPost,
+                    input: prepared.input
+                )
+                appState.selectedTab = .feed
+                onDismiss()
             },
             onCancel: { capturedMedia = nil }
         )

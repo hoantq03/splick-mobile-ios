@@ -73,7 +73,7 @@ private struct ModernSplickTabBar: View {
 
                 sidePanel(side: .trailing) {
                     tabButton(.friends, badge: badgeCounts.friends)
-                    tabButton(.notifications, badge: badgeCounts.notifications)
+                    tabButton(.messages, badge: badgeCounts.messages)
                 }
                 .frame(maxWidth: .infinity)
             }
@@ -179,7 +179,7 @@ private struct LegacySplickTabBar: View {
             tabButton(.expenses, badge: badgeCounts.expenses)
             cameraButton
             tabButton(.friends, badge: badgeCounts.friends)
-            tabButton(.notifications, badge: badgeCounts.notifications)
+            tabButton(.messages, badge: badgeCounts.messages)
         }
         .frame(height: barHeight)
         .padding(.horizontal, SplickTheme.Spacing.sm)

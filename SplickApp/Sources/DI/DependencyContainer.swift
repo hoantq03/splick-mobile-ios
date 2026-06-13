@@ -10,6 +10,7 @@ import FeatureMedia
 import FeatureExpense
 import FeatureNotification
 import FeatureFriends
+import FeatureMessaging
 
 @MainActor
 final class DependencyContainer: ObservableObject {
@@ -165,6 +166,10 @@ final class DependencyContainer: ObservableObject {
 
     lazy var fetchPhotoAlbumUseCase: FetchPhotoAlbumUseCaseProtocol = {
         FetchPhotoAlbumUseCase(repository: feedRepository)
+    }()
+
+    lazy var fetchStreakUseCase: FetchStreakUseCaseProtocol = {
+        FetchStreakUseCase(repository: feedRepository)
     }()
 
     lazy var fetchPostUseCase: FetchPostUseCaseProtocol = {
@@ -401,25 +406,86 @@ final class DependencyContainer: ObservableObject {
         BadgeCountService(fetchBadgeCountsUseCase: fetchBadgeCountsUseCase)
     }()
 
+    // MARK: - Messaging
+
+    lazy var messagingWebSocketClient: MessagingWebSocketClient = {
+        MessagingWebSocketClient(tokenProvider: { [weak self] in
+            await self?.tokenProvider.accessToken()
+        })
+    }()
+
+    private lazy var messagingRepository: MessagingRepositoryProtocol = {
+        MessagingRepository(apiClient: apiClient)
+    }()
+
+    private lazy var fetchConversationsUseCase: FetchConversationsUseCase = {
+        FetchConversationsUseCase(repository: messagingRepository)
+    }()
+
+    private lazy var fetchMessagesUseCase: FetchMessagesUseCase = {
+        FetchMessagesUseCase(repository: messagingRepository)
+    }()
+
+    private lazy var sendMessageUseCase: SendMessageUseCase = {
+        SendMessageUseCase(repository: messagingRepository)
+    }()
+
+    func makeChatThreadViewModelFactory(currentUserId: UUID) -> ChatThreadViewModelFactory {
+        ChatThreadViewModelFactory(
+            currentUserId: currentUserId,
+            fetchMessagesUseCase: fetchMessagesUseCase,
+            sendMessageUseCase: sendMessageUseCase,
+            repository: messagingRepository,
+            wsClient: messagingWebSocketClient
+        )
+    }
+
+    func makeNewConversationViewModel(onConversationCreated: @escaping (Conversation) -> Void) -> NewConversationViewModel {
+        NewConversationViewModel(
+            friendsProvider: FetchMyFriendsAdapter(useCase: fetchMyFriendsUseCase),
+            repository: messagingRepository,
+            onConversationCreated: onConversationCreated
+        )
+    }
+
+    func getOrCreateConversationId(friendUserId: UUID) async -> UUID? {
+        do {
+            let conversation = try await messagingRepository.getOrCreateConversation(friendUserId: friendUserId)
+            return conversation.id
+        } catch {
+            return nil
+        }
+    }
+
     // MARK: - Tab ViewModels (survive tab switches)
 
     lazy var feedViewModel: FeedViewModel = makeFeedViewModel()
 
     lazy var photoAlbumViewModel: PhotoAlbumViewModel = makePhotoAlbumViewModel()
+    lazy var streakViewModel: StreakViewModel = makeStreakViewModel()
 
     lazy var notificationListViewModel: NotificationListViewModel = makeNotificationListViewModel()
 
     lazy var expenseListViewModel: ExpenseListViewModel = makeExpenseListViewModel()
 
+    lazy var conversationListViewModel: ConversationListViewModel = makeConversationListViewModel()
+
     func resetTabViewModels() {
+        messagingWebSocketClient.disconnect()
         feedViewModel = makeFeedViewModel()
         photoAlbumViewModel = makePhotoAlbumViewModel()
+        streakViewModel = makeStreakViewModel()
         notificationListViewModel = makeNotificationListViewModel()
         expenseListViewModel = makeExpenseListViewModel()
+        conversationListViewModel = makeConversationListViewModel()
     }
 
     private func makePhotoAlbumViewModel() -> PhotoAlbumViewModel {
         PhotoAlbumViewModel(fetchPhotoAlbumUseCase: fetchPhotoAlbumUseCase)
+    }
+
+    private func makeStreakViewModel() -> StreakViewModel {
+        StreakViewModel(fetchStreakUseCase: fetchStreakUseCase)
     }
 
     private func makeFeedViewModel() -> FeedViewModel {
@@ -429,7 +495,8 @@ final class DependencyContainer: ObservableObject {
             reactToPostUseCase: reactToPostUseCase,
             deletePostUseCase: deletePostUseCase,
             addCommentUseCase: addCommentUseCase,
-            sendBillReminderUseCase: sendBillReminderUseCase
+            sendBillReminderUseCase: sendBillReminderUseCase,
+            createPostUseCase: createPostUseCase
         )
     }
 
@@ -440,6 +507,13 @@ final class DependencyContainer: ObservableObject {
             onBadgeCountsChanged: { [weak self] in
                 await self?.badgeCountService.refresh()
             }
+        )
+    }
+
+    private func makeConversationListViewModel() -> ConversationListViewModel {
+        ConversationListViewModel(
+            fetchConversationsUseCase: fetchConversationsUseCase,
+            wsClient: messagingWebSocketClient
         )
     }
 
