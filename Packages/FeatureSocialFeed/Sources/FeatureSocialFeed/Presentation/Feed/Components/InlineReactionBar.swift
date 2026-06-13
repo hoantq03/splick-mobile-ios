@@ -4,12 +4,14 @@ import DesignSystem
 
 /// Always-visible emoji row. Tap = +1 with bounce; long-press + drag = hover scale + release to add.
 struct InlineReactionBar: View {
+    @ObservedObject private var preferences = QuickReactionPreferences.shared
     let onReact: (String) -> Void
     var onDragRelease: ((String, CGRect) -> Void)?
     let onCustomEmoji: () -> Void
 
     var body: some View {
         InlineReactionBarHost(
+            emojis: preferences.quickEmojis,
             onReact: onReact,
             onDragRelease: onDragRelease,
             onCustomEmoji: onCustomEmoji
@@ -21,12 +23,14 @@ struct InlineReactionBar: View {
 // MARK: - UIKit
 
 private struct InlineReactionBarHost: UIViewRepresentable {
+    let emojis: [String]
     let onReact: (String) -> Void
-    let onDragRelease: ((String, CGRect) -> Void)?
+    var onDragRelease: ((String, CGRect) -> Void)?
     let onCustomEmoji: () -> Void
 
     func makeUIView(context: Context) -> InlineReactionBarControl {
         let view = InlineReactionBarControl()
+        view.setEmojis(emojis)
         view.onReact = onReact
         view.onDragRelease = onDragRelease
         view.onCustomEmoji = onCustomEmoji
@@ -34,6 +38,7 @@ private struct InlineReactionBarHost: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: InlineReactionBarControl, context: Context) {
+        uiView.setEmojis(emojis)
         uiView.onReact = onReact
         uiView.onDragRelease = onDragRelease
         uiView.onCustomEmoji = onCustomEmoji
@@ -45,7 +50,7 @@ private final class InlineReactionBarControl: UIView {
     var onDragRelease: ((String, CGRect) -> Void)?
     var onCustomEmoji: (() -> Void)?
 
-    private let emojis = ["❤️", "😂", "😮", "😢", "😡", "👏"]
+    private var emojis: [String] = QuickReactionPreferences.defaultEmojis
     private let slotSize: CGFloat = 36
     private let slotSpacing: CGFloat = 4
 
@@ -65,6 +70,12 @@ private final class InlineReactionBarControl: UIView {
     required init?(coder: NSCoder) {
         super.init(coder: coder)
         buildBar()
+    }
+
+    func setEmojis(_ newEmojis: [String]) {
+        guard newEmojis != emojis else { return }
+        emojis = newEmojis
+        rebuildEmojiViews()
     }
 
     /// Pass touches outside emoji row through to the feed scroll view.
@@ -90,30 +101,16 @@ private final class InlineReactionBarControl: UIView {
             stack.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
 
-        emojiViews = emojis.map { emoji in
-            let label = UILabel()
-            label.text = emoji
-            label.font = .systemFont(ofSize: 24)
-            label.textAlignment = .center
-            label.isUserInteractionEnabled = true
-            label.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([
-                label.widthAnchor.constraint(equalToConstant: slotSize),
-                label.heightAnchor.constraint(equalToConstant: slotSize),
-            ])
-
-            let tap = UITapGestureRecognizer(target: self, action: #selector(handleEmojiTap(_:)))
-            label.addGestureRecognizer(tap)
-            stack.addArrangedSubview(label)
-            return label
-        }
+        rebuildEmojiViews()
 
         let plus = UIView()
+        plus.isUserInteractionEnabled = true
         plus.translatesAutoresizingMaskIntoConstraints = false
         plus.backgroundColor = UIColor(SplickTheme.Colors.tertiaryBackground)
         plus.layer.cornerRadius = slotSize / 2
         let plusIcon = UIImageView(image: UIImage(systemName: "plus"))
         plusIcon.tintColor = UIColor(SplickTheme.Colors.textSecondary)
+        plusIcon.isUserInteractionEnabled = false
         plusIcon.translatesAutoresizingMaskIntoConstraints = false
         plus.addSubview(plusIcon)
         NSLayoutConstraint.activate([
@@ -132,6 +129,43 @@ private final class InlineReactionBarControl: UIView {
         longPress.allowableMovement = 300
         longPress.delegate = self
         stack.addGestureRecognizer(longPress)
+    }
+
+    private func rebuildEmojiViews() {
+        guard let slotStack else { return }
+
+        emojiViews.forEach {
+            slotStack.removeArrangedSubview($0)
+            $0.removeFromSuperview()
+        }
+        emojiViews.removeAll()
+
+        emojiViews = emojis.map { emoji in
+            let label = makeEmojiLabel(emoji: emoji)
+            if let plusContainer, let plusIndex = slotStack.arrangedSubviews.firstIndex(of: plusContainer) {
+                slotStack.insertArrangedSubview(label, at: plusIndex)
+            } else {
+                slotStack.addArrangedSubview(label)
+            }
+            return label
+        }
+    }
+
+    private func makeEmojiLabel(emoji: String) -> UILabel {
+        let label = UILabel()
+        label.text = emoji
+        label.font = .systemFont(ofSize: 24)
+        label.textAlignment = .center
+        label.isUserInteractionEnabled = true
+        label.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            label.widthAnchor.constraint(equalToConstant: slotSize),
+            label.heightAnchor.constraint(equalToConstant: slotSize),
+        ])
+
+        let tap = UITapGestureRecognizer(target: self, action: #selector(handleEmojiTap(_:)))
+        label.addGestureRecognizer(tap)
+        return label
     }
 
     @objc private func handleEmojiTap(_ gesture: UITapGestureRecognizer) {

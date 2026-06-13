@@ -1,16 +1,18 @@
 import SwiftUI
 
-struct FeedContentPager<Feed: View, Album: View>: View {
+struct FeedContentPager<Feed: View, Album: View, Streak: View>: View {
     @Binding var selection: FeedContentSegment
     @ViewBuilder var feed: () -> Feed
     @ViewBuilder var album: () -> Album
+    @ViewBuilder var streak: () -> Streak
 
     var body: some View {
         if #available(iOS 17.0, *) {
             ModernFeedContentPager(
                 selection: $selection,
                 feed: feed,
-                album: album
+                album: album,
+                streak: streak
             )
         } else {
             legacyPager
@@ -19,6 +21,9 @@ struct FeedContentPager<Feed: View, Album: View>: View {
 
     private var legacyPager: some View {
         TabView(selection: $selection) {
+            streak()
+                .tag(FeedContentSegment.streak)
+
             feed()
                 .tag(FeedContentSegment.feed)
 
@@ -30,16 +35,21 @@ struct FeedContentPager<Feed: View, Album: View>: View {
 }
 
 @available(iOS 17.0, *)
-private struct ModernFeedContentPager<Feed: View, Album: View>: View {
+private struct ModernFeedContentPager<Feed: View, Album: View, Streak: View>: View {
     @Binding var selection: FeedContentSegment
     @ViewBuilder var feed: () -> Feed
     @ViewBuilder var album: () -> Album
+    @ViewBuilder var streak: () -> Streak
 
     @State private var scrollPosition: FeedContentSegment?
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 0) {
+                streak()
+                    .containerRelativeFrame(.horizontal)
+                    .id(FeedContentSegment.streak)
+
                 feed()
                     .containerRelativeFrame(.horizontal)
                     .id(FeedContentSegment.feed)
