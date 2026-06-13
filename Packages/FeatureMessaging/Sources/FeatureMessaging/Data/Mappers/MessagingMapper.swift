@@ -1,0 +1,36 @@
+import Foundation
+import SplickDomain
+
+enum MessagingMapper {
+
+    static func toConversation(_ dto: ConversationResponseDTO) -> Conversation {
+        Conversation(
+            id: dto.id,
+            unreadCount: dto.unreadCount,
+            peer: dto.peer.map(toPeer),
+            lastMessage: dto.lastMessage.map(toMessage),
+            createdAt: dto.createdAt,
+            updatedAt: dto.updatedAt
+        )
+    }
+
+    static func toPeer(_ dto: ConversationPeerResponseDTO) -> ConversationPeer {
+        ConversationPeer(
+            userId: dto.userId,
+            username: dto.username,
+            displayName: dto.displayName,
+            avatarUrl: dto.avatarUrl
+        )
+    }
+
+    static func toMessage(_ dto: MessageResponseDTO) -> ChatMessage {
+        ChatMessage(
+            id: dto.id,
+            conversationId: dto.conversationId,
+            senderId: dto.senderId,
+            body: dto.body,
+            clientMessageId: dto.clientMessageId,
+            createdAt: dto.createdAt
+        )
+    }
+}
