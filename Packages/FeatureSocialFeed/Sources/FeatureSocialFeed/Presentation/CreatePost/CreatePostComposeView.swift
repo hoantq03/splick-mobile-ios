@@ -12,7 +12,7 @@ public struct CreatePostComposeView: View {
     @EnvironmentObject private var languageService: LanguageService
     @StateObject private var viewModel: CreatePostComposeViewModel
     @Environment(\.tabBarScrollState) private var tabBarScrollState
-    let onPosted: (Post) -> Void
+    let onPostSubmit: (PreparedPostSubmit) -> Void
     let onCancel: () -> Void
     @State private var photoPickerItems: [PhotosPickerItem] = []
     @State private var showPhotoLibraryPicker = false
@@ -22,11 +22,11 @@ public struct CreatePostComposeView: View {
 
     public init(
         viewModel: @autoclosure @escaping () -> CreatePostComposeViewModel,
-        onPosted: @escaping (Post) -> Void,
+        onPostSubmit: @escaping (PreparedPostSubmit) -> Void,
         onCancel: @escaping () -> Void
     ) {
         _viewModel = StateObject(wrappedValue: viewModel())
-        self.onPosted = onPosted
+        self.onPostSubmit = onPostSubmit
         self.onCancel = onCancel
     }
 
@@ -50,19 +50,10 @@ public struct CreatePostComposeView: View {
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Đăng") {
-                    Task {
-                        if let post = await viewModel.submit() {
-                            onPosted(post)
-                        }
+                    if let prepared = viewModel.prepareSubmit() {
+                        onPostSubmit(prepared)
                     }
                 }
-                .disabled(viewModel.submitState.isLoading)
-            }
-        }
-        .overlay {
-            if viewModel.submitState.isLoading {
-                LoadingView(message: languageService.text(.feedCreatePosting))
-                    .background(.ultraThinMaterial)
             }
         }
         .alert(
@@ -308,30 +299,9 @@ public struct CreatePostComposeView: View {
                     .padding(SplickTheme.Spacing.sm)
             } else {
                 ForEach(viewModel.friendSearchResults) { friend in
-                    Button {
+                    FriendTagRow(friend: friend) {
                         viewModel.addCompanion(friend)
-                    } label: {
-                        HStack(spacing: SplickTheme.Spacing.sm) {
-                            AvatarView(
-                                imageURL: friend.avatarURL,
-                                name: friend.displayName,
-                                size: .small
-                            )
-                            .frame(width: 32, height: 32)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(friend.displayName)
-                                    .font(SplickTheme.Typography.callout)
-                                    .foregroundStyle(SplickTheme.Colors.textPrimary)
-                                Text("@\(friend.username)")
-                                    .font(SplickTheme.Typography.caption)
-                                    .foregroundStyle(SplickTheme.Colors.textTertiary)
-                            }
-                            Spacer()
-                        }
-                        .padding(.horizontal, SplickTheme.Spacing.sm)
-                        .padding(.vertical, SplickTheme.Spacing.xs)
                     }
-                    .buttonStyle(.plain)
                     .onAppear {
                         viewModel.loadMoreFriendSearchIfNeeded(currentFriend: friend)
                     }

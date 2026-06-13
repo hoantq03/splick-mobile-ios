@@ -21,6 +21,16 @@ public enum ComposeBillSplitMode: String, CaseIterable, Identifiable {
     }
 }
 
+public struct PreparedPostSubmit: Sendable {
+    public let optimisticPost: Post
+    public let input: CreatePostInput
+
+    public init(optimisticPost: Post, input: CreatePostInput) {
+        self.optimisticPost = optimisticPost
+        self.input = input
+    }
+}
+
 @MainActor
 public final class CreatePostComposeViewModel: ObservableObject {
     @Published var caption = ""
@@ -41,7 +51,6 @@ public final class CreatePostComposeViewModel: ObservableObject {
     @Published private(set) var selectedMediaItems: [ComposeMediaDraft] = []
     @Published private(set) var mentionPickerViewModel: MentionFriendsViewModel?
 
-    private let createPostUseCase: CreatePostUseCaseProtocol
     private let fetchFriendsUseCase: FetchFriendsUseCaseProtocol
     private let currentUser: UserSummary?
     private let currentUserId: UUID?
@@ -64,12 +73,10 @@ public final class CreatePostComposeViewModel: ObservableObject {
         previewImages: [UIImage] = [],
         videoURL: URL? = nil,
         mediaType: PostMediaType = .image,
-        createPostUseCase: CreatePostUseCaseProtocol,
         fetchFriendsUseCase: FetchFriendsUseCaseProtocol,
         currentUser: UserSummary?,
         currentUserId: UUID?
     ) {
-        self.createPostUseCase = createPostUseCase
         self.fetchFriendsUseCase = fetchFriendsUseCase
         self.currentUser = currentUser
         self.currentUserId = currentUserId ?? currentUser?.id
@@ -266,7 +273,29 @@ public final class CreatePostComposeViewModel: ObservableObject {
         exactAmountTexts.removeValue(forKey: user.id)
     }
 
-    func submit() async -> Post? {
+    func prepareSubmit() -> PreparedPostSubmit? {
+        guard let input = buildCreatePostInput() else { return nil }
+        guard let author = currentUser else {
+            submitState = .failed("Không xác định được tài khoản.")
+            return nil
+        }
+
+        do {
+            let optimisticPost = try OptimisticPostBuilder.build(
+                author: author,
+                input: input,
+                mediaDrafts: selectedMediaItems,
+                companions: selectedCompanions
+            )
+            submitState = .idle
+            return PreparedPostSubmit(optimisticPost: optimisticPost, input: input)
+        } catch {
+            submitState = .failed(error.localizedDescription)
+            return nil
+        }
+    }
+
+    private func buildCreatePostInput() -> CreatePostInput? {
         guard !selectedMediaItems.isEmpty else {
             submitState = .failed("Chọn ít nhất một ảnh hoặc video.")
             return nil
@@ -283,7 +312,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
             }
         }
 
-        let input = CreatePostInput(
+        return CreatePostInput(
             mediaItems: selectedMediaItems.map {
                 CreatePostMediaInput(
                     data: $0.data,
@@ -300,16 +329,6 @@ public final class CreatePostComposeViewModel: ObservableObject {
             billSplitType: enableBillSplit ? splitMode.apiSplitType : nil,
             autoReminderEnabled: enableBillSplit && autoReminderEnabled
         )
-
-        submitState = .loading
-        do {
-            let post = try await createPostUseCase.execute(input)
-            submitState = .loaded(post)
-            return post
-        } catch {
-            submitState = .failed(error.localizedDescription)
-            return nil
-        }
     }
 
     private func buildBillSplit() -> PostBillSplit? {
