@@ -164,7 +164,70 @@
       "currency": "VND"
     }
   ],
-  "notifications": [
+  "conversations": [
+    {
+      "id": "aaaaaaaa-0000-0000-0000-000000000001",
+      "unread_count": 2,
+      "peer": {
+        "user_id": "00000000-0000-0000-0000-000000000001",
+        "username": "alice",
+        "display_name": "Alice Nguyen",
+        "avatar_url": null
+      },
+      "last_message": {
+        "id": "bbbbbbbb-0000-0000-0000-000000000001",
+        "conversation_id": "aaaaaaaa-0000-0000-0000-000000000001",
+        "sender_id": "00000000-0000-0000-0000-000000000001",
+        "body": "Hey! Are you coming tonight? 🎉",
+        "client_message_id": "cccccccc-0000-0000-0000-000000000001",
+        "created_at": "2025-01-16T09:50:00Z"
+      },
+      "created_at": "2025-01-15T10:00:00Z",
+      "updated_at": "2025-01-16T09:50:00Z"
+    },
+    {
+      "id": "aaaaaaaa-0000-0000-0000-000000000002",
+      "unread_count": 0,
+      "peer": {
+        "user_id": "00000000-0000-0000-0000-000000000002",
+        "username": "bob_tran",
+        "display_name": "Bob Trần",
+        "avatar_url": null
+      },
+      "last_message": {
+        "id": "bbbbbbbb-0000-0000-0000-000000000002",
+        "conversation_id": "aaaaaaaa-0000-0000-0000-000000000002",
+        "sender_id": "00000000-0000-0000-0000-000000000002",
+        "body": "Sure, I'll check the menu.",
+        "client_message_id": "cccccccc-0000-0000-0000-000000000002",
+        "created_at": "2025-01-16T09:00:00Z"
+      },
+      "created_at": "2025-01-14T08:00:00Z",
+      "updated_at": "2025-01-16T09:00:00Z"
+    }
+  ],
+  "messages": [
+    {
+      "id": "bbbbbbbb-0000-0000-0000-000000000011",
+      "conversation_id": "aaaaaaaa-0000-0000-0000-000000000001",
+      "sender_id": "00000000-0000-0000-0000-000000000099",
+      "body": "Hi! What's up?",
+      "client_message_id": "cccccccc-0000-0000-0000-000000000011",
+      "created_at": "2025-01-16T09:45:00Z"
+    },
+    {
+      "id": "bbbbbbbb-0000-0000-0000-000000000001",
+      "conversation_id": "aaaaaaaa-0000-0000-0000-000000000001",
+      "sender_id": "00000000-0000-0000-0000-000000000001",
+      "body": "Hey! Are you coming tonight? 🎉",
+      "client_message_id": "cccccccc-0000-0000-0000-000000000001",
+      "created_at": "2025-01-16T09:50:00Z"
+    }
+  ],
+  "badge-counts": {
+    "messages": 2,
+    "notifications": 2
+  },
     {
       "id": "n0000001-0000-0000-0000-000000000001",
       "type": "EXPENSE_CREATED",
