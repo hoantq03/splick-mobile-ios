@@ -174,7 +174,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
     }
 }
 
-public struct Reaction: Codable, Equatable, Sendable, Identifiable {
+public struct Reaction: Codable, Equatable, Hashable, Sendable, Identifiable {
     public let id: UUID
     public let emoji: String
     public let userId: UUID
