@@ -30,6 +30,7 @@ private actor StubMessagingRepository: MessagingRepositoryProtocol {
         Reaction(id: UUID(), emoji: emoji, userId: UUID(), createdAt: .now)
     }
     func removeReaction(conversationId: UUID, messageId: UUID, reactionId: UUID) async throws {}
+    func searchMessages(query: String, page: Int, limit: Int) async throws -> [MessageSearchHit] { [] }
     func recordedMarkReadCalls() async -> [(UUID, UUID)] { markReadCalls }
 }
 
@@ -39,23 +40,29 @@ private struct StubReactToMessageUseCase: ReactToMessageUseCaseProtocol {
     }
 }
 
+// MARK: - Test fixtures
+
+private enum ChatThreadViewModelTestFixtures {
+    static let conversationId = UUID(uuidString: "aaaaaaaa-0000-0000-0000-000000000001")!
+    static let senderId = UUID(uuidString: "bbbbbbbb-0000-0000-0000-000000000001")!
+    static let currentUserId = UUID(uuidString: "cccccccc-0000-0000-0000-000000000001")!
+}
+
 // MARK: - Tests
 
 @MainActor
 final class ChatThreadViewModelTests: XCTestCase {
 
-    private static let conversationId = UUID(uuidString: "aaaaaaaa-0000-0000-0000-000000000001")!
-    private static let senderId = UUID(uuidString: "bbbbbbbb-0000-0000-0000-000000000001")!
-    private static let currentUserId = UUID(uuidString: "cccccccc-0000-0000-0000-000000000001")!
-
     private func makeViewModel(
-        conversationId: UUID = Self.conversationId,
+        conversationId: UUID = ChatThreadViewModelTestFixtures.conversationId,
+        highlightMessageId: UUID? = nil,
         repo: StubMessagingRepository,
         wsClient: MessagingWebSocketClient
     ) -> ChatThreadViewModel {
         ChatThreadViewModel(
             conversationId: conversationId,
-            currentUserId: Self.currentUserId,
+            currentUserId: ChatThreadViewModelTestFixtures.currentUserId,
+            highlightMessageId: highlightMessageId,
             fetchMessagesUseCase: FetchMessagesUseCase(repository: repo),
             sendMessageUseCase: SendMessageUseCase(repository: repo),
             reactToMessageUseCase: StubReactToMessageUseCase(),
@@ -67,8 +74,8 @@ final class ChatThreadViewModelTests: XCTestCase {
     private func makeMessage(id: UUID = UUID(), body: String = "Hello") -> ChatMessage {
         ChatMessage(
             id: id,
-            conversationId: Self.conversationId,
-            senderId: Self.senderId,
+            conversationId: ChatThreadViewModelTestFixtures.conversationId,
+            senderId: ChatThreadViewModelTestFixtures.senderId,
             body: body,
             clientMessageId: UUID(),
             createdAt: .now
@@ -87,7 +94,7 @@ final class ChatThreadViewModelTests: XCTestCase {
         let countAfterLoad = vm.messages.count
 
         // Send duplicate via WS
-        wsClient.eventSubject.send(.newMessage(conversationId: Self.conversationId, message: existingMsg))
+        wsClient.eventSubject.send(.newMessage(conversationId: ChatThreadViewModelTestFixtures.conversationId, message: existingMsg))
         // Allow main-actor sink to process
         await Task.yield()
 
@@ -103,7 +110,7 @@ final class ChatThreadViewModelTests: XCTestCase {
         XCTAssertEqual(vm.messages.count, 0)
 
         let newMsg = makeMessage(body: "New incoming")
-        wsClient.eventSubject.send(.newMessage(conversationId: Self.conversationId, message: newMsg))
+        wsClient.eventSubject.send(.newMessage(conversationId: ChatThreadViewModelTestFixtures.conversationId, message: newMsg))
         await Task.yield()
 
         XCTAssertEqual(vm.messages.count, 1)
@@ -125,7 +132,7 @@ final class ChatThreadViewModelTests: XCTestCase {
 
         let calls = await repo.recordedMarkReadCalls()
         XCTAssertFalse(calls.isEmpty, "markRead should be called after loading messages")
-        XCTAssertEqual(calls.first?.0, Self.conversationId)
+        XCTAssertEqual(calls.first?.0, ChatThreadViewModelTestFixtures.conversationId)
     }
 
     func test_load_doesNotCallMarkRead_whenNoMessages() async {
@@ -149,10 +156,24 @@ final class ChatThreadViewModelTests: XCTestCase {
 
         await vm.load()
         let otherConvId = UUID()
-        let msg = ChatMessage(id: UUID(), conversationId: otherConvId, senderId: Self.senderId, body: "Other", clientMessageId: UUID(), createdAt: .now)
+        let msg = ChatMessage(id: UUID(), conversationId: otherConvId, senderId: ChatThreadViewModelTestFixtures.senderId, body: "Other", clientMessageId: UUID(), createdAt: .now)
         wsClient.eventSubject.send(.newMessage(conversationId: otherConvId, message: msg))
         await Task.yield()
 
         XCTAssertEqual(vm.messages.count, 0)
+    }
+
+    func test_loadWithHighlightMessage_setsHighlightAndScrollToken() async {
+        let targetId = UUID()
+        let targetMessage = makeMessage(id: targetId, body: "Find me")
+        let repo = StubMessagingRepository(messages: [targetMessage])
+        let wsClient = MessagingWebSocketClient(tokenProvider: { nil })
+        let vm = makeViewModel(highlightMessageId: targetId, repo: repo, wsClient: wsClient)
+
+        await vm.load()
+
+        XCTAssertEqual(vm.messages.first?.id, targetId)
+        XCTAssertEqual(vm.highlightedMessageId, targetId)
+        XCTAssertGreaterThan(vm.scrollToMessageToken, 0)
     }
 }

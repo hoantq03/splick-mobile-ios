@@ -25,7 +25,8 @@ final class MessagingMapperTests: XCTestCase {
             senderId: Self.senderId,
             body: "Hey there!",
             clientMessageId: Self.clientMsgId,
-            createdAt: Self.createdAt
+            createdAt: Self.createdAt,
+            reactions: nil
         )
         let dto = ConversationResponseDTO(
             id: Self.conversationId,
