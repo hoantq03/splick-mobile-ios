@@ -510,7 +510,10 @@ final class DependencyContainer: ObservableObject {
     private func makeConversationListViewModel() -> ConversationListViewModel {
         ConversationListViewModel(
             fetchConversationsUseCase: fetchConversationsUseCase,
-            friendSearchProvider: MessagingFriendSearchAdapter(searchUsersUseCase: searchUsersUseCase),
+            searchProvider: MessagingSearchAdapter(
+                searchUsersUseCase: searchUsersUseCase,
+                messagingRepository: messagingRepository
+            ),
             repository: messagingRepository,
             wsClient: messagingWebSocketClient
         )
