@@ -14,12 +14,19 @@ public final class TabBarScrollState: ObservableObject {
     @Published public private(set) var suppressesBottomInset = false
 
     private var lastOffset: CGFloat = 0
+    private var offsetNormalizer = ScrollChromeOffsetNormalizer()
+    private var suppressUpdatesUntil: Date = .distantPast
     private let hideThreshold: CGFloat = 8
     private let showAtTopThreshold: CGFloat = 24
+    private let visibilityChangeCooldown: TimeInterval = 0.35
 
     public init() {}
 
-    public func updateScrollOffset(_ offset: CGFloat) {
+    public func updateScrollOffset(_ rawOffset: CGFloat) {
+        guard Date() >= suppressUpdatesUntil else { return }
+
+        let offset = offsetNormalizer.normalize(rawOffset)
+
         if offset <= showAtTopThreshold {
             setVisible(true)
             lastOffset = offset
@@ -37,6 +44,7 @@ public final class TabBarScrollState: ObservableObject {
 
     public func reset() {
         lastOffset = 0
+        offsetNormalizer.reset()
         suppressesBottomInset = false
         setVisible(true)
     }
@@ -55,6 +63,7 @@ public final class TabBarScrollState: ObservableObject {
     private func setVisible(_ visible: Bool) {
         guard isVisible != visible else { return }
         isVisible = visible
+        suppressUpdatesUntil = Date().addingTimeInterval(visibilityChangeCooldown)
     }
 }
 
@@ -113,20 +122,13 @@ public struct TabBarContentPaddingModifier: ViewModifier {
     private var bottomInset: CGFloat {
         guard isEnabled else { return 0 }
         guard let tabBarScrollState else { return SplickTabBarMetrics.floatingClearance }
-        if tabBarScrollState.isVisible {
-            return SplickTabBarMetrics.floatingClearance
-        }
-        return tabBarScrollState.suppressesBottomInset ? 0 : SplickTabBarMetrics.hiddenClearance
+        if tabBarScrollState.suppressesBottomInset { return 0 }
+        // Keep inset stable while the tab bar hides/shows to avoid scroll feedback loops.
+        return SplickTabBarMetrics.floatingClearance
     }
 
     public func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content
-                .animation(.easeInOut(duration: 0.28), value: bottomInset)
-                .modifier(TabBarBottomInsetModifier(inset: bottomInset))
-        } else {
-            content.modifier(TabBarBottomInsetModifier(inset: bottomInset))
-        }
+        content.modifier(TabBarBottomInsetModifier(inset: bottomInset))
     }
 }
 
