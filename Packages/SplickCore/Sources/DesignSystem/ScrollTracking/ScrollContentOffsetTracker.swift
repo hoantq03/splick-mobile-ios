@@ -1,5 +1,21 @@
 import SwiftUI
 
+/// Converts raw `onScrollGeometryChange` offsets into distance scrolled from the initial rest position.
+struct ScrollChromeOffsetNormalizer {
+    private var baseline: CGFloat?
+
+    mutating func reset() {
+        baseline = nil
+    }
+
+    mutating func normalize(_ rawOffset: CGFloat) -> CGFloat {
+        if baseline == nil {
+            baseline = rawOffset
+        }
+        return max(0, rawOffset - (baseline ?? rawOffset))
+    }
+}
+
 private struct ScrollContentOffsetPreferenceKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
 

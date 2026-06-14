@@ -18,12 +18,15 @@ public final class FeedSegmentScrollState: ObservableObject {
     public var isExpanded: Bool { collapseProgress < 0.5 }
 
     private var lastOffset: CGFloat = 0
+    private var offsetNormalizer = ScrollChromeOffsetNormalizer()
     private let showAtTopThreshold: CGFloat = 24
     private let collapseDistance: CGFloat = 72
 
     public init() {}
 
-    public func updateScrollOffset(_ offset: CGFloat) {
+    public func updateScrollOffset(_ rawOffset: CGFloat) {
+        let offset = offsetNormalizer.normalize(rawOffset)
+
         if offset <= showAtTopThreshold {
             setCollapseProgress(0)
             lastOffset = offset
@@ -45,6 +48,7 @@ public final class FeedSegmentScrollState: ObservableObject {
 
     public func reset() {
         lastOffset = 0
+        offsetNormalizer.reset()
         setCollapseProgress(0, animated: false)
     }
 
