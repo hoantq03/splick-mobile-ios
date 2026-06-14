@@ -47,13 +47,19 @@ private struct FeedPagerScrollInsetsModifier: ViewModifier {
             GeometryReader { geometry in
                 Color.clear
                     .onAppear {
-                        topMargin = FeedPagerTopInsetMetrics.resolvedTopMargin(for: geometry)
+                        applyTopMargin(from: geometry)
                     }
                     .onChange(of: geometry.frame(in: .global).minY) { _ in
-                        topMargin = FeedPagerTopInsetMetrics.resolvedTopMargin(for: geometry)
+                        applyTopMargin(from: geometry)
                     }
             }
         }
+    }
+
+    private func applyTopMargin(from geometry: GeometryProxy) {
+        let next = FeedPagerTopInsetMetrics.resolvedTopMargin(for: geometry)
+        guard abs(next - topMargin) > 0.5 else { return }
+        topMargin = next
     }
 }
 
@@ -69,13 +75,19 @@ private struct FeedPagerPageTopInsetModifier: ViewModifier {
                     GeometryReader { geometry in
                         Color.clear
                             .onAppear {
-                                topPadding = FeedPagerTopInsetMetrics.resolvedTopMargin(for: geometry)
+                                applyTopPadding(from: geometry)
                             }
                             .onChange(of: geometry.frame(in: .global).minY) { _ in
-                                topPadding = FeedPagerTopInsetMetrics.resolvedTopMargin(for: geometry)
+                                applyTopPadding(from: geometry)
                             }
                     }
                 }
             }
+    }
+
+    private func applyTopPadding(from geometry: GeometryProxy) {
+        let next = FeedPagerTopInsetMetrics.resolvedTopMargin(for: geometry)
+        guard abs(next - topPadding) > 0.5 else { return }
+        topPadding = next
     }
 }
