@@ -43,14 +43,21 @@ extension EnvironmentValues {
 extension View {
     /// Avatar button top-leading + notification bell top-trailing.
     public func splickProfileToolbar(
-        titleDisplayMode: NavigationBarItem.TitleDisplayMode = .large
+        titleDisplayMode: NavigationBarItem.TitleDisplayMode = .large,
+        isSuppressed: Bool = false
     ) -> some View {
-        modifier(SplickProfileToolbarModifier(titleDisplayMode: titleDisplayMode))
+        modifier(
+            SplickProfileToolbarModifier(
+                titleDisplayMode: titleDisplayMode,
+                isSuppressed: isSuppressed
+            )
+        )
     }
 }
 
 private struct SplickProfileToolbarModifier: ViewModifier {
     let titleDisplayMode: NavigationBarItem.TitleDisplayMode
+    var isSuppressed: Bool = false
 
     @Environment(\.openProfileSettings) private var openProfileSettings
     @Environment(\.currentUserSummary) private var currentUserSummary
@@ -61,6 +68,7 @@ private struct SplickProfileToolbarModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .navigationBarTitleDisplayMode(titleDisplayMode)
+            .toolbar(isSuppressed ? .hidden : .visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     if let openProfileSettings, let user = currentUserSummary {
@@ -73,6 +81,8 @@ private struct SplickProfileToolbarModifier: ViewModifier {
                             .frame(width: 34, height: 34)
                         }
                         .buttonStyle(.plain)
+                        .opacity(isSuppressed ? 0 : 1)
+                        .allowsHitTesting(!isSuppressed)
                         .accessibilityLabel(
                             languageService?.text(.profileSettingsAccessibility)
                                 ?? L10n.string(.profileSettingsAccessibility, locale: .default)
@@ -96,6 +106,8 @@ private struct SplickProfileToolbarModifier: ViewModifier {
                             }
                         }
                         .buttonStyle(.plain)
+                        .opacity(isSuppressed ? 0 : 1)
+                        .allowsHitTesting(!isSuppressed)
                         .accessibilityLabel(
                             languageService?.text(.notificationBellAccessibility)
                                 ?? L10n.string(.notificationBellAccessibility, locale: .default)
