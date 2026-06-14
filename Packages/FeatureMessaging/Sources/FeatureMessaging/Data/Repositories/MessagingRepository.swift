@@ -47,4 +47,25 @@ public final class MessagingRepository: MessagingRepositoryProtocol, Sendable {
         let dto: UnreadMessageCountDTO = try await apiClient.request(MessagingEndpoint.unreadCount)
         return dto.unreadCount
     }
+
+    public func addReaction(conversationId: UUID, messageId: UUID, emoji: String) async throws -> Reaction {
+        let dto: ReactionResponseDTO = try await apiClient.request(
+            MessagingEndpoint.addReaction(
+                conversationId: conversationId,
+                messageId: messageId,
+                CreateReactionRequestDTO(emoji: emoji)
+            )
+        )
+        return MessagingMapper.toReaction(dto)
+    }
+
+    public func removeReaction(conversationId: UUID, messageId: UUID, reactionId: UUID) async throws {
+        try await apiClient.request(
+            MessagingEndpoint.removeReaction(
+                conversationId: conversationId,
+                messageId: messageId,
+                reactionId: reactionId
+            )
+        )
+    }
 }

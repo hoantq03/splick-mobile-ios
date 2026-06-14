@@ -23,6 +23,18 @@ struct MessageResponseDTO: Decodable {
     let body: String
     let clientMessageId: UUID
     let createdAt: Date
+    let reactions: [ReactionResponseDTO]?
+}
+
+struct ReactionResponseDTO: Decodable {
+    let id: UUID
+    let emoji: String
+    let userId: UUID
+    let createdAt: Date
+}
+
+struct CreateReactionRequestDTO: Encodable {
+    let emoji: String
 }
 
 struct CreateConversationRequestDTO: Encodable {

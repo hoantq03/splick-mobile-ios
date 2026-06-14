@@ -8,4 +8,6 @@ public protocol MessagingRepositoryProtocol: Sendable {
     func sendMessage(conversationId: UUID, body: String, clientMessageId: UUID) async throws -> ChatMessage
     func markRead(conversationId: UUID, upToMessageId: UUID) async throws
     func unreadCount() async throws -> Int
+    func addReaction(conversationId: UUID, messageId: UUID, emoji: String) async throws -> Reaction
+    func removeReaction(conversationId: UUID, messageId: UUID, reactionId: UUID) async throws
 }

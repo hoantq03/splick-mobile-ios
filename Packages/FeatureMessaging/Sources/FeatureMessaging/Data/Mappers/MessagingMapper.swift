@@ -30,7 +30,12 @@ enum MessagingMapper {
             senderId: dto.senderId,
             body: dto.body,
             clientMessageId: dto.clientMessageId,
-            createdAt: dto.createdAt
+            createdAt: dto.createdAt,
+            reactions: (dto.reactions ?? []).map(toReaction)
         )
+    }
+
+    static func toReaction(_ dto: ReactionResponseDTO) -> Reaction {
+        Reaction(id: dto.id, emoji: dto.emoji, userId: dto.userId, createdAt: dto.createdAt)
     }
 }

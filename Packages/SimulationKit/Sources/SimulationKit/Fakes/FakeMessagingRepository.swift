@@ -118,4 +118,13 @@ public actor FakeMessagingRepository: MessagingRepositoryProtocol {
     public func unreadCount() async throws -> Int {
         return Self.sampleConversations.reduce(0) { $0 + $1.unreadCount }
     }
+
+    public func addReaction(conversationId: UUID, messageId: UUID, emoji: String) async throws -> Reaction {
+        logger.log("addReaction conversationId=\(conversationId) messageId=\(messageId) emoji=\(emoji)")
+        return Reaction(id: UUID(), emoji: emoji, userId: Self.myId, createdAt: Date())
+    }
+
+    public func removeReaction(conversationId: UUID, messageId: UUID, reactionId: UUID) async throws {
+        logger.log("removeReaction conversationId=\(conversationId) messageId=\(messageId) reactionId=\(reactionId)")
+    }
 }

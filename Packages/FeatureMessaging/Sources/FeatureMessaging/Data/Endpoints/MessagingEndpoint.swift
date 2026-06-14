@@ -8,6 +8,8 @@ enum MessagingEndpoint: APIEndpoint {
     case sendMessage(conversationId: UUID, body: String, clientMessageId: UUID)
     case markRead(conversationId: UUID, upToMessageId: UUID)
     case unreadCount
+    case addReaction(conversationId: UUID, messageId: UUID, CreateReactionRequestDTO)
+    case removeReaction(conversationId: UUID, messageId: UUID, reactionId: UUID)
 
     var path: String {
         switch self {
@@ -21,13 +23,18 @@ enum MessagingEndpoint: APIEndpoint {
             return "/v1/messaging/conversations/\(id)/read"
         case .unreadCount:
             return "/v1/messaging/unread-count"
+        case .addReaction(let conversationId, let messageId, _):
+            return "/v1/messaging/conversations/\(conversationId)/messages/\(messageId)/reactions"
+        case .removeReaction(let conversationId, let messageId, let reactionId):
+            return "/v1/messaging/conversations/\(conversationId)/messages/\(messageId)/reactions/\(reactionId)"
         }
     }
 
     var method: HTTPMethod {
         switch self {
         case .listConversations, .listMessages, .unreadCount: return .get
-        case .getOrCreateConversation, .sendMessage, .markRead: return .post
+        case .getOrCreateConversation, .sendMessage, .markRead, .addReaction: return .post
+        case .removeReaction: return .delete
         }
     }
 
@@ -55,6 +62,8 @@ enum MessagingEndpoint: APIEndpoint {
             return SendMessageRequestDTO(body: msgBody, clientMessageId: clientId)
         case .markRead(_, let messageId):
             return MarkReadRequestDTO(upToMessageId: messageId)
+        case .addReaction(_, _, let dto):
+            return dto
         default: return nil
         }
     }
