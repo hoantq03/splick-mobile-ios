@@ -14,18 +14,34 @@ public final class ConversationListViewModel: ObservableObject {
     }
 
     @Published public private(set) var state: State = .idle
+    @Published public var searchQuery = ""
+    @Published public private(set) var searchResults: [UserSummary] = []
+    @Published public private(set) var searchState: LoadingState<[UserSummary]> = .idle
+    @Published public private(set) var isStartingConversation = false
+    @Published public var startConversationError: String?
 
     private let fetchConversationsUseCase: FetchConversationsUseCase
+    private let friendSearchProvider: MessagingFriendSearchProviding
+    private let repository: MessagingRepositoryProtocol
     private let wsClient: MessagingWebSocketClient
     private var cancellables = Set<AnyCancellable>()
+    private var searchTask: Task<Void, Never>?
 
     public init(
         fetchConversationsUseCase: FetchConversationsUseCase,
+        friendSearchProvider: MessagingFriendSearchProviding,
+        repository: MessagingRepositoryProtocol,
         wsClient: MessagingWebSocketClient
     ) {
         self.fetchConversationsUseCase = fetchConversationsUseCase
+        self.friendSearchProvider = friendSearchProvider
+        self.repository = repository
         self.wsClient = wsClient
         bindWsEvents()
+    }
+
+    public var isSearching: Bool {
+        !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     public var conversations: [Conversation] {
@@ -50,6 +66,53 @@ public final class ConversationListViewModel: ObservableObject {
             state = .loaded(items)
         } catch {
             Log.error(error, category: .network, metadata: ["action": "refreshConversations"])
+        }
+    }
+
+    public func onSearchQueryChanged(_ query: String) {
+        searchTask?.cancel()
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            searchResults = []
+            searchState = .idle
+            return
+        }
+
+        searchState = .loading
+        searchTask = Task {
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled else { return }
+
+            do {
+                let results = try await friendSearchProvider.searchFriends(query: trimmed)
+                guard !Task.isCancelled else { return }
+                searchResults = results
+                searchState = .loaded(results)
+            } catch {
+                guard !Task.isCancelled else { return }
+                searchResults = []
+                searchState = .failed(error.localizedDescription)
+                Log.error(error, category: .network, metadata: ["action": "searchFriendsForMessaging", "query": trimmed])
+            }
+        }
+    }
+
+    public func clearStartConversationError() {
+        startConversationError = nil
+    }
+
+    public func startConversation(with friend: UserSummary) async -> Conversation? {
+        guard !isStartingConversation else { return nil }
+        isStartingConversation = true
+        startConversationError = nil
+        defer { isStartingConversation = false }
+
+        do {
+            return try await repository.getOrCreateConversation(friendUserId: friend.id)
+        } catch {
+            Log.error(error, category: .network, metadata: ["action": "getOrCreateConversation"])
+            startConversationError = error.localizedDescription
+            return nil
         }
     }
 

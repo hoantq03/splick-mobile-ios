@@ -181,12 +181,7 @@ struct MainTabView: View {
             .ignoresSafeArea()
 
         case .messages:
-            ConversationListView(
-                viewModel: container.conversationListViewModel,
-                newConversationViewModelFactory: { onCreated in
-                    container.makeNewConversationViewModel(onConversationCreated: onCreated)
-                }
-            )
+            ConversationListView(viewModel: container.conversationListViewModel)
             .environmentObject(container.makeChatThreadViewModelFactory(
                 currentUserId: appState.currentUser?.id ?? UUID()
             ))

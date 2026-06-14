@@ -298,6 +298,11 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case messagingChatEmptyTitle = "messaging.chat.empty.title"
     case messagingChatEmptyMessage = "messaging.chat.empty.message"
     case messagingSelectFriend = "messaging.select_friend"
+    case messagingSearchPlaceholder = "messaging.search.placeholder"
+    case messagingSearchLoading = "messaging.search.loading"
+    case messagingSearchEmptyTitle = "messaging.search.empty.title"
+    case messagingSearchEmptyMessage = "messaging.search.empty.message"
+    case messagingStartConversationError = "messaging.start_conversation.error"
     case messagingBellAccessibility = "messaging.bell.accessibility"
     case messagingMessageButton = "messaging.message_button"
 }

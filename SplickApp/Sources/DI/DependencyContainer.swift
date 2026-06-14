@@ -430,21 +430,18 @@ final class DependencyContainer: ObservableObject {
         SendMessageUseCase(repository: messagingRepository)
     }()
 
+    private lazy var reactToMessageUseCase: ReactToMessageUseCase = {
+        ReactToMessageUseCase(repository: messagingRepository)
+    }()
+
     func makeChatThreadViewModelFactory(currentUserId: UUID) -> ChatThreadViewModelFactory {
         ChatThreadViewModelFactory(
             currentUserId: currentUserId,
             fetchMessagesUseCase: fetchMessagesUseCase,
             sendMessageUseCase: sendMessageUseCase,
+            reactToMessageUseCase: reactToMessageUseCase,
             repository: messagingRepository,
             wsClient: messagingWebSocketClient
-        )
-    }
-
-    func makeNewConversationViewModel(onConversationCreated: @escaping (Conversation) -> Void) -> NewConversationViewModel {
-        NewConversationViewModel(
-            friendsProvider: FetchMyFriendsAdapter(useCase: fetchMyFriendsUseCase),
-            repository: messagingRepository,
-            onConversationCreated: onConversationCreated
         )
     }
 
@@ -513,6 +510,8 @@ final class DependencyContainer: ObservableObject {
     private func makeConversationListViewModel() -> ConversationListViewModel {
         ConversationListViewModel(
             fetchConversationsUseCase: fetchConversationsUseCase,
+            friendSearchProvider: MessagingFriendSearchAdapter(searchUsersUseCase: searchUsersUseCase),
+            repository: messagingRepository,
             wsClient: messagingWebSocketClient
         )
     }
