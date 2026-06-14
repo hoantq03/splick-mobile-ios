@@ -57,15 +57,19 @@ struct MainTabView: View {
             .environment(\.currentUserSummary, currentUserSummary)
             .environment(\.tabBarScrollState, tabBarScrollState)
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                if appState.selectedTab != .camera, tabBarScrollState.isVisible {
-                    SplickTabBar(
-                        selectedTab: $appState.selectedTab,
-                        badgeCounts: badgeCounts
-                    )
-                    .equatable()
-                } else if appState.selectedTab != .camera,
-                          !tabBarScrollState.suppressesBottomInset {
-                    Color.clear.frame(height: TabBarLayout.hiddenClearance)
+                if appState.selectedTab != .camera {
+                    ZStack {
+                        SplickTabBar(
+                            selectedTab: $appState.selectedTab,
+                            badgeCounts: badgeCounts
+                        )
+                        .equatable()
+                        .opacity(tabBarScrollState.isVisible ? 1 : 0)
+                        .offset(y: tabBarScrollState.isVisible ? 0 : TabBarLayout.tabBarSlideDistance)
+                        .allowsHitTesting(tabBarScrollState.isVisible)
+                    }
+                    .frame(height: TabBarLayout.floatingClearance)
+                    .animation(.easeInOut(duration: 0.28), value: tabBarScrollState.isVisible)
                 }
             }
             .onChange(of: appState.selectedTab, perform: handleSelectedTabChange)
@@ -83,10 +87,6 @@ struct MainTabView: View {
         }
         .task {
             await container.badgeCountService.refresh()
-            if scenePhase == .active {
-                container.badgeCountService.startPolling()
-                container.messagingWebSocketClient.connect()
-            }
         }
         .sheet(isPresented: $appState.showProfileSettings) {
             ProfileSettingsView()
