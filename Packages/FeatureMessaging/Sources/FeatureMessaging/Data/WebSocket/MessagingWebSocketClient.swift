@@ -15,8 +15,10 @@ public final class MessagingWebSocketClient: ObservableObject {
     private var reconnectTask: Task<Void, Never>?
     private var pingTask: Task<Void, Never>?
     private var isConnected = false
-    private var reconnectDelay: TimeInterval = 1.0
-    private let maxReconnectDelay: TimeInterval = 60.0
+    private var isConnecting = false
+    private var reconnectDelay: TimeInterval = 5.0
+    private let minReconnectDelay: TimeInterval = 5.0
+    private let maxReconnectDelay: TimeInterval = 120.0
     private let decoder = JSONDecoder.apiDecoder
 
     // Token provider — refreshed before each connection attempt.
@@ -30,7 +32,7 @@ public final class MessagingWebSocketClient: ObservableObject {
     }
 
     public func connect() {
-        guard !isConnected else { return }
+        guard !isConnected, !isConnecting else { return }
         reconnectTask?.cancel()
         reconnectTask = Task { [weak self] in
             await self?.attemptConnect()
@@ -39,14 +41,19 @@ public final class MessagingWebSocketClient: ObservableObject {
 
     public func disconnect() {
         isConnected = false
+        isConnecting = false
         reconnectTask?.cancel()
         pingTask?.cancel()
         webSocketTask?.cancel(with: .normalClosure, reason: nil)
         webSocketTask = nil
-        reconnectDelay = 1.0
+        reconnectDelay = minReconnectDelay
     }
 
     private func attemptConnect() async {
+        guard !isConnected else { return }
+        isConnecting = true
+        defer { isConnecting = false }
+
         guard let token = await tokenProvider() else {
             Log.warning("WS connect skipped: no token", category: .network)
             return
@@ -56,13 +63,31 @@ public final class MessagingWebSocketClient: ObservableObject {
             Log.error("Invalid WS URL", category: .network)
             return
         }
-        let session = URLSession.shared
-        webSocketTask = session.webSocketTask(with: url)
-        webSocketTask?.resume()
+
+        let task = URLSession.shared.webSocketTask(with: url)
+        webSocketTask = task
+        task.resume()
+
+        guard await sendPing(on: task) else {
+            Log.warning("WS handshake failed — messaging service may be down", category: .network)
+            task.cancel(with: .goingAway, reason: nil)
+            webSocketTask = nil
+            await scheduleReconnect()
+            return
+        }
+
         isConnected = true
-        reconnectDelay = 1.0
+        reconnectDelay = minReconnectDelay
         startPing()
         await receiveLoop()
+    }
+
+    private func sendPing(on task: URLSessionWebSocketTask) async -> Bool {
+        await withCheckedContinuation { continuation in
+            task.sendPing { error in
+                continuation.resume(returning: error == nil)
+            }
+        }
     }
 
     private func receiveLoop() async {
