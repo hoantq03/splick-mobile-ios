@@ -15,13 +15,14 @@ public final class ConversationListViewModel: ObservableObject {
 
     @Published public private(set) var state: State = .idle
     @Published public var searchQuery = ""
-    @Published public private(set) var searchResults: [UserSummary] = []
-    @Published public private(set) var searchState: LoadingState<[UserSummary]> = .idle
+    @Published public private(set) var searchResults: [MessagingSearchResult] = []
+    @Published public private(set) var searchState: LoadingState<[MessagingSearchResult]> = .idle
+    @Published public private(set) var isRefreshingSearch = false
     @Published public private(set) var isStartingConversation = false
     @Published public var startConversationError: String?
 
     private let fetchConversationsUseCase: FetchConversationsUseCase
-    private let friendSearchProvider: MessagingFriendSearchProviding
+    private let searchProvider: MessagingSearchProviding
     private let repository: MessagingRepositoryProtocol
     private let wsClient: MessagingWebSocketClient
     private var cancellables = Set<AnyCancellable>()
@@ -29,12 +30,12 @@ public final class ConversationListViewModel: ObservableObject {
 
     public init(
         fetchConversationsUseCase: FetchConversationsUseCase,
-        friendSearchProvider: MessagingFriendSearchProviding,
+        searchProvider: MessagingSearchProviding,
         repository: MessagingRepositoryProtocol,
         wsClient: MessagingWebSocketClient
     ) {
         self.fetchConversationsUseCase = fetchConversationsUseCase
-        self.friendSearchProvider = friendSearchProvider
+        self.searchProvider = searchProvider
         self.repository = repository
         self.wsClient = wsClient
         bindWsEvents()
@@ -70,29 +71,36 @@ public final class ConversationListViewModel: ObservableObject {
     }
 
     public func onSearchQueryChanged(_ query: String) {
+        searchQuery = query
         searchTask?.cancel()
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             searchResults = []
             searchState = .idle
+            isRefreshingSearch = false
             return
         }
 
-        searchState = .loading
+        if case .idle = searchState {
+            searchState = .loading
+        }
+        isRefreshingSearch = true
         searchTask = Task {
             try? await Task.sleep(for: .milliseconds(350))
             guard !Task.isCancelled else { return }
 
             do {
-                let results = try await friendSearchProvider.searchFriends(query: trimmed)
+                let results = try await searchProvider.search(query: trimmed)
                 guard !Task.isCancelled else { return }
                 searchResults = results
                 searchState = .loaded(results)
+                isRefreshingSearch = false
             } catch {
                 guard !Task.isCancelled else { return }
                 searchResults = []
                 searchState = .failed(error.localizedDescription)
-                Log.error(error, category: .network, metadata: ["action": "searchFriendsForMessaging", "query": trimmed])
+                isRefreshingSearch = false
+                Log.error(error, category: .network, metadata: ["action": "searchMessaging", "query": trimmed])
             }
         }
     }
@@ -101,19 +109,32 @@ public final class ConversationListViewModel: ObservableObject {
         startConversationError = nil
     }
 
-    public func startConversation(with friend: UserSummary) async -> Conversation? {
+    public func startConversation(with user: UserSummary) async -> ChatThreadRoute? {
         guard !isStartingConversation else { return nil }
         isStartingConversation = true
         startConversationError = nil
         defer { isStartingConversation = false }
 
         do {
-            return try await repository.getOrCreateConversation(friendUserId: friend.id)
+            let conversation = try await repository.getOrCreateConversation(friendUserId: user.id)
+            return ChatThreadRoute(conversation: conversation)
         } catch {
             Log.error(error, category: .network, metadata: ["action": "getOrCreateConversation"])
             startConversationError = error.localizedDescription
             return nil
         }
+    }
+
+    public func routeForMessageHit(_ hit: MessageSearchHit) -> ChatThreadRoute {
+        let conversation = Conversation(
+            id: hit.conversationId,
+            unreadCount: 0,
+            peer: hit.peer,
+            lastMessage: nil,
+            createdAt: hit.createdAt,
+            updatedAt: hit.createdAt
+        )
+        return ChatThreadRoute(conversation: conversation, highlightMessageId: hit.messageId)
     }
 
     private func bindWsEvents() {
