@@ -8,13 +8,11 @@ struct ConversationRowView: View {
 
     var body: some View {
         HStack(spacing: SplickTheme.Spacing.sm) {
-            Circle()
-                .fill(SplickTheme.Colors.secondaryBackground)
-                .frame(width: 48, height: 48)
-                .overlay {
-                    Image(systemName: "person.fill")
-                        .foregroundStyle(SplickTheme.Colors.textTertiary)
-                }
+            AvatarView(
+                imageURL: conversation.peer?.avatarUrl.flatMap(URL.init(string:)),
+                name: conversation.peer?.displayTitle ?? "",
+                size: .medium
+            )
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack {

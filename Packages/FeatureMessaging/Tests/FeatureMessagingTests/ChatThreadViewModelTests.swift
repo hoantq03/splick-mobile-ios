@@ -26,7 +26,17 @@ private actor StubMessagingRepository: MessagingRepositoryProtocol {
         markReadCalls.append((conversationId, upToMessageId))
     }
     func unreadCount() async throws -> Int { 0 }
+    func addReaction(conversationId: UUID, messageId: UUID, emoji: String) async throws -> Reaction {
+        Reaction(id: UUID(), emoji: emoji, userId: UUID(), createdAt: .now)
+    }
+    func removeReaction(conversationId: UUID, messageId: UUID, reactionId: UUID) async throws {}
     func recordedMarkReadCalls() async -> [(UUID, UUID)] { markReadCalls }
+}
+
+private struct StubReactToMessageUseCase: ReactToMessageUseCaseProtocol {
+    func execute(conversationId: UUID, messageId: UUID, emoji: String) async throws -> Reaction {
+        Reaction(id: UUID(), emoji: emoji, userId: UUID(), createdAt: .now)
+    }
 }
 
 // MARK: - Tests
@@ -36,6 +46,23 @@ final class ChatThreadViewModelTests: XCTestCase {
 
     private static let conversationId = UUID(uuidString: "aaaaaaaa-0000-0000-0000-000000000001")!
     private static let senderId = UUID(uuidString: "bbbbbbbb-0000-0000-0000-000000000001")!
+    private static let currentUserId = UUID(uuidString: "cccccccc-0000-0000-0000-000000000001")!
+
+    private func makeViewModel(
+        conversationId: UUID = Self.conversationId,
+        repo: StubMessagingRepository,
+        wsClient: MessagingWebSocketClient
+    ) -> ChatThreadViewModel {
+        ChatThreadViewModel(
+            conversationId: conversationId,
+            currentUserId: Self.currentUserId,
+            fetchMessagesUseCase: FetchMessagesUseCase(repository: repo),
+            sendMessageUseCase: SendMessageUseCase(repository: repo),
+            reactToMessageUseCase: StubReactToMessageUseCase(),
+            repository: repo,
+            wsClient: wsClient
+        )
+    }
 
     private func makeMessage(id: UUID = UUID(), body: String = "Hello") -> ChatMessage {
         ChatMessage(
@@ -54,13 +81,7 @@ final class ChatThreadViewModelTests: XCTestCase {
         let existingMsg = makeMessage(body: "Already here")
         let repo = StubMessagingRepository(messages: [existingMsg])
         let wsClient = MessagingWebSocketClient(tokenProvider: { nil })
-        let vm = ChatThreadViewModel(
-            conversationId: Self.conversationId,
-            fetchMessagesUseCase: FetchMessagesUseCase(repository: repo),
-            sendMessageUseCase: SendMessageUseCase(repository: repo),
-            repository: repo,
-            wsClient: wsClient
-        )
+        let vm = makeViewModel(repo: repo, wsClient: wsClient)
 
         await vm.load()
         let countAfterLoad = vm.messages.count
@@ -76,13 +97,7 @@ final class ChatThreadViewModelTests: XCTestCase {
     func test_appendMessage_addsNewMessage_onWsEvent() async {
         let repo = StubMessagingRepository(messages: [])
         let wsClient = MessagingWebSocketClient(tokenProvider: { nil })
-        let vm = ChatThreadViewModel(
-            conversationId: Self.conversationId,
-            fetchMessagesUseCase: FetchMessagesUseCase(repository: repo),
-            sendMessageUseCase: SendMessageUseCase(repository: repo),
-            repository: repo,
-            wsClient: wsClient
-        )
+        let vm = makeViewModel(repo: repo, wsClient: wsClient)
 
         await vm.load()
         XCTAssertEqual(vm.messages.count, 0)
@@ -102,13 +117,7 @@ final class ChatThreadViewModelTests: XCTestCase {
         let msg2 = makeMessage(body: "Last")
         let repo = StubMessagingRepository(messages: [msg1, msg2])
         let wsClient = MessagingWebSocketClient(tokenProvider: { nil })
-        let vm = ChatThreadViewModel(
-            conversationId: Self.conversationId,
-            fetchMessagesUseCase: FetchMessagesUseCase(repository: repo),
-            sendMessageUseCase: SendMessageUseCase(repository: repo),
-            repository: repo,
-            wsClient: wsClient
-        )
+        let vm = makeViewModel(repo: repo, wsClient: wsClient)
 
         await vm.load()
         // Give async markRead task a chance to complete
@@ -122,13 +131,7 @@ final class ChatThreadViewModelTests: XCTestCase {
     func test_load_doesNotCallMarkRead_whenNoMessages() async {
         let repo = StubMessagingRepository(messages: [])
         let wsClient = MessagingWebSocketClient(tokenProvider: { nil })
-        let vm = ChatThreadViewModel(
-            conversationId: Self.conversationId,
-            fetchMessagesUseCase: FetchMessagesUseCase(repository: repo),
-            sendMessageUseCase: SendMessageUseCase(repository: repo),
-            repository: repo,
-            wsClient: wsClient
-        )
+        let vm = makeViewModel(repo: repo, wsClient: wsClient)
 
         await vm.load()
         try? await Task.sleep(nanoseconds: 50_000_000)
@@ -142,13 +145,7 @@ final class ChatThreadViewModelTests: XCTestCase {
     func test_wsEvent_fromDifferentConversation_isIgnored() async {
         let repo = StubMessagingRepository(messages: [])
         let wsClient = MessagingWebSocketClient(tokenProvider: { nil })
-        let vm = ChatThreadViewModel(
-            conversationId: Self.conversationId,
-            fetchMessagesUseCase: FetchMessagesUseCase(repository: repo),
-            sendMessageUseCase: SendMessageUseCase(repository: repo),
-            repository: repo,
-            wsClient: wsClient
-        )
+        let vm = makeViewModel(repo: repo, wsClient: wsClient)
 
         await vm.load()
         let otherConvId = UUID()

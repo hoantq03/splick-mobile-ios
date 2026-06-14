@@ -8,15 +8,22 @@ import Storage
 public struct ChatThreadView: View {
     @ObservedObject private var viewModel: ChatThreadViewModel
     @EnvironmentObject private var languageService: LanguageService
+    @Environment(\.tabBarScrollState) private var tabBarScrollState
     @State private var inputText: String = ""
-    @State private var scrollProxy: ScrollViewProxy? = nil
 
     private let currentUserId: UUID
+    private let peer: ConversationPeer?
     private let navigationTitle: String
 
-    public init(viewModel: ChatThreadViewModel, currentUserId: UUID, navigationTitle: String = "") {
+    public init(
+        viewModel: ChatThreadViewModel,
+        currentUserId: UUID,
+        peer: ConversationPeer? = nil,
+        navigationTitle: String = ""
+    ) {
         self._viewModel = ObservedObject(wrappedValue: viewModel)
         self.currentUserId = currentUserId
+        self.peer = peer
         self.navigationTitle = navigationTitle
     }
 
@@ -26,10 +33,26 @@ public struct ChatThreadView: View {
             Divider()
             inputBar
         }
-        .navigationTitle(navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
-        .onFirstAppear {
-            Task { await viewModel.load() }
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                HStack(spacing: SplickTheme.Spacing.xs) {
+                    AvatarView(
+                        imageURL: peer?.avatarUrl.flatMap(URL.init(string:)),
+                        name: navigationTitle,
+                        size: .small
+                    )
+                    Text(navigationTitle)
+                        .font(SplickTheme.Typography.headline)
+                        .foregroundStyle(SplickTheme.Colors.textPrimary)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .onAppear { tabBarScrollState?.hide(flushToBottom: true) }
+        .onDisappear { tabBarScrollState?.show() }
+        .task {
+            await viewModel.loadIfNeeded()
         }
     }
 
@@ -45,28 +68,11 @@ public struct ChatThreadView: View {
                 message: languageService.text(.messagingChatEmptyMessage)
             )
         case .loaded(let messages):
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: SplickTheme.Spacing.xs) {
-                        ForEach(messages) { message in
-                            MessageBubble(
-                                message: message,
-                                isOutgoing: message.senderId == currentUserId
-                            )
-                            .id(message.id)
-                        }
-                    }
-                    .padding(.horizontal, SplickTheme.Spacing.md)
-                    .padding(.vertical, SplickTheme.Spacing.sm)
-                }
-                .onAppear {
-                    scrollProxy = proxy
-                    scrollToBottom(proxy: proxy, messages: messages, animated: false)
-                }
-                .onChange(of: messages.count) { _ in
-                    scrollToBottom(proxy: proxy, messages: messages, animated: true)
-                }
-            }
+            ChatMessageListView(
+                viewModel: viewModel,
+                messages: messages,
+                currentUserId: currentUserId
+            )
         case .failed(let error):
             ErrorView(message: error) {
                 Task { await viewModel.load() }
@@ -101,14 +107,5 @@ public struct ChatThreadView: View {
         .padding(.horizontal, SplickTheme.Spacing.md)
         .padding(.vertical, SplickTheme.Spacing.sm)
         .background(SplickTheme.Colors.background)
-    }
-
-    private func scrollToBottom(proxy: ScrollViewProxy, messages: [ChatMessage], animated: Bool) {
-        guard let last = messages.last else { return }
-        if animated {
-            withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
-        } else {
-            proxy.scrollTo(last.id, anchor: .bottom)
-        }
     }
 }
