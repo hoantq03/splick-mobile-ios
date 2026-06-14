@@ -16,8 +16,13 @@ public final class ChatThreadViewModel: ObservableObject {
 
     @Published public private(set) var state: State = .idle
     @Published public private(set) var isSending = false
-    /// Incremented whenever the thread should scroll to the newest message.
     @Published public private(set) var scrollToBottomToken = 0
+    @Published public private(set) var scrollToMessageToken = 0
+    @Published public private(set) var highlightedMessageId: UUID?
+
+    private static let maxPagesForMessageLookup = 10
+    private static let pageSize = 30
+    private static let highlightDuration: Duration = .seconds(2)
 
     private var isLoading: Bool {
         if case .loading = state { return true }
@@ -26,16 +31,19 @@ public final class ChatThreadViewModel: ObservableObject {
 
     public let conversationId: UUID
     public let currentUserId: UUID
+    private let highlightMessageId: UUID?
     private let fetchMessagesUseCase: FetchMessagesUseCase
     private let sendMessageUseCase: SendMessageUseCase
     private let reactToMessageUseCase: ReactToMessageUseCaseProtocol
     private let repository: MessagingRepositoryProtocol
     private let wsClient: MessagingWebSocketClient
     private var cancellables = Set<AnyCancellable>()
+    private var highlightClearTask: Task<Void, Never>?
 
     public init(
         conversationId: UUID,
         currentUserId: UUID,
+        highlightMessageId: UUID? = nil,
         fetchMessagesUseCase: FetchMessagesUseCase,
         sendMessageUseCase: SendMessageUseCase,
         reactToMessageUseCase: ReactToMessageUseCaseProtocol,
@@ -44,6 +52,7 @@ public final class ChatThreadViewModel: ObservableObject {
     ) {
         self.conversationId = conversationId
         self.currentUserId = currentUserId
+        self.highlightMessageId = highlightMessageId
         self.fetchMessagesUseCase = fetchMessagesUseCase
         self.sendMessageUseCase = sendMessageUseCase
         self.reactToMessageUseCase = reactToMessageUseCase
@@ -70,13 +79,16 @@ public final class ChatThreadViewModel: ObservableObject {
         guard !isLoading else { return }
         state = .loading
         do {
-            let msgs = try await fetchMessagesUseCase.execute(conversationId: conversationId)
-            let sorted = msgs.reversed() as [ChatMessage]
-            state = .loaded(sorted)
-            requestScrollToBottom()
-            // Mark thread read after initial load if there are messages.
-            if let lastId = sorted.last?.id {
-                markRead(upToMessageId: lastId)
+            if let targetId = highlightMessageId {
+                try await loadUntilMessage(id: targetId)
+            } else {
+                let msgs = try await fetchMessagesUseCase.execute(conversationId: conversationId)
+                let sorted = msgs.reversed() as [ChatMessage]
+                state = .loaded(sorted)
+                requestScrollToBottom()
+                if let lastId = sorted.last?.id {
+                    markRead(upToMessageId: lastId)
+                }
             }
         } catch {
             Log.error(error, category: .network, metadata: ["action": "loadMessages"])
@@ -136,6 +148,54 @@ public final class ChatThreadViewModel: ObservableObject {
         return nil
     }
 
+    private func loadUntilMessage(id targetId: UUID) async throws {
+        var messagesById: [UUID: ChatMessage] = [:]
+        var page = 0
+
+        while page < Self.maxPagesForMessageLookup {
+            let batch = try await fetchMessagesUseCase.execute(
+                conversationId: conversationId,
+                page: page,
+                limit: Self.pageSize
+            )
+            if batch.isEmpty { break }
+            for message in batch {
+                messagesById[message.id] = message
+            }
+            if messagesById[targetId] != nil { break }
+            page += 1
+        }
+
+        let sorted = messagesById.values.sorted { $0.createdAt < $1.createdAt }
+        state = .loaded(sorted)
+
+        if messagesById[targetId] != nil {
+            activateHighlight(for: targetId)
+            requestScrollToMessage(targetId)
+        } else {
+            requestScrollToBottom()
+        }
+
+        if let lastId = sorted.last?.id {
+            markRead(upToMessageId: lastId)
+        }
+    }
+
+    private func requestScrollToMessage(_ messageId: UUID) {
+        scrollToMessageToken += 1
+        _ = messageId
+    }
+
+    private func activateHighlight(for messageId: UUID) {
+        highlightClearTask?.cancel()
+        highlightedMessageId = messageId
+        highlightClearTask = Task {
+            try? await Task.sleep(for: Self.highlightDuration)
+            guard !Task.isCancelled else { return }
+            highlightedMessageId = nil
+        }
+    }
+
     private func updateMessage(at index: Int, with message: ChatMessage) {
         guard case .loaded(var messages) = state, messages.indices.contains(index) else { return }
         messages[index] = message
@@ -166,7 +226,6 @@ public final class ChatThreadViewModel: ObservableObject {
 
     private func appendMessage(_ message: ChatMessage) {
         guard case .loaded(var msgs) = state else { return }
-        // Deduplicate: skip if message with same id already present.
         guard !msgs.contains(where: { $0.id == message.id }) else { return }
         msgs.append(message)
         withAnimation(ChatScrollAnimation.spring) {

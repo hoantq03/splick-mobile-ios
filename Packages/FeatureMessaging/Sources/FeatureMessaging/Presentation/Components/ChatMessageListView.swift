@@ -17,6 +17,7 @@ struct ChatMessageListView: View {
                         MessageBubble(
                             displayMessage: item,
                             isOutgoing: item.message.senderId == currentUserId,
+                            isHighlighted: viewModel.highlightedMessageId == item.message.id,
                             onReact: { emoji in
                                 _ = viewModel.react(to: item.message.id, emoji: emoji)
                             }
@@ -35,12 +36,17 @@ struct ChatMessageListView: View {
             .modifier(ChatBottomScrollAnchorModifier())
             .animation(ChatScrollAnimation.spring, value: messages.map(\.id))
             .onAppear {
-                // Token may already be set before this view mounts; onChange alone misses initial open.
-                scrollToBottom(proxy: proxy, animated: false)
+                if viewModel.scrollToMessageToken == 0 {
+                    scrollToBottom(proxy: proxy, animated: false)
+                }
             }
             .onChange(of: viewModel.scrollToBottomToken) { token in
                 guard token > 0 else { return }
                 scrollToBottom(proxy: proxy, animated: token > 1)
+            }
+            .onChange(of: viewModel.scrollToMessageToken) { token in
+                guard token > 0, let targetId = viewModel.highlightedMessageId else { return }
+                scrollToMessage(targetId, proxy: proxy)
             }
         }
     }
@@ -60,11 +66,25 @@ struct ChatMessageListView: View {
             }
         }
 
-        // Chat content height is unknown until layout finishes — retry across several frames.
         let delays: [TimeInterval] = animated ? [0, 0.05, 0.12] : [0, 0.05, 0.12, 0.25]
         for (index, delay) in delays.enumerated() {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
                 performScroll(useAnimation: animated && index > 0)
+            }
+        }
+    }
+
+    private func scrollToMessage(_ messageId: UUID, proxy: ScrollViewProxy) {
+        let delays: [TimeInterval] = [0, 0.05, 0.12, 0.25]
+        for (index, delay) in delays.enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                if index == 0 {
+                    proxy.scrollTo(messageId, anchor: .center)
+                } else {
+                    withAnimation(ChatScrollAnimation.spring) {
+                        proxy.scrollTo(messageId, anchor: .center)
+                    }
+                }
             }
         }
     }

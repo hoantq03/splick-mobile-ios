@@ -4,12 +4,19 @@ import SplickDomain
 
 struct ChatThreadNavigationWrapper: View {
     let conversation: Conversation
+    let highlightMessageId: UUID?
 
     @EnvironmentObject private var chatThreadViewModelFactory: ChatThreadViewModelFactory
+
+    init(conversation: Conversation, highlightMessageId: UUID? = nil) {
+        self.conversation = conversation
+        self.highlightMessageId = highlightMessageId
+    }
 
     var body: some View {
         ChatThreadScreen(
             conversation: conversation,
+            highlightMessageId: highlightMessageId,
             factory: chatThreadViewModelFactory
         )
     }
@@ -18,15 +25,24 @@ struct ChatThreadNavigationWrapper: View {
 /// Holds a stable `ChatThreadViewModel` — must not create the VM in `body` or load() never completes after re-renders.
 private struct ChatThreadScreen: View {
     let conversation: Conversation
+    let highlightMessageId: UUID?
     let factory: ChatThreadViewModelFactory
 
     @StateObject private var viewModel: ChatThreadViewModel
 
-    init(conversation: Conversation, factory: ChatThreadViewModelFactory) {
+    init(
+        conversation: Conversation,
+        highlightMessageId: UUID?,
+        factory: ChatThreadViewModelFactory
+    ) {
         self.conversation = conversation
+        self.highlightMessageId = highlightMessageId
         self.factory = factory
         _viewModel = StateObject(
-            wrappedValue: factory.make(conversationId: conversation.id)
+            wrappedValue: factory.make(
+                conversationId: conversation.id,
+                highlightMessageId: highlightMessageId
+            )
         )
     }
 
@@ -66,10 +82,11 @@ public final class ChatThreadViewModelFactory: ObservableObject {
     }
 
     @MainActor
-    public func make(conversationId: UUID) -> ChatThreadViewModel {
+    public func make(conversationId: UUID, highlightMessageId: UUID? = nil) -> ChatThreadViewModel {
         ChatThreadViewModel(
             conversationId: conversationId,
             currentUserId: currentUserId,
+            highlightMessageId: highlightMessageId,
             fetchMessagesUseCase: fetchMessagesUseCase,
             sendMessageUseCase: sendMessageUseCase,
             reactToMessageUseCase: reactToMessageUseCase,

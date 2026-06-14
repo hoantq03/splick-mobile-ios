@@ -5,6 +5,7 @@ import SplickDomain
 struct MessageBubble: View {
     let displayMessage: DisplayMessage
     let isOutgoing: Bool
+    var isHighlighted: Bool = false
     let onReact: (String) -> Void
 
     private static let quickEmojis = ["❤️", "😂", "😮", "😢", "😡", "👏"]
@@ -35,6 +36,15 @@ struct MessageBubble: View {
                             )
                     )
                     .clipShape(bubbleShape)
+                    .overlay {
+                        if isHighlighted {
+                            bubbleShape
+                                .stroke(SplickTheme.Colors.primaryGradientStart.opacity(0.85), lineWidth: 2)
+                                .background(
+                                    bubbleShape.fill(SplickTheme.Colors.primaryGradientStart.opacity(0.15))
+                                )
+                        }
+                    }
                     .contextMenu {
                         ForEach(Self.quickEmojis, id: \.self) { emoji in
                             Button(emoji) { onReact(emoji) }
