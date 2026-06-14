@@ -8,6 +8,7 @@ enum MessagingEndpoint: APIEndpoint {
     case sendMessage(conversationId: UUID, body: String, clientMessageId: UUID)
     case markRead(conversationId: UUID, upToMessageId: UUID)
     case unreadCount
+    case searchMessages(q: String, page: Int, limit: Int)
     case addReaction(conversationId: UUID, messageId: UUID, CreateReactionRequestDTO)
     case removeReaction(conversationId: UUID, messageId: UUID, reactionId: UUID)
 
@@ -23,6 +24,8 @@ enum MessagingEndpoint: APIEndpoint {
             return "/v1/messaging/conversations/\(id)/read"
         case .unreadCount:
             return "/v1/messaging/unread-count"
+        case .searchMessages:
+            return "/v1/messaging/search"
         case .addReaction(let conversationId, let messageId, _):
             return "/v1/messaging/conversations/\(conversationId)/messages/\(messageId)/reactions"
         case .removeReaction(let conversationId, let messageId, let reactionId):
@@ -32,7 +35,7 @@ enum MessagingEndpoint: APIEndpoint {
 
     var method: HTTPMethod {
         switch self {
-        case .listConversations, .listMessages, .unreadCount: return .get
+        case .listConversations, .listMessages, .unreadCount, .searchMessages: return .get
         case .getOrCreateConversation, .sendMessage, .markRead, .addReaction: return .post
         case .removeReaction: return .delete
         }
@@ -47,6 +50,12 @@ enum MessagingEndpoint: APIEndpoint {
             ]
         case .listMessages(_, let page, let limit):
             return [
+                URLQueryItem(name: "page", value: "\(page)"),
+                URLQueryItem(name: "limit", value: "\(limit)"),
+            ]
+        case .searchMessages(let q, let page, let limit):
+            return [
+                URLQueryItem(name: "q", value: q),
                 URLQueryItem(name: "page", value: "\(page)"),
                 URLQueryItem(name: "limit", value: "\(limit)"),
             ]

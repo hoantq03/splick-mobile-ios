@@ -38,4 +38,15 @@ enum MessagingMapper {
     static func toReaction(_ dto: ReactionResponseDTO) -> Reaction {
         Reaction(id: dto.id, emoji: dto.emoji, userId: dto.userId, createdAt: dto.createdAt)
     }
+
+    static func toMessageSearchHit(_ dto: MessageSearchHitResponseDTO) -> MessageSearchHit? {
+        guard let peerDTO = dto.peer else { return nil }
+        return MessageSearchHit(
+            messageId: dto.messageId,
+            conversationId: dto.conversationId,
+            body: dto.body,
+            createdAt: dto.createdAt,
+            peer: toPeer(peerDTO)
+        )
+    }
 }

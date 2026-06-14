@@ -53,3 +53,11 @@ struct MarkReadRequestDTO: Encodable {
 struct UnreadMessageCountDTO: Decodable {
     let unreadCount: Int
 }
+
+struct MessageSearchHitResponseDTO: Decodable {
+    let messageId: UUID
+    let conversationId: UUID
+    let body: String
+    let createdAt: Date
+    let peer: ConversationPeerResponseDTO?
+}

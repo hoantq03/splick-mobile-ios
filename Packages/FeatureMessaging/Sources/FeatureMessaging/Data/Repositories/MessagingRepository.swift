@@ -68,4 +68,11 @@ public final class MessagingRepository: MessagingRepositoryProtocol, Sendable {
             )
         )
     }
+
+    public func searchMessages(query: String, page: Int, limit: Int) async throws -> [MessageSearchHit] {
+        let dtos: [MessageSearchHitResponseDTO] = try await apiClient.request(
+            MessagingEndpoint.searchMessages(q: query, page: page, limit: limit)
+        )
+        return dtos.compactMap(MessagingMapper.toMessageSearchHit)
+    }
 }

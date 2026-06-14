@@ -10,4 +10,5 @@ public protocol MessagingRepositoryProtocol: Sendable {
     func unreadCount() async throws -> Int
     func addReaction(conversationId: UUID, messageId: UUID, emoji: String) async throws -> Reaction
     func removeReaction(conversationId: UUID, messageId: UUID, reactionId: UUID) async throws
+    func searchMessages(query: String, page: Int, limit: Int) async throws -> [MessageSearchHit]
 }

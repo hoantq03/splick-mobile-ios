@@ -127,4 +127,26 @@ public actor FakeMessagingRepository: MessagingRepositoryProtocol {
     public func removeReaction(conversationId: UUID, messageId: UUID, reactionId: UUID) async throws {
         logger.log("removeReaction conversationId=\(conversationId) messageId=\(messageId) reactionId=\(reactionId)")
     }
+
+    public func searchMessages(query: String, page: Int, limit: Int) async throws -> [MessageSearchHit] {
+        logger.log("searchMessages query=\(query)")
+        guard page == 0,
+              let conv = Self.sampleConversations.first,
+              let peer = conv.peer,
+              let lastMessage = conv.lastMessage else { return [] }
+
+        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty,
+              lastMessage.body.lowercased().contains(normalized) else { return [] }
+
+        return [
+            MessageSearchHit(
+                messageId: lastMessage.id,
+                conversationId: conv.id,
+                body: lastMessage.body,
+                createdAt: lastMessage.createdAt,
+                peer: peer
+            )
+        ]
+    }
 }
