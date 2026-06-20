@@ -4,6 +4,7 @@ import Common
 import Localization
 import SplickDomain
 import FeatureFriends
+import FeatureStickers
 
 private struct ProfileRoute: Identifiable {
     let user: UserSummary
@@ -23,6 +24,7 @@ public struct FeedView: View {
     private let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol?
     private let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
     private let profileDependencies: FriendUserProfileDependencies?
+    private let makeGifPickerViewModel: GifPickerViewModelFactory?
     private let photoAlbumViewModel: PhotoAlbumViewModel
     private let streakViewModel: StreakViewModel
     private let isTabActive: Bool
@@ -41,6 +43,7 @@ public struct FeedView: View {
         fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol? = nil,
         fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol? = nil,
         profileDependencies: FriendUserProfileDependencies? = nil,
+        makeGifPickerViewModel: GifPickerViewModelFactory? = nil,
         navigationPath: Binding<NavigationPath> = .constant(NavigationPath()),
         pendingPostId: UUID? = nil,
         onPendingPostHandled: (() -> Void)? = nil,
@@ -54,6 +57,7 @@ public struct FeedView: View {
         self.fetchMyFriendsUseCase = fetchMyFriendsUseCase
         self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
         self.profileDependencies = profileDependencies
+        self.makeGifPickerViewModel = makeGifPickerViewModel
         self.pendingPostId = pendingPostId
         self.onPendingPostHandled = onPendingPostHandled
         self.isTabActive = isTabActive
@@ -102,7 +106,8 @@ public struct FeedView: View {
                     destination: destination,
                     feedViewModel: viewModel,
                     fetchFriendsUseCase: fetchFriendsUseCase,
-                    profileDependencies: profileDependencies
+                    profileDependencies: profileDependencies,
+                    makeGifPickerViewModel: makeGifPickerViewModel
                 )
             }
             .alert(

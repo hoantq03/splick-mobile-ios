@@ -47,6 +47,8 @@ packages:
     path: Packages/FeatureFriends
   FeatureMessaging:
     path: Packages/FeatureMessaging
+  FeatureStickers:
+    path: Packages/FeatureStickers
   SimulationKit:
     path: Packages/SimulationKit
   GoogleSignIn:
@@ -88,6 +90,8 @@ targets:
         product: FeatureFriends
       - package: FeatureMessaging
         product: FeatureMessaging
+      - package: FeatureStickers
+        product: FeatureStickers
       - package: SimulationKit
         product: SimulationKit
       - package: GoogleSignIn
@@ -103,6 +107,7 @@ targets:
         TARGETED_DEVICE_FAMILY: 1
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        GIPHY_API_KEY: ""
 
 schemes:
   SplickApp:

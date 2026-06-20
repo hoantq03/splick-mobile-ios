@@ -31,6 +31,8 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>GIDClientID</key>
 	<string>702860718891-59e0chbkkidsbqvclul3d3a0klga4ve3.apps.googleusercontent.com</string>
+	<key>GIPHY_API_KEY</key>
+	<string>$(GIPHY_API_KEY)</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

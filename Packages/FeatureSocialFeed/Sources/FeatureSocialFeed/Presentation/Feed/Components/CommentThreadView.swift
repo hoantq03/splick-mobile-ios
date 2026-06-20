@@ -455,6 +455,12 @@ private struct CommentAttachmentsView: View {
                             .frame(maxWidth: maxImageWidth, maxHeight: 160)
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                         }
+                    case .gif:
+                        if let url = attachment.url {
+                            AnimatedRemoteImage(url: url, contentMode: .fill)
+                                .frame(maxWidth: maxImageWidth, maxHeight: 160)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
                     case .video, .file:
                         HStack(spacing: 6) {
                             Image(systemName: attachment.kind == .video ? "video" : "doc")

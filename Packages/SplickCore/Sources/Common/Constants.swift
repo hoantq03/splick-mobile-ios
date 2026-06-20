@@ -51,4 +51,20 @@ public enum AppConstants {
         public static let maxGroupNameLength = 50
         public static let maxExpenseDescriptionLength = 200
     }
+
+    public enum Giphy {
+        /// Read from `GIPHY_API_KEY` in Info.plist (inject via xcconfig / CI secret — never commit production keys).
+        public static var apiKey: String {
+            Bundle.main.object(forInfoDictionaryKey: "GIPHY_API_KEY") as? String ?? ""
+        }
+
+        public static let baseURL = "https://api.giphy.com/v1/gifs"
+        public static let defaultPageLimit = 25
+        public static let searchDebounceMilliseconds = 500
+        public static let attributionURL = URL(string: "https://giphy.com")!
+    }
+
+    public enum Stickers {
+        public static let maxGifsPerComment = 5
+    }
 }

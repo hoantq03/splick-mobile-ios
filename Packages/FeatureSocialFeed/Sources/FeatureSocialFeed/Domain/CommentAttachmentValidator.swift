@@ -1,10 +1,12 @@
 import Foundation
 import SplickDomain
+import Common
 
 public enum CommentAttachmentValidator {
     public static let maxImages = 10
     public static let maxFiles = 10
     public static let maxVideos = 3
+    public static let maxGifs = AppConstants.Stickers.maxGifsPerComment
     public static let maxFileTotalBytes = 10 * 1024 * 1024
     public static let maxVideoTotalBytes = 100 * 1024 * 1024
 
@@ -12,6 +14,7 @@ public enum CommentAttachmentValidator {
         let images = attachments.filter { $0.kind == .image }
         let files = attachments.filter { $0.kind == .file }
         let videos = attachments.filter { $0.kind == .video }
+        let gifs = attachments.filter { $0.kind == .gif }
 
         if images.count > maxImages {
             return "Tối đa \(maxImages) ảnh mỗi bình luận."
@@ -21,6 +24,9 @@ public enum CommentAttachmentValidator {
         }
         if videos.count > maxVideos {
             return "Tối đa \(maxVideos) video mỗi bình luận."
+        }
+        if gifs.count > maxGifs {
+            return "Tối đa \(maxGifs) GIF mỗi bình luận."
         }
 
         let fileBytes = files.reduce(0) { $0 + $1.sizeBytes }

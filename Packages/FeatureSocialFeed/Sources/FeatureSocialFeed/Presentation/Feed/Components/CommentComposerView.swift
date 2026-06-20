@@ -3,6 +3,7 @@ import PhotosUI
 import UniformTypeIdentifiers
 import DesignSystem
 import SplickDomain
+import FeatureStickers
 
 struct CommentComposerView: View {
     let placeholder: String
@@ -11,6 +12,7 @@ struct CommentComposerView: View {
     @Binding var isFocused: Bool
     let onSubmit: (String, [CommentSubmissionAttachment]) -> Void
     private let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
+    private let gifPickerViewModel: GifPickerViewModel?
 
     @State private var draft = ""
     @State private var appliedPrefillUsername: String?
@@ -21,6 +23,7 @@ struct CommentComposerView: View {
     @State private var mentionViewModel: MentionFriendsViewModel?
     @State private var photoPickerItems: [PhotosPickerItem] = []
     @State private var showFileImporter = false
+    @State private var showGifPicker = false
 
     private let composerHeight: CGFloat = 36
 
@@ -29,12 +32,14 @@ struct CommentComposerView: View {
         prefillMentionUsername: String? = nil,
         isFocused: Binding<Bool> = .constant(false),
         fetchFriendsUseCase: FetchFriendsUseCaseProtocol? = nil,
+        gifPickerViewModel: GifPickerViewModel? = nil,
         onSubmit: @escaping (String, [CommentSubmissionAttachment]) -> Void
     ) {
         self.placeholder = placeholder
         self.prefillMentionUsername = prefillMentionUsername
         _isFocused = isFocused
         self.fetchFriendsUseCase = fetchFriendsUseCase
+        self.gifPickerViewModel = gifPickerViewModel
         self.onSubmit = onSubmit
     }
 
@@ -99,6 +104,17 @@ struct CommentComposerView: View {
                             .foregroundStyle(SplickTheme.Colors.textSecondary)
                             .frame(width: 28, height: composerHeight)
                     }
+
+                    if gifPickerViewModel != nil {
+                        Button {
+                            showGifPicker = true
+                        } label: {
+                            Image(systemName: "face.smiling")
+                                .font(.system(size: 14))
+                                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                                .frame(width: 28, height: composerHeight)
+                        }
+                    }
                 }
 
                 MentionTextField(
@@ -144,6 +160,24 @@ struct CommentComposerView: View {
             allowsMultipleSelection: true
         ) { result in
             importFiles(result)
+        }
+        .sheet(isPresented: $showGifPicker) {
+            if let gifPickerViewModel {
+                NavigationStack {
+                    GifPickerView(viewModel: gifPickerViewModel) { sticker in
+                        appendGifSticker(sticker)
+                        showGifPicker = false
+                    }
+                    .navigationTitle("Chọn GIF")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Đóng") { showGifPicker = false }
+                        }
+                    }
+                }
+                .presentationDetents([.medium, .large])
+            }
         }
     }
 
@@ -218,7 +252,7 @@ struct CommentComposerView: View {
             CommentAttachment(
                 kind: $0.kind,
                 fileName: $0.fileName,
-                sizeBytes: $0.data.count
+                sizeBytes: $0.data?.count ?? 0
             )
         }
         if let error = CommentAttachmentValidator.validate(previewAttachments) {
@@ -288,8 +322,25 @@ struct CommentComposerView: View {
 
     private func previewAttachments(from submissions: [CommentSubmissionAttachment]) -> [CommentAttachment] {
         submissions.map {
-            CommentAttachment(kind: $0.kind, fileName: $0.fileName, sizeBytes: $0.data.count)
+            CommentAttachment(kind: $0.kind, fileName: $0.fileName, sizeBytes: $0.data?.count ?? 0)
         }
+    }
+
+    private func appendGifSticker(_ sticker: Sticker) {
+        let submission = CommentSubmissionAttachment(
+            kind: .gif,
+            remoteURL: sticker.url,
+            fileName: "gif-\(sticker.id).gif"
+        )
+        if let error = CommentAttachmentValidator.canAdd(
+            CommentAttachment(kind: .gif, fileName: submission.fileName),
+            to: previewAttachments(from: pendingAttachments)
+        ) {
+            validationMessage = error
+            return
+        }
+        validationMessage = nil
+        pendingAttachments.append(submission)
     }
 
     private func mimeType(for url: URL) -> String {
@@ -304,6 +355,7 @@ struct CommentComposerView: View {
         case .image: return "photo"
         case .video: return "video"
         case .file: return "doc"
+        case .gif: return "face.smiling"
         }
     }
 }

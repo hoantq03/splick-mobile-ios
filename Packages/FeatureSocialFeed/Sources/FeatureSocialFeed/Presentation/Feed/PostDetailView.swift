@@ -4,6 +4,7 @@ import Common
 import Localization
 import SplickDomain
 import FeatureFriends
+import FeatureStickers
 
 struct PostDetailView: View {
     @EnvironmentObject private var languageService: LanguageService
@@ -12,6 +13,7 @@ struct PostDetailView: View {
     @ObservedObject var feedViewModel: FeedViewModel
     let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
     let profileDependencies: FriendUserProfileDependencies?
+    let makeGifPickerViewModel: GifPickerViewModelFactory?
 
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.currentUserSummary) private var currentUserSummary
@@ -29,13 +31,15 @@ struct PostDetailView: View {
         initialMediaIndex: Int = 0,
         feedViewModel: FeedViewModel,
         fetchFriendsUseCase: FetchFriendsUseCaseProtocol? = nil,
-        profileDependencies: FriendUserProfileDependencies? = nil
+        profileDependencies: FriendUserProfileDependencies? = nil,
+        makeGifPickerViewModel: GifPickerViewModelFactory? = nil
     ) {
         self.post = post
         self.initialMediaIndex = initialMediaIndex
         self.feedViewModel = feedViewModel
         self.fetchFriendsUseCase = fetchFriendsUseCase
         self.profileDependencies = profileDependencies
+        self.makeGifPickerViewModel = makeGifPickerViewModel
         _commentPager = StateObject(wrappedValue: PostDetailViewModel(comments: post.comments))
     }
 
@@ -177,7 +181,8 @@ struct PostDetailView: View {
                 placeholder: composerPlaceholder,
                 prefillMentionUsername: replyTarget?.author.username,
                 isFocused: $composerFocused,
-                fetchFriendsUseCase: fetchFriendsUseCase
+                fetchFriendsUseCase: fetchFriendsUseCase,
+                gifPickerViewModel: makeGifPickerViewModel?(livePost.groupId)
             ) { text, attachments in
                 Task { await submitComment(text: text, attachments: attachments) }
             }

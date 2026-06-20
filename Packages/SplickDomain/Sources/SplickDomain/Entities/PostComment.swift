@@ -4,6 +4,7 @@ public enum CommentAttachmentKind: String, Codable, Equatable, Sendable {
     case image
     case video
     case file
+    case gif
 }
 
 public struct CommentAttachment: Identifiable, Codable, Equatable, Sendable {

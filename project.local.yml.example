@@ -6,3 +6,5 @@
 settings:
   base:
     DEVELOPMENT_TEAM: YOUR_TEAM_ID_HERE
+    # Optional: Giphy Developer API key for GIF picker (https://developers.giphy.com/)
+    GIPHY_API_KEY: YOUR_GIPHY_API_KEY_HERE

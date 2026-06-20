@@ -120,22 +120,35 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
     ) async throws {
         var attachmentDTOs: [CreateCommentAttachmentRequestDTO] = []
         for submission in submissionAttachments {
-            let upload = try await mediaRepository.uploadImage(
-                data: submission.data,
-                mimeType: submission.mimeType,
-                purpose: .commentAttachment,
-                groupId: nil
-            )
-            attachmentDTOs.append(
-                CreateCommentAttachmentRequestDTO(
-                    kind: submission.kind.rawValue,
-                    mediaId: upload.id,
-                    url: upload.url.absoluteString,
-                    fileName: submission.fileName,
-                    thumbnailUrl: upload.thumbnailURL?.absoluteString,
-                    sizeBytes: upload.sizeBytes
+            if submission.isRemoteOnly, let remoteURL = submission.remoteURL {
+                attachmentDTOs.append(
+                    CreateCommentAttachmentRequestDTO(
+                        kind: submission.kind.rawValue,
+                        mediaId: nil,
+                        url: remoteURL.absoluteString,
+                        fileName: submission.fileName,
+                        thumbnailUrl: remoteURL.absoluteString,
+                        sizeBytes: nil
+                    )
                 )
-            )
+            } else if let data = submission.data, let mimeType = submission.mimeType {
+                let upload = try await mediaRepository.uploadImage(
+                    data: data,
+                    mimeType: mimeType,
+                    purpose: .commentAttachment,
+                    groupId: nil
+                )
+                attachmentDTOs.append(
+                    CreateCommentAttachmentRequestDTO(
+                        kind: submission.kind.rawValue,
+                        mediaId: upload.id,
+                        url: upload.url.absoluteString,
+                        fileName: submission.fileName,
+                        thumbnailUrl: upload.thumbnailURL?.absoluteString,
+                        sizeBytes: upload.sizeBytes
+                    )
+                )
+            }
         }
 
         let trimmedBody = body?.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -11,6 +11,7 @@ import FeatureExpense
 import FeatureNotification
 import FeatureFriends
 import FeatureMessaging
+import FeatureStickers
 
 @MainActor
 final class DependencyContainer: ObservableObject {
@@ -153,6 +154,20 @@ final class DependencyContainer: ObservableObject {
     lazy var uploadGroupAvatarUseCase: UploadGroupAvatarUseCaseProtocol = {
         UploadGroupAvatarUseCase(repository: mediaRepository)
     }()
+
+    // MARK: - Stickers
+
+    private lazy var stickerRepository: StickerRepositoryProtocol = {
+        StickerRepositoryImpl(apiClient: apiClient)
+    }()
+
+    lazy var fetchStickersUseCase: FetchStickersUseCaseProtocol = {
+        FetchStickersUseCase(repository: stickerRepository)
+    }()
+
+    func makeGifPickerViewModel(groupId: UUID?) -> GifPickerViewModel {
+        GifPickerViewModel(fetchStickersUseCase: fetchStickersUseCase, groupId: groupId)
+    }
 
     // MARK: - Feed
 

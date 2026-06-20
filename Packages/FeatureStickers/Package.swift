@@ -3,33 +3,31 @@
 import PackageDescription
 
 let package = Package(
-    name: "FeatureSocialFeed",
+    name: "FeatureStickers",
     platforms: [.iOS(.v16)],
     products: [
-        .library(name: "FeatureSocialFeed", targets: ["FeatureSocialFeed"]),
+        .library(name: "FeatureStickers", targets: ["FeatureStickers"]),
     ],
     dependencies: [
         .package(path: "../SplickCore"),
         .package(path: "../SplickDomain"),
-        .package(path: "../FeatureFriends"),
-        .package(path: "../FeatureMedia"),
-        .package(path: "../FeatureStickers"),
     ],
     targets: [
         .target(
-            name: "FeatureSocialFeed",
+            name: "FeatureStickers",
             dependencies: [
                 .product(name: "Networking", package: "SplickCore"),
-                .product(name: "Storage", package: "SplickCore"),
                 .product(name: "DesignSystem", package: "SplickCore"),
                 .product(name: "Common", package: "SplickCore"),
                 .product(name: "Localization", package: "SplickCore"),
                 .product(name: "SplickDomain", package: "SplickDomain"),
-                .product(name: "FeatureFriends", package: "FeatureFriends"),
-                .product(name: "FeatureMedia", package: "FeatureMedia"),
-                .product(name: "FeatureStickers", package: "FeatureStickers"),
             ],
-            path: "Sources/FeatureSocialFeed"
+            path: "Sources/FeatureStickers"
+        ),
+        .testTarget(
+            name: "FeatureStickersTests",
+            dependencies: ["FeatureStickers"],
+            path: "Tests/FeatureStickersTests"
         ),
     ]
 )

@@ -117,6 +117,7 @@ struct MainTabView: View {
                 fetchMyFriendsUseCase: container.fetchMyFriendsUseCase,
                 fetchMyGroupsUseCase: container.fetchMyGroupsUseCase,
                 profileDependencies: container.friendUserProfileDependencies,
+                makeGifPickerViewModel: container.makeGifPickerViewModel(groupId:),
                 navigationPath: $appState.feedNavigationPath,
                 pendingPostId: appState.pendingPostId,
                 onPendingPostHandled: {
