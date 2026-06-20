@@ -52,6 +52,7 @@ struct FeedPullToRefreshScrollView<Content: View>: View {
     @State private var isRefreshSettling = false
 
     @Environment(\.feedSegmentScrollState) private var feedSegmentScrollState
+    @Environment(\.scrollChromeTrackingEnabled) private var scrollChromeTrackingEnabled
 
     var body: some View {
         ScrollViewReader { scrollProxy in
@@ -133,7 +134,9 @@ struct FeedPullToRefreshScrollView<Content: View>: View {
 
     private func applyPullFromScrollOffset(_ offsetY: CGFloat, scrollProxy: ScrollViewProxy) {
         lastScrollOffset = offsetY
-        feedSegmentScrollState?.updateScrollOffset(offsetY)
+        if scrollChromeTrackingEnabled {
+            feedSegmentScrollState?.updateScrollOffset(offsetY)
+        }
 
         if restScrollOffset == nil {
             restScrollOffset = offsetY
@@ -213,7 +216,9 @@ struct FeedPullToRefreshScrollView<Content: View>: View {
     }
 
     private func handleScrollRelease(scrollProxy: ScrollViewProxy) {
-        feedSegmentScrollState?.snapCollapseProgress()
+        if scrollChromeTrackingEnabled {
+            feedSegmentScrollState?.snapCollapseProgress()
+        }
 
         guard phase == .pulling, !releaseHandled else { return }
         guard Date() >= ignoresPullUntil else { return }

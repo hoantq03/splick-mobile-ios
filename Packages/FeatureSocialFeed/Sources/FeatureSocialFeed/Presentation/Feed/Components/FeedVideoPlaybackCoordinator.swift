@@ -17,6 +17,14 @@ final class FeedVideoPlaybackCoordinator: ObservableObject {
         pickActivePost()
     }
 
+    func applyVisibilityReports(_ reports: [FeedVideoVisibilityReport]) {
+        visibilityByPost.removeAll(keepingCapacity: true)
+        for report in reports where report.ratio > 0.01 {
+            visibilityByPost[report.postId] = report.ratio
+        }
+        pickActivePost()
+    }
+
     func clearPost(_ postId: UUID) {
         visibilityByPost.removeValue(forKey: postId)
         if activePostId == postId {
@@ -38,6 +46,19 @@ final class FeedVideoPlaybackCoordinator: ObservableObject {
             return
         }
         activePostId = best.key
+    }
+}
+
+struct FeedVideoVisibilityReport: Equatable {
+    let postId: UUID
+    let ratio: CGFloat
+}
+
+private struct FeedVideoVisibilityPreferenceKey: PreferenceKey {
+    static var defaultValue: [FeedVideoVisibilityReport] = []
+
+    static func reduce(value: inout [FeedVideoVisibilityReport], nextValue: () -> [FeedVideoVisibilityReport]) {
+        value.append(contentsOf: nextValue())
     }
 }
 
@@ -64,38 +85,40 @@ extension EnvironmentValues {
     }
 }
 
+extension View {
+    /// Collects per-post visibility ratios without `onChange(of: CGRect)` (fatal on iOS 26+).
+    func feedVideoVisibilityHandling(coordinator: FeedVideoPlaybackCoordinator) -> some View {
+        onPreferenceChange(FeedVideoVisibilityPreferenceKey.self) { reports in
+            coordinator.applyVisibilityReports(reports)
+        }
+    }
+}
+
 struct FeedVideoVisibilityReporter: View {
     let postId: UUID
-    @Environment(\.feedVideoCoordinator) private var coordinator
     @Environment(\.feedTabIsActive) private var feedTabIsActive
 
     var body: some View {
         GeometryReader { proxy in
             Color.clear
-                .onAppear { report(proxy) }
-                .onChange(of: proxy.frame(in: .global)) { _ in report(proxy) }
-                .onChange(of: feedTabIsActive) { isActive in
-                    if isActive {
-                        report(proxy)
-                    } else {
-                        coordinator?.clearPost(postId)
-                    }
-                }
-                .onDisappear { coordinator?.clearPost(postId) }
+                .preference(
+                    key: FeedVideoVisibilityPreferenceKey.self,
+                    value: feedTabIsActive ? [visibilityReport(for: proxy)] : []
+                )
         }
+        .frame(height: 0)
+        .allowsHitTesting(false)
     }
 
-    private func report(_ proxy: GeometryProxy) {
-        guard feedTabIsActive, let coordinator else { return }
+    private func visibilityReport(for proxy: GeometryProxy) -> FeedVideoVisibilityReport {
         let frame = proxy.frame(in: .global)
         let bounds = UIScreen.main.bounds
         let intersection = frame.intersection(bounds)
         guard intersection.width > 0, intersection.height > 0, frame.width > 0, frame.height > 0 else {
-            coordinator.updateVisibility(postId: postId, ratio: 0)
-            return
+            return FeedVideoVisibilityReport(postId: postId, ratio: 0)
         }
         let visibleArea = intersection.width * intersection.height
         let totalArea = frame.width * frame.height
-        coordinator.updateVisibility(postId: postId, ratio: visibleArea / totalArea)
+        return FeedVideoVisibilityReport(postId: postId, ratio: visibleArea / totalArea)
     }
 }

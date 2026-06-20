@@ -63,6 +63,7 @@ public struct FeedView: View {
         NavigationStack(path: $navigationPath) {
             FeedContentPager(selection: $selectedSegment) {
                 feedPane
+                    .environment(\.scrollChromeTrackingEnabled, selectedSegment == .feed)
             } album: {
                 PhotoAlbumView(
                     viewModel: photoAlbumViewModel,
@@ -72,12 +73,14 @@ public struct FeedView: View {
                     fetchMyGroupsUseCase: fetchMyGroupsUseCase,
                     isEmbedded: true
                 )
+                .environment(\.scrollChromeTrackingEnabled, selectedSegment == .album)
             } streak: {
                 StreakView(
                     viewModel: streakViewModel,
                     feedViewModel: viewModel,
                     navigationPath: $navigationPath
                 )
+                .environment(\.scrollChromeTrackingEnabled, selectedSegment == .streak)
             }
             .background(SplickTheme.Colors.background.ignoresSafeArea())
             .navigationTitle("")
@@ -146,6 +149,13 @@ public struct FeedView: View {
             tabBarScrollState?.reset()
             if segment != .feed {
                 videoCoordinator.suspendPlayback()
+            }
+        }
+        .onChange(of: viewModel.state) { state in
+            guard selectedSegment == .feed else { return }
+            if case .loaded(let posts) = state, posts.isEmpty {
+                tabBarScrollState?.show()
+                feedSegmentScrollState.reset()
             }
         }
         .environment(\.feedTabIsActive, isTabActive && selectedSegment == .feed)
@@ -265,6 +275,7 @@ public struct FeedView: View {
         }
         .scrollDisabled(feedScrollLocked)
         .environment(\.feedVideoCoordinator, videoCoordinator)
+        .feedVideoVisibilityHandling(coordinator: videoCoordinator)
         .tabBarHideOnScroll()
     }
 

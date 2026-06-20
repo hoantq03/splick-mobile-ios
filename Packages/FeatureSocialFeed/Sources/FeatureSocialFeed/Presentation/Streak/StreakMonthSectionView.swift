@@ -24,7 +24,7 @@ struct StreakMonthSectionView: View {
 
     private var weekdayLabels: some View {
         HStack(spacing: 4) {
-            ForEach(StreakCalendarLayout.weekdaySymbols(), id: \.self) { symbol in
+            ForEach(Array(StreakCalendarLayout.weekdaySymbols().enumerated()), id: \.offset) { _, symbol in
                 Text(symbol)
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(SplickTheme.Colors.textSecondary)

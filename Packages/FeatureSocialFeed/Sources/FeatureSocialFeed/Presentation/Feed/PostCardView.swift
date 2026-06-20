@@ -104,9 +104,6 @@ struct PostCardView: View {
             GeometryReader { geo in
                 Color.clear
                     .onAppear { cardFrameInGlobal = geo.frame(in: .global) }
-                    .onChange(of: geo.frame(in: .global)) { frame in
-                        cardFrameInGlobal = frame
-                    }
             }
         )
         .onPreferenceChange(ReactionTargetAnchorsKey.self) { reactionAnchors = $0 }
