@@ -14,7 +14,7 @@ let package = Package(
     ],
     dependencies: [
         .package(path: "../SplickDomain"),
-        .package(url: "https://github.com/kean/Nuke.git", from: "12.8.0"),
+        .package(url: "https://github.com/kean/Nuke.git", exact: "12.9.0"),
     ],
     targets: [
         .target(
