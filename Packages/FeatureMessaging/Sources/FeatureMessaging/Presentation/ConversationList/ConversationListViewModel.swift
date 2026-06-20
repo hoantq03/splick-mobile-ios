@@ -14,10 +14,11 @@ public final class ConversationListViewModel: ObservableObject {
     }
 
     @Published public private(set) var state: State = .idle
-    @Published public var searchQuery = ""
     @Published public private(set) var searchResults: [MessagingSearchResult] = []
     @Published public private(set) var searchState: LoadingState<[MessagingSearchResult]> = .idle
     @Published public private(set) var isRefreshingSearch = false
+    /// Query used for result highlighting — updates when a search completes, not on every keystroke.
+    @Published public private(set) var activeSearchQuery = ""
     @Published public private(set) var isStartingConversation = false
     @Published public var startConversationError: String?
 
@@ -39,10 +40,6 @@ public final class ConversationListViewModel: ObservableObject {
         self.repository = repository
         self.wsClient = wsClient
         bindWsEvents()
-    }
-
-    public var isSearching: Bool {
-        !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     public var conversations: [Conversation] {
@@ -71,20 +68,22 @@ public final class ConversationListViewModel: ObservableObject {
     }
 
     public func onSearchQueryChanged(_ query: String) {
-        searchQuery = query
         searchTask?.cancel()
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             searchResults = []
             searchState = .idle
             isRefreshingSearch = false
+            activeSearchQuery = ""
             return
         }
 
-        if case .idle = searchState {
+        if searchResults.isEmpty, case .idle = searchState {
             searchState = .loading
         }
-        isRefreshingSearch = true
+        if !isRefreshingSearch {
+            isRefreshingSearch = true
+        }
         searchTask = Task {
             try? await Task.sleep(for: .milliseconds(350))
             guard !Task.isCancelled else { return }
@@ -94,11 +93,13 @@ public final class ConversationListViewModel: ObservableObject {
                 guard !Task.isCancelled else { return }
                 searchResults = results
                 searchState = .loaded(results)
+                activeSearchQuery = trimmed
                 isRefreshingSearch = false
             } catch {
                 guard !Task.isCancelled else { return }
                 searchResults = []
                 searchState = .failed(error.localizedDescription)
+                activeSearchQuery = ""
                 isRefreshingSearch = false
                 Log.error(error, category: .network, metadata: ["action": "searchMessaging", "query": trimmed])
             }

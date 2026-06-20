@@ -4,19 +4,16 @@ import DesignSystem
 import Localization
 import SplickDomain
 
-private enum MessagingSearchChromeMetrics {
-    static let rowHeight: CGFloat = 44
-    static let verticalPadding: CGFloat = SplickTheme.Spacing.sm
-    static var insetHeight: CGFloat { rowHeight + verticalPadding * 2 }
-}
-
 public struct ConversationListView: View {
     @ObservedObject private var viewModel: ConversationListViewModel
     @EnvironmentObject private var languageService: LanguageService
     @State private var path = NavigationPath()
     @State private var searchDraft = ""
     @FocusState private var isSearchFocused: Bool
-    @Namespace private var searchNamespace
+
+    private var isSearching: Bool {
+        !searchDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     public init(viewModel: ConversationListViewModel) {
         self._viewModel = ObservedObject(wrappedValue: viewModel)
@@ -26,27 +23,28 @@ public struct ConversationListView: View {
         NavigationStack(path: $path) {
             ZStack {
                 conversationListContent
-                    .opacity(showSearchLayer ? 0 : 1)
-                    .allowsHitTesting(!showSearchLayer)
 
-                if showSearchLayer {
+                if isSearching {
                     searchResultsContent
+                        .background(SplickTheme.Colors.background)
+                        .transition(.opacity)
                 }
             }
-            .navigationTitle(languageService.text(.messagingTitle))
-            .splickProfileToolbar(isSuppressed: isSearchFocused)
+            .animation(MessagingSearchChromeAnimation.resultsSpring, value: isSearching)
+            .toolbar(.hidden, for: .navigationBar)
             .safeAreaInset(edge: .top, spacing: 0) {
-                Group {
-                    if isSearchFocused {
-                        focusedSearchHeader
-                    } else {
-                        collapsedSearchHeader
-                    }
-                }
-                .animation(.spring(response: 0.38, dampingFraction: 0.86), value: isSearchFocused)
+                MessagingConversationChrome(
+                    title: languageService.text(.messagingTitle),
+                    searchDraft: $searchDraft,
+                    searchPlaceholder: languageService.text(.messagingSearchPlaceholder),
+                    cancelLabel: languageService.text(.commonCancel),
+                    showsSearchSpinner: viewModel.isRefreshingSearch,
+                    isSearchFocused: $isSearchFocused,
+                    onCancel: dismissSearch
+                )
             }
             .refreshable {
-                if viewModel.isSearching {
+                if isSearching {
                     viewModel.onSearchQueryChanged(searchDraft)
                 } else {
                     await viewModel.refresh()
@@ -61,10 +59,6 @@ public struct ConversationListView: View {
         }
         .onChange(of: searchDraft) { newValue in
             viewModel.onSearchQueryChanged(newValue)
-        }
-        .onChange(of: viewModel.searchQuery) { newValue in
-            guard newValue != searchDraft else { return }
-            searchDraft = newValue
         }
         .onChange(of: isSearchFocused) { focused in
             guard !focused, searchDraft.isEmpty else { return }
@@ -81,14 +75,9 @@ public struct ConversationListView: View {
             Text(viewModel.startConversationError ?? "")
         }
         .onFirstAppear {
-            searchDraft = viewModel.searchQuery
             guard viewModel.conversations.isEmpty else { return }
             Task { await viewModel.load() }
         }
-    }
-
-    private var showSearchLayer: Bool {
-        isSearchFocused || viewModel.isSearching
     }
 
     private var startConversationErrorPresented: Binding<Bool> {
@@ -100,67 +89,6 @@ public struct ConversationListView: View {
                 }
             }
         )
-    }
-
-    private var collapsedSearchHeader: some View {
-        messagingSearchCapsule(showTrailingSpinner: viewModel.isRefreshingSearch)
-            .matchedGeometryEffect(id: "messagingSearchCapsule", in: searchNamespace)
-            .padding(.horizontal, SplickTheme.Spacing.md)
-            .padding(.vertical, MessagingSearchChromeMetrics.verticalPadding)
-            .frame(maxWidth: .infinity)
-            .background(SplickTheme.Colors.background)
-    }
-
-    private var focusedSearchHeader: some View {
-        HStack(spacing: SplickTheme.Spacing.sm) {
-            messagingSearchCapsule(showTrailingSpinner: viewModel.isRefreshingSearch)
-                .matchedGeometryEffect(id: "messagingSearchCapsule", in: searchNamespace)
-
-            Button {
-                dismissSearch()
-            } label: {
-                Text(languageService.text(.commonCancel))
-                    .font(SplickTheme.Typography.callout.weight(.medium))
-                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-            }
-            .buttonStyle(.plain)
-            .transition(.move(edge: .trailing).combined(with: .opacity))
-        }
-        .padding(.horizontal, SplickTheme.Spacing.md)
-        .padding(.vertical, MessagingSearchChromeMetrics.verticalPadding)
-        .frame(maxWidth: .infinity)
-        .background {
-            SplickTheme.Colors.background
-                .ignoresSafeArea(edges: .top)
-        }
-    }
-
-    private func messagingSearchCapsule(showTrailingSpinner: Bool) -> some View {
-        HStack(spacing: SplickTheme.Spacing.xs) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(SplickTheme.Colors.textSecondary)
-
-            TextField(
-                languageService.text(.messagingSearchPlaceholder),
-                text: $searchDraft
-            )
-            .font(SplickTheme.Typography.callout)
-            .focused($isSearchFocused)
-            .autocorrectionDisabled()
-            .textInputAutocapitalization(.never)
-            .submitLabel(.search)
-
-            if showTrailingSpinner {
-                ProgressView()
-                    .controlSize(.small)
-            }
-        }
-        .padding(.horizontal, SplickTheme.Spacing.md)
-        .padding(.vertical, SplickTheme.Spacing.sm)
-        .frame(maxWidth: .infinity, minHeight: MessagingSearchChromeMetrics.rowHeight)
-        .background(SplickTheme.Colors.secondaryBackground)
-        .clipShape(Capsule(style: .continuous))
     }
 
     @ViewBuilder
@@ -189,8 +117,11 @@ public struct ConversationListView: View {
     @ViewBuilder
     private var searchResultsContent: some View {
         switch viewModel.searchState {
-        case .idle, .loading where viewModel.searchResults.isEmpty:
-            LoadingView(message: languageService.text(.messagingSearchLoading))
+        case .loading where viewModel.searchResults.isEmpty:
+            searchResultsPlaceholder(
+                message: languageService.text(.messagingSearchLoading),
+                showsSpinner: true
+            )
 
         case .failed(let message):
             ErrorView(message: message) {
@@ -204,9 +135,21 @@ public struct ConversationListView: View {
                 message: languageService.text(.messagingSearchEmptyMessage)
             )
 
-        case .loading, .loaded:
+        case .idle, .loading, .loaded:
             searchResultsList(viewModel.searchResults)
         }
+    }
+
+    private func searchResultsPlaceholder(message: String, showsSpinner: Bool) -> some View {
+        VStack(spacing: SplickTheme.Spacing.sm) {
+            if showsSpinner {
+                ProgressView()
+            }
+            Text(message)
+                .font(SplickTheme.Typography.callout)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func searchResultsList(_ results: [MessagingSearchResult]) -> some View {
@@ -218,7 +161,7 @@ public struct ConversationListView: View {
                     } label: {
                         MessagingSearchResultRowView(
                             result: result,
-                            query: searchDraft,
+                            query: viewModel.activeSearchQuery,
                             isStarting: viewModel.isStartingConversation
                         )
                     }
@@ -230,10 +173,11 @@ public struct ConversationListView: View {
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
         }
+        .scrollDismissesKeyboard(.interactively)
     }
 
     private func dismissSearch() {
-        withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+        withAnimation(MessagingSearchChromeAnimation.focusSpring) {
             isSearchFocused = false
         }
         searchDraft = ""
@@ -250,8 +194,9 @@ public struct ConversationListView: View {
             route = viewModel.routeForMessageHit(hit)
         }
 
-        isSearchFocused = false
-        viewModel.searchQuery = ""
+        withAnimation(MessagingSearchChromeAnimation.focusSpring) {
+            isSearchFocused = false
+        }
         viewModel.onSearchQueryChanged("")
         searchDraft = ""
         path.append(route)
@@ -275,5 +220,6 @@ public struct ConversationListView: View {
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
         }
+        .scrollDismissesKeyboard(.interactively)
     }
 }
