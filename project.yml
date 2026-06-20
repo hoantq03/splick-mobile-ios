@@ -11,7 +11,9 @@ options:
   deploymentTarget:
     iOS: "16.0"
   xcodeVersion: "15.0"
-  generateEmptyDirectories: true
+  generateEmptyDirectories: false
+  # Keep local SPM packages under Package Dependencies only — avoids "Couldn't load project" folder refs.
+  localPackagesGroup: ""
   groupSortPosition: top
 
 settings:
@@ -93,6 +95,8 @@ targets:
     settings:
       base:
         PRODUCT_NAME: SplickApp
+        # Xcode 26 debug dylib can abort during dyld/xpc init (before main). Framework Previews still work.
+        ENABLE_DEBUG_DYLIB: NO
         INFOPLIST_FILE: SplickApp/Resources/Info.plist
         GENERATE_INFOPLIST_FILE: NO
         PRODUCT_BUNDLE_IDENTIFIER: com.splick.app

@@ -1,4 +1,4 @@
-.PHONY: generate setup clean build stubs
+.PHONY: generate setup clean reset-xcode open-xcode build stubs
 
 API_STUB_PORT ?= 8080
 
@@ -14,6 +14,15 @@ setup: generate
 clean:
 	rm -rf DerivedData build
 	xcodebuild clean -project Splick.xcodeproj -scheme SplickApp 2>/dev/null || true
+
+# Reset DerivedData + SwiftPM caches (use when Xcode shows package load / dyld abort)
+reset-xcode:
+	chmod +x scripts/reset-xcode-packages.sh scripts/verify-xcodeproj.sh
+	./scripts/reset-xcode-packages.sh
+
+# Regenerate project and open Splick.xcodeproj (safe entry point for Xcode)
+open-xcode: generate
+	open "$(CURDIR)/Splick.xcodeproj"
 
 # Build the project
 build: generate

@@ -69,6 +69,12 @@ install_xcodegen() {
 
 install_xcodegen
 
+PBXPROJ="$ROOT/Splick.xcodeproj/project.pbxproj"
+if [[ -f "$PBXPROJ" ]]; then
+  python3 "$ROOT/scripts/patch-xcodeproj-local-packages.py" "$PBXPROJ"
+  "$ROOT/scripts/verify-xcodeproj.sh"
+fi
+
 if [[ ! -f "$ROOT/Splick.xcodeproj/project.pbxproj" ]]; then
   echo "ERROR: project.pbxproj was not created"
   exit 1
