@@ -78,6 +78,7 @@ extension EnvironmentValues {
 
 public struct FeedSegmentHideOnScrollModifier: ViewModifier {
     @Environment(\.feedSegmentScrollState) private var feedSegmentScrollState
+    @Environment(\.scrollChromeTrackingEnabled) private var scrollChromeTrackingEnabled
 
     public init() {}
 
@@ -88,6 +89,7 @@ public struct FeedSegmentHideOnScrollModifier: ViewModifier {
                     .onScrollGeometryChange(for: CGFloat.self) { geometry in
                         geometry.contentOffset.y + geometry.contentInsets.top
                     } action: { _, offset in
+                        guard scrollChromeTrackingEnabled else { return }
                         feedSegmentScrollState.updateScrollOffset(offset)
                     }
                     .onScrollPhaseChange { oldPhase, newPhase in

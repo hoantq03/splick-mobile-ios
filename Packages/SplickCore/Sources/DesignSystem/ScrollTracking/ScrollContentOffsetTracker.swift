@@ -65,6 +65,7 @@ struct ScrollChromeOffsetTrackingModifier: ViewModifier {
 
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.feedSegmentScrollState) private var feedSegmentScrollState
+    @Environment(\.scrollChromeTrackingEnabled) private var scrollChromeTrackingEnabled
 
     func body(content: Content) -> some View {
         if #available(iOS 18.0, *) {
@@ -72,6 +73,7 @@ struct ScrollChromeOffsetTrackingModifier: ViewModifier {
         } else {
             VStack(spacing: 0) {
                 ScrollContentOffsetTracker(coordinateSpaceName: coordinateSpace) { offset in
+                    guard scrollChromeTrackingEnabled else { return }
                     tabBarScrollState?.updateScrollOffset(offset)
                     feedSegmentScrollState?.updateScrollOffset(offset)
                 }
