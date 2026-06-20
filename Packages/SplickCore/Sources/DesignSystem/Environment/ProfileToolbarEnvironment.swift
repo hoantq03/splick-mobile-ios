@@ -68,50 +68,47 @@ private struct SplickProfileToolbarModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .navigationBarTitleDisplayMode(titleDisplayMode)
-            .toolbar(isSuppressed ? .hidden : .visible, for: .navigationBar)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    if let openProfileSettings, let user = currentUserSummary {
-                        Button(action: openProfileSettings) {
-                            AvatarView(
-                                imageURL: user.avatarURL,
-                                name: user.displayName,
-                                size: .small
+                if !isSuppressed {
+                    ToolbarItem(placement: .topBarLeading) {
+                        if let openProfileSettings, let user = currentUserSummary {
+                            Button(action: openProfileSettings) {
+                                AvatarView(
+                                    imageURL: user.avatarURL,
+                                    name: user.displayName,
+                                    size: .small
+                                )
+                                .frame(width: 34, height: 34)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(
+                                languageService?.text(.profileSettingsAccessibility)
+                                    ?? L10n.string(.profileSettingsAccessibility, locale: .default)
                             )
-                            .frame(width: 34, height: 34)
                         }
-                        .buttonStyle(.plain)
-                        .opacity(isSuppressed ? 0 : 1)
-                        .allowsHitTesting(!isSuppressed)
-                        .accessibilityLabel(
-                            languageService?.text(.profileSettingsAccessibility)
-                                ?? L10n.string(.profileSettingsAccessibility, locale: .default)
-                        )
                     }
-                }
 
-                ToolbarItem(placement: .topBarTrailing) {
-                    if let openNotifications {
-                        Button(action: openNotifications) {
-                            ZStack(alignment: .topTrailing) {
-                                Image(systemName: notificationUnreadCount > 0 ? "bell.fill" : "bell")
-                                    .font(.system(size: 20, weight: .medium))
-                                    .frame(width: 34, height: 34)
-                                if notificationUnreadCount > 0 {
-                                    Circle()
-                                        .fill(Color.red)
-                                        .frame(width: 8, height: 8)
-                                        .offset(x: 2, y: -2)
+                    ToolbarItem(placement: .topBarTrailing) {
+                        if let openNotifications {
+                            Button(action: openNotifications) {
+                                ZStack(alignment: .topTrailing) {
+                                    Image(systemName: notificationUnreadCount > 0 ? "bell.fill" : "bell")
+                                        .font(.system(size: 20, weight: .medium))
+                                        .frame(width: 34, height: 34)
+                                    if notificationUnreadCount > 0 {
+                                        Circle()
+                                            .fill(Color.red)
+                                            .frame(width: 8, height: 8)
+                                            .offset(x: 2, y: -2)
+                                    }
                                 }
                             }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(
+                                languageService?.text(.notificationBellAccessibility)
+                                    ?? L10n.string(.notificationBellAccessibility, locale: .default)
+                            )
                         }
-                        .buttonStyle(.plain)
-                        .opacity(isSuppressed ? 0 : 1)
-                        .allowsHitTesting(!isSuppressed)
-                        .accessibilityLabel(
-                            languageService?.text(.notificationBellAccessibility)
-                                ?? L10n.string(.notificationBellAccessibility, locale: .default)
-                        )
                     }
                 }
             }
