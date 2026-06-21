@@ -174,6 +174,11 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
         return AuthMapper.toAuthSession(response)
     }
 
+    public func verifyPasswordChange(currentPassword: String?, otpCode: String?) async throws {
+        let dto = AccountActionRequestDTO(currentPassword: currentPassword, otpCode: otpCode)
+        try await apiClient.request(AuthEndpoint.verifyPasswordChange(dto))
+    }
+
     public func logout() async {
         do {
             if let refreshToken = try? keychainService.loadString(for: AppConstants.Keychain.refreshTokenKey) {
@@ -219,8 +224,7 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
     }
 
     public func listSessions() async throws -> [UserSession] {
-        let refreshToken = try? keychainService.loadString(for: AppConstants.Keychain.refreshTokenKey)
-        let dtos: [SessionDTO] = try await apiClient.request(AuthEndpoint.listSessions(refreshToken: refreshToken))
+        let dtos: [SessionDTO] = try await apiClient.request(AuthEndpoint.listSessions)
         return dtos.map(AuthMapper.toUserSession)
     }
 

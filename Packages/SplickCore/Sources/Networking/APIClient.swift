@@ -153,6 +153,13 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
 
         var authedRequest = request
         authedRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        if endpoint.sendsRefreshTokenHeader,
+           let refreshToken = await tokenProvider.refreshToken(),
+           !refreshToken.isEmpty {
+            authedRequest.setValue(refreshToken, forHTTPHeaderField: "X-Refresh-Token")
+        }
+
         return authedRequest
     }
 

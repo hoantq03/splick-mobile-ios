@@ -14,13 +14,14 @@ enum AuthEndpoint: APIEndpoint {
     case forgotPassword(ForgotPasswordRequestDTO)
     case resetPassword(ResetPasswordRequestDTO)
     case changePassword(ChangePasswordRequestDTO)
+    case verifyPasswordChange(AccountActionRequestDTO)
     case logout(LogoutRequestDTO)
     case me
     case patchMe(UpdateUserProfileRequestDTO)
     case paymentProfile
     case upsertPaymentProfile(UpsertPaymentProfileRequestDTO)
     case deletePaymentProfile
-    case listSessions(refreshToken: String?)
+    case listSessions
     case revokeAllSessions
     case revokeSession(UUID)
     case deactivateAccount(AccountActionRequestDTO)
@@ -46,6 +47,7 @@ enum AuthEndpoint: APIEndpoint {
         case .forgotPassword: return "/v1/auth/password/forgot"
         case .resetPassword: return "/v1/auth/password/reset"
         case .changePassword: return "/v1/auth/password/change"
+        case .verifyPasswordChange: return "/v1/auth/password/verify"
         case .logout: return "/v1/auth/logout"
         case .me, .patchMe: return "/v1/auth/me"
         case .paymentProfile, .upsertPaymentProfile, .deletePaymentProfile:
@@ -69,7 +71,7 @@ enum AuthEndpoint: APIEndpoint {
         switch self {
         case .checkIdentifier, .googleSignIn, .login, .requestEmailOtp, .requestPhoneOtp, .verifyPhoneOtp,
              .registerEmail, .registerPhone, .refreshToken,
-             .forgotPassword, .resetPassword, .changePassword, .logout, .revokeAllSessions,
+             .forgotPassword, .resetPassword, .changePassword, .verifyPasswordChange, .logout, .revokeAllSessions,
              .deactivateAccount, .linkGoogle, .requestLinkPhoneOtp, .linkPhone,
              .requestLinkEmailOtp, .linkEmail:
             return .post
@@ -98,6 +100,7 @@ enum AuthEndpoint: APIEndpoint {
         case .forgotPassword(let dto): return dto
         case .resetPassword(let dto): return dto
         case .changePassword(let dto): return dto
+        case .verifyPasswordChange(let dto): return dto
         case .logout(let dto): return dto
         case .deactivateAccount(let dto): return dto
         case .deleteAccount(let dto): return dto
@@ -116,12 +119,15 @@ enum AuthEndpoint: APIEndpoint {
     }
 
     var headers: [String: String]? {
+        nil
+    }
+
+    var sendsRefreshTokenHeader: Bool {
         switch self {
-        case .listSessions(let refreshToken):
-            guard let refreshToken, !refreshToken.isEmpty else { return nil }
-            return ["X-Refresh-Token": refreshToken]
+        case .listSessions:
+            return true
         default:
-            return nil
+            return false
         }
     }
 
@@ -131,7 +137,7 @@ enum AuthEndpoint: APIEndpoint {
              .registerEmail, .registerPhone, .refreshToken,
              .forgotPassword, .resetPassword:
             return false
-        case .changePassword, .logout, .me, .patchMe, .listSessions, .revokeAllSessions, .revokeSession,
+        case .changePassword, .verifyPasswordChange, .logout, .me, .patchMe, .listSessions, .revokeAllSessions, .revokeSession,
              .deactivateAccount, .deleteAccount, .connectedAccounts, .linkGoogle, .unlinkGoogle,
              .requestLinkPhoneOtp, .linkPhone, .requestLinkEmailOtp, .linkEmail, .paymentProfile,
              .upsertPaymentProfile, .deletePaymentProfile:
