@@ -38,8 +38,13 @@ public final class SessionsViewModel: ObservableObject {
         errorMessage = nil
         do {
             let loaded = try await listSessionsUseCase.execute()
-            sessions = loaded
-            loadingState = .loaded(loaded)
+            sessions = loaded.sorted { lhs, rhs in
+                if lhs.isCurrent != rhs.isCurrent {
+                    return lhs.isCurrent
+                }
+                return lhs.createdAt > rhs.createdAt
+            }
+            loadingState = .loaded(sessions)
         } catch {
             guard !error.isRequestCancellation else { return }
             if isPullToRefresh, !sessions.isEmpty {
