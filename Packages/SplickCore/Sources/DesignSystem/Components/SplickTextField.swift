@@ -110,6 +110,11 @@ public struct SplickTextField: View {
         switch validationStatus {
         case .neutral:
             EmptyView()
+        case .loading:
+            ProgressView()
+                .controlSize(.small)
+                .frame(width: 20, height: 20)
+                .accessibilityLabel("Checking")
         case .valid:
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 20))
