@@ -12,6 +12,7 @@ public struct ChangePasswordView: View {
     @State private var isCurrentPasswordVisible = false
     @State private var isNewPasswordVisible = false
     @State private var isConfirmPasswordVisible = false
+    @State private var verifiedRevealStep = 0
 
     private let onPasswordChanged: ((User) -> Void)?
 
@@ -44,6 +45,13 @@ public struct ChangePasswordView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: viewModel.method) { _ in
             viewModel.onMethodChanged()
+            verifiedRevealStep = 0
+        }
+        .onChange(of: viewModel.isCurrentPasswordVerified) { verified in
+            if verified { animateVerifiedReveal(maxSteps: 5) } else { verifiedRevealStep = 0 }
+        }
+        .onChange(of: viewModel.isEmailCodeVerified) { verified in
+            if verified { animateVerifiedReveal(maxSteps: 4) } else { verifiedRevealStep = 0 }
         }
         .onChange(of: viewModel.state) { state in
             if case .loaded(let session) = state {
@@ -82,7 +90,7 @@ public struct ChangePasswordView: View {
     private var currentPasswordPage: some View {
         VStack(spacing: SplickTheme.Spacing.lg) {
             if viewModel.isCurrentPasswordVerified {
-                verifiedNewPasswordSection
+                verifiedNewPasswordSection()
             } else {
                 PasswordMascotView(
                     passwordLength: viewModel.currentPassword.count,
@@ -122,25 +130,91 @@ public struct ChangePasswordView: View {
 
     private var emailCodePage: some View {
         VStack(spacing: SplickTheme.Spacing.lg) {
-            if let message = viewModel.otpInfoMessage {
-                Text(message)
-                    .font(SplickTheme.Typography.caption)
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
-            }
+            readOnlyAccountEmailField
 
             if viewModel.isEmailCodeVerified {
-                verifiedNewPasswordSection
+                verifiedNewPasswordSection(showMascot: false)
+                    .transition(
+                        .asymmetric(
+                            insertion: .move(edge: .bottom).combined(with: .opacity),
+                            removal: .opacity
+                        )
+                    )
             } else {
-                SplickButton(languageService.text(.changePasswordSendCode), style: .secondary) {
+                emailOtpSection
+                    .transition(
+                        .asymmetric(
+                            insertion: .opacity,
+                            removal: .move(edge: .top).combined(with: .opacity)
+                        )
+                    )
+            }
+        }
+        .padding(.top, SplickTheme.Spacing.sm)
+        .animation(.spring(response: 0.48, dampingFraction: 0.86), value: viewModel.isEmailCodeVerified)
+    }
+
+    private var readOnlyAccountEmailField: some View {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxs) {
+            Text(languageService.text(.changePasswordEmailHint))
+                .font(SplickTheme.Typography.caption)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                .padding(.leading, SplickTheme.Spacing.sm)
+
+            HStack(spacing: SplickTheme.Spacing.xs) {
+                Image(systemName: "envelope.fill")
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    .frame(width: 20)
+
+                Text(viewModel.accountEmail)
+                    .font(SplickTheme.Typography.body)
+                    .foregroundStyle(SplickTheme.Colors.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 13))
+                    .foregroundStyle(SplickTheme.Colors.textSecondary.opacity(0.55))
+                    .accessibilityHidden(true)
+            }
+            .padding(SplickTheme.Spacing.sm)
+            .background(SplickTheme.Colors.secondaryBackground.opacity(0.92))
+            .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.control, style: .continuous))
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("\(languageService.text(.authEmail)): \(viewModel.accountEmail)")
+            .accessibilityHint(languageService.text(.changePasswordEmailHint))
+        }
+    }
+
+    private var emailOtpSection: some View {
+        VStack(spacing: SplickTheme.Spacing.lg) {
+            if !viewModel.hasSentEmailCode {
+                SplickButton(
+                    languageService.text(.changePasswordSendCode),
+                    style: .secondary,
+                    isLoading: viewModel.isRequestingEmailCode,
+                    isDisabled: viewModel.isRequestingEmailCode
+                ) {
                     Task { await viewModel.requestEmailCode() }
+                }
+            } else {
+                if let message = viewModel.otpInfoMessage {
+                    Text(message)
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .transition(.opacity)
                 }
 
                 SplickOtpField(code: $viewModel.otpCode, errorMessage: viewModel.otpError)
                     .onChange(of: viewModel.otpCode) { _ in
                         viewModel.onOtpCodeChanged()
                     }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+
+                resendCodeControl
 
                 SplickButton(
                     languageService.text(.changePasswordVerifyContinue),
@@ -148,71 +222,137 @@ public struct ChangePasswordView: View {
                 ) {
                     viewModel.verifyEmailCodeStep()
                 }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .padding(.top, SplickTheme.Spacing.sm)
+        .animation(.spring(response: 0.42, dampingFraction: 0.86), value: viewModel.hasSentEmailCode)
     }
 
-    private var verifiedNewPasswordSection: some View {
+    @ViewBuilder
+    private var resendCodeControl: some View {
+        if viewModel.otpResendSecondsRemaining > 0 {
+            Text(
+                languageService.format(
+                    .changePasswordResendIn,
+                    viewModel.otpResendSecondsRemaining
+                )
+            )
+            .font(SplickTheme.Typography.caption)
+            .foregroundStyle(SplickTheme.Colors.textSecondary)
+            .frame(maxWidth: .infinity)
+            .transition(.opacity)
+        } else {
+            Button {
+                Task { await viewModel.resendEmailCode() }
+            } label: {
+                Text(languageService.text(.changePasswordResendCode))
+                    .font(SplickTheme.Typography.callout)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+            }
+            .buttonStyle(.plain)
+            .disabled(viewModel.isRequestingEmailCode)
+            .opacity(viewModel.isRequestingEmailCode ? 0.5 : 1)
+            .frame(maxWidth: .infinity)
+            .transition(.opacity)
+        }
+    }
+
+    private func verifiedNewPasswordSection(showMascot: Bool = true) -> some View {
         VStack(spacing: SplickTheme.Spacing.lg) {
-            Text(languageService.text(.changePasswordVerifiedHint))
-                .font(SplickTheme.Typography.callout)
-                .foregroundStyle(SplickTheme.Colors.textSecondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
+            if verifiedRevealStep >= 1 {
+                Text(languageService.text(.changePasswordVerifiedHint))
+                    .font(SplickTheme.Typography.callout)
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .transition(verifiedFieldTransition)
+            }
 
-            PasswordMascotView(
-                passwordLength: viewModel.newPassword.count,
-                isPasswordVisible: isNewPasswordVisible
-            )
-            .padding(.bottom, SplickTheme.Spacing.xs)
+            if showMascot, verifiedRevealStep >= 2 {
+                PasswordMascotView(
+                    passwordLength: viewModel.newPassword.count,
+                    isPasswordVisible: isNewPasswordVisible
+                )
+                .padding(.bottom, SplickTheme.Spacing.xs)
+                .transition(verifiedFieldTransition)
+            }
 
-            SplickTextField(
-                languageService.text(.changePasswordNewPassword),
-                text: $viewModel.newPassword,
-                isSecure: true,
-                errorMessage: viewModel.passwordError,
-                icon: "lock",
-                validationStatus: viewModel.passwordStrength.isStrong && !viewModel.newPassword.isEmpty ? .valid : .neutral,
-                showsPasswordVisibilityToggle: true,
-                isPasswordVisible: $isNewPasswordVisible,
-                passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
-                passwordHiddenAccessibilityLabel: languageService.text(.authHidePassword)
-            )
-            .textContentType(.newPassword)
-            .onChange(of: viewModel.newPassword) { _ in viewModel.validatePasswordField() }
+            if verifiedRevealStep >= (showMascot ? 3 : 2) {
+                SplickTextField(
+                    languageService.text(.changePasswordNewPassword),
+                    text: $viewModel.newPassword,
+                    isSecure: true,
+                    errorMessage: viewModel.passwordError,
+                    icon: "lock",
+                    validationStatus: viewModel.passwordStrength.isStrong && !viewModel.newPassword.isEmpty ? .valid : .neutral,
+                    showsPasswordVisibilityToggle: true,
+                    isPasswordVisible: $isNewPasswordVisible,
+                    passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
+                    passwordHiddenAccessibilityLabel: languageService.text(.authHidePassword)
+                )
+                .textContentType(.newPassword)
+                .onChange(of: viewModel.newPassword) { _ in viewModel.validatePasswordField() }
+                .transition(verifiedFieldTransition)
+            }
 
-            SplickTextField(
-                languageService.text(.changePasswordConfirmPassword),
-                text: $viewModel.confirmPassword,
-                isSecure: true,
-                errorMessage: viewModel.confirmPasswordError,
-                icon: "lock.fill",
-                validationStatus: passwordsMatchStatus,
-                showsPasswordVisibilityToggle: true,
-                isPasswordVisible: $isConfirmPasswordVisible,
-                passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
-                passwordHiddenAccessibilityLabel: languageService.text(.authHidePassword)
-            )
-            .textContentType(.newPassword)
-            .onChange(of: viewModel.confirmPassword) { _ in viewModel.validateConfirmPasswordField() }
+            if verifiedRevealStep >= (showMascot ? 4 : 3) {
+                SplickTextField(
+                    languageService.text(.changePasswordConfirmPassword),
+                    text: $viewModel.confirmPassword,
+                    isSecure: true,
+                    errorMessage: viewModel.confirmPasswordError,
+                    icon: "lock.fill",
+                    validationStatus: passwordsMatchStatus,
+                    showsPasswordVisibilityToggle: true,
+                    isPasswordVisible: $isConfirmPasswordVisible,
+                    passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
+                    passwordHiddenAccessibilityLabel: languageService.text(.authHidePassword)
+                )
+                .textContentType(.newPassword)
+                .onChange(of: viewModel.confirmPassword) { _ in viewModel.validateConfirmPasswordField() }
+                .transition(verifiedFieldTransition)
+            }
 
-            if let error = viewModel.state.error {
+            if verifiedRevealStep >= (showMascot ? 5 : 4), let error = viewModel.state.error {
                 Text(error)
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.error)
                     .multilineTextAlignment(.center)
+                    .transition(verifiedFieldTransition)
             }
 
-            SplickButton(
-                languageService.text(.changePasswordUpdate),
-                isLoading: viewModel.state.isLoading,
-                isDisabled: submitDisabled
-            ) {
-                Task { await viewModel.changePassword() }
+            if verifiedRevealStep >= (showMascot ? 5 : 4) {
+                SplickButton(
+                    languageService.text(.changePasswordUpdate),
+                    isLoading: viewModel.state.isLoading,
+                    isDisabled: submitDisabled
+                ) {
+                    Task { await viewModel.changePassword() }
+                }
+                .transition(verifiedFieldTransition)
             }
         }
-        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    private var verifiedFieldTransition: AnyTransition {
+        .asymmetric(
+            insertion: .move(edge: .bottom).combined(with: .opacity),
+            removal: .opacity
+        )
+    }
+
+    private func animateVerifiedReveal(maxSteps: Int) {
+        verifiedRevealStep = 0
+
+        Task { @MainActor in
+            for step in 1...maxSteps {
+                try? await Task.sleep(nanoseconds: 55_000_000)
+                withAnimation(.spring(response: 0.46, dampingFraction: 0.84)) {
+                    verifiedRevealStep = step
+                }
+            }
+        }
     }
 
     private var passwordsMatchStatus: FieldValidationStatus {
