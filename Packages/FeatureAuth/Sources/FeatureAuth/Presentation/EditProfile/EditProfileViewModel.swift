@@ -75,7 +75,9 @@ public final class EditProfileViewModel: ObservableObject {
             let user = try await updateProfileUseCase.execute(
                 displayName: nameToSend,
                 avatarUrl: avatarToSend,
-                preferredLocale: nil
+                preferredLocale: nil,
+                dateOfBirth: nil,
+                username: nil
             )
             state = .loaded(user)
             return user
