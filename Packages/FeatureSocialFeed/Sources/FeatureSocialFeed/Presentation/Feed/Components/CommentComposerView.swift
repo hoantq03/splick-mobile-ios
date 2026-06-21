@@ -1,14 +1,21 @@
 import SwiftUI
 import PhotosUI
 import UniformTypeIdentifiers
+import Common
 import DesignSystem
+import Localization
 import SplickDomain
 import FeatureStickers
 
 struct CommentComposerView: View {
+    @EnvironmentObject private var languageService: LanguageService
+    @EnvironmentObject private var emojiStore: CustomEmojiStore
+    @Environment(\.customEmojiDependencies) private var customEmojiDependencies
+
     let placeholder: String
     /// When set (e.g. user tapped Reply), pre-fills `@username ` for mention + server push.
     let prefillMentionUsername: String?
+    let groupId: UUID?
     @Binding var isFocused: Bool
     let onSubmit: (String, [CommentSubmissionAttachment]) -> Void
     private let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
@@ -24,6 +31,8 @@ struct CommentComposerView: View {
     @State private var photoPickerItems: [PhotosPickerItem] = []
     @State private var showFileImporter = false
     @State private var showGifPicker = false
+    @State private var showEmojiInsertPicker = false
+    @State private var showCustomEmojiUpload = false
 
     private let composerHeight: CGFloat = 36
 
@@ -31,6 +40,7 @@ struct CommentComposerView: View {
         placeholder: String,
         prefillMentionUsername: String? = nil,
         isFocused: Binding<Bool> = .constant(false),
+        groupId: UUID? = nil,
         fetchFriendsUseCase: FetchFriendsUseCaseProtocol? = nil,
         gifPickerViewModel: GifPickerViewModel? = nil,
         onSubmit: @escaping (String, [CommentSubmissionAttachment]) -> Void
@@ -38,6 +48,7 @@ struct CommentComposerView: View {
         self.placeholder = placeholder
         self.prefillMentionUsername = prefillMentionUsername
         _isFocused = isFocused
+        self.groupId = groupId
         self.fetchFriendsUseCase = fetchFriendsUseCase
         self.gifPickerViewModel = gifPickerViewModel
         self.onSubmit = onSubmit
@@ -70,18 +81,6 @@ struct CommentComposerView: View {
 
             HStack(alignment: .center, spacing: 8) {
                 HStack(spacing: 2) {
-                    if fetchFriendsUseCase != nil {
-                        Button {
-                            draft += draft.isEmpty || draft.last?.isWhitespace == true ? "@" : " @"
-                            syncMentionPicker(with: draft)
-                        } label: {
-                            Text("@")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                                .frame(width: 28, height: composerHeight)
-                        }
-                    }
-
                     PhotosPicker(
                         selection: $photoPickerItems,
                         maxSelectionCount: 10,
@@ -105,15 +104,8 @@ struct CommentComposerView: View {
                             .frame(width: 28, height: composerHeight)
                     }
 
-                    if gifPickerViewModel != nil {
-                        Button {
-                            showGifPicker = true
-                        } label: {
-                            Image(systemName: "face.smiling")
-                                .font(.system(size: 14))
-                                .foregroundStyle(SplickTheme.Colors.textSecondary)
-                                .frame(width: 28, height: composerHeight)
-                        }
+                    if gifPickerViewModel != nil || groupId != nil {
+                        emojiMenuButton
                     }
                 }
 
@@ -179,6 +171,79 @@ struct CommentComposerView: View {
                 .presentationDetents([.medium, .large])
             }
         }
+        .sheet(isPresented: $showEmojiInsertPicker) {
+            EmojiPickerSheet(
+                groupId: groupId,
+                mode: .inlineInsert,
+                onPick: { emoji in insertEmoji(emoji) },
+                onOpenUpload: groupId != nil ? { openCustomEmojiUpload() } : nil
+            )
+        }
+        .sheet(isPresented: $showCustomEmojiUpload) {
+            if let groupId, let deps = customEmojiDependencies {
+                CustomEmojiUploadSheet(
+                    groupId: groupId,
+                    currentUserId: nil,
+                    customEmojiFetcher: deps.fetcher,
+                    uploadMediaUseCase: deps.uploadMediaUseCase,
+                    addEmojiUseCase: deps.addEmojiUseCase,
+                    deleteEmojiUseCase: deps.deleteEmojiUseCase
+                )
+            }
+        }
+    }
+
+    private func openCustomEmojiUpload() {
+        showEmojiInsertPicker = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            showCustomEmojiUpload = true
+        }
+    }
+
+    @ViewBuilder
+    private var emojiMenuButton: some View {
+        let showsGif = gifPickerViewModel != nil
+        let showsEmoji = groupId != nil || showsGif
+
+        if showsGif && showsEmoji {
+            Menu {
+                if showsGif {
+                    Button {
+                        showGifPicker = true
+                    } label: {
+                        Label("GIF", systemImage: "photo.on.rectangle.angled")
+                    }
+                }
+                Button {
+                    showEmojiInsertPicker = true
+                } label: {
+                    Label(languageService.text(.feedEmojiPickerTitle), systemImage: "face.smiling")
+                }
+            } label: {
+                Image(systemName: "face.smiling")
+                    .font(.system(size: 14))
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    .frame(width: 28, height: composerHeight)
+            }
+        } else if showsGif {
+            Button {
+                showGifPicker = true
+            } label: {
+                Image(systemName: "face.smiling")
+                    .font(.system(size: 14))
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    .frame(width: 28, height: composerHeight)
+            }
+        } else {
+            Button {
+                showEmojiInsertPicker = true
+            } label: {
+                Image(systemName: "face.smiling")
+                    .font(.system(size: 14))
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    .frame(width: 28, height: composerHeight)
+            }
+        }
     }
 
     private func applyPrefillMention(_ username: String?) {
@@ -221,6 +286,15 @@ struct CommentComposerView: View {
         draft.replaceSubrange(context.replaceRange, with: mention)
         showMentionPicker = false
         activeMentionQuery = ""
+    }
+
+    private func insertEmoji(_ emoji: String) {
+        let token = EmojiKind.from(emoji).storageValue
+        if draft.isEmpty || draft.last?.isWhitespace == true {
+            draft += token
+        } else {
+            draft += " \(token)"
+        }
     }
 
     private func attachmentChip(_ item: CommentSubmissionAttachment, index: Int) -> some View {
