@@ -248,6 +248,8 @@ struct ProfileSettingsView: View {
     @State private var showTheme = false
     @State private var showAppIcon = false
     @State private var showWidget = false
+    @State private var showLanguagePicker = false
+    @State private var languageDraft = AppLocale.default
     @State private var showAvatarOptions = false
     @State private var showAvatarViewer = false
     @State private var showPhotoPicker = false
@@ -278,7 +280,6 @@ struct ProfileSettingsView: View {
                     accountSettingsGroup
                     personalProfileSettingsGroup
                     appSettingsGroup
-                    languageSection
 
                     SplickButton(
                         languageService.text(.profileSignOut),
@@ -348,6 +349,9 @@ struct ProfileSettingsView: View {
             }
             .sheet(isPresented: $showBirthdayPicker) {
                 birthdayPickerSheet
+            }
+            .sheet(isPresented: $showLanguagePicker) {
+                languagePickerSheet
             }
             .sheet(isPresented: $showChangeUsername) {
                 if let user = appState.currentUser {
@@ -698,6 +702,51 @@ struct ProfileSettingsView: View {
         .presentationDetents([.large])
     }
 
+    private var languagePickerSheet: some View {
+        NavigationStack {
+            List {
+                ForEach(AppLocale.allCases) { locale in
+                    Button {
+                        languageDraft = locale
+                    } label: {
+                        HStack {
+                            Text(languageService.text(locale.displayNameKey))
+                                .foregroundStyle(SplickTheme.Colors.textPrimary)
+                            Spacer()
+                            if languageDraft == locale {
+                                Image(systemName: "checkmark")
+                                    .font(.body.weight(.semibold))
+                                    .foregroundStyle(SplickTheme.Colors.primary)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle(languageService.text(.profileLanguage))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(languageService.text(.commonCancel)) {
+                        showLanguagePicker = false
+                    }
+                    .disabled(isUpdatingLanguage)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(languageService.text(.commonDone)) {
+                        showLanguagePicker = false
+                        if languageDraft != languageService.locale {
+                            Task { await updateLanguage(languageDraft) }
+                        }
+                    }
+                    .disabled(isUpdatingLanguage)
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
     private var accountSettingsGroup: some View {
         ProfileSettingsGroup(
             title: languageService.text(.profileGroupAccount),
@@ -775,6 +824,15 @@ struct ProfileSettingsView: View {
                     icon: "bell",
                     title: languageService.text(.profileNotifications),
                     action: { showNotifications = true }
+                ),
+                ProfileSettingsItem(
+                    icon: "globe",
+                    title: languageService.text(.profileLanguage),
+                    subtitle: languageService.text(languageService.locale.displayNameKey),
+                    action: {
+                        languageDraft = languageService.locale
+                        showLanguagePicker = true
+                    }
                 ),
                 ProfileSettingsItem(
                     icon: "paintbrush",
@@ -908,29 +966,6 @@ struct ProfileSettingsView: View {
             showEditDisplayName = false
         } catch {
             displayNameError = languageService.localizedMessage(for: error)
-        }
-    }
-
-    private var languageSection: some View {
-        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-            Text(languageService.text(.profileLanguage))
-                .font(SplickTheme.Typography.caption)
-                .foregroundStyle(SplickTheme.Colors.textSecondary)
-                .padding(.horizontal, SplickTheme.Spacing.xl)
-
-            Picker(languageService.text(.profileLanguage), selection: Binding(
-                get: { languageService.locale },
-                set: { newLocale in
-                    Task { await updateLanguage(newLocale) }
-                }
-            )) {
-                ForEach(AppLocale.allCases) { locale in
-                    Text(languageService.text(locale.displayNameKey)).tag(locale)
-                }
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, SplickTheme.Spacing.xl)
-            .disabled(isUpdatingLanguage || appState.currentUser == nil)
         }
     }
 
