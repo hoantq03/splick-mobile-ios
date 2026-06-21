@@ -13,19 +13,11 @@ enum SessionMetadata {
     }
 
     static var deviceName: String {
-        #if canImport(UIKit)
-        return UIDevice.current.model
-        #else
-        return "Splick"
-        #endif
+        DeviceMetadata.marketingName
     }
 
     static var deviceInfo: String {
-        #if canImport(UIKit)
-        return "\(UIDevice.current.model) · \(UIDevice.current.systemName) \(UIDevice.current.systemVersion)"
-        #else
-        return "Splick"
-        #endif
+        "\(DeviceMetadata.marketingName) · \(DeviceMetadata.platformLine)"
     }
 
     /// Approximate location without GPS permission (region + timezone).
