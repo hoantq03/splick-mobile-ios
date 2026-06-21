@@ -9,6 +9,12 @@ public struct SplickTextField: View {
     private let validationStatus: FieldValidationStatus
     private let onValidationAccessoryTap: (() -> Void)?
     private let cornerRadius: CGFloat
+    private let showsPasswordVisibilityToggle: Bool
+    private let passwordVisibleAccessibilityLabel: String
+    private let passwordHiddenAccessibilityLabel: String
+    private let externalPasswordVisible: Binding<Bool>?
+
+    @State private var internalPasswordVisible = false
 
     public init(
         _ placeholder: String,
@@ -18,7 +24,11 @@ public struct SplickTextField: View {
         icon: String? = nil,
         validationStatus: FieldValidationStatus = .neutral,
         onValidationAccessoryTap: (() -> Void)? = nil,
-        cornerRadius: CGFloat = SplickTheme.CornerRadius.small
+        cornerRadius: CGFloat = SplickTheme.CornerRadius.control,
+        showsPasswordVisibilityToggle: Bool = false,
+        isPasswordVisible: Binding<Bool>? = nil,
+        passwordVisibleAccessibilityLabel: String = "Show password",
+        passwordHiddenAccessibilityLabel: String = "Hide password"
     ) {
         self.placeholder = placeholder
         self._text = text
@@ -28,6 +38,10 @@ public struct SplickTextField: View {
         self.validationStatus = validationStatus
         self.onValidationAccessoryTap = onValidationAccessoryTap
         self.cornerRadius = cornerRadius
+        self.showsPasswordVisibilityToggle = showsPasswordVisibilityToggle
+        self.externalPasswordVisible = isPasswordVisible
+        self.passwordVisibleAccessibilityLabel = passwordVisibleAccessibilityLabel
+        self.passwordHiddenAccessibilityLabel = passwordHiddenAccessibilityLabel
     }
 
     public var body: some View {
@@ -40,13 +54,31 @@ public struct SplickTextField: View {
                 }
 
                 Group {
-                    if isSecure {
+                    if isSecure, showsPasswordVisibilityToggle, passwordVisibleBinding.wrappedValue {
+                        TextField(placeholder, text: $text)
+                    } else if isSecure {
                         SecureField(placeholder, text: $text)
                     } else {
                         TextField(placeholder, text: $text)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+                if isSecure, showsPasswordVisibilityToggle {
+                    Button {
+                        passwordVisibleBinding.wrappedValue.toggle()
+                    } label: {
+                        Image(systemName: passwordVisibleBinding.wrappedValue ? "eye.slash" : "eye")
+                            .font(.system(size: 18))
+                            .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(
+                        passwordVisibleBinding.wrappedValue
+                            ? passwordHiddenAccessibilityLabel
+                            : passwordVisibleAccessibilityLabel
+                    )
+                }
 
                 validationAccessory
             }
@@ -67,6 +99,10 @@ public struct SplickTextField: View {
                     .foregroundStyle(SplickTheme.Colors.error)
             }
         }
+    }
+
+    private var passwordVisibleBinding: Binding<Bool> {
+        externalPasswordVisible ?? $internalPasswordVisible
     }
 
     @ViewBuilder

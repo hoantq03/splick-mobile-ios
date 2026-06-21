@@ -20,7 +20,7 @@ public struct SplickButton: View {
         style: Style = .primary,
         isLoading: Bool = false,
         isDisabled: Bool = false,
-        cornerRadius: CGFloat = SplickTheme.CornerRadius.medium,
+        cornerRadius: CGFloat = SplickTheme.CornerRadius.control,
         action: @escaping () -> Void
     ) {
         self.title = title

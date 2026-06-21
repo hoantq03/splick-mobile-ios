@@ -21,7 +21,7 @@ public struct SplickOtpField: View {
         length: Int = SplickOtpField.defaultLength,
         errorMessage: String? = nil,
         autoFocus: Bool = true,
-        cornerRadius: CGFloat = SplickTheme.CornerRadius.medium,
+        cornerRadius: CGFloat = SplickTheme.CornerRadius.control,
         onComplete: ((String) -> Void)? = nil
     ) {
         self._code = code

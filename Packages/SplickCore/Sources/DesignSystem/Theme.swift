@@ -70,6 +70,8 @@ public enum SplickTheme {
         public static let large: CGFloat = 16
         public static let extraLarge: CGFloat = 24
         public static let pill: CGFloat = 999
+        /// Text fields, buttons, and OTP boxes in profile/settings flows.
+        public static let control: CGFloat = extraLarge
     }
 
     // MARK: - Shadows
