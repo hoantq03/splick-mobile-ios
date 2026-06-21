@@ -12,27 +12,27 @@ public final class CustomEmojiRepository: CustomEmojiRepositoryProtocol {
         self.apiClient = apiClient
     }
 
-    public func fetchEmojis(groupId: UUID) async throws -> [CustomEmoji] {
-        let dtos: [CustomEmojiResponseDTO] = try await apiClient.request(
-            CustomEmojiEndpoint.list(groupId: groupId)
-        )
-        return dtos.compactMap { CustomEmojiMapper.toDomain($0, groupId: groupId) }
+    public func fetchAllEmojis() async throws -> [CustomEmoji] {
+        let dtos: [CustomEmojiResponseDTO] = try await apiClient.request(CustomEmojiEndpoint.listAll)
+        return dtos.compactMap { CustomEmojiMapper.toDomain($0) }
     }
 
-    public func addEmoji(groupId: UUID, shortcode: String, mediaId: UUID) async throws -> CustomEmoji {
+    public func fetchMyEmojis() async throws -> [CustomEmoji] {
+        let dtos: [CustomEmojiResponseDTO] = try await apiClient.request(CustomEmojiEndpoint.listMine)
+        return dtos.compactMap { CustomEmojiMapper.toDomain($0) }
+    }
+
+    public func addEmoji(alias: String?, mediaId: UUID) async throws -> CustomEmoji {
         let dto: CustomEmojiResponseDTO = try await apiClient.request(
-            CustomEmojiEndpoint.create(
-                groupId: groupId,
-                request: CreateCustomEmojiRequestDTO(shortcode: shortcode, mediaId: mediaId)
-            )
+            CustomEmojiEndpoint.create(request: CreateCustomEmojiRequestDTO(alias: alias, mediaId: mediaId))
         )
-        guard let emoji = CustomEmojiMapper.toDomain(dto, groupId: groupId) else {
+        guard let emoji = CustomEmojiMapper.toDomain(dto) else {
             throw CustomEmojiError.invalidResponse
         }
         return emoji
     }
 
-    public func deleteEmoji(groupId: UUID, emojiId: UUID) async throws {
-        try await apiClient.request(CustomEmojiEndpoint.delete(groupId: groupId, emojiId: emojiId))
+    public func deleteEmoji(emojiId: UUID) async throws {
+        try await apiClient.request(CustomEmojiEndpoint.delete(emojiId: emojiId))
     }
 }

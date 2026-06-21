@@ -148,7 +148,7 @@ struct PostDetailView: View {
             }
         }
         .sheet(isPresented: $showEmojiPicker) {
-            EmojiPickerSheet(groupId: livePost.groupId) { emoji in
+            EmojiPickerSheet(currentUserId: currentUserSummary?.id) { emoji in
                 if let error = feedViewModel.react(to: post.id, emoji: emoji) {
                     feedViewModel.alertMessage = error
                 }
@@ -181,6 +181,7 @@ struct PostDetailView: View {
                 placeholder: composerPlaceholder,
                 prefillMentionUsername: replyTarget?.author.username,
                 isFocused: $composerFocused,
+                groupId: livePost.groupId,
                 fetchFriendsUseCase: fetchFriendsUseCase,
                 gifPickerViewModel: makeGifPickerViewModel?(livePost.groupId)
             ) { text, attachments in

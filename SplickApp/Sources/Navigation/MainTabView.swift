@@ -38,6 +38,10 @@ struct MainTabView: View {
         selectedTabContent
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .onAppear { badgeCounts = container.badgeCountService.counts }
+            .task(id: appState.currentUser?.id) {
+                guard appState.currentUser != nil else { return }
+                await container.customEmojiStore.load(fetcher: container.customEmojiRepository)
+            }
             .onReceive(container.badgeCountService.$counts) { badgeCounts = $0 }
             .onReceive(container.messagingWebSocketClient.eventSubject) { event in
                 if case .newMessage = event {
@@ -128,7 +132,7 @@ struct MainTabView: View {
                 },
                 isTabActive: true
             )
-            .environment(\.customEmojiStore, container.customEmojiStore)
+            .environmentObject(container.customEmojiStore)
             .environment(\.customEmojiDependencies, container.customEmojiDependencies)
 
         case .expenses:
@@ -179,6 +183,8 @@ struct MainTabView: View {
                 revokeGroupQrUseCase: container.revokeGroupQrUseCase,
                 onBadgeCountsChanged: { await container.badgeCountService.refresh() }
             )
+            .environmentObject(container.customEmojiStore)
+            .environment(\.customEmojiDependencies, container.customEmojiDependencies)
 
         case .camera:
             PostCaptureFlowView(onDismiss: {

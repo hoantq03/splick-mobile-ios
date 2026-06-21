@@ -1,6 +1,7 @@
 import Foundation
 import Networking
 import Common
+import SplickDomain
 
 public final class MediaRepository: MediaRepositoryProtocol, Sendable {
     private let apiClient: APIClientProtocol

@@ -1,17 +1,17 @@
 import Foundation
 
-public protocol DeleteGroupCustomEmojiUseCaseProtocol: Sendable {
-    func execute(groupId: UUID, emojiId: UUID) async throws
+public protocol DeleteUserCustomEmojiUseCaseProtocol: Sendable {
+    func execute(emojiId: UUID) async throws
 }
 
-public final class DeleteGroupCustomEmojiUseCase: DeleteGroupCustomEmojiUseCaseProtocol, Sendable {
+public final class DeleteUserCustomEmojiUseCase: DeleteUserCustomEmojiUseCaseProtocol, Sendable {
     private let repository: CustomEmojiRepositoryProtocol
 
     public init(repository: CustomEmojiRepositoryProtocol) {
         self.repository = repository
     }
 
-    public func execute(groupId: UUID, emojiId: UUID) async throws {
-        try await repository.deleteEmoji(groupId: groupId, emojiId: emojiId)
+    public func execute(emojiId: UUID) async throws {
+        try await repository.deleteEmoji(emojiId: emojiId)
     }
 }

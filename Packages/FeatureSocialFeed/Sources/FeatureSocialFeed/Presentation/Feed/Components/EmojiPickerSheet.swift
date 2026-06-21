@@ -12,7 +12,7 @@ private enum EmojiPickerTab: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-/// Popup for picking a reaction and customizing the six quick-reaction slots on the feed bar.
+/// Popup for picking a reaction emoji or inserting a custom emoji into text.
 struct EmojiPickerSheet: View {
     enum Mode {
         /// Reaction bar: quick slots + optional Done to persist preferences.
@@ -26,7 +26,7 @@ struct EmojiPickerSheet: View {
     @Environment(\.customEmojiDependencies) private var customEmojiDependencies
     @ObservedObject private var preferences = QuickReactionPreferences.shared
 
-    let groupId: UUID?
+    let currentUserId: UUID?
     let mode: Mode
     let onPick: (String) -> Void
     var onOpenUpload: (() -> Void)?
@@ -37,22 +37,20 @@ struct EmojiPickerSheet: View {
     @State private var selectedTab: EmojiPickerTab
 
     init(
-        groupId: UUID?,
+        currentUserId: UUID?,
         mode: Mode = .reaction,
         onPick: @escaping (String) -> Void,
         onOpenUpload: (() -> Void)? = nil
     ) {
-        self.groupId = groupId
+        self.currentUserId = currentUserId
         self.mode = mode
         self.onPick = onPick
         self.onOpenUpload = onOpenUpload
-        // Default to "Của nhóm" tab when there's a group and we're inserting into comment.
-        // For reaction mode keep unicode first (user is reacting, not uploading).
-        _selectedTab = State(initialValue: (groupId != nil && mode == .inlineInsert) ? .custom : .unicode)
+        _selectedTab = State(initialValue: mode == .inlineInsert ? .custom : .unicode)
     }
 
     private let unicodeColumns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 8)
-    private let customColumns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 5)
+    private let customColumns = Array(repeating: GridItem(.flexible(), spacing: 5), count: 5)
 
     private static let emojiCatalog: [String] = [
         "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍",
@@ -69,14 +67,10 @@ struct EmojiPickerSheet: View {
                     if mode == .reaction {
                         quickBarSection
                     }
-                    if groupId != nil {
-                        tabPicker
-                    }
+                    tabPicker
                     switch selectedTab {
                     case .unicode:
-                        if groupId != nil {
-                            customEmojiQuickBanner
-                        }
+                        customEmojiQuickBanner
                         emojiGridSection
                     case .custom:
                         customEmojiSection
@@ -100,13 +94,11 @@ struct EmojiPickerSheet: View {
                         }
                     }
                 }
-                if onOpenUpload != nil, groupId != nil {
-                    ToolbarItem(placement: .primaryAction) {
-                        Button {
-                            onOpenUpload?()
-                        } label: {
-                            Label(languageService.text(.feedCustomEmojiUploadAction), systemImage: "plus.circle")
-                        }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        onOpenUpload?()
+                    } label: {
+                        Label(languageService.text(.feedCustomEmojiUploadAction), systemImage: "plus.circle")
                     }
                 }
             }
@@ -115,27 +107,31 @@ struct EmojiPickerSheet: View {
                     draftQuickEmojis = preferences.quickEmojis
                 }
             }
-            .task(id: groupId) {
-                guard let groupId, let fetcher = customEmojiDependencies?.fetcher else { return }
-                await emojiStore.load(groupId: groupId, fetcher: fetcher)
-            }
         }
         .presentationDetents([.medium, .large])
     }
 
+    private var tabPicker: some View {
+        Picker("Emoji source", selection: $selectedTab) {
+            Text(languageService.text(.feedEmojiPickerAllTitle)).tag(EmojiPickerTab.unicode)
+            Text(languageService.text(.feedEmojiPickerCustomTabTitle)).tag(EmojiPickerTab.custom)
+        }
+        .pickerStyle(.segmented)
+    }
+
     private var customEmojiQuickBanner: some View {
-        let emojis = groupId.map { emojiStore.emojis(for: $0) } ?? []
+        let myEmojis = currentUserId.map { emojiStore.emojis(ownedBy: $0) } ?? []
         return Button {
-            if emojis.isEmpty, let onOpenUpload {
-                onOpenUpload()
+            if myEmojis.isEmpty {
+                onOpenUpload?()
             } else {
                 selectedTab = .custom
             }
         } label: {
             HStack(spacing: 8) {
-                Image(systemName: emojis.isEmpty ? "plus.circle.fill" : "face.smiling.fill")
+                Image(systemName: myEmojis.isEmpty ? "plus.circle.fill" : "face.smiling.fill")
                     .font(.system(size: 14, weight: .semibold))
-                Text(emojis.isEmpty
+                Text(myEmojis.isEmpty
                      ? languageService.text(.feedCustomEmojiUploadAction)
                      : languageService.text(.feedEmojiPickerCustomTabTitle))
                     .font(SplickTheme.Typography.caption.weight(.semibold))
@@ -150,14 +146,6 @@ struct EmojiPickerSheet: View {
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(.plain)
-    }
-
-    private var tabPicker: some View {
-        Picker("Emoji source", selection: $selectedTab) {
-            Text(languageService.text(.feedEmojiPickerAllTitle)).tag(EmojiPickerTab.unicode)
-            Text(languageService.text(.feedEmojiPickerCustomTabTitle)).tag(EmojiPickerTab.custom)
-        }
-        .pickerStyle(.segmented)
     }
 
     private var quickBarSection: some View {
@@ -184,7 +172,7 @@ struct EmojiPickerSheet: View {
         return Button {
             selectedSlot = isSelected ? nil : index
         } label: {
-            EmojiView(value: draftQuickEmojis[index], groupId: groupId, size: 26)
+            EmojiView(value: draftQuickEmojis[index], size: 26)
                 .frame(width: 44, height: 44)
                 .background(
                     Circle()
@@ -239,39 +227,31 @@ struct EmojiPickerSheet: View {
                 Spacer()
             }
 
-            if onOpenUpload != nil {
-                Button(action: { onOpenUpload?() }) {
-                    Label(languageService.text(.feedCustomEmojiUploadAction), systemImage: "square.and.arrow.up")
-                        .font(SplickTheme.Typography.callout.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(SplickTheme.Colors.primaryGradientStart.opacity(0.12))
-                        .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                }
-                .buttonStyle(.plain)
+            Button(action: { onOpenUpload?() }) {
+                Label(languageService.text(.feedCustomEmojiUploadAction), systemImage: "square.and.arrow.up")
+                    .font(SplickTheme.Typography.callout.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(SplickTheme.Colors.primaryGradientStart.opacity(0.12))
+                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
+            .buttonStyle(.plain)
 
-            let emojis = groupId.map { emojiStore.emojis(for: $0) } ?? []
-            if emojis.isEmpty {
-                Button {
-                    onOpenUpload?()
-                } label: {
-                    Text(languageService.text(.feedCustomEmojiEmpty))
-                        .font(SplickTheme.Typography.caption)
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .buttonStyle(.plain)
-                .disabled(onOpenUpload == nil)
+            let myEmojis = currentUserId.map { emojiStore.emojis(ownedBy: $0) } ?? []
+            if myEmojis.isEmpty {
+                Text(languageService.text(.feedCustomEmojiEmpty))
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 LazyVGrid(columns: customColumns, spacing: 10) {
-                    ForEach(emojis) { emoji in
+                    ForEach(myEmojis) { emoji in
                         Button {
                             handleEmojiTap(emoji.colonCode)
                         } label: {
                             VStack(spacing: 4) {
-                                EmojiView(value: emoji.colonCode, groupId: groupId, size: 36)
+                                EmojiView(value: emoji.colonCode, size: 36)
                                     .frame(height: 40)
                                 Text(":\(emoji.shortcode):")
                                     .font(.caption2)

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Read-only text with `@username` in bold blue.
+/// Read-only text with `@username` in bold blue and optional `:custom_emoji:` images.
 public struct MentionText: View {
     let text: String
     var fontSize: CGFloat = 12
@@ -17,25 +17,6 @@ public struct MentionText: View {
     }
 
     public var body: some View {
-        Group {
-            if text.isEmpty {
-                Text(verbatim: "")
-            } else {
-                styledText
-            }
-        }
-    }
-
-    private var styledText: Text {
-        MentionStyler.segments(in: text).reduce(Text(verbatim: "")) { partial, segment in
-            let piece = segment.isMention
-                ? Text(segment.content)
-                    .font(.system(size: fontSize, weight: .semibold))
-                    .foregroundColor(SplickTheme.Colors.info)
-                : Text(segment.content)
-                    .font(.system(size: fontSize))
-                    .foregroundColor(plainColor)
-            return partial + piece
-        }
+        EmojiResolvingText(text, fontSize: fontSize, plainColor: plainColor)
     }
 }

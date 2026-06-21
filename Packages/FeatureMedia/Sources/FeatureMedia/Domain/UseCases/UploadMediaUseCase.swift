@@ -45,7 +45,7 @@ public final class UploadMediaUseCase: UploadMediaUseCaseProtocol, Sendable {
         purpose: MediaUploadPurpose,
         groupId: UUID?
     ) async throws -> MediaUploadResult {
-        let maxBytes = purpose == .groupCustomEmoji
+        let maxBytes = (purpose == .groupCustomEmoji || purpose == .userCustomEmoji)
             ? AppConstants.Media.maxCustomEmojiSizeBytes
             : AppConstants.Media.maxAvatarSizeBytes
         guard imageData.count <= maxBytes else {

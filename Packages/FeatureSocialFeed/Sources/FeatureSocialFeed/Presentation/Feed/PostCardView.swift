@@ -8,7 +8,6 @@ import FeatureStickers
 private enum PostCardSheet: Identifiable {
     case reactions
     case emojiPicker
-    case customEmojiUpload
     case viewers
     case share
 
@@ -16,7 +15,6 @@ private enum PostCardSheet: Identifiable {
         switch self {
         case .reactions: "reactions"
         case .emojiPicker: "emojiPicker"
-        case .customEmojiUpload: "customEmojiUpload"
         case .viewers: "viewers"
         case .share: "share"
         }
@@ -25,7 +23,7 @@ private enum PostCardSheet: Identifiable {
 
 struct PostCardView: View {
     @EnvironmentObject private var languageService: LanguageService
-    @Environment(\.customEmojiStore) private var emojiStore
+    @EnvironmentObject private var emojiStore: CustomEmojiStore
     @Environment(\.customEmojiDependencies) private var customEmojiDependencies
     let post: Post
     let currentUser: UserSummary?
@@ -48,6 +46,7 @@ struct PostCardView: View {
     @State private var mediaPageIndex = 0
     @State private var appliedInitialMediaIndex = false
     @State private var activeSheet: PostCardSheet?
+    @State private var showCustomEmojiUpload = false
     @State private var reminderSentMessage: String?
     @State private var cardFrameInGlobal: CGRect = .zero
     @State private var reactionAnchors: [String: CGPoint] = [:]
@@ -104,10 +103,6 @@ struct PostCardView: View {
             mediaPageIndex = min(initialMediaIndex, max(post.displayMediaItems.count - 1, 0))
             appliedInitialMediaIndex = true
         }
-        .task(id: post.groupId) {
-            guard let groupId = post.groupId, let fetcher = customEmojiDependencies?.fetcher else { return }
-            await emojiStore.load(groupId: groupId, fetcher: fetcher)
-        }
         .coordinateSpace(name: "postCard")
         .background(
             GeometryReader { geo in
@@ -118,7 +113,7 @@ struct PostCardView: View {
         .onPreferenceChange(ReactionTargetAnchorsKey.self) { reactionAnchors = $0 }
         .overlay {
             ForEach(flyingEmojis) { flight in
-                FlyingEmojiView(flight: flight, groupId: post.groupId) {
+                FlyingEmojiView(flight: flight) {
                     flyingEmojis.removeAll { $0.id == flight.id }
                 }
             }
@@ -126,29 +121,21 @@ struct PostCardView: View {
         .sheet(item: $activeSheet) { sheet in
             switch sheet {
             case .reactions:
-                ReactionDetailSheet(summaries: post.userReactionSummaries(), groupId: post.groupId)
+                ReactionDetailSheet(summaries: post.userReactionSummaries())
             case .emojiPicker:
                 EmojiPickerSheet(
-                    groupId: post.groupId,
+                    currentUserId: currentUser?.id,
                     onPick: { emoji in onReact(emoji) },
-                    onOpenUpload: post.groupId == nil ? nil : { activeSheet = .customEmojiUpload }
+                    onOpenUpload: { openCustomEmojiUpload() }
                 )
-            case .customEmojiUpload:
-                if let groupId = post.groupId, let deps = customEmojiDependencies {
-                    CustomEmojiUploadSheet(
-                        groupId: groupId,
-                        currentUserId: currentUser?.id,
-                        customEmojiFetcher: deps.fetcher,
-                        uploadMediaUseCase: deps.uploadMediaUseCase,
-                        addEmojiUseCase: deps.addEmojiUseCase,
-                        deleteEmojiUseCase: deps.deleteEmojiUseCase
-                    )
-                }
             case .viewers:
                 ViewersListSheet(viewers: post.viewers, onUserTap: onUserTap)
             case .share:
                 SharePostSheet(post: post)
             }
+        }
+        .sheet(isPresented: $showCustomEmojiUpload) {
+            customEmojiUploadSheet
         }
         .alert(
             "Đã gửi",
@@ -316,10 +303,29 @@ struct PostCardView: View {
 
     // MARK: - Reactions
 
+    @ViewBuilder
+    private var customEmojiUploadSheet: some View {
+        if let deps = customEmojiDependencies {
+            CustomEmojiUploadSheet(
+                currentUserId: currentUser?.id,
+                customEmojiFetcher: deps.fetcher,
+                uploadMediaUseCase: deps.uploadMediaUseCase,
+                addEmojiUseCase: deps.addEmojiUseCase,
+                deleteEmojiUseCase: deps.deleteEmojiUseCase
+            )
+        }
+    }
+
+    private func openCustomEmojiUpload() {
+        activeSheet = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            showCustomEmojiUpload = true
+        }
+    }
+
     private var reactionBarRow: some View {
         HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
             InlineReactionBar(
-                groupId: post.groupId,
                 onReact: onReact,
                 onDragRelease: { emoji, sourceGlobal in
                     scheduleFlyingEmoji(emoji: emoji, sourceGlobal: sourceGlobal)
@@ -410,7 +416,7 @@ struct PostCardView: View {
             Button { activeSheet = .reactions } label: {
                 HStack(spacing: 6) {
                     ForEach(preview.top, id: \.userId) { summary in
-                        UserReactionBadgeView(summary: summary, groupId: post.groupId)
+                        UserReactionBadgeView(summary: summary)
                             .id(summary.userId)
                     }
                     if preview.otherPeopleCount > 0 {

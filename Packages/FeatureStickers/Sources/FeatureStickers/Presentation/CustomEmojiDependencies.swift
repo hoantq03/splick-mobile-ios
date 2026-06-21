@@ -2,19 +2,18 @@ import Foundation
 import SwiftUI
 import Common
 import FeatureMedia
-import FeatureStickers
 
 public struct CustomEmojiDependencies {
     public let fetcher: any CustomEmojiFetching
     public let uploadMediaUseCase: UploadMediaUseCaseProtocol
-    public let addEmojiUseCase: AddGroupCustomEmojiUseCaseProtocol
-    public let deleteEmojiUseCase: DeleteGroupCustomEmojiUseCaseProtocol
+    public let addEmojiUseCase: AddUserCustomEmojiUseCaseProtocol
+    public let deleteEmojiUseCase: DeleteUserCustomEmojiUseCaseProtocol
 
     public init(
         fetcher: any CustomEmojiFetching,
         uploadMediaUseCase: UploadMediaUseCaseProtocol,
-        addEmojiUseCase: AddGroupCustomEmojiUseCaseProtocol,
-        deleteEmojiUseCase: DeleteGroupCustomEmojiUseCaseProtocol
+        addEmojiUseCase: AddUserCustomEmojiUseCaseProtocol,
+        deleteEmojiUseCase: DeleteUserCustomEmojiUseCaseProtocol
     ) {
         self.fetcher = fetcher
         self.uploadMediaUseCase = uploadMediaUseCase

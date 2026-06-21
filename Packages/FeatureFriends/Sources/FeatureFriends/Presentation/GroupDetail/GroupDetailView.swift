@@ -2,12 +2,15 @@ import SwiftUI
 import DesignSystem
 import Common
 import FeatureMedia
+import FeatureStickers
 import Localization
 import SplickDomain
 
 struct GroupDetailView: View {
     @StateObject private var viewModel: GroupDetailViewModel
     @EnvironmentObject private var languageService: LanguageService
+    @EnvironmentObject private var emojiStore: CustomEmojiStore
+    @Environment(\.customEmojiDependencies) private var customEmojiDependencies
     let onUserTap: (UserSummary) -> Void
     let onGroupLeft: () -> Void
     let onGroupDeleted: () -> Void
@@ -30,6 +33,7 @@ struct GroupDetailView: View {
     @State private var showTransferOwnership = false
     @State private var confirmLeave = false
     @State private var confirmDelete = false
+    @State private var showCustomEmojiUpload = false
 
     init(
         group: SplickDomain.Group,
@@ -85,6 +89,7 @@ struct GroupDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
                 headerCard
+                customEmojiSection
                 if !viewModel.pendingMembers.isEmpty {
                     pendingMembersSection
                 }
@@ -146,6 +151,17 @@ struct GroupDetailView: View {
                     }
                 }
             )
+        }
+        .sheet(isPresented: $showCustomEmojiUpload) {
+            if let deps = customEmojiDependencies {
+                CustomEmojiUploadSheet(
+                    currentUserId: currentUserSummary?.id,
+                    customEmojiFetcher: deps.fetcher,
+                    uploadMediaUseCase: deps.uploadMediaUseCase,
+                    addEmojiUseCase: deps.addEmojiUseCase,
+                    deleteEmojiUseCase: deps.deleteEmojiUseCase
+                )
+            }
         }
         .task {
             await viewModel.load(currentUserId: currentUserSummary?.id)
@@ -267,6 +283,12 @@ struct GroupDetailView: View {
                 Label("Thêm thành viên", systemImage: "person.badge.plus")
             }
 
+            Button {
+                showCustomEmojiUpload = true
+            } label: {
+                Label(languageService.text(.feedCustomEmojiUploadTitle), systemImage: "face.smiling")
+            }
+
             if viewModel.isOwner(currentUserId: currentUserSummary?.id) {
                 Button {
                     showEditGroup = true
@@ -336,6 +358,73 @@ struct GroupDetailView: View {
                         .font(SplickTheme.Typography.caption)
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
                     Spacer()
+                }
+            }
+        }
+        .splickCard()
+    }
+
+    private var customEmojiSection: some View {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+            HStack {
+                Text(languageService.text(.feedCustomEmojiExistingTitle))
+                    .font(SplickTheme.Typography.headline)
+                    .foregroundStyle(SplickTheme.Colors.textPrimary)
+                Spacer()
+                Button(languageService.text(.feedCustomEmojiUploadAction)) {
+                    showCustomEmojiUpload = true
+                }
+                .font(SplickTheme.Typography.caption.weight(.semibold))
+            }
+
+            let emojis = currentUserSummary.map { emojiStore.emojis(ownedBy: $0.id) } ?? []
+            if emojis.isEmpty {
+                Button {
+                    showCustomEmojiUpload = true
+                } label: {
+                    HStack(spacing: SplickTheme.Spacing.sm) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.title3)
+                            .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                        Text(languageService.text(.feedCustomEmojiEmpty))
+                            .font(SplickTheme.Typography.caption)
+                            .foregroundStyle(SplickTheme.Colors.textSecondary)
+                            .multilineTextAlignment(.leading)
+                        Spacer()
+                    }
+                }
+                .buttonStyle(.plain)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(emojis) { emoji in
+                            VStack(spacing: 4) {
+                                EmojiView(value: emoji.colonCode, size: 40)
+                                Text(":\(emoji.shortcode):")
+                                    .font(.caption2)
+                                    .foregroundStyle(SplickTheme.Colors.textTertiary)
+                                    .lineLimit(1)
+                            }
+                        }
+                        Button {
+                            showCustomEmojiUpload = true
+                        } label: {
+                            VStack(spacing: 4) {
+                                Image(systemName: "plus")
+                                    .font(.title3)
+                                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                                    .frame(width: 40, height: 40)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .fill(SplickTheme.Colors.secondaryBackground)
+                                    )
+                                Text(languageService.text(.feedCustomEmojiAddAction))
+                                    .font(.caption2)
+                                    .foregroundStyle(SplickTheme.Colors.textTertiary)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
         }

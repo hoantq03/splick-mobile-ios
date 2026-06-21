@@ -31,7 +31,6 @@ struct FlyingEmojiFlight: Identifiable {
 /// Pop upward, arc toward target, shrink and fade (~0.22s total).
 struct FlyingEmojiView: View {
     let flight: FlyingEmojiFlight
-    var groupId: UUID?
     let onComplete: () -> Void
 
     @State private var position: CGPoint
@@ -66,7 +65,7 @@ struct FlyingEmojiView: View {
     }
 
     var body: some View {
-        EmojiView(value: flight.emoji, groupId: groupId, size: 28)
+        EmojiView(value: flight.emoji, size: 28)
             .scaleEffect(scale)
             .position(position)
             .opacity(opacity)

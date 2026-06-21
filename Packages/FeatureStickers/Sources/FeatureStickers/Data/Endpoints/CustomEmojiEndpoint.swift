@@ -2,22 +2,25 @@ import Foundation
 import Networking
 
 enum CustomEmojiEndpoint: APIEndpoint {
-    case list(groupId: UUID)
-    case create(groupId: UUID, request: CreateCustomEmojiRequestDTO)
-    case delete(groupId: UUID, emojiId: UUID)
+    case listAll
+    case listMine
+    case create(request: CreateCustomEmojiRequestDTO)
+    case delete(emojiId: UUID)
 
     var path: String {
         switch self {
-        case .list(let groupId), .create(let groupId, _):
-            return "/v1/social/groups/\(groupId)/emojis"
-        case .delete(let groupId, let emojiId):
-            return "/v1/social/groups/\(groupId)/emojis/\(emojiId)"
+        case .listAll:
+            return "/v1/social/emojis"
+        case .listMine, .create:
+            return "/v1/social/users/me/emojis"
+        case .delete(let emojiId):
+            return "/v1/social/emojis/\(emojiId)"
         }
     }
 
     var method: HTTPMethod {
         switch self {
-        case .list:
+        case .listAll, .listMine:
             return .get
         case .create:
             return .post
@@ -28,9 +31,9 @@ enum CustomEmojiEndpoint: APIEndpoint {
 
     var body: Encodable? {
         switch self {
-        case .create(_, let request):
+        case .create(let request):
             return request
-        case .list, .delete:
+        case .listAll, .listMine, .delete:
             return nil
         }
     }

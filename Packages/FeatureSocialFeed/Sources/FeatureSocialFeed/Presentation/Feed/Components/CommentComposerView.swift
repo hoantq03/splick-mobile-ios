@@ -104,9 +104,7 @@ struct CommentComposerView: View {
                             .frame(width: 28, height: composerHeight)
                     }
 
-                    if gifPickerViewModel != nil || groupId != nil {
-                        emojiMenuButton
-                    }
+                    emojiMenuButton
                 }
 
                 MentionTextField(
@@ -173,16 +171,15 @@ struct CommentComposerView: View {
         }
         .sheet(isPresented: $showEmojiInsertPicker) {
             EmojiPickerSheet(
-                groupId: groupId,
+                currentUserId: nil,
                 mode: .inlineInsert,
                 onPick: { emoji in insertEmoji(emoji) },
-                onOpenUpload: groupId != nil ? { openCustomEmojiUpload() } : nil
+                onOpenUpload: { openCustomEmojiUpload() }
             )
         }
         .sheet(isPresented: $showCustomEmojiUpload) {
-            if let groupId, let deps = customEmojiDependencies {
+            if let deps = customEmojiDependencies {
                 CustomEmojiUploadSheet(
-                    groupId: groupId,
                     currentUserId: nil,
                     customEmojiFetcher: deps.fetcher,
                     uploadMediaUseCase: deps.uploadMediaUseCase,
@@ -203,7 +200,7 @@ struct CommentComposerView: View {
     @ViewBuilder
     private var emojiMenuButton: some View {
         let showsGif = gifPickerViewModel != nil
-        let showsEmoji = groupId != nil || showsGif
+        let showsEmoji = true
 
         if showsGif && showsEmoji {
             Menu {

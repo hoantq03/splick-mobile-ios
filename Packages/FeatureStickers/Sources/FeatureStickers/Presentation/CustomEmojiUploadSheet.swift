@@ -9,30 +9,27 @@ import SplickDomain
 public struct CustomEmojiUploadSheet: View {
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.customEmojiStore) private var emojiStore
+    @EnvironmentObject private var emojiStore: CustomEmojiStore
 
-    private let groupId: UUID
     private let currentUserId: UUID?
     private let customEmojiFetcher: any CustomEmojiFetching
     private let uploadMediaUseCase: UploadMediaUseCaseProtocol
-    private let addEmojiUseCase: AddGroupCustomEmojiUseCaseProtocol
-    private let deleteEmojiUseCase: DeleteGroupCustomEmojiUseCaseProtocol
+    private let addEmojiUseCase: AddUserCustomEmojiUseCaseProtocol
+    private let deleteEmojiUseCase: DeleteUserCustomEmojiUseCaseProtocol
 
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var previewImage: UIImage?
-    @State private var shortcode = ""
+    @State private var alias = ""
     @State private var isUploading = false
     @State private var errorMessage: String?
 
     public init(
-        groupId: UUID,
         currentUserId: UUID?,
         customEmojiFetcher: any CustomEmojiFetching,
         uploadMediaUseCase: UploadMediaUseCaseProtocol,
-        addEmojiUseCase: AddGroupCustomEmojiUseCaseProtocol,
-        deleteEmojiUseCase: DeleteGroupCustomEmojiUseCaseProtocol
+        addEmojiUseCase: AddUserCustomEmojiUseCaseProtocol,
+        deleteEmojiUseCase: DeleteUserCustomEmojiUseCaseProtocol
     ) {
-        self.groupId = groupId
         self.currentUserId = currentUserId
         self.customEmojiFetcher = customEmojiFetcher
         self.uploadMediaUseCase = uploadMediaUseCase
@@ -71,7 +68,7 @@ public struct CustomEmojiUploadSheet: View {
         }
         .presentationDetents([.medium, .large])
         .task {
-            await emojiStore.load(groupId: groupId, fetcher: customEmojiFetcher)
+            await emojiStore.load(fetcher: customEmojiFetcher)
         }
     }
 
@@ -101,13 +98,13 @@ public struct CustomEmojiUploadSheet: View {
                     PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
                         Text(languageService.text(.feedCustomEmojiChoosePhoto))
                     }
-                    .onChange(of: selectedPhotoItem) { _, item in
+                    .onChange(of: selectedPhotoItem) { item in
                         Task { await loadPreview(from: item) }
                     }
 
                     TextField(
                         languageService.text(.feedCustomEmojiShortcodePlaceholder),
-                        text: $shortcode
+                        text: $alias
                     )
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -136,7 +133,7 @@ public struct CustomEmojiUploadSheet: View {
             Text(languageService.text(.feedCustomEmojiExistingTitle))
                 .font(SplickTheme.Typography.headline)
 
-            let emojis = emojiStore.emojis(for: groupId)
+            let emojis = currentUserId.map { emojiStore.emojis(ownedBy: $0) } ?? emojiStore.allEmojis
             if emojis.isEmpty {
                 Text(languageService.text(.feedCustomEmojiEmpty))
                     .font(SplickTheme.Typography.caption)
@@ -148,17 +145,15 @@ public struct CustomEmojiUploadSheet: View {
                 ) {
                     ForEach(emojis) { emoji in
                         VStack(spacing: 4) {
-                            EmojiView(value: emoji.colonCode, groupId: groupId, size: 44)
+                            EmojiView(value: emoji.colonCode, size: 44)
                             Text(":\(emoji.shortcode):")
                                 .font(.caption2)
                                 .lineLimit(1)
-                            if canDelete(emoji) {
-                                Button(role: .destructive) {
-                                    Task { await delete(emoji) }
-                                } label: {
-                                    Text(languageService.text(.profilePaymentDelete))
-                                        .font(.caption2)
-                                }
+                            Button(role: .destructive) {
+                                Task { await delete(emoji) }
+                            } label: {
+                                Text(languageService.text(.profilePaymentDelete))
+                                    .font(.caption2)
                             }
                         }
                     }
@@ -168,14 +163,7 @@ public struct CustomEmojiUploadSheet: View {
     }
 
     private var canUpload: Bool {
-        previewImage != nil
-            && CustomEmojiShortcodeValidator.isValid(shortcode)
-            && !isUploading
-    }
-
-    private func canDelete(_ emoji: CustomEmoji) -> Bool {
-        guard let currentUserId else { return false }
-        return emoji.createdBy == currentUserId
+        previewImage != nil && !isUploading
     }
 
     @MainActor
@@ -192,29 +180,30 @@ public struct CustomEmojiUploadSheet: View {
 
     @MainActor
     private func upload() async {
-        guard let previewImage else { return }
+        guard var image = previewImage else { return }
         isUploading = true
         defer { isUploading = false }
 
         do {
-            let normalized = CustomEmojiShortcodeValidator.normalize(shortcode)
-            guard CustomEmojiShortcodeValidator.isValid(normalized) else {
-                throw CustomEmojiError.invalidShortcode
+            let resolvedAlias = alias.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !resolvedAlias.isEmpty {
+                guard CustomEmojiShortcodeValidator.isValid(resolvedAlias) else {
+                    throw CustomEmojiError.invalidShortcode
+                }
             }
-            let (data, mimeType) = try CustomEmojiImageProcessor.prepareUploadData(from: previewImage)
+            let (data, mimeType) = try CustomEmojiImageProcessor.prepareUploadData(from: image)
             let upload = try await uploadMediaUseCase.execute(
                 imageData: data,
                 mimeType: mimeType,
-                purpose: .groupCustomEmoji,
-                groupId: groupId
+                purpose: MediaUploadPurpose.userCustomEmoji,
+                groupId: nil
             )
             let emoji = try await addEmojiUseCase.execute(
-                groupId: groupId,
-                shortcode: normalized,
+                alias: resolvedAlias.isEmpty ? nil : resolvedAlias,
                 mediaId: upload.id
             )
             emojiStore.upsert(emoji)
-            shortcode = ""
+            alias = ""
             previewImage = nil
             selectedPhotoItem = nil
         } catch {
@@ -225,8 +214,8 @@ public struct CustomEmojiUploadSheet: View {
     @MainActor
     private func delete(_ emoji: CustomEmoji) async {
         do {
-            try await deleteEmojiUseCase.execute(groupId: groupId, emojiId: emoji.id)
-            emojiStore.remove(emojiId: emoji.id, from: groupId)
+            try await deleteEmojiUseCase.execute(emojiId: emoji.id)
+            emojiStore.remove(emojiId: emoji.id)
         } catch {
             errorMessage = error.localizedDescription
         }

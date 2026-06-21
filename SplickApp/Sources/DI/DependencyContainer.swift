@@ -181,20 +181,20 @@ final class DependencyContainer: ObservableObject {
         GifPickerViewModel(fetchStickersUseCase: fetchStickersUseCase, groupId: groupId)
     }
 
-    private lazy var customEmojiRepository: CustomEmojiRepositoryProtocol = {
+    lazy var customEmojiRepository: CustomEmojiRepositoryProtocol = {
         CustomEmojiRepository(apiClient: apiClient)
     }()
 
-    lazy var fetchGroupCustomEmojisUseCase: FetchGroupCustomEmojisUseCaseProtocol = {
-        FetchGroupCustomEmojisUseCase(repository: customEmojiRepository)
+    lazy var fetchAllCustomEmojisUseCase: FetchAllCustomEmojisUseCaseProtocol = {
+        FetchAllCustomEmojisUseCase(repository: customEmojiRepository)
     }()
 
-    lazy var addGroupCustomEmojiUseCase: AddGroupCustomEmojiUseCaseProtocol = {
-        AddGroupCustomEmojiUseCase(repository: customEmojiRepository)
+    lazy var addUserCustomEmojiUseCase: AddUserCustomEmojiUseCaseProtocol = {
+        AddUserCustomEmojiUseCase(repository: customEmojiRepository)
     }()
 
-    lazy var deleteGroupCustomEmojiUseCase: DeleteGroupCustomEmojiUseCaseProtocol = {
-        DeleteGroupCustomEmojiUseCase(repository: customEmojiRepository)
+    lazy var deleteUserCustomEmojiUseCase: DeleteUserCustomEmojiUseCaseProtocol = {
+        DeleteUserCustomEmojiUseCase(repository: customEmojiRepository)
     }()
 
     let customEmojiStore = CustomEmojiStore()
@@ -203,8 +203,8 @@ final class DependencyContainer: ObservableObject {
         CustomEmojiDependencies(
             fetcher: customEmojiRepository,
             uploadMediaUseCase: uploadMediaUseCase,
-            addEmojiUseCase: addGroupCustomEmojiUseCase,
-            deleteEmojiUseCase: deleteGroupCustomEmojiUseCase
+            addEmojiUseCase: addUserCustomEmojiUseCase,
+            deleteEmojiUseCase: deleteUserCustomEmojiUseCase
         )
     }
 
