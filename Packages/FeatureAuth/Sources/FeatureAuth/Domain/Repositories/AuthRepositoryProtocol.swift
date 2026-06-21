@@ -3,6 +3,7 @@ import SplickDomain
 
 public protocol AuthRepositoryProtocol: Sendable {
     func checkIdentifier(email: String?, phoneNumber: String?) async throws -> Bool
+    func checkUsernameAvailability(_ username: String) async throws -> Bool
     func signInWithGoogle(idToken: String) async throws -> AuthSession
     func login(email: String, password: String) async throws -> AuthSession
     func requestEmailOtp(email: String) async throws
@@ -30,10 +31,17 @@ public protocol AuthRepositoryProtocol: Sendable {
         otpCode: String?,
         newPassword: String
     ) async throws -> AuthSession
+    func verifyPasswordChange(currentPassword: String?, otpCode: String?) async throws
     /// Revokes the current device session on the server when possible, then clears local credentials.
     func logout() async
     func getCurrentUser() async throws -> User
-    func updateProfile(displayName: String?, avatarUrl: String?, preferredLocale: String?) async throws -> User
+    func updateProfile(
+        displayName: String?,
+        avatarUrl: String?,
+        preferredLocale: String?,
+        dateOfBirth: Date?,
+        username: String?
+    ) async throws -> User
     func listSessions() async throws -> [UserSession]
     func revokeSession(id: UUID) async throws
     func revokeAllSessions() async throws

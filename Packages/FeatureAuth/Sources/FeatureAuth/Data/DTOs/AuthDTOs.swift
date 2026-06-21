@@ -9,6 +9,14 @@ struct CheckIdentifierResponseDTO: Decodable {
     let exists: Bool
 }
 
+struct CheckUsernameRequestDTO: Encodable {
+    let username: String
+}
+
+struct CheckUsernameResponseDTO: Decodable {
+    let available: Bool
+}
+
 struct GoogleSignInRequestDTO: Encodable {
     let idToken: String
     let deviceInfo: String?
@@ -79,13 +87,16 @@ struct UserDTO: Decodable {
     let avatarUrl: String?
     let status: String?
     let preferredLocale: String?
+    let dateOfBirth: String?
     let createdAt: Date
 }
 
 struct UpdateUserProfileRequestDTO: Encodable {
     let displayName: String?
+    let username: String?
     let avatarUrl: String?
     let preferredLocale: String?
+    let dateOfBirth: String?
 }
 
 struct PaymentProfileResponseDTO: Decodable {

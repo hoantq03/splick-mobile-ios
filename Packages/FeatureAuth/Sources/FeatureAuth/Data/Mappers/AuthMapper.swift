@@ -1,4 +1,5 @@
 import Foundation
+import Common
 import SplickDomain
 
 enum AuthMapper {
@@ -16,6 +17,7 @@ enum AuthMapper {
             avatarURL: dto.avatarUrl.flatMap(URL.init(string:)),
             status: UserAccountStatus.from(apiValue: dto.status),
             preferredLocale: dto.preferredLocale ?? "vi",
+            dateOfBirth: dto.dateOfBirth.flatMap(Date.from(apiCalendarDate:)),
             createdAt: dto.createdAt
         )
     }

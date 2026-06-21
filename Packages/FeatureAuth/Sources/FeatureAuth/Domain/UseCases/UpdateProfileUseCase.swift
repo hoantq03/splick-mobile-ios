@@ -2,7 +2,13 @@ import Foundation
 import SplickDomain
 
 public protocol UpdateProfileUseCaseProtocol: Sendable {
-    func execute(displayName: String?, avatarUrl: String?, preferredLocale: String?) async throws -> User
+    func execute(
+        displayName: String?,
+        avatarUrl: String?,
+        preferredLocale: String?,
+        dateOfBirth: Date?,
+        username: String?
+    ) async throws -> User
 }
 
 public final class UpdateProfileUseCase: UpdateProfileUseCaseProtocol, Sendable {
@@ -17,16 +23,51 @@ public final class UpdateProfileUseCase: UpdateProfileUseCaseProtocol, Sendable 
     public func execute(
         displayName: String?,
         avatarUrl: String?,
-        preferredLocale: String? = nil
+        preferredLocale: String? = nil,
+        dateOfBirth: Date? = nil,
+        username: String? = nil
     ) async throws -> User {
         let user = try await repository.updateProfile(
             displayName: displayName,
             avatarUrl: avatarUrl,
-            preferredLocale: preferredLocale
+            preferredLocale: preferredLocale,
+            dateOfBirth: dateOfBirth,
+            username: username
         )
         if let session = await sessionManager.currentSession() {
             await sessionManager.setSession(AuthSession(user: user, token: session.token))
         }
         return user
+    }
+}
+
+public extension UpdateProfileUseCaseProtocol {
+    func execute(
+        displayName: String?,
+        avatarUrl: String?,
+        preferredLocale: String?
+    ) async throws -> User {
+        try await execute(
+            displayName: displayName,
+            avatarUrl: avatarUrl,
+            preferredLocale: preferredLocale,
+            dateOfBirth: nil,
+            username: nil
+        )
+    }
+
+    func execute(
+        displayName: String?,
+        avatarUrl: String?,
+        preferredLocale: String?,
+        dateOfBirth: Date?
+    ) async throws -> User {
+        try await execute(
+            displayName: displayName,
+            avatarUrl: avatarUrl,
+            preferredLocale: preferredLocale,
+            dateOfBirth: dateOfBirth,
+            username: nil
+        )
     }
 }
