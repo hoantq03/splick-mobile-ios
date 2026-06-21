@@ -91,14 +91,9 @@ struct BillSplitSectionView: View {
         HStack(spacing: SplickTheme.Spacing.xs) {
             Image(systemName: isFullySettled ? "checkmark.circle.fill" : "dollarsign.circle.fill")
                 .font(.body)
+                .scaleEffect(1.3)
                 .foregroundStyle(SplickTheme.Colors.success)
-            Text(languageService.text(.feedBillSplitTitle))
-                .font(SplickTheme.Typography.caption)
-                .foregroundStyle(
-                    isFullySettled
-                        ? SplickTheme.Colors.success
-                        : SplickTheme.Colors.textSecondary
-                )
+                .accessibilityLabel(languageService.text(.feedBillSplitTitle))
             Text(formatMoney(bill.totalAmount, currency: bill.currency))
                 .font(SplickTheme.Typography.headline)
                 .foregroundStyle(
