@@ -217,6 +217,15 @@ struct MainTabView: View {
 }
 
 struct ProfileSettingsView: View {
+    private static let minimumBirthdayAgeYears = 13
+
+    private static let birthDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .long
+        formatter.timeStyle = .none
+        return formatter
+    }()
+
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var container: DependencyContainer
     @EnvironmentObject private var languageService: LanguageService
@@ -228,9 +237,12 @@ struct ProfileSettingsView: View {
     @State private var showChangePassword = false
     @State private var showSessions = false
     @State private var showConnectedAccounts = false
-    @State private var showAccountSecurity = false
+    @State private var accountClosureAction: AccountClosureAction?
     @State private var showPaymentProfile = false
-    @State private var showBirthday = false
+    @State private var showBirthdayPicker = false
+    @State private var birthdayDraft = Calendar.current.date(byAdding: .year, value: -18, to: Date()) ?? Date()
+    @State private var isSavingBirthday = false
+    @State private var birthdayError: String?
     @State private var showChangeUsername = false
     @State private var showNotifications = false
     @State private var showTheme = false
@@ -334,6 +346,25 @@ struct ProfileSettingsView: View {
             .sheet(isPresented: $showEditDisplayName) {
                 editDisplayNameSheet
             }
+            .sheet(isPresented: $showBirthdayPicker) {
+                birthdayPickerSheet
+            }
+            .sheet(isPresented: $showChangeUsername) {
+                if let user = appState.currentUser {
+                    ChangeUsernameSheet(
+                        viewModel: ChangeUsernameSheetViewModel(
+                            currentUsername: user.username,
+                            checkUsernameAvailabilityUseCase: container.checkUsernameAvailabilityUseCase,
+                            updateProfileUseCase: container.updateProfileUseCase,
+                            languageService: languageService
+                        ),
+                        onSaved: { user in
+                            appState.updateAuthenticatedUser(user)
+                        }
+                    )
+                    .environmentObject(languageService)
+                }
+            }
             .sheet(isPresented: $showPaymentProfile) {
                 NavigationStack {
                     PaymentProfileManageView(
@@ -357,8 +388,8 @@ struct ProfileSettingsView: View {
                         viewModel: ChangePasswordViewModel(
                             accountEmail: email,
                             changePasswordUseCase: container.changePasswordUseCase,
+                            verifyPasswordChangeUseCase: container.verifyPasswordChangeUseCase,
                             requestEmailOtpUseCase: container.requestEmailOtpUseCase,
-                            loginUseCase: container.loginUseCase,
                             languageService: languageService
                         ),
                         onPasswordChanged: { user in
@@ -392,32 +423,33 @@ struct ProfileSettingsView: View {
                             linkPhoneAccountUseCase: container.linkPhoneAccountUseCase,
                             linkEmailAccountUseCase: container.linkEmailAccountUseCase,
                             requestEmailOtpUseCase: container.requestEmailOtpUseCase,
-                            googleSignInPresenter: GoogleSignInClient.shared
+                            googleSignInPresenter: GoogleSignInClient.shared,
+                            languageService: languageService
                         )
                     )
+                    .environmentObject(languageService)
                 }
             }
-            .navigationDestination(isPresented: $showAccountSecurity) {
-                if let email = appState.currentUser?.email {
-                    AccountSecurityView(
-                        accountEmail: email,
-                        requestEmailOtpUseCase: container.requestEmailOtpUseCase,
+            .sheet(item: $accountClosureAction) { action in
+                AccountClosureSheet(
+                    isPresented: Binding(
+                        get: { accountClosureAction != nil },
+                        set: { if !$0 { accountClosureAction = nil } }
+                    ),
+                    viewModel: AccountClosureSheetViewModel(
+                        action: action,
+                        verifyPasswordChangeUseCase: container.verifyPasswordChangeUseCase,
                         deactivateAccountUseCase: container.deactivateAccountUseCase,
                         deleteAccountUseCase: container.deleteAccountUseCase,
-                        onAccountClosed: {
+                        languageService: languageService,
+                        onCompleted: {
+                            accountClosureAction = nil
                             appState.setUnauthenticated(container: container)
                             dismiss()
                         }
                     )
-                }
-            }
-            .navigationDestination(isPresented: $showBirthday) {
-                BirthdayView()
-                    .environmentObject(languageService)
-            }
-            .navigationDestination(isPresented: $showChangeUsername) {
-                ChangeUsernameView()
-                    .environmentObject(languageService)
+                )
+                .environmentObject(languageService)
             }
             .navigationDestination(isPresented: $showNotifications) {
                 NotificationsSettingsView()
@@ -616,6 +648,47 @@ struct ProfileSettingsView: View {
         .presentationDetents([.medium])
     }
 
+    private var birthdayPickerSheet: some View {
+        NavigationStack {
+            VStack(spacing: SplickTheme.Spacing.lg) {
+                DatePicker(
+                    languageService.text(.profileBirthday),
+                    selection: $birthdayDraft,
+                    in: ...Date(),
+                    displayedComponents: .date
+                )
+                .datePickerStyle(.graphical)
+                .labelsHidden()
+
+                if let birthdayError {
+                    Text(birthdayError)
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.error)
+                        .multilineTextAlignment(.center)
+                }
+
+                SplickButton(
+                    languageService.text(.profileSave),
+                    isLoading: isSavingBirthday,
+                    isDisabled: isSavingBirthday
+                ) {
+                    Task { await saveBirthday() }
+                }
+            }
+            .padding(SplickTheme.Spacing.md)
+            .navigationTitle(languageService.text(.profileBirthday))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(languageService.text(.commonCancel)) {
+                        showBirthdayPicker = false
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
     private var accountSettingsGroup: some View {
         ProfileSettingsGroup(
             title: languageService.text(.profileGroupAccount),
@@ -638,13 +711,13 @@ struct ProfileSettingsView: View {
                 ProfileSettingsItem(
                     icon: "pause.circle",
                     title: languageService.text(.profileDeactivate),
-                    action: { showAccountSecurity = true }
+                    action: { accountClosureAction = .deactivate }
                 ),
                 ProfileSettingsItem(
                     icon: "trash",
                     title: languageService.text(.profileDeleteAccount),
                     isDestructive: true,
-                    action: { showAccountSecurity = true }
+                    action: { accountClosureAction = .delete }
                 )
             ]
         )
@@ -664,11 +737,19 @@ struct ProfileSettingsView: View {
                 ProfileSettingsItem(
                     icon: "calendar",
                     title: languageService.text(.profileBirthday),
-                    action: { showBirthday = true }
+                    subtitle: formattedBirthday(appState.currentUser?.dateOfBirth),
+                    action: {
+                        birthdayDraft = appState.currentUser?.dateOfBirth
+                            ?? Calendar.current.date(byAdding: .year, value: -18, to: Date())
+                            ?? Date()
+                        birthdayError = nil
+                        showBirthdayPicker = true
+                    }
                 ),
                 ProfileSettingsItem(
                     icon: "at",
                     title: languageService.text(.profileChangeUsername),
+                    subtitle: appState.currentUser.map { "@\($0.username)" },
                     action: { showChangeUsername = true }
                 )
             ]
@@ -761,6 +842,42 @@ struct ProfileSettingsView: View {
         } catch {
             profileError = languageService.localizedMessage(for: error)
         }
+    }
+
+    private func saveBirthday() async {
+        guard !isSavingBirthday else { return }
+
+        let minimumBirthDate = Calendar.current.date(
+            byAdding: .year,
+            value: -Self.minimumBirthdayAgeYears,
+            to: Date()
+        ) ?? Date()
+        if birthdayDraft > minimumBirthDate {
+            birthdayError = languageService.text(.profileBirthdayAgeError)
+            return
+        }
+
+        isSavingBirthday = true
+        birthdayError = nil
+        defer { isSavingBirthday = false }
+
+        do {
+            let user = try await container.updateProfileUseCase.execute(
+                displayName: nil,
+                avatarUrl: nil,
+                preferredLocale: nil,
+                dateOfBirth: birthdayDraft
+            )
+            appState.updateAuthenticatedUser(user)
+            showBirthdayPicker = false
+        } catch {
+            birthdayError = languageService.localizedMessage(for: error)
+        }
+    }
+
+    private func formattedBirthday(_ date: Date?) -> String? {
+        guard let date else { return nil }
+        return Self.birthDateFormatter.string(from: date)
     }
 
     private func saveDisplayName() async {
