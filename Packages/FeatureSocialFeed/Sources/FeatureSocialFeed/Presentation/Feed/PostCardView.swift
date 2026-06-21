@@ -271,17 +271,21 @@ struct PostCardView: View {
                 BillSplitSectionView(
                     bill: bill,
                     onUserTap: onUserTap,
-                    onSendReminder: { user, message in
-                        sendReminder(to: [user], message: message, singleName: user.displayName)
-                    },
-                    onSendAllReminders: { users, message in
-                        sendReminder(
-                            to: users,
-                            message: message,
-                            singleName: nil,
-                            count: users.count
-                        )
-                    }
+                    onSendReminder: isAuthor
+                        ? { user, message in
+                            sendReminder(to: [user], message: message, singleName: user.displayName)
+                        }
+                        : nil,
+                    onSendAllReminders: isAuthor
+                        ? { users, message in
+                            sendReminder(
+                                to: users,
+                                message: message,
+                                singleName: nil,
+                                count: users.count
+                            )
+                        }
+                        : nil
                 )
             }
         }
@@ -436,12 +440,16 @@ struct PostCardView: View {
                     message
                 )
                 if let singleName {
-                    reminderSentMessage = "Đã gửi nhắc nhở tới \(singleName)"
+                    reminderSentMessage = languageService.format(.feedBillReminderSentSingle, singleName)
                 } else if let count {
-                    reminderSentMessage = "Đã gửi nhắc nhở tới \(result.sentCount)/\(count) người"
+                    reminderSentMessage = languageService.format(
+                        .feedBillReminderSentMultiple,
+                        result.sentCount,
+                        count
+                    )
                 }
             } catch {
-                reminderSentMessage = error.localizedDescription
+                reminderSentMessage = languageService.localizedMessage(for: error)
             }
         }
     }
