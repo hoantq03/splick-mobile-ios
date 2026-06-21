@@ -6,6 +6,11 @@ struct OnboardingView: View {
     let onComplete: () -> Void
 
     @State private var currentPage = 0
+    @State private var hasCompleted = false
+
+    private var isLastPage: Bool {
+        currentPage == pages.count - 1
+    }
 
     private let pages: [OnboardingPage] = [
         OnboardingPage(kind: .brand, background: .brand),
@@ -49,8 +54,8 @@ struct OnboardingView: View {
             VStack {
                 Spacer()
                 pageIndicator
-                if currentPage == pages.count - 1 {
-                    Text("Tap to get started")
+                if isLastPage {
+                    Text("Tap or swipe to get started")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(SplickTheme.Colors.textTertiary)
                         .padding(.top, SplickTheme.Spacing.xs)
@@ -60,7 +65,8 @@ struct OnboardingView: View {
         }
         .background(SplickTheme.Colors.background)
         .contentShape(Rectangle())
-        .onTapGesture(perform: advance)
+        .simultaneousGesture(tapAdvanceGesture)
+        .simultaneousGesture(lastPageSwipeToLoginGesture)
     }
 
     @ViewBuilder
@@ -200,14 +206,42 @@ struct OnboardingView: View {
         return SplickTheme.Colors.textTertiary.opacity(0.35)
     }
 
-    private func advance() {
-        if currentPage < pages.count - 1 {
-            withAnimation(.easeInOut(duration: 0.38)) {
-                currentPage += 1
+    private var tapAdvanceGesture: some Gesture {
+        TapGesture()
+            .onEnded {
+                advance()
             }
-        } else {
-            onComplete()
+    }
+
+    private var lastPageSwipeToLoginGesture: some Gesture {
+        DragGesture(minimumDistance: 24, coordinateSpace: .local)
+            .onEnded { value in
+                guard isLastPage else { return }
+
+                let horizontalTravel = value.translation.width
+                let verticalTravel = value.translation.height
+                guard abs(horizontalTravel) > abs(verticalTravel) else { return }
+                guard horizontalTravel < -40 else { return }
+
+                completeOnboarding()
+            }
+    }
+
+    private func advance() {
+        if isLastPage {
+            completeOnboarding()
+            return
         }
+
+        withAnimation(.easeInOut(duration: 0.38)) {
+            currentPage += 1
+        }
+    }
+
+    private func completeOnboarding() {
+        guard !hasCompleted else { return }
+        hasCompleted = true
+        onComplete()
     }
 }
 
