@@ -697,14 +697,6 @@ struct ProfileSettingsView: View {
                             .foregroundStyle(SplickTheme.Colors.error)
                             .multilineTextAlignment(.center)
                     }
-
-                    SplickButton(
-                        languageService.text(.profileSave),
-                        isLoading: isSavingBirthday,
-                        isDisabled: isSavingBirthday
-                    ) {
-                        Task { await saveBirthday() }
-                    }
                 }
                 .padding(SplickTheme.Spacing.md)
             }
