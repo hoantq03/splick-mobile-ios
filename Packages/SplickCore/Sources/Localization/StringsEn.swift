@@ -86,6 +86,7 @@ enum StringsEn {
         .profileGroupPersonal: "Personal profile",
         .profileGroupApp: "App",
         .profileQrReceive: "Receive money QR",
+        .profileCopyInviteLink: "Share invite link",
         .profileBirthday: "Date of birth",
         .profileBirthdayAgeError: "You must be at least 13 years old",
         .profileChangeUsername: "Change username",

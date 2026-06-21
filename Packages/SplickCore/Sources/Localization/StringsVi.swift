@@ -86,6 +86,7 @@ enum StringsVi {
         .profileGroupPersonal: "Hồ sơ cá nhân",
         .profileGroupApp: "Ứng dụng",
         .profileQrReceive: "QR nhận tiền",
+        .profileCopyInviteLink: "Chia sẻ link mời",
         .profileBirthday: "Ngày sinh",
         .profileBirthdayAgeError: "Bạn phải từ 13 tuổi trở lên",
         .profileChangeUsername: "Đổi username",
