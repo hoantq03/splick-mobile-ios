@@ -29,11 +29,12 @@ public enum NetworkError: Error, Equatable {
     case notFound
     case rateLimited
     case serverUnreachable
+    case apiError(code: String, message: String, traceId: String? = nil)
     case unknown(String, traceId: String? = nil)
 
     public var supportTraceId: String? {
         switch self {
-        case .serverError(_, let traceId), .unknown(_, let traceId):
+        case .serverError(_, let traceId), .unknown(_, let traceId), .apiError(_, _, let traceId):
             return traceId
         default:
             return nil
@@ -68,6 +69,8 @@ public enum NetworkError: Error, Equatable {
         case .forbidden: return "You don't have permission to perform this action."
         case .notFound: return "The requested resource was not found."
         case .rateLimited: return "Too many requests. Please wait a moment."
+        case .apiError(_, let message, _):
+            return message.isEmpty ? "An unexpected error occurred." : message
         case .unknown(let message, _):
             return message.isEmpty ? "An unexpected error occurred." : message
         }
