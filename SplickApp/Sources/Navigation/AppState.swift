@@ -78,7 +78,9 @@ final class AppState: ObservableObject {
 
     /// Called when user taps through the last onboarding page.
     func passOnboardingGate() {
-        hasPassedOnboardingThisSession = true
+        withAnimation(SplashMotion.onboardingToLogin) {
+            hasPassedOnboardingThisSession = true
+        }
     }
 
     func openPostFromNotification(_ postId: UUID) {
@@ -96,7 +98,7 @@ final class AppState: ObservableObject {
     }
 
     func completeLaunchSplash() {
-        withAnimation {
+        withAnimation(SplashMotion.reveal) {
             isLaunchSplashComplete = true
         }
     }

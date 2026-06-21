@@ -13,6 +13,7 @@ struct SplashScreenView: View {
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
+            .ignoresSafeArea()
 
             VStack(spacing: SplickTheme.Spacing.md) {
                 SplickLogoMark(size: 128, layout: .markOnly, style: .fullColor)

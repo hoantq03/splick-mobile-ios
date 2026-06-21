@@ -10,24 +10,21 @@ struct RootView: View {
 
     @State private var previousScenePhase: ScenePhase = .inactive
 
-    private static let dismissAnimation = Animation.spring(
-        response: 0.78,
-        dampingFraction: 0.86,
-        blendDuration: 0.22
-    )
-
     var body: some View {
         ZStack {
             rootContent
+                .offset(y: appState.needsSplash ? 28 : 0)
+                .opacity(appState.needsSplash ? 0.94 : 1)
+                .animation(SplashMotion.reveal, value: appState.isLaunchSplashComplete)
 
             if appState.needsSplash {
-                splashOverlay
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                SplashScreenView()
+                    .transition(SplashMotion.slideUpRemoval)
                     .zIndex(999)
             }
         }
         .ignoresSafeArea()
-        .animation(Self.dismissAnimation, value: appState.needsSplash)
+        .animation(SplashMotion.reveal, value: appState.needsSplash)
         .onChange(of: scenePhase) { phase in
             defer { previousScenePhase = phase }
 
@@ -42,33 +39,6 @@ struct RootView: View {
         }
     }
 
-    // MARK: - Splash overlay (logo + spinner — shown while session restores)
-
-    private var splashOverlay: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    Color(hex: 0x5B6CFF).opacity(0.12),
-                    SplickTheme.Colors.background,
-                    Color(hex: 0x2A9D8F).opacity(0.1),
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-
-            VStack(spacing: SplickTheme.Spacing.md) {
-                SplickLogoMark(size: 128, layout: .markOnly, style: .fullColor)
-                Text("Splick")
-                    .font(.system(size: 32, weight: .bold, design: .rounded))
-                    .foregroundStyle(SplickTheme.Colors.primaryGradient)
-                SplickSpinner(size: .large)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(SplickTheme.Colors.background)
-    }
-
     // MARK: - Root content
 
     /// The onboarding 4-page intro shows every time the user is not signed in,
@@ -81,11 +51,16 @@ struct RootView: View {
             SplickTheme.Colors.background.ignoresSafeArea()
 
         case .unauthenticated:
-            if appState.hasPassedOnboardingThisSession {
-                authFlow
-            } else {
-                onboardingFlow
+            ZStack {
+                if appState.hasPassedOnboardingThisSession {
+                    authFlow
+                        .transition(SplashMotion.loginInsertion)
+                } else {
+                    onboardingFlow
+                        .transition(SplashMotion.onboardingRemoval)
+                }
             }
+            .animation(SplashMotion.onboardingToLogin, value: appState.hasPassedOnboardingThisSession)
 
         case .authenticated:
             MainTabView()
@@ -104,19 +79,15 @@ struct RootView: View {
         NavigationStack {
             LoginView(
                 viewModel: LoginViewModel(
+                    checkIdentifierUseCase: container.checkIdentifierUseCase,
                     loginUseCase: container.loginUseCase,
+                    registerUseCase: container.registerUseCase,
+                    requestEmailOtpUseCase: container.requestEmailOtpUseCase,
                     requestPhoneOtpUseCase: container.requestPhoneOtpUseCase,
                     verifyPhoneOtpUseCase: container.verifyPhoneOtpUseCase,
                     googleSignInUseCase: container.googleSignInUseCase,
                     googleSignInPresenter: GoogleSignInClient.shared
                 ),
-                registerViewModelFactory: {
-                    RegisterViewModel(
-                        registerUseCase: container.registerUseCase,
-                        requestEmailOtpUseCase: container.requestEmailOtpUseCase,
-                        requestPhoneOtpUseCase: container.requestPhoneOtpUseCase
-                    )
-                },
                 forgotPasswordViewModelFactory: {
                     ForgotPasswordViewModel(
                         forgotPasswordUseCase: container.forgotPasswordUseCase,
