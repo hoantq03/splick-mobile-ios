@@ -3,6 +3,7 @@ import Networking
 
 enum AuthEndpoint: APIEndpoint {
     case checkIdentifier(CheckIdentifierRequestDTO)
+    case checkUsername(CheckUsernameRequestDTO)
     case googleSignIn(GoogleSignInRequestDTO)
     case login(LoginRequestDTO)
     case requestEmailOtp(EmailOtpRequestDTO)
@@ -37,6 +38,7 @@ enum AuthEndpoint: APIEndpoint {
     var path: String {
         switch self {
         case .checkIdentifier: return "/v1/auth/identifier/check"
+        case .checkUsername: return "/v1/auth/username/check"
         case .googleSignIn: return "/v1/auth/google"
         case .login: return "/v1/auth/login"
         case .requestEmailOtp: return "/v1/auth/email/otp/request"
@@ -73,7 +75,7 @@ enum AuthEndpoint: APIEndpoint {
              .registerEmail, .registerPhone, .refreshToken,
              .forgotPassword, .resetPassword, .changePassword, .verifyPasswordChange, .logout, .revokeAllSessions,
              .deactivateAccount, .linkGoogle, .requestLinkPhoneOtp, .linkPhone,
-             .requestLinkEmailOtp, .linkEmail:
+             .requestLinkEmailOtp, .linkEmail, .checkUsername:
             return .post
         case .me, .listSessions, .connectedAccounts, .paymentProfile:
             return .get
@@ -89,6 +91,7 @@ enum AuthEndpoint: APIEndpoint {
     var body: Encodable? {
         switch self {
         case .checkIdentifier(let dto): return dto
+        case .checkUsername(let dto): return dto
         case .googleSignIn(let dto): return dto
         case .login(let dto): return dto
         case .requestEmailOtp(let dto): return dto
@@ -137,6 +140,8 @@ enum AuthEndpoint: APIEndpoint {
              .registerEmail, .registerPhone, .refreshToken,
              .forgotPassword, .resetPassword:
             return false
+        case .checkUsername:
+            return true
         case .changePassword, .verifyPasswordChange, .logout, .me, .patchMe, .listSessions, .revokeAllSessions, .revokeSession,
              .deactivateAccount, .deleteAccount, .connectedAccounts, .linkGoogle, .unlinkGoogle,
              .requestLinkPhoneOtp, .linkPhone, .requestLinkEmailOtp, .linkEmail, .paymentProfile,

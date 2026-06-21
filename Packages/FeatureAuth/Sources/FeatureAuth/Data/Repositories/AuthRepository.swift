@@ -27,6 +27,15 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
         return response.exists
     }
 
+    public func checkUsernameAvailability(_ username: String) async throws -> Bool {
+        let trimmed = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        let dto = CheckUsernameRequestDTO(username: trimmed)
+        let response: CheckUsernameResponseDTO = try await apiClient.request(
+            AuthEndpoint.checkUsername(dto)
+        )
+        return response.available
+    }
+
     public func signInWithGoogle(idToken: String) async throws -> AuthSession {
         let session = SessionMetadata.current
         let dto = GoogleSignInRequestDTO(
@@ -200,7 +209,9 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
     public func updateProfile(
         displayName: String?,
         avatarUrl: String?,
-        preferredLocale: String? = nil
+        preferredLocale: String? = nil,
+        dateOfBirth: Date? = nil,
+        username: String? = nil
     ) async throws -> User {
         let trimmedName = displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedName = (trimmedName?.isEmpty == false) ? trimmedName : nil
@@ -208,16 +219,25 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
         let resolvedAvatar = (trimmedAvatar?.isEmpty == false) ? trimmedAvatar : nil
         let resolvedLocale = preferredLocale?.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedLocale = (resolvedLocale?.isEmpty == false) ? resolvedLocale : nil
+        let resolvedDateOfBirth = dateOfBirth?.apiCalendarDateString
+        let trimmedUsername = username?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedUsername = (trimmedUsername?.isEmpty == false) ? trimmedUsername : nil
 
-        if resolvedName == nil && resolvedAvatar == nil && normalizedLocale == nil {
-            throw AppError.validation("Enter a display name or avatar URL to update.")
+        if resolvedName == nil
+            && resolvedAvatar == nil
+            && normalizedLocale == nil
+            && resolvedDateOfBirth == nil
+            && resolvedUsername == nil {
+            throw AppError.validation("Enter at least one field to update.")
         }
 
         let dto: UserDTO = try await apiClient.request(
             AuthEndpoint.patchMe(UpdateUserProfileRequestDTO(
                 displayName: resolvedName,
+                username: resolvedUsername,
                 avatarUrl: resolvedAvatar,
-                preferredLocale: normalizedLocale
+                preferredLocale: normalizedLocale,
+                dateOfBirth: resolvedDateOfBirth
             ))
         )
         return AuthMapper.toUser(dto)
