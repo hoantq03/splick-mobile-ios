@@ -72,4 +72,20 @@ public enum AppConstants {
         public static let minimumDisplayDuration: Duration = .milliseconds(1500)
         public static let dismissDuration: Duration = .milliseconds(850)
     }
+
+    public enum Links {
+        public static let webHost = "splick.app"
+
+        public static func profileInvitePath(username: String) -> String {
+            "\(webHost)/\(username)"
+        }
+
+        public static func profileInviteURL(username: String) -> URL {
+            URL(string: "https://\(profileInvitePath(username: username))")!
+        }
+
+        public static let marketingURL = URL(string: "https://\(webHost)")!
+        public static let termsOfServiceURL = URL(string: "https://\(webHost)/terms")!
+        public static let privacyPolicyURL = URL(string: "https://\(webHost)/privacy")!
+    }
 }
