@@ -27,6 +27,9 @@ public final class ChangePasswordViewModel: ObservableObject {
     @Published var isCurrentPasswordVerified = false
     @Published var isEmailCodeVerified = false
     @Published var isVerifyingCurrentPassword = false
+    @Published private(set) var hasSentEmailCode = false
+    @Published private(set) var isRequestingEmailCode = false
+    @Published private(set) var otpResendSecondsRemaining = 0
 
     let accountEmail: String
 
@@ -34,6 +37,9 @@ public final class ChangePasswordViewModel: ObservableObject {
     private let requestEmailOtpUseCase: RequestEmailOtpUseCaseProtocol
     private let loginUseCase: LoginUseCaseProtocol
     private let languageService: LanguageService
+    private var resendCountdownTask: Task<Void, Never>?
+
+    private static let otpResendCooldownSeconds = 60
 
     public init(
         accountEmail: String,
@@ -51,6 +57,7 @@ public final class ChangePasswordViewModel: ObservableObject {
 
     func onMethodChanged() {
         resetVerificationState()
+        stopOtpResendCountdown()
     }
 
     func onCurrentPasswordChanged() {
@@ -125,16 +132,20 @@ public final class ChangePasswordViewModel: ObservableObject {
     }
 
     func requestEmailCode() async {
-        state = .loading
+        guard otpResendSecondsRemaining == 0 else { return }
+
+        isRequestingEmailCode = true
         otpError = nil
+        defer { isRequestingEmailCode = false }
+
         do {
             try await requestEmailOtpUseCase.execute(email: accountEmail)
+            hasSentEmailCode = true
             otpInfoMessage = languageService.format(.changePasswordCodeSent, accountEmail)
-            state = .idle
+            startOtpResendCountdown()
         } catch let error as AuthError {
             if error.shouldShowOnOtpStep {
                 otpError = error.userMessage
-                state = .idle
             } else {
                 state = .failed(error.userMessage)
             }
@@ -143,6 +154,10 @@ public final class ChangePasswordViewModel: ObservableObject {
         } catch {
             state = .failed(languageService.text(.changePasswordFailed))
         }
+    }
+
+    func resendEmailCode() async {
+        await requestEmailCode()
     }
 
     func changePassword() async {
@@ -195,12 +210,39 @@ public final class ChangePasswordViewModel: ObservableObject {
     private func resetVerificationState() {
         isCurrentPasswordVerified = false
         isEmailCodeVerified = false
+        hasSentEmailCode = false
         currentPasswordError = nil
         otpError = nil
         passwordError = nil
         confirmPasswordError = nil
+        otpInfoMessage = nil
+        otpCode = ""
         newPassword = ""
         confirmPassword = ""
         passwordStrength = .empty
+    }
+
+    private func startOtpResendCountdown() {
+        stopOtpResendCountdown()
+        otpResendSecondsRemaining = Self.otpResendCooldownSeconds
+
+        resendCountdownTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                guard !Task.isCancelled, let self else { return }
+
+                if otpResendSecondsRemaining > 0 {
+                    otpResendSecondsRemaining -= 1
+                } else {
+                    break
+                }
+            }
+        }
+    }
+
+    private func stopOtpResendCountdown() {
+        resendCountdownTask?.cancel()
+        resendCountdownTask = nil
+        otpResendSecondsRemaining = 0
     }
 }
