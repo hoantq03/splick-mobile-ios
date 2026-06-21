@@ -1,103 +1,88 @@
 import SwiftUI
 import DesignSystem
 
-/// Capybara mascot: watches while you type, covers its eyes when the password is hidden.
+/// Cute capybara mascot — tracks the password cursor, covers eyes when hidden.
 struct PasswordMascotView: View {
-    /// Characters typed so far.
     let passwordLength: Int
-    /// Whether the password field is showing plaintext.
     let isPasswordVisible: Bool
-    /// Approximate visible character capacity of the field (controls pupil travel).
     var maxTrackedCharacters: Int = 22
 
-    // MARK: - Gaze maths
+    // MARK: - Gaze
 
     private var gazeT: CGFloat {
         guard passwordLength > 0 else { return 0 }
         return min(1, CGFloat(passwordLength) / CGFloat(max(1, maxTrackedCharacters)))
     }
 
-    /// Iris offset: sweeps left → right as characters are typed.
     private var irisOffsetX: CGFloat { (gazeT * 2 - 1) * 5 }
     private var irisOffsetY: CGFloat { passwordLength == 0 ? 0 : 1.5 }
 
     // MARK: - Palette
 
-    private let fur          = Color(hex: 0x9B7B5B)   // main coat
-    private let furDark      = Color(hex: 0x7A5C3E)   // shadow / outline
-    private let furLight     = Color(hex: 0xBFA080)   // highlight / snout
-    private let snoutColor   = Color(hex: 0xC4A07A)   // muzzle box
-    private let noseColor    = Color(hex: 0x3D2214)   // nostrils
-    private let eyeColor     = Color(hex: 0x221208)   // iris
-    private let earInner     = Color(hex: 0xD4A882)   // inner ear
+    private let headTop    = Color(hex: 0xD4A574)
+    private let headBtm    = Color(hex: 0xA07040)
+    private let earOuter   = Color(hex: 0xB8895A)
+    private let earInner   = Color(hex: 0xEDC9A8)
+    private let snoutFill  = Color(hex: 0xE6C89A)
+    private let noseDot    = Color(hex: 0x4A2C14)
+    private let blush      = Color(hex: 0xF4A898)
+    private let pawFill    = Color(hex: 0xC49A6C)
+    private let pawShad    = Color(hex: 0x9B7040)
+    private let eyeDark    = Color(hex: 0x221208)
 
     // MARK: - Body
 
     var body: some View {
-        // Extra vertical room so paws don't clip at bottom when at rest
-        ZStack(alignment: .top) {
-            capybaraFace
-        }
-        .frame(width: 130, height: 150)   // 130 face + 20 paw room below
-        .contentShape(Rectangle())
-    }
-
-    // MARK: - Face
-
-    private var capybaraFace: some View {
-        ZStack(alignment: .center) {
-            // Head
-            Circle()
-                .fill(fur)
-                .frame(width: 130, height: 130)
-
-            Circle()
-                .strokeBorder(furDark.opacity(0.5), lineWidth: 1.5)
-                .frame(width: 130, height: 130)
-
-            // Ears (behind head highlight, so drawn first)
+        ZStack {
+            head
             ears
-
-            // Snout block
             snout
-
-            // Eyes
+            blushMarks
             eyes
-
-            // Nostrils
-            nostrils
-
-            // Paws — rendered LAST so they appear in front of everything
+            noseDots
             paws
         }
         .frame(width: 130, height: 130)
+        .clipShape(Circle())   // hides paws below the circle; they emerge naturally when raised
+        .contentShape(Circle())
+    }
+
+    // MARK: - Head
+
+    private var head: some View {
+        Circle()
+            .fill(
+                RadialGradient(
+                    colors: [headTop, headBtm],
+                    center: .init(x: 0.38, y: 0.30),
+                    startRadius: 8,
+                    endRadius: 72
+                )
+            )
+            .shadow(color: headBtm.opacity(0.45), radius: 8, y: 5)
     }
 
     // MARK: - Ears
 
     private var ears: some View {
         ZStack {
-            // Left ear
-            Ellipse()
-                .fill(furDark)
-                .frame(width: 28, height: 24)
-                .offset(x: -46, y: -46)
+            // left
+            earShape.offset(x: -47, y: -44)
+            // right
+            earShape.offset(x:  47, y: -44)
+        }
+    }
 
-            Ellipse()
+    private var earShape: some View {
+        ZStack {
+            Circle()
+                .fill(earOuter)
+                .frame(width: 30, height: 30)
+
+            Circle()
                 .fill(earInner)
-                .frame(width: 16, height: 14)
-                .offset(x: -46, y: -46)
-
-            // Right ear
-            Ellipse()
-                .fill(furDark)
-                .frame(width: 28, height: 24)
-                .offset(x: 46, y: -46)
-
-            Ellipse()
-                .fill(earInner)
-                .frame(width: 16, height: 14)
-                .offset(x: 46, y: -46)
+                .frame(width: 16, height: 16)
+                .offset(y: 2)
         }
     }
 
@@ -105,137 +90,149 @@ struct PasswordMascotView: View {
 
     private var snout: some View {
         ZStack {
-            // Muzzle box — distinctive capybara rectangular snout
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(snoutColor)
-                .frame(width: 56, height: 38)
-                .offset(y: 22)
-
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(furDark.opacity(0.3), lineWidth: 1)
-                .frame(width: 56, height: 38)
-                .offset(y: 22)
+            Ellipse()
+                .fill(
+                    RadialGradient(
+                        colors: [snoutFill, snoutFill.opacity(0.7)],
+                        center: .init(x: 0.4, y: 0.35),
+                        startRadius: 2,
+                        endRadius: 40
+                    )
+                )
+                .frame(width: 68, height: 48)
+                .offset(y: 24)
         }
     }
 
-    // MARK: - Nostrils
+    // MARK: - Blush
 
-    private var nostrils: some View {
-        HStack(spacing: 10) {
+    private var blushMarks: some View {
+        HStack(spacing: 52) {
             Ellipse()
-                .fill(noseColor)
-                .frame(width: 8, height: 7)
+                .fill(blush.opacity(0.38))
+                .frame(width: 20, height: 12)
             Ellipse()
-                .fill(noseColor)
-                .frame(width: 8, height: 7)
+                .fill(blush.opacity(0.38))
+                .frame(width: 20, height: 12)
         }
-        .offset(y: 20)
+        .offset(y: 10)
     }
 
     // MARK: - Eyes
 
     private var eyes: some View {
-        HStack(spacing: 26) {
-            singleEye
-            singleEye
+        HStack(spacing: 30) {
+            eyeball
+            eyeball
         }
-        .offset(y: -8)
+        .offset(y: -16)
         .animation(.easeOut(duration: 0.10), value: irisOffsetX)
         .animation(.spring(response: 0.28, dampingFraction: 0.78), value: isPasswordVisible)
     }
 
-    private var singleEye: some View {
+    private var eyeball: some View {
         ZStack {
-            // White sclera — shrinks to a slit when hidden
+            // Sclera — squishes to a line when eyes are closed
             Ellipse()
                 .fill(Color.white)
-                .frame(width: 20, height: isPasswordVisible ? 22 : 3)
-                .overlay {
-                    Ellipse()
-                        .strokeBorder(furDark.opacity(0.25), lineWidth: 1)
-                        .frame(width: 20, height: isPasswordVisible ? 22 : 3)
-                }
+                .frame(width: 22, height: isPasswordVisible ? 26 : 3)
+                .shadow(color: Color.black.opacity(0.08), radius: 2, y: 1)
 
             if isPasswordVisible {
                 // Iris
                 Circle()
-                    .fill(eyeColor)
-                    .frame(width: 13, height: 13)
-                    .offset(x: irisOffsetX, y: irisOffsetY + 1)
+                    .fill(eyeDark)
+                    .frame(width: 15, height: 15)
+                    .offset(x: irisOffsetX, y: irisOffsetY)
 
                 // Specular
                 Circle()
-                    .fill(Color.white.opacity(0.85))
-                    .frame(width: 4, height: 4)
-                    .offset(x: irisOffsetX - 2, y: irisOffsetY - 2)
+                    .fill(Color.white.opacity(0.9))
+                    .frame(width: 5, height: 5)
+                    .offset(x: irisOffsetX - 3, y: irisOffsetY - 4)
+
+                // Second smaller specular
+                Circle()
+                    .fill(Color.white.opacity(0.55))
+                    .frame(width: 3, height: 3)
+                    .offset(x: irisOffsetX + 3, y: irisOffsetY + 2)
             }
         }
-        .frame(width: 22, height: 24)
+        .frame(width: 24, height: 28)
         .animation(.spring(response: 0.25, dampingFraction: 0.8), value: isPasswordVisible)
     }
 
-    // MARK: - Paws (slide straight up to cover the eyes)
+    // MARK: - Nose dots
 
+    private var noseDots: some View {
+        HStack(spacing: 9) {
+            Circle()
+                .fill(noseDot)
+                .frame(width: 7, height: 7)
+            Circle()
+                .fill(noseDot)
+                .frame(width: 7, height: 7)
+        }
+        .offset(y: 22)
+    }
+
+    // MARK: - Paws
+
+    /// Eyes live at y ≈ -16 from centre.
+    /// Paws slide from y = +90 (hidden below) → y = -16 (covering eyes).
     private var paws: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             pawShape
             pawShape
         }
-        // Eyes are at y = -8 relative to face centre.
-        // Paws need to cover them → raise to y ≈ -8 (rest: y = +72, below circle).
-        .offset(y: isPasswordVisible ? 72 : -8)
-        .animation(
-            .spring(response: 0.42, dampingFraction: 0.64),
-            value: isPasswordVisible
-        )
+        .offset(y: isPasswordVisible ? 90 : -14)
+        .animation(.spring(response: 0.44, dampingFraction: 0.60), value: isPasswordVisible)
     }
 
     private var pawShape: some View {
-        ZStack {
-            // Palm
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(fur)
-                .frame(width: 34, height: 30)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(furDark.opacity(0.45), lineWidth: 1.5)
-                }
+        ZStack(alignment: .top) {
+            // Palm — warm rounded rectangle
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [pawFill, pawShad],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: 36, height: 32)
 
-            // Three stubby toes at top
+            // Three little toe bumps across the top
             HStack(spacing: 4) {
                 ForEach(0..<3, id: \.self) { _ in
-                    Capsule()
-                        .fill(furLight)
-                        .frame(width: 7, height: 10)
-                        .overlay {
-                            Capsule()
-                                .strokeBorder(furDark.opacity(0.3), lineWidth: 1)
-                        }
+                    Circle()
+                        .fill(pawFill)
+                        .frame(width: 10, height: 10)
                 }
             }
-            .offset(y: -14)
+            .offset(y: -6)
         }
-        .frame(width: 34, height: 44)
+        .frame(width: 36, height: 40)
     }
 }
 
 // MARK: - Preview
 
 #if DEBUG
-#Preview("Capybara states") {
-    VStack(spacing: 32) {
-        HStack(spacing: 24) {
+#Preview("Capybara") {
+    VStack(spacing: 28) {
+        HStack(spacing: 20) {
             VStack(spacing: 6) {
                 PasswordMascotView(passwordLength: 0, isPasswordVisible: true)
-                Text("idle · visible").font(.caption2).foregroundStyle(.secondary)
+                Text("idle").font(.caption2).foregroundStyle(.secondary)
             }
             VStack(spacing: 6) {
-                PasswordMascotView(passwordLength: 10, isPasswordVisible: true)
-                Text("typing · visible").font(.caption2).foregroundStyle(.secondary)
+                PasswordMascotView(passwordLength: 12, isPasswordVisible: true)
+                Text("typing").font(.caption2).foregroundStyle(.secondary)
             }
             VStack(spacing: 6) {
-                PasswordMascotView(passwordLength: 10, isPasswordVisible: false)
-                Text("typing · hidden").font(.caption2).foregroundStyle(.secondary)
+                PasswordMascotView(passwordLength: 12, isPasswordVisible: false)
+                Text("hidden").font(.caption2).foregroundStyle(.secondary)
             }
         }
     }
