@@ -52,7 +52,7 @@ public struct ProfileSettingsGroup: View {
                 }
             }
             .background(SplickTheme.Colors.cardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium))
+            .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.extraLarge))
         }
     }
 }
