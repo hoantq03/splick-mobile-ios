@@ -10,54 +10,67 @@ public struct ConnectedAccountsView: View {
     }
 
     public var body: some View {
-        List {
-            if let info = viewModel.infoMessage {
-                Text(info)
-                    .font(SplickTheme.Typography.caption)
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
-            }
-            if let error = viewModel.errorMessage {
-                Text(error)
-                    .font(SplickTheme.Typography.caption)
-                    .foregroundStyle(SplickTheme.Colors.error)
-            }
+        ScrollView {
+            VStack(spacing: SplickTheme.Spacing.lg) {
+                if let info = viewModel.infoMessage {
+                    Text(info)
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if let error = viewModel.errorMessage {
+                    Text(error)
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.error)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
 
-            if let accounts = viewModel.accounts {
-                providerRow(
-                    title: "Google",
-                    provider: accounts.google,
-                    actionTitle: accounts.google.isLinked ? "Unlink" : "Connect",
-                    isLoading: viewModel.isLinkingGoogle,
-                    isDisabled: !viewModel.isGoogleLinkAvailable && !accounts.google.isLinked
-                ) {
-                    if accounts.google.isLinked {
-                        viewModel.showUnlinkSheet = true
-                    } else {
-                        Task { await viewModel.linkGoogle() }
+                if let accounts = viewModel.accounts {
+                    VStack(spacing: 0) {
+                        providerRow(
+                            title: "Google",
+                            provider: accounts.google,
+                            actionTitle: accounts.google.isLinked ? "Unlink" : "Connect",
+                            isLoading: viewModel.isLinkingGoogle,
+                            isDisabled: !viewModel.isGoogleLinkAvailable && !accounts.google.isLinked,
+                            showsDivider: true
+                        ) {
+                            if accounts.google.isLinked {
+                                viewModel.showUnlinkSheet = true
+                            } else {
+                                Task { await viewModel.linkGoogle() }
+                            }
+                        }
+
+                        providerRow(
+                            title: "Email & password",
+                            provider: accounts.emailPassword,
+                            actionTitle: accounts.emailPassword.isLinked ? nil : "Connect",
+                            isLoading: false,
+                            isDisabled: false,
+                            showsDivider: true
+                        ) {
+                            viewModel.showConnectEmailSheet = true
+                        }
+
+                        providerRow(
+                            title: "Phone",
+                            provider: accounts.phone,
+                            actionTitle: accounts.phone.isLinked ? nil : "Connect",
+                            isLoading: false,
+                            isDisabled: false,
+                            showsDivider: false
+                        ) {
+                            viewModel.showConnectPhoneSheet = true
+                        }
                     }
-                }
-
-                providerRow(
-                    title: "Email & password",
-                    provider: accounts.emailPassword,
-                    actionTitle: accounts.emailPassword.isLinked ? nil : "Connect",
-                    isLoading: false,
-                    isDisabled: false
-                ) {
-                    viewModel.showConnectEmailSheet = true
-                }
-
-                providerRow(
-                    title: "Phone",
-                    provider: accounts.phone,
-                    actionTitle: accounts.phone.isLinked ? nil : "Connect",
-                    isLoading: false,
-                    isDisabled: false
-                ) {
-                    viewModel.showConnectPhoneSheet = true
+                    .background(SplickTheme.Colors.cardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.control, style: .continuous))
                 }
             }
+            .padding(SplickTheme.Spacing.lg)
         }
+        .background(SplickTheme.Colors.background)
         .navigationTitle("Connected accounts")
         .navigationBarTitleDisplayMode(.inline)
         .task { await viewModel.load() }
@@ -80,20 +93,33 @@ public struct ConnectedAccountsView: View {
         actionTitle: String?,
         isLoading: Bool,
         isDisabled: Bool,
+        showsDivider: Bool,
         action: @escaping () -> Void
     ) -> some View {
-        HStack {
-            VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
-                Text(title)
-                    .font(SplickTheme.Typography.body)
-                Text(provider.isLinked ? (provider.detail ?? "Connected") : "Not connected")
-                    .font(SplickTheme.Typography.caption)
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+        VStack(spacing: 0) {
+            HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
+                VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxs) {
+                    Text(title)
+                        .font(SplickTheme.Typography.body)
+                        .foregroundStyle(SplickTheme.Colors.textPrimary)
+                    Text(provider.isLinked ? (provider.detail ?? "Connected") : "Not connected")
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+                }
+                Spacer()
+                if let actionTitle {
+                    Button(actionTitle, action: action)
+                        .font(SplickTheme.Typography.callout.weight(.semibold))
+                        .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                        .disabled(isDisabled || isLoading)
+                }
             }
-            Spacer()
-            if let actionTitle {
-                Button(actionTitle, action: action)
-                    .disabled(isDisabled || isLoading)
+            .padding(.horizontal, SplickTheme.Spacing.md)
+            .padding(.vertical, SplickTheme.Spacing.sm + 2)
+
+            if showsDivider {
+                Divider()
+                    .padding(.leading, SplickTheme.Spacing.md)
             }
         }
     }
@@ -124,8 +150,9 @@ public struct ConnectedAccountsView: View {
                         Task { _ = await viewModel.linkPhone() }
                     }
                 }
-                .padding()
+                .padding(SplickTheme.Spacing.lg)
             }
+            .background(SplickTheme.Colors.background)
             .navigationTitle("Connect phone")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -174,8 +201,9 @@ public struct ConnectedAccountsView: View {
                         Task { _ = await viewModel.linkEmail() }
                     }
                 }
-                .padding()
+                .padding(SplickTheme.Spacing.lg)
             }
+            .background(SplickTheme.Colors.background)
             .navigationTitle("Connect email")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -189,29 +217,32 @@ public struct ConnectedAccountsView: View {
 
     private var unlinkGoogleSheet: some View {
         NavigationStack {
-            VStack(spacing: SplickTheme.Spacing.lg) {
-                Picker("Verify with", selection: $viewModel.unlinkMethod) {
-                    ForEach(ConnectedAccountsViewModel.VerificationMethod.allCases, id: \.self) { method in
-                        Text(method.rawValue).tag(method)
+            ScrollView {
+                VStack(spacing: SplickTheme.Spacing.lg) {
+                    Picker("Verify with", selection: $viewModel.unlinkMethod) {
+                        ForEach(ConnectedAccountsViewModel.VerificationMethod.allCases, id: \.self) { method in
+                            Text(method.rawValue).tag(method)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    switch viewModel.unlinkMethod {
+                    case .password:
+                        SplickTextField("Password", text: $viewModel.unlinkPassword, isSecure: true, icon: "lock")
+                    case .emailCode:
+                        SplickButton("Send code to email", style: .secondary) {
+                            Task { await viewModel.requestUnlinkCode() }
+                        }
+                        SplickOtpField(code: $viewModel.unlinkOtpCode)
+                    }
+
+                    SplickButton("Unlink Google", style: .destructive, isLoading: viewModel.isUnlinkingGoogle) {
+                        Task { _ = await viewModel.unlinkGoogle() }
                     }
                 }
-                .pickerStyle(.segmented)
-
-                switch viewModel.unlinkMethod {
-                case .password:
-                    SplickTextField("Password", text: $viewModel.unlinkPassword, isSecure: true, icon: "lock")
-                case .emailCode:
-                    SplickButton("Send code to email", style: .secondary) {
-                        Task { await viewModel.requestUnlinkCode() }
-                    }
-                    SplickOtpField(code: $viewModel.unlinkOtpCode)
-                }
-
-                SplickButton("Unlink Google", style: .destructive, isLoading: viewModel.isUnlinkingGoogle) {
-                    Task { _ = await viewModel.unlinkGoogle() }
-                }
+                .padding(SplickTheme.Spacing.lg)
             }
-            .padding()
+            .background(SplickTheme.Colors.background)
             .navigationTitle("Unlink Google")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

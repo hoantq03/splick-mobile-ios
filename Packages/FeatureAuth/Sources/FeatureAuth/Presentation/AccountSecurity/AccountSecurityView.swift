@@ -80,8 +80,9 @@ public struct AccountSecurityView: View {
                     showDeleteConfirm = true
                 }
             }
-            .padding()
+            .padding(SplickTheme.Spacing.lg)
         }
+        .background(SplickTheme.Colors.background)
         .navigationTitle("Account")
         .navigationBarTitleDisplayMode(.inline)
         .confirmationDialog(
