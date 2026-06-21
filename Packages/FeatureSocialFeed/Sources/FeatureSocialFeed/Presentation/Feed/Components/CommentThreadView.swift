@@ -306,7 +306,8 @@ struct CommentRowView: View {
                 AvatarView(
                     imageURL: comment.author.avatarURL,
                     name: comment.author.displayName,
-                    size: .small
+                    size: .small,
+                    userId: comment.author.id
                 )
                 .frame(width: style.avatarSize, height: style.avatarSize)
                 .clipShape(Circle())
