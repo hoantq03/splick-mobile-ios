@@ -260,6 +260,8 @@ struct ProfileSettingsView: View {
     @State private var isSavingDisplayName = false
     @State private var displayNameDraft = ""
     @State private var displayNameError: String?
+    @State private var showProfileInviteShare = false
+    @State private var profileInviteShareUsername = ""
 
     var body: some View {
         NavigationStack {
@@ -352,6 +354,12 @@ struct ProfileSettingsView: View {
             }
             .sheet(isPresented: $showLanguagePicker) {
                 languagePickerSheet
+            }
+            .sheet(isPresented: $showProfileInviteShare) {
+                AppShareSheet(
+                    message: AppConstants.Links.profileInvitePath(username: profileInviteShareUsername),
+                    url: AppConstants.Links.profileInviteURL(username: profileInviteShareUsername)
+                )
             }
             .sheet(isPresented: $showChangeUsername) {
                 if let user = appState.currentUser {
@@ -529,10 +537,17 @@ struct ProfileSettingsView: View {
             .buttonStyle(.plain)
             .padding(.top, SplickTheme.Spacing.xs)
 
-            Text("@\(user.username)")
-                .font(SplickTheme.Typography.callout)
-                .foregroundStyle(SplickTheme.Colors.textSecondary)
-                .padding(.top, SplickTheme.Spacing.xxs)
+            Button {
+                profileInviteShareUsername = user.username
+                showProfileInviteShare = true
+            } label: {
+                Text(AppConstants.Links.profileInvitePath(username: user.username))
+                    .font(SplickTheme.Typography.callout)
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(languageService.text(.profileCopyInviteLink))
+            .padding(.top, SplickTheme.Spacing.xxs)
         }
         .frame(maxWidth: .infinity)
     }
@@ -1003,4 +1018,15 @@ struct ProfileSettingsView: View {
             profileError = languageService.text(.profileRefreshFailed)
         }
     }
+}
+
+private struct AppShareSheet: UIViewControllerRepresentable {
+    let message: String
+    let url: URL
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: [message, url], applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
