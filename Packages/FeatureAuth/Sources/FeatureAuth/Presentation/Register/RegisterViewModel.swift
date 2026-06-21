@@ -127,7 +127,7 @@ public final class RegisterViewModel: ObservableObject {
             usernameError = "Username is too long"
             usernameStatus = .neutral
         } else if !value.isValidUsername {
-            usernameError = "Letters, numbers, and underscores only"
+            usernameError = "Letters, numbers, _ and . only"
             usernameStatus = .neutral
         } else {
             usernameError = nil

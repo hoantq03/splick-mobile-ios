@@ -7,7 +7,7 @@ extension String {
     }
 
     public var isValidUsername: Bool {
-        let pattern = #"^[a-zA-Z0-9_]+$"#
+        let pattern = #"^[a-zA-Z0-9_.]+$"#
         return range(of: pattern, options: .regularExpression) != nil
     }
 

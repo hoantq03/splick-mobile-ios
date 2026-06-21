@@ -1,5 +1,7 @@
 import SwiftUI
 import Combine
+import PhotosUI
+import UIKit
 import Common
 import DesignSystem
 import Localization
@@ -227,102 +229,62 @@ struct ProfileSettingsView: View {
     @State private var showSessions = false
     @State private var showConnectedAccounts = false
     @State private var showAccountSecurity = false
-    @State private var showEditProfile = false
     @State private var showPaymentProfile = false
-    @State private var myPaymentProfile: PaymentProfile?
-    @State private var isLoadingPaymentProfile = false
-    @State private var paymentProfileLoadError: String?
+    @State private var showBirthday = false
+    @State private var showChangeUsername = false
+    @State private var showNotifications = false
+    @State private var showTheme = false
+    @State private var showAppIcon = false
+    @State private var showWidget = false
+    @State private var showAvatarOptions = false
+    @State private var showAvatarViewer = false
+    @State private var showPhotoPicker = false
+    @State private var showEditDisplayName = false
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var avatarPreviewImage: UIImage?
+    @State private var isUpdatingAvatar = false
+    @State private var isSavingDisplayName = false
+    @State private var displayNameDraft = ""
+    @State private var displayNameError: String?
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: SplickTheme.Spacing.lg) {
-                if let user = appState.currentUser {
-                    AvatarView(imageURL: user.avatarURL, name: user.displayName, size: .large)
-
-                    Text(user.displayName)
-                        .font(SplickTheme.Typography.title)
-
-                    Text("@\(user.username)")
-                        .font(SplickTheme.Typography.callout)
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
-
-                    Text(user.email)
-                        .font(SplickTheme.Typography.caption)
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
-                }
-
-                if let profileError {
-                    Text(profileError)
-                        .font(SplickTheme.Typography.caption)
-                        .foregroundStyle(SplickTheme.Colors.error)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                }
-
-                myPaymentProfileSection
-
-                SplickButton(
-                    languageService.text(.profileEdit),
-                    style: .secondary,
-                    isDisabled: appState.currentUser == nil
-                ) {
-                    showEditProfile = true
-                }
-                .padding(.horizontal, SplickTheme.Spacing.xl)
-
-                SplickButton(
-                    languageService.text(.profilePaymentManage),
-                    style: .secondary,
-                    isDisabled: appState.currentUser == nil
-                ) {
-                    showPaymentProfile = true
-                }
-                .padding(.horizontal, SplickTheme.Spacing.xl)
-
-                languageSection
-
-                SplickButton(
-                    languageService.text(.profileChangePassword),
-                    style: .secondary,
-                    isDisabled: appState.currentUser == nil
-                ) {
-                    showChangePassword = true
-                }
-                .padding(.horizontal, SplickTheme.Spacing.xl)
-
-                SplickButton(languageService.text(.profileDevicesSessions), style: .secondary) {
-                    showSessions = true
-                }
-                .padding(.horizontal, SplickTheme.Spacing.xl)
-
-                SplickButton(languageService.text(.profileConnectedAccounts), style: .secondary) {
-                    showConnectedAccounts = true
-                }
-                .padding(.horizontal, SplickTheme.Spacing.xl)
-
-                SplickButton(languageService.text(.profileDeactivateDelete), style: .secondary) {
-                    showAccountSecurity = true
-                }
-                .padding(.horizontal, SplickTheme.Spacing.xl)
-
-                SplickButton(
-                    languageService.text(.profileSignOut),
-                    style: .destructive,
-                    isLoading: isSigningOut,
-                    isDisabled: isSigningOut
-                ) {
-                    Task {
-                        isSigningOut = true
-                        defer { isSigningOut = false }
-                        await container.logoutUseCase.execute()
-                        appState.setUnauthenticated(container: container)
-                        dismiss()
+                    if let user = appState.currentUser {
+                        profileHeaderSection(user: user)
                     }
+
+                    if let profileError {
+                        Text(profileError)
+                            .font(SplickTheme.Typography.caption)
+                            .foregroundStyle(SplickTheme.Colors.error)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+
+                    accountSettingsGroup
+                    personalProfileSettingsGroup
+                    appSettingsGroup
+                    languageSection
+
+                    SplickButton(
+                        languageService.text(.profileSignOut),
+                        style: .destructive,
+                        isLoading: isSigningOut,
+                        isDisabled: isSigningOut
+                    ) {
+                        Task {
+                            isSigningOut = true
+                            defer { isSigningOut = false }
+                            await container.logoutUseCase.execute()
+                            appState.setUnauthenticated(container: container)
+                            dismiss()
+                        }
+                    }
+                    .padding(.horizontal, SplickTheme.Spacing.xl)
                 }
-                .padding(.horizontal, SplickTheme.Spacing.xl)
-                }
-                .padding(.top, SplickTheme.Spacing.xxl)
+                .padding(.top, SplickTheme.Spacing.xl)
                 .padding(.bottom, SplickTheme.Spacing.xl)
             }
             .navigationTitle(languageService.text(.profileTitle))
@@ -338,10 +300,39 @@ struct ProfileSettingsView: View {
             .task {
                 await refreshProfile()
             }
-            .onChange(of: showPaymentProfile) { isShowing in
-                if !isShowing {
-                    Task { await loadMyPaymentProfile() }
+            .confirmationDialog(
+                "",
+                isPresented: $showAvatarOptions,
+                titleVisibility: .hidden
+            ) {
+                if appState.currentUser?.avatarURL != nil || avatarPreviewImage != nil {
+                    Button(languageService.text(.profileAvatarView)) {
+                        showAvatarViewer = true
+                    }
                 }
+                Button(languageService.text(.profileAvatarEdit)) {
+                    showPhotoPicker = true
+                }
+                if appState.currentUser?.avatarURL != nil {
+                    Button(languageService.text(.profileAvatarDelete), role: .destructive) {
+                        Task { await removeAvatar() }
+                    }
+                }
+                Button(languageService.text(.commonCancel), role: .cancel) {}
+            }
+            .photosPicker(
+                isPresented: $showPhotoPicker,
+                selection: $selectedPhotoItem,
+                matching: .images
+            )
+            .onChange(of: selectedPhotoItem) { _ in
+                Task { await onPhotoItemChanged() }
+            }
+            .sheet(isPresented: $showAvatarViewer) {
+                avatarViewerSheet
+            }
+            .sheet(isPresented: $showEditDisplayName) {
+                editDisplayNameSheet
             }
             .sheet(isPresented: $showPaymentProfile) {
                 NavigationStack {
@@ -354,33 +345,10 @@ struct ProfileSettingsView: View {
                                 let result = try await container.uploadPaymentQrUseCase.execute(image: image)
                                 return result.url
                             },
-                            onProfileChanged: { profile in
-                                myPaymentProfile = profile
-                                paymentProfileLoadError = nil
-                            }
+                            onProfileChanged: { _ in }
                         )
                     )
                     .environmentObject(languageService)
-                }
-            }
-            .sheet(isPresented: $showEditProfile) {
-                if let user = appState.currentUser {
-                    NavigationStack {
-                        EditProfileView(
-                            viewModel: EditProfileViewModel(
-                                user: user,
-                                updateProfileUseCase: container.updateProfileUseCase,
-                                uploadAvatar: { image in
-                                    let result = try await container.uploadUserAvatarUseCase.execute(image: image)
-                                    return result.url
-                                }
-                            ),
-                            onProfileUpdated: { updated in
-                                appState.updateAuthenticatedUser(updated)
-                                showEditProfile = false
-                            }
-                        )
-                    }
                 }
             }
             .sheet(isPresented: $showChangePassword) {
@@ -440,51 +408,374 @@ struct ProfileSettingsView: View {
                     )
                 }
             }
+            .navigationDestination(isPresented: $showBirthday) {
+                BirthdayView()
+                    .environmentObject(languageService)
+            }
+            .navigationDestination(isPresented: $showChangeUsername) {
+                ChangeUsernameView()
+                    .environmentObject(languageService)
+            }
+            .navigationDestination(isPresented: $showNotifications) {
+                NotificationsSettingsView()
+                    .environmentObject(languageService)
+            }
+            .navigationDestination(isPresented: $showTheme) {
+                ThemeSettingsView()
+                    .environmentObject(languageService)
+            }
+            .navigationDestination(isPresented: $showAppIcon) {
+                AppIconSettingsView()
+                    .environmentObject(languageService)
+            }
+            .navigationDestination(isPresented: $showWidget) {
+                WidgetSettingsView()
+                    .environmentObject(languageService)
+            }
         }
     }
 
     @ViewBuilder
-    private var myPaymentProfileSection: some View {
-        Group {
-            if isLoadingPaymentProfile {
-                HStack {
-                    Spacer()
-                    ProgressView()
-                    Spacer()
+    private func profileHeaderSection(user: User) -> some View {
+        VStack(spacing: 0) {
+            ZStack(alignment: .topTrailing) {
+                Button {
+                    showAvatarOptions = true
+                } label: {
+                    profileAvatarContent(user: user)
+                        .frame(width: 96, height: 96)
+                        .clipShape(Circle())
                 }
-                .padding(.vertical, SplickTheme.Spacing.md)
-            } else if let myPaymentProfile {
-                PaymentProfileSummaryView(
-                    profile: myPaymentProfile,
-                    title: languageService.text(.profilePaymentFriendSection)
-                )
-            } else if let paymentProfileLoadError {
-                VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
-                    Text(languageService.text(.profilePaymentFriendSection))
-                        .font(SplickTheme.Typography.headline)
-                    Text(paymentProfileLoadError)
-                        .font(SplickTheme.Typography.caption)
-                        .foregroundStyle(SplickTheme.Colors.error)
+                .buttonStyle(.plain)
+                .disabled(isUpdatingAvatar)
+
+                Button {
+                    showAvatarOptions = true
+                } label: {
+                    Image(systemName: "pencil.circle.fill")
+                        .font(.system(size: 28))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, SplickTheme.Colors.primary)
+                        .background(Circle().fill(SplickTheme.Colors.background))
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(SplickTheme.Spacing.md)
-                .background(SplickTheme.Colors.cardBackground)
-                .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium))
-            } else {
-                VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
-                    Text(languageService.text(.profilePaymentFriendSection))
-                        .font(SplickTheme.Typography.headline)
-                    Text(languageService.text(.profilePaymentEmptySelf))
-                        .font(SplickTheme.Typography.callout)
+                .buttonStyle(.plain)
+                .offset(x: 4, y: -4)
+                .disabled(isUpdatingAvatar)
+            }
+
+            if isUpdatingAvatar {
+                ProgressView()
+                    .padding(.top, SplickTheme.Spacing.xs)
+            }
+
+            Button {
+                displayNameDraft = user.displayName
+                displayNameError = nil
+                showEditDisplayName = true
+            } label: {
+                HStack(spacing: SplickTheme.Spacing.xxs) {
+                    Text(user.displayName)
+                        .font(SplickTheme.Typography.title)
+                        .foregroundStyle(SplickTheme.Colors.textPrimary)
+
+                    Image(systemName: "pencil")
+                        .font(.system(size: 14))
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(SplickTheme.Spacing.md)
-                .background(SplickTheme.Colors.cardBackground)
-                .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium))
+            }
+            .buttonStyle(.plain)
+            .padding(.top, SplickTheme.Spacing.xs)
+
+            Text("@\(user.username)")
+                .font(SplickTheme.Typography.callout)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                .padding(.top, SplickTheme.Spacing.xxs)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
+    private func profileAvatarContent(user: User) -> some View {
+        if let avatarPreviewImage {
+            Image(uiImage: avatarPreviewImage)
+                .resizable()
+                .scaledToFill()
+        } else if let url = user.avatarURL {
+            RemoteImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                case .failure:
+                    profileAvatarPlaceholder(name: user.displayName)
+                default:
+                    SplickSpinner(size: .small)
+                }
+            }
+        } else {
+            profileAvatarPlaceholder(name: user.displayName)
+        }
+    }
+
+    private func profileAvatarPlaceholder(name: String) -> some View {
+        ZStack {
+            SplickTheme.Colors.primaryGradient
+            Text(String(name.prefix(2)).uppercased())
+                .font(.title2)
+                .fontWeight(.semibold)
+                .foregroundStyle(.white)
+        }
+    }
+
+    private var avatarViewerSheet: some View {
+        NavigationStack {
+            Group {
+                if let avatarPreviewImage {
+                    Image(uiImage: avatarPreviewImage)
+                        .resizable()
+                        .scaledToFit()
+                } else if let url = appState.currentUser?.avatarURL {
+                    RemoteImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image.resizable().scaledToFit()
+                        case .failure:
+                            EmptyStateView(
+                                icon: "person.crop.circle",
+                                title: languageService.text(.profileAvatarView),
+                                message: languageService.text(.profileRefreshFailed)
+                            )
+                        default:
+                            ProgressView()
+                        }
+                    }
+                } else {
+                    EmptyStateView(
+                        icon: "person.crop.circle",
+                        title: languageService.text(.profileAvatarView),
+                        message: languageService.text(.profileAvatarDelete)
+                    )
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(SplickTheme.Colors.background)
+            .navigationTitle(languageService.text(.profileAvatarView))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(languageService.text(.commonDone)) {
+                        showAvatarViewer = false
+                    }
+                }
             }
         }
+    }
+
+    private var editDisplayNameSheet: some View {
+        NavigationStack {
+            VStack(spacing: SplickTheme.Spacing.lg) {
+                SplickTextField(
+                    languageService.text(.authDisplayName),
+                    text: $displayNameDraft,
+                    icon: "person"
+                )
+                .textInputAutocapitalization(.words)
+
+                if let displayNameError {
+                    Text(displayNameError)
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.error)
+                        .multilineTextAlignment(.center)
+                }
+
+                SplickButton(
+                    languageService.text(.profileSave),
+                    isLoading: isSavingDisplayName,
+                    isDisabled: isSavingDisplayName
+                ) {
+                    Task { await saveDisplayName() }
+                }
+            }
+            .padding(SplickTheme.Spacing.md)
+            .navigationTitle(languageService.text(.profileEditDisplayName))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(languageService.text(.commonCancel)) {
+                        showEditDisplayName = false
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
+    private var accountSettingsGroup: some View {
+        ProfileSettingsGroup(
+            title: languageService.text(.profileGroupAccount),
+            items: [
+                ProfileSettingsItem(
+                    icon: "lock",
+                    title: languageService.text(.profileChangePassword),
+                    action: { showChangePassword = true }
+                ),
+                ProfileSettingsItem(
+                    icon: "iphone.and.arrow.forward",
+                    title: languageService.text(.profileDevicesSessions),
+                    action: { showSessions = true }
+                ),
+                ProfileSettingsItem(
+                    icon: "link",
+                    title: languageService.text(.profileConnectedAccounts),
+                    action: { showConnectedAccounts = true }
+                ),
+                ProfileSettingsItem(
+                    icon: "pause.circle",
+                    title: languageService.text(.profileDeactivate),
+                    action: { showAccountSecurity = true }
+                ),
+                ProfileSettingsItem(
+                    icon: "trash",
+                    title: languageService.text(.profileDeleteAccount),
+                    isDestructive: true,
+                    action: { showAccountSecurity = true }
+                )
+            ]
+        )
         .padding(.horizontal, SplickTheme.Spacing.xl)
+        .disabled(appState.currentUser == nil)
+    }
+
+    private var personalProfileSettingsGroup: some View {
+        ProfileSettingsGroup(
+            title: languageService.text(.profileGroupPersonal),
+            items: [
+                ProfileSettingsItem(
+                    icon: "qrcode",
+                    title: languageService.text(.profileQrReceive),
+                    action: { showPaymentProfile = true }
+                ),
+                ProfileSettingsItem(
+                    icon: "calendar",
+                    title: languageService.text(.profileBirthday),
+                    action: { showBirthday = true }
+                ),
+                ProfileSettingsItem(
+                    icon: "at",
+                    title: languageService.text(.profileChangeUsername),
+                    action: { showChangeUsername = true }
+                )
+            ]
+        )
+        .padding(.horizontal, SplickTheme.Spacing.xl)
+        .disabled(appState.currentUser == nil)
+    }
+
+    private var appSettingsGroup: some View {
+        ProfileSettingsGroup(
+            title: languageService.text(.profileGroupApp),
+            items: [
+                ProfileSettingsItem(
+                    icon: "bell",
+                    title: languageService.text(.profileNotifications),
+                    action: { showNotifications = true }
+                ),
+                ProfileSettingsItem(
+                    icon: "paintbrush",
+                    title: languageService.text(.profileTheme),
+                    action: { showTheme = true }
+                ),
+                ProfileSettingsItem(
+                    icon: "app",
+                    title: languageService.text(.profileAppIcon),
+                    action: { showAppIcon = true }
+                ),
+                ProfileSettingsItem(
+                    icon: "square.grid.2x2",
+                    title: languageService.text(.profileWidget),
+                    action: { showWidget = true }
+                )
+            ]
+        )
+        .padding(.horizontal, SplickTheme.Spacing.xl)
+    }
+
+    private func onPhotoItemChanged() async {
+        guard let selectedPhotoItem else {
+            avatarPreviewImage = nil
+            return
+        }
+        guard let data = try? await selectedPhotoItem.loadTransferable(type: Data.self),
+              let image = UIImage(data: data) else {
+            profileError = languageService.text(.profileRefreshFailed)
+            return
+        }
+        avatarPreviewImage = image
+        await uploadAvatar(image)
+    }
+
+    private func uploadAvatar(_ image: UIImage) async {
+        guard !isUpdatingAvatar else { return }
+        isUpdatingAvatar = true
+        profileError = nil
+        defer { isUpdatingAvatar = false }
+
+        do {
+            let uploaded = try await container.uploadUserAvatarUseCase.execute(image: image)
+            let user = try await container.updateProfileUseCase.execute(
+                displayName: nil,
+                avatarUrl: uploaded.url.absoluteString,
+                preferredLocale: nil
+            )
+            appState.updateAuthenticatedUser(user)
+            selectedPhotoItem = nil
+            avatarPreviewImage = nil
+        } catch {
+            profileError = languageService.localizedMessage(for: error)
+            avatarPreviewImage = nil
+            selectedPhotoItem = nil
+        }
+    }
+
+    private func removeAvatar() async {
+        guard !isUpdatingAvatar else { return }
+        isUpdatingAvatar = true
+        profileError = nil
+        defer { isUpdatingAvatar = false }
+
+        do {
+            let user = try await container.updateProfileUseCase.execute(
+                displayName: nil,
+                avatarUrl: "",
+                preferredLocale: nil
+            )
+            appState.updateAuthenticatedUser(user)
+            avatarPreviewImage = nil
+            selectedPhotoItem = nil
+        } catch {
+            profileError = languageService.localizedMessage(for: error)
+        }
+    }
+
+    private func saveDisplayName() async {
+        let trimmedName = displayNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        guard !isSavingDisplayName else { return }
+
+        isSavingDisplayName = true
+        displayNameError = nil
+        defer { isSavingDisplayName = false }
+
+        do {
+            let user = try await container.updateProfileUseCase.execute(
+                displayName: trimmedName,
+                avatarUrl: nil,
+                preferredLocale: nil
+            )
+            appState.updateAuthenticatedUser(user)
+            showEditDisplayName = false
+        } catch {
+            displayNameError = languageService.localizedMessage(for: error)
+        }
     }
 
     private var languageSection: some View {
@@ -542,22 +833,6 @@ struct ProfileSettingsView: View {
             languageService.applyFromServer(user.preferredLocale)
         } catch {
             profileError = languageService.text(.profileRefreshFailed)
-        }
-        await loadMyPaymentProfile()
-    }
-
-    private func loadMyPaymentProfile() async {
-        isLoadingPaymentProfile = true
-        paymentProfileLoadError = nil
-        defer { isLoadingPaymentProfile = false }
-
-        do {
-            let profile = try await container.fetchMyPaymentProfileUseCase.execute()
-            myPaymentProfile = profile.hasAnyContent ? profile : nil
-        } catch NetworkError.notFound {
-            myPaymentProfile = nil
-        } catch {
-            paymentProfileLoadError = error.localizedDescription
         }
     }
 }
