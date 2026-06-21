@@ -49,8 +49,9 @@ public struct StreakView: View {
                 sections: viewModel.monthSections,
                 anchorMonthID: viewModel.anchorMonthID,
                 isLoadingOlder: viewModel.isLoadingOlderMonths,
+                canLoadOlder: !viewModel.hasReachedOldestMonth,
                 onLoadOlder: { section in
-                    Task { await viewModel.loadOlderMonthIfNeeded(for: section) }
+                    await viewModel.loadOlderMonthIfNeeded(for: section)
                 },
                 onDayTap: { day in
                     viewModel.selectDay(day)

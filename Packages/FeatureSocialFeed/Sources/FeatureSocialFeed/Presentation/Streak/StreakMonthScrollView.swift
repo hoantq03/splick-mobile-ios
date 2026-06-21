@@ -2,65 +2,119 @@ import SwiftUI
 import DesignSystem
 import SplickDomain
 
-/// Continuous vertical month list (like photo album). Free scroll while dragging;
-/// on iOS 17+ snaps a full month into the viewport only when decelerating to a stop.
+/// Continuous vertical month list (like photo album). Older months prepend at the top;
+/// scroll position is preserved so the viewport does not jump while paginating upward.
 struct StreakMonthScrollView: View {
     let sections: [StreakMonthSection]
     let anchorMonthID: String
     let isLoadingOlder: Bool
-    let onLoadOlder: (StreakMonthSection) -> Void
+    let canLoadOlder: Bool
+    let onLoadOlder: (StreakMonthSection) async -> Bool
     let onDayTap: (StreakDay) -> Void
     let onRefresh: () async -> Void
 
     @State private var didInitialScroll = false
+    @State private var scrollAnchorAfterPrepend: String?
+    @State private var lastOlderLoadTriggerSectionID: String?
+    @State private var suppressLoadForSectionID: String?
+    @State private var trackedSectionCount = 0
 
     var body: some View {
         ScrollViewReader { proxy in
-            Group {
-                if #available(iOS 17.0, *) {
-                    ScrollView {
-                        monthStack
-                            .scrollTargetLayout()
-                    }
-                    .scrollTargetBehavior(.viewAligned(limitBehavior: .always))
-                    .scrollBounceBehavior(.basedOnSize, axes: .vertical)
-                } else {
-                    ScrollView {
-                        monthStack
-                    }
-                }
+            ScrollView {
+                monthStack
             }
             .scrollContentBackground(.hidden)
             .background(SplickTheme.Colors.background)
+            .overlay(alignment: .top) {
+                if isLoadingOlder {
+                    ProgressView()
+                        .padding(.top, SplickTheme.Spacing.sm)
+                        .allowsHitTesting(false)
+                }
+            }
             .refreshable { await onRefresh() }
             .tabBarHideOnScroll()
             .feedSegmentHideOnScroll()
             .onAppear {
+                trackedSectionCount = sections.count
                 scrollToCurrentMonth(using: proxy, animated: false)
+            }
+            .onChange(of: sections.count) { newCount in
+                let oldCount = trackedSectionCount
+                trackedSectionCount = newCount
+                handleSectionCountChange(
+                    oldCount: oldCount,
+                    newCount: newCount,
+                    proxy: proxy
+                )
             }
         }
     }
 
     private var monthStack: some View {
         LazyVStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
-            if isLoadingOlder {
-                ProgressView()
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, SplickTheme.Spacing.sm)
-            }
-
             ForEach(sections) { section in
                 StreakMonthSectionView(section: section, onDayTap: onDayTap)
                     .id(section.id)
                     .onAppear {
-                        if section.id == sections.first?.id {
-                            onLoadOlder(section)
+                        requestOlderMonthIfNeeded(for: section)
+                    }
+                    .onDisappear {
+                        if suppressLoadForSectionID == section.id {
+                            suppressLoadForSectionID = nil
                         }
                     }
             }
         }
         .padding(.top, SplickTheme.Spacing.xs)
         .padding(.bottom, SplickTheme.Spacing.xl)
+    }
+
+    private func requestOlderMonthIfNeeded(for section: StreakMonthSection) {
+        guard canLoadOlder else { return }
+        guard section.id == sections.first?.id else { return }
+        guard suppressLoadForSectionID != section.id else { return }
+        guard lastOlderLoadTriggerSectionID != section.id else { return }
+
+        lastOlderLoadTriggerSectionID = section.id
+
+        Task {
+            let anchor = section.id
+            scrollAnchorAfterPrepend = anchor
+            let inserted = await onLoadOlder(section)
+            if !inserted {
+                scrollAnchorAfterPrepend = nil
+            }
+        }
+    }
+
+    private func handleSectionCountChange(
+        oldCount: Int,
+        newCount: Int,
+        proxy: ScrollViewProxy
+    ) {
+        if newCount < oldCount {
+            lastOlderLoadTriggerSectionID = nil
+            scrollAnchorAfterPrepend = nil
+            suppressLoadForSectionID = nil
+            didInitialScroll = false
+            DispatchQueue.main.async {
+                scrollToCurrentMonth(using: proxy, animated: false)
+            }
+            return
+        }
+
+        guard newCount > oldCount, let anchor = scrollAnchorAfterPrepend else { return }
+
+        if let newFirstID = sections.first?.id {
+            suppressLoadForSectionID = newFirstID
+        }
+
+        DispatchQueue.main.async {
+            proxy.scrollTo(anchor, anchor: .top)
+            scrollAnchorAfterPrepend = nil
+        }
     }
 
     private func scrollToCurrentMonth(using proxy: ScrollViewProxy, animated: Bool) {
