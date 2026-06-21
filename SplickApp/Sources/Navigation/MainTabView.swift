@@ -445,27 +445,31 @@ struct ProfileSettingsView: View {
                     profileAvatarContent(user: user)
                         .frame(width: 96, height: 96)
                         .clipShape(Circle())
+                        .overlay {
+                            if isUpdatingAvatar {
+                                Circle()
+                                    .fill(Color.black.opacity(0.4))
+                                ProgressView()
+                                    .tint(.white)
+                            }
+                        }
                 }
                 .buttonStyle(.plain)
                 .disabled(isUpdatingAvatar)
 
-                Button {
-                    showAvatarOptions = true
-                } label: {
-                    Image(systemName: "pencil.circle.fill")
-                        .font(.system(size: 28))
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(.white, SplickTheme.Colors.primary)
-                        .background(Circle().fill(SplickTheme.Colors.background))
+                if !isUpdatingAvatar {
+                    Button {
+                        showAvatarOptions = true
+                    } label: {
+                        Image(systemName: "pencil.circle.fill")
+                            .font(.system(size: 28))
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, SplickTheme.Colors.primary)
+                            .background(Circle().fill(SplickTheme.Colors.background))
+                    }
+                    .buttonStyle(.plain)
+                    .offset(x: 4, y: -4)
                 }
-                .buttonStyle(.plain)
-                .offset(x: 4, y: -4)
-                .disabled(isUpdatingAvatar)
-            }
-
-            if isUpdatingAvatar {
-                ProgressView()
-                    .padding(.top, SplickTheme.Spacing.xs)
             }
 
             Button {
