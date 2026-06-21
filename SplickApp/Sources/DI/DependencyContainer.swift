@@ -37,6 +37,10 @@ final class DependencyContainer: ObservableObject {
         CheckIdentifierUseCase(repository: authRepository)
     }()
 
+    lazy var checkUsernameAvailabilityUseCase: CheckUsernameAvailabilityUseCaseProtocol = {
+        CheckUsernameAvailabilityUseCase(repository: authRepository)
+    }()
+
     lazy var loginUseCase: LoginUseCaseProtocol = {
         LoginUseCase(repository: authRepository, sessionManager: sessionManager)
     }()
@@ -75,6 +79,10 @@ final class DependencyContainer: ObservableObject {
 
     lazy var changePasswordUseCase: ChangePasswordUseCaseProtocol = {
         ChangePasswordUseCase(repository: authRepository, sessionManager: sessionManager)
+    }()
+
+    lazy var verifyPasswordChangeUseCase: VerifyPasswordChangeUseCaseProtocol = {
+        VerifyPasswordChangeUseCase(repository: authRepository)
     }()
 
     lazy var refreshProfileUseCase: RefreshProfileUseCaseProtocol = {
