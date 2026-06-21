@@ -283,9 +283,9 @@ struct ProfileSettingsView: View {
                             .padding(.horizontal)
                     }
 
-                    accountSettingsGroup
                     personalProfileSettingsGroup
                     appSettingsGroup
+                    accountSettingsGroup
                     aboutGroup
 
                     SplickButton(
