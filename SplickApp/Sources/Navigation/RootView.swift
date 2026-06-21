@@ -4,10 +4,11 @@ import Common
 import FeatureAuth
 
 struct RootView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var container: DependencyContainer
 
-    @State private var splashLayerActive = true
+    @State private var previousScenePhase: ScenePhase = .inactive
 
     private static let dismissAnimation = Animation.spring(
         response: 0.78,
@@ -16,48 +17,71 @@ struct RootView: View {
     )
 
     var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                rootContent
+        ZStack {
+            rootContent
 
-                if splashLayerActive {
-                    SplashScreenView()
-                        .frame(width: geometry.size.width, height: geometry.size.height)
-                        .offset(y: appState.isShowingSplash ? 0 : -geometry.size.height)
-                        .ignoresSafeArea()
-                        .zIndex(1)
-                        .allowsHitTesting(appState.isShowingSplash)
-                }
+            if appState.needsSplash {
+                splashOverlay
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(999)
             }
-            .frame(width: geometry.size.width, height: geometry.size.height)
         }
         .ignoresSafeArea()
-        .animation(Self.dismissAnimation, value: appState.isShowingSplash)
-        .onChange(of: appState.isShowingSplash) { isShowing in
-            if isShowing {
-                splashLayerActive = true
-            } else {
-                Task {
-                    try? await Task.sleep(for: AppConstants.Splash.dismissDuration)
-                    splashLayerActive = false
-                }
-            }
+        .animation(Self.dismissAnimation, value: appState.needsSplash)
+        .onChange(of: scenePhase) { phase in
+            defer { previousScenePhase = phase }
+
+            guard phase == .active else { return }
+            guard previousScenePhase == .background else { return }
+            guard !appState.isAuthenticated else { return }
+            appState.resetGuestSplashSession()
         }
-        .task(id: appState.isShowingSplash) {
-            guard shouldRunSplashSequence else { return }
+        .task(id: appState.splashSessionID) {
+            guard appState.needsSplash else { return }
             await runSplashSequence()
         }
     }
 
+    // MARK: - Splash overlay (logo + spinner — shown while session restores)
+
+    private var splashOverlay: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(hex: 0x5B6CFF).opacity(0.12),
+                    SplickTheme.Colors.background,
+                    Color(hex: 0x2A9D8F).opacity(0.1),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
+            VStack(spacing: SplickTheme.Spacing.md) {
+                SplickLogoMark(size: 128, layout: .markOnly, style: .fullColor)
+                Text("Splick")
+                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .foregroundStyle(SplickTheme.Colors.primaryGradient)
+                SplickSpinner(size: .large)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(SplickTheme.Colors.background)
+    }
+
+    // MARK: - Root content
+
+    /// The onboarding 4-page intro shows every time the user is not signed in,
+    /// until they tap through to the end (`passOnboardingGate()`).
+    /// After passing the gate this session, the login screen is shown.
     @ViewBuilder
     private var rootContent: some View {
         switch appState.authState {
         case .unknown:
-            SplickTheme.Colors.background
-                .ignoresSafeArea()
+            SplickTheme.Colors.background.ignoresSafeArea()
 
         case .unauthenticated:
-            if appState.hasCompletedOnboarding {
+            if appState.hasPassedOnboardingThisSession {
                 authFlow
             } else {
                 onboardingFlow
@@ -68,20 +92,11 @@ struct RootView: View {
         }
     }
 
-    private var shouldRunSplashSequence: Bool {
-        switch appState.authState {
-        case .unknown:
-            return true
-        case .unauthenticated:
-            return appState.isShowingSplash
-        case .authenticated:
-            return false
-        }
-    }
+    // MARK: - Flows
 
     private var onboardingFlow: some View {
         OnboardingView {
-            appState.completeOnboarding()
+            appState.passOnboardingGate()
         }
     }
 
@@ -116,6 +131,8 @@ struct RootView: View {
         }
     }
 
+    // MARK: - Session restore
+
     private func runSplashSequence() async {
         async let minimumDisplay: Void = {
             try? await Task.sleep(for: AppConstants.Splash.minimumDisplayDuration)
@@ -128,8 +145,8 @@ struct RootView: View {
         await minimumDisplay
 
         guard !Task.isCancelled else { return }
-        guard appState.isShowingSplash else { return }
-        appState.finishSplash()
+        guard appState.needsSplash else { return }
+        appState.completeLaunchSplash()
     }
 
     private func resolveInitialSession() async {
@@ -137,7 +154,7 @@ struct RootView: View {
             container.languageService.applyFromServer(session.user.preferredLocale)
             appState.setAuthenticated(user: session.user)
         } else {
-            appState.setUnauthenticated(container: container)
+            appState.markUnauthenticated(container: container)
         }
     }
 }

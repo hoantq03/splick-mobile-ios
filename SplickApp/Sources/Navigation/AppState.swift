@@ -18,13 +18,17 @@ final class AppState: ObservableObject {
     @Published var showNotifications = false
     @Published var feedNavigationPath = NavigationPath()
     @Published var pendingPostId: UUID?
-    @Published private(set) var hasCompletedOnboarding: Bool
-    @Published private(set) var isShowingSplash = true
 
-    init() {
-        hasCompletedOnboarding = UserDefaults.standard.bool(
-            forKey: AppConstants.UserDefaults.isOnboardingCompleted
-        )
+    /// In-memory only — `false` every cold launch and after logout.
+    /// `true` only after the user taps through the 4-page onboarding this session.
+    @Published private(set) var hasPassedOnboardingThisSession = false
+
+    /// `false` = splash overlay is visible; `true` = splash has slid away.
+    @Published private(set) var isLaunchSplashComplete = false
+    @Published private(set) var splashSessionID = UUID()
+
+    var needsSplash: Bool {
+        !isAuthenticated && !isLaunchSplashComplete
     }
 
     var isAuthenticated: Bool {
@@ -39,12 +43,7 @@ final class AppState: ObservableObject {
 
     func setAuthenticated(user: User) {
         authState = .authenticated(user)
-        withAnimation {
-            isShowingSplash = false
-        }
-        if !hasCompletedOnboarding {
-            completeOnboarding()
-        }
+        isLaunchSplashComplete = true
         Log.info("User authenticated: \(user.username)", category: .lifecycle)
         Log.debug("Navigate to main tabs", category: .ui)
     }
@@ -57,12 +56,29 @@ final class AppState: ObservableObject {
     func setUnauthenticated(container: DependencyContainer) {
         container.resetTabViewModels()
         authState = .unauthenticated
-        isShowingSplash = true
+        hasPassedOnboardingThisSession = false
+        resetGuestSplashSession()
         selectedTab = .feed
         showNotifications = false
         feedNavigationPath = NavigationPath()
         pendingPostId = nil
         Log.info("User signed out", category: .lifecycle)
+    }
+
+    /// Called when session restore determines there is no active session.
+    /// Does NOT replay the splash — caller controls that.
+    func markUnauthenticated(container: DependencyContainer) {
+        container.resetTabViewModels()
+        authState = .unauthenticated
+        selectedTab = .feed
+        showNotifications = false
+        feedNavigationPath = NavigationPath()
+        pendingPostId = nil
+    }
+
+    /// Called when user taps through the last onboarding page.
+    func passOnboardingGate() {
+        hasPassedOnboardingThisSession = true
     }
 
     func openPostFromNotification(_ postId: UUID) {
@@ -79,16 +95,15 @@ final class AppState: ObservableObject {
         pendingPostId = nil
     }
 
-    func completeOnboarding() {
-        hasCompletedOnboarding = true
-        UserDefaults.standard.set(true, forKey: AppConstants.UserDefaults.isOnboardingCompleted)
-        Log.info("Onboarding completed", category: .lifecycle)
+    func completeLaunchSplash() {
+        withAnimation {
+            isLaunchSplashComplete = true
+        }
     }
 
-    func finishSplash() {
-        withAnimation {
-            isShowingSplash = false
-        }
+    func resetGuestSplashSession() {
+        isLaunchSplashComplete = false
+        splashSessionID = UUID()
     }
 }
 
