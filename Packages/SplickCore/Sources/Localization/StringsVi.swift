@@ -63,6 +63,9 @@ enum StringsVi {
         .changePasswordOtpRequired: "Nhập mã 6 chữ số",
         .changePasswordFailed: "Không thể đổi mật khẩu.",
         .changePasswordVerifiedHint: "Đã xác minh. Nhập mật khẩu mới bên dưới.",
+        .changePasswordEmailHint: "Mã xác minh sẽ được gửi tới email tài khoản của bạn.",
+        .changePasswordResendCode: "Gửi lại mã",
+        .changePasswordResendIn: "Gửi lại sau %d giây",
         .authShowPassword: "Hiện mật khẩu",
         .authHidePassword: "Ẩn mật khẩu",
 

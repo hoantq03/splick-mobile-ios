@@ -63,6 +63,9 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case changePasswordOtpRequired = "change_password.otp_required"
     case changePasswordFailed = "change_password.failed"
     case changePasswordVerifiedHint = "change_password.verified_hint"
+    case changePasswordEmailHint = "change_password.email_hint"
+    case changePasswordResendCode = "change_password.resend_code"
+    case changePasswordResendIn = "change_password.resend_in"
     case authShowPassword = "auth.show_password"
     case authHidePassword = "auth.hide_password"
 

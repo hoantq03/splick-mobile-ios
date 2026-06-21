@@ -63,6 +63,9 @@ enum StringsEn {
         .changePasswordOtpRequired: "Enter the 6-digit code",
         .changePasswordFailed: "Could not change password.",
         .changePasswordVerifiedHint: "Identity verified. Set your new password below.",
+        .changePasswordEmailHint: "A verification code will be sent to your account email.",
+        .changePasswordResendCode: "Resend code",
+        .changePasswordResendIn: "Resend code in %d s",
         .authShowPassword: "Show password",
         .authHidePassword: "Hide password",
 
