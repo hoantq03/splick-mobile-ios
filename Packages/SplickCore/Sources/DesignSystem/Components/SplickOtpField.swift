@@ -9,6 +9,7 @@ public struct SplickOtpField: View {
     private let errorMessage: String?
     private let autoFocus: Bool
     private let onComplete: ((String) -> Void)?
+    private let cornerRadius: CGFloat
 
     @FocusState private var isFocused: Bool
 
@@ -20,12 +21,14 @@ public struct SplickOtpField: View {
         length: Int = SplickOtpField.defaultLength,
         errorMessage: String? = nil,
         autoFocus: Bool = true,
+        cornerRadius: CGFloat = SplickTheme.CornerRadius.medium,
         onComplete: ((String) -> Void)? = nil
     ) {
         self._code = code
         self.length = max(4, min(length, 8))
         self.errorMessage = errorMessage
         self.autoFocus = autoFocus
+        self.cornerRadius = cornerRadius
         self.onComplete = onComplete
     }
 
@@ -97,10 +100,10 @@ public struct SplickOtpField: View {
         let isFilled = index < code.count
 
         ZStack {
-            RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium, style: .continuous)
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(boxFill(isFilled: isFilled, isActive: isActive))
 
-            RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium, style: .continuous)
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .strokeBorder(boxStroke(isActive: isActive), lineWidth: isActive ? 2 : 1)
 
             if digit.isEmpty && isActive {

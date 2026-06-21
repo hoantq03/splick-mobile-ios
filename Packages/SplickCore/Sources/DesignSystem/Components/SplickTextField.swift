@@ -8,6 +8,7 @@ public struct SplickTextField: View {
     private let icon: String?
     private let validationStatus: FieldValidationStatus
     private let onValidationAccessoryTap: (() -> Void)?
+    private let cornerRadius: CGFloat
 
     public init(
         _ placeholder: String,
@@ -16,7 +17,8 @@ public struct SplickTextField: View {
         errorMessage: String? = nil,
         icon: String? = nil,
         validationStatus: FieldValidationStatus = .neutral,
-        onValidationAccessoryTap: (() -> Void)? = nil
+        onValidationAccessoryTap: (() -> Void)? = nil,
+        cornerRadius: CGFloat = SplickTheme.CornerRadius.small
     ) {
         self.placeholder = placeholder
         self._text = text
@@ -25,6 +27,7 @@ public struct SplickTextField: View {
         self.icon = icon
         self.validationStatus = validationStatus
         self.onValidationAccessoryTap = onValidationAccessoryTap
+        self.cornerRadius = cornerRadius
     }
 
     public var body: some View {
@@ -49,9 +52,9 @@ public struct SplickTextField: View {
             }
             .padding(SplickTheme.Spacing.sm)
             .background(SplickTheme.Colors.secondaryBackground)
-            .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small))
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small)
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .strokeBorder(
                         errorMessage != nil ? SplickTheme.Colors.error : Color.clear,
                         lineWidth: 1

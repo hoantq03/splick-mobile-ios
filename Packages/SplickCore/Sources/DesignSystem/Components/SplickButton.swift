@@ -12,6 +12,7 @@ public struct SplickButton: View {
     private let style: Style
     private let isLoading: Bool
     private let isDisabled: Bool
+    private let cornerRadius: CGFloat
     private let action: () -> Void
 
     public init(
@@ -19,12 +20,14 @@ public struct SplickButton: View {
         style: Style = .primary,
         isLoading: Bool = false,
         isDisabled: Bool = false,
+        cornerRadius: CGFloat = SplickTheme.CornerRadius.medium,
         action: @escaping () -> Void
     ) {
         self.title = title
         self.style = style
         self.isLoading = isLoading
         self.isDisabled = isDisabled
+        self.cornerRadius = cornerRadius
         self.action = action
     }
 
@@ -42,10 +45,10 @@ public struct SplickButton: View {
             .padding(.horizontal, SplickTheme.Spacing.lg)
             .background(backgroundColor)
             .foregroundStyle(foregroundColor)
-            .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium))
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay {
                 if style == .secondary || style == .ghost {
-                    RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium)
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                         .strokeBorder(borderColor, lineWidth: style == .ghost ? 0 : 1.5)
                 }
             }
