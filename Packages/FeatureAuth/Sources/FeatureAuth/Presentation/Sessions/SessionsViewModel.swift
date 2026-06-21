@@ -12,6 +12,7 @@ public final class SessionsViewModel: ObservableObject {
     private let revokeSessionUseCase: RevokeSessionUseCaseProtocol
     private let revokeAllSessionsUseCase: RevokeAllSessionsUseCaseProtocol
     private let onSignedOutEverywhere: () -> Void
+    private var isRefreshing = false
 
     public init(
         listSessionsUseCase: ListSessionsUseCaseProtocol,
@@ -25,16 +26,28 @@ public final class SessionsViewModel: ObservableObject {
         self.onSignedOutEverywhere = onSignedOutEverywhere
     }
 
-    public func load() async {
-        loadingState = .loading
+    public func load(isPullToRefresh: Bool = false) async {
+        if isPullToRefresh {
+            guard !isRefreshing else { return }
+            isRefreshing = true
+            defer { isRefreshing = false }
+        } else if sessions.isEmpty {
+            loadingState = .loading
+        }
+
         errorMessage = nil
         do {
             let loaded = try await listSessionsUseCase.execute()
             sessions = loaded
             loadingState = .loaded(loaded)
         } catch {
-            loadingState = .failed("Could not load devices.")
-            errorMessage = (error as? AuthError)?.userMessage ?? "Could not load devices."
+            guard !error.isRequestCancellation else { return }
+            if isPullToRefresh, !sessions.isEmpty {
+                loadingState = .loaded(sessions)
+            } else {
+                loadingState = .failed("Could not load devices.")
+                errorMessage = (error as? AuthError)?.userMessage ?? "Could not load devices."
+            }
         }
     }
 

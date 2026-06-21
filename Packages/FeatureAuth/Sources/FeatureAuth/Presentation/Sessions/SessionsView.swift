@@ -43,8 +43,10 @@ public struct SessionsView: View {
         .background(SplickTheme.Colors.background)
         .navigationTitle("Devices")
         .navigationBarTitleDisplayMode(.inline)
-        .task { await viewModel.load() }
-        .refreshable { await viewModel.load() }
+        .onFirstAppear {
+            Task { await viewModel.load() }
+        }
+        .refreshable { await viewModel.load(isPullToRefresh: true) }
     }
 
     private func sessionCard(_ session: UserSession) -> some View {
