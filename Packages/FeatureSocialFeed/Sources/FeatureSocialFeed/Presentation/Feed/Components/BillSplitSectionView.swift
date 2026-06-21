@@ -19,68 +19,49 @@ struct BillSplitSectionView: View {
         bill.splits.filter { !$0.isPaid }
     }
 
+    private var paidCount: Int {
+        bill.splits.filter(\.isPaid).count
+    }
+
+    private var totalCount: Int {
+        bill.splits.count
+    }
+
+    private var isFullySettled: Bool {
+        unpaidSplits.isEmpty && totalCount > 0
+    }
+
+    private var canSendReminders: Bool {
+        onSendReminder != nil && onSendAllReminders != nil
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isExpanded.toggle()
+            Group {
+                if isExpanded {
+                    Button {
+                        toggleExpanded()
+                    } label: {
+                        headerRow
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    headerRow
                 }
-            } label: {
-                HStack(spacing: SplickTheme.Spacing.xs) {
-                    Image(systemName: "dollarsign.circle.fill")
-                        .font(.body)
-                        .foregroundStyle(SplickTheme.Colors.success)
-                    Text(languageService.text(.feedBillSplitTitle))
-                        .font(SplickTheme.Typography.caption)
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
-                    Text(formatMoney(bill.totalAmount, currency: bill.currency))
-                        .font(SplickTheme.Typography.headline)
-                        .foregroundStyle(SplickTheme.Colors.textPrimary)
-                    Spacer()
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(SplickTheme.Colors.textTertiary)
-                }
-                .padding(.horizontal, SplickTheme.Spacing.sm)
-                .padding(.vertical, SplickTheme.Spacing.xs)
             }
-            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             if isExpanded {
                 Divider()
                     .padding(.horizontal, SplickTheme.Spacing.sm)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(bill.splits) { line in
-                        splitRow(line)
-                    }
-
-                    if !unpaidSplits.isEmpty {
-                        Button {
-                            reminderMessage = BillReminderMessages.random()
-                            showSendAllReminder = true
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "bell.badge.fill")
-                                    .font(.system(size: 13, weight: .semibold))
-                                Text(languageService.format(.feedBillRemindAll, unpaidSplits.count))
-                                    .font(.system(size: 12, weight: .semibold))
-                            }
-                            .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 8)
-                            .background(
-                                RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small)
-                                    .fill(SplickTheme.Colors.primaryGradientStart.opacity(0.1))
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.top, 4)
-                    }
-                }
-                .padding(.horizontal, SplickTheme.Spacing.sm)
-                .padding(.vertical, SplickTheme.Spacing.xs)
+                expandedContent
             }
+        }
+        .contentShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small))
+        .onTapGesture {
+            guard !isExpanded else { return }
+            toggleExpanded()
         }
         .sheet(item: $reminderTarget) { user in
             BillReminderSheet(
@@ -104,6 +85,99 @@ struct BillSplitSectionView: View {
             RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small)
                 .fill(SplickTheme.Colors.tertiaryBackground)
         )
+    }
+
+    private var headerRow: some View {
+        HStack(spacing: SplickTheme.Spacing.xs) {
+            Image(systemName: isFullySettled ? "checkmark.circle.fill" : "dollarsign.circle.fill")
+                .font(.body)
+                .foregroundStyle(SplickTheme.Colors.success)
+            Text(languageService.text(.feedBillSplitTitle))
+                .font(SplickTheme.Typography.caption)
+                .foregroundStyle(
+                    isFullySettled
+                        ? SplickTheme.Colors.success
+                        : SplickTheme.Colors.textSecondary
+                )
+            Text(formatMoney(bill.totalAmount, currency: bill.currency))
+                .font(SplickTheme.Typography.headline)
+                .foregroundStyle(
+                    isFullySettled
+                        ? SplickTheme.Colors.success
+                        : SplickTheme.Colors.textPrimary
+                )
+            Spacer()
+            if totalCount > 0 {
+                Text(languageService.format(.feedBillPaidCount, paidCount, totalCount))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(
+                        isFullySettled
+                            ? SplickTheme.Colors.success
+                            : SplickTheme.Colors.textSecondary
+                    )
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule()
+                            .fill(
+                                isFullySettled
+                                    ? SplickTheme.Colors.success.opacity(0.12)
+                                    : SplickTheme.Colors.secondaryBackground
+                            )
+                    )
+            }
+            if isFullySettled {
+                Text(languageService.text(.feedBillSettled))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(SplickTheme.Colors.success)
+            } else {
+                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(SplickTheme.Colors.textTertiary)
+            }
+        }
+        .padding(.horizontal, SplickTheme.Spacing.sm)
+        .padding(.vertical, SplickTheme.Spacing.xs)
+        .contentShape(Rectangle())
+    }
+
+    private var expandedContent: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(bill.splits) { line in
+                splitRow(line)
+            }
+
+            if canSendReminders, !unpaidSplits.isEmpty {
+                Button {
+                    reminderMessage = BillReminderMessages.random()
+                    showSendAllReminder = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "bell.badge.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text(languageService.format(.feedBillRemindAll, unpaidSplits.count))
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small)
+                            .fill(SplickTheme.Colors.primaryGradientStart.opacity(0.1))
+                    )
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 4)
+            }
+        }
+        .padding(.horizontal, SplickTheme.Spacing.sm)
+        .padding(.vertical, SplickTheme.Spacing.xs)
+    }
+
+    private func toggleExpanded() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            isExpanded.toggle()
+        }
     }
 
     @ViewBuilder
@@ -136,7 +210,7 @@ struct BillSplitSectionView: View {
                     .foregroundStyle(SplickTheme.Colors.success)
                     .frame(width: 32, height: 32)
                     .accessibilityLabel(languageService.text(.feedBillPaidAccessibility))
-            } else {
+            } else if canSendReminders {
                 Button {
                     reminderMessage = BillReminderMessages.random()
                     reminderTarget = line.user
