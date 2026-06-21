@@ -650,32 +650,34 @@ struct ProfileSettingsView: View {
 
     private var birthdayPickerSheet: some View {
         NavigationStack {
-            VStack(spacing: SplickTheme.Spacing.lg) {
-                DatePicker(
-                    languageService.text(.profileBirthday),
-                    selection: $birthdayDraft,
-                    in: ...Date(),
-                    displayedComponents: .date
-                )
-                .datePickerStyle(.graphical)
-                .labelsHidden()
+            ScrollView {
+                VStack(spacing: SplickTheme.Spacing.lg) {
+                    DatePicker(
+                        languageService.text(.profileBirthday),
+                        selection: $birthdayDraft,
+                        in: ...Date(),
+                        displayedComponents: .date
+                    )
+                    .datePickerStyle(.graphical)
+                    .labelsHidden()
 
-                if let birthdayError {
-                    Text(birthdayError)
-                        .font(SplickTheme.Typography.caption)
-                        .foregroundStyle(SplickTheme.Colors.error)
-                        .multilineTextAlignment(.center)
-                }
+                    if let birthdayError {
+                        Text(birthdayError)
+                            .font(SplickTheme.Typography.caption)
+                            .foregroundStyle(SplickTheme.Colors.error)
+                            .multilineTextAlignment(.center)
+                    }
 
-                SplickButton(
-                    languageService.text(.profileSave),
-                    isLoading: isSavingBirthday,
-                    isDisabled: isSavingBirthday
-                ) {
-                    Task { await saveBirthday() }
+                    SplickButton(
+                        languageService.text(.profileSave),
+                        isLoading: isSavingBirthday,
+                        isDisabled: isSavingBirthday
+                    ) {
+                        Task { await saveBirthday() }
+                    }
                 }
+                .padding(SplickTheme.Spacing.md)
             }
-            .padding(SplickTheme.Spacing.md)
             .navigationTitle(languageService.text(.profileBirthday))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -683,10 +685,17 @@ struct ProfileSettingsView: View {
                     Button(languageService.text(.commonCancel)) {
                         showBirthdayPicker = false
                     }
+                    .disabled(isSavingBirthday)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(languageService.text(.profileSave)) {
+                        Task { await saveBirthday() }
+                    }
+                    .disabled(isSavingBirthday)
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.large])
     }
 
     private var accountSettingsGroup: some View {
