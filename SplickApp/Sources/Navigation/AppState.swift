@@ -19,6 +19,7 @@ final class AppState: ObservableObject {
     @Published var feedNavigationPath = NavigationPath()
     @Published var pendingPostId: UUID?
     @Published private(set) var hasCompletedOnboarding: Bool
+    @Published private(set) var isShowingSplash = true
 
     init() {
         hasCompletedOnboarding = UserDefaults.standard.bool(
@@ -38,6 +39,9 @@ final class AppState: ObservableObject {
 
     func setAuthenticated(user: User) {
         authState = .authenticated(user)
+        withAnimation {
+            isShowingSplash = false
+        }
         if !hasCompletedOnboarding {
             completeOnboarding()
         }
@@ -53,6 +57,7 @@ final class AppState: ObservableObject {
     func setUnauthenticated(container: DependencyContainer) {
         container.resetTabViewModels()
         authState = .unauthenticated
+        isShowingSplash = true
         selectedTab = .feed
         showNotifications = false
         feedNavigationPath = NavigationPath()
@@ -78,6 +83,12 @@ final class AppState: ObservableObject {
         hasCompletedOnboarding = true
         UserDefaults.standard.set(true, forKey: AppConstants.UserDefaults.isOnboardingCompleted)
         Log.info("Onboarding completed", category: .lifecycle)
+    }
+
+    func finishSplash() {
+        withAnimation {
+            isShowingSplash = false
+        }
     }
 }
 

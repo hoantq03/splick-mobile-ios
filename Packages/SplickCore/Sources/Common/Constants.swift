@@ -67,4 +67,9 @@ public enum AppConstants {
     public enum Stickers {
         public static let maxGifsPerComment = 5
     }
+
+    public enum Splash {
+        public static let minimumDisplayDuration: Duration = .milliseconds(1500)
+        public static let dismissDuration: Duration = .milliseconds(850)
+    }
 }

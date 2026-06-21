@@ -7,50 +7,75 @@ struct RootView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var container: DependencyContainer
 
+    @State private var splashLayerActive = true
+
+    private static let dismissAnimation = Animation.spring(
+        response: 0.78,
+        dampingFraction: 0.86,
+        blendDuration: 0.22
+    )
+
     var body: some View {
-        Group {
-            switch appState.authState {
-            case .unknown:
-                splashView
+        GeometryReader { geometry in
+            ZStack {
+                rootContent
 
-            case .unauthenticated:
-                if appState.hasCompletedOnboarding {
-                    authFlow
-                } else {
-                    onboardingFlow
+                if splashLayerActive {
+                    SplashScreenView()
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .offset(y: appState.isShowingSplash ? 0 : -geometry.size.height)
+                        .ignoresSafeArea()
+                        .zIndex(1)
+                        .allowsHitTesting(appState.isShowingSplash)
                 }
-
-            case .authenticated:
-                MainTabView()
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height)
+        }
+        .ignoresSafeArea()
+        .animation(Self.dismissAnimation, value: appState.isShowingSplash)
+        .onChange(of: appState.isShowingSplash) { _, isShowing in
+            if isShowing {
+                splashLayerActive = true
+            } else {
+                Task {
+                    try? await Task.sleep(for: AppConstants.Splash.dismissDuration)
+                    splashLayerActive = false
+                }
             }
         }
-        .animation(.easeInOut(duration: 0.3), value: appState.authState)
+        .task(id: appState.isShowingSplash) {
+            guard shouldRunSplashSequence else { return }
+            await runSplashSequence()
+        }
     }
 
-    private var splashView: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    Color(hex: 0x5B6CFF).opacity(0.12),
-                    SplickTheme.Colors.background,
-                    Color(hex: 0x2A9D8F).opacity(0.1),
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+    @ViewBuilder
+    private var rootContent: some View {
+        switch appState.authState {
+        case .unknown:
+            SplickTheme.Colors.background
+                .ignoresSafeArea()
 
-            VStack(spacing: SplickTheme.Spacing.md) {
-                SplickLogoMark(size: 128, layout: .markOnly, style: .fullColor)
-                Text("Splick")
-                    .font(.system(size: 32, weight: .bold, design: .rounded))
-                    .foregroundStyle(SplickTheme.Colors.primaryGradient)
-                SplickSpinner(size: .large)
+        case .unauthenticated:
+            if appState.hasCompletedOnboarding {
+                authFlow
+            } else {
+                onboardingFlow
             }
+
+        case .authenticated:
+            MainTabView()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task {
-            await checkExistingSession()
+    }
+
+    private var shouldRunSplashSequence: Bool {
+        switch appState.authState {
+        case .unknown:
+            return true
+        case .unauthenticated:
+            return appState.isShowingSplash
+        case .authenticated:
+            return false
         }
     }
 
@@ -91,7 +116,23 @@ struct RootView: View {
         }
     }
 
-    private func checkExistingSession() async {
+    private func runSplashSequence() async {
+        async let minimumDisplay: Void = {
+            try? await Task.sleep(for: AppConstants.Splash.minimumDisplayDuration)
+        }()
+
+        if case .unknown = appState.authState {
+            await resolveInitialSession()
+        }
+
+        await minimumDisplay
+
+        guard !Task.isCancelled else { return }
+        guard appState.isShowingSplash else { return }
+        appState.finishSplash()
+    }
+
+    private func resolveInitialSession() async {
         if let session = await container.restoreSessionUseCase.execute() {
             container.languageService.applyFromServer(session.user.preferredLocale)
             appState.setAuthenticated(user: session.user)
