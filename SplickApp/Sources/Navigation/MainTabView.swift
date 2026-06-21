@@ -357,12 +357,15 @@ struct ProfileSettingsView: View {
                         viewModel: ChangePasswordViewModel(
                             accountEmail: email,
                             changePasswordUseCase: container.changePasswordUseCase,
-                            requestEmailOtpUseCase: container.requestEmailOtpUseCase
+                            requestEmailOtpUseCase: container.requestEmailOtpUseCase,
+                            loginUseCase: container.loginUseCase,
+                            languageService: languageService
                         ),
                         onPasswordChanged: { user in
                             appState.updateAuthenticatedUser(user)
                         }
                     )
+                    .environmentObject(languageService)
                 }
             }
             .navigationDestination(isPresented: $showSessions) {
