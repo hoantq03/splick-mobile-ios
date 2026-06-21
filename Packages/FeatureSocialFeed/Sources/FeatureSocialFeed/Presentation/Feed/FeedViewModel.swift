@@ -8,6 +8,7 @@ public final class FeedViewModel: ObservableObject {
     @Published var posts: [Post] = []
     @Published var state: LoadingState<[Post]> = .idle
     @Published var isLoadingMore = false
+    @Published private(set) var hasReachedFeedEnd = false
     @Published private(set) var isRefreshing = false
     @Published var alertMessage: String?
     private(set) var currentUserId: UUID?
@@ -127,6 +128,7 @@ public final class FeedViewModel: ObservableObject {
         isLoadingMore = false
         currentPage = 0
         canLoadMore = true
+        hasReachedFeedEnd = false
         if !isPullToRefresh {
             trackedViewPostIds.removeAll()
         }
@@ -145,6 +147,7 @@ public final class FeedViewModel: ObservableObject {
             self.posts = mergeFeedPreservingPendingUploads(with: posts)
             state = .loaded(self.posts)
             canLoadMore = !posts.isEmpty
+            updateHasReachedFeedEnd()
             Log.info("Loaded feed", category: .feed, metadata: ["count": String(posts.count)])
             return true
         } catch {
@@ -197,6 +200,7 @@ public final class FeedViewModel: ObservableObject {
             posts.append(contentsOf: newPosts)
             canLoadMore = !newPosts.isEmpty
             state = .loaded(posts)
+            updateHasReachedFeedEnd()
         } catch {
             if error.isRequestCancellation { return }
             currentPage -= 1
@@ -204,6 +208,10 @@ public final class FeedViewModel: ObservableObject {
         }
 
         isLoadingMore = false
+    }
+
+    private func updateHasReachedFeedEnd() {
+        hasReachedFeedEnd = !canLoadMore && !posts.isEmpty
     }
 
     func refreshPost(id: UUID, allowingConcurrentFeedRefresh: Bool = false) async {
