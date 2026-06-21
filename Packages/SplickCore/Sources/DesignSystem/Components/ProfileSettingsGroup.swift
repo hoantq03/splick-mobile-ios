@@ -4,17 +4,20 @@ public struct ProfileSettingsItem: Identifiable {
     public let id = UUID()
     public let icon: String
     public let title: String
+    public let subtitle: String?
     public let isDestructive: Bool
     public let action: () -> Void
 
     public init(
         icon: String,
         title: String,
+        subtitle: String? = nil,
         isDestructive: Bool = false,
         action: @escaping () -> Void
     ) {
         self.icon = icon
         self.title = title
+        self.subtitle = subtitle
         self.isDestructive = isDestructive
         self.action = action
     }
@@ -41,6 +44,7 @@ public struct ProfileSettingsGroup: View {
                     ProfileSettingsRow(
                         icon: item.icon,
                         title: item.title,
+                        subtitle: item.subtitle,
                         isDestructive: item.isDestructive,
                         action: item.action
                     )
@@ -60,17 +64,20 @@ public struct ProfileSettingsGroup: View {
 public struct ProfileSettingsRow: View {
     private let icon: String
     private let title: String
+    private let subtitle: String?
     private let isDestructive: Bool
     private let action: () -> Void
 
     public init(
         icon: String,
         title: String,
+        subtitle: String? = nil,
         isDestructive: Bool = false,
         action: @escaping () -> Void
     ) {
         self.icon = icon
         self.title = title
+        self.subtitle = subtitle
         self.isDestructive = isDestructive
         self.action = action
     }
@@ -88,6 +95,13 @@ public struct ProfileSettingsRow: View {
                     .foregroundStyle(isDestructive ? SplickTheme.Colors.error : SplickTheme.Colors.textPrimary)
 
                 Spacer(minLength: 0)
+
+                if let subtitle {
+                    Text(subtitle)
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+                        .lineLimit(1)
+                }
 
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
