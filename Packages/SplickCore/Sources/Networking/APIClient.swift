@@ -291,6 +291,15 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
                 body.message.isEmpty ? "Validation failed." : body.message,
                 traceId: resolvedTraceId
             )
+        case "REMINDER_COOLDOWN",
+             "REMINDER_ALREADY_PAID",
+             "REMINDER_NO_TARGETS",
+             "REMINDER_RATE_LIMITED":
+            return NetworkError.apiError(
+                code: body.error,
+                message: body.message,
+                traceId: resolvedTraceId
+            )
         case "PAYMENT_PROFILE_NOT_FOUND", "RESOURCE_NOT_FOUND":
             return NetworkError.notFound
         case "NOT_FOUND":
@@ -312,6 +321,8 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
             return .serverError(statusCode: statusCode, traceId: traceId)
         case .unknown(let message, _):
             return .unknown(message, traceId: traceId)
+        case .apiError(let code, let message, _):
+            return .apiError(code: code, message: message, traceId: traceId)
         default:
             return error
         }
