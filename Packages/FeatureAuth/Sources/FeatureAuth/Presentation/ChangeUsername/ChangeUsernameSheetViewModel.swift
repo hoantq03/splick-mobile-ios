@@ -9,13 +9,11 @@ public final class ChangeUsernameSheetViewModel: ObservableObject {
     @Published var usernameDraft = ""
     @Published var usernameError: String?
     @Published private(set) var usernameStatus: FieldValidationStatus = .neutral
-    @Published private(set) var isCheckingAvailability = false
     @Published private(set) var isSaving = false
     @Published var saveError: String?
 
     public var canSave: Bool {
         usernameStatus == .valid
-            && !isCheckingAvailability
             && !isSaving
             && usernameDraft.trimmed != currentUsername
     }
@@ -58,18 +56,15 @@ public final class ChangeUsernameSheetViewModel: ObservableObject {
         let candidate = usernameDraft.trimmed
         guard usernameError == nil, !candidate.isEmpty else {
             usernameStatus = .neutral
-            isCheckingAvailability = false
             return
         }
 
         if candidate == currentUsername {
             usernameStatus = .valid
-            isCheckingAvailability = false
             return
         }
 
-        usernameStatus = .neutral
-        isCheckingAvailability = true
+        usernameStatus = .loading
 
         availabilityTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: Self.debounceNanoseconds)
@@ -122,7 +117,6 @@ public final class ChangeUsernameSheetViewModel: ObservableObject {
             guard !Task.isCancelled else { return }
             guard usernameDraft.trimmed == candidate else { return }
 
-            isCheckingAvailability = false
             if available {
                 usernameError = nil
                 usernameStatus = .valid
@@ -133,7 +127,6 @@ public final class ChangeUsernameSheetViewModel: ObservableObject {
         } catch {
             guard !Task.isCancelled else { return }
             guard usernameDraft.trimmed == candidate else { return }
-            isCheckingAvailability = false
             usernameError = languageService.localizedMessage(for: error)
             usernameStatus = .neutral
         }

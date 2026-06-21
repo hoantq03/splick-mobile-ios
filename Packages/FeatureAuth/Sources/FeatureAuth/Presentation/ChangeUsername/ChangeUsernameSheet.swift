@@ -34,16 +34,6 @@ public struct ChangeUsernameSheet: View {
                     viewModel.onUsernameChanged()
                 }
 
-                if viewModel.isCheckingAvailability {
-                    HStack(spacing: SplickTheme.Spacing.xs) {
-                        ProgressView()
-                            .controlSize(.small)
-                        Text(languageService.text(.profileUsernameChecking))
-                            .font(SplickTheme.Typography.caption)
-                            .foregroundStyle(SplickTheme.Colors.textSecondary)
-                    }
-                }
-
                 if let saveError = viewModel.saveError {
                     Text(saveError)
                         .font(SplickTheme.Typography.caption)
