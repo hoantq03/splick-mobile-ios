@@ -1,4 +1,5 @@
 import SwiftUI
+import Common
 
 public struct AvatarView: View {
     public enum Size {
@@ -22,18 +23,24 @@ public struct AvatarView: View {
     }
 
     private let imageURL: URL?
+    private let userId: UUID?
     private let initials: String
     private let size: Size
 
-    public init(imageURL: URL? = nil, name: String, size: Size = .medium) {
+    public init(imageURL: URL? = nil, name: String, size: Size = .medium, userId: UUID? = nil) {
         self.imageURL = imageURL
+        self.userId = userId
         self.size = size
         self.initials = String(name.prefix(2)).uppercased()
     }
 
     public var body: some View {
         Group {
-            if let imageURL {
+            if SplickBot.isBot(userId) {
+                Image("SplickBotAvatar", bundle: .module)
+                    .resizable()
+                    .scaledToFill()
+            } else if let imageURL {
                 RemoteImage(url: imageURL) { phase in
                     switch phase {
                     case .success(let image):
