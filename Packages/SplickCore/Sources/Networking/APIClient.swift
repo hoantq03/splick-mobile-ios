@@ -56,7 +56,7 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
     ) async throws -> T {
         var request = try endpoint.asURLRequest(baseURL: baseURL, encoder: encoder)
         request = try await applyLocale(to: request)
-        request = try await applyAuth(to: request, requiresAuth: endpoint.requiresAuth)
+        request = try await applyAuth(to: request, endpoint: endpoint)
 
         let boundary = UUID().uuidString
         request.setValue(
@@ -95,7 +95,7 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
     ) async throws -> Data {
         var request = try endpoint.asURLRequest(baseURL: baseURL, encoder: encoder)
         request = try await applyLocale(to: request)
-        request = try await applyAuth(to: request, requiresAuth: endpoint.requiresAuth)
+        request = try await applyAuth(to: request, endpoint: endpoint)
 
         Log.debug("\(endpoint.method.rawValue) \(endpoint.path)", category: .network)
 
@@ -144,8 +144,8 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
         return localizedRequest
     }
 
-    private func applyAuth(to request: URLRequest, requiresAuth: Bool) async throws -> URLRequest {
-        guard requiresAuth else { return request }
+    private func applyAuth(to request: URLRequest, endpoint: APIEndpoint) async throws -> URLRequest {
+        guard endpoint.requiresAuth else { return request }
 
         guard let token = await tokenProvider.accessToken() else {
             throw NetworkError.unauthorized
