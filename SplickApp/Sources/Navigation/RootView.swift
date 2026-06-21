@@ -33,7 +33,7 @@ struct RootView: View {
         }
         .ignoresSafeArea()
         .animation(Self.dismissAnimation, value: appState.isShowingSplash)
-        .onChange(of: appState.isShowingSplash) { _, isShowing in
+        .onChange(of: appState.isShowingSplash) { isShowing in
             if isShowing {
                 splashLayerActive = true
             } else {
