@@ -22,4 +22,21 @@ extension Date {
     public static func from(iso8601 string: String) -> Date? {
         ISO8601DateFormatter().date(from: string)
     }
+
+    private static let apiCalendarDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+
+    public var apiCalendarDateString: String {
+        Self.apiCalendarDateFormatter.string(from: self)
+    }
+
+    public static func from(apiCalendarDate string: String) -> Date? {
+        apiCalendarDateFormatter.date(from: string)
+    }
 }
