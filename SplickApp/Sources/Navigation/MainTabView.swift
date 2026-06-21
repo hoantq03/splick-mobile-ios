@@ -2,6 +2,7 @@ import SwiftUI
 import Combine
 import PhotosUI
 import UIKit
+import StoreKit
 import Common
 import DesignSystem
 import Localization
@@ -230,6 +231,8 @@ struct ProfileSettingsView: View {
     @EnvironmentObject private var container: DependencyContainer
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+    @Environment(\.requestReview) private var requestReview
     @State private var isSigningOut = false
     @State private var isRefreshingProfile = false
     @State private var isUpdatingLanguage = false
@@ -262,6 +265,7 @@ struct ProfileSettingsView: View {
     @State private var displayNameError: String?
     @State private var showProfileInviteShare = false
     @State private var profileInviteShareUsername = ""
+    @State private var showShareSplick = false
 
     var body: some View {
         NavigationStack {
@@ -282,6 +286,7 @@ struct ProfileSettingsView: View {
                     accountSettingsGroup
                     personalProfileSettingsGroup
                     appSettingsGroup
+                    aboutGroup
 
                     SplickButton(
                         languageService.text(.profileSignOut),
@@ -359,6 +364,12 @@ struct ProfileSettingsView: View {
                 AppShareSheet(
                     message: AppConstants.Links.profileInvitePath(username: profileInviteShareUsername),
                     url: AppConstants.Links.profileInviteURL(username: profileInviteShareUsername)
+                )
+            }
+            .sheet(isPresented: $showShareSplick) {
+                AppShareSheet(
+                    message: languageService.text(.profileShareSplickMessage),
+                    url: AppConstants.Links.marketingURL
                 )
             }
             .sheet(isPresented: $showChangeUsername) {
@@ -863,6 +874,35 @@ struct ProfileSettingsView: View {
                     icon: "square.grid.2x2",
                     title: languageService.text(.profileWidget),
                     action: { showWidget = true }
+                )
+            ]
+        )
+        .padding(.horizontal, SplickTheme.Spacing.xl)
+    }
+
+    private var aboutGroup: some View {
+        ProfileSettingsGroup(
+            title: languageService.text(.profileGroupAbout),
+            items: [
+                ProfileSettingsItem(
+                    icon: "square.and.arrow.up",
+                    title: languageService.text(.profileShareSplick),
+                    action: { showShareSplick = true }
+                ),
+                ProfileSettingsItem(
+                    icon: "star",
+                    title: languageService.text(.profileRateSplick),
+                    action: { requestReview() }
+                ),
+                ProfileSettingsItem(
+                    icon: "doc.text",
+                    title: languageService.text(.profileTermsOfService),
+                    action: { openURL(AppConstants.Links.termsOfServiceURL) }
+                ),
+                ProfileSettingsItem(
+                    icon: "hand.raised",
+                    title: languageService.text(.profilePrivacyPolicy),
+                    action: { openURL(AppConstants.Links.privacyPolicyURL) }
                 )
             ]
         )
