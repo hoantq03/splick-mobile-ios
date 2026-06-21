@@ -6,6 +6,19 @@ import SplickDomain
 
 // MARK: - Mock Use Cases
 
+final class MockCheckIdentifierUseCase: CheckIdentifierUseCaseProtocol, Sendable {
+    func execute(email: String?, phoneNumber: String?) async throws -> Bool {
+        try await Task.sleep(for: .milliseconds(300))
+        if let email, email.lowercased().contains("existing") {
+            return true
+        }
+        if let phoneNumber, phoneNumber.hasSuffix("999") {
+            return true
+        }
+        return false
+    }
+}
+
 final class MockLoginUseCase: LoginUseCaseProtocol, Sendable {
     func execute(email: String, password: String) async throws -> AuthSession {
         try await Task.sleep(for: .seconds(1))
@@ -87,18 +100,14 @@ final class MockRegisterUseCase: RegisterUseCaseProtocol, Sendable {
     NavigationStack {
         LoginView(
             viewModel: LoginViewModel(
+                checkIdentifierUseCase: MockCheckIdentifierUseCase(),
                 loginUseCase: MockLoginUseCase(),
+                registerUseCase: MockRegisterUseCase(),
+                requestEmailOtpUseCase: MockRequestEmailOtpUseCase(),
                 requestPhoneOtpUseCase: MockRequestPhoneOtpUseCase(),
                 verifyPhoneOtpUseCase: MockVerifyPhoneOtpUseCase(),
                 googleSignInUseCase: MockGoogleSignInUseCase()
             ),
-            registerViewModelFactory: {
-                RegisterViewModel(
-                    registerUseCase: MockRegisterUseCase(),
-                    requestEmailOtpUseCase: MockRequestEmailOtpUseCase(),
-                    requestPhoneOtpUseCase: MockRequestPhoneOtpUseCase()
-                )
-            },
             forgotPasswordViewModelFactory: {
                 ForgotPasswordViewModel(
                     forgotPasswordUseCase: MockForgotPasswordUseCase(),

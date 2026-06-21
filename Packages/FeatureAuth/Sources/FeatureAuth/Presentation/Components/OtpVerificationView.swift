@@ -11,6 +11,7 @@ public struct OtpVerificationView: View {
     private let otpError: String?
     private let otpInfoMessage: String?
     private let isLoading: Bool
+    private let cornerRadius: CGFloat
     private let onResend: () -> Void
     private let onSubmit: () -> Void
     private let onBack: () -> Void
@@ -23,6 +24,7 @@ public struct OtpVerificationView: View {
         otpError: String?,
         otpInfoMessage: String?,
         isLoading: Bool,
+        cornerRadius: CGFloat = SplickTheme.CornerRadius.medium,
         onResend: @escaping () -> Void,
         onSubmit: @escaping () -> Void,
         onBack: @escaping () -> Void
@@ -34,6 +36,7 @@ public struct OtpVerificationView: View {
         self.otpError = otpError
         self.otpInfoMessage = otpInfoMessage
         self.isLoading = isLoading
+        self.cornerRadius = cornerRadius
         self.onResend = onResend
         self.onSubmit = onSubmit
         self.onBack = onBack
@@ -60,12 +63,13 @@ public struct OtpVerificationView: View {
                     .multilineTextAlignment(.center)
             }
 
-            SplickOtpField(code: $otpCode, errorMessage: otpError)
+            SplickOtpField(code: $otpCode, errorMessage: otpError, cornerRadius: cornerRadius)
 
             SplickButton(
                 submitTitle,
                 isLoading: isLoading,
-                isDisabled: otpCode.count != SplickOtpField.defaultLength
+                isDisabled: otpCode.count != SplickOtpField.defaultLength,
+                cornerRadius: cornerRadius
             ) {
                 hideKeyboard()
                 onSubmit()

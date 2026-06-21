@@ -7,16 +7,16 @@ import SplickDomain
 @MainActor
 public final class ForgotPasswordViewModel: ObservableObject {
     enum Step {
-        case email
+        case identifier
         case reset
     }
 
-    @Published var step: Step = .email
-    @Published var email = ""
+    @Published var step: Step = .identifier
+    @Published var identifier = ""
     @Published var otpCode = ""
     @Published var password = ""
     @Published var confirmPassword = ""
-    @Published var emailError: String?
+    @Published var identifierError: String?
     @Published var passwordError: String?
     @Published var confirmPasswordError: String?
     @Published var otpError: String?
@@ -24,8 +24,18 @@ public final class ForgotPasswordViewModel: ObservableObject {
     @Published var state: LoadingState<AuthSession> = .idle
     @Published var passwordStrength: PasswordStrengthResult = .empty
 
+    @Published private(set) var identifierStatus: FieldValidationStatus = .neutral
+
     private let forgotPasswordUseCase: ForgotPasswordUseCaseProtocol
     private let resetPasswordUseCase: ResetPasswordUseCaseProtocol
+
+    var detectedKind: LoginIdentifierKind {
+        identifier.detectedLoginIdentifierKind
+    }
+
+    var normalizedEmail: String {
+        identifier.trimmed
+    }
 
     public init(
         forgotPasswordUseCase: ForgotPasswordUseCaseProtocol,
@@ -35,13 +45,27 @@ public final class ForgotPasswordViewModel: ObservableObject {
         self.resetPasswordUseCase = resetPasswordUseCase
     }
 
-    func validateEmailField() {
-        let value = email.trimmingCharacters(in: .whitespacesAndNewlines)
+    func validateIdentifierField() {
+        let value = identifier.trimmed
         if value.isEmpty {
-            emailError = nil
+            identifierError = nil
+            identifierStatus = .neutral
             return
         }
-        emailError = value.isValidEmail ? nil : "Please enter a valid email"
+
+        switch detectedKind {
+        case .email:
+            identifierError = nil
+            identifierStatus = .valid
+        case .phone:
+            identifierError = nil
+            identifierStatus = .valid
+        case .unknown:
+            identifierError = value.contains("@")
+                ? "Please enter a valid email"
+                : "Use international format, e.g. +84901234567"
+            identifierStatus = .neutral
+        }
     }
 
     func validatePasswordField() {
@@ -63,15 +87,22 @@ public final class ForgotPasswordViewModel: ObservableObject {
     }
 
     func requestResetCode() async {
-        validateEmailField()
-        let normalized = email.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard emailError == nil, !normalized.isEmpty else { return }
+        validateIdentifierField()
+        guard identifierError == nil, detectedKind != .unknown else { return }
+
+        guard detectedKind == .email else {
+            state = .failed("Password reset via phone is not available yet. Use your email address.")
+            return
+        }
+
+        let normalized = normalizedEmail
+        guard !normalized.isEmpty else { return }
 
         state = .loading
         do {
             try await forgotPasswordUseCase.execute(email: normalized)
             step = .reset
-            otpInfoMessage = "If an account exists for this email, a code was sent. Check your Gmail inbox (dev)."
+            otpInfoMessage = "If an account exists for this email, a code was sent. Check your inbox."
             state = .idle
         } catch let error as AuthError {
             applyAuthError(error, onOtpStep: false)
@@ -87,7 +118,6 @@ public final class ForgotPasswordViewModel: ObservableObject {
         validateConfirmPasswordField()
         guard passwordStrength.isStrong, password == confirmPassword else { return }
 
-        let normalizedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
         let code = otpCode.trimmingCharacters(in: .whitespacesAndNewlines)
         guard code.count == 6 else {
             otpError = "Enter the 6-digit code"
@@ -116,8 +146,8 @@ public final class ForgotPasswordViewModel: ObservableObject {
         await requestResetCode()
     }
 
-    func goBackToEmail() {
-        step = .email
+    func goBackToIdentifier() {
+        step = .identifier
         otpCode = ""
         password = ""
         confirmPassword = ""
