@@ -13,11 +13,13 @@ public final class StreakViewModel: ObservableObject {
     @Published private(set) var selectedDayPhotos: [AlbumPhoto] = []
     @Published private(set) var isDayPhotosLoading = false
     @Published private(set) var isLoadingOlderMonths = false
+    @Published private(set) var hasReachedOldestMonth = false
 
     private let fetchStreakUseCase: FetchStreakUseCaseProtocol
     private let calendar = Calendar.current
     private var loadTask: Task<Void, Never>?
     private let initialMonthCount = 4
+    private static let maxMonthsInPast = 24
 
     public init(fetchStreakUseCase: FetchStreakUseCaseProtocol) {
         self.fetchStreakUseCase = fetchStreakUseCase
@@ -42,31 +44,54 @@ public final class StreakViewModel: ObservableObject {
         await task.value
     }
 
-    func loadOlderMonthIfNeeded(for section: StreakMonthSection) async {
-        guard section.id == monthSections.first?.id, !isLoadingOlderMonths else { return }
+    func loadOlderMonthIfNeeded(for section: StreakMonthSection) async -> Bool {
+        guard section.id == monthSections.first?.id, !isLoadingOlderMonths, !hasReachedOldestMonth else {
+            return false
+        }
+
+        guard let previous = previousMonth(year: section.year, month: section.month) else {
+            hasReachedOldestMonth = true
+            return false
+        }
+
+        guard isMonthAllowed(year: previous.year, month: previous.month) else {
+            hasReachedOldestMonth = true
+            return false
+        }
+
+        let sectionID = monthSectionID(year: previous.year, month: previous.month)
+        guard !monthSections.contains(where: { $0.id == sectionID }) else {
+            return false
+        }
+
         isLoadingOlderMonths = true
         defer { isLoadingOlderMonths = false }
-
-        guard let previous = previousMonth(year: section.year, month: section.month) else { return }
-        let sectionID = monthSectionID(year: previous.year, month: previous.month)
-        guard !monthSections.contains(where: { $0.id == sectionID }) else { return }
 
         do {
             let days = try await fetchStreakUseCase.fetchCalendar(
                 year: previous.year,
                 month: previous.month
             )
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else { return false }
             let olderSection = StreakMonthSection(
                 year: previous.year,
                 month: previous.month,
                 days: days
             )
             monthSections.insert(olderSection, at: 0)
+            if let nextOlder = previousMonth(year: olderSection.year, month: olderSection.month),
+               !isMonthAllowed(year: nextOlder.year, month: nextOlder.month) {
+                hasReachedOldestMonth = true
+            }
+            return true
         } catch {
             if !error.isRequestCancellation {
                 Log.error(error, category: .feed)
+                if isStreakMonthOutOfRange(error) {
+                    hasReachedOldestMonth = true
+                }
             }
+            return false
         }
     }
 
@@ -95,6 +120,7 @@ public final class StreakViewModel: ObservableObject {
 
             currentStreak = summary.currentStreak
             hasTodayPhoto = summary.hasTodayPhoto
+            hasReachedOldestMonth = false
             monthSections = months.sorted { $0.monthDate < $1.monthDate }
             state = .loaded(monthSections)
         } catch {
@@ -159,5 +185,25 @@ public final class StreakViewModel: ObservableObject {
 
     private func monthSectionID(year: Int, month: Int) -> String {
         "\(year)-\(String(format: "%02d", month))"
+    }
+
+    private func oldestAllowedYearMonth() -> (year: Int, month: Int) {
+        guard let date = calendar.date(byAdding: .month, value: -Self.maxMonthsInPast, to: Date()) else {
+            return (2020, 1)
+        }
+        let components = calendar.dateComponents([.year, .month], from: date)
+        return (components.year ?? 2020, components.month ?? 1)
+    }
+
+    private func isMonthAllowed(year: Int, month: Int) -> Bool {
+        let oldest = oldestAllowedYearMonth()
+        if year < oldest.year { return false }
+        if year == oldest.year, month < oldest.month { return false }
+        return true
+    }
+
+    private func isStreakMonthOutOfRange(_ error: Error) -> Bool {
+        let message = String(describing: error).lowercased()
+        return message.contains("24 months") || message.contains("last 24")
     }
 }
