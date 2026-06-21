@@ -27,6 +27,7 @@ public final class ChangePasswordViewModel: ObservableObject {
     @Published var isCurrentPasswordVerified = false
     @Published var isEmailCodeVerified = false
     @Published var isVerifyingCurrentPassword = false
+    @Published var isVerifyingEmailCode = false
     @Published private(set) var hasSentEmailCode = false
     @Published private(set) var isRequestingEmailCode = false
     @Published private(set) var otpResendSecondsRemaining = 0
@@ -34,8 +35,8 @@ public final class ChangePasswordViewModel: ObservableObject {
     let accountEmail: String
 
     private let changePasswordUseCase: ChangePasswordUseCaseProtocol
+    private let verifyPasswordChangeUseCase: VerifyPasswordChangeUseCaseProtocol
     private let requestEmailOtpUseCase: RequestEmailOtpUseCaseProtocol
-    private let loginUseCase: LoginUseCaseProtocol
     private let languageService: LanguageService
     private var resendCountdownTask: Task<Void, Never>?
 
@@ -44,14 +45,14 @@ public final class ChangePasswordViewModel: ObservableObject {
     public init(
         accountEmail: String,
         changePasswordUseCase: ChangePasswordUseCaseProtocol,
+        verifyPasswordChangeUseCase: VerifyPasswordChangeUseCaseProtocol,
         requestEmailOtpUseCase: RequestEmailOtpUseCaseProtocol,
-        loginUseCase: LoginUseCaseProtocol,
         languageService: LanguageService
     ) {
         self.accountEmail = accountEmail
         self.changePasswordUseCase = changePasswordUseCase
+        self.verifyPasswordChangeUseCase = verifyPasswordChangeUseCase
         self.requestEmailOtpUseCase = requestEmailOtpUseCase
-        self.loginUseCase = loginUseCase
         self.languageService = languageService
     }
 
@@ -108,7 +109,10 @@ public final class ChangePasswordViewModel: ObservableObject {
         defer { isVerifyingCurrentPassword = false }
 
         do {
-            _ = try await loginUseCase.execute(email: accountEmail, password: trimmed)
+            try await verifyPasswordChangeUseCase.execute(
+                currentPassword: trimmed,
+                otpCode: nil
+            )
             isCurrentPasswordVerified = true
         } catch let error as AuthError where error == .invalidCredentials {
             currentPasswordError = languageService.text(.changePasswordInvalidCurrent)
@@ -116,19 +120,53 @@ public final class ChangePasswordViewModel: ObservableObject {
         } catch let error as AuthError {
             currentPasswordError = error.userMessage
             isCurrentPasswordVerified = false
+        } catch let error as NetworkError {
+            if case .unauthorized = error {
+                currentPasswordError = languageService.text(.changePasswordInvalidCurrent)
+            } else {
+                currentPasswordError = error.userMessage
+            }
+            isCurrentPasswordVerified = false
         } catch {
             currentPasswordError = languageService.text(.changePasswordInvalidCurrent)
             isCurrentPasswordVerified = false
         }
     }
 
-    func verifyEmailCodeStep() {
+    func verifyEmailCodeStep() async {
         guard otpCode.count == SplickOtpField.defaultLength else {
             otpError = languageService.text(.changePasswordOtpRequired)
             return
         }
+
+        isVerifyingEmailCode = true
         otpError = nil
-        isEmailCodeVerified = true
+        defer { isVerifyingEmailCode = false }
+
+        do {
+            try await verifyPasswordChangeUseCase.execute(
+                currentPassword: nil,
+                otpCode: otpCode
+            )
+            isEmailCodeVerified = true
+        } catch let error as AuthError {
+            if error.shouldShowOnOtpStep {
+                otpError = error.userMessage
+            } else {
+                otpError = languageService.text(.errorAuthInvalidOtpDefault)
+            }
+            isEmailCodeVerified = false
+        } catch let error as NetworkError {
+            if case .unauthorized = error {
+                otpError = languageService.text(.errorAuthInvalidOtpDefault)
+            } else {
+                otpError = error.userMessage
+            }
+            isEmailCodeVerified = false
+        } catch {
+            otpError = languageService.text(.errorAuthInvalidOtpDefault)
+            isEmailCodeVerified = false
+        }
     }
 
     func requestEmailCode() async {

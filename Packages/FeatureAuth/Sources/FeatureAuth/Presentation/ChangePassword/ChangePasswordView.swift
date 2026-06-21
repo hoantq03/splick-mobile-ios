@@ -218,9 +218,11 @@ public struct ChangePasswordView: View {
 
                 SplickButton(
                     languageService.text(.changePasswordVerifyContinue),
-                    isDisabled: viewModel.otpCode.count != SplickOtpField.defaultLength
+                    isLoading: viewModel.isVerifyingEmailCode,
+                    isDisabled: viewModel.isVerifyingEmailCode
+                        || viewModel.otpCode.count != SplickOtpField.defaultLength
                 ) {
-                    viewModel.verifyEmailCodeStep()
+                    Task { await viewModel.verifyEmailCodeStep() }
                 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
