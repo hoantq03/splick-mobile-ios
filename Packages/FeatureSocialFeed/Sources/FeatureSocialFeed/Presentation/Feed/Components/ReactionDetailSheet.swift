@@ -6,6 +6,7 @@ import SplickDomain
 struct ReactionDetailSheet: View {
     @EnvironmentObject private var languageService: LanguageService
     let summaries: [UserReactionSummary]
+    var groupId: UUID?
 
     @Environment(\.dismiss) private var dismiss
 
@@ -31,8 +32,7 @@ struct ReactionDetailSheet: View {
 
                     ForEach(summary.emojiCounts, id: \.emoji) { item in
                         HStack {
-                            Text(item.emoji)
-                                .font(.title)
+                            EmojiView(value: item.emoji, groupId: groupId, size: 32)
                             Text("×\(item.count)")
                                 .font(SplickTheme.Typography.title)
                                 .foregroundStyle(SplickTheme.Colors.textSecondary)

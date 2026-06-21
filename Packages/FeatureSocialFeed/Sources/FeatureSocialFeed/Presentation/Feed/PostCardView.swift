@@ -3,10 +3,12 @@ import DesignSystem
 import Common
 import Localization
 import SplickDomain
+import FeatureStickers
 
 private enum PostCardSheet: Identifiable {
     case reactions
     case emojiPicker
+    case customEmojiUpload
     case viewers
     case share
 
@@ -14,6 +16,7 @@ private enum PostCardSheet: Identifiable {
         switch self {
         case .reactions: "reactions"
         case .emojiPicker: "emojiPicker"
+        case .customEmojiUpload: "customEmojiUpload"
         case .viewers: "viewers"
         case .share: "share"
         }
@@ -22,6 +25,8 @@ private enum PostCardSheet: Identifiable {
 
 struct PostCardView: View {
     @EnvironmentObject private var languageService: LanguageService
+    @Environment(\.customEmojiStore) private var emojiStore
+    @Environment(\.customEmojiDependencies) private var customEmojiDependencies
     let post: Post
     let currentUser: UserSummary?
     let onReact: (String) -> Void
@@ -99,6 +104,10 @@ struct PostCardView: View {
             mediaPageIndex = min(initialMediaIndex, max(post.displayMediaItems.count - 1, 0))
             appliedInitialMediaIndex = true
         }
+        .task(id: post.groupId) {
+            guard let groupId = post.groupId, let fetcher = customEmojiDependencies?.fetcher else { return }
+            await emojiStore.load(groupId: groupId, fetcher: fetcher)
+        }
         .coordinateSpace(name: "postCard")
         .background(
             GeometryReader { geo in
@@ -109,7 +118,7 @@ struct PostCardView: View {
         .onPreferenceChange(ReactionTargetAnchorsKey.self) { reactionAnchors = $0 }
         .overlay {
             ForEach(flyingEmojis) { flight in
-                FlyingEmojiView(flight: flight) {
+                FlyingEmojiView(flight: flight, groupId: post.groupId) {
                     flyingEmojis.removeAll { $0.id == flight.id }
                 }
             }
@@ -117,10 +126,23 @@ struct PostCardView: View {
         .sheet(item: $activeSheet) { sheet in
             switch sheet {
             case .reactions:
-                ReactionDetailSheet(summaries: post.userReactionSummaries())
+                ReactionDetailSheet(summaries: post.userReactionSummaries(), groupId: post.groupId)
             case .emojiPicker:
-                EmojiPickerSheet { emoji in
-                    onReact(emoji)
+                EmojiPickerSheet(
+                    groupId: post.groupId,
+                    onPick: { emoji in onReact(emoji) },
+                    onOpenUpload: post.groupId == nil ? nil : { activeSheet = .customEmojiUpload }
+                )
+            case .customEmojiUpload:
+                if let groupId = post.groupId, let deps = customEmojiDependencies {
+                    CustomEmojiUploadSheet(
+                        groupId: groupId,
+                        currentUserId: currentUser?.id,
+                        customEmojiFetcher: deps.fetcher,
+                        uploadMediaUseCase: deps.uploadMediaUseCase,
+                        addEmojiUseCase: deps.addEmojiUseCase,
+                        deleteEmojiUseCase: deps.deleteEmojiUseCase
+                    )
                 }
             case .viewers:
                 ViewersListSheet(viewers: post.viewers, onUserTap: onUserTap)
@@ -149,7 +171,8 @@ struct PostCardView: View {
                 AvatarView(
                     imageURL: post.author.avatarURL,
                     name: post.author.displayName,
-                    size: .small
+                    size: .small,
+                    userId: post.author.id
                 )
             }
             .buttonStyle(.plain)
@@ -296,6 +319,7 @@ struct PostCardView: View {
     private var reactionBarRow: some View {
         HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
             InlineReactionBar(
+                groupId: post.groupId,
                 onReact: onReact,
                 onDragRelease: { emoji, sourceGlobal in
                     scheduleFlyingEmoji(emoji: emoji, sourceGlobal: sourceGlobal)
@@ -386,7 +410,7 @@ struct PostCardView: View {
             Button { activeSheet = .reactions } label: {
                 HStack(spacing: 6) {
                     ForEach(preview.top, id: \.userId) { summary in
-                        UserReactionBadgeView(summary: summary)
+                        UserReactionBadgeView(summary: summary, groupId: post.groupId)
                             .id(summary.userId)
                     }
                     if preview.otherPeopleCount > 0 {

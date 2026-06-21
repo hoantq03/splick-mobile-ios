@@ -128,6 +128,8 @@ struct MainTabView: View {
                 },
                 isTabActive: true
             )
+            .environment(\.customEmojiStore, container.customEmojiStore)
+            .environment(\.customEmojiDependencies, container.customEmojiDependencies)
 
         case .expenses:
             ExpenseListView(

@@ -148,7 +148,7 @@ struct PostDetailView: View {
             }
         }
         .sheet(isPresented: $showEmojiPicker) {
-            EmojiPickerSheet { emoji in
+            EmojiPickerSheet(groupId: livePost.groupId) { emoji in
                 if let error = feedViewModel.react(to: post.id, emoji: emoji) {
                     feedViewModel.alertMessage = error
                 }

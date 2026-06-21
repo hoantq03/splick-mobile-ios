@@ -1,10 +1,14 @@
 import SwiftUI
 import UIKit
 import DesignSystem
+import SplickDomain
 
 /// Always-visible emoji row. Tap = +1 with bounce; long-press + drag = hover scale + release to add.
 struct InlineReactionBar: View {
     @ObservedObject private var preferences = QuickReactionPreferences.shared
+    @Environment(\.customEmojiStore) private var emojiStore
+
+    let groupId: UUID?
     let onReact: (String) -> Void
     var onDragRelease: ((String, CGRect) -> Void)?
     let onCustomEmoji: () -> Void
@@ -12,6 +16,11 @@ struct InlineReactionBar: View {
     var body: some View {
         InlineReactionBarHost(
             emojis: preferences.quickEmojis,
+            groupId: groupId,
+            resolveURL: { value in
+                guard let groupId else { return nil }
+                return emojiStore.resolveColonCode(value, in: groupId)
+            },
             onReact: onReact,
             onDragRelease: onDragRelease,
             onCustomEmoji: onCustomEmoji
@@ -24,13 +33,15 @@ struct InlineReactionBar: View {
 
 private struct InlineReactionBarHost: UIViewRepresentable {
     let emojis: [String]
+    let groupId: UUID?
+    let resolveURL: (String) -> URL?
     let onReact: (String) -> Void
     var onDragRelease: ((String, CGRect) -> Void)?
     let onCustomEmoji: () -> Void
 
     func makeUIView(context: Context) -> InlineReactionBarControl {
         let view = InlineReactionBarControl()
-        view.setEmojis(emojis)
+        view.setEmojis(emojis, resolveURL: resolveURL)
         view.onReact = onReact
         view.onDragRelease = onDragRelease
         view.onCustomEmoji = onCustomEmoji
@@ -38,7 +49,7 @@ private struct InlineReactionBarHost: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: InlineReactionBarControl, context: Context) {
-        uiView.setEmojis(emojis)
+        uiView.setEmojis(emojis, resolveURL: resolveURL)
         uiView.onReact = onReact
         uiView.onDragRelease = onDragRelease
         uiView.onCustomEmoji = onCustomEmoji
@@ -51,10 +62,11 @@ private final class InlineReactionBarControl: UIView {
     var onCustomEmoji: (() -> Void)?
 
     private var emojis: [String] = QuickReactionPreferences.defaultEmojis
+    private var resolveURL: ((String) -> URL?)?
     private let slotSize: CGFloat = 36
     private let slotSpacing: CGFloat = 4
 
-    private var emojiViews: [UILabel] = []
+    private var emojiSlots: [UIView] = []
     private var plusContainer: UIView?
     private var slotStack: UIStackView!
     private var highlightedIndex: Int?
@@ -72,7 +84,8 @@ private final class InlineReactionBarControl: UIView {
         buildBar()
     }
 
-    func setEmojis(_ newEmojis: [String]) {
+    func setEmojis(_ newEmojis: [String], resolveURL: @escaping (String) -> URL?) {
+        self.resolveURL = resolveURL
         guard newEmojis != emojis else { return }
         emojis = newEmojis
         rebuildEmojiViews()
@@ -134,44 +147,81 @@ private final class InlineReactionBarControl: UIView {
     private func rebuildEmojiViews() {
         guard let slotStack else { return }
 
-        emojiViews.forEach {
+        emojiSlots.forEach {
             slotStack.removeArrangedSubview($0)
             $0.removeFromSuperview()
         }
-        emojiViews.removeAll()
+        emojiSlots.removeAll()
 
-        emojiViews = emojis.map { emoji in
-            let label = makeEmojiLabel(emoji: emoji)
+        emojiSlots = emojis.enumerated().map { index, emoji in
+            let slot = makeEmojiSlot(emoji: emoji, index: index)
             if let plusContainer, let plusIndex = slotStack.arrangedSubviews.firstIndex(of: plusContainer) {
-                slotStack.insertArrangedSubview(label, at: plusIndex)
+                slotStack.insertArrangedSubview(slot, at: plusIndex)
             } else {
-                slotStack.addArrangedSubview(label)
+                slotStack.addArrangedSubview(slot)
             }
-            return label
+            return slot
         }
     }
 
-    private func makeEmojiLabel(emoji: String) -> UILabel {
-        let label = UILabel()
-        label.text = emoji
-        label.font = .systemFont(ofSize: 24)
-        label.textAlignment = .center
-        label.isUserInteractionEnabled = true
-        label.translatesAutoresizingMaskIntoConstraints = false
+    private func makeEmojiSlot(emoji: String, index: Int) -> UIView {
+        let container = UIView()
+        container.tag = index
+        container.isUserInteractionEnabled = true
+        container.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            label.widthAnchor.constraint(equalToConstant: slotSize),
-            label.heightAnchor.constraint(equalToConstant: slotSize),
+            container.widthAnchor.constraint(equalToConstant: slotSize),
+            container.heightAnchor.constraint(equalToConstant: slotSize),
         ])
 
+        switch EmojiKind.from(emoji) {
+        case .unicode(let symbol):
+            let label = UILabel()
+            label.text = symbol
+            label.font = .systemFont(ofSize: 24)
+            label.textAlignment = .center
+            label.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(label)
+            NSLayoutConstraint.activate([
+                label.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                label.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                label.topAnchor.constraint(equalTo: container.topAnchor),
+                label.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            ])
+
+        case .custom:
+            let imageView = UIImageView()
+            imageView.contentMode = .scaleAspectFit
+            imageView.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(imageView)
+            NSLayoutConstraint.activate([
+                imageView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 4),
+                imageView.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -4),
+                imageView.topAnchor.constraint(equalTo: container.topAnchor, constant: 4),
+                imageView.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -4),
+            ])
+            if let url = resolveURL?(emoji) {
+                loadImage(url: url, into: imageView)
+            }
+        }
+
         let tap = UITapGestureRecognizer(target: self, action: #selector(handleEmojiTap(_:)))
-        label.addGestureRecognizer(tap)
-        return label
+        container.addGestureRecognizer(tap)
+        return container
+    }
+
+    private func loadImage(url: URL, into imageView: UIImageView) {
+        URLSession.shared.dataTask(with: url) { data, _, _ in
+            guard let data, let image = UIImage(data: data) else { return }
+            DispatchQueue.main.async {
+                imageView.image = image
+            }
+        }.resume()
     }
 
     @objc private func handleEmojiTap(_ gesture: UITapGestureRecognizer) {
-        guard !isDragSelecting, let label = gesture.view as? UILabel,
-              let index = emojiViews.firstIndex(of: label) else { return }
-        commitReaction(at: index)
+        guard !isDragSelecting, let view = gesture.view else { return }
+        commitReaction(at: view.tag)
     }
 
     @objc private func handlePlusTap() {
@@ -230,7 +280,7 @@ private final class InlineReactionBarControl: UIView {
     }
 
     private func slotIndex(at location: CGPoint, in container: UIView) -> Int? {
-        let allSlots: [UIView] = emojiViews + (plusContainer.map { [$0] } ?? [])
+        let allSlots: [UIView] = emojiSlots + (plusContainer.map { [$0] } ?? [])
         for (index, view) in allSlots.enumerated() {
             let frame = view.convert(view.bounds, to: container).insetBy(dx: -4, dy: -8)
             if frame.contains(location) {
@@ -242,8 +292,8 @@ private final class InlineReactionBarControl: UIView {
 
     private func animateSlot(at index: Int, highlighted: Bool) {
         let view: UIView?
-        if index < emojiViews.count {
-            view = emojiViews[index]
+        if index < emojiSlots.count {
+            view = emojiSlots[index]
         } else {
             view = plusContainer
         }
@@ -264,8 +314,8 @@ private final class InlineReactionBarControl: UIView {
     }
 
     private func bounceSlot(at index: Int) {
-        guard index < emojiViews.count else { return }
-        let view = emojiViews[index]
+        guard index < emojiSlots.count else { return }
+        let view = emojiSlots[index]
         impactFeedback.impactOccurred()
         view.layer.removeAllAnimations()
         view.transform = .identity
@@ -303,7 +353,7 @@ private final class InlineReactionBarControl: UIView {
     private func commitReaction(at index: Int) {
         guard emojis.indices.contains(index) else { return }
         let emoji = emojis[index]
-        let label = emojiViews[index]
+        let label = emojiSlots[index]
         let globalFrame = label.convert(label.bounds, to: nil)
         bounceSlot(at: index)
         onDragRelease?(emoji, globalFrame)

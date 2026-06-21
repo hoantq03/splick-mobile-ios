@@ -19,6 +19,9 @@ let package = Package(
     targets: [
         .target(
             name: "Common",
+            dependencies: [
+                .product(name: "SplickDomain", package: "SplickDomain"),
+            ],
             path: "Sources/Common"
         ),
         .target(

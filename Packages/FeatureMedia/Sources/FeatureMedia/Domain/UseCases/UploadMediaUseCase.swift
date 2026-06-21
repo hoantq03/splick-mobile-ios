@@ -1,9 +1,16 @@
 import Foundation
 import Common
+import SplickDomain
 
 public protocol UploadMediaUseCaseProtocol: Sendable {
     func execute(imageData: Data) async throws -> MediaUploadResult
     func execute(imageData: Data, groupId: UUID) async throws -> MediaUploadResult
+    func execute(
+        imageData: Data,
+        mimeType: String,
+        purpose: MediaUploadPurpose,
+        groupId: UUID?
+    ) async throws -> MediaUploadResult
 }
 
 public extension UploadMediaUseCaseProtocol {
@@ -24,13 +31,30 @@ public final class UploadMediaUseCase: UploadMediaUseCaseProtocol, Sendable {
     }
 
     public func execute(imageData: Data, groupId: UUID) async throws -> MediaUploadResult {
-        guard imageData.count <= AppConstants.Media.maxAvatarSizeBytes else {
-            throw AppError.validation("Image exceeds maximum size of 5 MB")
+        try await execute(
+            imageData: imageData,
+            mimeType: "image/jpeg",
+            purpose: .groupAvatar,
+            groupId: groupId
+        )
+    }
+
+    public func execute(
+        imageData: Data,
+        mimeType: String,
+        purpose: MediaUploadPurpose,
+        groupId: UUID?
+    ) async throws -> MediaUploadResult {
+        let maxBytes = purpose == .groupCustomEmoji
+            ? AppConstants.Media.maxCustomEmojiSizeBytes
+            : AppConstants.Media.maxAvatarSizeBytes
+        guard imageData.count <= maxBytes else {
+            throw AppError.validation("Image exceeds maximum allowed size")
         }
         return try await repository.uploadImage(
             data: imageData,
-            mimeType: "image/jpeg",
-            purpose: .groupAvatar,
+            mimeType: mimeType,
+            purpose: purpose,
             groupId: groupId
         )
     }

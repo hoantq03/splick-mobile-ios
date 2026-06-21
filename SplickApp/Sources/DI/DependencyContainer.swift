@@ -181,6 +181,33 @@ final class DependencyContainer: ObservableObject {
         GifPickerViewModel(fetchStickersUseCase: fetchStickersUseCase, groupId: groupId)
     }
 
+    private lazy var customEmojiRepository: CustomEmojiRepositoryProtocol = {
+        CustomEmojiRepository(apiClient: apiClient)
+    }()
+
+    lazy var fetchGroupCustomEmojisUseCase: FetchGroupCustomEmojisUseCaseProtocol = {
+        FetchGroupCustomEmojisUseCase(repository: customEmojiRepository)
+    }()
+
+    lazy var addGroupCustomEmojiUseCase: AddGroupCustomEmojiUseCaseProtocol = {
+        AddGroupCustomEmojiUseCase(repository: customEmojiRepository)
+    }()
+
+    lazy var deleteGroupCustomEmojiUseCase: DeleteGroupCustomEmojiUseCaseProtocol = {
+        DeleteGroupCustomEmojiUseCase(repository: customEmojiRepository)
+    }()
+
+    let customEmojiStore = CustomEmojiStore()
+
+    var customEmojiDependencies: CustomEmojiDependencies {
+        CustomEmojiDependencies(
+            fetcher: customEmojiRepository,
+            uploadMediaUseCase: uploadMediaUseCase,
+            addEmojiUseCase: addGroupCustomEmojiUseCase,
+            deleteEmojiUseCase: deleteGroupCustomEmojiUseCase
+        )
+    }
+
     // MARK: - Feed
 
     private lazy var feedRepository: FeedRepositoryProtocol = {

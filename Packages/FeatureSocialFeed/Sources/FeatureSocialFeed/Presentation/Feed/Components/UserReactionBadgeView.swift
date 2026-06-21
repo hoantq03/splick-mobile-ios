@@ -5,6 +5,7 @@ import SplickDomain
 /// Avatar on the left; emoji samples stacked on the right (1/2 overlap) overlapping the avatar edge.
 struct UserReactionBadgeView: View {
     let summary: UserReactionSummary
+    var groupId: UUID?
 
     private let avatarSize: CGFloat = 28
     private let emojiFontSize: CGFloat = 13
@@ -20,7 +21,11 @@ struct UserReactionBadgeView: View {
             .reactionTargetAnchor(id: "user:\(summary.userId.uuidString)")
 
             if !summary.emojiCounts.isEmpty {
-                OverlappingEmojiStack(emojiCounts: summary.emojiCounts, fontSize: emojiFontSize)
+                OverlappingEmojiStack(
+                    emojiCounts: summary.emojiCounts,
+                    groupId: groupId,
+                    fontSize: emojiFontSize
+                )
                     .padding(.horizontal, 5)
                     .padding(.vertical, 3)
                     .background(
@@ -38,6 +43,7 @@ struct UserReactionBadgeView: View {
 /// Emoji chips stacked with ~1/2 overlap (each step advances half the cell width).
 private struct OverlappingEmojiStack: View {
     let emojiCounts: [UserEmojiCount]
+    let groupId: UUID?
     let fontSize: CGFloat
 
     private var cellWidth: CGFloat { fontSize * 1.2 }
@@ -51,9 +57,7 @@ private struct OverlappingEmojiStack: View {
     var body: some View {
         ZStack(alignment: .leading) {
             ForEach(Array(emojiCounts.enumerated()), id: \.element.emoji) { index, item in
-                Text(item.emoji)
-                    .font(.system(size: fontSize))
-                    .frame(width: cellWidth, height: cellWidth)
+                EmojiView(value: item.emoji, groupId: groupId, size: cellWidth)
                     .background(
                         Circle()
                             .fill(SplickTheme.Colors.background)
