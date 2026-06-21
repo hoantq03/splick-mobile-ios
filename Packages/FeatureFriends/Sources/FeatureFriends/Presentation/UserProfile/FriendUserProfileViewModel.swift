@@ -21,6 +21,7 @@ public final class FriendUserProfileViewModel: ObservableObject {
     @Published var showBlockConfirm = false
 
     public var mode: FriendProfileMode { friendStatus.profileMode }
+    public var isBotProfile: Bool { SplickBot.isBot(user.id) }
 
     private let fetchUserProfileUseCase: FetchUserProfileUseCaseProtocol?
     private let fetchFriendPaymentProfileUseCase: FetchFriendPaymentProfileUseCaseProtocol?
@@ -63,6 +64,22 @@ public final class FriendUserProfileViewModel: ObservableObject {
     }
 
     func loadProfile() async {
+        if SplickBot.isBot(user.id) {
+            user = UserSummary(
+                id: SplickBot.userId,
+                username: SplickBot.username,
+                displayName: SplickBot.displayName,
+                avatarURL: nil
+            )
+            friendStatus = .none
+            stats = nil
+            profileError = nil
+            paymentProfile = nil
+            friendPaymentNotConfigured = false
+            paymentProfileError = nil
+            return
+        }
+
         guard let fetchUserProfileUseCase else { return }
         isLoadingProfile = true
         profileError = nil

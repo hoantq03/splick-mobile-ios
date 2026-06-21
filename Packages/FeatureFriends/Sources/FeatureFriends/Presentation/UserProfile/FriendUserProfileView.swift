@@ -1,4 +1,5 @@
 import SwiftUI
+import Common
 import DesignSystem
 import Localization
 import SplickDomain
@@ -20,14 +21,20 @@ public struct FriendUserProfileView: View {
                     AvatarView(
                         imageURL: viewModel.user.avatarURL,
                         name: viewModel.user.displayName,
-                        size: .large
+                        size: .large,
+                        userId: viewModel.user.id
                     )
                     .padding(.top, SplickTheme.Spacing.xl)
 
                     VStack(spacing: SplickTheme.Spacing.xxs) {
                         Text(viewModel.user.displayName)
                             .font(SplickTheme.Typography.largeTitle)
-                        if let subtitle = viewModel.user.subtitle {
+                        if viewModel.isBotProfile {
+                            Text(languageService.text(.splickBotProfileTagline))
+                                .font(SplickTheme.Typography.callout)
+                                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                                .multilineTextAlignment(.center)
+                        } else if let subtitle = viewModel.user.subtitle {
                             Text(subtitle)
                                 .font(SplickTheme.Typography.callout)
                                 .foregroundStyle(SplickTheme.Colors.textSecondary)
@@ -37,12 +44,15 @@ public struct FriendUserProfileView: View {
                             .foregroundStyle(SplickTheme.Colors.textSecondary)
                     }
 
-                    if let stats = viewModel.stats {
+                    if viewModel.isBotProfile {
+                        botProfileContent
+                            .padding(.horizontal, SplickTheme.Spacing.xl)
+                    } else if let stats = viewModel.stats {
                         statsRow(stats)
                             .padding(.top, SplickTheme.Spacing.md)
                     }
 
-                    if let profileError = viewModel.profileError {
+                    if !viewModel.isBotProfile, let profileError = viewModel.profileError {
                         Text(profileError)
                             .font(SplickTheme.Typography.caption)
                             .foregroundStyle(SplickTheme.Colors.error)
@@ -53,7 +63,7 @@ public struct FriendUserProfileView: View {
                             Task { await viewModel.loadProfile() }
                         }
                         .padding(.horizontal, SplickTheme.Spacing.xl)
-                    } else {
+                    } else if !viewModel.isBotProfile {
                         relationshipActions
                             .padding(.horizontal, SplickTheme.Spacing.xl)
 
@@ -74,7 +84,8 @@ public struct FriendUserProfileView: View {
                 }
             }
             .overlay {
-                if viewModel.isLoadingProfile && viewModel.stats == nil {
+                if !viewModel.isBotProfile,
+                   viewModel.isLoadingProfile && viewModel.stats == nil {
                     LoadingView(message: languageService.text(.profileLoading))
                 }
             }
@@ -134,6 +145,45 @@ public struct FriendUserProfileView: View {
             Text(label)
                 .font(SplickTheme.Typography.caption)
                 .foregroundStyle(SplickTheme.Colors.textTertiary)
+        }
+    }
+
+    private func statBlock(value: String, label: String) -> some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(SplickTheme.Typography.title)
+            Text(label)
+                .font(SplickTheme.Typography.caption)
+                .foregroundStyle(SplickTheme.Colors.textTertiary)
+        }
+    }
+
+    private var botProfileContent: some View {
+        VStack(spacing: SplickTheme.Spacing.lg) {
+            HStack(spacing: SplickTheme.Spacing.xl) {
+                statBlock(
+                    value: "\(SplickBot.remindersSentCount.formatted())+",
+                    label: languageService.text(.splickBotStatReminders)
+                )
+                statBlock(
+                    value: languageService.text(.splickBotStatRecoveryValue),
+                    label: languageService.text(.splickBotStatRecovery)
+                )
+                statBlock(
+                    value: languageService.text(.splickBotStatExperienceValue),
+                    label: languageService.text(.splickBotStatExperience)
+                )
+            }
+            .padding(.top, SplickTheme.Spacing.md)
+
+            Text(languageService.text(.splickBotProfileBio))
+                .font(SplickTheme.Typography.body)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(SplickTheme.Spacing.md)
+                .background(SplickTheme.Colors.cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium))
         }
     }
 
