@@ -275,6 +275,16 @@ public struct FeedView: View {
                         }
                     }
                 }
+
+                if viewModel.isLoadingMore {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, SplickTheme.Spacing.md)
+                }
+
+                if viewModel.hasReachedFeedEnd {
+                    feedEndReachedFooter
+                }
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
         }
@@ -282,6 +292,26 @@ public struct FeedView: View {
         .environment(\.feedVideoCoordinator, videoCoordinator)
         .feedVideoVisibilityHandling(coordinator: videoCoordinator)
         .tabBarHideOnScroll()
+    }
+
+    private var feedEndReachedFooter: some View {
+        VStack(spacing: SplickTheme.Spacing.xs) {
+            Image(systemName: "checkmark.seal.fill")
+                .font(.title2)
+                .foregroundStyle(SplickTheme.Colors.textTertiary)
+
+            Text(languageService.text(.feedEndReachedTitle))
+                .font(SplickTheme.Typography.headline)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+
+            Text(languageService.text(.feedEndReachedMessage))
+                .font(SplickTheme.Typography.caption)
+                .foregroundStyle(SplickTheme.Colors.textTertiary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, SplickTheme.Spacing.xl)
+        .padding(.horizontal, SplickTheme.Spacing.sm)
     }
 
     private func openProfile(for user: UserSummary) {
