@@ -8,6 +8,7 @@ public struct User: Identifiable, Codable, Equatable, Sendable {
     public let avatarURL: URL?
     public let status: UserAccountStatus
     public let preferredLocale: String
+    public let dateOfBirth: Date?
     public let createdAt: Date
 
     public init(
@@ -18,6 +19,7 @@ public struct User: Identifiable, Codable, Equatable, Sendable {
         avatarURL: URL? = nil,
         status: UserAccountStatus = .active,
         preferredLocale: String = "vi",
+        dateOfBirth: Date? = nil,
         createdAt: Date = .now
     ) {
         self.id = id
@@ -27,6 +29,7 @@ public struct User: Identifiable, Codable, Equatable, Sendable {
         self.avatarURL = avatarURL
         self.status = status
         self.preferredLocale = preferredLocale
+        self.dateOfBirth = dateOfBirth
         self.createdAt = createdAt
     }
 }
