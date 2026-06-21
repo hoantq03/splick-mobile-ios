@@ -19,6 +19,14 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
         self.tokenProvider = tokenProvider
     }
 
+    public func checkIdentifier(email: String?, phoneNumber: String?) async throws -> Bool {
+        let dto = CheckIdentifierRequestDTO(email: email, phoneNumber: phoneNumber)
+        let response: CheckIdentifierResponseDTO = try await apiClient.request(
+            AuthEndpoint.checkIdentifier(dto)
+        )
+        return response.exists
+    }
+
     public func signInWithGoogle(idToken: String) async throws -> AuthSession {
         let session = SessionMetadata.current
         let dto = GoogleSignInRequestDTO(

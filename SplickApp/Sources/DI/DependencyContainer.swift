@@ -33,6 +33,10 @@ final class DependencyContainer: ObservableObject {
     let refreshTokenUseCase: RefreshTokenUseCaseProtocol
     let restoreSessionUseCase: RestoreSessionUseCaseProtocol
 
+    lazy var checkIdentifierUseCase: CheckIdentifierUseCaseProtocol = {
+        CheckIdentifierUseCase(repository: authRepository)
+    }()
+
     lazy var loginUseCase: LoginUseCaseProtocol = {
         LoginUseCase(repository: authRepository, sessionManager: sessionManager)
     }()

@@ -1,5 +1,14 @@
 import Foundation
 
+struct CheckIdentifierRequestDTO: Encodable {
+    let email: String?
+    let phoneNumber: String?
+}
+
+struct CheckIdentifierResponseDTO: Decodable {
+    let exists: Bool
+}
+
 struct GoogleSignInRequestDTO: Encodable {
     let idToken: String
     let deviceInfo: String?

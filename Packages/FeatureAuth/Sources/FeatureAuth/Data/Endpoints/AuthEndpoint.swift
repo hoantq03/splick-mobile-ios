@@ -2,6 +2,7 @@ import Foundation
 import Networking
 
 enum AuthEndpoint: APIEndpoint {
+    case checkIdentifier(CheckIdentifierRequestDTO)
     case googleSignIn(GoogleSignInRequestDTO)
     case login(LoginRequestDTO)
     case requestEmailOtp(EmailOtpRequestDTO)
@@ -34,6 +35,7 @@ enum AuthEndpoint: APIEndpoint {
 
     var path: String {
         switch self {
+        case .checkIdentifier: return "/v1/auth/identifier/check"
         case .googleSignIn: return "/v1/auth/google"
         case .login: return "/v1/auth/login"
         case .requestEmailOtp: return "/v1/auth/email/otp/request"
@@ -65,7 +67,7 @@ enum AuthEndpoint: APIEndpoint {
 
     var method: HTTPMethod {
         switch self {
-        case .googleSignIn, .login, .requestEmailOtp, .requestPhoneOtp, .verifyPhoneOtp,
+        case .checkIdentifier, .googleSignIn, .login, .requestEmailOtp, .requestPhoneOtp, .verifyPhoneOtp,
              .registerEmail, .registerPhone, .refreshToken,
              .forgotPassword, .resetPassword, .changePassword, .logout, .revokeAllSessions,
              .deactivateAccount, .linkGoogle, .requestLinkPhoneOtp, .linkPhone,
@@ -84,6 +86,7 @@ enum AuthEndpoint: APIEndpoint {
 
     var body: Encodable? {
         switch self {
+        case .checkIdentifier(let dto): return dto
         case .googleSignIn(let dto): return dto
         case .login(let dto): return dto
         case .requestEmailOtp(let dto): return dto
@@ -124,7 +127,7 @@ enum AuthEndpoint: APIEndpoint {
 
     var requiresAuth: Bool {
         switch self {
-        case .googleSignIn, .login, .requestEmailOtp, .requestPhoneOtp, .verifyPhoneOtp,
+        case .checkIdentifier, .googleSignIn, .login, .requestEmailOtp, .requestPhoneOtp, .verifyPhoneOtp,
              .registerEmail, .registerPhone, .refreshToken,
              .forgotPassword, .resetPassword:
             return false
