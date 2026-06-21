@@ -57,6 +57,8 @@ public enum APIErrorLocalization {
             return L10n.string(.errorNetworkNotFound, locale: locale)
         case .rateLimited:
             return L10n.string(.errorNetworkRateLimited, locale: locale)
+        case .apiError(let code, let message, _):
+            return apiBusinessMessage(for: code, fallback: message, locale: locale)
         case .unknown(let message, _):
             return message.isEmpty
                 ? L10n.string(.errorNetworkUnexpected, locale: locale)
@@ -98,6 +100,27 @@ public enum APIErrorLocalization {
             return L10n.string(.errorAuthPhoneExists, locale: locale)
         case .usernameAlreadyExists:
             return L10n.string(.errorAuthUsernameExists, locale: locale)
+        }
+    }
+
+    private static func apiBusinessMessage(
+        for code: String,
+        fallback: String,
+        locale: AppLocale
+    ) -> String {
+        switch code.uppercased() {
+        case "REMINDER_COOLDOWN":
+            return L10n.string(.feedBillReminderCooldown, locale: locale)
+        case "REMINDER_ALREADY_PAID":
+            return L10n.string(.feedBillReminderAlreadyPaid, locale: locale)
+        case "REMINDER_NO_TARGETS":
+            return L10n.string(.feedBillReminderNoTargets, locale: locale)
+        case "REMINDER_RATE_LIMITED":
+            return L10n.string(.feedBillReminderRateLimited, locale: locale)
+        default:
+            return fallback.isEmpty
+                ? L10n.string(.errorNetworkUnexpected, locale: locale)
+                : fallback
         }
     }
 }
