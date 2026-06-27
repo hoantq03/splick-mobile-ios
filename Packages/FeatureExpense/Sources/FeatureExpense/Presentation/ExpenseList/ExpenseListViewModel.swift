@@ -6,13 +6,19 @@ import SplickDomain
 @MainActor
 public final class ExpenseListViewModel: ObservableObject {
     @Published var expenses: [Expense] = [] {
-        didSet { objectWillChange.send() }
+        didSet {
+            reconcileDisplayedExpenses()
+            objectWillChange.send()
+        }
     }
     @Published var debts: [DebtSummary] = []
     @Published var state: LoadingState<[Expense]> = .idle
     @Published private(set) var isRefreshing = false
     @Published var showCreateExpense = false
     @Published var filters = ExpenseListFilters()
+    @Published private(set) var displayedExpenses: [Expense] = []
+
+    private static let listFilterAnimation = Animation.spring(response: 0.42, dampingFraction: 0.86)
 
     private let fetchExpensesUseCase: FetchExpensesUseCaseProtocol
     private let fetchDebtSummaryUseCase: FetchDebtSummaryUseCaseProtocol
@@ -37,7 +43,7 @@ public final class ExpenseListViewModel: ObservableObject {
 
     /// Reactive list used by the UI — recomputes whenever `expenses` or `filters` change.
     var filteredExpenses: [Expense] {
-        expenses.filter(matchesFilters)
+        displayedExpenses
     }
 
     var filteredDebts: [DebtSummary] {
@@ -55,6 +61,7 @@ public final class ExpenseListViewModel: ObservableObject {
     func updateCurrentUserId(_ id: UUID?) {
         guard currentUserId != id else { return }
         currentUserId = id
+        reconcileDisplayedExpenses()
         objectWillChange.send()
     }
 
@@ -64,6 +71,22 @@ public final class ExpenseListViewModel: ObservableObject {
 
     var totalOwing: Decimal {
         filteredDebts.filter(\.owes).reduce(Decimal.zero) { $0 + abs($1.amount) }
+    }
+
+    var overviewOwedPeopleCount: Int {
+        debts.filter(\.isOwed).count
+    }
+
+    var overviewOwingPeopleCount: Int {
+        debts.filter(\.owes).count
+    }
+
+    var overviewTotalOwed: Decimal {
+        debts.filter(\.isOwed).reduce(Decimal.zero) { $0 + $1.amount }
+    }
+
+    var overviewTotalOwing: Decimal {
+        debts.filter(\.owes).reduce(Decimal.zero) { $0 + abs($1.amount) }
     }
 
     func load(isPullToRefresh: Bool = false) async {
@@ -125,6 +148,19 @@ public final class ExpenseListViewModel: ObservableObject {
         mutateFilters { $0.debtStatus = status }
     }
 
+    func applyOverviewDebtFilter(_ status: ExpenseDebtFilter) {
+        withAnimation(Self.listFilterAnimation) {
+            mutateFilters {
+                if $0.debtStatus == status {
+                    $0.debtStatus = .all
+                } else {
+                    $0.debtStatus = status
+                    $0.selectedUser = nil
+                }
+            }
+        }
+    }
+
     func setSelectedUser(_ user: UserSummary?) {
         mutateFilters { $0.selectedUser = user }
     }
@@ -145,8 +181,53 @@ public final class ExpenseListViewModel: ObservableObject {
         mutateFilters {
             $0.debtStatus = .all
             $0.selectedUser = nil
-            $0.dateFrom = nil
+            $0.dateFrom = ExpenseListFilters.defaultWeekStart
             $0.dateTo = nil
+        }
+    }
+
+    func applyDatePreset(_ preset: ExpenseDatePreset) {
+        mutateFilters {
+            switch preset {
+            case .week:
+                $0.dateFrom = ExpenseListFilters.defaultWeekStart
+                $0.dateTo = nil
+            case .month:
+                $0.dateFrom = Calendar.current.date(
+                    byAdding: .day,
+                    value: -30,
+                    to: Calendar.current.startOfDay(for: .now)
+                )
+                $0.dateTo = nil
+            case .all:
+                $0.dateFrom = nil
+                $0.dateTo = nil
+            }
+        }
+    }
+
+    func clearListFilters() {
+        mutateFilters {
+            $0.captionQuery = ""
+            $0.selectedUser = nil
+            $0.dateFrom = ExpenseListFilters.defaultWeekStart
+            $0.dateTo = nil
+        }
+    }
+
+    var filterParticipantUsers: [UserSummary] {
+        var seen = Set<UUID>()
+        var users: [UserSummary] = []
+
+        for expense in expenses {
+            let participants = [expense.paidBy] + expense.splits.map(\.user)
+            for user in participants where seen.insert(user.id).inserted {
+                users.append(user)
+            }
+        }
+
+        return users.sorted {
+            $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
         }
     }
 
@@ -154,7 +235,12 @@ public final class ExpenseListViewModel: ObservableObject {
         var next = filters
         mutation(&next)
         filters = next
+        reconcileDisplayedExpenses()
         objectWillChange.send()
+    }
+
+    private func reconcileDisplayedExpenses() {
+        displayedExpenses = expenses.filter(matchesFilters)
     }
 
     // MARK: - Filtering
@@ -201,11 +287,10 @@ public final class ExpenseListViewModel: ObservableObject {
     /// Align list with debt summary: expense involves a user in the filtered debt set.
     private func expenseMatchesOweFilter(_ expense: Expense) -> Bool {
         if let userId = currentUserId {
-            if expense.splits.contains(where: { $0.user.id == userId && !$0.isPaid }) {
-                return true
-            }
+            return expense.splits.contains { $0.user.id == userId && !$0.isPaid }
         }
-        let owingUserIds = Set(filteredDebts.map(\.user.id))
+
+        let owingUserIds = Set(debts.filter(\.owes).map(\.user.id))
         guard !owingUserIds.isEmpty else {
             return expense.splits.contains { !$0.isPaid }
         }
@@ -213,10 +298,12 @@ public final class ExpenseListViewModel: ObservableObject {
     }
 
     private func expenseMatchesOwedFilter(_ expense: Expense) -> Bool {
-        if let userId = currentUserId, expense.paidBy.id == userId {
+        if let userId = currentUserId {
+            guard expense.paidBy.id == userId else { return false }
             return expense.splits.contains { $0.user.id != userId && !$0.isPaid }
         }
-        let owedUserIds = Set(filteredDebts.map(\.user.id))
+
+        let owedUserIds = Set(debts.filter(\.isOwed).map(\.user.id))
         guard !owedUserIds.isEmpty else { return false }
         return expense.splits.contains { !$0.isPaid && owedUserIds.contains($0.user.id) }
     }

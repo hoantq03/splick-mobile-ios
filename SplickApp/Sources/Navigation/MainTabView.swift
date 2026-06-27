@@ -35,8 +35,48 @@ struct MainTabView: View {
     }
 
     var body: some View {
-        selectedTabContent
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        ZStack {
+            selectedTabContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            if let presentation = appState.linkedPostPresentation {
+                LinkedPostDetailOverlay(
+                    presentation: presentation,
+                    feedViewModel: container.feedViewModel,
+                    fetchFriendsUseCase: container.fetchFriendsUseCase,
+                    profileDependencies: container.friendUserProfileDependencies,
+                    makeGifPickerViewModel: container.makeGifPickerViewModel(groupId:),
+                    onDismiss: { appState.dismissLinkedPostPresentation() }
+                )
+                .environmentObject(container.languageService)
+                .environmentObject(container.customEmojiStore)
+                .environment(\.customEmojiDependencies, container.customEmojiDependencies)
+                .transition(.move(edge: .trailing))
+                .zIndex(1)
+            }
+
+            if appState.showNotifications {
+                NotificationCircularRevealOverlay(
+                    isPresented: $appState.showNotifications,
+                    origin: appState.notificationRevealOrigin
+                ) { dismiss in
+                    NotificationListView(
+                        viewModel: container.notificationListViewModel,
+                        onNavigateToPost: { postId in
+                            dismiss()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) {
+                                appState.openPostFromNotification(postId)
+                            }
+                        },
+                        onDismiss: dismiss,
+                        presentedAsSheet: true
+                    )
+                    .environmentObject(container.languageService)
+                }
+                .zIndex(2)
+            }
+        }
+        .animation(LinkedPostMotion.spring, value: appState.linkedPostPresentation)
             .onAppear { badgeCounts = container.badgeCountService.counts }
             .task(id: appState.currentUser?.id) {
                 guard appState.currentUser != nil else { return }
@@ -51,12 +91,15 @@ struct MainTabView: View {
             .environment(\.openProfileSettings) {
                 appState.showProfileSettings = true
             }
-            .environment(\.openNotifications) {
-                appState.showNotifications = true
+            .environment(\.openNotifications) { bellFrame in
+                appState.presentNotifications(from: bellFrame)
             }
             .environment(\.notificationUnreadCount, badgeCounts.notifications)
             .environment(\.openPostCaptureFlow) {
                 appState.selectedTab = .camera
+            }
+            .environment(\.openLinkedPost) { postId, expandBillSplit in
+                appState.openLinkedPost(postId, expandBillSplit: expandBillSplit)
             }
             .environment(\.openDirectMessage) { friendUserId in
                     await container.getOrCreateConversationId(friendUserId: friendUserId)
@@ -64,7 +107,9 @@ struct MainTabView: View {
             .environment(\.currentUserSummary, currentUserSummary)
             .environment(\.tabBarScrollState, tabBarScrollState)
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                if appState.selectedTab != .camera {
+                if appState.selectedTab != .camera,
+                   appState.linkedPostPresentation == nil,
+                   !appState.showNotifications {
                     ZStack {
                         SplickTabBar(
                             selectedTab: $appState.selectedTab,
@@ -98,17 +143,6 @@ struct MainTabView: View {
         .sheet(isPresented: $appState.showProfileSettings) {
             ProfileSettingsView()
         }
-        .sheet(isPresented: $appState.showNotifications) {
-            NotificationListView(
-                viewModel: container.notificationListViewModel,
-                onNavigateToPost: { postId in
-                    appState.showNotifications = false
-                    appState.openPostFromNotification(postId)
-                },
-                presentedAsSheet: true
-            )
-            .environmentObject(container.languageService)
-        }
         .tint(SplickTheme.Colors.primaryGradientStart)
     }
 
@@ -126,7 +160,7 @@ struct MainTabView: View {
                 profileDependencies: container.friendUserProfileDependencies,
                 makeGifPickerViewModel: container.makeGifPickerViewModel(groupId:),
                 navigationPath: $appState.feedNavigationPath,
-                pendingPostId: appState.pendingPostId,
+                pendingFeedPostNavigation: appState.pendingFeedPostNavigation,
                 onPendingPostHandled: {
                     appState.clearPendingPostNavigation()
                 },
@@ -138,9 +172,6 @@ struct MainTabView: View {
         case .expenses:
             ExpenseListView(
                 viewModel: container.expenseListViewModel,
-                userSearchUseCase: FriendsUserSearchAdapter(
-                    fetchFriendsUseCase: container.fetchFriendsUseCase
-                ),
                 currentUserId: appState.currentUser?.id
             )
 
@@ -1069,4 +1100,61 @@ private struct AppShareSheet: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+private enum NotificationRevealMotion {
+    static let expand = Animation.spring(response: 0.48, dampingFraction: 0.88, blendDuration: 0.08)
+    static let collapse = Animation.spring(response: 0.4, dampingFraction: 0.92, blendDuration: 0.06)
+}
+
+private struct NotificationCircularRevealOverlay<Content: View>: View {
+    @Binding var isPresented: Bool
+    let origin: CGPoint
+    @ViewBuilder var content: (_ dismiss: @escaping () -> Void) -> Content
+
+    @State private var revealProgress: CGFloat = 0
+
+    var body: some View {
+        GeometryReader { proxy in
+            let coverRadius = Self.radiusCoveringScreen(origin: origin, in: proxy.size)
+            let diameter = max(coverRadius * 2 * revealProgress, 0.5)
+
+            content(dismissAnimated)
+                .frame(width: proxy.size.width, height: proxy.size.height)
+                .background(SplickTheme.Colors.background)
+                .mask {
+                    Circle()
+                        .frame(width: diameter, height: diameter)
+                        .position(origin)
+                }
+        }
+        .ignoresSafeArea()
+        .onAppear {
+            withAnimation(NotificationRevealMotion.expand) {
+                revealProgress = 1
+            }
+        }
+    }
+
+    private func dismissAnimated() {
+        guard isPresented else { return }
+        withAnimation(NotificationRevealMotion.collapse) {
+            revealProgress = 0
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            isPresented = false
+        }
+    }
+
+    private static func radiusCoveringScreen(origin: CGPoint, in size: CGSize) -> CGFloat {
+        let corners = [
+            CGPoint(x: 0, y: 0),
+            CGPoint(x: size.width, y: 0),
+            CGPoint(x: 0, y: size.height),
+            CGPoint(x: size.width, y: size.height),
+        ]
+        return corners
+            .map { hypot($0.x - origin.x, $0.y - origin.y) }
+            .max() ?? size.width
+    }
 }
