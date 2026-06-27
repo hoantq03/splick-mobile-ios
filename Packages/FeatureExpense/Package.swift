@@ -11,6 +11,7 @@ let package = Package(
     dependencies: [
         .package(path: "../SplickCore"),
         .package(path: "../SplickDomain"),
+        .package(path: "../FeatureFriends"),
     ],
     targets: [
         .target(
@@ -22,6 +23,7 @@ let package = Package(
                 .product(name: "Common", package: "SplickCore"),
                 .product(name: "Localization", package: "SplickCore"),
                 .product(name: "SplickDomain", package: "SplickDomain"),
+                .product(name: "FeatureFriends", package: "FeatureFriends"),
             ],
             path: "Sources/FeatureExpense"
         ),
