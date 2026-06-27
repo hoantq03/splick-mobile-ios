@@ -8,6 +8,9 @@ public struct EmojiView: View {
     private let size: CGFloat
     @EnvironmentObject private var emojiStore: CustomEmojiStore
 
+    /// Matches the visual diameter of unicode glyphs (`size * 0.85` font in a `size` frame).
+    private var glyphDiameter: CGFloat { size * 0.85 }
+
     public init(value: String, size: CGFloat) {
         self.value = value
         self.size = size
@@ -17,7 +20,7 @@ public struct EmojiView: View {
         switch EmojiKind.from(value) {
         case .unicode(let symbol):
             Text(symbol)
-                .font(.system(size: size * 0.85))
+                .font(.system(size: glyphDiameter))
                 .frame(width: size, height: size)
 
         case .custom(let shortcode):
@@ -26,11 +29,13 @@ public struct EmojiView: View {
                     if let image = state.image {
                         image
                             .resizable()
-                            .scaledToFit()
+                            .scaledToFill()
                     } else {
                         placeholder(shortcode: shortcode)
                     }
                 }
+                .frame(width: glyphDiameter, height: glyphDiameter)
+                .clipShape(Circle())
                 .frame(width: size, height: size)
             } else {
                 placeholder(shortcode: shortcode)
