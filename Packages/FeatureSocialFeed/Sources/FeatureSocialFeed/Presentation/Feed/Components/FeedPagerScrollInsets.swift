@@ -2,31 +2,46 @@ import SwiftUI
 import DesignSystem
 
 enum FeedPagerTopInsetMetrics {
-    /// Counteracts excess system scroll inset inside the feed pager; tuned below the old 42pt lift.
-    private static let contentLift: CGFloat = SplickTheme.Spacing.sm + 22
+    /// Gap between the bottom of the inline segment row and the first feed card.
+    private static let belowSegmentSpacing: CGFloat = SplickTheme.Spacing.lg
 
-    static var defaultScrollTopMargin: CGFloat { -contentLift }
+    /// Extra buffer for avatar/bell toolbar row above segment pills.
+    private static let toolbarBuffer: CGFloat = SplickTheme.Spacing.sm
+
+    /// Nav bar + inline segment pills (principal toolbar).
+    private static var segmentChromeHeight: CGFloat {
+        FeedSegmentChromeMetrics.navigationBarHeight
+            + FeedSegmentChromeMetrics.segmentRowHeight
+            + toolbarBuffer
+    }
+
+    /// Minimum top gap even when geometry reports content is already below chrome.
+    static var minimumTopGap: CGFloat {
+        FeedSegmentChromeMetrics.segmentRowHeight + belowSegmentSpacing
+    }
+
+    static var defaultScrollTopMargin: CGFloat { minimumTopGap }
 
     static func resolvedTopMargin(for geometry: GeometryProxy) -> CGFloat {
         let globalMinY = geometry.frame(in: .global).minY
         let safeTop = geometry.safeAreaInsets.top
-        let navBarBottom = safeTop + FeedSegmentChromeMetrics.navigationBarHeight
+        let chromeBottom = safeTop + segmentChromeHeight
 
-        if globalMinY >= navBarBottom - SplickTheme.Spacing.sm {
-            return -contentLift
+        if globalMinY >= chromeBottom - belowSegmentSpacing {
+            return minimumTopGap
         }
 
-        return max(-contentLift, navBarBottom - globalMinY - contentLift)
+        return max(minimumTopGap, chromeBottom - globalMinY + belowSegmentSpacing)
     }
 }
 
 extension View {
-    /// Restores navigation spacing for scroll views nested inside the feed/album pager `TabView`.
+    /// Keeps scroll content below the inline Chuỗi/Tin/Album segment row.
     func feedPagerScrollInsets() -> some View {
         modifier(FeedPagerScrollInsetsModifier())
     }
 
-    /// Restores navigation spacing for non-scroll pager pages (e.g. album filter header stack).
+    /// Top inset for non-scroll pager pages (loading, empty, error).
     func feedPagerPageTopInset(isEnabled: Bool) -> some View {
         modifier(FeedPagerPageTopInsetModifier(isEnabled: isEnabled))
     }
