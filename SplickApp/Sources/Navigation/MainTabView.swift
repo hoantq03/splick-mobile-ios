@@ -1091,6 +1091,91 @@ struct ProfileSettingsView: View {
     }
 }
 
+// MARK: - Main tab pager
+
+private enum MainTabPagerMotion {
+    static let spring = Animation.spring(response: 0.46, dampingFraction: 0.60, blendDuration: 0.05)
+}
+
+private extension Tab {
+    static let pagerTabs: [Tab] = [.feed, .expenses, .friends, .messages]
+
+    var isPagerTab: Bool {
+        Self.pagerTabs.contains(self)
+    }
+}
+
+private struct MainTabContentPager<Feed: View, Expenses: View, Friends: View, Messages: View, Camera: View>: View {
+    @Binding var selectedTab: Tab
+    @ViewBuilder var feed: () -> Feed
+    @ViewBuilder var expenses: () -> Expenses
+    @ViewBuilder var friends: () -> Friends
+    @ViewBuilder var messages: () -> Messages
+    @ViewBuilder var camera: () -> Camera
+
+    var body: some View {
+        MainTabOffsetPager(
+            selectedTab: $selectedTab,
+            feed: feed,
+            expenses: expenses,
+            friends: friends,
+            messages: messages,
+            camera: camera
+        )
+    }
+}
+
+private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Messages: View, Camera: View>: View {
+    @Binding var selectedTab: Tab
+    @ViewBuilder var feed: () -> Feed
+    @ViewBuilder var expenses: () -> Expenses
+    @ViewBuilder var friends: () -> Friends
+    @ViewBuilder var messages: () -> Messages
+    @ViewBuilder var camera: () -> Camera
+
+    @State private var pagerIndex: Int = 0
+
+    var body: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let pageCount = CGFloat(Tab.pagerTabs.count)
+
+            ZStack(alignment: .topLeading) {
+                HStack(spacing: 0) {
+                    feed()    .frame(width: width)
+                    expenses().frame(width: width)
+                    friends() .frame(width: width)
+                    messages().frame(width: width)
+                }
+                .frame(width: width * pageCount, alignment: .leading)
+                .offset(x: -CGFloat(pagerIndex) * width)
+                .animation(MainTabPagerMotion.spring, value: pagerIndex)
+
+                if selectedTab == .camera {
+                    camera()
+                        .frame(width: width)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .zIndex(1)
+                }
+            }
+        }
+        .ignoresSafeArea(edges: [.top, .bottom])
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(MainTabPagerMotion.spring, value: selectedTab == .camera)
+        .onAppear {
+            pagerIndex = Tab.pagerTabs.firstIndex(
+                of: selectedTab.isPagerTab ? selectedTab : .feed
+            ) ?? 0
+        }
+        .onChange(of: selectedTab) { newTab in
+            guard newTab.isPagerTab else { return }
+            let idx = Tab.pagerTabs.firstIndex(of: newTab) ?? 0
+            guard idx != pagerIndex else { return }
+            pagerIndex = idx
+        }
+    }
+}
+
 private struct AppShareSheet: UIViewControllerRepresentable {
     let message: String
     let url: URL
@@ -1100,61 +1185,4 @@ private struct AppShareSheet: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
-}
-
-private enum NotificationRevealMotion {
-    static let expand = Animation.spring(response: 0.48, dampingFraction: 0.88, blendDuration: 0.08)
-    static let collapse = Animation.spring(response: 0.4, dampingFraction: 0.92, blendDuration: 0.06)
-}
-
-private struct NotificationCircularRevealOverlay<Content: View>: View {
-    @Binding var isPresented: Bool
-    let origin: CGPoint
-    @ViewBuilder var content: (_ dismiss: @escaping () -> Void) -> Content
-
-    @State private var revealProgress: CGFloat = 0
-
-    var body: some View {
-        GeometryReader { proxy in
-            let coverRadius = Self.radiusCoveringScreen(origin: origin, in: proxy.size)
-            let diameter = max(coverRadius * 2 * revealProgress, 0.5)
-
-            content(dismissAnimated)
-                .frame(width: proxy.size.width, height: proxy.size.height)
-                .background(SplickTheme.Colors.background)
-                .mask {
-                    Circle()
-                        .frame(width: diameter, height: diameter)
-                        .position(origin)
-                }
-        }
-        .ignoresSafeArea()
-        .onAppear {
-            withAnimation(NotificationRevealMotion.expand) {
-                revealProgress = 1
-            }
-        }
-    }
-
-    private func dismissAnimated() {
-        guard isPresented else { return }
-        withAnimation(NotificationRevealMotion.collapse) {
-            revealProgress = 0
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-            isPresented = false
-        }
-    }
-
-    private static func radiusCoveringScreen(origin: CGPoint, in size: CGSize) -> CGFloat {
-        let corners = [
-            CGPoint(x: 0, y: 0),
-            CGPoint(x: size.width, y: 0),
-            CGPoint(x: 0, y: size.height),
-            CGPoint(x: size.width, y: size.height),
-        ]
-        return corners
-            .map { hypot($0.x - origin.x, $0.y - origin.y) }
-            .max() ?? size.width
-    }
 }
