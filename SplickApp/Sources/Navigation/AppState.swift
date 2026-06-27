@@ -3,6 +3,7 @@ import SwiftUI
 import SplickDomain
 import Common
 import Localization
+import FeatureSocialFeed
 
 @MainActor
 final class AppState: ObservableObject {
@@ -16,8 +17,11 @@ final class AppState: ObservableObject {
     @Published var selectedTab: Tab = .feed
     @Published var showProfileSettings = false
     @Published var showNotifications = false
+    @Published var notificationAnchorFrame: CGRect = .zero
     @Published var feedNavigationPath = NavigationPath()
-    @Published var pendingPostId: UUID?
+    @Published var pendingFeedPostNavigation: PendingFeedPostNavigation?
+    /// Slides in over the current tab (e.g. expense row → post detail).
+    @Published var linkedPostPresentation: PendingFeedPostNavigation?
 
     /// In-memory only — `false` every cold launch and after logout.
     /// `true` only after the user taps through the 4-page onboarding this session.
@@ -61,7 +65,8 @@ final class AppState: ObservableObject {
         selectedTab = .feed
         showNotifications = false
         feedNavigationPath = NavigationPath()
-        pendingPostId = nil
+        pendingFeedPostNavigation = nil
+        linkedPostPresentation = nil
         Log.info("User signed out", category: .lifecycle)
     }
 
@@ -73,7 +78,8 @@ final class AppState: ObservableObject {
         selectedTab = .feed
         showNotifications = false
         feedNavigationPath = NavigationPath()
-        pendingPostId = nil
+        pendingFeedPostNavigation = nil
+        linkedPostPresentation = nil
     }
 
     /// Called when user taps through the last onboarding page.
@@ -84,8 +90,13 @@ final class AppState: ObservableObject {
     }
 
     func openPostFromNotification(_ postId: UUID) {
-        pendingPostId = postId
-        selectedTab = .feed
+        pendingFeedPostNavigation = PendingFeedPostNavigation(
+            postId: postId,
+            expandBillSplit: false
+        )
+        withAnimation(.easeInOut(duration: 0.35)) {
+            selectedTab = .feed
+        }
         Log.debug(
             "Navigate to post from notification",
             category: .ui,
@@ -93,8 +104,33 @@ final class AppState: ObservableObject {
         )
     }
 
+    func openLinkedPost(_ postId: UUID, expandBillSplit: Bool) {
+        linkedPostPresentation = PendingFeedPostNavigation(
+            postId: postId,
+            expandBillSplit: expandBillSplit
+        )
+        Log.debug(
+            "Present linked post overlay",
+            category: .ui,
+            metadata: [
+                "postId": postId.uuidString,
+                "expandBillSplit": String(expandBillSplit),
+            ]
+        )
+    }
+
+    func dismissLinkedPostPresentation() {
+        linkedPostPresentation = nil
+    }
+
+    func presentNotifications(from bellFrame: CGRect) {
+        guard bellFrame.width > 1, bellFrame.height > 1 else { return }
+        notificationAnchorFrame = bellFrame
+        showNotifications = true
+    }
+
     func clearPendingPostNavigation() {
-        pendingPostId = nil
+        pendingFeedPostNavigation = nil
     }
 
     func completeLaunchSplash() {
