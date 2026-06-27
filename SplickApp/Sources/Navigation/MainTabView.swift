@@ -189,91 +189,95 @@ struct MainTabView: View {
     }
 
     @ViewBuilder
-    private var selectedTabContent: some View {
-        switch appState.selectedTab {
-        case .feed:
-            FeedView(
-                viewModel: container.feedViewModel,
-                photoAlbumViewModel: container.photoAlbumViewModel,
-                streakViewModel: container.streakViewModel,
-                fetchFriendsUseCase: container.fetchFriendsUseCase,
-                fetchMyFriendsUseCase: container.fetchMyFriendsUseCase,
-                fetchMyGroupsUseCase: container.fetchMyGroupsUseCase,
-                profileDependencies: container.friendUserProfileDependencies,
-                makeGifPickerViewModel: container.makeGifPickerViewModel(groupId:),
-                navigationPath: $appState.feedNavigationPath,
-                pendingFeedPostNavigation: appState.pendingFeedPostNavigation,
-                onPendingPostHandled: {
-                    appState.clearPendingPostNavigation()
-                },
-                isTabActive: true
-            )
-            .environmentObject(container.customEmojiStore)
-            .environment(\.customEmojiDependencies, container.customEmojiDependencies)
+    private var feedTabContent: some View {
+        FeedView(
+            viewModel: container.feedViewModel,
+            photoAlbumViewModel: container.photoAlbumViewModel,
+            streakViewModel: container.streakViewModel,
+            fetchFriendsUseCase: container.fetchFriendsUseCase,
+            fetchMyFriendsUseCase: container.fetchMyFriendsUseCase,
+            fetchMyGroupsUseCase: container.fetchMyGroupsUseCase,
+            profileDependencies: container.friendUserProfileDependencies,
+            makeGifPickerViewModel: container.makeGifPickerViewModel(groupId:),
+            navigationPath: $appState.feedNavigationPath,
+            pendingFeedPostNavigation: appState.pendingFeedPostNavigation,
+            onPendingPostHandled: {
+                appState.clearPendingPostNavigation()
+            },
+            isTabActive: appState.selectedTab == .feed
+        )
+        .environmentObject(container.customEmojiStore)
+        .environment(\.customEmojiDependencies, container.customEmojiDependencies)
+    }
 
-        case .expenses:
-            ExpenseListView(
-                viewModel: container.expenseListViewModel,
-                currentUserId: appState.currentUser?.id
-            )
+    @ViewBuilder
+    private var expensesTabContent: some View {
+        ExpenseListView(
+            viewModel: container.expenseListViewModel,
+            currentUserId: appState.currentUser?.id,
+            userSearchUseCase: container.expenseFriendSearchUseCase,
+            profileDependencies: container.friendUserProfileDependencies
+        )
+    }
 
-        case .friends:
-            FriendsRootView(
-                fetchMyFriendsUseCase: container.fetchMyFriendsUseCase,
-                fetchMyGroupsUseCase: container.fetchMyGroupsUseCase,
-                searchUsersUseCase: container.searchUsersUseCase,
-                fetchUserProfileUseCase: container.fetchUserProfileUseCase,
-                fetchFriendPaymentProfileUseCase: container.fetchFriendPaymentProfileUseCase,
-                generateMyQrUseCase: container.generateMyQrUseCase,
-                addFriendUseCase: container.addFriendUseCase,
-                fetchIncomingFriendRequestsUseCase: container.fetchIncomingFriendRequestsUseCase,
-                acceptFriendRequestUseCase: container.acceptFriendRequestUseCase,
-                rejectFriendRequestUseCase: container.rejectFriendRequestUseCase,
-                fetchOutgoingFriendRequestsUseCase: container.fetchOutgoingFriendRequestsUseCase,
-                cancelFriendRequestUseCase: container.cancelFriendRequestUseCase,
-                removeFriendUseCase: container.removeFriendUseCase,
-                setFriendNicknameUseCase: container.setFriendNicknameUseCase,
-                blockUserUseCase: container.blockUserUseCase,
-                unblockUserUseCase: container.unblockUserUseCase,
-                fetchBlockedUsersUseCase: container.fetchBlockedUsersUseCase,
-                joinGroupUseCase: container.joinGroupUseCase,
-                createGroupUseCase: container.createGroupUseCase,
-                fetchGroupMembersUseCase: container.fetchGroupMembersUseCase,
-                fetchGroupInviteCodeUseCase: container.fetchGroupInviteCodeUseCase,
-                generateGroupInviteCodeUseCase: container.generateGroupInviteCodeUseCase,
-                inviteFriendsToGroupUseCase: container.inviteFriendsToGroupUseCase,
-                fetchGroupUseCase: container.fetchGroupUseCase,
-                approveGroupMemberUseCase: container.approveGroupMemberUseCase,
-                rejectGroupMemberUseCase: container.rejectGroupMemberUseCase,
-                removeGroupMemberUseCase: container.removeGroupMemberUseCase,
-                leaveGroupUseCase: container.leaveGroupUseCase,
-                deleteGroupUseCase: container.deleteGroupUseCase,
-                updateGroupUseCase: container.updateGroupUseCase,
-                updateGroupAvatarUseCase: container.updateGroupAvatarUseCase,
-                uploadGroupAvatarUseCase: container.uploadGroupAvatarUseCase,
-                transferGroupOwnershipUseCase: container.transferGroupOwnershipUseCase,
-                generateGroupQrUseCase: container.generateGroupQrUseCase,
-                revokeGroupQrUseCase: container.revokeGroupQrUseCase,
-                onBadgeCountsChanged: { await container.badgeCountService.refresh() }
-            )
-            .environmentObject(container.customEmojiStore)
-            .environment(\.customEmojiDependencies, container.customEmojiDependencies)
+    @ViewBuilder
+    private var friendsTabContent: some View {
+        FriendsRootView(
+            fetchMyFriendsUseCase: container.fetchMyFriendsUseCase,
+            fetchMyGroupsUseCase: container.fetchMyGroupsUseCase,
+            searchUsersUseCase: container.searchUsersUseCase,
+            fetchUserProfileUseCase: container.fetchUserProfileUseCase,
+            fetchFriendPaymentProfileUseCase: container.fetchFriendPaymentProfileUseCase,
+            generateMyQrUseCase: container.generateMyQrUseCase,
+            addFriendUseCase: container.addFriendUseCase,
+            fetchIncomingFriendRequestsUseCase: container.fetchIncomingFriendRequestsUseCase,
+            acceptFriendRequestUseCase: container.acceptFriendRequestUseCase,
+            rejectFriendRequestUseCase: container.rejectFriendRequestUseCase,
+            fetchOutgoingFriendRequestsUseCase: container.fetchOutgoingFriendRequestsUseCase,
+            cancelFriendRequestUseCase: container.cancelFriendRequestUseCase,
+            removeFriendUseCase: container.removeFriendUseCase,
+            setFriendNicknameUseCase: container.setFriendNicknameUseCase,
+            blockUserUseCase: container.blockUserUseCase,
+            unblockUserUseCase: container.unblockUserUseCase,
+            fetchBlockedUsersUseCase: container.fetchBlockedUsersUseCase,
+            joinGroupUseCase: container.joinGroupUseCase,
+            createGroupUseCase: container.createGroupUseCase,
+            fetchGroupMembersUseCase: container.fetchGroupMembersUseCase,
+            fetchGroupInviteCodeUseCase: container.fetchGroupInviteCodeUseCase,
+            generateGroupInviteCodeUseCase: container.generateGroupInviteCodeUseCase,
+            inviteFriendsToGroupUseCase: container.inviteFriendsToGroupUseCase,
+            fetchGroupUseCase: container.fetchGroupUseCase,
+            approveGroupMemberUseCase: container.approveGroupMemberUseCase,
+            rejectGroupMemberUseCase: container.rejectGroupMemberUseCase,
+            removeGroupMemberUseCase: container.removeGroupMemberUseCase,
+            leaveGroupUseCase: container.leaveGroupUseCase,
+            deleteGroupUseCase: container.deleteGroupUseCase,
+            updateGroupUseCase: container.updateGroupUseCase,
+            updateGroupAvatarUseCase: container.updateGroupAvatarUseCase,
+            uploadGroupAvatarUseCase: container.uploadGroupAvatarUseCase,
+            transferGroupOwnershipUseCase: container.transferGroupOwnershipUseCase,
+            generateGroupQrUseCase: container.generateGroupQrUseCase,
+            revokeGroupQrUseCase: container.revokeGroupQrUseCase,
+            onBadgeCountsChanged: { await container.badgeCountService.refresh() }
+        )
+        .environmentObject(container.customEmojiStore)
+        .environment(\.customEmojiDependencies, container.customEmojiDependencies)
+    }
 
-        case .camera:
-            PostCaptureFlowView(onDismiss: {
-                appState.selectedTab = .feed
-            })
-            .ignoresSafeArea()
-
-        case .messages:
-            ConversationListView(viewModel: container.conversationListViewModel)
+    @ViewBuilder
+    private var messagesTabContent: some View {
+        ConversationListView(viewModel: container.conversationListViewModel)
             .environmentObject(container.makeChatThreadViewModelFactory(
                 currentUserId: appState.currentUser?.id ?? UUID()
             ))
+    }
 
-        case .profile:
-            EmptyView()
-        }
+    @ViewBuilder
+    private var cameraTabContent: some View {
+        PostCaptureFlowView(onDismiss: {
+            appState.selectedTab = .feed
+        })
+        .ignoresSafeArea()
     }
 
     private func handleSelectedTabChange(_ tab: Tab) {
