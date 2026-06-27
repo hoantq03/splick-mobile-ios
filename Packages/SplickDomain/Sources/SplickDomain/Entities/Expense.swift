@@ -8,6 +8,7 @@ public struct Expense: Identifiable, Codable, Equatable, Sendable {
     public let paidBy: UserSummary
     public let splits: [ExpenseSplit]
     public let groupId: UUID?
+    public let postId: UUID?
     public let category: ExpenseCategory
     public let status: ExpenseStatus
     public let createdAt: Date
@@ -22,6 +23,7 @@ public struct Expense: Identifiable, Codable, Equatable, Sendable {
         paidBy: UserSummary,
         splits: [ExpenseSplit] = [],
         groupId: UUID? = nil,
+        postId: UUID? = nil,
         category: ExpenseCategory = .general,
         status: ExpenseStatus = .pending,
         createdAt: Date = .now,
@@ -34,6 +36,7 @@ public struct Expense: Identifiable, Codable, Equatable, Sendable {
         self.paidBy = paidBy
         self.splits = splits
         self.groupId = groupId
+        self.postId = postId
         self.category = category
         self.status = status
         self.createdAt = createdAt
@@ -45,6 +48,54 @@ public struct Expense: Identifiable, Codable, Equatable, Sendable {
         if let settledAt { return settledAt }
         let paidDates = splits.compactMap(\.paidAt)
         return paidDates.max()
+    }
+
+    /// Whether the given user has no outstanding share (payer or marked paid on their split).
+    public func isPaidFor(userId: UUID?) -> Bool {
+        guard let userId else { return status == .settled }
+        if paidBy.id == userId { return true }
+        if let split = splits.first(where: { $0.user.id == userId }) {
+            return split.isPaid
+        }
+        return status == .settled
+    }
+
+    /// Signed cash-flow for list rows: paying others (−) vs being repaid (+).
+    public func userCashFlow(userId: UUID?) -> ExpenseUserCashFlow {
+        guard let userId else {
+            return ExpenseUserCashFlow(direction: .neutral, amount: totalAmount)
+        }
+
+        if paidBy.id == userId {
+            let fromOthers = splits.filter { $0.user.id != userId }
+            let amount = fromOthers.reduce(Decimal.zero) { $0 + $1.amount }
+            if amount > 0 {
+                return ExpenseUserCashFlow(direction: .receiving, amount: amount)
+            }
+            return ExpenseUserCashFlow(direction: .neutral, amount: totalAmount)
+        }
+
+        if let split = splits.first(where: { $0.user.id == userId }) {
+            return ExpenseUserCashFlow(direction: .paying, amount: split.amount)
+        }
+
+        return ExpenseUserCashFlow(direction: .neutral, amount: totalAmount)
+    }
+}
+
+public struct ExpenseUserCashFlow: Equatable, Sendable {
+    public enum Direction: Sendable {
+        case receiving
+        case paying
+        case neutral
+    }
+
+    public let direction: Direction
+    public let amount: Decimal
+
+    public init(direction: Direction, amount: Decimal) {
+        self.direction = direction
+        self.amount = amount
     }
 }
 

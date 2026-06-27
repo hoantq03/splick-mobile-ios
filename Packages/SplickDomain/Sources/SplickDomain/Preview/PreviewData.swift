@@ -129,6 +129,7 @@ public enum PreviewData {
             ),
         ],
         groupId: nil,
+        postId: samplePost.id,
         category: .food,
         status: .pending,
         createdAt: Date().addingTimeInterval(-3600)
