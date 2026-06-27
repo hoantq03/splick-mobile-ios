@@ -339,6 +339,15 @@ public struct ExpenseListView: View {
             ExpenseListSectionHeader(
                 title: languageService.text(.expenseRecordsSectionTitle),
                 subtitle: recordsSectionSubtitle,
+                filterPanelTitle: languageService.text(.expenseFilterPanelTitle),
+                filterClearTitle: languageService.text(.expenseFilterClear),
+                showsFilterClear: viewModel.filters.hasNonDefaultListFilters,
+                onClearFilters: {
+                    captionQueryDraft = ""
+                    friendQueryDraft = ""
+                    friendSearchViewModel.reset(query: "")
+                    viewModel.clearListFilters()
+                },
                 systemImage: "list.bullet.rectangle",
                 accent: SplickTheme.Colors.primaryGradientStart,
                 showsFilterBadge: viewModel.filters.hasNonDefaultListFilters,
@@ -748,6 +757,10 @@ struct ExpenseRowView: View {
 private struct ExpenseListSectionHeader<FilterPanel: View>: View {
     let title: String
     var subtitle: String?
+    let filterPanelTitle: String
+    let filterClearTitle: String
+    var showsFilterClear: Bool = false
+    var onClearFilters: (() -> Void)?
     let systemImage: String
     let accent: Color
     var showsFilterBadge: Bool = false
@@ -759,25 +772,25 @@ private struct ExpenseListSectionHeader<FilterPanel: View>: View {
     private let controlSize: CGFloat = 30
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            VStack(alignment: .leading, spacing: isFilterPresented ? SplickTheme.Spacing.md : 0) {
+        VStack(alignment: .leading, spacing: isFilterPresented ? SplickTheme.Spacing.md : 0) {
+            ZStack(alignment: .topTrailing) {
                 headerTitleRow
-
-                if isFilterPresented {
-                    filterPanel()
-                        .transition(
-                            .scale(scale: 0.2, anchor: .topTrailing)
-                                .combined(with: .opacity)
-                        )
-                }
+                cornerControl
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.leading, isFilterPresented ? SplickTheme.Spacing.md : SplickTheme.Spacing.xxs)
-            .padding(.trailing, isFilterPresented ? SplickTheme.Spacing.md + controlSize + SplickTheme.Spacing.xxs : SplickTheme.Spacing.xxs)
-            .padding(.vertical, isFilterPresented ? SplickTheme.Spacing.md : 0)
 
-            cornerControl
+            if isFilterPresented {
+                filterPanel()
+                    .transition(
+                        .scale(scale: 0.2, anchor: .topTrailing)
+                            .combined(with: .opacity)
+                    )
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, SplickTheme.Spacing.md)
+        .padding(.leading, isFilterPresented ? SplickTheme.Spacing.md : 0)
+        .padding(.trailing, isFilterPresented ? SplickTheme.Spacing.md : 0)
+        .padding(.bottom, isFilterPresented ? SplickTheme.Spacing.md : 0)
         .background {
             if isFilterPresented {
                 RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous)
@@ -799,7 +812,7 @@ private struct ExpenseListSectionHeader<FilterPanel: View>: View {
 
     private var headerTitleRow: some View {
         HStack(alignment: .center, spacing: SplickTheme.Spacing.xs) {
-            Image(systemName: systemImage)
+            Image(systemName: isFilterPresented ? "slider.horizontal.3" : systemImage)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(accent)
                 .frame(width: 22, height: 22)
@@ -808,24 +821,53 @@ private struct ExpenseListSectionHeader<FilterPanel: View>: View {
                         .fill(accent.opacity(0.14))
                 }
 
-            HStack(spacing: SplickTheme.Spacing.xxxs) {
-                Text(title)
-                    .font(SplickTheme.Typography.captionBold)
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
-                    .textCase(.uppercase)
-                    .lineLimit(1)
-
-                if let subtitle {
-                    Text(subtitle)
-                        .font(SplickTheme.Typography.caption)
-                        .foregroundStyle(SplickTheme.Colors.textTertiary)
-                        .lineLimit(1)
+            Group {
+                if isFilterPresented {
+                    filterHeaderTitle
+                } else {
+                    recordsHeaderTitle
                 }
             }
+            .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .leading)))
 
             Spacer(minLength: 0)
         }
         .padding(.horizontal, isFilterPresented ? 0 : SplickTheme.Spacing.xxs)
+        .padding(.trailing, controlSize + SplickTheme.Spacing.xxxs)
+        .animation(SplickRevealMotion.expand, value: isFilterPresented)
+    }
+
+    private var recordsHeaderTitle: some View {
+        HStack(spacing: SplickTheme.Spacing.xxxs) {
+            Text(title)
+                .font(SplickTheme.Typography.captionBold)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                .textCase(.uppercase)
+                .lineLimit(1)
+
+            if let subtitle {
+                Text(subtitle)
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.textTertiary)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    private var filterHeaderTitle: some View {
+        HStack(spacing: SplickTheme.Spacing.sm) {
+            Text(filterPanelTitle)
+                .font(SplickTheme.Typography.captionBold)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                .textCase(.uppercase)
+                .lineLimit(1)
+
+            if showsFilterClear, let onClearFilters {
+                Button(filterClearTitle, action: onClearFilters)
+                    .font(SplickTheme.Typography.caption.weight(.semibold))
+                    .foregroundStyle(accent)
+            }
+        }
     }
 
     private var cornerControl: some View {
@@ -853,8 +895,7 @@ private struct ExpenseListSectionHeader<FilterPanel: View>: View {
             }
         }
         .buttonStyle(.plain)
-        .padding(.trailing, SplickTheme.Spacing.xxs)
-        .padding(.top, isFilterPresented ? SplickTheme.Spacing.md : 0)
+        .padding(.trailing, isFilterPresented ? 0 : SplickTheme.Spacing.md)
         .accessibilityLabel(filterAccessibilityLabel)
     }
 }
@@ -879,25 +920,6 @@ private struct ExpenseListFilterPanel: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
-                HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
-                    Text(languageService.text(.expenseFilterPanelTitle))
-                        .font(SplickTheme.Typography.headline)
-                        .foregroundStyle(SplickTheme.Colors.textPrimary)
-
-                    Spacer(minLength: 0)
-
-                    if viewModel.filters.hasNonDefaultListFilters {
-                        Button(languageService.text(.expenseFilterClear)) {
-                            captionQueryDraft = ""
-                            friendQueryDraft = ""
-                            friendSearchViewModel.reset(query: "")
-                            viewModel.clearListFilters()
-                        }
-                        .font(SplickTheme.Typography.caption.weight(.semibold))
-                        .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                    }
-                }
-
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
                 filterSectionLabel(languageService.text(.expenseFilterDateRange))
                 HStack(spacing: SplickTheme.Spacing.xs) {
