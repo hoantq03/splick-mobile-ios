@@ -53,12 +53,14 @@ extension View {
     /// Avatar button top-leading + notification bell top-trailing.
     public func splickProfileToolbar(
         titleDisplayMode: NavigationBarItem.TitleDisplayMode = .large,
-        isSuppressed: Bool = false
+        isSuppressed: Bool = false,
+        showsBell: Bool = true
     ) -> some View {
         modifier(
             SplickProfileToolbarModifier(
                 titleDisplayMode: titleDisplayMode,
-                isSuppressed: isSuppressed
+                isSuppressed: isSuppressed,
+                showsBell: showsBell
             )
         )
     }
@@ -67,6 +69,7 @@ extension View {
 private struct SplickProfileToolbarModifier: ViewModifier {
     let titleDisplayMode: NavigationBarItem.TitleDisplayMode
     var isSuppressed: Bool = false
+    var showsBell: Bool = true
 
     @Environment(\.openProfileSettings) private var openProfileSettings
     @Environment(\.currentUserSummary) private var currentUserSummary
@@ -99,7 +102,7 @@ private struct SplickProfileToolbarModifier: ViewModifier {
                     }
 
                     ToolbarItem(placement: .topBarTrailing) {
-                        if let openNotifications {
+                        if showsBell, let openNotifications {
                             NotificationBellButton(
                                 unreadCount: notificationUnreadCount,
                                 isPresented: notificationsPresented,
