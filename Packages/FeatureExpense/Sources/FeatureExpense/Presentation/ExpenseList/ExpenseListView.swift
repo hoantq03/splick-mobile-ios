@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import DesignSystem
 import Common
 import Localization
@@ -19,6 +20,7 @@ public struct ExpenseListView: View {
     @State private var friendQueryDraft = ""
     @State private var profileRoute: ExpenseUserProfileRoute?
     @EnvironmentObject private var languageService: LanguageService
+    @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.openPostCaptureFlow) private var openPostCaptureFlow
     @Environment(\.openLinkedPost) private var openLinkedPost
     @Environment(\.openProfileSettings) private var openProfileSettings
@@ -87,19 +89,35 @@ public struct ExpenseListView: View {
         }
     }
 
-    private var expenseContent: some View {
-        ScrollView {
-            VStack(spacing: SplickTheme.Spacing.md) {
-                debtSummarySection
+    private var sameTabTapPublisher: AnyPublisher<Void, Never> {
+        tabBarScrollState?.sameTabTapSubject.eraseToAnyPublisher()
+            ?? Empty().eraseToAnyPublisher()
+    }
 
-                expenseRecordsSection
+    private var expenseContent: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: SplickTheme.Spacing.md) {
+                    Color.clear.frame(height: 0).id("expenseScrollTop")
+                    debtSummarySection
+                    expenseRecordsSection
+                }
+                .padding(.horizontal, SplickTheme.Spacing.md)
             }
-            .padding(.horizontal, SplickTheme.Spacing.md)
-        }
-        .tabBarHideOnScroll()
-        .onAppear {
-            if captionQueryDraft.isEmpty {
-                captionQueryDraft = viewModel.filters.captionQuery
+            .tabBarHideOnScroll()
+            .onAppear {
+                if captionQueryDraft.isEmpty {
+                    captionQueryDraft = viewModel.filters.captionQuery
+                }
+            }
+            .onReceive(sameTabTapPublisher) { _ in
+                if tabBarScrollState?.isAtTop == true {
+                    Task { await viewModel.load(isPullToRefresh: true) }
+                } else {
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                        proxy.scrollTo("expenseScrollTop", anchor: .top)
+                    }
+                }
             }
         }
     }
