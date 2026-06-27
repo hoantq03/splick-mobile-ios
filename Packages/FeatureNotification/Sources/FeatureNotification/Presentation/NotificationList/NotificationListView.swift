@@ -61,12 +61,12 @@ public struct NotificationListView: View {
     }
 
     private var overlayHeader: some View {
-        HStack {
+        HStack(spacing: SplickTheme.Spacing.sm) {
             Text(languageService.text(.notificationTitle))
                 .font(SplickTheme.Typography.headline)
                 .foregroundStyle(SplickTheme.Colors.textPrimary)
 
-            Spacer()
+            Spacer(minLength: 0)
 
             if viewModel.unreadCount > 0 {
                 markAllReadButton
