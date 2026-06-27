@@ -46,7 +46,6 @@ final class MockUserSearchUseCase: UserSearchUseCaseProtocol, Sendable {
             fetchDebtSummaryUseCase: MockFetchDebtSummaryUseCase(),
             currentUserId: PreviewData.currentUser.id
         ),
-        userSearchUseCase: MockUserSearchUseCase(),
         currentUserId: PreviewData.currentUser.id
     )
 }
