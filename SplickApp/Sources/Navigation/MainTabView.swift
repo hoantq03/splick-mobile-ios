@@ -144,29 +144,6 @@ struct MainTabView: View {
                 .animation(TabBarMotion.spring, value: tabBarChromeAnimationToken)
                 .ignoresSafeArea(edges: .bottom)
             }
-            .overlay {
-                if appState.showNotifications {
-                    SplickNotificationRevealOverlay(
-                        isPresented: $appState.showNotifications,
-                        anchorFrame: appState.notificationAnchorFrame,
-                        unreadCount: badgeCounts.notifications
-                    ) { dismiss in
-                        NotificationListView(
-                            viewModel: container.notificationListViewModel,
-                            onNavigateToPost: { postId in
-                                dismiss()
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
-                                    appState.openPostFromNotification(postId)
-                                }
-                            },
-                            onDismiss: dismiss,
-                            presentedAsSheet: true
-                        )
-                        .environmentObject(container.languageService)
-                    }
-                    .zIndex(10)
-                }
-            }
             .onChange(of: appState.selectedTab, perform: handleSelectedTabChange)
         .task(id: scenePhase) {
             switch scenePhase {
@@ -185,6 +162,28 @@ struct MainTabView: View {
         }
         .sheet(isPresented: $appState.showProfileSettings) {
             ProfileSettingsView()
+        }
+        .overlay {
+            if appState.showNotifications {
+                SplickNotificationRevealOverlay(
+                    isPresented: $appState.showNotifications,
+                    anchorFrame: appState.notificationAnchorFrame,
+                    unreadCount: badgeCounts.notifications
+                ) { dismiss in
+                    NotificationListView(
+                        viewModel: container.notificationListViewModel,
+                        onNavigateToPost: { postId in
+                            dismiss()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+                                appState.openPostFromNotification(postId)
+                            }
+                        },
+                        onDismiss: dismiss,
+                        presentedAsSheet: true
+                    )
+                    .environmentObject(container.languageService)
+                }
+            }
         }
         .tint(SplickTheme.Colors.primaryGradientStart)
     }
