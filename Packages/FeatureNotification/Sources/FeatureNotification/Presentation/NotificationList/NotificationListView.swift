@@ -9,64 +9,101 @@ public struct NotificationListView: View {
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
     private let onNavigateToPost: ((UUID) -> Void)?
+    private let onDismiss: (() -> Void)?
     private let presentedAsSheet: Bool
 
     public init(
         viewModel: NotificationListViewModel,
         onNavigateToPost: ((UUID) -> Void)? = nil,
+        onDismiss: (() -> Void)? = nil,
         presentedAsSheet: Bool = false
     ) {
         self._viewModel = ObservedObject(wrappedValue: viewModel)
         self.onNavigateToPost = onNavigateToPost
+        self.onDismiss = onDismiss
         self.presentedAsSheet = presentedAsSheet
     }
 
     public var body: some View {
-        NavigationStack {
-            Group {
-                switch viewModel.state {
-                case .idle, .loading:
-                    LoadingView(message: languageService.text(.notificationLoading))
-
-                case .loaded(let items) where items.isEmpty:
-                    EmptyStateView(
-                        icon: "bell.slash",
-                        title: languageService.text(.notificationEmptyTitle),
-                        message: languageService.text(.notificationEmptyMessage)
-                    )
-
-                case .loaded:
-                    notificationList
-
-                case .failed(let message):
-                    ErrorView(message: message) {
-                        Task { await viewModel.load() }
-                    }
-                }
-            }
-            .navigationTitle(languageService.text(.notificationTitle))
-            .navigationBarTitleDisplayMode(.inline)
-            .modifier(NotificationToolbarModifier(presentedAsSheet: presentedAsSheet))
-            .toolbar {
-                if presentedAsSheet {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button(languageService.text(.commonDone)) { dismiss() }
-                    }
-                }
-                if viewModel.unreadCount > 0 {
-                    ToolbarItem(placement: .primaryAction) {
-                        Button(languageService.text(.notificationReadAll)) {
-                            Task { await viewModel.markAllAsRead() }
+        Group {
+            if presentedAsSheet {
+                overlayBody
+            } else {
+                NavigationStack {
+                    listContent
+                        .splickProfileToolbar(titleDisplayMode: .inline)
+                        .toolbar {
+                            if viewModel.unreadCount > 0 {
+                                ToolbarItem(placement: .primaryAction) {
+                                    markAllReadButton
+                                }
+                            }
                         }
-                        .font(SplickTheme.Typography.callout)
-                    }
+                        .refreshable { await viewModel.load() }
                 }
             }
-            .refreshable { await viewModel.load() }
         }
         .onFirstAppear {
             guard viewModel.notifications.isEmpty else { return }
             Task { await viewModel.load() }
+        }
+    }
+
+    // Flat layout (no NavigationStack) so the overlay's X button is never covered
+    // by a UIKit UINavigationBar.
+    private var overlayBody: some View {
+        VStack(spacing: 0) {
+            overlayHeader
+
+            listContent
+                .refreshable { await viewModel.load() }
+        }
+    }
+
+    private var overlayHeader: some View {
+        HStack {
+            Text(languageService.text(.notificationTitle))
+                .font(SplickTheme.Typography.headline)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
+
+            Spacer()
+
+            if viewModel.unreadCount > 0 {
+                markAllReadButton
+            }
+        }
+        .padding(.horizontal, SplickTheme.Spacing.md)
+        .padding(.vertical, SplickTheme.Spacing.sm)
+    }
+
+    private var markAllReadButton: some View {
+        Button(languageService.text(.notificationReadAll)) {
+            Task { await viewModel.markAllAsRead() }
+        }
+        .font(SplickTheme.Typography.callout)
+    }
+
+    private var listContent: some View {
+        Group {
+            switch viewModel.state {
+            case .idle, .loading:
+                LoadingView(message: languageService.text(.notificationLoading))
+
+            case .loaded(let items) where items.isEmpty:
+                EmptyStateView(
+                    icon: "bell.slash",
+                    title: languageService.text(.notificationEmptyTitle),
+                    message: languageService.text(.notificationEmptyMessage)
+                )
+
+            case .loaded:
+                notificationList
+
+            case .failed(let message):
+                ErrorView(message: message) {
+                    Task { await viewModel.load() }
+                }
+            }
         }
     }
 
@@ -90,16 +127,6 @@ public struct NotificationListView: View {
     }
 }
 
-private struct NotificationToolbarModifier: ViewModifier {
-    let presentedAsSheet: Bool
-    func body(content: Content) -> some View {
-        if presentedAsSheet {
-            content
-        } else {
-            content.splickProfileToolbar(titleDisplayMode: .inline)
-        }
-    }
-}
 
 struct NotificationRowView: View {
     let notification: AppNotification
