@@ -221,7 +221,7 @@ public struct FriendsRootView: View {
                     }
                 }
             }
-            .navigationTitle(languageService.text(.friendsTitle))
+            .splickTabScreenHeader(languageService.text(.friendsTitle))
             .onChange(of: viewModel.searchQuery) { newValue in
                 viewModel.onSearchQueryChanged(newValue)
             }
@@ -230,7 +230,6 @@ public struct FriendsRootView: View {
                 viewModel.searchQuery = ""
                 viewModel.onSearchQueryChanged("")
             }
-            .splickProfileToolbar()
             .toolbar {
                 if viewModel.segment == .groups {
                     toolbarAddMenu
