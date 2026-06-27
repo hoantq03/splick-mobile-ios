@@ -8,6 +8,11 @@ public enum SplickRevealMotion {
     public static let collapseDuration: TimeInterval = 0.44
 }
 
+/// Shared root coordinate space for anchored overlays (bell, notifications) across tab pager pages.
+public enum SplickScreenCoordinateSpace {
+    public static let name = "splick.screen"
+}
+
 public enum SplickAnchoredRevealStyle: Equatable {
     case popover(cardWidth: CGFloat = 340)
     case fullscreen
@@ -257,12 +262,15 @@ private struct SplickRevealAnchorFrameKey: PreferenceKey {
 }
 
 public extension View {
-    func splickRevealAnchorFrame(_ frame: Binding<CGRect>) -> some View {
+    func splickRevealAnchorFrame(
+        _ frame: Binding<CGRect>,
+        in space: CoordinateSpace = .global
+    ) -> some View {
         background {
             GeometryReader { proxy in
                 Color.clear.preference(
                     key: SplickRevealAnchorFrameKey.self,
-                    value: proxy.frame(in: .global)
+                    value: proxy.frame(in: space)
                 )
             }
         }
