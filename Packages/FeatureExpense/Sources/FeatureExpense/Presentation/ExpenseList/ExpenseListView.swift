@@ -3,27 +3,43 @@ import DesignSystem
 import Common
 import Localization
 import SplickDomain
+import FeatureFriends
+
+private struct ExpenseUserProfileRoute: Identifiable {
+    let user: UserSummary
+    var id: UUID { user.id }
+}
 
 public struct ExpenseListView: View {
     @StateObject private var viewModel: ExpenseListViewModel
+    @StateObject private var friendSearchViewModel: ExpenseUserSearchViewModel
     @State private var isOverviewExpanded = false
     @State private var showFilterPanel = false
-    @State private var filterRevealOrigin: CGPoint = .zero
     @State private var captionQueryDraft = ""
+    @State private var friendQueryDraft = ""
+    @State private var profileRoute: ExpenseUserProfileRoute?
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.openPostCaptureFlow) private var openPostCaptureFlow
     @Environment(\.openLinkedPost) private var openLinkedPost
+    @Environment(\.openProfileSettings) private var openProfileSettings
     private let currentUserId: UUID?
+    private let profileDependencies: FriendUserProfileDependencies?
 
     private let overviewToggleAnimation = Animation.spring(response: 0.48, dampingFraction: 0.86)
     private let listFilterAnimation = Animation.spring(response: 0.42, dampingFraction: 0.86)
 
     public init(
         viewModel: @autoclosure @escaping () -> ExpenseListViewModel,
-        currentUserId: UUID? = nil
+        currentUserId: UUID? = nil,
+        userSearchUseCase: UserSearchUseCaseProtocol? = nil,
+        profileDependencies: FriendUserProfileDependencies? = nil
     ) {
         _viewModel = StateObject(wrappedValue: viewModel())
+        _friendSearchViewModel = StateObject(
+            wrappedValue: ExpenseUserSearchViewModel(useCase: userSearchUseCase)
+        )
         self.currentUserId = currentUserId
+        self.profileDependencies = profileDependencies
     }
 
     public var body: some View {
@@ -62,34 +78,25 @@ public struct ExpenseListView: View {
         .onChange(of: currentUserId) { userId in
             viewModel.updateCurrentUserId(userId)
         }
+        .sheet(item: $profileRoute) { route in
+            if let profileDependencies {
+                FriendUserProfileView(
+                    viewModel: profileDependencies.makeViewModel(user: route.user)
+                )
+            }
+        }
     }
 
     private var expenseContent: some View {
-        ZStack(alignment: .top) {
-            ScrollView {
-                VStack(spacing: SplickTheme.Spacing.md) {
-                    debtSummarySection
+        ScrollView {
+            VStack(spacing: SplickTheme.Spacing.md) {
+                debtSummarySection
 
-                    expenseRecordsSection
-                }
-                .padding(.horizontal, SplickTheme.Spacing.md)
+                expenseRecordsSection
             }
-            .tabBarHideOnScroll()
-
-            if showFilterPanel {
-                ExpenseFilterRevealOverlay(
-                    isPresented: $showFilterPanel,
-                    origin: filterRevealOrigin
-                ) {
-                    ExpenseListFilterPanel(
-                        viewModel: viewModel,
-                        captionQueryDraft: $captionQueryDraft,
-                        languageService: languageService
-                    )
-                }
-                .zIndex(1)
-            }
+            .padding(.horizontal, SplickTheme.Spacing.md)
         }
+        .tabBarHideOnScroll()
         .onAppear {
             if captionQueryDraft.isEmpty {
                 captionQueryDraft = viewModel.filters.captionQuery
@@ -317,17 +324,27 @@ public struct ExpenseListView: View {
                 systemImage: "list.bullet.rectangle",
                 accent: SplickTheme.Colors.primaryGradientStart,
                 showsFilterBadge: viewModel.filters.hasNonDefaultListFilters,
+                isFilterPresented: showFilterPanel,
                 filterAccessibilityLabel: languageService.text(.expenseFilterOpenAccessibility),
-                onFilterTap: { frame in
-                    filterRevealOrigin = CGPoint(x: frame.midX, y: frame.midY)
-                    withAnimation(ExpenseFilterRevealMotion.expand) {
-                        showFilterPanel = true
+                onFilterToggle: {
+                    withAnimation(showFilterPanel ? SplickRevealMotion.collapse : SplickRevealMotion.expand) {
+                        showFilterPanel.toggle()
                     }
+                },
+                filterPanel: {
+                    ExpenseListFilterPanel(
+                        viewModel: viewModel,
+                        friendSearchViewModel: friendSearchViewModel,
+                        captionQueryDraft: $captionQueryDraft,
+                        friendQueryDraft: $friendQueryDraft,
+                        languageService: languageService
+                    )
                 }
             )
 
             content()
         }
+        .zIndex(showFilterPanel ? 1 : 0)
     }
 
     private var recordsSectionSubtitle: String? {
@@ -408,7 +425,10 @@ public struct ExpenseListView: View {
                 ExpenseRowView(
                     expense: expense,
                     currentUserId: currentUserId,
-                    layout: .grouped
+                    layout: .grouped,
+                    onCreatorTap: {
+                        openCreatorProfile(expense.paidBy)
+                    }
                 ) {
                     openLinkedPost(for: expense)
                 }
@@ -425,7 +445,7 @@ public struct ExpenseListView: View {
 
                 if index < expenses.count - 1 {
                     Divider()
-                        .padding(.leading, 92)
+                        .padding(.leading, 84)
                 }
             }
         }
@@ -456,6 +476,15 @@ public struct ExpenseListView: View {
         openLinkedPost?(postId, true)
     }
 
+    private func openCreatorProfile(_ user: UserSummary) {
+        if user.id == currentUserId {
+            openProfileSettings?()
+            return
+        }
+        guard profileDependencies != nil else { return }
+        profileRoute = ExpenseUserProfileRoute(user: user)
+    }
+
     private func formatAmount(_ amount: Decimal) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
@@ -481,6 +510,7 @@ struct ExpenseRowView: View {
     let expense: Expense
     let currentUserId: UUID?
     var layout: Layout = .standalone
+    let onCreatorTap: () -> Void
     let onTap: () -> Void
 
     private var isLinkedToPost: Bool {
@@ -500,64 +530,115 @@ struct ExpenseRowView: View {
     }
 
     var body: some View {
-        Button(action: onTap) {
-            HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
+        HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
+            Button(action: onCreatorTap) {
                 creatorColumn
-
-                VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxs) {
-                    Text(formatAmount(expense.totalAmount))
-                        .font(SplickTheme.Typography.headline)
-                        .foregroundStyle(SplickTheme.Colors.textPrimary)
-                        .lineLimit(1)
-
-                    Text(formatSignedAmount(userCashFlow))
-                        .font(SplickTheme.Typography.callout.weight(.semibold))
-                        .foregroundStyle(amountColor(for: userCashFlow.direction))
-                        .lineLimit(1)
-
-                    Text(expense.createdAt.expenseListRelativeString)
-                        .font(SplickTheme.Typography.caption)
-                        .foregroundStyle(ageUrgency.color)
-                        .lineLimit(1)
-                        .padding(.horizontal, SplickTheme.Spacing.xs)
-                        .padding(.vertical, SplickTheme.Spacing.xxxs)
-                        .background {
-                            Capsule()
-                                .fill(ageUrgency.color.opacity(0.12))
-                        }
-                }
-
-                Spacer(minLength: SplickTheme.Spacing.xs)
-
-                paymentStatusIcon
             }
-            .contentShape(Rectangle())
-            .padding(.horizontal, SplickTheme.Spacing.md)
-            .padding(.vertical, SplickTheme.Spacing.sm)
-            .modifier(ExpenseRowChromeModifier(layout: layout))
+            .buttonStyle(.plain)
+
+            Button(action: onTap) {
+                HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
+                    VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
+                        if let caption = postCaptionHeader {
+                            Text(caption)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(SplickTheme.Colors.textPrimary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+
+                        combinedAmountLine
+
+                        Text(expense.createdAt.expenseListRelativeString)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(ageUrgency.color)
+                            .lineLimit(1)
+                            .padding(.horizontal, SplickTheme.Spacing.xs)
+                            .padding(.vertical, 2)
+                            .background {
+                                Capsule()
+                                    .fill(ageUrgency.color.opacity(0.12))
+                            }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    paymentStatusIcon
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(ExpenseRowPressStyle())
+            .disabled(!isLinkedToPost)
         }
-        .buttonStyle(ExpenseRowPressStyle())
-        .disabled(!isLinkedToPost)
+        .padding(.horizontal, SplickTheme.Spacing.md)
+        .padding(.vertical, SplickTheme.Spacing.xs)
+        .modifier(ExpenseRowChromeModifier(layout: layout))
         .opacity(isLinkedToPost ? 1 : 0.55)
+    }
+
+    private var postCaptionHeader: String? {
+        let caption = expense.description.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard expense.postId != nil, !caption.isEmpty else { return nil }
+        return caption
+    }
+
+    private let avatarSize: CGFloat = 46
+
+    private var isCurrentUserPayer: Bool {
+        guard let currentUserId else { return false }
+        return expense.paidBy.id == currentUserId
     }
 
     private var creatorColumn: some View {
         VStack(spacing: SplickTheme.Spacing.xxxs) {
-            AvatarView(
-                imageURL: expense.paidBy.avatarURL,
-                name: expense.paidBy.displayName,
-                size: .small,
-                userId: expense.paidBy.id
-            )
-            .clipShape(Circle())
-            .frame(width: 44, height: 44)
+            ZStack(alignment: .topTrailing) {
+                AvatarView(
+                    imageURL: expense.paidBy.avatarURL,
+                    name: expense.paidBy.displayName,
+                    size: .medium,
+                    userId: expense.paidBy.id
+                )
+                .scaleEffect(avatarSize / 48)
+                .frame(width: avatarSize, height: avatarSize)
 
-            Text(languageService.text(.expenseRowCreatorLabel))
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(SplickTheme.Colors.textTertiary)
-                .lineLimit(1)
+                Text(languageService.text(.expenseRowCreatorLabel))
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background {
+                        Capsule()
+                            .fill(SplickTheme.Colors.primaryGradientStart)
+                    }
+                    .offset(x: 4, y: -4)
+            }
+            .frame(width: avatarSize, height: avatarSize)
+
+            HStack(spacing: 2) {
+                Text(expense.paidBy.displayName.givenNameOnly)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+
+                if isCurrentUserPayer {
+                    Text(languageService.text(.expenseRowPaidByMe))
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(SplickTheme.Colors.textTertiary)
+                }
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            .frame(maxWidth: 68)
         }
-        .frame(width: 56)
+        .frame(width: 68)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(creatorColumnAccessibilityLabel)
+    }
+
+    private var creatorColumnAccessibilityLabel: String {
+        let name = expense.paidBy.displayName
+        if isCurrentUserPayer {
+            return "\(languageService.text(.expenseRowCreatorLabel)), \(name), \(languageService.text(.expenseRowPaidByMe))"
+        }
+        return "\(languageService.text(.expenseRowCreatorLabel)), \(name)"
     }
 
     @ViewBuilder
@@ -565,17 +646,65 @@ struct ExpenseRowView: View {
         Group {
             if isPaidForCurrentUser {
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 24, weight: .semibold))
+                    .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(SplickTheme.Colors.success)
                     .accessibilityLabel(languageService.text(.expenseRowPaidAccessibility))
             } else {
                 Image(systemName: "exclamationmark.circle.fill")
-                    .font(.system(size: 24, weight: .semibold))
+                    .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(SplickTheme.Colors.error)
                     .accessibilityLabel(languageService.text(.expenseRowUnpaidAccessibility))
             }
         }
-        .frame(width: 36, height: 36)
+        .frame(width: 32, height: 32)
+    }
+
+    private var combinedAmountLine: some View {
+        let personalCompact = userCashFlow.amount.compactAmountString()
+        let totalCompact = expense.totalAmount.compactAmountString()
+        let currencySymbol = Decimal.currencySymbol(for: expense.currency)
+        let verb = amountVerb
+        let personalColor = amountColor(for: userCashFlow.direction)
+        let personalWithUnit = "\(personalCompact)\(currencySymbol)"
+        let totalWithUnit = "\(totalCompact)\(currencySymbol)"
+
+        return HStack(spacing: 0) {
+            Text("\(verb) ")
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+
+            Text(personalWithUnit)
+                .foregroundStyle(personalColor)
+                .fontWeight(.semibold)
+
+            Text(" \(languageService.text(.expenseRowOfConnector)) ")
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+
+            Text(totalWithUnit)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
+                .fontWeight(.semibold)
+        }
+        .font(.system(size: 12, weight: .medium))
+        .lineLimit(1)
+        .minimumScaleFactor(0.85)
+        .accessibilityLabel(combinedAmountAccessibilityLabel)
+    }
+
+    private var amountVerb: String {
+        switch userCashFlow.direction {
+        case .paying:
+            return languageService.text(.expenseRowPayVerb)
+        case .receiving:
+            return languageService.text(.expenseRowReceiveVerb)
+        case .neutral:
+            return languageService.text(.expenseRowShareVerb)
+        }
+    }
+
+    private var combinedAmountAccessibilityLabel: String {
+        let personal = formatAmount(userCashFlow.amount)
+        let total = formatAmount(expense.totalAmount)
+        let symbol = Decimal.currencySymbol(for: expense.currency)
+        return "\(amountVerb) \(personal)\(symbol) \(languageService.text(.expenseRowOfConnector)) \(total)\(symbol)"
     }
 
     private func amountColor(for direction: ExpenseUserCashFlow.Direction) -> Color {
@@ -589,18 +718,6 @@ struct ExpenseRowView: View {
         }
     }
 
-    private func formatSignedAmount(_ cashFlow: ExpenseUserCashFlow) -> String {
-        let formatted = formatAmount(abs(cashFlow.amount))
-        switch cashFlow.direction {
-        case .receiving:
-            return "+\(formatted)"
-        case .paying:
-            return "-\(formatted)"
-        case .neutral:
-            return formatted
-        }
-    }
-
     private func formatAmount(_ amount: Decimal) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
@@ -610,18 +727,59 @@ struct ExpenseRowView: View {
     }
 }
 
-private struct ExpenseListSectionHeader: View {
+private struct ExpenseListSectionHeader<FilterPanel: View>: View {
     let title: String
     var subtitle: String?
     let systemImage: String
     let accent: Color
     var showsFilterBadge: Bool = false
+    let isFilterPresented: Bool
     let filterAccessibilityLabel: String
-    let onFilterTap: (CGRect) -> Void
+    let onFilterToggle: () -> Void
+    @ViewBuilder let filterPanel: () -> FilterPanel
 
-    @State private var filterButtonFrame: CGRect = .zero
+    private let controlSize: CGFloat = 30
 
     var body: some View {
+        ZStack(alignment: .topTrailing) {
+            VStack(alignment: .leading, spacing: isFilterPresented ? SplickTheme.Spacing.md : 0) {
+                headerTitleRow
+
+                if isFilterPresented {
+                    filterPanel()
+                        .transition(
+                            .scale(scale: 0.2, anchor: .topTrailing)
+                                .combined(with: .opacity)
+                        )
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.leading, isFilterPresented ? SplickTheme.Spacing.md : SplickTheme.Spacing.xxs)
+            .padding(.trailing, isFilterPresented ? SplickTheme.Spacing.md + controlSize + SplickTheme.Spacing.xxs : SplickTheme.Spacing.xxs)
+            .padding(.vertical, isFilterPresented ? SplickTheme.Spacing.md : 0)
+
+            cornerControl
+        }
+        .background {
+            if isFilterPresented {
+                RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous)
+                    .fill(SplickTheme.Colors.cardBackground)
+                    .shadow(
+                        color: SplickTheme.Shadow.card.color,
+                        radius: SplickTheme.Shadow.card.radius,
+                        x: SplickTheme.Shadow.card.x,
+                        y: SplickTheme.Shadow.card.y
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous)
+                            .strokeBorder(accent.opacity(0.1), lineWidth: 1)
+                    }
+            }
+        }
+        .animation(SplickRevealMotion.expand, value: isFilterPresented)
+    }
+
+    private var headerTitleRow: some View {
         HStack(alignment: .center, spacing: SplickTheme.Spacing.xs) {
             Image(systemName: systemImage)
                 .font(.system(size: 12, weight: .semibold))
@@ -648,140 +806,79 @@ private struct ExpenseListSectionHeader: View {
             }
 
             Spacer(minLength: 0)
-
-            Button {
-                onFilterTap(filterButtonFrame)
-            } label: {
-                ZStack(alignment: .topTrailing) {
-                    Image(systemName: "slider.horizontal.3")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(
-                            showsFilterBadge
-                                ? accent
-                                : SplickTheme.Colors.textSecondary
-                        )
-                        .frame(width: 30, height: 30)
-                        .background {
-                            Circle()
-                                .fill(
-                                    showsFilterBadge
-                                        ? accent.opacity(0.14)
-                                        : SplickTheme.Colors.secondaryBackground
-                                )
-                        }
-
-                    if showsFilterBadge {
-                        Circle()
-                            .fill(accent)
-                            .frame(width: 7, height: 7)
-                            .offset(x: 2, y: -1)
-                    }
-                }
-                .background {
-                    GeometryReader { proxy in
-                        Color.clear.preference(
-                            key: ExpenseFilterButtonFrameKey.self,
-                            value: proxy.frame(in: .global)
-                        )
-                    }
-                }
-                .onPreferenceChange(ExpenseFilterButtonFrameKey.self) { filterButtonFrame = $0 }
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(filterAccessibilityLabel)
         }
-        .padding(.horizontal, SplickTheme.Spacing.xxs)
+        .padding(.horizontal, isFilterPresented ? 0 : SplickTheme.Spacing.xxs)
     }
-}
 
-private struct ExpenseFilterButtonFrameKey: PreferenceKey {
-    static var defaultValue: CGRect = .zero
-
-    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
-        value = nextValue()
-    }
-}
-
-private enum ExpenseFilterRevealMotion {
-    static let expand = Animation.spring(response: 0.44, dampingFraction: 0.88, blendDuration: 0.08)
-    static let collapse = Animation.spring(response: 0.38, dampingFraction: 0.92, blendDuration: 0.06)
-}
-
-private struct ExpenseFilterRevealOverlay<Content: View>: View {
-    @Binding var isPresented: Bool
-    let origin: CGPoint
-    @ViewBuilder var content: () -> Content
-
-    @State private var revealProgress: CGFloat = 0
-
-    var body: some View {
-        GeometryReader { proxy in
-            let cardWidth = min(340, proxy.size.width - SplickTheme.Spacing.xl)
-            let cardOriginY = min(origin.y + 18, proxy.size.height * 0.22)
-            let trailingInset = max(SplickTheme.Spacing.md, proxy.size.width - origin.x - 12)
-            let coverRadius = hypot(cardWidth, 320)
-
+    private var cornerControl: some View {
+        Button(action: onFilterToggle) {
             ZStack(alignment: .topTrailing) {
-                Color.black.opacity(Double(revealProgress) * 0.18)
-                    .ignoresSafeArea()
-                    .onTapGesture { dismissAnimated() }
-
-                content()
-                    .frame(width: cardWidth, alignment: .leading)
-                    .padding(.top, cardOriginY)
-                    .padding(.trailing, trailingInset)
-                    .mask {
+                Image(systemName: isFilterPresented ? "xmark" : "slider.horizontal.3")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(showsFilterBadge || isFilterPresented ? accent : SplickTheme.Colors.textSecondary)
+                    .frame(width: controlSize, height: controlSize)
+                    .background {
                         Circle()
-                            .frame(
-                                width: max(coverRadius * 2 * revealProgress, 1),
-                                height: max(coverRadius * 2 * revealProgress, 1)
+                            .fill(
+                                showsFilterBadge || isFilterPresented
+                                    ? accent.opacity(0.14)
+                                    : SplickTheme.Colors.secondaryBackground
                             )
-                            .position(origin)
                     }
-            }
-        }
-        .ignoresSafeArea()
-        .onAppear {
-            withAnimation(ExpenseFilterRevealMotion.expand) {
-                revealProgress = 1
-            }
-        }
-    }
 
-    private func dismissAnimated() {
-        guard isPresented else { return }
-        withAnimation(ExpenseFilterRevealMotion.collapse) {
-            revealProgress = 0
+                if showsFilterBadge && !isFilterPresented {
+                    Circle()
+                        .fill(accent)
+                        .frame(width: 7, height: 7)
+                        .offset(x: 2, y: -1)
+                }
+            }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.32) {
-            isPresented = false
-        }
+        .buttonStyle(.plain)
+        .padding(.trailing, SplickTheme.Spacing.xxs)
+        .padding(.top, isFilterPresented ? SplickTheme.Spacing.md : 0)
+        .accessibilityLabel(filterAccessibilityLabel)
     }
 }
 
 private struct ExpenseListFilterPanel: View {
     @ObservedObject var viewModel: ExpenseListViewModel
+    @ObservedObject var friendSearchViewModel: ExpenseUserSearchViewModel
     @Binding var captionQueryDraft: String
+    @Binding var friendQueryDraft: String
     let languageService: LanguageService
 
     @State private var captionSearchTask: Task<Void, Never>?
 
+    private var visibleFriendOptions: [UserSummary] {
+        let query = friendQueryDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if query.isEmpty {
+            return viewModel.filterParticipantUsers
+        }
+        return friendSearchViewModel.users
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
-            HStack {
-                Text(languageService.text(.expenseFilterPanelTitle))
-                    .font(SplickTheme.Typography.headline)
-                    .foregroundStyle(SplickTheme.Colors.textPrimary)
-                Spacer(minLength: 0)
-                if viewModel.filters.hasNonDefaultListFilters {
-                    Button(languageService.text(.expenseFilterClear)) {
-                        captionQueryDraft = ""
-                        viewModel.clearListFilters()
+        ScrollView {
+            VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
+                HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
+                    Text(languageService.text(.expenseFilterPanelTitle))
+                        .font(SplickTheme.Typography.headline)
+                        .foregroundStyle(SplickTheme.Colors.textPrimary)
+
+                    Spacer(minLength: 0)
+
+                    if viewModel.filters.hasNonDefaultListFilters {
+                        Button(languageService.text(.expenseFilterClear)) {
+                            captionQueryDraft = ""
+                            friendQueryDraft = ""
+                            friendSearchViewModel.reset(query: "")
+                            viewModel.clearListFilters()
+                        }
+                        .font(SplickTheme.Typography.caption.weight(.semibold))
+                        .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
                     }
-                    .font(SplickTheme.Typography.caption.weight(.semibold))
-                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
                 }
-            }
 
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
                 filterSectionLabel(languageService.text(.expenseFilterDateRange))
@@ -827,37 +924,104 @@ private struct ExpenseListFilterPanel: View {
                 .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.inset, style: .continuous))
             }
 
-            if !viewModel.filterParticipantUsers.isEmpty {
-                VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
-                    filterSectionLabel(languageService.text(.expenseFilterUser))
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: SplickTheme.Spacing.xs) {
-                            ForEach(viewModel.filterParticipantUsers) { user in
-                                userChip(user)
-                            }
+            VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+                filterSectionLabel(languageService.text(.expenseFilterFriends))
+
+                if let selectedUser = viewModel.filters.selectedUser {
+                    selectedFriendChip(selectedUser)
+                }
+
+                HStack(spacing: SplickTheme.Spacing.xs) {
+                    Image(systemName: "person.2.fill")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+
+                    TextField(
+                        languageService.text(.expenseFilterSearchFriends),
+                        text: $friendQueryDraft
+                    )
+                    .font(SplickTheme.Typography.callout)
+                    .textFieldStyle(.plain)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .onChange(of: friendQueryDraft) { query in
+                        friendSearchViewModel.reset(query: query)
+                    }
+
+                    if !friendQueryDraft.isEmpty {
+                        Button {
+                            friendQueryDraft = ""
+                            friendSearchViewModel.reset(query: "")
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(SplickTheme.Colors.textTertiary)
                         }
+                        .buttonStyle(.plain)
                     }
                 }
+                .padding(.horizontal, SplickTheme.Spacing.sm)
+                .padding(.vertical, SplickTheme.Spacing.sm)
+                .background(SplickTheme.Colors.secondaryBackground)
+                .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.inset, style: .continuous))
+
+                friendsOptionsList
             }
-        }
-        .padding(SplickTheme.Spacing.md)
-        .background {
-            RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous)
-                .fill(SplickTheme.Colors.cardBackground)
-                .shadow(
-                    color: SplickTheme.Shadow.card.color,
-                    radius: SplickTheme.Shadow.card.radius,
-                    x: SplickTheme.Shadow.card.x,
-                    y: SplickTheme.Shadow.card.y
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous)
-                        .strokeBorder(SplickTheme.Colors.primaryGradientStart.opacity(0.1), lineWidth: 1)
-                }
+            }
         }
         .onDisappear {
             captionSearchTask?.cancel()
         }
+    }
+
+    @ViewBuilder
+    private var friendsOptionsList: some View {
+        if friendSearchViewModel.isLoading && visibleFriendOptions.isEmpty {
+            SplickSpinner(size: .small)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, SplickTheme.Spacing.xs)
+        } else if visibleFriendOptions.isEmpty {
+            Text(languageService.text(.expenseFilterNoFriends))
+                .font(SplickTheme.Typography.caption)
+                .foregroundStyle(SplickTheme.Colors.textTertiary)
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: SplickTheme.Spacing.xs) {
+                    ForEach(visibleFriendOptions) { user in
+                        userChip(user)
+                            .onAppear {
+                                Task { await friendSearchViewModel.loadMoreIfNeeded(current: user) }
+                            }
+                    }
+                }
+            }
+        }
+    }
+
+    private func selectedFriendChip(_ user: UserSummary) -> some View {
+        HStack(spacing: SplickTheme.Spacing.xs) {
+            AvatarView(imageURL: user.avatarURL, name: user.displayName, size: .small)
+                .scaleEffect(0.78)
+                .frame(width: 24, height: 24)
+
+            Text(user.displayName)
+                .font(.system(size: 12, weight: .medium))
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+
+            Button {
+                viewModel.setSelectedUser(nil)
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(SplickTheme.Colors.textTertiary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, SplickTheme.Spacing.sm)
+        .padding(.vertical, SplickTheme.Spacing.xs)
+        .background(SplickTheme.Colors.secondaryBackground)
+        .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.inset, style: .continuous))
     }
 
     private func filterSectionLabel(_ title: String) -> some View {
@@ -911,6 +1075,8 @@ private struct ExpenseListFilterPanel: View {
                 viewModel.setSelectedUser(nil)
             } else {
                 viewModel.setSelectedUser(user)
+                friendQueryDraft = ""
+                friendSearchViewModel.reset(query: "")
             }
         } label: {
             HStack(spacing: SplickTheme.Spacing.xxs) {
