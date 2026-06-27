@@ -21,28 +21,21 @@ public struct ConversationListView: View {
 
     public var body: some View {
         NavigationStack(path: $path) {
-            ZStack {
-                conversationListContent
+            VStack(spacing: 0) {
+                messagingSearchBar
 
-                if isSearching {
-                    searchResultsContent
-                        .background(SplickTheme.Colors.background)
-                        .transition(.opacity)
+                ZStack {
+                    conversationListContent
+
+                    if isSearching {
+                        searchResultsContent
+                            .background(SplickTheme.Colors.background)
+                            .transition(.opacity)
+                    }
                 }
             }
             .animation(MessagingSearchChromeAnimation.resultsSpring, value: isSearching)
-            .toolbar(.hidden, for: .navigationBar)
-            .safeAreaInset(edge: .top, spacing: 0) {
-                MessagingConversationChrome(
-                    title: languageService.text(.messagingTitle),
-                    searchDraft: $searchDraft,
-                    searchPlaceholder: languageService.text(.messagingSearchPlaceholder),
-                    cancelLabel: languageService.text(.commonCancel),
-                    showsSearchSpinner: viewModel.isRefreshingSearch,
-                    isSearchFocused: $isSearchFocused,
-                    onCancel: dismissSearch
-                )
-            }
+            .splickTabScreenHeader(languageService.text(.messagingTitle))
             .refreshable {
                 if isSearching {
                     viewModel.onSearchQueryChanged(searchDraft)
@@ -221,5 +214,44 @@ public struct ConversationListView: View {
             .padding(.horizontal, SplickTheme.Spacing.md)
         }
         .scrollDismissesKeyboard(.interactively)
+    }
+
+    private var messagingSearchBar: some View {
+        HStack(spacing: SplickTheme.Spacing.xs) {
+            HStack(spacing: SplickTheme.Spacing.xs) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+
+                TextField(
+                    languageService.text(.messagingSearchPlaceholder),
+                    text: $searchDraft
+                )
+                .font(SplickTheme.Typography.callout)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .focused($isSearchFocused)
+
+                if viewModel.isRefreshingSearch {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
+            .padding(.horizontal, SplickTheme.Spacing.md)
+            .padding(.vertical, SplickTheme.Spacing.sm)
+            .frame(maxWidth: .infinity)
+            .background(SplickTheme.Colors.secondaryBackground)
+            .clipShape(Capsule(style: .continuous))
+
+            if isSearching || isSearchFocused {
+                Button(languageService.text(.commonCancel), action: dismissSearch)
+                    .font(SplickTheme.Typography.callout.weight(.semibold))
+                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+            }
+        }
+        .padding(.horizontal, SplickTheme.Spacing.md)
+        .padding(.bottom, SplickTheme.Spacing.sm)
+        .animation(MessagingSearchChromeAnimation.focusSpring, value: isSearching)
+        .animation(MessagingSearchChromeAnimation.focusSpring, value: isSearchFocused)
     }
 }
