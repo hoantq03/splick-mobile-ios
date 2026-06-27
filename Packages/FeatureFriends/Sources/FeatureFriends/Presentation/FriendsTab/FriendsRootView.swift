@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import DesignSystem
 import Common
 import FeatureMedia
@@ -21,6 +22,7 @@ public struct FriendsRootView: View {
     @StateObject private var blockedUsersViewModel: BlockedUsersViewModel
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.currentUserSummary) private var currentUserSummary
+    @Environment(\.tabBarScrollState) private var tabBarScrollState
 
     private let fetchOutgoingFriendRequestsUseCase: FetchOutgoingFriendRequestsUseCaseProtocol
     private let fetchBlockedUsersUseCase: FetchBlockedUsersUseCaseProtocol
@@ -40,6 +42,7 @@ public struct FriendsRootView: View {
     @State private var showBlockedUsers = false
     @State private var showAddActions = false
     @State private var profileRoute: UserProfileRoute?
+    @State private var scrollTopSignal = 0
 
     private let fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol
     private let searchUsersUseCase: SearchUsersUseCaseProtocol
@@ -334,6 +337,18 @@ public struct FriendsRootView: View {
         .onFirstAppear {
             Task { await viewModel.load() }
         }
+        .onReceive(sameTabTapPublisher) { _ in
+            if tabBarScrollState?.isAtTop == true {
+                Task { await viewModel.refresh() }
+            } else {
+                scrollTopSignal += 1
+            }
+        }
+    }
+
+    private var sameTabTapPublisher: AnyPublisher<Void, Never> {
+        tabBarScrollState?.sameTabTapSubject.eraseToAnyPublisher()
+            ?? Empty().eraseToAnyPublisher()
     }
 
     @ViewBuilder
@@ -609,21 +624,29 @@ public struct FriendsRootView: View {
                 showAddFriend = true
             }
         default:
-            ScrollView {
-                LazyVStack(spacing: SplickTheme.Spacing.xs) {
-                    ForEach(viewModel.friends) { friend in
-                        Button {
-                            profileRoute = UserProfileRoute(user: friend, initialFriendStatus: .friends)
-                        } label: {
-                            FriendRowView(user: friend)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: SplickTheme.Spacing.xs) {
+                        Color.clear.frame(height: 0).id("friendsScrollTop")
+                        ForEach(viewModel.friends) { friend in
+                            Button {
+                                profileRoute = UserProfileRoute(user: friend, initialFriendStatus: .friends)
+                            } label: {
+                                FriendRowView(user: friend)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, SplickTheme.Spacing.md)
+                    .padding(.bottom, SplickTheme.Spacing.md)
+                }
+                .tabBarHideOnScroll()
+                .onChange(of: scrollTopSignal) { _ in
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                        proxy.scrollTo("friendsScrollTop", anchor: .top)
                     }
                 }
-                .padding(.horizontal, SplickTheme.Spacing.md)
-                .padding(.bottom, SplickTheme.Spacing.md)
             }
-            .tabBarHideOnScroll()
         }
     }
 
@@ -646,19 +669,27 @@ public struct FriendsRootView: View {
                 showCreateGroup = true
             }
         default:
-            ScrollView {
-                LazyVStack(spacing: SplickTheme.Spacing.xs) {
-                    ForEach(viewModel.groups) { group in
-                        NavigationLink(value: group.id) {
-                            GroupRowView(group: group)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: SplickTheme.Spacing.xs) {
+                        Color.clear.frame(height: 0).id("groupsScrollTop")
+                        ForEach(viewModel.groups) { group in
+                            NavigationLink(value: group.id) {
+                                GroupRowView(group: group)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, SplickTheme.Spacing.md)
+                    .padding(.bottom, SplickTheme.Spacing.md)
+                }
+                .tabBarHideOnScroll()
+                .onChange(of: scrollTopSignal) { _ in
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                        proxy.scrollTo("groupsScrollTop", anchor: .top)
                     }
                 }
-                .padding(.horizontal, SplickTheme.Spacing.md)
-                .padding(.bottom, SplickTheme.Spacing.md)
             }
-            .tabBarHideOnScroll()
         }
     }
 }
