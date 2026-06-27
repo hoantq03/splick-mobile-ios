@@ -1,16 +1,9 @@
 import SwiftUI
 
-private struct BellButtonFrameKey: PreferenceKey {
-    static var defaultValue: CGRect = .zero
-
-    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
-        value = nextValue()
-    }
-}
-
 /// Toolbar bell that reports its global frame when tapped (for circular reveal transitions).
 public struct NotificationBellButton: View {
     let unreadCount: Int
+    let isPresented: Bool
     let accessibilityLabel: String
     let onTap: (CGRect) -> Void
 
@@ -18,17 +11,23 @@ public struct NotificationBellButton: View {
 
     public init(
         unreadCount: Int,
+        isPresented: Bool = false,
         accessibilityLabel: String,
         onTap: @escaping (CGRect) -> Void
     ) {
         self.unreadCount = unreadCount
+        self.isPresented = isPresented
         self.accessibilityLabel = accessibilityLabel
         self.onTap = onTap
     }
 
     public var body: some View {
         Button {
-            onTap(bellFrame)
+            DispatchQueue.main.async {
+                let frame = bellFrame
+                guard frame.width > 1, frame.height > 1 else { return }
+                onTap(frame)
+            }
         } label: {
             ZStack(alignment: .topTrailing) {
                 Image(systemName: unreadCount > 0 ? "bell.badge.fill" : "bell")
@@ -36,7 +35,7 @@ public struct NotificationBellButton: View {
                     .foregroundStyle(SplickTheme.Colors.textPrimary)
                     .frame(width: 34, height: 34)
 
-                if unreadCount > 0 {
+                if unreadCount > 0, !isPresented {
                     Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
                         .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(.white)
@@ -46,17 +45,14 @@ public struct NotificationBellButton: View {
                         .offset(x: 6, y: -2)
                 }
             }
-            .background {
-                GeometryReader { proxy in
-                    Color.clear.preference(
-                        key: BellButtonFrameKey.self,
-                        value: proxy.frame(in: .global)
-                    )
-                }
-            }
-            .onPreferenceChange(BellButtonFrameKey.self) { bellFrame = $0 }
         }
         .buttonStyle(.plain)
+        .background {
+            SplickGlobalFrameReader(frame: $bellFrame)
+        }
+        .opacity(isPresented ? 0 : 1)
+        .allowsHitTesting(!isPresented)
         .accessibilityLabel(accessibilityLabel)
+        .animation(isPresented ? nil : SplickRevealMotion.collapse, value: isPresented)
     }
 }
