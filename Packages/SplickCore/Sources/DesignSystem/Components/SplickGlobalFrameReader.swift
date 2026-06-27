@@ -13,9 +13,9 @@ struct SplickGlobalFrameReader: UIViewRepresentable {
 
     func updateUIView(_ uiView: UIView, context: Context) {
         DispatchQueue.main.async {
-            guard let window = uiView.window else { return }
-            let next = uiView.convert(uiView.bounds, to: window)
-            guard next != frame else { return }
+            guard uiView.window != nil else { return }
+            let next = uiView.convert(uiView.bounds, to: nil)
+            guard next.width > 1, next.height > 1, next != frame else { return }
             frame = next
         }
     }
