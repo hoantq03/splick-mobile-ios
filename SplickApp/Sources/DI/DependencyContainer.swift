@@ -296,6 +296,10 @@ final class DependencyContainer: ObservableObject {
         SearchUsersUseCase(repository: friendsManagementRepository)
     }()
 
+    lazy var expenseFriendSearchUseCase: UserSearchUseCaseProtocol = {
+        FriendsUserSearchAdapter(fetchFriendsUseCase: fetchFriendsUseCase)
+    }()
+
     lazy var generateMyQrUseCase: GenerateMyQrUseCaseProtocol = {
         GenerateMyQrUseCase(repository: friendsManagementRepository)
     }()
