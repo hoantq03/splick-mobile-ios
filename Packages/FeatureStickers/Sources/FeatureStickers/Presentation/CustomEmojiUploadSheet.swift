@@ -79,14 +79,16 @@ public struct CustomEmojiUploadSheet: View {
 
             HStack(spacing: SplickTheme.Spacing.md) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    Circle()
                         .fill(SplickTheme.Colors.secondaryBackground)
                         .frame(width: 96, height: 96)
                     if let previewImage {
                         Image(uiImage: previewImage)
                             .resizable()
-                            .scaledToFit()
-                            .frame(width: 80, height: 80)
+                            .scaledToFill()
+                            .frame(width: 75, height: 75)
+                            .clipShape(Circle())
+                            .frame(width: 88, height: 88)
                     } else {
                         Image(systemName: "photo.badge.plus")
                             .font(.title2)
