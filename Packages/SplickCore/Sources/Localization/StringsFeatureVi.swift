@@ -207,7 +207,7 @@ enum StringsFeatureVi {
         .expenseRowReceiveVerb: "Bạn nhận",
         .expenseRowShareVerb: "Bạn",
         .expenseRowOfConnector: "trên tổng",
-        .expenseFilterPanelTitle: "Lọc",
+        .expenseFilterPanelTitle: "Bộ lọc",
         .expenseFilterOpenAccessibility: "Mở bộ lọc chi tiêu",
         .expenseFilterPresetWeek: "Tuần qua",
         .expenseFilterPresetMonth: "Tháng qua",

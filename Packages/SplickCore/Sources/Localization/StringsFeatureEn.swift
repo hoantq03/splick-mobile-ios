@@ -207,7 +207,7 @@ enum StringsFeatureEn {
         .expenseRowReceiveVerb: "You receive",
         .expenseRowShareVerb: "You",
         .expenseRowOfConnector: "of total",
-        .expenseFilterPanelTitle: "Filter",
+        .expenseFilterPanelTitle: "Filters",
         .expenseFilterOpenAccessibility: "Open expense filters",
         .expenseFilterPresetWeek: "This week",
         .expenseFilterPresetMonth: "This month",
