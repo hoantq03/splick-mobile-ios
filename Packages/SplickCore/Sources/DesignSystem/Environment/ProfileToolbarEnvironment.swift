@@ -11,11 +11,15 @@ private struct CurrentUserSummaryKey: EnvironmentKey {
 }
 
 private struct OpenNotificationsActionKey: EnvironmentKey {
-    static let defaultValue: (() -> Void)? = nil
+    static let defaultValue: ((CGRect) -> Void)? = nil
 }
 
 private struct NotificationUnreadCountKey: EnvironmentKey {
     static let defaultValue: Int = 0
+}
+
+private struct NotificationsPresentedKey: EnvironmentKey {
+    static let defaultValue: Bool = false
 }
 
 extension EnvironmentValues {
@@ -29,7 +33,7 @@ extension EnvironmentValues {
         set { self[CurrentUserSummaryKey.self] = newValue }
     }
 
-    public var openNotifications: (() -> Void)? {
+    public var openNotifications: ((CGRect) -> Void)? {
         get { self[OpenNotificationsActionKey.self] }
         set { self[OpenNotificationsActionKey.self] = newValue }
     }
@@ -37,6 +41,11 @@ extension EnvironmentValues {
     public var notificationUnreadCount: Int {
         get { self[NotificationUnreadCountKey.self] }
         set { self[NotificationUnreadCountKey.self] = newValue }
+    }
+
+    public var notificationsPresented: Bool {
+        get { self[NotificationsPresentedKey.self] }
+        set { self[NotificationsPresentedKey.self] = newValue }
     }
 }
 
@@ -63,6 +72,7 @@ private struct SplickProfileToolbarModifier: ViewModifier {
     @Environment(\.currentUserSummary) private var currentUserSummary
     @Environment(\.openNotifications) private var openNotifications
     @Environment(\.notificationUnreadCount) private var notificationUnreadCount
+    @Environment(\.notificationsPresented) private var notificationsPresented
     @Environment(\.languageService) private var languageService
 
     func body(content: Content) -> some View {
@@ -90,23 +100,12 @@ private struct SplickProfileToolbarModifier: ViewModifier {
 
                     ToolbarItem(placement: .topBarTrailing) {
                         if let openNotifications {
-                            Button(action: openNotifications) {
-                                ZStack(alignment: .topTrailing) {
-                                    Image(systemName: notificationUnreadCount > 0 ? "bell.fill" : "bell")
-                                        .font(.system(size: 20, weight: .medium))
-                                        .frame(width: 34, height: 34)
-                                    if notificationUnreadCount > 0 {
-                                        Circle()
-                                            .fill(Color.red)
-                                            .frame(width: 8, height: 8)
-                                            .offset(x: 2, y: -2)
-                                    }
-                                }
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(
-                                languageService?.text(.notificationBellAccessibility)
-                                    ?? L10n.string(.notificationBellAccessibility, locale: .default)
+                            NotificationBellButton(
+                                unreadCount: notificationUnreadCount,
+                                isPresented: notificationsPresented,
+                                accessibilityLabel: languageService?.text(.notificationBellAccessibility)
+                                    ?? L10n.string(.notificationBellAccessibility, locale: .default),
+                                onTap: openNotifications
                             )
                         }
                     }
