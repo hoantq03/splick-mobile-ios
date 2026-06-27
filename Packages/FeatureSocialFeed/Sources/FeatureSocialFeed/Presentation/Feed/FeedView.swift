@@ -88,11 +88,7 @@ public struct FeedView: View {
             }
             .background(SplickTheme.Colors.background.ignoresSafeArea())
             .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.clear, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .toolbarBackground(.hidden, for: .navigationBar)
-            .splickProfileToolbar(titleDisplayMode: .inline)
+            .splickTabNavigationBarChrome()
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     FeedNavPills(
