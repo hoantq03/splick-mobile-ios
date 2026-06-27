@@ -15,6 +15,11 @@ import FeatureNotification
 import FeatureFriends
 import FeatureMessaging
 
+private struct TabBarChromeAnimationToken: Equatable {
+    let isChromePresented: Bool
+    let isVisible: Bool
+}
+
 struct MainTabView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var container: DependencyContainer
@@ -34,10 +39,49 @@ struct MainTabView: View {
         }
     }
 
+    private var isTabBarChromePresented: Bool {
+        appState.selectedTab != .camera
+            && appState.linkedPostPresentation == nil
+            && !appState.showNotifications
+    }
+
+    private var tabBarChromeAnimationToken: TabBarChromeAnimationToken {
+        TabBarChromeAnimationToken(
+            isChromePresented: isTabBarChromePresented,
+            isVisible: tabBarScrollState.isVisible
+        )
+    }
+
+    private var tabBarInsetHeight: CGFloat {
+        isTabBarChromePresented ? TabBarLayout.floatingClearance : 0
+    }
+
+    private var tabBarSlideOffset: CGFloat {
+        guard isTabBarChromePresented else { return TabBarLayout.tabBarSlideDistance }
+        return tabBarScrollState.isVisible ? 0 : TabBarLayout.tabBarSlideDistance
+    }
+
+    private var tabBarOpacity: Double {
+        guard isTabBarChromePresented else { return 0 }
+        return tabBarScrollState.isVisible ? 1 : 0
+    }
+
     var body: some View {
         ZStack {
-            selectedTabContent
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Fills the full screen (including safe areas) so system white never shows
+            // through at the top (status bar) or bottom (home indicator) safe area regions.
+            SplickTheme.Colors.background
+                .ignoresSafeArea()
+
+            MainTabContentPager(
+                selectedTab: $appState.selectedTab,
+                feed: { feedTabContent },
+                expenses: { expensesTabContent },
+                friends: { friendsTabContent },
+                messages: { messagesTabContent },
+                camera: { cameraTabContent }
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             if let presentation = appState.linkedPostPresentation {
                 LinkedPostDetailOverlay(
