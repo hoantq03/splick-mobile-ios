@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 public enum SplickTabBarMetrics {
     /// Space reserved above the floating tab bar so bottom controls stay tappable.
@@ -18,6 +19,9 @@ public final class TabBarScrollState: ObservableObject {
     /// When true (e.g. post detail), no extra bottom inset — composer can sit on the screen edge.
     @Published public private(set) var suppressesBottomInset = false
 
+    /// Fires when the user taps the tab button while already on that tab.
+    public let sameTabTapSubject = PassthroughSubject<Void, Never>()
+
     private var lastOffset: CGFloat = 0
     private var offsetNormalizer = ScrollChromeOffsetNormalizer()
     private var suppressUpdatesUntil: Date = .distantPast
@@ -25,7 +29,15 @@ public final class TabBarScrollState: ObservableObject {
     private let showAtTopThreshold: CGFloat = 24
     private let visibilityChangeCooldown: TimeInterval = 0.35
 
+    /// True when the tracked scroll position is at (or near) the top.
+    public var isAtTop: Bool { lastOffset <= showAtTopThreshold }
+
     public init() {}
+
+    /// Call when the user taps the active tab again — subscribers scroll to top or trigger refresh.
+    public func handleSameTabTap() {
+        sameTabTapSubject.send()
+    }
 
     public func updateScrollOffset(_ rawOffset: CGFloat) {
         guard Date() >= suppressUpdatesUntil else { return }

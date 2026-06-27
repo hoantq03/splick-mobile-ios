@@ -131,7 +131,11 @@ private struct ModernSplickTabBar: View {
         let isSelected = selectedTab == tab
         return Button {
             tappedTab = tab
-            selectedTab = tab
+            if selectedTab == tab {
+                tabBarScrollState?.handleSameTabTap()
+            } else {
+                selectedTab = tab
+            }
             tabBarScrollState?.show()
         } label: {
             tabLabel(tab: tab, isSelected: isSelected, badge: badge)
@@ -225,7 +229,11 @@ private struct LegacySplickTabBar: View {
         let isSelected = selectedTab == tab
         return Button {
             tappedTab = tab
-            selectedTab = tab
+            if selectedTab == tab {
+                tabBarScrollState?.handleSameTabTap()
+            } else {
+                selectedTab = tab
+            }
             tabBarScrollState?.show()
         } label: {
             VStack(spacing: 2) {
