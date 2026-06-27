@@ -43,7 +43,7 @@ public struct ConversationListView: View {
                 }
             }
             .animation(MessagingSearchChromeAnimation.resultsSpring, value: isSearching)
-            .splickTabScreenHeader(languageService.text(.messagingTitle))
+            .splickTabScreenHeader(languageService.text(.messagingTitle), showsBell: false)
             .refreshable {
                 if isSearching {
                     viewModel.onSearchQueryChanged(searchDraft)
