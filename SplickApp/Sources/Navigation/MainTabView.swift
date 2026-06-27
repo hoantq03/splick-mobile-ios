@@ -164,6 +164,7 @@ struct MainTabView: View {
                         )
                         .environmentObject(container.languageService)
                     }
+                    .zIndex(10)
                 }
             }
             .onChange(of: appState.selectedTab, perform: handleSelectedTabChange)

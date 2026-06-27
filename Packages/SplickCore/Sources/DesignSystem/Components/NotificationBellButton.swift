@@ -50,9 +50,10 @@ public struct NotificationBellButton: View {
         .background {
             SplickGlobalFrameReader(frame: $bellFrame)
         }
+        .scaleEffect(isPresented ? 0.2 : 1)
         .opacity(isPresented ? 0 : 1)
         .allowsHitTesting(!isPresented)
         .accessibilityLabel(accessibilityLabel)
-        .animation(isPresented ? nil : SplickRevealMotion.collapse, value: isPresented)
+        .animation(SplickRevealMotion.expand, value: isPresented)
     }
 }

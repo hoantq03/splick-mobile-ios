@@ -1,15 +1,19 @@
 import SwiftUI
 
-/// Circular reveal for notifications — expands from the bell icon with feed-style spring bounce.
+/// Full-screen notification panel — panel scales from the bell; close (X) grows in place at the bell.
 public struct SplickNotificationRevealOverlay<Content: View>: View {
     @Binding var isPresented: Bool
     let anchorFrame: CGRect
     let unreadCount: Int
     @ViewBuilder let content: (_ dismiss: @escaping () -> Void) -> Content
 
-    @State private var revealProgress: CGFloat = 0
+    @State private var isRevealed = false
 
     private let controlSize: CGFloat = 34
+    private var panelTransition: AnyTransition {
+        .scale(scale: 0.2, anchor: .topTrailing)
+            .combined(with: .opacity)
+    }
 
     public init(
         isPresented: Binding<Bool>,
@@ -26,120 +30,76 @@ public struct SplickNotificationRevealOverlay<Content: View>: View {
     public var body: some View {
         GeometryReader { proxy in
             let rootGlobal = proxy.frame(in: .global)
-            let anchor = localAnchor(rootGlobal: rootGlobal, containerSize: proxy.size)
+            let anchor = resolvedAnchor(rootGlobal: rootGlobal, containerSize: proxy.size)
             let anchorCenter = CGPoint(x: anchor.midX, y: anchor.midY)
-            let coverRadius = Self.radiusCovering(origin: anchorCenter, in: proxy.size)
-            let diameter = max(coverRadius * 2 * revealProgress, controlSize)
-            let morph = morphAmount(for: revealProgress)
+            let bleedHeight = proxy.size.height + proxy.safeAreaInsets.top + proxy.safeAreaInsets.bottom
 
-            revealedPanel(
-                anchor: anchor,
-                containerSize: proxy.size,
-                safeAreaInsets: proxy.safeAreaInsets
-            )
-            .mask {
-                Circle()
-                    .frame(width: diameter, height: diameter)
+            ZStack(alignment: .topLeading) {
+                if isRevealed {
+                    ZStack(alignment: .top) {
+                        SplickTheme.Colors.background
+
+                        content(dismissAnimated)
+                            .padding(.top, anchor.maxY + SplickTheme.Spacing.xxs)
+                    }
+                    .frame(width: proxy.size.width, height: bleedHeight, alignment: .top)
+                    .offset(y: -proxy.safeAreaInsets.top)
+                    .transition(panelTransition)
+                    .animation(SplickRevealMotion.expand, value: isRevealed)
+                }
+
+                closeButton
+                    .scaleEffect(isRevealed ? 1 : 0.2)
+                    .opacity(isRevealed ? 1 : 0)
+                    .animation(SplickRevealMotion.expand, value: isRevealed)
                     .position(anchorCenter)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .overlay(alignment: .topLeading) {
-                morphControl(morph: morph, action: dismissAnimated)
-                    .position(anchorCenter)
-            }
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea()
         .onAppear {
-            revealProgress = 0
+            isRevealed = false
             withAnimation(SplickRevealMotion.expand) {
-                revealProgress = 1
+                isRevealed = true
             }
         }
     }
 
-    @ViewBuilder
-    private func revealedPanel(
-        anchor: CGRect,
-        containerSize: CGSize,
-        safeAreaInsets: EdgeInsets
-    ) -> some View {
-        let panelTop = anchor.minY
-        // Extend through the home-indicator region so no feed/tab chrome peeks below.
-        let panelHeight = containerSize.height - panelTop + safeAreaInsets.bottom
-
-        content(dismissAnimated)
-            .frame(width: containerSize.width, alignment: .leading)
-            .frame(maxHeight: panelHeight, alignment: .top)
-            .padding(.top, controlSize + SplickTheme.Spacing.xxs)
-            .frame(width: containerSize.width, height: panelHeight, alignment: .top)
-            .offset(y: panelTop)
-            .background {
-                SplickTheme.Colors.background
-                    .ignoresSafeArea(edges: .bottom)
-            }
-    }
-
-    private func morphControl(morph: CGFloat, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            ZStack(alignment: .topTrailing) {
-                ZStack {
-                    Image(systemName: unreadCount > 0 ? "bell.badge.fill" : "bell")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(SplickTheme.Colors.textPrimary)
-                        .opacity(1 - morph)
-
-                    Image(systemName: "xmark")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(SplickTheme.Colors.textPrimary)
-                        .frame(width: controlSize, height: controlSize)
-                        .background {
-                            Circle()
-                                .fill(SplickTheme.Colors.secondaryBackground)
-                        }
-                        .opacity(morph)
-                }
+    private var closeButton: some View {
+        Button(action: dismissAnimated) {
+            Image(systemName: "xmark")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
                 .frame(width: controlSize, height: controlSize)
-
-                if unreadCount > 0, morph < 0.85 {
-                    Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 2)
-                        .background(Capsule().fill(SplickTheme.Colors.error))
-                        .offset(x: 6, y: -2)
-                        .opacity(Double(1 - morph))
+                .background {
+                    Circle()
+                        .fill(SplickTheme.Colors.secondaryBackground)
                 }
-            }
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Close")
     }
 
-    private func morphAmount(for progress: CGFloat) -> CGFloat {
-        min(max((progress - 0.18) / 0.42, 0), 1)
-    }
-
     private func dismissAnimated() {
         guard isPresented else { return }
         withAnimation(SplickRevealMotion.collapse) {
-            revealProgress = 0
+            isRevealed = false
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + SplickRevealMotion.collapseDuration) {
             isPresented = false
         }
     }
 
-    private func localAnchor(rootGlobal: CGRect, containerSize: CGSize) -> CGRect {
+    private func resolvedAnchor(rootGlobal: CGRect, containerSize: CGSize) -> CGRect {
         guard anchorFrame.width > 1, anchorFrame.height > 1 else {
-            let side = controlSize
             let trailingPadding: CGFloat = 16
             let topPadding: CGFloat = 6
             return CGRect(
-                x: containerSize.width - trailingPadding - side,
+                x: containerSize.width - trailingPadding - controlSize,
                 y: topPadding,
-                width: side,
-                height: side
+                width: controlSize,
+                height: controlSize
             )
         }
 
@@ -149,17 +109,5 @@ public struct SplickNotificationRevealOverlay<Content: View>: View {
             width: anchorFrame.width,
             height: anchorFrame.height
         )
-    }
-
-    private static func radiusCovering(origin: CGPoint, in size: CGSize) -> CGFloat {
-        let corners = [
-            CGPoint(x: 0, y: 0),
-            CGPoint(x: size.width, y: 0),
-            CGPoint(x: 0, y: size.height),
-            CGPoint(x: size.width, y: size.height),
-        ]
-        return corners
-            .map { hypot($0.x - origin.x, $0.y - origin.y) }
-            .max() ?? size.width
     }
 }
