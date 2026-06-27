@@ -8,6 +8,10 @@ public struct NotificationBellButton: View {
     let onTap: (CGRect) -> Void
 
     @State private var bellFrame: CGRect = .zero
+    @State private var bellScale: CGFloat = 1
+    @State private var bellOpacity: Double = 1
+
+    private static let reappearSpring = Animation.spring(response: 0.22, dampingFraction: 0.72)
 
     public init(
         unreadCount: Int,
@@ -50,10 +54,22 @@ public struct NotificationBellButton: View {
         .background {
             SplickGlobalFrameReader(frame: $bellFrame)
         }
-        .scaleEffect(isPresented ? 0.2 : 1)
-        .opacity(isPresented ? 0 : 1)
+        .scaleEffect(bellScale)
+        .opacity(bellOpacity)
         .allowsHitTesting(!isPresented)
         .accessibilityLabel(accessibilityLabel)
-        .animation(SplickRevealMotion.expand, value: isPresented)
+        .onChange(of: isPresented) { presented in
+            if presented {
+                withAnimation(SplickRevealMotion.expand) {
+                    bellScale = 0.2
+                    bellOpacity = 0
+                }
+            } else {
+                withAnimation(Self.reappearSpring) {
+                    bellScale = 1
+                    bellOpacity = 1
+                }
+            }
+        }
     }
 }
