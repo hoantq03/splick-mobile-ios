@@ -26,6 +26,7 @@ struct MessagingConversationChrome: View {
     @Environment(\.currentUserSummary) private var currentUserSummary
     @Environment(\.openNotifications) private var openNotifications
     @Environment(\.notificationUnreadCount) private var notificationUnreadCount
+    @Environment(\.notificationsPresented) private var notificationsPresented
     @Environment(\.languageService) private var languageService
 
     var body: some View {
@@ -103,23 +104,12 @@ struct MessagingConversationChrome: View {
             Spacer()
 
             if let openNotifications {
-                Button(action: openNotifications) {
-                    ZStack(alignment: .topTrailing) {
-                        Image(systemName: notificationUnreadCount > 0 ? "bell.fill" : "bell")
-                            .font(.system(size: 20, weight: .medium))
-                            .frame(width: 34, height: 34)
-                        if notificationUnreadCount > 0 {
-                            Circle()
-                                .fill(Color.red)
-                                .frame(width: 8, height: 8)
-                                .offset(x: 2, y: -2)
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(
-                    languageService?.text(.notificationBellAccessibility)
-                        ?? L10n.string(.notificationBellAccessibility, locale: .default)
+                NotificationBellButton(
+                    unreadCount: notificationUnreadCount,
+                    isPresented: notificationsPresented,
+                    accessibilityLabel: languageService?.text(.notificationBellAccessibility)
+                        ?? L10n.string(.notificationBellAccessibility, locale: .default),
+                    onTap: openNotifications
                 )
             }
         }
