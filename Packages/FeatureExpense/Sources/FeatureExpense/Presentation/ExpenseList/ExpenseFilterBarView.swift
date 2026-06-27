@@ -4,11 +4,12 @@ import Localization
 import SplickDomain
 
 private enum FilterMetrics {
-    static let innerH: CGFloat = 8
-    static let innerV: CGFloat = 5
-    static let rowV: CGFloat = 4
-    static let sectionSpacing: CGFloat = 5
-    static let cardPadding: CGFloat = 8
+    static let innerH: CGFloat = 10
+    static let innerV: CGFloat = 8
+    static let rowV: CGFloat = 6
+    static let sectionSpacing: CGFloat = 8
+    static let cardPadding: CGFloat = SplickTheme.Spacing.sm
+    static let fieldRadius: CGFloat = SplickTheme.CornerRadius.inset
 }
 
 struct ExpenseFilterBarView: View {
@@ -32,7 +33,7 @@ struct ExpenseFilterBarView: View {
                 advancedSection
             }
         }
-        .animation(.easeOut(duration: 0.18), value: filters.isAdvancedExpanded)
+        .animation(.spring(response: 0.34, dampingFraction: 0.88), value: filters.isAdvancedExpanded)
         .splickCard(padding: FilterMetrics.cardPadding)
         .sheet(item: $activeDatePicker) { field in
             datePickerSheet(field: field)
@@ -142,13 +143,13 @@ struct ExpenseFilterBarView: View {
 
     private var userFilterSection: some View {
         VStack(alignment: .leading, spacing: 3) {
-            filterLabel(languageService.text(.expenseFilterUser))
+            filterLabel(languageService.text(.expenseFilterFriends))
 
             if let user = filters.selectedUser {
                 selectedUserChip(user)
             } else {
                 compactTextField(
-                    placeholder: languageService.text(.expenseFilterSearchUser),
+                    placeholder: languageService.text(.expenseFilterSearchFriends),
                     text: $userQuery,
                     icon: "person.fill",
                     onChange: {
@@ -191,7 +192,7 @@ struct ExpenseFilterBarView: View {
         .padding(.horizontal, FilterMetrics.innerH)
         .padding(.vertical, FilterMetrics.innerV)
         .background(SplickTheme.Colors.secondaryBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: FilterMetrics.fieldRadius, style: .continuous))
     }
 
     private var userResultsList: some View {
@@ -202,7 +203,7 @@ struct ExpenseFilterBarView: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 28)
             } else if userSearchViewModel.users.isEmpty {
-                Text(languageService.text(.expenseFilterNoUsers))
+                Text(languageService.text(.expenseFilterNoFriends))
                     .font(.system(size: 10))
                     .foregroundStyle(SplickTheme.Colors.textTertiary)
             } else {
@@ -292,7 +293,7 @@ struct ExpenseFilterBarView: View {
             .padding(.horizontal, FilterMetrics.innerH)
             .padding(.vertical, FilterMetrics.innerV)
             .background(SplickTheme.Colors.secondaryBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: FilterMetrics.fieldRadius, style: .continuous))
         }
         .buttonStyle(.plain)
     }
@@ -330,7 +331,7 @@ struct ExpenseFilterBarView: View {
         .padding(.horizontal, FilterMetrics.innerH)
         .padding(.vertical, FilterMetrics.innerV)
         .background(SplickTheme.Colors.secondaryBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: FilterMetrics.fieldRadius, style: .continuous))
     }
 
     private func filterLabel(_ title: String) -> some View {
