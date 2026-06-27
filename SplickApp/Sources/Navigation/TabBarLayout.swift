@@ -8,6 +8,11 @@ enum TabBarLayout {
     static let tabBarSlideDistance: CGFloat = 120
 }
 
+enum TabBarMotion {
+    static let spring = TabBarChromeMotion.spring
+    static let show = TabBarChromeMotion.show
+}
+
 struct FloatingTabBarContentPadding: ViewModifier {
     var isEnabled: Bool = true
 

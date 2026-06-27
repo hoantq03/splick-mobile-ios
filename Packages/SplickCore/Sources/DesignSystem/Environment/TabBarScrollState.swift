@@ -7,6 +7,11 @@ public enum SplickTabBarMetrics {
     public static let hiddenClearance: CGFloat = 16
 }
 
+public enum TabBarChromeMotion {
+    public static let spring = Animation.spring(response: 0.38, dampingFraction: 0.74, blendDuration: 0.06)
+    public static let show = Animation.spring(response: 0.34, dampingFraction: 0.82, blendDuration: 0.05)
+}
+
 @MainActor
 public final class TabBarScrollState: ObservableObject {
     @Published public private(set) var isVisible = true
@@ -130,7 +135,14 @@ public struct TabBarContentPaddingModifier: ViewModifier {
     }
 
     public func body(content: Content) -> some View {
-        content.modifier(TabBarBottomInsetModifier(inset: bottomInset))
+        content
+            .modifier(TabBarBottomInsetModifier(inset: bottomInset))
+            .animation(TabBarChromeMotion.spring, value: bottomInsetAnimationToken)
+    }
+
+    private var bottomInsetAnimationToken: String {
+        guard let tabBarScrollState else { return "default" }
+        return "\(tabBarScrollState.suppressesBottomInset)-\(isEnabled)"
     }
 }
 
