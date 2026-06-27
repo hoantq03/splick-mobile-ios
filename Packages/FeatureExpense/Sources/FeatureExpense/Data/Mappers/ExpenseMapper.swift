@@ -11,6 +11,7 @@ enum ExpenseMapper {
             paidBy: toUserSummary(dto.paidBy),
             splits: dto.splits.map(toExpenseSplit),
             groupId: dto.groupId,
+            postId: dto.postId,
             category: ExpenseCategory(rawValue: dto.category) ?? .general,
             status: ExpenseStatus(rawValue: dto.status) ?? .pending,
             createdAt: dto.createdAt,

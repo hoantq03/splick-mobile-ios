@@ -8,6 +8,7 @@ struct ExpenseResponseDTO: Decodable {
     let paidBy: ExpenseUserDTO
     let splits: [ExpenseSplitDTO]
     let groupId: UUID?
+    let postId: UUID?
     let category: String
     let status: String
     let createdAt: Date
