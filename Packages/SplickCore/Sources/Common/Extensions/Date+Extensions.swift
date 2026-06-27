@@ -11,6 +11,13 @@ extension Date {
         return formatter.localizedString(for: self, relativeTo: .now)
     }
 
+    /// Long-form relative time for expense rows, e.g. "2 hours ago" / "2 giờ trước".
+    public var expenseListRelativeString: String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        return formatter.localizedString(for: self, relativeTo: .now)
+    }
+
     public var isToday: Bool {
         Calendar.current.isDateInToday(self)
     }
