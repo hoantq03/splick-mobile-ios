@@ -49,6 +49,7 @@ public struct NotificationBellButton: View {
                         .offset(x: 6, y: -2)
                 }
             }
+            .frame(width: 34, height: 34)
         }
         .buttonStyle(.plain)
         .background {
