@@ -224,7 +224,7 @@ public struct FriendsRootView: View {
                     }
                 }
             }
-            .splickTabScreenHeader(languageService.text(.friendsTitle))
+            .splickTabScreenHeader(languageService.text(.friendsTitle), showsBell: false)
             .onChange(of: viewModel.searchQuery) { newValue in
                 viewModel.onSearchQueryChanged(newValue)
             }
