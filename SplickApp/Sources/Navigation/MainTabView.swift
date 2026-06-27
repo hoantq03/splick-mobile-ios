@@ -98,27 +98,6 @@ struct MainTabView: View {
                 .transition(.move(edge: .trailing))
                 .zIndex(1)
             }
-
-            if appState.showNotifications {
-                NotificationCircularRevealOverlay(
-                    isPresented: $appState.showNotifications,
-                    origin: appState.notificationRevealOrigin
-                ) { dismiss in
-                    NotificationListView(
-                        viewModel: container.notificationListViewModel,
-                        onNavigateToPost: { postId in
-                            dismiss()
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) {
-                                appState.openPostFromNotification(postId)
-                            }
-                        },
-                        onDismiss: dismiss,
-                        presentedAsSheet: true
-                    )
-                    .environmentObject(container.languageService)
-                }
-                .zIndex(2)
-            }
         }
         .animation(LinkedPostMotion.spring, value: appState.linkedPostPresentation)
             .onAppear { badgeCounts = container.badgeCountService.counts }
@@ -139,6 +118,7 @@ struct MainTabView: View {
                 appState.presentNotifications(from: bellFrame)
             }
             .environment(\.notificationUnreadCount, badgeCounts.notifications)
+            .environment(\.notificationsPresented, appState.showNotifications)
             .environment(\.openPostCaptureFlow) {
                 appState.selectedTab = .camera
             }
@@ -150,22 +130,40 @@ struct MainTabView: View {
                 }
             .environment(\.currentUserSummary, currentUserSummary)
             .environment(\.tabBarScrollState, tabBarScrollState)
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                if appState.selectedTab != .camera,
-                   appState.linkedPostPresentation == nil,
-                   !appState.showNotifications {
-                    ZStack {
-                        SplickTabBar(
-                            selectedTab: $appState.selectedTab,
-                            badgeCounts: badgeCounts
+            .overlay(alignment: .bottom) {
+                SplickTabBar(
+                    selectedTab: $appState.selectedTab,
+                    badgeCounts: badgeCounts
+                )
+                .equatable()
+                .opacity(tabBarOpacity)
+                .offset(y: tabBarSlideOffset)
+                .allowsHitTesting(isTabBarChromePresented && tabBarScrollState.isVisible)
+                .frame(height: tabBarInsetHeight)
+                .clipped()
+                .animation(TabBarMotion.spring, value: tabBarChromeAnimationToken)
+                .ignoresSafeArea(edges: .bottom)
+            }
+            .overlay {
+                if appState.showNotifications {
+                    SplickNotificationRevealOverlay(
+                        isPresented: $appState.showNotifications,
+                        anchorFrame: appState.notificationAnchorFrame,
+                        unreadCount: badgeCounts.notifications
+                    ) { dismiss in
+                        NotificationListView(
+                            viewModel: container.notificationListViewModel,
+                            onNavigateToPost: { postId in
+                                dismiss()
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+                                    appState.openPostFromNotification(postId)
+                                }
+                            },
+                            onDismiss: dismiss,
+                            presentedAsSheet: true
                         )
-                        .equatable()
-                        .opacity(tabBarScrollState.isVisible ? 1 : 0)
-                        .offset(y: tabBarScrollState.isVisible ? 0 : TabBarLayout.tabBarSlideDistance)
-                        .allowsHitTesting(tabBarScrollState.isVisible)
+                        .environmentObject(container.languageService)
                     }
-                    .frame(height: TabBarLayout.floatingClearance)
-                    .animation(.easeInOut(duration: 0.28), value: tabBarScrollState.isVisible)
                 }
             }
             .onChange(of: appState.selectedTab, perform: handleSelectedTabChange)
