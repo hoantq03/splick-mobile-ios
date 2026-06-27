@@ -47,6 +47,7 @@ private struct ModernSplickTabBar: View {
 
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.tabBarScrollState) private var tabBarScrollState
+    @State private var tappedTab: Tab?
 
     private let cameraSize: CGFloat = 63
     private let cameraGap: CGFloat = 5
@@ -129,6 +130,7 @@ private struct ModernSplickTabBar: View {
     private func tabButton(_ tab: Tab, badge: Int = 0) -> some View {
         let isSelected = selectedTab == tab
         return Button {
+            tappedTab = tab
             selectedTab = tab
             tabBarScrollState?.show()
         } label: {
@@ -146,6 +148,7 @@ private struct ModernSplickTabBar: View {
             VStack(spacing: 3) {
                 Image(systemName: isSelected ? tab.selectedIcon : tab.icon)
                     .font(.system(size: 21, weight: .medium))
+                    .symbolEffect(.bounce, value: tappedTab == tab)
                 Text(tab.localizedTitle(using: languageService))
                     .font(.system(size: 10, weight: isSelected ? .semibold : .medium))
                     .lineLimit(1)
@@ -155,10 +158,19 @@ private struct ModernSplickTabBar: View {
                     ? SplickTheme.Colors.primaryGradientStart
                     : SplickTheme.Colors.textTertiary
             )
+            .scaleEffect(tappedTab == tab ? 1.18 : 1.0)
+            .animation(.spring(response: 0.30, dampingFraction: 0.52), value: tappedTab == tab)
             TabBarBadgeView(count: badge)
                 .offset(x: 10, y: -6)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onChange(of: tappedTab) { _, _ in
+            guard tappedTab == tab else { return }
+            Task {
+                try? await Task.sleep(for: .milliseconds(180))
+                tappedTab = nil
+            }
+        }
     }
 }
 
@@ -170,6 +182,7 @@ private struct LegacySplickTabBar: View {
 
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.tabBarScrollState) private var tabBarScrollState
+    @State private var tappedTab: Tab?
 
     private let barHeight: CGFloat = 56
 
@@ -211,6 +224,7 @@ private struct LegacySplickTabBar: View {
     private func tabButton(_ tab: Tab, badge: Int = 0) -> some View {
         let isSelected = selectedTab == tab
         return Button {
+            tappedTab = tab
             selectedTab = tab
             tabBarScrollState?.show()
         } label: {
@@ -231,7 +245,16 @@ private struct LegacySplickTabBar: View {
                     ? SplickTheme.Colors.primaryGradientStart
                     : SplickTheme.Colors.textTertiary
             )
+            .scaleEffect(tappedTab == tab ? 1.18 : 1.0)
+            .animation(.spring(response: 0.30, dampingFraction: 0.52), value: tappedTab == tab)
             .frame(maxWidth: .infinity)
+            .onChange(of: tappedTab) { _ in
+                guard tappedTab == tab else { return }
+                Task {
+                    try? await Task.sleep(for: .milliseconds(180))
+                    tappedTab = nil
+                }
+            }
         }
         .buttonStyle(.plain)
         .contentShape(Rectangle())
