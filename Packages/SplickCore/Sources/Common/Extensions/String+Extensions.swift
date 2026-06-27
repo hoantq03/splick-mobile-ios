@@ -39,4 +39,19 @@ extension String {
         if count <= limit { return self }
         return String(prefix(limit)) + trailing
     }
+
+    /// Given name for compact UI — drops Vietnamese family + middle names (keeps last segment when 3+ parts).
+    public var givenNameOnly: String {
+        let parts = trimmed.split(whereSeparator: \.isWhitespace).map(String.init)
+        switch parts.count {
+        case 0:
+            return trimmed
+        case 1:
+            return parts[0]
+        case 2:
+            return parts[0]
+        default:
+            return parts[parts.count - 1]
+        }
+    }
 }
