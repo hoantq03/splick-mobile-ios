@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import Common
 import DesignSystem
 import Localization
@@ -7,9 +8,16 @@ import SplickDomain
 public struct ConversationListView: View {
     @ObservedObject private var viewModel: ConversationListViewModel
     @EnvironmentObject private var languageService: LanguageService
+    @Environment(\.tabBarScrollState) private var tabBarScrollState
     @State private var path = NavigationPath()
     @State private var searchDraft = ""
+    @State private var scrollTopSignal = 0
     @FocusState private var isSearchFocused: Bool
+
+    private var sameTabTapPublisher: AnyPublisher<Void, Never> {
+        tabBarScrollState?.sameTabTapSubject.eraseToAnyPublisher()
+            ?? Empty().eraseToAnyPublisher()
+    }
 
     private var isSearching: Bool {
         !searchDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -70,6 +78,13 @@ public struct ConversationListView: View {
         .onFirstAppear {
             guard viewModel.conversations.isEmpty else { return }
             Task { await viewModel.load() }
+        }
+        .onReceive(sameTabTapPublisher) { _ in
+            if tabBarScrollState?.isAtTop == true {
+                Task { await viewModel.refresh() }
+            } else {
+                scrollTopSignal += 1
+            }
         }
     }
 
@@ -198,22 +213,30 @@ public struct ConversationListView: View {
 
     @ViewBuilder
     private func conversationList(_ items: [Conversation]) -> some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(items) { conversation in
-                    Button {
-                        path.append(ChatThreadRoute(conversation: conversation))
-                    } label: {
-                        ConversationRowView(conversation: conversation)
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    Color.clear.frame(height: 0).id("messagingScrollTop")
+                    ForEach(items) { conversation in
+                        Button {
+                            path.append(ChatThreadRoute(conversation: conversation))
+                        } label: {
+                            ConversationRowView(conversation: conversation)
+                        }
+                        .buttonStyle(.plain)
+                        Divider()
+                            .padding(.leading, 56)
                     }
-                    .buttonStyle(.plain)
-                    Divider()
-                        .padding(.leading, 56)
+                }
+                .padding(.horizontal, SplickTheme.Spacing.md)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .onChange(of: scrollTopSignal) { _ in
+                withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                    proxy.scrollTo("messagingScrollTop", anchor: .top)
                 }
             }
-            .padding(.horizontal, SplickTheme.Spacing.md)
         }
-        .scrollDismissesKeyboard(.interactively)
     }
 
     private var messagingSearchBar: some View {
