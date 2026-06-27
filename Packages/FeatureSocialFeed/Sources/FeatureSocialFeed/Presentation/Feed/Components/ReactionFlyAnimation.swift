@@ -5,18 +5,20 @@ import SplickDomain
 struct FlyingEmojiFlight: Identifiable {
     let id = UUID()
     let emoji: String
-    let start: CGPoint
+    /// Tap location in global screen space — converted to card-local at render time.
+    let startGlobal: CGPoint
+    /// Destination in the post card's named coordinate space.
     let end: CGPoint
     let popVector: CGVector
     let lateralDrift: CGFloat
     let arcLift: CGFloat
 
-    static func make(emoji: String, start: CGPoint, end: CGPoint) -> FlyingEmojiFlight {
+    static func make(emoji: String, startGlobal: CGPoint, end: CGPoint) -> FlyingEmojiFlight {
         let angle = Double.random(in: (-5.0 / 6.0) * .pi ... (-1.0 / 6.0) * .pi)
         let distance = CGFloat.random(in: 22...40)
         return FlyingEmojiFlight(
             emoji: emoji,
-            start: start,
+            startGlobal: startGlobal,
             end: end,
             popVector: CGVector(
                 dx: CGFloat(cos(angle)) * distance,
@@ -26,54 +28,55 @@ struct FlyingEmojiFlight: Identifiable {
             arcLift: CGFloat.random(in: 12...28)
         )
     }
+
+    func startLocal(relativeTo cardOriginGlobal: CGPoint) -> CGPoint {
+        CGPoint(
+            x: startGlobal.x - cardOriginGlobal.x,
+            y: startGlobal.y - cardOriginGlobal.y
+        )
+    }
 }
 
 /// Pop upward, arc toward target, shrink and fade (~0.22s total).
 struct FlyingEmojiView: View {
     let flight: FlyingEmojiFlight
+    let cardOriginGlobal: CGPoint
     let onComplete: () -> Void
 
-    @State private var position: CGPoint
+    @State private var position: CGPoint = .zero
     @State private var scale: CGFloat = 1.35
     @State private var opacity: Double = 1
 
-    init(flight: FlyingEmojiFlight, onComplete: @escaping () -> Void) {
-        self.flight = flight
-        self.onComplete = onComplete
-        _position = State(initialValue: flight.start)
-    }
-
-    private var popEnd: CGPoint {
-        CGPoint(
-            x: flight.start.x + flight.popVector.dx,
-            y: flight.start.y + flight.popVector.dy
-        )
-    }
-
-    private var arcMid: CGPoint {
-        CGPoint(
-            x: (popEnd.x + flight.end.x) / 2 + flight.lateralDrift,
-            y: (popEnd.y + flight.end.y) / 2 - flight.arcLift
-        )
-    }
-
-    private var landPoint: CGPoint {
-        CGPoint(
-            x: flight.end.x + flight.lateralDrift * 0.35,
-            y: flight.end.y
-        )
-    }
+    private let glyphSize: CGFloat = 28
 
     var body: some View {
-        EmojiView(value: flight.emoji, size: 28)
+        EmojiView(value: flight.emoji, size: glyphSize)
+            .frame(width: glyphSize, height: glyphSize)
             .scaleEffect(scale)
             .position(position)
             .opacity(opacity)
             .allowsHitTesting(false)
-            .onAppear { runAnimation() }
+            .onAppear {
+                let start = flight.startLocal(relativeTo: cardOriginGlobal)
+                position = start
+                runAnimation(from: start)
+            }
     }
 
-    private func runAnimation() {
+    private func runAnimation(from start: CGPoint) {
+        let popEnd = CGPoint(
+            x: start.x + flight.popVector.dx,
+            y: start.y + flight.popVector.dy
+        )
+        let arcMid = CGPoint(
+            x: (popEnd.x + flight.end.x) / 2 + flight.lateralDrift,
+            y: (popEnd.y + flight.end.y) / 2 - flight.arcLift
+        )
+        let landPoint = CGPoint(
+            x: flight.end.x + flight.lateralDrift * 0.35,
+            y: flight.end.y
+        )
+
         withAnimation(.spring(response: 0.06, dampingFraction: 0.62)) {
             scale = 1.55
             position = popEnd

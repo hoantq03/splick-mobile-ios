@@ -50,7 +50,6 @@ struct PostCardView: View {
     @State private var activeSheet: PostCardSheet?
     @State private var showCustomEmojiUpload = false
     @State private var reminderSentMessage: String?
-    @State private var cardFrameInGlobal: CGRect = .zero
     @State private var reactionAnchors: [String: CGPoint] = [:]
     @State private var flyingEmojis: [FlyingEmojiFlight] = []
 
@@ -106,17 +105,18 @@ struct PostCardView: View {
             appliedInitialMediaIndex = true
         }
         .coordinateSpace(name: "postCard")
-        .background(
-            GeometryReader { geo in
-                Color.clear
-                    .onAppear { cardFrameInGlobal = geo.frame(in: .global) }
-            }
-        )
         .onPreferenceChange(ReactionTargetAnchorsKey.self) { reactionAnchors = $0 }
         .overlay {
-            ForEach(flyingEmojis) { flight in
-                FlyingEmojiView(flight: flight) {
-                    flyingEmojis.removeAll { $0.id == flight.id }
+            GeometryReader { geo in
+                let cardOrigin = geo.frame(in: .global).origin
+                ForEach(flyingEmojis) { flight in
+                    FlyingEmojiView(
+                        flight: flight,
+                        cardOriginGlobal: cardOrigin,
+                        onComplete: {
+                            flyingEmojis.removeAll { $0.id == flight.id }
+                        }
+                    )
                 }
             }
         }
@@ -373,13 +373,9 @@ struct PostCardView: View {
     }
 
     private func scheduleFlyingEmoji(emoji: String, sourceGlobal: CGRect) {
-        let origin = cardFrameInGlobal.origin
-        let start = CGPoint(
-            x: sourceGlobal.midX - origin.x,
-            y: sourceGlobal.midY - origin.y
-        )
+        let startGlobal = CGPoint(x: sourceGlobal.midX, y: sourceGlobal.midY)
         let end = flyTargetPoint()
-        let flight = FlyingEmojiFlight.make(emoji: emoji, start: start, end: end)
+        let flight = FlyingEmojiFlight.make(emoji: emoji, startGlobal: startGlobal, end: end)
         let maxConcurrentFlights = 16
         if flyingEmojis.count >= maxConcurrentFlights {
             flyingEmojis.removeFirst(flyingEmojis.count - maxConcurrentFlights + 1)

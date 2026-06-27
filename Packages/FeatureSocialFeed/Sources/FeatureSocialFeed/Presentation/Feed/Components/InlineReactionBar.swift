@@ -62,6 +62,7 @@ struct InlineReactionBar: View {
             commitReaction(emoji: emoji, index: index)
         } label: {
             EmojiView(value: emoji, size: slotSize)
+                .frame(width: slotSize, height: slotSize)
                 .scaleEffect(isHighlighted ? 1.5 : (isBouncing ? 1.28 : 1))
                 .offset(y: isHighlighted ? -10 : (isBouncing ? -4 : 0))
                 .animation(.spring(response: 0.12, dampingFraction: 0.68), value: isHighlighted)

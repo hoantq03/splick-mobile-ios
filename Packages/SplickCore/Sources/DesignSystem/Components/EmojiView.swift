@@ -31,12 +31,15 @@ public struct EmojiView: View {
                             .resizable()
                             .scaledToFill()
                     } else {
-                        placeholder(shortcode: shortcode)
+                        Circle()
+                            .fill(SplickTheme.Colors.tertiaryBackground)
                     }
                 }
                 .frame(width: glyphDiameter, height: glyphDiameter)
                 .clipShape(Circle())
                 .frame(width: size, height: size)
+                .contentTransition(.identity)
+                .transaction { $0.animation = nil }
             } else {
                 placeholder(shortcode: shortcode)
             }
