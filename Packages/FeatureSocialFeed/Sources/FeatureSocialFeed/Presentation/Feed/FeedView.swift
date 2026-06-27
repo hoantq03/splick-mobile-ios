@@ -15,7 +15,7 @@ public struct FeedView: View {
     @EnvironmentObject private var languageService: LanguageService
     @ObservedObject private var viewModel: FeedViewModel
     @Binding private var navigationPath: NavigationPath
-    private let pendingPostId: UUID?
+    private let pendingFeedPostNavigation: PendingFeedPostNavigation?
     private let onPendingPostHandled: (() -> Void)?
     @Environment(\.openPostCaptureFlow) private var openPostCaptureFlow
     @Environment(\.currentUserSummary) private var currentUserSummary
@@ -45,7 +45,7 @@ public struct FeedView: View {
         profileDependencies: FriendUserProfileDependencies? = nil,
         makeGifPickerViewModel: GifPickerViewModelFactory? = nil,
         navigationPath: Binding<NavigationPath> = .constant(NavigationPath()),
-        pendingPostId: UUID? = nil,
+        pendingFeedPostNavigation: PendingFeedPostNavigation? = nil,
         onPendingPostHandled: (() -> Void)? = nil,
         isTabActive: Bool = true
     ) {
@@ -58,7 +58,7 @@ public struct FeedView: View {
         self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
         self.profileDependencies = profileDependencies
         self.makeGifPickerViewModel = makeGifPickerViewModel
-        self.pendingPostId = pendingPostId
+        self.pendingFeedPostNavigation = pendingFeedPostNavigation
         self.onPendingPostHandled = onPendingPostHandled
         self.isTabActive = isTabActive
     }
@@ -89,6 +89,9 @@ public struct FeedView: View {
             .background(SplickTheme.Colors.background.ignoresSafeArea())
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.clear, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .splickProfileToolbar(titleDisplayMode: .inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
@@ -131,11 +134,17 @@ public struct FeedView: View {
         .onChange(of: currentUserSummary?.id) { _ in
             viewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
         }
-        .task(id: pendingPostId) {
-            guard let postId = pendingPostId else { return }
-            let loaded = await viewModel.ensurePostLoaded(id: postId)
+        .task(id: pendingFeedPostNavigation) {
+            guard let navigation = pendingFeedPostNavigation else { return }
+            let loaded = await viewModel.ensurePostLoaded(id: navigation.postId)
             if loaded {
-                navigationPath.append(FeedPostDestination(postId: postId, mediaIndex: 0))
+                navigationPath.append(
+                    FeedPostDestination(
+                        postId: navigation.postId,
+                        mediaIndex: 0,
+                        expandBillSplit: navigation.expandBillSplit
+                    )
+                )
             }
             onPendingPostHandled?()
         }
@@ -287,6 +296,7 @@ public struct FeedView: View {
                 }
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
+            .padding(.top, SplickTheme.Spacing.md)
         }
         .scrollDisabled(feedScrollLocked)
         .environment(\.feedVideoCoordinator, videoCoordinator)
