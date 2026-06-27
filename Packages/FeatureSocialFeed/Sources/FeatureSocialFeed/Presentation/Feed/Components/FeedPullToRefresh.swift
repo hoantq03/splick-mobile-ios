@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import DesignSystem
 
 enum FeedScrollAnchor {
@@ -51,8 +52,14 @@ struct FeedPullToRefreshScrollView<Content: View>: View {
     @State private var lastScrollOffset: CGFloat = 0
     @State private var isRefreshSettling = false
 
+    @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.feedSegmentScrollState) private var feedSegmentScrollState
     @Environment(\.scrollChromeTrackingEnabled) private var scrollChromeTrackingEnabled
+
+    private var sameTabTapPublisher: AnyPublisher<Void, Never> {
+        tabBarScrollState?.sameTabTapSubject.eraseToAnyPublisher()
+            ?? Empty().eraseToAnyPublisher()
+    }
 
     var body: some View {
         ScrollViewReader { scrollProxy in
@@ -84,6 +91,15 @@ struct FeedPullToRefreshScrollView<Content: View>: View {
             .onChange(of: isRefreshing) { refreshing in
                 if !refreshing {
                     finishRefreshUI(animated: true)
+                }
+            }
+            .onReceive(sameTabTapPublisher) { _ in
+                if isScrolledToTop {
+                    triggerTabTapRefresh(scrollProxy: scrollProxy)
+                } else {
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                        scrollProxy.scrollTo(FeedScrollAnchor.top, anchor: .top)
+                    }
                 }
             }
         }
@@ -265,6 +281,38 @@ struct FeedPullToRefreshScrollView<Content: View>: View {
             let succeeded = await onRefresh()
             guard generation == refreshGeneration, !Task.isCancelled else { return }
 
+            if succeeded {
+                try? await Task.sleep(nanoseconds: 120_000_000)
+                guard generation == refreshGeneration, !Task.isCancelled else { return }
+                withAnimation(.easeOut(duration: 0.28)) {
+                    scrollProxy.scrollTo(FeedScrollAnchor.top, anchor: .top)
+                }
+            }
+        }
+    }
+
+    /// Programmatic refresh triggered by tapping the active tab icon while at the top.
+    private func triggerTabTapRefresh(scrollProxy: ScrollViewProxy) {
+        guard phase == .idle else { return }
+        refreshGeneration += 1
+        let generation = refreshGeneration
+        refreshTask?.cancel()
+        phase = .loading
+        peakPull = 0
+        dragRotation = 0
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
+            headerHeight = loadingSlotHeight
+        }
+        refreshTask = Task { @MainActor in
+            defer {
+                if generation == refreshGeneration {
+                    refreshTask = nil
+                    finishRefreshUI(animated: true)
+                }
+            }
+            let succeeded = await onRefresh()
+            guard generation == refreshGeneration, !Task.isCancelled else { return }
             if succeeded {
                 try? await Task.sleep(nanoseconds: 120_000_000)
                 guard generation == refreshGeneration, !Task.isCancelled else { return }
