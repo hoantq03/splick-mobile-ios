@@ -29,7 +29,8 @@ struct PostDetailContainerView: View {
                     feedViewModel: feedViewModel,
                     fetchFriendsUseCase: fetchFriendsUseCase,
                     profileDependencies: profileDependencies,
-                    makeGifPickerViewModel: makeGifPickerViewModel
+                    makeGifPickerViewModel: makeGifPickerViewModel,
+                    expandBillSplitInitially: destination.expandBillSplit
                 )
             } else if !loadAttemptFinished {
                 LoadingView(message: languageService.text(.feedLoading))

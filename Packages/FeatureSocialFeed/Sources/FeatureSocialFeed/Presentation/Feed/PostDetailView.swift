@@ -14,6 +14,7 @@ struct PostDetailView: View {
     let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
     let profileDependencies: FriendUserProfileDependencies?
     let makeGifPickerViewModel: GifPickerViewModelFactory?
+    let expandBillSplitInitially: Bool
 
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.currentUserSummary) private var currentUserSummary
@@ -32,7 +33,8 @@ struct PostDetailView: View {
         feedViewModel: FeedViewModel,
         fetchFriendsUseCase: FetchFriendsUseCaseProtocol? = nil,
         profileDependencies: FriendUserProfileDependencies? = nil,
-        makeGifPickerViewModel: GifPickerViewModelFactory? = nil
+        makeGifPickerViewModel: GifPickerViewModelFactory? = nil,
+        expandBillSplitInitially: Bool = false
     ) {
         self.post = post
         self.initialMediaIndex = initialMediaIndex
@@ -40,6 +42,7 @@ struct PostDetailView: View {
         self.fetchFriendsUseCase = fetchFriendsUseCase
         self.profileDependencies = profileDependencies
         self.makeGifPickerViewModel = makeGifPickerViewModel
+        self.expandBillSplitInitially = expandBillSplitInitially
         _commentPager = StateObject(wrappedValue: PostDetailViewModel(comments: post.comments))
     }
 
@@ -85,6 +88,7 @@ struct PostDetailView: View {
                                 message: message
                             )
                         },
+                        initiallyExpandedBillSplit: expandBillSplitInitially,
                         initialMediaIndex: initialMediaIndex
                     )
 

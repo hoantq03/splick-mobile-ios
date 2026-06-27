@@ -39,6 +39,8 @@ struct PostCardView: View {
     /// Tap on a media item in detail opens fullscreen viewer at that index.
     var onMediaTap: ((Int) -> Void)? = nil
     var onSendBillReminder: ((UUID, [UUID]?, String) async throws -> SendBillReminderResult)? = nil
+    /// When true, the bill split section below media starts expanded (e.g. opened from Expenses tab).
+    var initiallyExpandedBillSplit: Bool = false
     /// Restores carousel position when opening detail after swiping media in the feed.
     var initialMediaIndex: Int = 0
     var uploadState: PostUploadState? = nil
@@ -281,6 +283,7 @@ struct PostCardView: View {
                 BillSplitSectionView(
                     bill: bill,
                     onUserTap: onUserTap,
+                    initiallyExpanded: initiallyExpandedBillSplit,
                     onSendReminder: isAuthor
                         ? { user, message in
                             sendReminder(to: [user], message: message, singleName: user.displayName)

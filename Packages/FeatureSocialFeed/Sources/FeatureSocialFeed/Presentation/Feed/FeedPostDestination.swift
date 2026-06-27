@@ -1,7 +1,23 @@
 import Foundation
 
-/// Navigation value for opening post detail while preserving the visible media page.
-struct FeedPostDestination: Hashable {
-    let postId: UUID
-    let mediaIndex: Int
+public struct FeedPostDestination: Hashable {
+    public let postId: UUID
+    public let mediaIndex: Int
+    public let expandBillSplit: Bool
+
+    public init(postId: UUID, mediaIndex: Int = 0, expandBillSplit: Bool = false) {
+        self.postId = postId
+        self.mediaIndex = mediaIndex
+        self.expandBillSplit = expandBillSplit
+    }
+}
+
+public struct PendingFeedPostNavigation: Equatable, Hashable {
+    public let postId: UUID
+    public let expandBillSplit: Bool
+
+    public init(postId: UUID, expandBillSplit: Bool) {
+        self.postId = postId
+        self.expandBillSplit = expandBillSplit
+    }
 }
