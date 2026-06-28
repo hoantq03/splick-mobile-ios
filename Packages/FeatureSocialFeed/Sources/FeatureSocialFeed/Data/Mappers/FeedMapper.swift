@@ -71,7 +71,11 @@ enum FeedMapper {
             parentCommentId: dto.parentCommentId,
             createdAt: dto.createdAt,
             updatedAt: dto.updatedAt,
-            deletedAt: dto.deletedAt
+            deletedAt: dto.deletedAt,
+            commentType: CommentType(rawValue: dto.commentType ?? CommentType.standard.rawValue) ?? .standard,
+            evidenceId: dto.evidenceId,
+            splitId: dto.splitId,
+            evidenceStatus: dto.evidenceStatus.flatMap { EvidenceStatus(rawValue: $0) }
         )
     }
 
@@ -150,11 +154,15 @@ enum FeedMapper {
 
     private static func toBillSplitLine(_ line: PostBillSplitLineDTO) -> PostBillSplitLine {
         let amount = Decimal(string: line.amount) ?? 0
+        let paymentStatus = line.paymentStatus.flatMap { PaymentSplitStatus(rawValue: $0) }
         return PostBillSplitLine(
             id: line.id ?? UUID(),
             user: toUserSummary(line.user),
             amount: amount,
-            isPaid: line.isPaid ?? false
+            isPaid: line.isPaid ?? false,
+            paymentStatus: paymentStatus,
+            latestEvidenceCommentId: line.latestEvidenceCommentId,
+            lastRejectedAt: line.lastRejectedAt
         )
     }
 }

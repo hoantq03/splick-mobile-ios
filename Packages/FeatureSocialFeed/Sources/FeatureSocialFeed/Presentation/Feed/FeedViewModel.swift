@@ -20,6 +20,9 @@ public final class FeedViewModel: ObservableObject {
     private let deletePostUseCase: DeletePostUseCaseProtocol
     private let addCommentUseCase: AddCommentUseCaseProtocol
     private let sendBillReminderUseCase: SendBillReminderUseCaseProtocol
+    private let submitPaymentEvidenceUseCase: SubmitPaymentEvidenceUseCaseProtocol
+    private let approvePaymentEvidenceUseCase: ApprovePaymentEvidenceUseCaseProtocol
+    private let rejectPaymentEvidenceUseCase: RejectPaymentEvidenceUseCaseProtocol
     private let createPostUseCase: CreatePostUseCaseProtocol
     private var currentPage = 0
     private var canLoadMore = true
@@ -60,6 +63,9 @@ public final class FeedViewModel: ObservableObject {
         deletePostUseCase: DeletePostUseCaseProtocol,
         addCommentUseCase: AddCommentUseCaseProtocol,
         sendBillReminderUseCase: SendBillReminderUseCaseProtocol,
+        submitPaymentEvidenceUseCase: SubmitPaymentEvidenceUseCaseProtocol,
+        approvePaymentEvidenceUseCase: ApprovePaymentEvidenceUseCaseProtocol,
+        rejectPaymentEvidenceUseCase: RejectPaymentEvidenceUseCaseProtocol,
         createPostUseCase: CreatePostUseCaseProtocol,
         currentUserId: UUID? = nil,
         currentUser: UserSummary? = nil
@@ -70,6 +76,9 @@ public final class FeedViewModel: ObservableObject {
         self.deletePostUseCase = deletePostUseCase
         self.addCommentUseCase = addCommentUseCase
         self.sendBillReminderUseCase = sendBillReminderUseCase
+        self.submitPaymentEvidenceUseCase = submitPaymentEvidenceUseCase
+        self.approvePaymentEvidenceUseCase = approvePaymentEvidenceUseCase
+        self.rejectPaymentEvidenceUseCase = rejectPaymentEvidenceUseCase
         self.createPostUseCase = createPostUseCase
         self.currentUserId = currentUserId
         self.currentUserSummary = currentUser
@@ -568,5 +577,51 @@ public final class FeedViewModel: ObservableObject {
             targetUserIds: targetUserIds,
             message: message
         )
+    }
+
+    func submitPaymentEvidence(
+        postId: UUID,
+        splitId: UUID,
+        message: String?,
+        submissionAttachments: [CommentSubmissionAttachment]
+    ) async throws {
+        _ = try await submitPaymentEvidenceUseCase.execute(
+            postId: postId,
+            splitId: splitId,
+            message: message,
+            submissionAttachments: submissionAttachments
+        )
+        await refreshPost(id: postId, allowingConcurrentFeedRefresh: true)
+    }
+
+    func canModerateEvidence(on comment: PostComment, post: Post) -> Bool {
+        guard let currentUserId else { return false }
+        guard post.author.id == currentUserId else { return false }
+        guard comment.isEvidence, comment.evidenceStatus == .pending else { return false }
+        return comment.evidenceId != nil
+    }
+
+    func approvePaymentEvidence(postId: UUID, evidenceId: UUID) async {
+        do {
+            try await approvePaymentEvidenceUseCase.execute(postId: postId, evidenceId: evidenceId)
+            await refreshPost(id: postId, allowingConcurrentFeedRefresh: true)
+        } catch {
+            alertMessage = error.localizedDescription
+            Log.error(error, category: .feed)
+        }
+    }
+
+    func rejectPaymentEvidence(postId: UUID, evidenceId: UUID, reason: String) async {
+        do {
+            try await rejectPaymentEvidenceUseCase.execute(
+                postId: postId,
+                evidenceId: evidenceId,
+                reason: reason
+            )
+            await refreshPost(id: postId, allowingConcurrentFeedRefresh: true)
+        } catch {
+            alertMessage = error.localizedDescription
+            Log.error(error, category: .feed)
+        }
     }
 }

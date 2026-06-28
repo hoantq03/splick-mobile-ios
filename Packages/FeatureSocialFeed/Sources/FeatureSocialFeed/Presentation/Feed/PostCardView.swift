@@ -39,6 +39,7 @@ struct PostCardView: View {
     /// Tap on a media item in detail opens fullscreen viewer at that index.
     var onMediaTap: ((Int) -> Void)? = nil
     var onSendBillReminder: ((UUID, [UUID]?, String) async throws -> SendBillReminderResult)? = nil
+    var onSubmitPaymentEvidence: ((UUID, UUID, String?, [CommentSubmissionAttachment]) async throws -> Void)? = nil
     /// When true, the bill split section below media starts expanded (e.g. opened from Expenses tab).
     var initiallyExpandedBillSplit: Bool = false
     /// Restores carousel position when opening detail after swiping media in the feed.
@@ -50,6 +51,7 @@ struct PostCardView: View {
     @State private var activeSheet: PostCardSheet?
     @State private var showCustomEmojiUpload = false
     @State private var reminderSentMessage: String?
+    @State private var showPaymentEvidenceSheet = false
     @State private var reactionAnchors: [String: CGPoint] = [:]
     @State private var flyingEmojis: [FlyingEmojiFlight] = []
 
@@ -68,6 +70,16 @@ struct PostCardView: View {
 
     private var isUploadPending: Bool {
         uploadState != nil
+    }
+
+    private var currentUserSplitLine: PostBillSplitLine? {
+        guard let currentUser, post.feedKind == .shareBill else { return nil }
+        return post.billSplitLine(for: currentUser.id)
+    }
+
+    private var shouldShowPaymentCTA: Bool {
+        guard !isAuthor, currentUserSplitLine != nil else { return false }
+        return post.feedKind == .shareBill
     }
 
     var body: some View {
@@ -138,6 +150,13 @@ struct PostCardView: View {
         }
         .sheet(isPresented: $showCustomEmojiUpload) {
             customEmojiUploadSheet
+        }
+        .sheet(isPresented: $showPaymentEvidenceSheet) {
+            if let split = currentUserSplitLine {
+                PaymentEvidenceSheet(postAuthorName: post.author.displayName) { message, attachments in
+                    try await onSubmitPaymentEvidence?(post.id, split.id, message, attachments)
+                }
+            }
         }
         .alert(
             "Đã gửi",
@@ -338,7 +357,13 @@ struct PostCardView: View {
 
             Spacer(minLength: 0)
 
-            if isAuthor {
+            if shouldShowPaymentCTA, let split = currentUserSplitLine {
+                PaymentStatusCTA(status: split.paymentStatus) {
+                    if split.paymentStatus == .unpaid {
+                        showPaymentEvidenceSheet = true
+                    }
+                }
+            } else if isAuthor {
                 viewsEntryButton
             }
         }

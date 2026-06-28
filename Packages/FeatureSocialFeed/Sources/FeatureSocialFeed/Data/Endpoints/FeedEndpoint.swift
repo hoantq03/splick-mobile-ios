@@ -12,6 +12,9 @@ enum FeedEndpoint: APIEndpoint {
     case addComment(postId: UUID, CreateCommentRequestDTO)
     case deletePost(id: UUID)
     case sendBillReminder(postId: UUID, SendPostBillReminderRequestDTO)
+    case submitPaymentEvidence(postId: UUID, SubmitPaymentEvidenceRequestDTO)
+    case approvePaymentEvidence(postId: UUID, evidenceId: UUID)
+    case rejectPaymentEvidence(postId: UUID, evidenceId: UUID, RejectPaymentEvidenceRequestDTO)
     case streakSummary
     case streakCalendar(year: Int, month: Int)
     case streakDayPhotos(date: String)
@@ -27,6 +30,11 @@ enum FeedEndpoint: APIEndpoint {
             return "/v1/feed/posts/\(postId)/reactions/\(reactionId)"
         case .addComment(let postId, _): return "/v1/feed/posts/\(postId)/comments"
         case .sendBillReminder(let postId, _): return "/v1/feed/posts/\(postId)/reminders"
+        case .submitPaymentEvidence(let postId, _): return "/v1/feed/posts/\(postId)/payments/evidence"
+        case .approvePaymentEvidence(let postId, let evidenceId):
+            return "/v1/feed/posts/\(postId)/payments/evidence/\(evidenceId)/approve"
+        case .rejectPaymentEvidence(let postId, let evidenceId, _):
+            return "/v1/feed/posts/\(postId)/payments/evidence/\(evidenceId)/reject"
         case .streakSummary: return "/v1/feed/streak"
         case .streakCalendar: return "/v1/feed/streak/calendar"
         case .streakDayPhotos(let date): return "/v1/feed/streak/days/\(date)/photos"
@@ -38,7 +46,8 @@ enum FeedEndpoint: APIEndpoint {
         case .feed, .post, .photoAlbumFirstPage, .photoAlbumCursor,
              .streakSummary, .streakCalendar, .streakDayPhotos:
             return .get
-        case .createPost, .addReaction, .addComment, .sendBillReminder: return .post
+        case .createPost, .addReaction, .addComment, .sendBillReminder,
+             .submitPaymentEvidence, .approvePaymentEvidence, .rejectPaymentEvidence: return .post
         case .removeReaction, .deletePost: return .delete
         }
     }
@@ -97,6 +106,8 @@ enum FeedEndpoint: APIEndpoint {
         case .addReaction(_, let dto): return dto
         case .addComment(_, let dto): return dto
         case .sendBillReminder(_, let dto): return dto
+        case .submitPaymentEvidence(_, let dto): return dto
+        case .rejectPaymentEvidence(_, _, let dto): return dto
         default: return nil
         }
     }

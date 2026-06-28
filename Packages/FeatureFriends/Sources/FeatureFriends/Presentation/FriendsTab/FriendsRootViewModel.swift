@@ -2,14 +2,54 @@ import Foundation
 import Common
 import SplickDomain
 
-@MainActor
-public final class FriendsRootViewModel: ObservableObject {
-    enum Segment: String, CaseIterable {
-        case friends
-        case groups
+enum FriendsDirectoryItem: Identifiable {
+    case friend(UserSummary)
+    case group(Group)
+
+    var id: String {
+        switch self {
+        case .friend(let user):
+            return "friend-\(user.id.uuidString)"
+        case .group(let group):
+            return "group-\(group.id.uuidString)"
+        }
     }
 
-    @Published var segment: Segment = .friends
+    var sortKey: String {
+        switch self {
+        case .friend(let user):
+            return user.displayName
+        case .group(let group):
+            return group.name
+        }
+    }
+}
+
+enum FriendsSearchItem: Identifiable {
+    case user(UserSearchResult)
+    case group(Group)
+
+    var id: String {
+        switch self {
+        case .user(let result):
+            return "user-\(result.user.id.uuidString)"
+        case .group(let group):
+            return "group-\(group.id.uuidString)"
+        }
+    }
+
+    var sortKey: String {
+        switch self {
+        case .user(let result):
+            return result.user.displayName
+        case .group(let group):
+            return group.name
+        }
+    }
+}
+
+@MainActor
+public final class FriendsRootViewModel: ObservableObject {
     @Published var friends: [UserSummary] = []
     @Published var groups: [Group] = []
     @Published var friendsState: LoadingState<[UserSummary]> = .idle
@@ -35,6 +75,30 @@ public final class FriendsRootViewModel: ObservableObject {
 
     public var isSearching: Bool {
         !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var combinedDirectoryItems: [FriendsDirectoryItem] {
+        let friendItems = friends.map { FriendsDirectoryItem.friend($0) }
+        let groupItems = groups.map { FriendsDirectoryItem.group($0) }
+        return (friendItems + groupItems).sorted {
+            $0.sortKey.localizedCaseInsensitiveCompare($1.sortKey) == .orderedAscending
+        }
+    }
+
+    var combinedSearchItems: [FriendsSearchItem] {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return [] }
+
+        let apiUserIds = Set(searchResults.map(\.user.id))
+        let userItems = searchResults.map { FriendsSearchItem.user($0) }
+        let localFriendItems = filterFriends(matching: query)
+            .filter { !apiUserIds.contains($0.id) }
+            .map { FriendsSearchItem.user(UserSearchResult(user: $0, friendStatus: .friends)) }
+        let groupItems = filterGroups(matching: query).map { FriendsSearchItem.group($0) }
+
+        return (userItems + localFriendItems + groupItems).sorted {
+            $0.sortKey.localizedCaseInsensitiveCompare($1.sortKey) == .orderedAscending
+        }
     }
 
     public init(
@@ -161,7 +225,12 @@ public final class FriendsRootViewModel: ObservableObject {
             return
         }
 
-        searchState = .loading
+        searchResults = []
+        if combinedSearchItems.isEmpty {
+            searchState = .loading
+        } else {
+            searchState = .loaded([])
+        }
         searchTask = Task {
             try? await Task.sleep(for: .milliseconds(350))
             guard !Task.isCancelled else { return }
@@ -174,9 +243,29 @@ public final class FriendsRootViewModel: ObservableObject {
             } catch {
                 guard !Task.isCancelled else { return }
                 searchResults = []
-                searchState = .failed(error.localizedDescription)
+                if combinedSearchItems.isEmpty {
+                    searchState = .failed(error.localizedDescription)
+                } else {
+                    searchState = .loaded([])
+                }
                 Log.error(error, category: .friends, metadata: ["query": trimmed])
             }
+        }
+    }
+
+    private func filterFriends(matching query: String) -> [UserSummary] {
+        friends.filter { friend in
+            friend.displayName.localizedCaseInsensitiveContains(query)
+                || friend.username.localizedCaseInsensitiveContains(query)
+                || (friend.subtitle?.localizedCaseInsensitiveContains(query) ?? false)
+        }
+    }
+
+    private func filterGroups(matching query: String) -> [Group] {
+        groups.filter { group in
+            group.name.localizedCaseInsensitiveContains(query)
+                || group.inviteCode.localizedCaseInsensitiveContains(query)
+                || (group.description?.localizedCaseInsensitiveContains(query) ?? false)
         }
     }
 

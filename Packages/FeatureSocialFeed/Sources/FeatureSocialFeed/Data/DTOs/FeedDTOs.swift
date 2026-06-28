@@ -9,6 +9,10 @@ struct CommentDTO: Decodable {
     let createdAt: Date
     let updatedAt: Date?
     let deletedAt: Date?
+    let commentType: String?
+    let evidenceId: UUID?
+    let splitId: UUID?
+    let evidenceStatus: String?
 }
 
 struct CommentAttachmentDTO: Decodable {
@@ -71,6 +75,9 @@ struct PostBillSplitLineDTO: Decodable {
     let user: AuthorDTO
     let amount: String
     let isPaid: Bool?
+    let paymentStatus: String?
+    let latestEvidenceCommentId: UUID?
+    let lastRejectedAt: Date?
 }
 
 struct AuthorDTO: Decodable {
@@ -168,6 +175,21 @@ struct SendPostBillReminderRequestDTO: Encodable {
 struct SendPostBillReminderResponseDTO: Decodable {
     let sentCount: Int
     let skippedCount: Int
+}
+
+struct SubmitPaymentEvidenceRequestDTO: Encodable {
+    let splitId: UUID
+    let message: String?
+    let attachments: [CreateCommentAttachmentRequestDTO]
+}
+
+struct SubmitPaymentEvidenceResponseDTO: Decodable {
+    let evidenceId: UUID
+    let commentId: UUID
+}
+
+struct RejectPaymentEvidenceRequestDTO: Encodable {
+    let reason: String
 }
 
 struct StreakSummaryDTO: Decodable {

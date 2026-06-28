@@ -270,6 +270,14 @@ public struct FeedView: View {
                                 message: message
                             )
                         },
+                        onSubmitPaymentEvidence: { postId, splitId, message, attachments in
+                            try await viewModel.submitPaymentEvidence(
+                                postId: postId,
+                                splitId: splitId,
+                                message: message,
+                                submissionAttachments: attachments
+                            )
+                        },
                         uploadState: viewModel.postUploadState(for: post.id)
                     )
                     .onAppear {

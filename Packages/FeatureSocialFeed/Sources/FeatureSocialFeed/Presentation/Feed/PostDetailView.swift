@@ -26,6 +26,8 @@ struct PostDetailView: View {
     @State private var showEmojiPicker = false
     @State private var mediaViewerRoute: MediaViewerRoute?
     @State private var composerFocused = false
+    @State private var rejectEvidenceTarget: PostComment?
+    @State private var rejectReason = ""
 
     init(
         post: Post,
@@ -86,6 +88,14 @@ struct PostDetailView: View {
                                 postId: postId,
                                 targetUserIds: targetUserIds,
                                 message: message
+                            )
+                        },
+                        onSubmitPaymentEvidence: { postId, splitId, message, attachments in
+                            try await feedViewModel.submitPaymentEvidence(
+                                postId: postId,
+                                splitId: splitId,
+                                message: message,
+                                submissionAttachments: attachments
                             )
                         },
                         initiallyExpandedBillSplit: expandBillSplitInitially,
@@ -170,6 +180,37 @@ struct PostDetailView: View {
                     )
                 )
             }
+        }
+        .alert(
+            languageService.text(.feedPaymentEvidenceReject),
+            isPresented: Binding(
+                get: { rejectEvidenceTarget != nil },
+                set: { if !$0 { rejectEvidenceTarget = nil } }
+            )
+        ) {
+            TextField(
+                languageService.text(.feedPaymentEvidenceRejectReasonPlaceholder),
+                text: $rejectReason
+            )
+            Button(languageService.text(.feedPaymentEvidenceReject), role: .destructive) {
+                guard let target = rejectEvidenceTarget,
+                      let evidenceId = target.evidenceId else { return }
+                let reason = rejectReason.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !reason.isEmpty else { return }
+                Task {
+                    await feedViewModel.rejectPaymentEvidence(
+                        postId: post.id,
+                        evidenceId: evidenceId,
+                        reason: reason
+                    )
+                }
+                rejectEvidenceTarget = nil
+            }
+            Button(languageService.text(.commonCancel), role: .cancel) {
+                rejectEvidenceTarget = nil
+            }
+        } message: {
+            Text(languageService.text(.feedPaymentEvidenceRejectReasonPlaceholder))
         }
     }
 
@@ -257,6 +298,7 @@ struct PostDetailView: View {
                 highlightedCommentId: highlightedCommentId,
                 repliesPreviewCount: commentPager.repliesPreviewCount,
                 canReplyToComment: { feedViewModel.canReply(to: $0) },
+                canModerateEvidence: { feedViewModel.canModerateEvidence(on: $0, post: livePost) },
                 onReply: { comment in
                     guard feedViewModel.canReply(to: comment) else { return }
                     commentPager.expandAncestorChain(of: comment)
@@ -266,6 +308,14 @@ struct PostDetailView: View {
                 onUserTap: { openProfile(for: $0) },
                 onViewMoreReplies: { parentId in
                     commentPager.expandReplies(for: parentId)
+                },
+                onApproveEvidence: { comment in
+                    guard let evidenceId = comment.evidenceId else { return }
+                    Task { await feedViewModel.approvePaymentEvidence(postId: post.id, evidenceId: evidenceId) }
+                },
+                onRejectEvidence: { comment in
+                    rejectEvidenceTarget = comment
+                    rejectReason = ""
                 }
             )
 

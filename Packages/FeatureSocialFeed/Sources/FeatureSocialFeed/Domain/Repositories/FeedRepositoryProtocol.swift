@@ -26,6 +26,17 @@ public protocol FeedRepositoryProtocol: Sendable {
         message: String
     ) async throws -> SendBillReminderResult
 
+    func submitPaymentEvidence(
+        postId: UUID,
+        splitId: UUID,
+        message: String?,
+        submissionAttachments: [CommentSubmissionAttachment]
+    ) async throws -> SubmitPaymentEvidenceResult
+
+    func approvePaymentEvidence(postId: UUID, evidenceId: UUID) async throws
+
+    func rejectPaymentEvidence(postId: UUID, evidenceId: UUID, reason: String) async throws
+
     // MARK: - Streak
     func fetchStreakSummary() async throws -> StreakSummary
     func fetchStreakCalendar(year: Int, month: Int) async throws -> [StreakDay]

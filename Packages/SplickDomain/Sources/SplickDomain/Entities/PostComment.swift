@@ -1,5 +1,3 @@
-import Foundation
-
 public enum CommentAttachmentKind: String, Codable, Equatable, Sendable {
     case image
     case video
@@ -32,6 +30,17 @@ public struct CommentAttachment: Identifiable, Codable, Equatable, Sendable {
     }
 }
 
+public enum CommentType: String, Codable, Equatable, Sendable {
+    case standard = "STANDARD"
+    case evidence = "EVIDENCE"
+}
+
+public enum EvidenceStatus: String, Codable, Equatable, Sendable {
+    case pending = "PENDING"
+    case approved = "APPROVED"
+    case rejected = "REJECTED"
+}
+
 public struct PostComment: Identifiable, Codable, Equatable, Sendable {
     public let id: UUID
     public let author: UserSummary
@@ -41,6 +50,10 @@ public struct PostComment: Identifiable, Codable, Equatable, Sendable {
     public let createdAt: Date
     public let updatedAt: Date?
     public let deletedAt: Date?
+    public let commentType: CommentType
+    public let evidenceId: UUID?
+    public let splitId: UUID?
+    public let evidenceStatus: EvidenceStatus?
 
     public init(
         id: UUID = UUID(),
@@ -50,7 +63,11 @@ public struct PostComment: Identifiable, Codable, Equatable, Sendable {
         parentCommentId: UUID? = nil,
         createdAt: Date = .now,
         updatedAt: Date? = nil,
-        deletedAt: Date? = nil
+        deletedAt: Date? = nil,
+        commentType: CommentType = .standard,
+        evidenceId: UUID? = nil,
+        splitId: UUID? = nil,
+        evidenceStatus: EvidenceStatus? = nil
     ) {
         self.id = id
         self.author = author
@@ -60,7 +77,13 @@ public struct PostComment: Identifiable, Codable, Equatable, Sendable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.deletedAt = deletedAt
+        self.commentType = commentType
+        self.evidenceId = evidenceId
+        self.splitId = splitId
+        self.evidenceStatus = evidenceStatus
     }
+
+    public var isEvidence: Bool { commentType == .evidence }
 
     public var isDeleted: Bool { deletedAt != nil }
 

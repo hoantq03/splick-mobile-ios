@@ -250,6 +250,18 @@ final class DependencyContainer: ObservableObject {
         SendBillReminderUseCase(repository: feedRepository)
     }()
 
+    lazy var submitPaymentEvidenceUseCase: SubmitPaymentEvidenceUseCaseProtocol = {
+        SubmitPaymentEvidenceUseCase(repository: feedRepository)
+    }()
+
+    lazy var approvePaymentEvidenceUseCase: ApprovePaymentEvidenceUseCaseProtocol = {
+        ApprovePaymentEvidenceUseCase(repository: feedRepository)
+    }()
+
+    lazy var rejectPaymentEvidenceUseCase: RejectPaymentEvidenceUseCaseProtocol = {
+        RejectPaymentEvidenceUseCase(repository: feedRepository)
+    }()
+
     private lazy var friendsManagementRepository: FriendsManagementRepositoryProtocol = {
         FriendsManagementRepository(apiClient: apiClient)
     }()
@@ -551,6 +563,9 @@ final class DependencyContainer: ObservableObject {
             deletePostUseCase: deletePostUseCase,
             addCommentUseCase: addCommentUseCase,
             sendBillReminderUseCase: sendBillReminderUseCase,
+            submitPaymentEvidenceUseCase: submitPaymentEvidenceUseCase,
+            approvePaymentEvidenceUseCase: approvePaymentEvidenceUseCase,
+            rejectPaymentEvidenceUseCase: rejectPaymentEvidenceUseCase,
             createPostUseCase: createPostUseCase
         )
     }

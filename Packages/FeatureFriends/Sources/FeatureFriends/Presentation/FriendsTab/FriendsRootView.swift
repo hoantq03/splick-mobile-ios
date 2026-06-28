@@ -193,34 +193,18 @@ public struct FriendsRootView: View {
     public var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                if viewModel.segment == .friends {
-                    friendsTopBar
-                }
-
-                Picker("Section", selection: $viewModel.segment) {
-                    ForEach(FriendsRootViewModel.Segment.allCases, id: \.self) { segment in
-                        Text(segment.localizedTitle(using: languageService)).tag(segment)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, SplickTheme.Spacing.md)
-                .padding(.vertical, SplickTheme.Spacing.sm)
+                directoryTopBar
 
                 Group {
-                    switch viewModel.segment {
-                    case .friends:
-                        if viewModel.isSearching {
-                            searchResultsContent
-                        } else {
-                            VStack(spacing: SplickTheme.Spacing.xs) {
-                                incomingRequestsBanner
-                                outgoingRequestsBanner
-                                blockedUsersLink
-                                friendsContent
-                            }
+                    if viewModel.isSearching {
+                        searchResultsContent
+                    } else {
+                        VStack(spacing: SplickTheme.Spacing.xs) {
+                            incomingRequestsBanner
+                            outgoingRequestsBanner
+                            blockedUsersLink
+                            combinedDirectoryContent
                         }
-                    case .groups:
-                        groupsContent
                     }
                 }
             }
@@ -228,15 +212,8 @@ public struct FriendsRootView: View {
             .onChange(of: viewModel.searchQuery) { newValue in
                 viewModel.onSearchQueryChanged(newValue)
             }
-            .onChange(of: viewModel.segment) { segment in
-                guard segment == .groups else { return }
-                viewModel.searchQuery = ""
-                viewModel.onSearchQueryChanged("")
-            }
             .toolbar {
-                if viewModel.segment == .groups {
-                    toolbarAddMenu
-                }
+                toolbarAddMenu
             }
             .refreshable { await viewModel.refresh() }
             .navigationDestination(for: UUID.self) { groupId in
@@ -437,7 +414,7 @@ public struct FriendsRootView: View {
         }
     }
 
-    private var friendsTopBar: some View {
+    private var directoryTopBar: some View {
         HStack(spacing: SplickTheme.Spacing.sm) {
             friendsSearchField
             scanQrButton
@@ -452,7 +429,7 @@ public struct FriendsRootView: View {
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
 
-            TextField("Search by username", text: $viewModel.searchQuery)
+            TextField("Search friends & groups", text: $viewModel.searchQuery)
                 .font(SplickTheme.Typography.callout)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
@@ -566,36 +543,26 @@ public struct FriendsRootView: View {
 
     @ViewBuilder
     private var searchResultsContent: some View {
+        let items = viewModel.combinedSearchItems
+
         switch viewModel.searchState {
-        case .idle, .loading:
+        case .loading where items.isEmpty:
             LoadingView(message: "Searching...")
-        case .failed(let message):
+        case .failed(let message) where items.isEmpty:
             ErrorView(message: message) {
                 viewModel.onSearchQueryChanged(viewModel.searchQuery)
             }
-        case .loaded(let results) where results.isEmpty:
+        case .loaded where items.isEmpty, .idle where items.isEmpty:
             EmptyStateView(
                 icon: "magnifyingglass",
-                title: "No users found",
-                message: "Try another username."
+                title: "No results found",
+                message: "Try another name or username."
             )
-        case .loaded:
+        default:
             ScrollView {
                 LazyVStack(spacing: SplickTheme.Spacing.xs) {
-                    ForEach(viewModel.searchResults) { result in
-                        FriendRowView(
-                            user: result.user,
-                            friendStatus: result.friendStatus,
-                            isSendingRequest: viewModel.sendingFriendRequestUserIds.contains(result.user.id)
-                                || viewModel.acceptingFriendRequestUserIds.contains(result.user.id),
-                            onProfileTap: {
-                                profileRoute = UserProfileRoute(
-                                    user: result.user,
-                                    initialFriendStatus: result.friendStatus
-                                )
-                            },
-                            onAddFriend: actionForSearchResult(result)
-                        )
+                    ForEach(items) { item in
+                        searchResultRow(item)
                     }
                 }
                 .padding(.horizontal, SplickTheme.Spacing.md)
@@ -606,19 +573,52 @@ public struct FriendsRootView: View {
     }
 
     @ViewBuilder
-    private var friendsContent: some View {
-        switch viewModel.friendsState {
-        case .idle, .loading where viewModel.friends.isEmpty:
-            LoadingView(message: "Loading friends...")
-        case .failed(let message) where viewModel.friends.isEmpty:
-            ErrorView(message: message) {
-                Task { await viewModel.loadFriends(isPullToRefresh: false) }
+    private func searchResultRow(_ item: FriendsSearchItem) -> some View {
+        switch item {
+        case .user(let result):
+            FriendRowView(
+                user: result.user,
+                friendStatus: result.friendStatus,
+                isSendingRequest: viewModel.sendingFriendRequestUserIds.contains(result.user.id)
+                    || viewModel.acceptingFriendRequestUserIds.contains(result.user.id),
+                onProfileTap: {
+                    profileRoute = UserProfileRoute(
+                        user: result.user,
+                        initialFriendStatus: result.friendStatus
+                    )
+                },
+                onAddFriend: actionForSearchResult(result)
+            )
+        case .group(let group):
+            NavigationLink(value: group.id) {
+                GroupRowView(group: group)
             }
-        case .loaded where viewModel.friends.isEmpty:
+            .buttonStyle(.plain)
+        }
+    }
+
+    @ViewBuilder
+    private var combinedDirectoryContent: some View {
+        let items = viewModel.combinedDirectoryItems
+        let isInitialLoading = (viewModel.friendsState == .idle || viewModel.friendsState == .loading
+            || viewModel.groupsState == .idle || viewModel.groupsState == .loading)
+            && viewModel.friends.isEmpty && viewModel.groups.isEmpty
+
+        switch true {
+        case isInitialLoading:
+            LoadingView(message: "Loading...")
+        case items.isEmpty && directoryLoadFailed:
+            ErrorView(message: directoryErrorMessage) {
+                Task {
+                    await viewModel.loadFriends(isPullToRefresh: false)
+                    await viewModel.loadGroups(isPullToRefresh: false)
+                }
+            }
+        case items.isEmpty:
             EmptyStateView(
                 icon: "person.2",
-                title: "No friends yet",
-                message: "Add friends by username or scan their QR code.",
+                title: "No friends or groups yet",
+                message: "Add friends, create a group, or join one by invite code.",
                 actionTitle: "Add friend"
             ) {
                 showAddFriend = true
@@ -627,14 +627,9 @@ public struct FriendsRootView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: SplickTheme.Spacing.xs) {
-                        Color.clear.frame(height: 0).id("friendsScrollTop")
-                        ForEach(viewModel.friends) { friend in
-                            Button {
-                                profileRoute = UserProfileRoute(user: friend, initialFriendStatus: .friends)
-                            } label: {
-                                FriendRowView(user: friend)
-                            }
-                            .buttonStyle(.plain)
+                        Color.clear.frame(height: 0).id("directoryScrollTop")
+                        ForEach(items) { item in
+                            directoryRow(item)
                         }
                     }
                     .padding(.horizontal, SplickTheme.Spacing.md)
@@ -643,65 +638,40 @@ public struct FriendsRootView: View {
                 .tabBarHideOnScroll()
                 .onChange(of: scrollTopSignal) { _ in
                     withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
-                        proxy.scrollTo("friendsScrollTop", anchor: .top)
+                        proxy.scrollTo("directoryScrollTop", anchor: .top)
                     }
                 }
             }
         }
+    }
+
+    private var directoryLoadFailed: Bool {
+        if case .failed = viewModel.friendsState { return true }
+        if case .failed = viewModel.groupsState { return true }
+        return false
+    }
+
+    private var directoryErrorMessage: String {
+        if case .failed(let message) = viewModel.friendsState { return message }
+        if case .failed(let message) = viewModel.groupsState { return message }
+        return "Something went wrong."
     }
 
     @ViewBuilder
-    private var groupsContent: some View {
-        switch viewModel.groupsState {
-        case .idle, .loading where viewModel.groups.isEmpty:
-            LoadingView(message: "Loading groups...")
-        case .failed(let message) where viewModel.groups.isEmpty:
-            ErrorView(message: message) {
-                Task { await viewModel.loadGroups(isPullToRefresh: false) }
+    private func directoryRow(_ item: FriendsDirectoryItem) -> some View {
+        switch item {
+        case .friend(let friend):
+            Button {
+                profileRoute = UserProfileRoute(user: friend, initialFriendStatus: .friends)
+            } label: {
+                FriendRowView(user: friend)
             }
-        case .loaded where viewModel.groups.isEmpty:
-            EmptyStateView(
-                icon: "person.3",
-                title: "Chưa có nhóm",
-                message: "Tạo nhóm mới hoặc tham gia bằng mã mời / QR.",
-                actionTitle: "Tạo nhóm"
-            ) {
-                showCreateGroup = true
+            .buttonStyle(.plain)
+        case .group(let group):
+            NavigationLink(value: group.id) {
+                GroupRowView(group: group)
             }
-        default:
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: SplickTheme.Spacing.xs) {
-                        Color.clear.frame(height: 0).id("groupsScrollTop")
-                        ForEach(viewModel.groups) { group in
-                            NavigationLink(value: group.id) {
-                                GroupRowView(group: group)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.horizontal, SplickTheme.Spacing.md)
-                    .padding(.bottom, SplickTheme.Spacing.md)
-                }
-                .tabBarHideOnScroll()
-                .onChange(of: scrollTopSignal) { _ in
-                    withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
-                        proxy.scrollTo("groupsScrollTop", anchor: .top)
-                    }
-                }
-            }
-        }
-    }
-}
-
-private extension FriendsRootViewModel.Segment {
-    @MainActor
-    func localizedTitle(using languageService: LanguageService) -> String {
-        switch self {
-        case .friends:
-            return languageService.text(.friendsTabFriends)
-        case .groups:
-            return languageService.text(.friendsTabGroups)
+            .buttonStyle(.plain)
         }
     }
 }

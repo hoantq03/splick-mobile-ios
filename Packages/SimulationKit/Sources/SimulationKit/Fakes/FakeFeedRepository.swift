@@ -413,6 +413,33 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
         )
     }
 
+    public func submitPaymentEvidence(
+        postId: UUID,
+        splitId: UUID,
+        message: String?,
+        submissionAttachments: [CommentSubmissionAttachment]
+    ) async throws -> SubmitPaymentEvidenceResult {
+        logger.log("Submit payment evidence postId=\(postId) splitId=\(splitId)")
+        _ = message
+        _ = submissionAttachments
+        try await Task.sleep(for: .milliseconds(200))
+        logger.success("Payment evidence submitted")
+        return SubmitPaymentEvidenceResult(evidenceId: UUID(), commentId: UUID())
+    }
+
+    public func approvePaymentEvidence(postId: UUID, evidenceId: UUID) async throws {
+        logger.log("Approve payment evidence postId=\(postId) evidenceId=\(evidenceId)")
+        try await Task.sleep(for: .milliseconds(200))
+        logger.success("Payment evidence approved")
+    }
+
+    public func rejectPaymentEvidence(postId: UUID, evidenceId: UUID, reason: String) async throws {
+        logger.log("Reject payment evidence postId=\(postId) evidenceId=\(evidenceId)")
+        _ = reason
+        try await Task.sleep(for: .milliseconds(200))
+        logger.success("Payment evidence rejected")
+    }
+
     public func fetchStreakSummary() async throws -> StreakSummary {
         logger.log("Fetch streak summary")
         try await Task.sleep(for: .milliseconds(200))

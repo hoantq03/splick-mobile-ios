@@ -10,17 +10,41 @@ public enum PostFeedKind: String, Codable, Equatable, Sendable {
     case shareBill
 }
 
+public enum PaymentSplitStatus: String, Codable, Equatable, Sendable {
+    case unpaid = "UNPAID"
+    case pendingApproval = "PENDING_APPROVAL"
+    case paid = "PAID"
+}
+
 public struct PostBillSplitLine: Identifiable, Codable, Equatable, Sendable {
     public let id: UUID
     public let user: UserSummary
     public let amount: Decimal
     public let isPaid: Bool
+    public let paymentStatus: PaymentSplitStatus
+    public let latestEvidenceCommentId: UUID?
+    public let lastRejectedAt: Date?
 
-    public init(id: UUID = UUID(), user: UserSummary, amount: Decimal, isPaid: Bool = false) {
+    public init(
+        id: UUID = UUID(),
+        user: UserSummary,
+        amount: Decimal,
+        isPaid: Bool = false,
+        paymentStatus: PaymentSplitStatus? = nil,
+        latestEvidenceCommentId: UUID? = nil,
+        lastRejectedAt: Date? = nil
+    ) {
         self.id = id
         self.user = user
         self.amount = amount
         self.isPaid = isPaid
+        if let paymentStatus {
+            self.paymentStatus = paymentStatus
+        } else {
+            self.paymentStatus = isPaid ? .paid : .unpaid
+        }
+        self.latestEvidenceCommentId = latestEvidenceCommentId
+        self.lastRejectedAt = lastRejectedAt
     }
 }
 
@@ -252,5 +276,10 @@ public extension Post {
         let first = companions.prefix(maxNamed).map(\.displayName).joined(separator: ", ")
         let others = companions.count - maxNamed
         return "\(first) và +\(others) người khác"
+    }
+
+    /// Split line for the given user in a share-bill post.
+    func billSplitLine(for userId: UUID) -> PostBillSplitLine? {
+        billSplit?.splits.first { $0.user.id == userId }
     }
 }

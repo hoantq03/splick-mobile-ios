@@ -42,6 +42,36 @@ final class MockSendBillReminderUseCase: SendBillReminderUseCaseProtocol, Sendab
     }
 }
 
+final class MockSubmitPaymentEvidenceUseCase: SubmitPaymentEvidenceUseCaseProtocol, Sendable {
+    func execute(
+        postId: UUID,
+        splitId: UUID,
+        message: String?,
+        submissionAttachments: [CommentSubmissionAttachment]
+    ) async throws -> SubmitPaymentEvidenceResult {
+        _ = postId
+        _ = splitId
+        _ = message
+        _ = submissionAttachments
+        return SubmitPaymentEvidenceResult(evidenceId: UUID(), commentId: UUID())
+    }
+}
+
+final class MockApprovePaymentEvidenceUseCase: ApprovePaymentEvidenceUseCaseProtocol, Sendable {
+    func execute(postId: UUID, evidenceId: UUID) async throws {
+        _ = postId
+        _ = evidenceId
+    }
+}
+
+final class MockRejectPaymentEvidenceUseCase: RejectPaymentEvidenceUseCaseProtocol, Sendable {
+    func execute(postId: UUID, evidenceId: UUID, reason: String) async throws {
+        _ = postId
+        _ = evidenceId
+        _ = reason
+    }
+}
+
 final class MockCreatePostUseCase: CreatePostUseCaseProtocol, Sendable {
     func execute(_ input: CreatePostInput) async throws -> Post {
         _ = input
@@ -131,6 +161,9 @@ final class MockFetchPhotoAlbumUseCase: FetchPhotoAlbumUseCaseProtocol, Sendable
                 deletePostUseCase: MockDeletePostUseCase(),
                 addCommentUseCase: MockAddCommentUseCase(),
                 sendBillReminderUseCase: MockSendBillReminderUseCase(),
+                submitPaymentEvidenceUseCase: MockSubmitPaymentEvidenceUseCase(),
+                approvePaymentEvidenceUseCase: MockApprovePaymentEvidenceUseCase(),
+                rejectPaymentEvidenceUseCase: MockRejectPaymentEvidenceUseCase(),
                 createPostUseCase: MockCreatePostUseCase(),
                 currentUserId: PreviewData.currentUser.id,
                 currentUser: UserSummary(

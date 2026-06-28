@@ -1,5 +1,6 @@
 import SwiftUI
 import DesignSystem
+import Localization
 import SplickDomain
 
 private enum CommentRowStyle {
@@ -58,9 +59,12 @@ struct CommentThreadView: View {
     let highlightedCommentId: UUID?
     let repliesPreviewCount: Int
     let canReplyToComment: (PostComment) -> Bool
+    let canModerateEvidence: (PostComment) -> Bool
     let onReply: (PostComment) -> Void
     let onUserTap: (UserSummary) -> Void
     let onViewMoreReplies: (UUID) -> Void
+    let onApproveEvidence: (PostComment) -> Void
+    let onRejectEvidence: (PostComment) -> Void
 
     // The coordinate-space name of the *parent* CommentBranchView that owns the
     // connector column for `threadGroupId`. Passed to each child so replies can
@@ -77,9 +81,12 @@ struct CommentThreadView: View {
         highlightedCommentId: UUID? = nil,
         repliesPreviewCount: Int = 2,
         canReplyToComment: @escaping (PostComment) -> Bool = { _ in true },
+        canModerateEvidence: @escaping (PostComment) -> Bool = { _ in false },
         onReply: @escaping (PostComment) -> Void,
         onUserTap: @escaping (UserSummary) -> Void,
         onViewMoreReplies: @escaping (UUID) -> Void,
+        onApproveEvidence: @escaping (PostComment) -> Void = { _ in },
+        onRejectEvidence: @escaping (PostComment) -> Void = { _ in },
         parentBranchSpaceName: String? = nil
     ) {
         self.comments = comments
@@ -90,9 +97,12 @@ struct CommentThreadView: View {
         self.highlightedCommentId = highlightedCommentId
         self.repliesPreviewCount = repliesPreviewCount
         self.canReplyToComment = canReplyToComment
+        self.canModerateEvidence = canModerateEvidence
         self.onReply = onReply
         self.onUserTap = onUserTap
         self.onViewMoreReplies = onViewMoreReplies
+        self.onApproveEvidence = onApproveEvidence
+        self.onRejectEvidence = onRejectEvidence
         self.parentBranchSpaceName = parentBranchSpaceName
     }
 
@@ -108,9 +118,12 @@ struct CommentThreadView: View {
                 highlightedCommentId: highlightedCommentId,
                 repliesPreviewCount: repliesPreviewCount,
                 canReplyToComment: canReplyToComment,
+                canModerateEvidence: canModerateEvidence,
                 onReply: onReply,
                 onUserTap: onUserTap,
-                onViewMoreReplies: onViewMoreReplies
+                onViewMoreReplies: onViewMoreReplies,
+                onApproveEvidence: onApproveEvidence,
+                onRejectEvidence: onRejectEvidence
             )
         }
     }
@@ -131,9 +144,12 @@ private struct CommentBranchView: View {
     let highlightedCommentId: UUID?
     let repliesPreviewCount: Int
     let canReplyToComment: (PostComment) -> Bool
+    let canModerateEvidence: (PostComment) -> Bool
     let onReply: (PostComment) -> Void
     let onUserTap: (UserSummary) -> Void
     let onViewMoreReplies: (UUID) -> Void
+    let onApproveEvidence: (PostComment) -> Void
+    let onRejectEvidence: (PostComment) -> Void
 
     /// A stable named coordinate space owned by this branch view.
     /// All anchors for this branch's own thread are measured in this space.
@@ -187,9 +203,12 @@ private struct CommentBranchView: View {
                 threadStartCoordinateSpace: .named(branchSpaceName),
                 isHighlighted: highlightedCommentId == comment.id,
                 showsReplyAction: canReplyToComment(comment),
+                canModerateEvidence: canModerateEvidence(comment),
                 anchorsThreadForChildren: !children.isEmpty,
                 onReply: { onReply(comment) },
-                onUserTap: onUserTap
+                onUserTap: onUserTap,
+                onApproveEvidence: { onApproveEvidence(comment) },
+                onRejectEvidence: { onRejectEvidence(comment) }
             )
             .id(comment.id)
 
@@ -204,9 +223,12 @@ private struct CommentBranchView: View {
                         highlightedCommentId: highlightedCommentId,
                         repliesPreviewCount: repliesPreviewCount,
                         canReplyToComment: canReplyToComment,
+                        canModerateEvidence: canModerateEvidence,
                         onReply: onReply,
                         onUserTap: onUserTap,
                         onViewMoreReplies: onViewMoreReplies,
+                        onApproveEvidence: onApproveEvidence,
+                        onRejectEvidence: onRejectEvidence,
                         parentBranchSpaceName: branchSpaceName
                     )
 
@@ -279,6 +301,8 @@ private struct CommentThreadConnectorOverlay: View {
 // MARK: - Row
 
 struct CommentRowView: View {
+    @EnvironmentObject private var languageService: LanguageService
+
     let comment: PostComment
     let depth: Int
     var avatarThreadGroupId: UUID? = nil
@@ -289,9 +313,12 @@ struct CommentRowView: View {
     var threadStartCoordinateSpace: CoordinateSpace = .named("__unused__")
     let isHighlighted: Bool
     var showsReplyAction: Bool = true
+    var canModerateEvidence: Bool = false
     var anchorsThreadForChildren: Bool = false
     let onReply: () -> Void
     let onUserTap: (UserSummary) -> Void
+    let onApproveEvidence: () -> Void
+    let onRejectEvidence: () -> Void
 
     private var style: CommentRowStyle { CommentRowStyle.forDepth(depth) }
 
@@ -329,6 +356,10 @@ struct CommentRowView: View {
             ))
 
             VStack(alignment: .leading, spacing: 3) {
+                if comment.isEvidence {
+                    evidenceBadge
+                }
+
                 HStack(spacing: 5) {
                     Button { onUserTap(comment.author) } label: {
                         Text(comment.author.displayName)
@@ -363,16 +394,56 @@ struct CommentRowView: View {
                             .font(.system(size: style.replyActionFontSize, weight: .medium))
                             .foregroundStyle(SplickTheme.Colors.textTertiary)
                     }
+
+                    if canModerateEvidence {
+                        evidenceModerationActions
+                    }
                 }
             }
         }
         .padding(.vertical, depth == 0 ? 6 : 4)
         .padding(.horizontal, isHighlighted ? 6 : 0)
         .background {
-            if isHighlighted {
+            if comment.isEvidence {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(SplickTheme.Colors.primaryGradientStart.opacity(0.06))
+            } else if isHighlighted {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(SplickTheme.Colors.tertiaryBackground.opacity(0.9))
             }
+        }
+    }
+
+    private var evidenceBadge: some View {
+        HStack(spacing: 6) {
+            Label(languageService.text(.feedPaymentEvidenceBadge), systemImage: "banknote")
+                .font(.system(size: style.metaFontSize, weight: .semibold))
+                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+            if let status = comment.evidenceStatus {
+                Text(evidenceStatusLabel(status))
+                    .font(.system(size: style.metaFontSize, weight: .medium))
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+            }
+        }
+    }
+
+    private var evidenceModerationActions: some View {
+        HStack(spacing: 8) {
+            Button(languageService.text(.feedPaymentEvidenceApprove), action: onApproveEvidence)
+                .font(.system(size: style.replyActionFontSize, weight: .semibold))
+                .foregroundStyle(SplickTheme.Colors.success)
+            Button(languageService.text(.feedPaymentEvidenceReject), action: onRejectEvidence)
+                .font(.system(size: style.replyActionFontSize, weight: .semibold))
+                .foregroundStyle(SplickTheme.Colors.error)
+        }
+        .padding(.top, 2)
+    }
+
+    private func evidenceStatusLabel(_ status: EvidenceStatus) -> String {
+        switch status {
+        case .pending: return languageService.text(.feedPaymentPending)
+        case .approved: return languageService.text(.feedPaymentPaid)
+        case .rejected: return languageService.text(.feedPaymentEvidenceReject)
         }
     }
 

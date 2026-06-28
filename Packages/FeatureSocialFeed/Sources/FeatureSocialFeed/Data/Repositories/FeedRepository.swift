@@ -208,6 +208,78 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
         )
     }
 
+    public func submitPaymentEvidence(
+        postId: UUID,
+        splitId: UUID,
+        message: String?,
+        submissionAttachments: [CommentSubmissionAttachment]
+    ) async throws -> SubmitPaymentEvidenceResult {
+        let attachmentDTOs = try await buildCommentAttachmentDTOs(from: submissionAttachments)
+        let request = SubmitPaymentEvidenceRequestDTO(
+            splitId: splitId,
+            message: message,
+            attachments: attachmentDTOs
+        )
+        let response: SubmitPaymentEvidenceResponseDTO = try await apiClient.request(
+            FeedEndpoint.submitPaymentEvidence(postId: postId, request)
+        )
+        return SubmitPaymentEvidenceResult(
+            evidenceId: response.evidenceId,
+            commentId: response.commentId
+        )
+    }
+
+    public func approvePaymentEvidence(postId: UUID, evidenceId: UUID) async throws {
+        try await apiClient.request(
+            FeedEndpoint.approvePaymentEvidence(postId: postId, evidenceId: evidenceId)
+        )
+    }
+
+    public func rejectPaymentEvidence(postId: UUID, evidenceId: UUID, reason: String) async throws {
+        let request = RejectPaymentEvidenceRequestDTO(reason: reason)
+        try await apiClient.request(
+            FeedEndpoint.rejectPaymentEvidence(postId: postId, evidenceId: evidenceId, request)
+        )
+    }
+
+    private func buildCommentAttachmentDTOs(
+        from submissions: [CommentSubmissionAttachment]
+    ) async throws -> [CreateCommentAttachmentRequestDTO] {
+        var attachmentDTOs: [CreateCommentAttachmentRequestDTO] = []
+        for submission in submissions {
+            if submission.isRemoteOnly, let remoteURL = submission.remoteURL {
+                attachmentDTOs.append(
+                    CreateCommentAttachmentRequestDTO(
+                        kind: submission.kind.rawValue,
+                        mediaId: nil,
+                        url: remoteURL.absoluteString,
+                        fileName: submission.fileName,
+                        thumbnailUrl: remoteURL.absoluteString,
+                        sizeBytes: nil
+                    )
+                )
+            } else if let data = submission.data, let mimeType = submission.mimeType {
+                let upload = try await mediaRepository.uploadImage(
+                    data: data,
+                    mimeType: mimeType,
+                    purpose: .commentAttachment,
+                    groupId: nil
+                )
+                attachmentDTOs.append(
+                    CreateCommentAttachmentRequestDTO(
+                        kind: submission.kind.rawValue,
+                        mediaId: upload.id,
+                        url: upload.url.absoluteString,
+                        fileName: submission.fileName,
+                        thumbnailUrl: upload.thumbnailURL?.absoluteString,
+                        sizeBytes: upload.sizeBytes
+                    )
+                )
+            }
+        }
+        return attachmentDTOs
+    }
+
     public func fetchStreakSummary() async throws -> StreakSummary {
         let dto: StreakSummaryDTO = try await apiClient.request(FeedEndpoint.streakSummary)
         return FeedMapper.toStreakSummary(dto)
