@@ -1,3 +1,5 @@
+import Foundation
+
 public enum CommentAttachmentKind: String, Codable, Equatable, Sendable {
     case image
     case video
