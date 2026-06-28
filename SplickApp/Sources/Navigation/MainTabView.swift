@@ -290,6 +290,9 @@ struct MainTabView: View {
         if tab == .messages || tab == .friends || tab == .expenses {
             scheduleBadgeRefresh()
         }
+        if tab == .expenses {
+            Task { await container.expenseListViewModel.load(isPullToRefresh: true) }
+        }
     }
 
     private func scheduleBadgeRefresh() {
