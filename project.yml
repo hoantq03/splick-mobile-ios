@@ -124,3 +124,19 @@ schemes:
       config: Debug
     archive:
       config: Release
+
+  # Xcode 26 can fail to launch under LLDB (launchd spawn / SBMainWorkspace denied).
+  # Use this scheme when ▶ Run fails but the app installs fine via simctl.
+  SplickApp-Run:
+    build:
+      targets:
+        SplickApp: all
+    run:
+      config: Debug
+      debugEnabled: false
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
