@@ -89,7 +89,7 @@ public final class ExpenseListViewModel: ObservableObject {
         debts.filter(\.owes).reduce(Decimal.zero) { $0 + abs($1.amount) }
     }
 
-    func load(isPullToRefresh: Bool = false) async {
+    public func load(isPullToRefresh: Bool = false) async {
         if isPullToRefresh {
             guard !isRefreshing else { return }
             isRefreshing = true

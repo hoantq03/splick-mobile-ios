@@ -77,6 +77,9 @@ public struct ExpenseListView: View {
             viewModel.updateCurrentUserId(currentUserId)
             Task { await viewModel.load() }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .paymentEvidenceStatusDidChange)) { _ in
+            Task { await viewModel.load(isPullToRefresh: true) }
+        }
         .onChange(of: currentUserId) { userId in
             viewModel.updateCurrentUserId(userId)
         }

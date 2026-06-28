@@ -592,6 +592,7 @@ public final class FeedViewModel: ObservableObject {
             submissionAttachments: submissionAttachments
         )
         await refreshPost(id: postId, allowingConcurrentFeedRefresh: true)
+        NotificationCenter.default.post(name: .paymentEvidenceStatusDidChange, object: nil)
     }
 
     func canModerateEvidence(on comment: PostComment, post: Post) -> Bool {
@@ -605,6 +606,7 @@ public final class FeedViewModel: ObservableObject {
         do {
             try await approvePaymentEvidenceUseCase.execute(postId: postId, evidenceId: evidenceId)
             await refreshPost(id: postId, allowingConcurrentFeedRefresh: true)
+            NotificationCenter.default.post(name: .paymentEvidenceStatusDidChange, object: nil)
         } catch {
             alertMessage = error.localizedDescription
             Log.error(error, category: .feed)
@@ -619,6 +621,7 @@ public final class FeedViewModel: ObservableObject {
                 reason: reason
             )
             await refreshPost(id: postId, allowingConcurrentFeedRefresh: true)
+            NotificationCenter.default.post(name: .paymentEvidenceStatusDidChange, object: nil)
         } catch {
             alertMessage = error.localizedDescription
             Log.error(error, category: .feed)
