@@ -24,6 +24,13 @@ struct GoogleSignInRequestDTO: Encodable {
     let loginLocation: String?
 }
 
+struct AppleSignInRequestDTO: Encodable {
+    let idToken: String
+    let deviceInfo: String?
+    let deviceName: String?
+    let loginLocation: String?
+}
+
 struct LoginRequestDTO: Encodable {
     let email: String
     let password: String

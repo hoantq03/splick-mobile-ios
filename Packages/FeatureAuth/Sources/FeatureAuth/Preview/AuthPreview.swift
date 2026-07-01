@@ -61,6 +61,16 @@ final class MockGoogleSignInUseCase: GoogleSignInUseCaseProtocol, Sendable {
     }
 }
 
+final class MockAppleSignInUseCase: AppleSignInUseCaseProtocol, Sendable {
+    func execute(idToken: String) async throws -> AuthSession {
+        try await Task.sleep(for: .seconds(1))
+        return AuthSession(
+            user: PreviewData.currentUser,
+            token: AuthToken(accessToken: "mock-token", refreshToken: "mock-refresh", expiresIn: 3600)
+        )
+    }
+}
+
 final class MockForgotPasswordUseCase: ForgotPasswordUseCaseProtocol, Sendable {
     func execute(email: String) async throws {
         try await Task.sleep(for: .milliseconds(300))
@@ -106,7 +116,8 @@ final class MockRegisterUseCase: RegisterUseCaseProtocol, Sendable {
                 requestEmailOtpUseCase: MockRequestEmailOtpUseCase(),
                 requestPhoneOtpUseCase: MockRequestPhoneOtpUseCase(),
                 verifyPhoneOtpUseCase: MockVerifyPhoneOtpUseCase(),
-                googleSignInUseCase: MockGoogleSignInUseCase()
+                googleSignInUseCase: MockGoogleSignInUseCase(),
+                appleSignInUseCase: MockAppleSignInUseCase()
             ),
             forgotPasswordViewModelFactory: {
                 ForgotPasswordViewModel(

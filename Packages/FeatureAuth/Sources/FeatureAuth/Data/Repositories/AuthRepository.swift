@@ -49,6 +49,19 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
         return AuthMapper.toAuthSession(response)
     }
 
+    public func signInWithApple(idToken: String) async throws -> AuthSession {
+        let session = SessionMetadata.current
+        let dto = AppleSignInRequestDTO(
+            idToken: idToken,
+            deviceInfo: session.deviceInfo,
+            deviceName: session.deviceName,
+            loginLocation: session.loginLocation
+        )
+        let response: AuthResponseDTO = try await apiClient.request(AuthEndpoint.appleSignIn(dto))
+        try await persistSession(response)
+        return AuthMapper.toAuthSession(response)
+    }
+
     public func login(email: String, password: String) async throws -> AuthSession {
         let session = SessionMetadata.current
         let dto = LoginRequestDTO(

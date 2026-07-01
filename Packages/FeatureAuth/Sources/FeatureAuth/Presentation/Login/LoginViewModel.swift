@@ -39,6 +39,8 @@ public final class LoginViewModel: ObservableObject {
     @Published var state: LoadingState<AuthSession> = .idle
     @Published var passwordStrength: PasswordStrengthResult = .empty
     @Published var showPasswordRequirements = false
+    @Published var hasAcceptedLegalTerms = false
+    @Published var legalConsentError: String?
 
     @Published private(set) var lookupState: IdentifierLookupState = .pending
     @Published private(set) var identifierStatus: FieldValidationStatus = .neutral
@@ -53,7 +55,9 @@ public final class LoginViewModel: ObservableObject {
     private let requestPhoneOtpUseCase: RequestPhoneOtpUseCaseProtocol
     private let verifyPhoneOtpUseCase: VerifyPhoneOtpUseCaseProtocol
     private let googleSignInUseCase: GoogleSignInUseCaseProtocol
+    private let appleSignInUseCase: AppleSignInUseCaseProtocol
     private weak var googleSignInPresenter: GoogleSignInPresenting?
+    private weak var appleSignInPresenter: AppleSignInPresenting?
 
     private static let minUsernameLength = 3
     private static let minimumRegistrationAgeYears = 13
@@ -87,6 +91,10 @@ public final class LoginViewModel: ObservableObject {
 
     private var normalizedPhone: String { identifier.normalizedE164Phone }
 
+    public var isAppleSignInAvailable: Bool {
+        appleSignInPresenter?.isAvailable == true
+    }
+
     public var isGoogleSignInAvailable: Bool {
         googleSignInPresenter?.isAvailable == true
     }
@@ -99,7 +107,9 @@ public final class LoginViewModel: ObservableObject {
         requestPhoneOtpUseCase: RequestPhoneOtpUseCaseProtocol,
         verifyPhoneOtpUseCase: VerifyPhoneOtpUseCaseProtocol,
         googleSignInUseCase: GoogleSignInUseCaseProtocol,
-        googleSignInPresenter: GoogleSignInPresenting? = nil
+        appleSignInUseCase: AppleSignInUseCaseProtocol,
+        googleSignInPresenter: GoogleSignInPresenting? = nil,
+        appleSignInPresenter: AppleSignInPresenting? = nil
     ) {
         self.checkIdentifierUseCase = checkIdentifierUseCase
         self.loginUseCase = loginUseCase
@@ -108,7 +118,9 @@ public final class LoginViewModel: ObservableObject {
         self.requestPhoneOtpUseCase = requestPhoneOtpUseCase
         self.verifyPhoneOtpUseCase = verifyPhoneOtpUseCase
         self.googleSignInUseCase = googleSignInUseCase
+        self.appleSignInUseCase = appleSignInUseCase
         self.googleSignInPresenter = googleSignInPresenter
+        self.appleSignInPresenter = appleSignInPresenter
     }
 
     func onIdentifierChanged() {
@@ -280,6 +292,11 @@ public final class LoginViewModel: ObservableObject {
         validateDateOfBirthField()
         validatePasswordField()
         validateConfirmPasswordField()
+        guard hasAcceptedLegalTerms else {
+            legalConsentError = "required"
+            return
+        }
+        legalConsentError = nil
         guard canSubmitRegistration else { return }
 
         state = .loading
@@ -450,6 +467,31 @@ public final class LoginViewModel: ObservableObject {
         }
     }
 
+    func signInWithApple() async {
+        guard let appleSignInPresenter, appleSignInPresenter.isAvailable else {
+            state = .failed("Sign in with Apple is not available.")
+            return
+        }
+
+        state = .loading
+        do {
+            let idToken = try await appleSignInPresenter.fetchIdToken()
+            let session = try await appleSignInUseCase.execute(idToken: idToken)
+            state = .loaded(session)
+            Log.info("Apple sign-in successful for \(session.user.username)", category: .auth)
+        } catch AppleSignInError.cancelled {
+            state = .idle
+        } catch let error as NetworkError where error.isConnectivityIssue {
+            state = .failed(error.userMessage)
+        } catch let error as NetworkError {
+            state = .failed(error.userMessage)
+        } catch let error as AuthError {
+            state = .failed(error.userMessage)
+        } catch {
+            state = .failed(error.localizedDescription)
+        }
+    }
+
     var credentialsSubmitDisabled: Bool {
         guard !state.isLoading else { return true }
 
@@ -471,7 +513,8 @@ public final class LoginViewModel: ObservableObject {
     }
 
     private var canSubmitRegistration: Bool {
-        usernameError == nil
+        hasAcceptedLegalTerms
+            && usernameError == nil
             && displayNameError == nil
             && dateOfBirthError == nil
             && passwordError == nil
@@ -498,6 +541,8 @@ public final class LoginViewModel: ObservableObject {
         passwordStatus = .neutral
         confirmPasswordStatus = .neutral
         usernameStatus = .neutral
+        hasAcceptedLegalTerms = false
+        legalConsentError = nil
     }
 
     private func loginWithEmail() async {

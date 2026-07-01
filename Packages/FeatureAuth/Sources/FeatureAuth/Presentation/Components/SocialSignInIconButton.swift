@@ -3,8 +3,8 @@ import DesignSystem
 
 struct SocialSignInIconButton: View {
     enum Provider {
+        case apple
         case google
-        case facebook
     }
 
     let provider: Provider
@@ -36,6 +36,13 @@ struct SocialSignInIconButton: View {
     @ViewBuilder
     private var providerContent: some View {
         switch provider {
+        case .apple:
+            ZStack {
+                providerBackground
+                Image(systemName: "apple.logo")
+                    .font(.system(size: Self.iconSize, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
         case .google:
             ZStack {
                 providerBackground
@@ -44,21 +51,16 @@ struct SocialSignInIconButton: View {
                     .scaledToFit()
                     .frame(width: Self.iconSize, height: Self.iconSize)
             }
-        case .facebook:
-            ZStack {
-                providerBackground
-                Text("f")
-                    .font(.system(size: Self.facebookGlyphFontSize, weight: .black))
-                    .foregroundStyle(.white)
-                    .frame(width: Self.facebookGlyphFrameSize, height: Self.facebookGlyphFrameSize)
-                    .offset(x: Self.facebookGlyphXOffset, y: Self.facebookGlyphYOffset)
-            }
         }
     }
 
     @ViewBuilder
     private var providerBackground: some View {
         switch provider {
+        case .apple:
+            Circle()
+                .fill(Color.black)
+                .shadow(color: Color.black.opacity(0.04), radius: 2, y: 1)
         case .google:
             Circle()
                 .fill(Color.white)
@@ -70,10 +72,6 @@ struct SocialSignInIconButton: View {
                         )
                 }
                 .shadow(color: Color.black.opacity(0.04), radius: 2, y: 1)
-        case .facebook:
-            Circle()
-                .fill(Self.facebookBlue)
-                .shadow(color: Color.black.opacity(0.04), radius: 2, y: 1)
         }
     }
 }
@@ -81,18 +79,13 @@ struct SocialSignInIconButton: View {
 private extension SocialSignInIconButton {
     static let buttonSize: CGFloat = 45
     static let iconSize: CGFloat = 21
-    static let facebookBlue = Color(red: 24 / 255, green: 119 / 255, blue: 242 / 255)
-    static let facebookGlyphFrameSize: CGFloat = 22
-    static let facebookGlyphFontSize: CGFloat = 23
-    static let facebookGlyphXOffset: CGFloat = 0.6
-    static let facebookGlyphYOffset: CGFloat = -0.2
 }
 
 #if DEBUG
 #Preview("Social icons") {
     HStack(spacing: 20) {
+        SocialSignInIconButton(provider: .apple, accessibilityLabel: "Apple") {}
         SocialSignInIconButton(provider: .google, accessibilityLabel: "Google") {}
-        SocialSignInIconButton(provider: .facebook, accessibilityLabel: "Facebook") {}
     }
     .padding()
 }

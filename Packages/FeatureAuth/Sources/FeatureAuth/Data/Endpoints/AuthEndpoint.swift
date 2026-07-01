@@ -5,6 +5,7 @@ enum AuthEndpoint: APIEndpoint {
     case checkIdentifier(CheckIdentifierRequestDTO)
     case checkUsername(CheckUsernameRequestDTO)
     case googleSignIn(GoogleSignInRequestDTO)
+    case appleSignIn(AppleSignInRequestDTO)
     case login(LoginRequestDTO)
     case requestEmailOtp(EmailOtpRequestDTO)
     case requestPhoneOtp(PhoneOtpRequestDTO)
@@ -40,6 +41,7 @@ enum AuthEndpoint: APIEndpoint {
         case .checkIdentifier: return "/v1/auth/identifier/check"
         case .checkUsername: return "/v1/auth/username/check"
         case .googleSignIn: return "/v1/auth/google"
+        case .appleSignIn: return "/v1/auth/apple"
         case .login: return "/v1/auth/login"
         case .requestEmailOtp: return "/v1/auth/email/otp/request"
         case .requestPhoneOtp: return "/v1/auth/phone/otp/request"
@@ -71,7 +73,7 @@ enum AuthEndpoint: APIEndpoint {
 
     var method: HTTPMethod {
         switch self {
-        case .checkIdentifier, .googleSignIn, .login, .requestEmailOtp, .requestPhoneOtp, .verifyPhoneOtp,
+        case .checkIdentifier, .googleSignIn, .appleSignIn, .login, .requestEmailOtp, .requestPhoneOtp, .verifyPhoneOtp,
              .registerEmail, .registerPhone, .refreshToken,
              .forgotPassword, .resetPassword, .changePassword, .verifyPasswordChange, .logout, .revokeAllSessions,
              .deactivateAccount, .linkGoogle, .requestLinkPhoneOtp, .linkPhone,
@@ -93,6 +95,7 @@ enum AuthEndpoint: APIEndpoint {
         case .checkIdentifier(let dto): return dto
         case .checkUsername(let dto): return dto
         case .googleSignIn(let dto): return dto
+        case .appleSignIn(let dto): return dto
         case .login(let dto): return dto
         case .requestEmailOtp(let dto): return dto
         case .requestPhoneOtp(let dto): return dto
@@ -136,7 +139,7 @@ enum AuthEndpoint: APIEndpoint {
 
     var requiresAuth: Bool {
         switch self {
-        case .checkIdentifier, .googleSignIn, .login, .requestEmailOtp, .requestPhoneOtp, .verifyPhoneOtp,
+        case .checkIdentifier, .googleSignIn, .appleSignIn, .login, .requestEmailOtp, .requestPhoneOtp, .verifyPhoneOtp,
              .registerEmail, .registerPhone, .refreshToken,
              .forgotPassword, .resetPassword:
             return false

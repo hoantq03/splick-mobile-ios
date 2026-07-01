@@ -5,6 +5,7 @@ public protocol AuthRepositoryProtocol: Sendable {
     func checkIdentifier(email: String?, phoneNumber: String?) async throws -> Bool
     func checkUsernameAvailability(_ username: String) async throws -> Bool
     func signInWithGoogle(idToken: String) async throws -> AuthSession
+    func signInWithApple(idToken: String) async throws -> AuthSession
     func login(email: String, password: String) async throws -> AuthSession
     func requestEmailOtp(email: String) async throws
     func requestPhoneOtp(phoneNumber: String) async throws

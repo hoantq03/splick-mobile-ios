@@ -86,7 +86,9 @@ struct RootView: View {
                     requestPhoneOtpUseCase: container.requestPhoneOtpUseCase,
                     verifyPhoneOtpUseCase: container.verifyPhoneOtpUseCase,
                     googleSignInUseCase: container.googleSignInUseCase,
-                    googleSignInPresenter: GoogleSignInClient.shared
+                    appleSignInUseCase: container.appleSignInUseCase,
+                    googleSignInPresenter: GoogleSignInClient.shared,
+                    appleSignInPresenter: AppleSignInClient.shared
                 ),
                 forgotPasswordViewModelFactory: {
                     ForgotPasswordViewModel(

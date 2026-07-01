@@ -61,6 +61,10 @@ final class DependencyContainer: ObservableObject {
         GoogleSignInUseCase(repository: authRepository, sessionManager: sessionManager)
     }()
 
+    lazy var appleSignInUseCase: AppleSignInUseCaseProtocol = {
+        AppleSignInUseCase(repository: authRepository, sessionManager: sessionManager)
+    }()
+
     lazy var registerUseCase: RegisterUseCaseProtocol = {
         RegisterUseCase(repository: authRepository, sessionManager: sessionManager)
     }()

@@ -12,6 +12,7 @@ public struct LoginView: View {
     private let onAuthenticated: ((User) -> Void)?
     @State private var showForgotPassword = false
     @State private var showDateOfBirthPicker = false
+    @State private var presentedLegalDocument: LegalDocumentType?
 
     private static let fieldCornerRadius = SplickTheme.CornerRadius.pill
 
@@ -58,6 +59,10 @@ public struct LoginView: View {
         }
         .sheet(isPresented: $showDateOfBirthPicker) {
             dateOfBirthPickerSheet
+        }
+        .sheet(item: $presentedLegalDocument) { documentType in
+            LegalDocumentSheet(documentType: documentType)
+                .environmentObject(languageService)
         }
         .onChange(of: viewModel.state) { state in
             if case .loaded(let session) = state {
@@ -115,6 +120,10 @@ public struct LoginView: View {
                         .multilineTextAlignment(.center)
                 }
 
+                if viewModel.step == .credentials {
+                    credentialsLegalFooter
+                }
+
                 if viewModel.step == .credentials, showsSocialSignIn {
                     socialSignInSection
                 }
@@ -123,6 +132,29 @@ public struct LoginView: View {
             .padding(.top, SplickTheme.Spacing.xxl)
         }
         .scrollDismissesKeyboard(.interactively)
+    }
+
+    private var credentialsLegalFooter: some View {
+        VStack(spacing: SplickTheme.Spacing.xs) {
+            LegalLinksFooter(
+                hasAcceptedTerms: $viewModel.hasAcceptedLegalTerms,
+                showsConsentCheckbox: viewModel.showsRegistrationFields,
+                onOpenTerms: { presentedLegalDocument = .terms },
+                onOpenPrivacy: { presentedLegalDocument = .privacy }
+            )
+            .onChange(of: viewModel.hasAcceptedLegalTerms) { accepted in
+                if accepted {
+                    viewModel.legalConsentError = nil
+                }
+            }
+
+            if viewModel.legalConsentError != nil {
+                Text(languageService.text(.legalConsentRequiredError))
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.error)
+                    .multilineTextAlignment(.center)
+            }
+        }
     }
 
     private var showsSocialSignIn: Bool {
@@ -382,20 +414,21 @@ public struct LoginView: View {
 
             HStack(spacing: SplickTheme.Spacing.lg) {
                 SocialSignInIconButton(
+                    provider: .apple,
+                    accessibilityLabel: languageService.text(.authSignInWithApple),
+                    isLoading: viewModel.state.isLoading,
+                    isDisabled: !viewModel.isAppleSignInAvailable || viewModel.state.isLoading
+                ) {
+                    Task { await viewModel.signInWithApple() }
+                }
+
+                SocialSignInIconButton(
                     provider: .google,
                     accessibilityLabel: languageService.text(.authSignInWithGoogle),
                     isLoading: viewModel.state.isLoading,
                     isDisabled: !viewModel.isGoogleSignInAvailable || viewModel.state.isLoading
                 ) {
                     Task { await viewModel.signInWithGoogle() }
-                }
-
-                SocialSignInIconButton(
-                    provider: .facebook,
-                    accessibilityLabel: languageService.text(.authSignInWithFacebook),
-                    isDisabled: viewModel.state.isLoading
-                ) {
-                    viewModel.state = .failed(languageService.text(.authFacebookComingSoon))
                 }
             }
         }
