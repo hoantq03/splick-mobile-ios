@@ -10,6 +10,10 @@ struct BillSplitSectionView: View {
     let onUserTap: (UserSummary) -> Void
     var onSendReminder: ((UserSummary, String) -> Void)?
     var onSendAllReminders: (([UserSummary], String) -> Void)?
+    var paymentStatus: PaymentSplitStatus?
+    var evidenceWasRejected: Bool = false
+    var postAuthorName: String?
+    var onPaymentTap: (() -> Void)?
 
     @State private var isExpanded: Bool
     @State private var reminderTarget: UserSummary?
@@ -41,30 +45,49 @@ struct BillSplitSectionView: View {
         onUserTap: @escaping (UserSummary) -> Void,
         initiallyExpanded: Bool = false,
         onSendReminder: ((UserSummary, String) -> Void)? = nil,
-        onSendAllReminders: (([UserSummary], String) -> Void)? = nil
+        onSendAllReminders: (([UserSummary], String) -> Void)? = nil,
+        paymentStatus: PaymentSplitStatus? = nil,
+        evidenceWasRejected: Bool = false,
+        postAuthorName: String? = nil,
+        onPaymentTap: (() -> Void)? = nil
     ) {
         self.bill = bill
         self.onUserTap = onUserTap
         self.onSendReminder = onSendReminder
         self.onSendAllReminders = onSendAllReminders
+        self.paymentStatus = paymentStatus
+        self.evidenceWasRejected = evidenceWasRejected
+        self.postAuthorName = postAuthorName
+        self.onPaymentTap = onPaymentTap
         _isExpanded = State(initialValue: initiallyExpanded)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Group {
-                if isExpanded {
-                    Button {
-                        toggleExpanded()
-                    } label: {
-                        headerRow
+            VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxs) {
+                Group {
+                    if isExpanded {
+                        Button {
+                            toggleExpanded()
+                        } label: {
+                            headerSummaryRow
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        headerSummaryRow
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                toggleExpanded()
+                            }
                     }
-                    .buttonStyle(.plain)
-                } else {
-                    headerRow
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                if paymentStatus != nil, onPaymentTap != nil {
+                    headerFooterRow
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, SplickTheme.Spacing.xs)
 
             if isExpanded {
                 Divider()
@@ -74,10 +97,6 @@ struct BillSplitSectionView: View {
             }
         }
         .contentShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous))
-        .onTapGesture {
-            guard !isExpanded else { return }
-            toggleExpanded()
-        }
         .sheet(item: $reminderTarget) { user in
             BillReminderSheet(
                 user: user,
@@ -106,13 +125,16 @@ struct BillSplitSectionView: View {
         }
     }
 
-    private var headerRow: some View {
+    private var headerSummaryRow: some View {
         HStack(spacing: SplickTheme.Spacing.xs) {
             Image(systemName: isFullySettled ? "checkmark.circle.fill" : "dollarsign.circle.fill")
                 .font(.body)
                 .scaleEffect(1.3)
                 .foregroundStyle(SplickTheme.Colors.success)
                 .accessibilityLabel(languageService.text(.feedBillSplitTitle))
+            Text(languageService.text(.feedBillTotalLabel))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
             Text(formatMoney(bill.totalAmount, currency: bill.currency))
                 .font(SplickTheme.Typography.headline)
                 .foregroundStyle(
@@ -122,23 +144,7 @@ struct BillSplitSectionView: View {
                 )
             Spacer()
             if totalCount > 0 {
-                Text(languageService.format(.feedBillPaidCount, paidCount, totalCount))
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(
-                        isFullySettled
-                            ? SplickTheme.Colors.success
-                            : SplickTheme.Colors.textSecondary
-                    )
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(
-                        Capsule()
-                            .fill(
-                                isFullySettled
-                                    ? SplickTheme.Colors.success.opacity(0.12)
-                                    : SplickTheme.Colors.secondaryBackground
-                            )
-                    )
+                paidCountBadge
             }
             if isFullySettled {
                 Text(languageService.text(.feedBillSettled))
@@ -151,8 +157,52 @@ struct BillSplitSectionView: View {
             }
         }
         .padding(.horizontal, SplickTheme.Spacing.sm)
-        .padding(.vertical, SplickTheme.Spacing.xs)
         .contentShape(Rectangle())
+    }
+
+    private var paidCountBadge: some View {
+        Text(languageService.format(.feedBillPaidCount, paidCount, totalCount))
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(
+                isFullySettled
+                    ? SplickTheme.Colors.success
+                    : SplickTheme.Colors.textSecondary
+            )
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                Capsule()
+                    .fill(
+                        isFullySettled
+                            ? SplickTheme.Colors.success.opacity(0.12)
+                            : SplickTheme.Colors.secondaryBackground
+                    )
+            )
+    }
+
+    private var headerFooterRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let paymentStatus, let onPaymentTap {
+                HStack(spacing: SplickTheme.Spacing.xs) {
+                    PaymentStatusCTA(
+                        status: paymentStatus,
+                        evidenceWasRejected: evidenceWasRejected,
+                        onPay: onPaymentTap
+                    )
+                    Spacer(minLength: 0)
+                }
+
+                if let postAuthorName {
+                    PaymentStatusHintView(
+                        status: paymentStatus,
+                        authorName: postAuthorName,
+                        evidenceWasRejected: evidenceWasRejected,
+                        onAction: onPaymentTap
+                    )
+                }
+            }
+        }
+        .padding(.horizontal, SplickTheme.Spacing.sm)
     }
 
     private var expandedContent: some View {

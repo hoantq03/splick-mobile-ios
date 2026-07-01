@@ -317,6 +317,16 @@ struct PostCardView: View {
                                 count: users.count
                             )
                         }
+                        : nil,
+                    paymentStatus: shouldShowPaymentCTA ? currentUserSplitLine?.paymentStatus : nil,
+                    evidenceWasRejected: currentUserSplitLine?.lastRejectedAt != nil,
+                    postAuthorName: shouldShowPaymentCTA ? post.author.displayName : nil,
+                    onPaymentTap: shouldShowPaymentCTA
+                        ? {
+                            if currentUserSplitLine?.paymentStatus == .unpaid {
+                                showPaymentEvidenceSheet = true
+                            }
+                        }
                         : nil
                 )
             }
@@ -357,13 +367,7 @@ struct PostCardView: View {
 
             Spacer(minLength: 0)
 
-            if shouldShowPaymentCTA, let split = currentUserSplitLine {
-                PaymentStatusCTA(status: split.paymentStatus) {
-                    if split.paymentStatus == .unpaid {
-                        showPaymentEvidenceSheet = true
-                    }
-                }
-            } else if isAuthor {
+            if isAuthor {
                 viewsEntryButton
             }
         }

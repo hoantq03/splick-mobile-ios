@@ -6,16 +6,35 @@ import SplickDomain
 struct PaymentStatusCTA: View {
     @EnvironmentObject private var languageService: LanguageService
 
+    enum Style {
+        case pill
+        case inline
+    }
+
     let status: PaymentSplitStatus
+    var evidenceWasRejected: Bool = false
+    var style: Style = .pill
     let onPay: () -> Void
 
     var body: some View {
         Button(action: onPay) {
+            label
+        }
+        .buttonStyle(.plain)
+        .disabled(!isActionable)
+    }
+
+    @ViewBuilder
+    private var label: some View {
+        switch style {
+        case .pill:
             HStack(spacing: 4) {
                 Image(systemName: iconName)
                     .font(.system(size: 12, weight: .semibold))
                 Text(title)
                     .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
             }
             .foregroundStyle(foregroundColor)
             .padding(.horizontal, 10)
@@ -23,9 +42,16 @@ struct PaymentStatusCTA: View {
             .background(
                 Capsule().fill(backgroundColor)
             )
+        case .inline:
+            HStack(spacing: 3) {
+                Image(systemName: iconName)
+                    .font(.system(size: 11, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 11, weight: .semibold))
+                    .underline()
+            }
+            .foregroundStyle(foregroundColor)
         }
-        .buttonStyle(.plain)
-        .disabled(!isActionable)
     }
 
     private var isActionable: Bool {
@@ -35,19 +61,24 @@ struct PaymentStatusCTA: View {
     private var title: String {
         switch status {
         case .unpaid:
-            return languageService.text(.feedPaymentPay)
+            return evidenceWasRejected
+                ? languageService.text(.feedPaymentStatusResubmitEvidence)
+                : languageService.text(.feedPaymentStatusSubmitEvidence)
         case .pendingApproval:
-            return languageService.text(.feedPaymentPending)
+            return languageService.text(.feedPaymentStatusPendingApproval)
         case .paid:
-            return languageService.text(.feedPaymentPaid)
+            return languageService.text(.feedPaymentStatusPaid)
         }
     }
 
     private var iconName: String {
         switch status {
-        case .unpaid: return "banknote"
-        case .pendingApproval: return "clock"
-        case .paid: return "checkmark.circle.fill"
+        case .unpaid:
+            return evidenceWasRejected ? "arrow.clockwise" : "photo.on.rectangle"
+        case .pendingApproval:
+            return "clock"
+        case .paid:
+            return "checkmark.circle.fill"
         }
     }
 
