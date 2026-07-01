@@ -26,6 +26,7 @@ public final class ExpenseListViewModel: ObservableObject {
     private let groupId: UUID?
     private(set) var currentUserId: UUID?
     private var currentPage = 0
+    private var pullToRefreshTask: Task<Void, Never>?
 
     public init(
         fetchExpensesUseCase: FetchExpensesUseCaseProtocol,
@@ -91,12 +92,27 @@ public final class ExpenseListViewModel: ObservableObject {
 
     public func load(isPullToRefresh: Bool = false) async {
         if isPullToRefresh {
-            guard !isRefreshing else { return }
-            isRefreshing = true
-        } else {
-            state = .loading
+            if let existing = pullToRefreshTask {
+                await existing.value
+                return
+            }
+
+            let task = Task { @MainActor in
+                isRefreshing = true
+                defer { isRefreshing = false }
+                await performLoad(isPullToRefresh: true)
+            }
+            pullToRefreshTask = task
+            await task.value
+            pullToRefreshTask = nil
+            return
         }
 
+        state = .loading
+        await performLoad(isPullToRefresh: false)
+    }
+
+    private func performLoad(isPullToRefresh: Bool) async {
         currentPage = 0
         Log.info("Loading expenses", category: .expense, metadata: ["pullToRefresh": String(isPullToRefresh)])
 
@@ -123,8 +139,6 @@ public final class ExpenseListViewModel: ObservableObject {
             }
             Log.error(error, category: .expense)
         }
-
-        isRefreshing = false
     }
 
     func loadMore() async {

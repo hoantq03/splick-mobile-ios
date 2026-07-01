@@ -19,8 +19,10 @@ public struct ExpenseListView: View {
     @State private var captionQueryDraft = ""
     @State private var friendQueryDraft = ""
     @State private var profileRoute: ExpenseUserProfileRoute?
+    @State private var refreshController = SplickRefreshController()
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.tabBarScrollState) private var tabBarScrollState
+    @Environment(\.pullToRefreshActive) private var pullToRefreshActive
     @Environment(\.openPostCaptureFlow) private var openPostCaptureFlow
     @Environment(\.openLinkedPost) private var openLinkedPost
     @Environment(\.openProfileSettings) private var openProfileSettings
@@ -71,7 +73,6 @@ public struct ExpenseListView: View {
                 }
             }
             .splickTabScreenHeader(languageService.text(.expenseTitle))
-            .refreshable { await viewModel.load(isPullToRefresh: true) }
         }
         .onFirstAppear {
             viewModel.updateCurrentUserId(currentUserId)
@@ -92,11 +93,6 @@ public struct ExpenseListView: View {
         }
     }
 
-    private var sameTabTapPublisher: AnyPublisher<Void, Never> {
-        tabBarScrollState?.sameTabTapSubject.eraseToAnyPublisher()
-            ?? Empty().eraseToAnyPublisher()
-    }
-
     private var expenseContent: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -106,20 +102,26 @@ public struct ExpenseListView: View {
                     expenseRecordsSection
                 }
                 .padding(.horizontal, SplickTheme.Spacing.md)
+                .transaction { transaction in
+                    if pullToRefreshActive {
+                        transaction.animation = nil
+                    }
+                }
             }
             .tabBarHideOnScroll()
+            .splickNativeRefreshable(controller: refreshController) {
+                await viewModel.load(isPullToRefresh: true)
+            }
+            .splickSameTabTapBehavior(
+                scrollTopID: "expenseScrollTop",
+                scrollProxy: proxy,
+                refreshController: refreshController
+            ) {
+                tabBarScrollState?.isAtTop == true
+            }
             .onAppear {
                 if captionQueryDraft.isEmpty {
                     captionQueryDraft = viewModel.filters.captionQuery
-                }
-            }
-            .onReceive(sameTabTapPublisher) { _ in
-                if tabBarScrollState?.isAtTop == true {
-                    Task { await viewModel.load(isPullToRefresh: true) }
-                } else {
-                    withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
-                        proxy.scrollTo("expenseScrollTop", anchor: .top)
-                    }
                 }
             }
         }
@@ -146,7 +148,7 @@ public struct ExpenseListView: View {
                         )
                 }
             }
-            .animation(listFilterAnimation, value: viewModel.filterSignature)
+            .animation(pullToRefreshActive ? nil : listFilterAnimation, value: viewModel.filterSignature)
         }
     }
 
@@ -231,7 +233,7 @@ public struct ExpenseListView: View {
                         )
                 }
         }
-        .animation(overviewToggleAnimation, value: isOverviewExpanded)
+        .animation(pullToRefreshActive ? nil : overviewToggleAnimation, value: isOverviewExpanded)
     }
 
     private var overviewSectionHeader: some View {
@@ -469,7 +471,9 @@ public struct ExpenseListView: View {
                     )
                 )
                 .animation(
-                    listFilterAnimation.delay(listRowRevealDelay(index: index, total: expenses.count)),
+                    pullToRefreshActive
+                        ? nil
+                        : listFilterAnimation.delay(listRowRevealDelay(index: index, total: expenses.count)),
                     value: viewModel.filterSignature
                 )
 
@@ -479,7 +483,10 @@ public struct ExpenseListView: View {
                 }
             }
         }
-        .animation(listFilterAnimation, value: viewModel.displayedExpenses.map(\.id))
+        .animation(
+            pullToRefreshActive ? nil : listFilterAnimation,
+            value: viewModel.displayedExpenses.map(\.id)
+        )
         .background {
             RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous)
                 .fill(SplickTheme.Colors.cardBackground)
