@@ -98,6 +98,7 @@ extension EnvironmentValues {
 public struct TabBarHideOnScrollModifier: ViewModifier {
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.scrollChromeTrackingEnabled) private var scrollChromeTrackingEnabled
+    @Environment(\.pullToRefreshActive) private var pullToRefreshActive
 
     public init() {}
 
@@ -107,7 +108,7 @@ public struct TabBarHideOnScrollModifier: ViewModifier {
                 content.onScrollGeometryChange(for: CGFloat.self) { geometry in
                     geometry.contentOffset.y + geometry.contentInsets.top
                 } action: { _, offset in
-                    guard scrollChromeTrackingEnabled else { return }
+                    guard scrollChromeTrackingEnabled, !pullToRefreshActive else { return }
                     tabBarScrollState.updateScrollOffset(offset)
                 }
             } else {

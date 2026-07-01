@@ -214,12 +214,7 @@ public struct FeedView: View {
     }
 
     private var feedList: some View {
-        FeedPullToRefreshScrollView(
-            isRefreshing: Binding(
-                get: { viewModel.isRefreshing },
-                set: { _ in }
-            )
-        ) {
+        FeedPullToRefreshScrollView {
             FeedScrollLock.forceUnlock()
             feedScrollLocked = false
             defer {

@@ -48,6 +48,7 @@ extension View {
 }
 
 private struct FeedPagerScrollInsetsModifier: ViewModifier {
+    @Environment(\.pullToRefreshActive) private var pullToRefreshActive
     @State private var topMargin: CGFloat = FeedPagerTopInsetMetrics.defaultScrollTopMargin
 
     func body(content: Content) -> some View {
@@ -74,6 +75,7 @@ private struct FeedPagerScrollInsetsModifier: ViewModifier {
     }
 
     private func applyTopMargin(from geometry: GeometryProxy) {
+        guard !pullToRefreshActive else { return }
         let next = FeedPagerTopInsetMetrics.resolvedTopMargin(for: geometry)
         guard abs(next - topMargin) > 0.5 else { return }
         topMargin = next
