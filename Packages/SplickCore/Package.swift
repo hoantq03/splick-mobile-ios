@@ -22,7 +22,8 @@ let package = Package(
             dependencies: [
                 .product(name: "SplickDomain", package: "SplickDomain"),
             ],
-            path: "Sources/Common"
+            path: "Sources/Common",
+            resources: [.process("Resources")]
         ),
         .target(
             name: "Localization",
