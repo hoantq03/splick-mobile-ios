@@ -9,9 +9,18 @@ public struct ConversationListView: View {
     @ObservedObject private var viewModel: ConversationListViewModel
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.tabBarScrollState) private var tabBarScrollState
+    @Environment(\.pullToRefreshActive) private var pullToRefreshActive
+    @State private var isPullRefreshing = false
+
+    private var suppressRefreshAnimations: Bool {
+        pullToRefreshActive || isPullRefreshing
+    }
     @State private var path = NavigationPath()
     @State private var searchDraft = ""
     @State private var scrollTopSignal = 0
+    @State private var searchScrollTopSignal = 0
+    @State private var refreshController = SplickRefreshController()
+    @State private var searchRefreshController = SplickRefreshController()
     @FocusState private var isSearchFocused: Bool
 
     private var sameTabTapPublisher: AnyPublisher<Void, Never> {
@@ -42,15 +51,12 @@ public struct ConversationListView: View {
                     }
                 }
             }
-            .animation(MessagingSearchChromeAnimation.resultsSpring, value: isSearching)
+            .animation(
+                suppressRefreshAnimations ? nil : MessagingSearchChromeAnimation.resultsSpring,
+                value: isSearching
+            )
+            .onPreferenceChange(PullToRefreshActivePreferenceKey.self) { isPullRefreshing = $0 }
             .splickTabScreenHeader(languageService.text(.messagingTitle), showsBell: false)
-            .refreshable {
-                if isSearching {
-                    viewModel.onSearchQueryChanged(searchDraft)
-                } else {
-                    await viewModel.refresh()
-                }
-            }
             .navigationDestination(for: ChatThreadRoute.self) { route in
                 ChatThreadNavigationWrapper(
                     conversation: route.conversation,
@@ -81,7 +87,14 @@ public struct ConversationListView: View {
         }
         .onReceive(sameTabTapPublisher) { _ in
             if tabBarScrollState?.isAtTop == true {
-                Task { await viewModel.refresh() }
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                if isSearching {
+                    searchRefreshController.refresh()
+                } else {
+                    refreshController.refresh()
+                }
+            } else if isSearching {
+                searchScrollTopSignal += 1
             } else {
                 scrollTopSignal += 1
             }
@@ -161,27 +174,45 @@ public struct ConversationListView: View {
     }
 
     private func searchResultsList(_ results: [MessagingSearchResult]) -> some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(results) { result in
-                    Button {
-                        Task { await openSearchResult(result) }
-                    } label: {
-                        MessagingSearchResultRowView(
-                            result: result,
-                            query: viewModel.activeSearchQuery,
-                            isStarting: viewModel.isStartingConversation
-                        )
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    Color.clear.frame(height: 0).id("messagingSearchScrollTop")
+                    ForEach(results) { result in
+                        Button {
+                            Task { await openSearchResult(result) }
+                        } label: {
+                            MessagingSearchResultRowView(
+                                result: result,
+                                query: viewModel.activeSearchQuery,
+                                isStarting: viewModel.isStartingConversation
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(viewModel.isStartingConversation)
+                        Divider()
+                            .padding(.leading, 56)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(viewModel.isStartingConversation)
-                    Divider()
-                        .padding(.leading, 56)
+                }
+                .padding(.horizontal, SplickTheme.Spacing.md)
+                .transaction { transaction in
+                    if suppressRefreshAnimations {
+                        transaction.animation = nil
+                    }
                 }
             }
-            .padding(.horizontal, SplickTheme.Spacing.md)
+            .id("messagingSearchScroll")
+            .scrollDismissesKeyboard(.interactively)
+            .tabBarHideOnScroll()
+            .splickNativeRefreshable(controller: searchRefreshController) {
+                await viewModel.refreshSearch(query: searchDraft)
+            }
+            .onChange(of: searchScrollTopSignal) { _ in
+                withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                    proxy.scrollTo("messagingSearchScrollTop", anchor: .top)
+                }
+            }
         }
-        .scrollDismissesKeyboard(.interactively)
     }
 
     private func dismissSearch() {
@@ -229,8 +260,18 @@ public struct ConversationListView: View {
                     }
                 }
                 .padding(.horizontal, SplickTheme.Spacing.md)
+                .transaction { transaction in
+                    if suppressRefreshAnimations {
+                        transaction.animation = nil
+                    }
+                }
             }
+            .id("messagingConversationScroll")
             .scrollDismissesKeyboard(.interactively)
+            .tabBarHideOnScroll()
+            .splickNativeRefreshable(controller: refreshController) {
+                await viewModel.refresh()
+            }
             .onChange(of: scrollTopSignal) { _ in
                 withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
                     proxy.scrollTo("messagingScrollTop", anchor: .top)
@@ -255,7 +296,7 @@ public struct ConversationListView: View {
                 .textInputAutocapitalization(.never)
                 .focused($isSearchFocused)
 
-                if viewModel.isRefreshingSearch {
+                if viewModel.isRefreshingSearch, !suppressRefreshAnimations {
                     ProgressView()
                         .controlSize(.small)
                 }
@@ -274,7 +315,13 @@ public struct ConversationListView: View {
         }
         .padding(.horizontal, SplickTheme.Spacing.md)
         .padding(.bottom, SplickTheme.Spacing.sm)
-        .animation(MessagingSearchChromeAnimation.focusSpring, value: isSearching)
-        .animation(MessagingSearchChromeAnimation.focusSpring, value: isSearchFocused)
+        .animation(
+            suppressRefreshAnimations ? nil : MessagingSearchChromeAnimation.focusSpring,
+            value: isSearching
+        )
+        .animation(
+            suppressRefreshAnimations ? nil : MessagingSearchChromeAnimation.focusSpring,
+            value: isSearchFocused
+        )
     }
 }

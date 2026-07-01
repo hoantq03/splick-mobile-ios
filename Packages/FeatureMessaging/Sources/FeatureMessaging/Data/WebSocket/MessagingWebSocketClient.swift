@@ -84,8 +84,9 @@ public final class MessagingWebSocketClient: ObservableObject {
 
     private func sendPing(on task: URLSessionWebSocketTask) async -> Bool {
         await withCheckedContinuation { continuation in
+            let gate = ContinuationGate(continuation)
             task.sendPing { error in
-                continuation.resume(returning: error == nil)
+                gate.resume(returning: error == nil)
             }
         }
     }
@@ -162,5 +163,23 @@ public final class MessagingWebSocketClient: ObservableObject {
 
     private struct WsEventEnvelope: Decodable {
         let type: String
+    }
+}
+
+/// URLSessionWebSocketTask.sendPing may invoke its handler more than once when the task is cancelled.
+private final class ContinuationGate<T>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<T, Never>?
+
+    init(_ continuation: CheckedContinuation<T, Never>) {
+        self.continuation = continuation
+    }
+
+    func resume(returning value: T) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let continuation else { return }
+        self.continuation = nil
+        continuation.resume(returning: value)
     }
 }

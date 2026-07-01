@@ -1,4 +1,4 @@
-import Foundation
+import SwiftUI
 import Combine
 import Common
 import SplickDomain
@@ -28,6 +28,7 @@ public final class ConversationListViewModel: ObservableObject {
     private let wsClient: MessagingWebSocketClient
     private var cancellables = Set<AnyCancellable>()
     private var searchTask: Task<Void, Never>?
+    private var refreshTask: Task<Void, Never>?
 
     public init(
         fetchConversationsUseCase: FetchConversationsUseCase,
@@ -59,9 +60,61 @@ public final class ConversationListViewModel: ObservableObject {
     }
 
     public func refresh() async {
+        if let existing = refreshTask {
+            await existing.value
+            return
+        }
+
+        let task = Task { @MainActor in
+            await performRefresh()
+        }
+        refreshTask = task
+        await task.value
+        refreshTask = nil
+    }
+
+    public func refreshSearch(query: String) async {
+        searchTask?.cancel()
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        let task = Task { @MainActor in
+            do {
+                let results = try await searchProvider.search(query: trimmed)
+                guard !Task.isCancelled else { return }
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    searchResults = results
+                    searchState = .loaded(results)
+                    activeSearchQuery = trimmed
+                    isRefreshingSearch = false
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    searchResults = []
+                    searchState = .failed(error.localizedDescription)
+                    activeSearchQuery = ""
+                    isRefreshingSearch = false
+                }
+                Log.error(error, category: .network, metadata: ["action": "searchMessaging", "query": trimmed])
+            }
+        }
+        searchTask = task
+        await task.value
+    }
+
+    private func performRefresh() async {
         do {
             let items = try await fetchConversationsUseCase.execute()
-            state = .loaded(items)
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                state = .loaded(items)
+            }
         } catch {
             Log.error(error, category: .network, metadata: ["action": "refreshConversations"])
         }
