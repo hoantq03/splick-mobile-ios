@@ -5,6 +5,8 @@ import Localization
 enum QRScannerMode {
     case addFriend
     case joinGroup
+    /// Single scanner for friend QR and group invite QR.
+    case unified
 }
 
 struct QRScannerMyQrContext {
@@ -30,7 +32,7 @@ struct QRScannerSheet: View {
                 VStack(spacing: SplickTheme.Spacing.md) {
                     cameraSection
 
-                    if mode == .addFriend, let myQrContext {
+                    if (mode == .addFriend || mode == .unified), let myQrContext {
                         MyQRPreviewSection(
                             username: myQrContext.username,
                             displayName: myQrContext.displayName,
@@ -125,6 +127,7 @@ struct QRScannerSheet: View {
         switch mode {
         case .addFriend: return languageService.text(.friendsScanQRAddFriend)
         case .joinGroup: return languageService.text(.friendsScanQRJoinGroup)
+        case .unified: return languageService.text(.friendsScanQRUnified)
         }
     }
 
@@ -132,6 +135,7 @@ struct QRScannerSheet: View {
         switch mode {
         case .addFriend: return "Dán payload QR hoặc splick://friend/username"
         case .joinGroup: return "splick://group/invite-code"
+        case .unified: return "splick://friend/username hoặc splick://group/mã-nhóm"
         }
     }
 }

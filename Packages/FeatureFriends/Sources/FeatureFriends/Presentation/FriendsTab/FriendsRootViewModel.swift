@@ -1,10 +1,11 @@
 import Foundation
+import SwiftUI
 import Common
 import SplickDomain
 
 enum FriendsDirectoryItem: Identifiable {
     case friend(UserSummary)
-    case group(Group)
+    case group(SplickDomain.Group)
 
     var id: String {
         switch self {
@@ -27,7 +28,8 @@ enum FriendsDirectoryItem: Identifiable {
 
 enum FriendsSearchItem: Identifiable {
     case user(UserSearchResult)
-    case group(Group)
+    case group(SplickDomain.Group)
+    case joinGroupInvite(code: String)
 
     var id: String {
         switch self {
@@ -35,6 +37,8 @@ enum FriendsSearchItem: Identifiable {
             return "user-\(result.user.id.uuidString)"
         case .group(let group):
             return "group-\(group.id.uuidString)"
+        case .joinGroupInvite(let code):
+            return "join-\(code.lowercased())"
         }
     }
 
@@ -44,6 +48,8 @@ enum FriendsSearchItem: Identifiable {
             return result.user.displayName
         case .group(let group):
             return group.name
+        case .joinGroupInvite(let code):
+            return code
         }
     }
 }
@@ -51,9 +57,9 @@ enum FriendsSearchItem: Identifiable {
 @MainActor
 public final class FriendsRootViewModel: ObservableObject {
     @Published var friends: [UserSummary] = []
-    @Published var groups: [Group] = []
+    @Published var groups: [SplickDomain.Group] = []
     @Published var friendsState: LoadingState<[UserSummary]> = .idle
-    @Published var groupsState: LoadingState<[Group]> = .idle
+    @Published var groupsState: LoadingState<[SplickDomain.Group]> = .idle
     @Published var isRefreshing = false
     @Published var alertMessage: String?
     @Published var searchQuery = ""
@@ -72,6 +78,7 @@ public final class FriendsRootViewModel: ObservableObject {
     private let fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol
     private let fetchOutgoingFriendRequestsUseCase: FetchOutgoingFriendRequestsUseCaseProtocol
     private var searchTask: Task<Void, Never>?
+    private var refreshTask: Task<Void, Never>?
 
     public var isSearching: Bool {
         !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -95,8 +102,15 @@ public final class FriendsRootViewModel: ObservableObject {
             .filter { !apiUserIds.contains($0.id) }
             .map { FriendsSearchItem.user(UserSearchResult(user: $0, friendStatus: .friends)) }
         let groupItems = filterGroups(matching: query).map { FriendsSearchItem.group($0) }
+        var items = userItems + localFriendItems + groupItems
 
-        return (userItems + localFriendItems + groupItems).sorted {
+        if userItems.isEmpty,
+           localFriendItems.isEmpty,
+           let joinCode = joinableInviteCode(from: query) {
+            items.append(.joinGroupInvite(code: joinCode))
+        }
+
+        return items.sorted {
             $0.sortKey.localizedCaseInsensitiveCompare($1.sortKey) == .orderedAscending
         }
     }
@@ -128,12 +142,131 @@ public final class FriendsRootViewModel: ObservableObject {
     }
 
     func refresh() async {
-        isRefreshing = true
-        await loadFriends(isPullToRefresh: true)
-        await loadGroups(isPullToRefresh: true)
-        await refreshIncomingRequestCount()
-        await refreshOutgoingRequestCount()
-        isRefreshing = false
+        if let existing = refreshTask {
+            await existing.value
+            return
+        }
+
+        let task = Task { @MainActor in
+            isRefreshing = true
+            defer { isRefreshing = false }
+            await performPullToRefresh()
+        }
+        refreshTask = task
+        await task.value
+        refreshTask = nil
+    }
+
+    func refreshSearch(query: String) async {
+        searchTask?.cancel()
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        let task = Task { @MainActor in
+            do {
+                let results = try await searchUsersUseCase.execute(query: trimmed, page: 0, size: 20)
+                guard !Task.isCancelled else { return }
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    searchResults = results
+                    searchState = .loaded(results)
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    if searchResults.isEmpty {
+                        searchState = .failed(error.localizedDescription)
+                    } else {
+                        searchState = .loaded(searchResults)
+                    }
+                }
+                Log.error(error, category: .friends, metadata: ["query": trimmed])
+            }
+        }
+        searchTask = task
+        await task.value
+    }
+
+    private func performPullToRefresh() async {
+        async let friendsResult = fetchFriendsForRefresh()
+        async let groupsResult = fetchGroupsForRefresh()
+        async let incomingCount = fetchIncomingRequestCount()
+        async let outgoingCount = fetchOutgoingRequestCount()
+
+        let (friends, groups, incoming, outgoing) = await (
+            friendsResult,
+            groupsResult,
+            incomingCount,
+            outgoingCount
+        )
+
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            applyFriendsRefreshResult(friends)
+            applyGroupsRefreshResult(groups)
+            incomingRequestCount = incoming
+            outgoingRequestCount = outgoing
+        }
+    }
+
+    private func fetchFriendsForRefresh() async -> Result<[UserSummary], Error> {
+        do {
+            return .success(try await fetchMyFriendsUseCase.execute())
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    private func fetchGroupsForRefresh() async -> Result<[SplickDomain.Group], Error> {
+        do {
+            return .success(try await fetchMyGroupsUseCase.execute())
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    private func fetchIncomingRequestCount() async -> Int {
+        (try? await fetchIncomingFriendRequestsUseCase.executeAll())?.count ?? 0
+    }
+
+    private func fetchOutgoingRequestCount() async -> Int {
+        (try? await fetchOutgoingFriendRequestsUseCase.executeAll())?.count ?? 0
+    }
+
+    private func applyFriendsRefreshResult(_ result: Result<[UserSummary], Error>) {
+        switch result {
+        case .success(let items):
+            friends = items
+            friendsState = .loaded(items)
+            Log.info("Loaded friends", category: .friends, metadata: ["count": String(items.count)])
+        case .failure(let error):
+            if friends.isEmpty {
+                friendsState = .failed(error.localizedDescription)
+            } else {
+                friendsState = .loaded(friends)
+            }
+            Log.error(error, category: .friends)
+        }
+    }
+
+    private func applyGroupsRefreshResult(_ result: Result<[SplickDomain.Group], Error>) {
+        switch result {
+        case .success(let items):
+            groups = items
+            groupsState = .loaded(items)
+            Log.info("Loaded groups", category: .friends, metadata: ["count": String(items.count)])
+        case .failure(let error):
+            if groups.isEmpty {
+                groupsState = .failed(error.localizedDescription)
+            } else {
+                groupsState = .loaded(groups)
+            }
+            Log.error(error, category: .friends)
+        }
     }
 
     func refreshIncomingRequestCount() async {
@@ -208,7 +341,7 @@ public final class FriendsRootViewModel: ObservableObject {
         Task { await loadGroups(isPullToRefresh: true) }
     }
 
-    func onGroupCreated(_ group: Group) {
+    func onGroupCreated(_ group: SplickDomain.Group) {
         if !groups.contains(where: { $0.id == group.id }) {
             groups.insert(group, at: 0)
         }
@@ -261,12 +394,31 @@ public final class FriendsRootViewModel: ObservableObject {
         }
     }
 
-    private func filterGroups(matching query: String) -> [Group] {
+    private func filterGroups(matching query: String) -> [SplickDomain.Group] {
         groups.filter { group in
             group.name.localizedCaseInsensitiveContains(query)
                 || group.inviteCode.localizedCaseInsensitiveContains(query)
                 || (group.description?.localizedCaseInsensitiveContains(query) ?? false)
         }
+    }
+
+    /// Offers "join group" when the query looks like an invite code for a group not yet joined.
+    private func joinableInviteCode(from query: String) -> String? {
+        let normalized = query
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "@", with: "")
+        guard (3 ... 32).contains(normalized.count) else { return nil }
+        guard normalized.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }) else {
+            return nil
+        }
+
+        let alreadyJoined = groups.contains {
+            $0.inviteCode.lowercased() == normalized
+        }
+        guard !alreadyJoined else { return nil }
+
+        return normalized
     }
 
     func sendFriendRequest(to result: UserSearchResult, message: String? = nil) async {

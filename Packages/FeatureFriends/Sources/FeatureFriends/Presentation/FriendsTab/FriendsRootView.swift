@@ -23,6 +23,12 @@ public struct FriendsRootView: View {
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.currentUserSummary) private var currentUserSummary
     @Environment(\.tabBarScrollState) private var tabBarScrollState
+    @Environment(\.pullToRefreshActive) private var pullToRefreshActive
+    @State private var isPullRefreshing = false
+
+    private var suppressRefreshAnimations: Bool {
+        pullToRefreshActive || isPullRefreshing
+    }
 
     private let fetchOutgoingFriendRequestsUseCase: FetchOutgoingFriendRequestsUseCaseProtocol
     private let fetchBlockedUsersUseCase: FetchBlockedUsersUseCaseProtocol
@@ -32,17 +38,17 @@ public struct FriendsRootView: View {
     private let blockUserUseCase: BlockUserUseCaseProtocol
     private let unblockUserUseCase: UnblockUserUseCaseProtocol
 
-    @State private var showAddFriend = false
-    @State private var showJoinGroup = false
     @State private var showCreateGroup = false
-    @State private var showAddFriendQR = false
-    @State private var showJoinGroupQR = false
+    @State private var showQRScanner = false
     @State private var showIncomingRequests = false
     @State private var showOutgoingRequests = false
     @State private var showBlockedUsers = false
-    @State private var showAddActions = false
+    @State private var isJoiningGroupFromSearch = false
     @State private var profileRoute: UserProfileRoute?
     @State private var scrollTopSignal = 0
+    @State private var searchScrollTopSignal = 0
+    @State private var directoryRefreshController = SplickRefreshController()
+    @State private var searchRefreshController = SplickRefreshController()
 
     private let fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol
     private let searchUsersUseCase: SearchUsersUseCaseProtocol
@@ -199,23 +205,18 @@ public struct FriendsRootView: View {
                     if viewModel.isSearching {
                         searchResultsContent
                     } else {
-                        VStack(spacing: SplickTheme.Spacing.xs) {
-                            incomingRequestsBanner
-                            outgoingRequestsBanner
-                            blockedUsersLink
-                            combinedDirectoryContent
-                        }
+                        combinedDirectoryContent
                     }
                 }
             }
+            .onPreferenceChange(PullToRefreshActivePreferenceKey.self) { isPullRefreshing = $0 }
             .splickTabScreenHeader(languageService.text(.friendsTitle), showsBell: false)
             .onChange(of: viewModel.searchQuery) { newValue in
                 viewModel.onSearchQueryChanged(newValue)
             }
             .toolbar {
-                toolbarAddMenu
+                toolbarCreateGroup
             }
-            .refreshable { await viewModel.refresh() }
             .navigationDestination(for: UUID.self) { groupId in
                 if let group = viewModel.groups.first(where: { $0.id == groupId }) {
                     GroupDetailView(
@@ -254,12 +255,6 @@ public struct FriendsRootView: View {
                     )
                 )
             }
-            .sheet(isPresented: $showAddFriend) {
-                AddFriendSheet(viewModel: addFriendViewModel)
-            }
-            .sheet(isPresented: $showJoinGroup) {
-                JoinGroupSheet(viewModel: joinGroupViewModel)
-            }
             .sheet(isPresented: $showCreateGroup) {
                 CreateGroupSheet(
                     viewModel: CreateGroupViewModel(createGroupUseCase: createGroupUseCase) { group in
@@ -281,12 +276,12 @@ public struct FriendsRootView: View {
             .sheet(isPresented: $showBlockedUsers) {
                 BlockedUsersSheet(viewModel: blockedUsersViewModel)
             }
-            .sheet(isPresented: $showAddFriendQR) {
+            .sheet(isPresented: $showQRScanner) {
                 if let user = currentUserSummary {
                     QRScannerSheet(
-                        mode: .addFriend,
+                        mode: .unified,
                         onScan: { code in
-                            Task { await addFriendViewModel.addFromQR(code) }
+                            Task { await handleUnifiedQR(code) }
                         },
                         myQrContext: QRScannerMyQrContext(
                             username: user.username,
@@ -295,11 +290,6 @@ public struct FriendsRootView: View {
                             generateMyQrUseCase: generateMyQrUseCase
                         )
                     )
-                }
-            }
-            .sheet(isPresented: $showJoinGroupQR) {
-                QRScannerSheet(mode: .joinGroup) { code in
-                    Task { await joinGroupViewModel.joinFromQR(code) }
                 }
             }
         }
@@ -316,7 +306,14 @@ public struct FriendsRootView: View {
         }
         .onReceive(sameTabTapPublisher) { _ in
             if tabBarScrollState?.isAtTop == true {
-                Task { await viewModel.refresh() }
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                if viewModel.isSearching {
+                    searchRefreshController.refresh()
+                } else {
+                    directoryRefreshController.refresh()
+                }
+            } else if viewModel.isSearching {
+                searchScrollTopSignal += 1
             } else {
                 scrollTopSignal += 1
             }
@@ -328,30 +325,83 @@ public struct FriendsRootView: View {
             ?? Empty().eraseToAnyPublisher()
     }
 
-    @ViewBuilder
-    private var outgoingRequestsBanner: some View {
-        Button {
-            showOutgoingRequests = true
-        } label: {
-            HStack {
-                Image(systemName: "paperplane")
-                if viewModel.outgoingRequestCount > 0 {
-                    Text(languageService.format(.friendsOutgoingRequests, viewModel.outgoingRequestCount))
-                } else {
-                    Text(languageService.text(.friendsOutgoingRequestsPlain))
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
+    private var friendRequestsRow: some View {
+        HStack(spacing: SplickTheme.Spacing.sm) {
+            friendRequestShortcut(
+                icon: "person.crop.circle.badge.plus",
+                title: languageService.text(.friendsIncomingTitle),
+                count: viewModel.incomingRequestCount,
+                isHighlighted: viewModel.incomingRequestCount > 0
+            ) {
+                showIncomingRequests = true
             }
-            .font(SplickTheme.Typography.callout.weight(.semibold))
-            .foregroundStyle(SplickTheme.Colors.textSecondary)
-            .padding(SplickTheme.Spacing.sm)
-            .background(SplickTheme.Colors.secondaryBackground)
+
+            friendRequestShortcut(
+                icon: "paperplane.fill",
+                title: languageService.text(.friendsOutgoingTitle),
+                count: viewModel.outgoingRequestCount,
+                isHighlighted: false
+            ) {
+                showOutgoingRequests = true
+            }
+        }
+        .padding(.top, SplickTheme.Spacing.xs)
+    }
+
+    private func friendRequestShortcut(
+        icon: String,
+        title: String,
+        count: Int,
+        isHighlighted: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: SplickTheme.Spacing.xxxs) {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: icon)
+                        .font(.system(size: 20, weight: .medium))
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, SplickTheme.Spacing.xxxs)
+
+                    if count > 0 {
+                        Text(count > 99 ? "99+" : "\(count)")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, count > 9 ? 4 : 5)
+                            .padding(.vertical, 2)
+                            .background(SplickTheme.Colors.primaryGradientStart, in: Capsule())
+                            .offset(x: 6, y: -4)
+                    }
+                }
+
+                Text(title)
+                    .font(SplickTheme.Typography.captionBold)
+                    .foregroundStyle(
+                        isHighlighted
+                            ? SplickTheme.Colors.primaryGradientStart
+                            : SplickTheme.Colors.textSecondary
+                    )
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .minimumScaleFactor(0.85)
+                    .frame(maxWidth: .infinity)
+            }
+            .padding(.vertical, SplickTheme.Spacing.sm)
+            .padding(.horizontal, SplickTheme.Spacing.xs)
+            .frame(maxWidth: .infinity)
+            .background(
+                isHighlighted
+                    ? SplickTheme.Colors.primaryGradientStart.opacity(0.1)
+                    : SplickTheme.Colors.secondaryBackground
+            )
             .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium, style: .continuous))
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, SplickTheme.Spacing.md)
+        .accessibilityLabel(
+            count > 0
+                ? "\(title), \(count)"
+                : title
+        )
     }
 
     @ViewBuilder
@@ -373,32 +423,6 @@ public struct FriendsRootView: View {
             .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium, style: .continuous))
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, SplickTheme.Spacing.md)
-    }
-
-    @ViewBuilder
-    private var incomingRequestsBanner: some View {
-        if viewModel.incomingRequestCount > 0 {
-            Button {
-                showIncomingRequests = true
-            } label: {
-                HStack {
-                    Image(systemName: "person.crop.circle.badge.plus")
-                    Text(languageService.format(.friendsIncomingRequests, viewModel.incomingRequestCount))
-                        .font(SplickTheme.Typography.callout.weight(.semibold))
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                }
-                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                .padding(SplickTheme.Spacing.sm)
-                .background(SplickTheme.Colors.primaryGradientStart.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, SplickTheme.Spacing.md)
-            .padding(.top, SplickTheme.Spacing.xs)
-        }
     }
 
     private func actionForSearchResult(_ result: UserSearchResult) -> (() -> Void)? {
@@ -415,12 +439,9 @@ public struct FriendsRootView: View {
     }
 
     private var directoryTopBar: some View {
-        HStack(spacing: SplickTheme.Spacing.sm) {
-            friendsSearchField
-            scanQrButton
-        }
-        .padding(.horizontal, SplickTheme.Spacing.md)
-        .padding(.bottom, SplickTheme.Spacing.sm)
+        friendsSearchField
+            .padding(.horizontal, SplickTheme.Spacing.md)
+            .padding(.bottom, SplickTheme.Spacing.sm)
     }
 
     private var friendsSearchField: some View {
@@ -429,12 +450,24 @@ public struct FriendsRootView: View {
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
 
-            TextField("Search friends & groups", text: $viewModel.searchQuery)
+            TextField(languageService.text(.friendsSearchPlaceholder), text: $viewModel.searchQuery)
                 .font(SplickTheme.Typography.callout)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
+
+            Button {
+                showQRScanner = true
+            } label: {
+                Image(systemName: "qrcode.viewfinder")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                    .frame(width: 32, height: 32)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(languageService.text(.friendsScanQRUnified))
         }
-        .padding(.horizontal, SplickTheme.Spacing.md)
+        .padding(.leading, SplickTheme.Spacing.md)
+        .padding(.trailing, SplickTheme.Spacing.sm)
         .padding(.vertical, SplickTheme.Spacing.sm)
         .frame(maxWidth: .infinity)
         .background(SplickTheme.Colors.secondaryBackground)
@@ -442,103 +475,55 @@ public struct FriendsRootView: View {
     }
 
     @ToolbarContentBuilder
-    private var toolbarAddMenu: some ToolbarContent {
+    private var toolbarCreateGroup: some ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
-            addMenuButton
-        }
-    }
-
-    private var scanQrButton: some View {
-        Button {
-            showAddFriendQR = true
-        } label: {
-            Image(systemName: "qrcode.viewfinder")
-                .font(.system(size: 22, weight: .medium))
-                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                .frame(width: 44, height: 44)
-                .background(SplickTheme.Colors.secondaryBackground)
-                .clipShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(languageService.text(.friendsScanQRAddFriend))
-    }
-
-    private var addMenuButton: some View {
-        Group {
-            if #available(iOS 26.0, *) {
-                Menu {
-                    addMenuActions
-                } label: {
-                    addMenuLabel
-                }
-            } else {
-                Button {
-                    showAddActions = true
-                } label: {
-                    addMenuLabel
-                }
-                .confirmationDialog(
-                    "Add",
-                    isPresented: $showAddActions,
-                    titleVisibility: .visible
-                ) {
-                    addMenuConfirmationActions
-                }
+            Button {
+                showCreateGroup = true
+            } label: {
+                Text(languageService.text(.friendsCreateGroup))
+                    .font(SplickTheme.Typography.callout.weight(.semibold))
+                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
             }
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Add")
-    }
-
-    private var addMenuLabel: some View {
-        Image(systemName: "plus.circle.fill")
-            .font(.system(size: 28))
-            .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-    }
-
-    @ViewBuilder
-    private var addMenuActions: some View {
-        Button {
-            showAddFriend = true
-        } label: {
-            Label("Add friend by username", systemImage: "person.badge.plus")
-        }
-
-        Button {
-            showAddFriendQR = true
-        } label: {
-            Label("Add friend by QR", systemImage: "qrcode.viewfinder")
-        }
-
-        Button {
-            showCreateGroup = true
-        } label: {
-            Label("Tạo nhóm", systemImage: "plus.circle")
-        }
-
-        Divider()
-
-        Button {
-            showJoinGroup = true
-        } label: {
-            Label("Join group by code", systemImage: "person.3.fill")
-        }
-
-        Button {
-            showJoinGroupQR = true
-        } label: {
-            Label("Join group by QR", systemImage: "qrcode")
+            .buttonStyle(.plain)
         }
     }
 
-    @ViewBuilder
-    private var addMenuConfirmationActions: some View {
-        Button("Add friend by username") { showAddFriend = true }
-        Button("Add friend by QR") { showAddFriendQR = true }
-        Button("Tạo nhóm") { showCreateGroup = true }
-        Button("Join group by code") { showJoinGroup = true }
-        Button("Join group by QR") { showJoinGroupQR = true }
-        Button("Cancel", role: .cancel) {}
+    private func handleUnifiedQR(_ payload: String) async {
+        guard let action = SplickQRParser.parse(payload) else {
+            viewModel.alertMessage = languageService.text(.friendsScanManualHint)
+            return
+        }
+
+        switch action {
+        case .addFriend(let username):
+            addFriendViewModel.username = username
+            await addFriendViewModel.addByUsername()
+        case .addFriendByServerPayload:
+            await addFriendViewModel.addFromQR(payload)
+        case .joinGroup:
+            await joinGroupViewModel.joinFromQR(payload)
+        }
+
+        if let error = addFriendViewModel.errorMessage ?? joinGroupViewModel.errorMessage {
+            viewModel.alertMessage = error
+        }
+    }
+
+    private func joinGroupFromSearch(inviteCode: String) async {
+        guard !isJoiningGroupFromSearch else { return }
+        isJoiningGroupFromSearch = true
+        defer { isJoiningGroupFromSearch = false }
+
+        joinGroupViewModel.inviteCode = inviteCode
+        await joinGroupViewModel.joinByCode()
+
+        if let error = joinGroupViewModel.errorMessage {
+            viewModel.alertMessage = error
+            return
+        }
+
+        viewModel.searchQuery = ""
+        viewModel.onSearchQueryChanged("")
     }
 
     @ViewBuilder
@@ -559,16 +544,33 @@ public struct FriendsRootView: View {
                 message: "Try another name or username."
             )
         default:
-            ScrollView {
-                LazyVStack(spacing: SplickTheme.Spacing.xs) {
-                    ForEach(items) { item in
-                        searchResultRow(item)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: SplickTheme.Spacing.xs) {
+                        Color.clear.frame(height: 0).id("friendsSearchScrollTop")
+                        ForEach(items) { item in
+                            searchResultRow(item)
+                        }
+                    }
+                    .padding(.horizontal, SplickTheme.Spacing.md)
+                    .padding(.bottom, SplickTheme.Spacing.md)
+                    .transaction { transaction in
+                        if suppressRefreshAnimations {
+                            transaction.animation = nil
+                        }
                     }
                 }
-                .padding(.horizontal, SplickTheme.Spacing.md)
-                .padding(.bottom, SplickTheme.Spacing.md)
+                .id("friendsSearchScroll")
+                .tabBarHideOnScroll()
+                .splickNativeRefreshable(controller: searchRefreshController) {
+                    await viewModel.refreshSearch(query: viewModel.searchQuery)
+                }
+                .onChange(of: searchScrollTopSignal) { _ in
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                        proxy.scrollTo("friendsSearchScrollTop", anchor: .top)
+                    }
+                }
             }
-            .tabBarHideOnScroll()
         }
     }
 
@@ -594,7 +596,46 @@ public struct FriendsRootView: View {
                 GroupRowView(group: group)
             }
             .buttonStyle(.plain)
+        case .joinGroupInvite(let code):
+            joinGroupInviteRow(code: code)
         }
+    }
+
+    private func joinGroupInviteRow(code: String) -> some View {
+        Button {
+            Task { await joinGroupFromSearch(inviteCode: code) }
+        } label: {
+            HStack(spacing: SplickTheme.Spacing.sm) {
+                Image(systemName: "person.3.fill")
+                    .font(.title3)
+                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                    .frame(width: 44, height: 44)
+                    .background(SplickTheme.Colors.primaryGradientStart.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
+                    Text(languageService.text(.friendsJoinGroupByCode))
+                        .font(SplickTheme.Typography.headline)
+                        .foregroundStyle(SplickTheme.Colors.textPrimary)
+                    Text("@\(code)")
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+                }
+
+                Spacer()
+
+                if isJoiningGroupFromSearch {
+                    SplickSpinner(size: .small)
+                } else {
+                    Text(languageService.text(.friendsJoinGroupAction))
+                        .font(SplickTheme.Typography.caption.weight(.semibold))
+                        .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                }
+            }
+            .splickCard(padding: SplickTheme.Spacing.sm)
+        }
+        .buttonStyle(.plain)
+        .disabled(isJoiningGroupFromSearch)
     }
 
     @ViewBuilder
@@ -618,24 +659,35 @@ public struct FriendsRootView: View {
             EmptyStateView(
                 icon: "person.2",
                 title: "No friends or groups yet",
-                message: "Add friends, create a group, or join one by invite code.",
-                actionTitle: "Add friend"
+                message: "Search by name or username, scan QR, or create a group.",
+                actionTitle: languageService.text(.friendsCreateGroup)
             ) {
-                showAddFriend = true
+                showCreateGroup = true
             }
         default:
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: SplickTheme.Spacing.xs) {
                         Color.clear.frame(height: 0).id("directoryScrollTop")
+                        friendRequestsRow
+                        blockedUsersLink
                         ForEach(items) { item in
                             directoryRow(item)
                         }
                     }
                     .padding(.horizontal, SplickTheme.Spacing.md)
                     .padding(.bottom, SplickTheme.Spacing.md)
+                    .transaction { transaction in
+                        if suppressRefreshAnimations {
+                            transaction.animation = nil
+                        }
+                    }
                 }
+                .id("friendsDirectoryScroll")
                 .tabBarHideOnScroll()
+                .splickNativeRefreshable(controller: directoryRefreshController) {
+                    await viewModel.refresh()
+                }
                 .onChange(of: scrollTopSignal) { _ in
                     withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
                         proxy.scrollTo("directoryScrollTop", anchor: .top)
