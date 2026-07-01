@@ -63,6 +63,12 @@ targets:
       - path: SplickApp/Sources
       - path: SplickApp/Resources/Assets.xcassets
         buildPhase: resources
+      - path: SplickApp/Resources/en.lproj
+        buildPhase: resources
+      - path: SplickApp/Resources/vi.lproj
+        buildPhase: resources
+      - path: SplickApp/PrivacyInfo.xcprivacy
+        buildPhase: resources
     dependencies:
       - package: SplickCore
         product: Networking
@@ -108,6 +114,11 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         GIPHY_API_KEY: ""
+      configs:
+        Debug:
+          CODE_SIGN_ENTITLEMENTS: SplickApp/SplickApp.entitlements
+        Release:
+          CODE_SIGN_ENTITLEMENTS: SplickApp/SplickApp.entitlements
 
 schemes:
   SplickApp:

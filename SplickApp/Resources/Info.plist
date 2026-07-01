@@ -39,13 +39,13 @@
 		<true/>
 	</dict>
 	<key>NSCameraUsageDescription</key>
-	<string>Splick needs camera access to capture and share moments with friends.</string>
+	<string>$(NSCameraUsageDescription)</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Splick needs microphone access to record audio when capturing videos.</string>
+	<string>$(NSMicrophoneUsageDescription)</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Splick needs photo library access to share photos with friends.</string>
+	<string>$(NSPhotoLibraryUsageDescription)</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Splick needs permission to save edited photos to your photo library.</string>
+	<string>$(NSPhotoLibraryAddUsageDescription)</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>
