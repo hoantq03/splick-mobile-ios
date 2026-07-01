@@ -5,7 +5,6 @@ import Localization
 public struct AccountClosureSheet: View {
     @StateObject private var viewModel: AccountClosureSheetViewModel
     @EnvironmentObject private var languageService: LanguageService
-    @Environment(\.dismiss) private var dismiss
 
     @State private var isPasswordVisible = false
     @State private var confirmedRevealStep = 0
@@ -30,32 +29,11 @@ public struct AccountClosureSheet: View {
                         ConnectAccountSheetErrorBanner(message: error)
                     }
 
-                    SplickTextField(
-                        languageService.text(.changePasswordCurrentPassword),
-                        text: $viewModel.password,
-                        isSecure: true,
-                        errorMessage: viewModel.passwordError,
-                        icon: "lock",
-                        showsPasswordVisibilityToggle: true,
-                        isPasswordVisible: $isPasswordVisible,
-                        passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
-                        passwordHiddenAccessibilityLabel: languageService.text(.authHidePassword)
-                    )
-                    .textContentType(.password)
-                    .onChange(of: viewModel.password) { _ in
-                        viewModel.onPasswordChanged()
+                    if viewModel.canUseEmailVerification {
+                        verificationPicker
                     }
 
-                    if !viewModel.isVerified {
-                        SplickButton(
-                            languageService.text(.changePasswordVerifyContinue),
-                            isLoading: viewModel.isVerifying,
-                            isDisabled: viewModel.isVerifying
-                                || viewModel.password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                        ) {
-                            Task { await viewModel.verifyPassword() }
-                        }
-                    }
+                    verificationSection
 
                     if viewModel.isVerified {
                         if confirmedRevealStep >= 1 {
@@ -103,6 +81,10 @@ public struct AccountClosureSheet: View {
                 viewModel.reset()
                 confirmedRevealStep = 0
             }
+            .onChange(of: viewModel.method) { _ in
+                viewModel.onMethodChanged()
+                confirmedRevealStep = 0
+            }
             .onChange(of: viewModel.isVerified) { verified in
                 if verified {
                     animateConfirmedReveal()
@@ -113,6 +95,121 @@ public struct AccountClosureSheet: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+    }
+
+    @ViewBuilder
+    private var verificationSection: some View {
+        switch viewModel.method {
+        case .password:
+            passwordVerificationSection
+        case .emailCode:
+            emailCodeVerificationSection
+        }
+    }
+
+    private var verificationPicker: some View {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+            Text(languageService.text(.changePasswordVerifyWith))
+                .font(SplickTheme.Typography.caption)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                .padding(.leading, SplickTheme.Spacing.sm)
+
+            Picker("", selection: $viewModel.method) {
+                Text(languageService.text(.changePasswordMethodCurrent))
+                    .tag(AccountClosureSheetViewModel.VerificationMethod.password)
+                Text(languageService.text(.changePasswordMethodEmail))
+                    .tag(AccountClosureSheetViewModel.VerificationMethod.emailCode)
+            }
+            .pickerStyle(.segmented)
+        }
+    }
+
+    private var passwordVerificationSection: some View {
+        VStack(spacing: SplickTheme.Spacing.lg) {
+            SplickTextField(
+                languageService.text(.changePasswordCurrentPassword),
+                text: $viewModel.password,
+                isSecure: true,
+                errorMessage: viewModel.passwordError,
+                icon: "lock",
+                showsPasswordVisibilityToggle: true,
+                isPasswordVisible: $isPasswordVisible,
+                passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
+                passwordHiddenAccessibilityLabel: languageService.text(.authHidePassword)
+            )
+            .textContentType(.password)
+            .onChange(of: viewModel.password) { _ in
+                viewModel.onPasswordChanged()
+            }
+
+            if !viewModel.isVerified {
+                SplickButton(
+                    languageService.text(.changePasswordVerifyContinue),
+                    isLoading: viewModel.isVerifying,
+                    isDisabled: viewModel.isVerifying
+                        || viewModel.password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ) {
+                    Task { await viewModel.verifyIdentity() }
+                }
+            }
+        }
+    }
+
+    private var emailCodeVerificationSection: some View {
+        VStack(spacing: SplickTheme.Spacing.lg) {
+            Text(languageService.format(.changePasswordEmailHint, viewModel.accountEmail))
+                .font(SplickTheme.Typography.callout)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+
+            if let info = viewModel.otpInfoMessage {
+                Text(info)
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            SplickOtpField(code: $viewModel.otpCode, errorMessage: viewModel.otpError)
+                .onChange(of: viewModel.otpCode) { _ in
+                    viewModel.onOtpCodeChanged()
+                }
+
+            if !viewModel.isVerified {
+                if !viewModel.hasSentEmailCode {
+                    SplickButton(
+                        languageService.text(.changePasswordSendCode),
+                        isLoading: viewModel.isRequestingEmailCode,
+                        isDisabled: viewModel.isRequestingEmailCode
+                    ) {
+                        Task { await viewModel.requestEmailCode() }
+                    }
+                } else {
+                    SplickButton(
+                        viewModel.otpResendSecondsRemaining > 0
+                            ? languageService.format(
+                                .changePasswordResendIn,
+                                viewModel.otpResendSecondsRemaining
+                            )
+                            : languageService.text(.changePasswordResendCode),
+                        style: .secondary,
+                        isDisabled: viewModel.isRequestingEmailCode
+                            || viewModel.otpResendSecondsRemaining > 0
+                    ) {
+                        Task { await viewModel.resendEmailCode() }
+                    }
+
+                    SplickButton(
+                        languageService.text(.changePasswordVerifyContinue),
+                        isLoading: viewModel.isVerifying,
+                        isDisabled: viewModel.isVerifying
+                            || viewModel.otpCode.count != SplickOtpField.defaultLength
+                    ) {
+                        Task { await viewModel.verifyIdentity() }
+                    }
+                }
+            }
+        }
     }
 
     private var warningHeader: some View {

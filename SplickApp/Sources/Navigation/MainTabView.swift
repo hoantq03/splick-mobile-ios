@@ -354,6 +354,7 @@ struct ProfileSettingsView: View {
     @State private var showProfileInviteShare = false
     @State private var profileInviteShareUsername = ""
     @State private var showShareSplick = false
+    @State private var presentedLegalDocument: LegalDocumentType?
 
     var body: some View {
         NavigationStack {
@@ -460,6 +461,10 @@ struct ProfileSettingsView: View {
                     url: AppConstants.Links.marketingURL
                 )
             }
+            .sheet(item: $presentedLegalDocument) { documentType in
+                LegalDocumentSheet(documentType: documentType)
+                    .environmentObject(languageService)
+            }
             .sheet(isPresented: $showChangeUsername) {
                 if let user = appState.currentUser {
                     ChangeUsernameSheet(
@@ -542,25 +547,30 @@ struct ProfileSettingsView: View {
                 }
             }
             .sheet(item: $accountClosureAction) { action in
-                AccountClosureSheet(
-                    isPresented: Binding(
-                        get: { accountClosureAction != nil },
-                        set: { if !$0 { accountClosureAction = nil } }
-                    ),
-                    viewModel: AccountClosureSheetViewModel(
-                        action: action,
-                        verifyPasswordChangeUseCase: container.verifyPasswordChangeUseCase,
-                        deactivateAccountUseCase: container.deactivateAccountUseCase,
-                        deleteAccountUseCase: container.deleteAccountUseCase,
-                        languageService: languageService,
-                        onCompleted: {
-                            accountClosureAction = nil
-                            appState.setUnauthenticated(container: container)
-                            dismiss()
-                        }
+                if let email = appState.currentUser?.email {
+                    AccountClosureSheet(
+                        isPresented: Binding(
+                            get: { accountClosureAction != nil },
+                            set: { if !$0 { accountClosureAction = nil } }
+                        ),
+                        viewModel: AccountClosureSheetViewModel(
+                            action: action,
+                            accountEmail: email,
+                            canUseEmailVerification: !email.hasSuffix("@phone.splick.local"),
+                            verifyPasswordChangeUseCase: container.verifyPasswordChangeUseCase,
+                            requestEmailOtpUseCase: container.requestEmailOtpUseCase,
+                            deactivateAccountUseCase: container.deactivateAccountUseCase,
+                            deleteAccountUseCase: container.deleteAccountUseCase,
+                            languageService: languageService,
+                            onCompleted: {
+                                accountClosureAction = nil
+                                appState.setUnauthenticated(container: container)
+                                dismiss()
+                            }
+                        )
                     )
-                )
-                .environmentObject(languageService)
+                    .environmentObject(languageService)
+                }
             }
             .navigationDestination(isPresented: $showNotifications) {
                 NotificationsSettingsView()
@@ -977,12 +987,12 @@ struct ProfileSettingsView: View {
                 ProfileSettingsItem(
                     icon: "doc.text",
                     title: languageService.text(.profileTermsOfService),
-                    action: { openURL(AppConstants.Links.termsOfServiceURL) }
+                    action: { presentedLegalDocument = .terms }
                 ),
                 ProfileSettingsItem(
                     icon: "hand.raised",
                     title: languageService.text(.profilePrivacyPolicy),
-                    action: { openURL(AppConstants.Links.privacyPolicyURL) }
+                    action: { presentedLegalDocument = .privacy }
                 )
             ]
         )
