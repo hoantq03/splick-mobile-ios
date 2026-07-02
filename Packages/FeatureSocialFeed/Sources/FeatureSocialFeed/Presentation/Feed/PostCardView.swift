@@ -320,7 +320,6 @@ struct PostCardView: View {
                         : nil,
                     paymentStatus: shouldShowPaymentCTA ? currentUserSplitLine?.paymentStatus : nil,
                     evidenceWasRejected: currentUserSplitLine?.lastRejectedAt != nil,
-                    postAuthorName: shouldShowPaymentCTA ? post.author.displayName : nil,
                     onPaymentTap: shouldShowPaymentCTA
                         ? {
                             if currentUserSplitLine?.paymentStatus == .unpaid {
@@ -355,8 +354,14 @@ struct PostCardView: View {
         }
     }
 
+    private enum Layout {
+        static let reactionBarHeight: CGFloat = 40
+        /// Keeps emoji row clear of the views button on the author's post.
+        static let viewsButtonReservedWidth: CGFloat = 52
+    }
+
     private var reactionBarRow: some View {
-        HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
+        ZStack(alignment: .trailing) {
             InlineReactionBar(
                 onReact: onReact,
                 onDragRelease: { emoji, sourceGlobal in
@@ -364,29 +369,35 @@ struct PostCardView: View {
                 },
                 onCustomEmoji: { activeSheet = .emojiPicker }
             )
-
-            Spacer(minLength: 0)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.trailing, isAuthor ? Layout.viewsButtonReservedWidth : 0)
 
             if isAuthor {
                 viewsEntryButton
             }
         }
+        .frame(height: Layout.reactionBarHeight, alignment: .center)
         .padding(.top, SplickTheme.Spacing.xxs)
     }
 
     private var viewsEntryButton: some View {
         Button { activeSheet = .viewers } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "eye.fill")
-                    .font(.system(size: 14))
-                Text("\(displayViewCount)")
-                    .font(.system(size: 12, weight: .medium))
-            }
-            .foregroundStyle(SplickTheme.Colors.textSecondary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
+            viewsEntryButtonLabel(viewCount: displayViewCount)
         }
         .buttonStyle(.plain)
+    }
+
+    private func viewsEntryButtonLabel(viewCount: Int) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: "eye.fill")
+                .font(.system(size: 14))
+            Text("\(viewCount)")
+                .font(.system(size: 12, weight: .medium))
+                .monospacedDigit()
+        }
+        .foregroundStyle(SplickTheme.Colors.textSecondary)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
     }
 
     private var commentIconWithCount: some View {
