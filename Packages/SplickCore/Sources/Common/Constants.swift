@@ -88,5 +88,6 @@ public enum AppConstants {
         public static let marketingURL = URL(string: "https://\(webHost)")!
         public static let termsOfServiceURL = URL(string: "https://\(webHost)/terms")!
         public static let privacyPolicyURL = URL(string: "https://\(webHost)/privacy")!
+        public static let supportURL = URL(string: "https://\(webHost)/support")!
     }
 }
