@@ -42,4 +42,22 @@ public final class NotificationRepository: NotificationRepositoryProtocol, Senda
             messages: dto.messages
         )
     }
+
+    public func registerDeviceToken(
+        token: String,
+        bundleId: String,
+        environment: String
+    ) async throws {
+        let request = RegisterPushDeviceRequestDTO(
+            token: token,
+            platform: "ios",
+            bundleId: bundleId,
+            environment: environment
+        )
+        try await apiClient.request(DeviceEndpoint.register(request))
+    }
+
+    public func unregisterDeviceToken(token: String) async throws {
+        try await apiClient.request(DeviceEndpoint.unregister(token: token))
+    }
 }

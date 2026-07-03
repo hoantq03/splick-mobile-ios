@@ -1,5 +1,60 @@
 import SwiftUI
 
+public struct NotificationBellButton: View {
+    private let unreadCount: Int
+    private let isPresented: Bool
+    private let accessibilityLabel: String
+    private let onTap: (CGRect) -> Void
+
+    public init(
+        unreadCount: Int,
+        isPresented: Bool,
+        accessibilityLabel: String,
+        onTap: @escaping (CGRect) -> Void
+    ) {
+        self.unreadCount = unreadCount
+        self.isPresented = isPresented
+        self.accessibilityLabel = accessibilityLabel
+        self.onTap = onTap
+    }
+
+    public var body: some View {
+        GeometryReader { proxy in
+            Button {
+                onTap(proxy.frame(in: .global))
+            } label: {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: isPresented ? "bell.fill" : "bell")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(SplickTheme.Colors.textPrimary)
+                        .frame(width: 34, height: 34)
+                        .background(
+                            Circle()
+                                .fill(SplickTheme.Colors.secondaryBackground)
+                        )
+
+                    if unreadCount > 0 {
+                        Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, unreadCount > 9 ? 5 : 0)
+                            .frame(minWidth: 18, minHeight: 18)
+                            .background(
+                                Capsule()
+                                    .fill(SplickTheme.Colors.primaryGradientStart)
+                            )
+                            .offset(x: 6, y: -4)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(accessibilityLabel)
+        }
+        .frame(width: 34, height: 34)
+    }
+}
+import SwiftUI
+
 /// Toolbar bell that reports its global frame when tapped (for circular reveal transitions).
 public struct NotificationBellButton: View {
     let unreadCount: Int
