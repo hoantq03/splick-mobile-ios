@@ -23,7 +23,7 @@ let package = Package(
                 .product(name: "SplickDomain", package: "SplickDomain"),
             ],
             path: "Sources/Common",
-            resources: [.process("Resources")]
+            resources: [.copy("Resources/Legal")]
         ),
         .target(
             name: "Localization",

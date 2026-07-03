@@ -12,33 +12,19 @@ public struct LegalDocumentView: View {
     }
 
     public var body: some View {
-        ScrollView {
-            Group {
-                if let markdown = LegalDocumentLoader.load(documentType, languageCode: languageService.locale.rawValue) {
-                    Text(attributedMarkdown(from: markdown))
-                        .font(SplickTheme.Typography.body)
-                        .foregroundStyle(SplickTheme.Colors.textPrimary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
-                } else {
-                    Text(languageService.text(.legalDocumentLoadFailed))
-                        .font(SplickTheme.Typography.body)
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, SplickTheme.Spacing.xl)
-                }
+        Group {
+            if let bundled = LegalDocumentLoader.loadBundled(
+                documentType,
+                languageCode: languageService.locale.rawValue
+            ) {
+                LegalWebView(html: bundled.html, baseURL: bundled.baseURL)
+            } else {
+                LegalWebView(
+                    remoteURL: documentType.webURL(languageCode: languageService.locale.rawValue)
+                )
             }
-            .padding(SplickTheme.Spacing.lg)
         }
-        .background(SplickTheme.Colors.background)
-    }
-
-    private func attributedMarkdown(from markdown: String) -> AttributedString {
-        if let attributed = try? AttributedString(markdown: markdown, options: .init(interpretedSyntax: .full)) {
-            return attributed
-        }
-        return AttributedString(markdown)
+        .background(Color(red: 250 / 255, green: 250 / 255, blue: 250 / 255))
     }
 }
 
@@ -64,12 +50,10 @@ public struct LegalDocumentSheet: View {
                         }
                     }
                     ToolbarItem(placement: .primaryAction) {
-                        if let url = externalURL {
-                            Link(destination: url) {
-                                Image(systemName: "safari")
-                            }
-                            .accessibilityLabel(languageService.text(.legalOpenInBrowser))
+                        Link(destination: documentType.webURL(languageCode: languageService.locale.rawValue)) {
+                            Image(systemName: "safari")
                         }
+                        .accessibilityLabel(languageService.text(.legalOpenInBrowser))
                     }
                 }
         }
@@ -79,13 +63,6 @@ public struct LegalDocumentSheet: View {
         switch documentType {
         case .terms: return languageService.text(.legalTermsTitle)
         case .privacy: return languageService.text(.legalPrivacyTitle)
-        }
-    }
-
-    private var externalURL: URL? {
-        switch documentType {
-        case .terms: return AppConstants.Links.termsOfServiceURL
-        case .privacy: return AppConstants.Links.privacyPolicyURL
         }
     }
 }
