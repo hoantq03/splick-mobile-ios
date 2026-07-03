@@ -47,6 +47,7 @@ public struct LoginView: View {
                     onAuthenticated: onAuthenticated
                 )
                 .frame(width: geometry.size.width)
+                .clipped()
             }
             .offset(x: showForgotPassword ? -geometry.size.width : 0)
             .animation(AuthFlowMotion.horizontalSlide, value: showForgotPassword)
@@ -69,6 +70,14 @@ public struct LoginView: View {
                 onAuthenticated?(session.user)
             }
         }
+        .alert(
+            languageService.text(.commonError),
+            isPresented: $viewModel.showErrorAlert
+        ) {
+            Button(languageService.text(.commonOK), role: .cancel) {}
+        } message: {
+            Text(languageService.text(.authSignInFailedGeneric))
+        }
     }
 
     private var signInPanel: some View {
@@ -89,10 +98,12 @@ public struct LoginView: View {
                             viewModel.phoneNumber
                         ),
                         submitTitle: languageService.text(.authSignIn),
-                        otpError: viewModel.otpError,
-                        otpInfoMessage: viewModel.otpInfoMessage,
+                        otpError: localizedOtpKey(viewModel.otpErrorKey),
+                        otpInfoMessage: localizedOtpKey(viewModel.otpInfoMessageKey),
                         isLoading: viewModel.state.isLoading,
                         cornerRadius: Self.fieldCornerRadius,
+                        backTitle: languageService.text(.commonBack),
+                        resendTitle: languageService.text(.changePasswordResendCode),
                         onResend: { Task { await viewModel.resendPhoneOtp() } },
                         onSubmit: { Task { await viewModel.verifyPhoneOtp() } },
                         onBack: { viewModel.goBackToCredentials() }
@@ -103,21 +114,16 @@ public struct LoginView: View {
                         title: registerOtpTitle,
                         subtitle: registerOtpSubtitle,
                         submitTitle: languageService.text(.authSignUp),
-                        otpError: viewModel.otpError,
-                        otpInfoMessage: viewModel.otpInfoMessage,
+                        otpError: localizedOtpKey(viewModel.otpErrorKey),
+                        otpInfoMessage: localizedOtpKey(viewModel.otpInfoMessageKey),
                         isLoading: viewModel.state.isLoading,
                         cornerRadius: Self.fieldCornerRadius,
+                        backTitle: languageService.text(.commonBack),
+                        resendTitle: languageService.text(.changePasswordResendCode),
                         onResend: { Task { await viewModel.resendRegistrationOtp() } },
                         onSubmit: { Task { await viewModel.completeRegistration() } },
                         onBack: { viewModel.goBackFromRegisterOtp() }
                     )
-                }
-
-                if viewModel.step == .credentials, let error = viewModel.state.error {
-                    Text(error)
-                        .font(SplickTheme.Typography.caption)
-                        .foregroundStyle(SplickTheme.Colors.error)
-                        .multilineTextAlignment(.center)
                 }
 
                 if viewModel.step == .credentials {
@@ -216,30 +222,39 @@ public struct LoginView: View {
             }
 
             if viewModel.showsPasswordField {
-                SplickTextField(
-                    languageService.text(.authPassword),
-                    text: $viewModel.password,
-                    isSecure: true,
-                    errorMessage: viewModel.passwordError,
-                    icon: "lock",
-                    cornerRadius: Self.fieldCornerRadius
-                )
-                .textContentType(.password)
-
-                if viewModel.showsForgotPassword {
-                    HStack {
-                        Spacer()
-                        Button(languageService.text(.authForgotPassword)) {
-                            openForgotPassword()
-                        }
-                        .font(SplickTheme.Typography.caption)
-                        .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                    }
-                }
+                emailPasswordFields
+                    .transition(AuthFlowMotion.credentialsFieldTransition)
             }
 
             if viewModel.showsRegistrationFields {
                 registrationFields
+                    .transition(AuthFlowMotion.credentialsFieldTransition)
+            }
+        }
+        .animation(AuthFlowMotion.fieldReveal, value: viewModel.lookupState)
+    }
+
+    private var emailPasswordFields: some View {
+        VStack(spacing: SplickTheme.Spacing.md) {
+            SplickTextField(
+                languageService.text(.authPassword),
+                text: $viewModel.password,
+                isSecure: true,
+                errorMessage: viewModel.passwordError,
+                icon: "lock",
+                cornerRadius: Self.fieldCornerRadius
+            )
+            .textContentType(.password)
+
+            if viewModel.showsForgotPassword {
+                HStack {
+                    Spacer()
+                    Button(languageService.text(.authForgotPassword)) {
+                        openForgotPassword()
+                    }
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                }
             }
         }
     }
@@ -390,7 +405,7 @@ public struct LoginView: View {
     private var credentialsActions: some View {
         SplickButton(
             languageService.text(viewModel.submitTitleKey),
-            isLoading: viewModel.state.isLoading,
+            isLoading: viewModel.loadingAction == .credentials,
             isDisabled: viewModel.credentialsSubmitDisabled,
             cornerRadius: Self.fieldCornerRadius
         ) {
@@ -416,7 +431,7 @@ public struct LoginView: View {
                 SocialSignInIconButton(
                     provider: .apple,
                     accessibilityLabel: languageService.text(.authSignInWithApple),
-                    isLoading: viewModel.state.isLoading,
+                    isLoading: viewModel.loadingAction == .apple,
                     isDisabled: !viewModel.isAppleSignInAvailable || viewModel.state.isLoading
                 ) {
                     Task { await viewModel.signInWithApple() }
@@ -425,7 +440,7 @@ public struct LoginView: View {
                 SocialSignInIconButton(
                     provider: .google,
                     accessibilityLabel: languageService.text(.authSignInWithGoogle),
-                    isLoading: viewModel.state.isLoading,
+                    isLoading: viewModel.loadingAction == .google,
                     isDisabled: !viewModel.isGoogleSignInAvailable || viewModel.state.isLoading
                 ) {
                     Task { await viewModel.signInWithGoogle() }
@@ -436,6 +451,8 @@ public struct LoginView: View {
     }
 
     private func openForgotPassword() {
+        forgotPasswordViewModel.identifier = viewModel.identifier
+        forgotPasswordViewModel.validateIdentifierField()
         withAnimation(AuthFlowMotion.horizontalSlide) {
             showForgotPassword = true
         }
@@ -445,5 +462,10 @@ public struct LoginView: View {
         withAnimation(AuthFlowMotion.horizontalSlide) {
             showForgotPassword = false
         }
+        forgotPasswordViewModel.reset()
+    }
+
+    private func localizedOtpKey(_ key: L10nKey?) -> String? {
+        key.map { languageService.text($0) }
     }
 }

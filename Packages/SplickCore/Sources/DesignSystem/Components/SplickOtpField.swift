@@ -33,7 +33,7 @@ public struct SplickOtpField: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+        VStack(alignment: .center, spacing: SplickTheme.Spacing.xs) {
             GeometryReader { geometry in
                 let boxWidth = boxWidth(for: geometry.size.width)
 
@@ -63,6 +63,8 @@ public struct SplickOtpField: View {
                 Text(errorMessage)
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.error)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
             }
         }
         .onAppear {

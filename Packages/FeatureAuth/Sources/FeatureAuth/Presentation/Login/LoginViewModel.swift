@@ -19,6 +19,12 @@ public final class LoginViewModel: ObservableObject {
         case newUser
     }
 
+    enum LoadingAction: Equatable {
+        case credentials
+        case apple
+        case google
+    }
+
     @Published var step: Step = .credentials
     @Published var identifier = ""
     @Published var password = ""
@@ -34,11 +40,13 @@ public final class LoginViewModel: ObservableObject {
     @Published var usernameError: String?
     @Published var displayNameError: String?
     @Published var dateOfBirthError: String?
-    @Published var otpError: String?
-    @Published var otpInfoMessage: String?
+    @Published var otpErrorKey: L10nKey?
+    @Published var otpInfoMessageKey: L10nKey?
     @Published var state: LoadingState<AuthSession> = .idle
+    @Published private(set) var loadingAction: LoadingAction?
     @Published var passwordStrength: PasswordStrengthResult = .empty
     @Published var showPasswordRequirements = false
+    @Published var showErrorAlert = false
     @Published var hasAcceptedLegalTerms = false
     @Published var legalConsentError: String?
 
@@ -259,7 +267,7 @@ public final class LoginViewModel: ObservableObject {
         validateIdentifierField()
         guard identifierError == nil, detectedKind != .unknown else { return }
 
-        state = .loading
+        setState(.loading, loadingAction: .credentials)
         do {
             let exists: Bool
             switch detectedKind {
@@ -274,15 +282,15 @@ public final class LoginViewModel: ObservableObject {
                     phoneNumber: normalizedPhone
                 )
             case .unknown:
-                state = .idle
+                setState(.idle)
                 return
             }
             lookupState = exists ? .existingUser : .newUser
-            state = .idle
+            setState(.idle)
         } catch let error as NetworkError {
-            state = .failed(error.userMessage)
+            setState(.failed(error.userMessage))
         } catch {
-            state = .failed("Could not verify your email or phone number.")
+            setState(.failed("Could not verify your email or phone number."))
         }
     }
 
@@ -299,49 +307,49 @@ public final class LoginViewModel: ObservableObject {
         legalConsentError = nil
         guard canSubmitRegistration else { return }
 
-        state = .loading
-        otpError = nil
-        otpInfoMessage = nil
+        setState(.loading, loadingAction: .credentials)
+        otpErrorKey = nil
+        otpInfoMessageKey = nil
         phoneNumber = normalizedPhone
 
         do {
             switch detectedKind {
             case .email:
                 try await requestEmailOtpUseCase.execute(email: identifier.trimmed)
-                otpInfoMessage = "Verification code sent. Check your email."
+                otpInfoMessageKey = .authOtpEmailHint
             case .phone:
                 try await requestPhoneOtpUseCase.execute(phoneNumber: phoneNumber)
                 #if DEBUG
-                otpInfoMessage = "Code sent via SMS. Check auth-service logs for [MockTwilio]."
+                otpInfoMessageKey = .authOtpPhoneHintDebug
                 #else
-                otpInfoMessage = "Verification code sent to your phone."
+                otpInfoMessageKey = .authOtpPhoneHint
                 #endif
             case .unknown:
-                state = .idle
+                setState(.idle)
                 return
             }
             step = .registerOtp
             otpCode = ""
-            state = .idle
+            setState(.idle)
         } catch let error as AuthError {
-            state = .failed(error.userMessage)
+            setState(.failed(error.userMessage))
         } catch let error as NetworkError {
-            state = .failed(error.userMessage)
+            setState(.failed(error.userMessage))
         } catch {
-            state = .failed("Could not send verification code.")
+            setState(.failed("Could not send verification code."))
         }
     }
 
     func completeRegistration() async {
         guard otpCode.count == 6 else {
-            otpError = detectedKind == .email
-                ? "Enter the 6-digit code from your email"
-                : "Enter the 6-digit code from SMS"
+            otpErrorKey = detectedKind == .email
+                ? .errorAuthInvalidOtpPrompt
+                : .authOtpSmsCodeRequired
             return
         }
 
-        otpError = nil
-        state = .loading
+        otpErrorKey = nil
+        setState(.loading)
         do {
             let channel: AuthRegistrationChannel = detectedKind == .email ? .email : .phone
             let registrationIdentifier = detectedKind == .email ? identifier.trimmed : phoneNumber
@@ -353,15 +361,15 @@ public final class LoginViewModel: ObservableObject {
                 otpCode: otpCode,
                 displayName: displayName.trimmed
             )
-            state = .loaded(session)
+            setState(.loaded(session))
             Log.info("Registration successful for \(session.user.username)", category: .auth)
         } catch let error as AuthError {
             applyRegistrationError(error)
         } catch let error as NetworkError where error.isConnectivityIssue {
-            state = .failed(error.userMessage)
+            setState(.failed(error.userMessage))
         } catch {
-            otpError = "Could not create your account. Try again."
-            state = .idle
+            otpErrorKey = .errorAuthInvalidOtpDefault
+            setState(.idle)
         }
     }
 
@@ -373,9 +381,9 @@ public final class LoginViewModel: ObservableObject {
         validateIdentifierField()
         guard detectedKind == .phone, identifierError == nil else { return }
 
-        state = .loading
-        otpError = nil
-        otpInfoMessage = nil
+        setState(.loading, loadingAction: .credentials)
+        otpErrorKey = nil
+        otpInfoMessageKey = nil
         phoneNumber = normalizedPhone
         Log.info("Requesting phone OTP", category: .auth)
         do {
@@ -383,17 +391,17 @@ public final class LoginViewModel: ObservableObject {
             step = .phoneOtp
             otpCode = ""
             #if DEBUG
-            otpInfoMessage = "Code sent via SMS. Check auth-service logs for [MockTwilio]."
+            otpInfoMessageKey = .authOtpPhoneHintDebug
             #else
-            otpInfoMessage = "Verification code sent to your phone."
+            otpInfoMessageKey = .authOtpPhoneHint
             #endif
-            state = .idle
+            setState(.idle)
         } catch let error as AuthError {
             applyOtpRequestError(error)
         } catch let error as NetworkError {
-            state = .failed(error.userMessage)
+            setState(.failed(error.userMessage))
         } catch {
-            state = .failed("Could not send verification code.")
+            setState(.failed("Could not send verification code."))
         }
     }
 
@@ -403,36 +411,33 @@ public final class LoginViewModel: ObservableObject {
 
     func verifyPhoneOtp() async {
         guard otpCode.count == 6 else {
-            otpError = "Enter the 6-digit code from SMS"
+            otpErrorKey = .authOtpSmsCodeRequired
             return
         }
 
-        otpError = nil
-        state = .loading
+        otpErrorKey = nil
+        setState(.loading)
         do {
             let session = try await verifyPhoneOtpUseCase.execute(
                 phoneNumber: phoneNumber,
                 otpCode: otpCode
             )
-            state = .loaded(session)
+            setState(.loaded(session))
         } catch let error as AuthError {
             applyOtpVerifyError(error)
         } catch let error as NetworkError where error.isConnectivityIssue {
-            state = .failed(error.userMessage)
+            setState(.failed(error.userMessage))
         } catch {
-            otpError = AuthError.invalidCredentials.userMessage
-            state = .idle
+            otpErrorKey = .errorAuthInvalidOtpDefault
+            setState(.idle)
         }
     }
 
     func goBackToCredentials() {
         step = .credentials
         otpCode = ""
-        otpError = nil
-        otpInfoMessage = nil
-        if case .failed = state {
-            state = .idle
-        }
+        otpErrorKey = nil
+        otpInfoMessageKey = nil
     }
 
     func goBackFromRegisterOtp() {
@@ -441,54 +446,54 @@ public final class LoginViewModel: ObservableObject {
 
     func signInWithGoogle() async {
         guard let googleSignInPresenter, googleSignInPresenter.isAvailable else {
-            state = .failed("Google Sign-In is not configured.")
+            setState(.failed("Google Sign-In is not configured."))
             return
         }
 
-        state = .loading
+        setState(.loading, loadingAction: .google)
         do {
             let idToken = try await googleSignInPresenter.fetchIdToken()
             let session = try await googleSignInUseCase.execute(idToken: idToken)
-            state = .loaded(session)
+            setState(.loaded(session))
             Log.info("Google sign-in successful for \(session.user.username)", category: .auth)
         } catch let error as NetworkError where error.isConnectivityIssue {
-            state = .failed(error.userMessage)
+            setState(.failed(error.userMessage))
         } catch let error as NetworkError {
-            state = .failed(error.userMessage)
+            setState(.failed(error.userMessage))
         } catch let error as AuthError {
-            state = .failed(error.userMessage)
+            setState(.failed(error.userMessage))
         } catch {
             let nsError = error as NSError
             if nsError.domain == "com.google.GIDSignIn" && nsError.code == -5 {
-                state = .failed("Google sign-in was cancelled.")
+                setState(.idle)
             } else {
-                state = .failed(error.localizedDescription)
+                setState(.failed(error.localizedDescription))
             }
         }
     }
 
     func signInWithApple() async {
         guard let appleSignInPresenter, appleSignInPresenter.isAvailable else {
-            state = .failed("Sign in with Apple is not available.")
+            setState(.failed("Sign in with Apple is not available."))
             return
         }
 
-        state = .loading
+        setState(.loading, loadingAction: .apple)
         do {
             let idToken = try await appleSignInPresenter.fetchIdToken()
             let session = try await appleSignInUseCase.execute(idToken: idToken)
-            state = .loaded(session)
+            setState(.loaded(session))
             Log.info("Apple sign-in successful for \(session.user.username)", category: .auth)
         } catch AppleSignInError.cancelled {
-            state = .idle
+            setState(.idle)
         } catch let error as NetworkError where error.isConnectivityIssue {
-            state = .failed(error.userMessage)
+            setState(.failed(error.userMessage))
         } catch let error as NetworkError {
-            state = .failed(error.userMessage)
+            setState(.failed(error.userMessage))
         } catch let error as AuthError {
-            state = .failed(error.userMessage)
+            setState(.failed(error.userMessage))
         } catch {
-            state = .failed(error.localizedDescription)
+            setState(.failed(error.localizedDescription))
         }
     }
 
@@ -548,46 +553,62 @@ public final class LoginViewModel: ObservableObject {
     private func loginWithEmail() async {
         guard validateEmailLogin() else { return }
 
-        state = .loading
+        setState(.loading, loadingAction: .credentials)
         Log.info("Logging in with email", category: .auth)
         do {
             let session = try await loginUseCase.execute(
                 email: identifier.trimmed,
                 password: password
             )
-            state = .loaded(session)
+            setState(.loaded(session))
             Log.info("Login successful for \(session.user.username)", category: .auth)
         } catch let error as AuthError {
-            state = .failed(error.userMessage)
+            setState(.failed(error.userMessage))
         } catch let error as NetworkError where error.isConnectivityIssue {
-            state = .failed(error.userMessage)
+            setState(.failed(error.userMessage))
         } catch {
-            state = .failed(AuthError.invalidCredentials.userMessage)
+            setState(.failed(AuthError.invalidCredentials.userMessage))
+        }
+    }
+
+    private func setState(_ newState: LoadingState<AuthSession>, loadingAction action: LoadingAction? = nil) {
+        switch newState {
+        case .loading:
+            self.loadingAction = action
+            state = .loading
+        case .failed(let detail):
+            Log.warning("Login failed: \(detail)", category: .auth)
+            showErrorAlert = true
+            self.loadingAction = nil
+            state = .idle
+        default:
+            self.loadingAction = nil
+            state = newState
         }
     }
 
     private func applyOtpRequestError(_ error: AuthError) {
         if error.shouldShowOnOtpStep {
-            otpError = error.userMessage
-            state = .idle
+            otpErrorKey = otpErrorKey(for: error)
+            setState(.idle)
         } else {
-            state = .failed(error.userMessage)
+            setState(.failed(error.userMessage))
         }
     }
 
     private func applyOtpVerifyError(_ error: AuthError) {
         if error.shouldShowOnOtpStep {
-            otpError = error.userMessage
-            state = .idle
+            otpErrorKey = otpErrorKey(for: error)
+            setState(.idle)
         } else {
-            state = .failed(error.userMessage)
+            setState(.failed(error.userMessage))
         }
     }
 
     private func applyRegistrationError(_ error: AuthError) {
         if error.shouldShowOnOtpStep {
-            otpError = error.userMessage
-            state = .idle
+            otpErrorKey = otpErrorKey(for: error)
+            setState(.idle)
             return
         }
 
@@ -596,15 +617,26 @@ public final class LoginViewModel: ObservableObject {
             lookupState = .existingUser
             step = .credentials
             otpCode = ""
-            state = .failed(error.userMessage)
+            setState(.failed(error.userMessage))
         case .usernameAlreadyExists:
             step = .credentials
             usernameError = error.userMessage
             usernameStatus = .neutral
             otpCode = ""
-            state = .idle
+            setState(.idle)
         default:
-            state = .failed(error.userMessage)
+            setState(.failed(error.userMessage))
+        }
+    }
+
+    private func otpErrorKey(for error: AuthError) -> L10nKey {
+        switch error {
+        case .otpRateLimited:
+            return .errorAuthOtpRateLimited
+        case .invalidOtp:
+            return .errorAuthInvalidOtpDefault
+        default:
+            return .errorAuthInvalidOtpDefault
         }
     }
 

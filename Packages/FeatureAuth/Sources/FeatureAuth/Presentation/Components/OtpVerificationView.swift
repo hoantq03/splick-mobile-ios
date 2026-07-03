@@ -12,9 +12,15 @@ public struct OtpVerificationView: View {
     private let otpInfoMessage: String?
     private let isLoading: Bool
     private let cornerRadius: CGFloat
+    private let showsBackButton: Bool
+    private let backTitle: String
+    private let resendTitle: String
+    private let isResendDisabled: Bool
+    private let secondaryActionTitle: String?
     private let onResend: () -> Void
     private let onSubmit: () -> Void
     private let onBack: () -> Void
+    private let onSecondaryAction: (() -> Void)?
 
     public init(
         otpCode: Binding<String>,
@@ -25,9 +31,15 @@ public struct OtpVerificationView: View {
         otpInfoMessage: String?,
         isLoading: Bool,
         cornerRadius: CGFloat = SplickTheme.CornerRadius.medium,
+        showsBackButton: Bool = true,
+        backTitle: String = "Back",
+        resendTitle: String = "Resend code",
+        isResendDisabled: Bool = false,
         onResend: @escaping () -> Void,
         onSubmit: @escaping () -> Void,
-        onBack: @escaping () -> Void
+        onBack: @escaping () -> Void,
+        secondaryActionTitle: String? = nil,
+        onSecondaryAction: (() -> Void)? = nil
     ) {
         self._otpCode = otpCode
         self.title = title
@@ -37,9 +49,15 @@ public struct OtpVerificationView: View {
         self.otpInfoMessage = otpInfoMessage
         self.isLoading = isLoading
         self.cornerRadius = cornerRadius
+        self.showsBackButton = showsBackButton
+        self.backTitle = backTitle
+        self.resendTitle = resendTitle
+        self.isResendDisabled = isResendDisabled
         self.onResend = onResend
         self.onSubmit = onSubmit
         self.onBack = onBack
+        self.secondaryActionTitle = secondaryActionTitle
+        self.onSecondaryAction = onSecondaryAction
     }
 
     public var body: some View {
@@ -75,18 +93,30 @@ public struct OtpVerificationView: View {
                 onSubmit()
             }
 
-            HStack(spacing: SplickTheme.Spacing.md) {
-                Button("Back", action: onBack)
-                    .font(SplickTheme.Typography.callout)
+            if let secondaryActionTitle, let onSecondaryAction {
+                Button(secondaryActionTitle, action: onSecondaryAction)
+                    .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
+            }
+
+            HStack(spacing: SplickTheme.Spacing.md) {
+                if showsBackButton {
+                    Button(backTitle, action: onBack)
+                        .font(SplickTheme.Typography.callout)
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+                }
 
                 Spacer()
 
-                Button("Resend code", action: onResend)
+                Button(resendTitle, action: onResend)
                     .font(SplickTheme.Typography.callout)
                     .fontWeight(.semibold)
-                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                    .disabled(isLoading)
+                    .foregroundStyle(
+                        isResendDisabled
+                            ? SplickTheme.Colors.textSecondary.opacity(0.55)
+                            : SplickTheme.Colors.primaryGradientStart
+                    )
+                    .disabled(isResendDisabled || isLoading)
             }
         }
     }

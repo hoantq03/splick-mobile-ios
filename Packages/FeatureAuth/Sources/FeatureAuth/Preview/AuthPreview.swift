@@ -77,6 +77,12 @@ final class MockForgotPasswordUseCase: ForgotPasswordUseCaseProtocol, Sendable {
     }
 }
 
+final class MockVerifyResetPasswordOtpUseCase: VerifyResetPasswordOtpUseCaseProtocol, Sendable {
+    func execute(email: String, otpCode: String) async throws {
+        try await Task.sleep(for: .milliseconds(300))
+    }
+}
+
 final class MockResetPasswordUseCase: ResetPasswordUseCaseProtocol, Sendable {
     func execute(email: String, otpCode: String, newPassword: String) async throws -> AuthSession {
         try await Task.sleep(for: .seconds(1))
@@ -122,6 +128,7 @@ final class MockRegisterUseCase: RegisterUseCaseProtocol, Sendable {
             forgotPasswordViewModelFactory: {
                 ForgotPasswordViewModel(
                     forgotPasswordUseCase: MockForgotPasswordUseCase(),
+                    verifyResetPasswordOtpUseCase: MockVerifyResetPasswordOtpUseCase(),
                     resetPasswordUseCase: MockResetPasswordUseCase()
                 )
             }

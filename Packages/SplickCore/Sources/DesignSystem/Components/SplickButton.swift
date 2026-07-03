@@ -35,7 +35,8 @@ public struct SplickButton: View {
         Button(action: action) {
             HStack(spacing: SplickTheme.Spacing.xs) {
                 if isLoading {
-                    SplickSpinner(size: .small)
+                    ProgressView()
+                        .tint(foregroundColor)
                 }
                 Text(title)
                     .font(SplickTheme.Typography.headline)
