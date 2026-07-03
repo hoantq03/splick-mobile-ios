@@ -33,6 +33,8 @@ public enum AppConstants {
         public static let lastSyncTimestamp = "lastSyncTimestamp"
         public static let selectedTheme = "selectedTheme"
         public static let pushNotificationsEnabled = "pushNotificationsEnabled"
+        public static let pushNotificationDeviceToken = "pushNotificationDeviceToken"
+        public static let pushNotificationPermissionRequested = "pushNotificationPermissionRequested"
         public static let preferredLocale = "preferredLocale"
     }
 
@@ -85,9 +87,9 @@ public enum AppConstants {
             URL(string: "https://\(profileInvitePath(username: username))")!
         }
 
-        public static let marketingURL = URL(string: "https://\(webHost)")!
-        public static let termsOfServiceURL = URL(string: "https://\(webHost)/terms")!
-        public static let privacyPolicyURL = URL(string: "https://\(webHost)/privacy")!
-        public static let supportURL = URL(string: "https://\(webHost)/support")!
+        public static let marketingURL = URL(string: "https://\(webHost)/")!
+        public static let termsOfServiceURL = URL(string: "https://\(webHost)/terms/")!
+        public static let privacyPolicyURL = URL(string: "https://\(webHost)/privacy/")!
+        public static let supportURL = URL(string: "https://\(webHost)/support/")!
     }
 }

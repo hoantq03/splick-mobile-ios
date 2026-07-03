@@ -7,6 +7,7 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var container: DependencyContainer
+    @EnvironmentObject private var pushNotificationCoordinator: PushNotificationCoordinator
 
     @State private var previousScenePhase: ScenePhase = .inactive
 
@@ -29,9 +30,19 @@ struct RootView: View {
             defer { previousScenePhase = phase }
 
             guard phase == .active else { return }
+            pushNotificationCoordinator.refreshAuthorizationStatus()
+
             guard previousScenePhase == .background else { return }
             guard !appState.isAuthenticated else { return }
             appState.resetGuestSplashSession()
+        }
+        .onReceive(pushNotificationCoordinator.$pendingDestination.compactMap { $0 }) { destination in
+            appState.routeRemoteNotification(destination)
+            pushNotificationCoordinator.clearPendingDestination()
+        }
+        .task(id: appState.isAuthenticated) {
+            guard appState.isAuthenticated else { return }
+            await pushNotificationCoordinator.syncStoredDeviceTokenIfPossible()
         }
         .task(id: appState.splashSessionID) {
             guard appState.needsSplash else { return }
@@ -93,6 +104,7 @@ struct RootView: View {
                 forgotPasswordViewModelFactory: {
                     ForgotPasswordViewModel(
                         forgotPasswordUseCase: container.forgotPasswordUseCase,
+                        verifyResetPasswordOtpUseCase: container.verifyResetPasswordOtpUseCase,
                         resetPasswordUseCase: container.resetPasswordUseCase
                     )
                 },

@@ -116,8 +116,10 @@ targets:
         GIPHY_API_KEY: ""
       configs:
         Debug:
+          APS_ENVIRONMENT: development
           CODE_SIGN_ENTITLEMENTS: SplickApp/SplickApp.entitlements
         Release:
+          APS_ENVIRONMENT: production
           CODE_SIGN_ENTITLEMENTS: SplickApp/SplickApp.entitlements
 
 schemes:

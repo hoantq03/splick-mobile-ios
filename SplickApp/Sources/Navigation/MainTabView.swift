@@ -318,6 +318,7 @@ struct ProfileSettingsView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var container: DependencyContainer
     @EnvironmentObject private var languageService: LanguageService
+    @EnvironmentObject private var pushNotificationCoordinator: PushNotificationCoordinator
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @Environment(\.requestReview) private var requestReview
@@ -386,6 +387,7 @@ struct ProfileSettingsView: View {
                         Task {
                             isSigningOut = true
                             defer { isSigningOut = false }
+                            await pushNotificationCoordinator.unregisterCurrentDeviceToken()
                             await container.logoutUseCase.execute()
                             appState.setUnauthenticated(container: container)
                             dismiss()
@@ -993,6 +995,11 @@ struct ProfileSettingsView: View {
                     icon: "hand.raised",
                     title: languageService.text(.profilePrivacyPolicy),
                     action: { presentedLegalDocument = .privacy }
+                ),
+                ProfileSettingsItem(
+                    icon: "questionmark.circle",
+                    title: languageService.text(.profileSupport),
+                    action: { openURL(AppConstants.Links.supportURL) }
                 )
             ]
         )

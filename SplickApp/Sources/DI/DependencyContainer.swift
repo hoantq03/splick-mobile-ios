@@ -81,6 +81,10 @@ final class DependencyContainer: ObservableObject {
         ResetPasswordUseCase(repository: authRepository, sessionManager: sessionManager)
     }()
 
+    lazy var verifyResetPasswordOtpUseCase: VerifyResetPasswordOtpUseCaseProtocol = {
+        VerifyResetPasswordOtpUseCase(repository: authRepository)
+    }()
+
     lazy var changePasswordUseCase: ChangePasswordUseCaseProtocol = {
         ChangePasswordUseCase(repository: authRepository, sessionManager: sessionManager)
     }()
@@ -474,6 +478,21 @@ final class DependencyContainer: ObservableObject {
 
     lazy var fetchBadgeCountsUseCase: FetchBadgeCountsUseCaseProtocol = {
         FetchBadgeCountsUseCase(repository: notificationRepository)
+    }()
+
+    lazy var registerPushDeviceTokenUseCase: RegisterPushDeviceTokenUseCaseProtocol = {
+        RegisterPushDeviceTokenUseCase(repository: notificationRepository)
+    }()
+
+    lazy var unregisterPushDeviceTokenUseCase: UnregisterPushDeviceTokenUseCaseProtocol = {
+        UnregisterPushDeviceTokenUseCase(repository: notificationRepository)
+    }()
+
+    lazy var deviceTokenService: DeviceTokenServiceProtocol = {
+        DeviceTokenService(
+            registerUseCase: registerPushDeviceTokenUseCase,
+            unregisterUseCase: unregisterPushDeviceTokenUseCase
+        )
     }()
 
     lazy var badgeCountService: BadgeCountService = {

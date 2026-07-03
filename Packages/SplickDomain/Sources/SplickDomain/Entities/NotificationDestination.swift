@@ -1,6 +1,35 @@
 import Foundation
 
 public struct NotificationDestination: Codable, Equatable, Sendable {
+    public let screen: NotificationScreen
+    public let postId: UUID?
+
+    public init(screen: NotificationScreen, postId: UUID? = nil) {
+        self.screen = screen
+        self.postId = postId
+    }
+
+    public init(screen: String, postId: UUID? = nil) {
+        self.init(screen: NotificationScreen(rawValue: screen) ?? .unknown, postId: postId)
+    }
+
+    public var postDetailId: UUID? {
+        guard screen == .postDetail else { return nil }
+        return postId
+    }
+}
+
+public enum NotificationScreen: String, Codable, Sendable {
+    case inbox = "INBOX"
+    case postDetail = "POST_DETAIL"
+    case friends = "FRIENDS"
+    case expenses = "EXPENSES"
+    case messages = "MESSAGES"
+    case unknown = "UNKNOWN"
+}
+import Foundation
+
+public struct NotificationDestination: Codable, Equatable, Sendable {
     public let screen: String
     public let postId: UUID?
 

@@ -129,6 +129,26 @@ final class AppState: ObservableObject {
         showNotifications = true
     }
 
+    func routeRemoteNotification(_ destination: NotificationDestination) {
+        switch destination.screen {
+        case .postDetail:
+            if let postId = destination.postDetailId {
+                openPostFromNotification(postId)
+            } else {
+                selectedTab = .feed
+            }
+        case .friends:
+            selectedTab = .friends
+        case .expenses:
+            selectedTab = .expenses
+        case .messages:
+            selectedTab = .messages
+        case .inbox, .unknown:
+            selectedTab = .feed
+            showNotifications = true
+        }
+    }
+
     func clearPendingPostNavigation() {
         pendingFeedPostNavigation = nil
     }
