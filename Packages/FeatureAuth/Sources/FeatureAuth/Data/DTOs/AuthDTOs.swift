@@ -145,6 +145,11 @@ struct ForgotPasswordRequestDTO: Encodable {
     let email: String
 }
 
+struct VerifyResetPasswordOtpRequestDTO: Encodable {
+    let email: String
+    let otpCode: String
+}
+
 struct ResetPasswordRequestDTO: Encodable {
     let email: String
     let otpCode: String

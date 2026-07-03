@@ -158,6 +158,11 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
         try await apiClient.request(AuthEndpoint.forgotPassword(dto))
     }
 
+    public func verifyResetPasswordOtp(email: String, otpCode: String) async throws {
+        let dto = VerifyResetPasswordOtpRequestDTO(email: email, otpCode: otpCode)
+        try await apiClient.request(AuthEndpoint.verifyResetPasswordOtp(dto))
+    }
+
     public func resetPassword(
         email: String,
         otpCode: String,

@@ -26,6 +26,7 @@ public protocol AuthRepositoryProtocol: Sendable {
     ) async throws -> AuthSession
     func refreshToken(_ refreshToken: String) async throws -> AuthSession
     func forgotPassword(email: String) async throws
+    func verifyResetPasswordOtp(email: String, otpCode: String) async throws
     func resetPassword(email: String, otpCode: String, newPassword: String) async throws -> AuthSession
     func changePassword(
         currentPassword: String?,

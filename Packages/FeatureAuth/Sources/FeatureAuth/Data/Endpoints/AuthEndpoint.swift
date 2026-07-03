@@ -14,6 +14,7 @@ enum AuthEndpoint: APIEndpoint {
     case registerPhone(PhoneRegisterRequestDTO)
     case refreshToken(RefreshTokenRequestDTO)
     case forgotPassword(ForgotPasswordRequestDTO)
+    case verifyResetPasswordOtp(VerifyResetPasswordOtpRequestDTO)
     case resetPassword(ResetPasswordRequestDTO)
     case changePassword(ChangePasswordRequestDTO)
     case verifyPasswordChange(AccountActionRequestDTO)
@@ -49,6 +50,7 @@ enum AuthEndpoint: APIEndpoint {
         case .registerEmail, .registerPhone: return "/v1/auth/register"
         case .refreshToken: return "/v1/auth/refresh"
         case .forgotPassword: return "/v1/auth/password/forgot"
+        case .verifyResetPasswordOtp: return "/v1/auth/password/reset/verify"
         case .resetPassword: return "/v1/auth/password/reset"
         case .changePassword: return "/v1/auth/password/change"
         case .verifyPasswordChange: return "/v1/auth/password/verify"
@@ -75,7 +77,7 @@ enum AuthEndpoint: APIEndpoint {
         switch self {
         case .checkIdentifier, .googleSignIn, .appleSignIn, .login, .requestEmailOtp, .requestPhoneOtp, .verifyPhoneOtp,
              .registerEmail, .registerPhone, .refreshToken,
-             .forgotPassword, .resetPassword, .changePassword, .verifyPasswordChange, .logout, .revokeAllSessions,
+             .forgotPassword, .verifyResetPasswordOtp, .resetPassword, .changePassword, .verifyPasswordChange, .logout, .revokeAllSessions,
              .deactivateAccount, .linkGoogle, .requestLinkPhoneOtp, .linkPhone,
              .requestLinkEmailOtp, .linkEmail, .checkUsername:
             return .post
@@ -104,6 +106,7 @@ enum AuthEndpoint: APIEndpoint {
         case .registerPhone(let dto): return dto
         case .refreshToken(let dto): return dto
         case .forgotPassword(let dto): return dto
+        case .verifyResetPasswordOtp(let dto): return dto
         case .resetPassword(let dto): return dto
         case .changePassword(let dto): return dto
         case .verifyPasswordChange(let dto): return dto
@@ -141,7 +144,7 @@ enum AuthEndpoint: APIEndpoint {
         switch self {
         case .checkIdentifier, .googleSignIn, .appleSignIn, .login, .requestEmailOtp, .requestPhoneOtp, .verifyPhoneOtp,
              .registerEmail, .registerPhone, .refreshToken,
-             .forgotPassword, .resetPassword:
+             .forgotPassword, .verifyResetPasswordOtp, .resetPassword:
             return false
         case .checkUsername:
             return true
