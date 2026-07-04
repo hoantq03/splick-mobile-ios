@@ -413,9 +413,12 @@ struct PostCardView: View {
     }
 
     private func scheduleFlyingEmoji(emoji: String, sourceGlobal: CGRect) {
-        let startGlobal = CGPoint(x: sourceGlobal.midX, y: sourceGlobal.midY)
         let end = flyTargetPoint()
-        let flight = FlyingEmojiFlight.make(emoji: emoji, startGlobal: startGlobal, end: end)
+        let flight = FlyingEmojiFlight.make(
+            emoji: emoji,
+            sourceFrameGlobal: sourceGlobal,
+            end: end
+        )
         let maxConcurrentFlights = 16
         if flyingEmojis.count >= maxConcurrentFlights {
             flyingEmojis.removeFirst(flyingEmojis.count - maxConcurrentFlights + 1)
