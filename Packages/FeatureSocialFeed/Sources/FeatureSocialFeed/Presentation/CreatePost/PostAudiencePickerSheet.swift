@@ -2,35 +2,52 @@ import SwiftUI
 import DesignSystem
 import SplickDomain
 
+private enum AudiencePickerScrollTarget: Hashable {
+    case selectionDetails
+}
+
+private enum AudienceSelectionMetrics {
+    static let tileWidth: CGFloat = 72
+    static let nameWidth: CGFloat = 64
+}
+
 struct PostAudiencePickerSheet: View {
     @ObservedObject var viewModel: CreatePostComposeViewModel
     @Environment(\.dismiss) private var dismiss
+    @State private var selectedDetent: PresentationDetent = .medium
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
-                    audienceModeSection
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
+                        audienceModeSection
 
-                    if viewModel.audienceMode != .friends {
-                        selectionDetailSection
+                        if viewModel.audienceMode != .friends {
+                            selectionDetailSection
+                                .id(AudiencePickerScrollTarget.selectionDetails)
+                        }
+                    }
+                    .padding(SplickTheme.Spacing.md)
+                    .padding(.bottom, SplickTheme.Spacing.xl)
+                }
+                .navigationTitle("Ai có thể xem")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Đóng") { dismiss() }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Xong") { dismiss() }
                     }
                 }
-                .padding(SplickTheme.Spacing.md)
-                .padding(.bottom, SplickTheme.Spacing.xl)
-            }
-            .navigationTitle("Ai có thể xem")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Đóng") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Xong") { dismiss() }
+                .onChange(of: viewModel.audienceMode) { mode in
+                    guard mode != .friends else { return }
+                    revealSelectionDetails(with: proxy)
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.medium, .large], selection: $selectedDetent)
         .task {
             switch viewModel.audienceMode {
             case .friends:
@@ -39,6 +56,20 @@ struct PostAudiencePickerSheet: View {
                 await viewModel.loadAudienceGroupsIfNeeded()
             case .specificUsers, .friendsExcept:
                 await viewModel.loadAudienceFriendsIfNeeded()
+            }
+        }
+    }
+
+    private func revealSelectionDetails(with proxy: ScrollViewProxy) {
+        Task { @MainActor in
+            withAnimation(.easeInOut(duration: 0.28)) {
+                selectedDetent = .large
+            }
+
+            try? await Task.sleep(nanoseconds: 220_000_000)
+
+            withAnimation(.easeInOut(duration: 0.25)) {
+                proxy.scrollTo(AudiencePickerScrollTarget.selectionDetails, anchor: .top)
             }
         }
     }
@@ -146,26 +177,105 @@ struct PostAudiencePickerSheet: View {
 
     private var audienceGroupChipStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: SplickTheme.Spacing.xs) {
+            HStack(alignment: .top, spacing: SplickTheme.Spacing.sm) {
                 ForEach(viewModel.selectedAudienceGroups) { group in
-                    removableChip(title: group.name) {
-                        viewModel.removeAudienceGroup(group)
-                    }
+                    selectedAudienceGroupTile(for: group)
                 }
             }
+            .padding(.vertical, SplickTheme.Spacing.xxxs)
         }
     }
 
     private var audienceUserChipStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: SplickTheme.Spacing.xs) {
+            HStack(alignment: .top, spacing: SplickTheme.Spacing.sm) {
                 ForEach(viewModel.selectedAudienceUsers) { user in
-                    removableChip(title: user.displayName) {
-                        viewModel.removeAudienceUser(user)
-                    }
+                    selectedAudienceUserTile(for: user)
                 }
             }
+            .padding(.vertical, SplickTheme.Spacing.xxxs)
         }
+    }
+
+    private func selectedAudienceGroupTile(for group: SplickDomain.Group) -> some View {
+        VStack(spacing: SplickTheme.Spacing.xs) {
+            ZStack(alignment: .topTrailing) {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(SplickTheme.Colors.primaryGradientStart.opacity(0.12))
+                    .frame(width: 56, height: 56)
+                    .overlay {
+                        Image(systemName: "person.3.fill")
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                    }
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(
+                                SplickTheme.Colors.primaryGradientStart.opacity(0.18),
+                                lineWidth: 1
+                            )
+                    }
+
+                Button {
+                    viewModel.removeAudienceGroup(group)
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.white, .black.opacity(0.55))
+                }
+                .buttonStyle(.plain)
+                .offset(x: 5, y: -5)
+            }
+
+            Text(shortDisplayName(group.name))
+                .font(SplickTheme.Typography.caption)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .multilineTextAlignment(.center)
+                .frame(width: AudienceSelectionMetrics.nameWidth)
+        }
+        .frame(width: AudienceSelectionMetrics.tileWidth)
+        .padding(.vertical, SplickTheme.Spacing.xxs)
+    }
+
+    private func selectedAudienceUserTile(for user: UserSummary) -> some View {
+        VStack(spacing: SplickTheme.Spacing.xs) {
+            ZStack(alignment: .topTrailing) {
+                AvatarView(
+                    imageURL: user.avatarURL,
+                    name: user.displayName,
+                    size: .medium
+                )
+                .overlay {
+                    Circle()
+                        .strokeBorder(
+                            SplickTheme.Colors.primaryGradientStart.opacity(0.18),
+                            lineWidth: 1
+                        )
+                }
+
+                Button {
+                    viewModel.removeAudienceUser(user)
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.white, .black.opacity(0.55))
+                }
+                .buttonStyle(.plain)
+                .offset(x: 5, y: -5)
+            }
+
+            Text(shortDisplayName(user.displayName, fallback: user.username))
+                .font(SplickTheme.Typography.caption)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .multilineTextAlignment(.center)
+                .frame(width: AudienceSelectionMetrics.nameWidth)
+        }
+        .frame(width: AudienceSelectionMetrics.tileWidth)
+        .padding(.vertical, SplickTheme.Spacing.xxs)
     }
 
     private var audienceGroupsPicker: some View {
@@ -385,22 +495,11 @@ struct PostAudiencePickerSheet: View {
         .buttonStyle(.plain)
     }
 
-    private func removableChip(title: String, onRemove: @escaping () -> Void) -> some View {
-        HStack(spacing: 6) {
-            Text(title)
-                .font(SplickTheme.Typography.caption)
-                .foregroundStyle(SplickTheme.Colors.textPrimary)
-
-            Button(action: onRemove) {
-                Image(systemName: "xmark.circle.fill")
-                    .foregroundStyle(SplickTheme.Colors.textTertiary)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, SplickTheme.Spacing.sm)
-        .padding(.vertical, SplickTheme.Spacing.xs)
-        .background(SplickTheme.Colors.tertiaryBackground)
-        .clipShape(Capsule())
+    private func shortDisplayName(_ value: String, fallback: String? = nil) -> String {
+        let trimmedName = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolved = trimmedName.isEmpty ? (fallback ?? value) : trimmedName
+        let shortName = resolved.split(whereSeparator: \.isWhitespace).last.map(String.init) ?? resolved
+        return shortName
     }
 
     private func searchField(placeholder: String, text: Binding<String>) -> some View {

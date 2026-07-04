@@ -73,11 +73,13 @@ public final class CreatePostComposeViewModel: ObservableObject {
     private var hasLoadedAudienceGroups = false
     private var hasLoadedAudienceFriends = false
 
-    private let friendSearchPageSize = 10
+    private let friendSearchPageSize = 20
     private let audienceFriendPageSize = 10
 
     var shouldShowFriendSuggestions: Bool {
         isFriendSearchActive
+            || isSearchingFriends
+            || !friendSearchResults.isEmpty
             || !friendSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
@@ -269,12 +271,19 @@ public final class CreatePostComposeViewModel: ObservableObject {
         selectedMediaItems.append(media)
     }
 
+    func preloadFriendSuggestionsIfNeeded() async {
+        guard friendSearchResults.isEmpty else { return }
+        guard friendSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        await fetchFriendSearchPage(page: 0, reset: true)
+    }
+
     func setFriendSearchActive(_ active: Bool) {
         isFriendSearchActive = active
         if active {
             scheduleFriendSearch(reset: true)
         } else if friendSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            cancelFriendSearch()
+            friendSearchTask?.cancel()
+            isSearchingFriends = false
         }
     }
 
@@ -330,11 +339,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
         selectedCompanions.append(user)
         friendSearchResults.removeAll { $0.id == user.id }
         friendSearchQuery = ""
-        if isFriendSearchActive {
-            scheduleFriendSearch(reset: true)
-        } else {
-            friendSearchResults = []
-        }
+        scheduleFriendSearch(reset: true)
     }
 
     func removeCompanion(_ user: UserSummary) {

@@ -12,6 +12,7 @@ private enum ComposeMetrics {
     static let fieldCornerRadius: CGFloat = SplickTheme.CornerRadius.inset
     static let companionTileWidth: CGFloat = 72
     static let companionNameWidth: CGFloat = 64
+    static let companionsTitle = "Cùng với"
 }
 
 private enum ComposeOptionRoute: Hashable {
@@ -270,7 +271,7 @@ public struct CreatePostComposeView: View {
             NavigationLink(value: ComposeOptionRoute.companions) {
                 optionRow(
                     icon: "person.crop.circle.badge.plus",
-                    title: languageService.text(.feedCreateTagFriends),
+                    title: ComposeMetrics.companionsTitle,
                     summary: companionsSummaryText
                 )
             }
@@ -329,7 +330,7 @@ public struct CreatePostComposeView: View {
 
     private var companionsSummaryText: String {
         guard !viewModel.selectedCompanions.isEmpty else {
-            return "Chạm để chọn bạn bè đi cùng hoặc người sẽ được tag."
+            return "Chạm để chọn bạn bè cùng với bạn hoặc người sẽ được tag."
         }
 
         if viewModel.selectedCompanions.count == 1 {
@@ -673,7 +674,7 @@ private struct ComposeCompanionsEditorView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
                 VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-                    Text(languageService.text(.feedCreateTagFriends))
+                    Text(ComposeMetrics.companionsTitle)
                         .font(SplickTheme.Typography.headline)
 
                     HStack(spacing: SplickTheme.Spacing.xs) {
@@ -712,8 +713,11 @@ private struct ComposeCompanionsEditorView: View {
             .padding(SplickTheme.Spacing.md)
             .padding(.bottom, SplickTheme.Spacing.xl)
         }
-        .navigationTitle(languageService.text(.feedCreateTagFriends))
+        .navigationTitle(ComposeMetrics.companionsTitle)
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await viewModel.preloadFriendSuggestionsIfNeeded()
+        }
     }
 
     private var selectedCompanionsStrip: some View {
