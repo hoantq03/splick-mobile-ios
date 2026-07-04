@@ -34,19 +34,27 @@ public struct NotificationBellButton: View {
             }
         } label: {
             ZStack(alignment: .topTrailing) {
-                Image(systemName: unreadCount > 0 ? "bell.badge.fill" : "bell")
+                Image(systemName: unreadCount > 0 ? "bell.fill" : "bell")
                     .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(SplickTheme.Colors.textPrimary)
                     .frame(width: 34, height: 34)
 
                 if unreadCount > 0, !isPresented {
                     Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.system(size: unreadCount > 99 ? 8 : 9, weight: .bold))
                         .foregroundStyle(.white)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 2)
-                        .background(Capsule().fill(SplickTheme.Colors.error))
-                        .offset(x: 6, y: -2)
+                        .padding(.horizontal, unreadCount > 9 ? 5 : 0)
+                        .frame(minWidth: 18, minHeight: 18)
+                        .background {
+                            Capsule(style: .continuous)
+                                .fill(SplickTheme.Colors.error)
+                                .overlay {
+                                    Capsule(style: .continuous)
+                                        .stroke(.white.opacity(0.95), lineWidth: 2)
+                                }
+                                .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
+                        }
+                        .offset(x: 7, y: -4)
                 }
             }
             .frame(width: 34, height: 34)
