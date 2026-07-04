@@ -14,6 +14,12 @@ enum SplashMotion {
         blendDuration: 0.16
     )
 
+    static let authStateSlide = Animation.spring(
+        response: 0.52,
+        dampingFraction: 0.88,
+        blendDuration: 0.12
+    )
+
     static var slideUpRemoval: AnyTransition {
         .asymmetric(
             insertion: .opacity.animation(.easeOut(duration: 0.2)),
@@ -35,6 +41,20 @@ enum SplashMotion {
     static var onboardingRemoval: AnyTransition {
         .asymmetric(
             insertion: .identity,
+            removal: .move(edge: .leading).combined(with: .opacity)
+        )
+    }
+
+    static var authenticatedTransition: AnyTransition {
+        .asymmetric(
+            insertion: .move(edge: .trailing).combined(with: .opacity),
+            removal: .move(edge: .trailing).combined(with: .opacity)
+        )
+    }
+
+    static var unauthenticatedTransition: AnyTransition {
+        .asymmetric(
+            insertion: .move(edge: .leading).combined(with: .opacity),
             removal: .move(edge: .leading).combined(with: .opacity)
         )
     }

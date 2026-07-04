@@ -66,7 +66,9 @@ struct OnboardingView: View {
         .background(SplickTheme.Colors.background)
         .contentShape(Rectangle())
         .simultaneousGesture(tapAdvanceGesture)
-        .simultaneousGesture(lastPageSwipeToLoginGesture)
+        .if(isLastPage) { view in
+            view.highPriorityGesture(lastPageSwipeToLoginGesture)
+        }
     }
 
     @ViewBuilder
@@ -241,7 +243,10 @@ struct OnboardingView: View {
     private func completeOnboarding() {
         guard !hasCompleted else { return }
         hasCompleted = true
-        onComplete()
+        // Let the current tap/drag gesture settle before swapping the whole root view.
+        DispatchQueue.main.async {
+            onComplete()
+        }
     }
 }
 

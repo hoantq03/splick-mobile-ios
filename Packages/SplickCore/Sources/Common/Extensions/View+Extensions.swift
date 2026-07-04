@@ -20,6 +20,10 @@ extension View {
         )
     }
 
+    public func dismissKeyboardOnTap() -> some View {
+        modifier(DismissKeyboardOnTapModifier())
+    }
+
     public func onFirstAppear(perform action: @escaping () -> Void) -> some View {
         modifier(FirstAppearModifier(action: action))
     }
@@ -46,5 +50,22 @@ private struct FirstAppearModifier: ViewModifier {
             hasAppeared = true
             action()
         }
+    }
+}
+
+private struct DismissKeyboardOnTapModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .contentShape(Rectangle())
+            .simultaneousGesture(
+                TapGesture().onEnded {
+                    UIApplication.shared.sendAction(
+                        #selector(UIResponder.resignFirstResponder),
+                        to: nil,
+                        from: nil,
+                        for: nil
+                    )
+                }
+            )
     }
 }

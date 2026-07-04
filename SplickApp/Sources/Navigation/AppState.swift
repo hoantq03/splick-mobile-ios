@@ -61,7 +61,7 @@ final class AppState: ObservableObject {
         container.resetTabViewModels()
         authState = .unauthenticated
         hasPassedOnboardingThisSession = false
-        resetGuestSplashSession()
+        isLaunchSplashComplete = true
         selectedTab = .feed
         showNotifications = false
         feedNavigationPath = NavigationPath()
@@ -84,9 +84,7 @@ final class AppState: ObservableObject {
 
     /// Called when user taps through the last onboarding page.
     func passOnboardingGate() {
-        withAnimation(SplashMotion.onboardingToLogin) {
-            hasPassedOnboardingThisSession = true
-        }
+        hasPassedOnboardingThisSession = true
     }
 
     func openPostFromNotification(_ postId: UUID) {

@@ -25,6 +25,7 @@ struct RootView: View {
             }
         }
         .ignoresSafeArea()
+        .dismissKeyboardOnTap()
         .animation(SplashMotion.reveal, value: appState.needsSplash)
         .onChange(of: scenePhase) { phase in
             defer { previousScenePhase = phase }
@@ -61,21 +62,37 @@ struct RootView: View {
         case .unknown:
             SplickTheme.Colors.background.ignoresSafeArea()
 
-        case .unauthenticated:
+        case .unauthenticated, .authenticated:
             ZStack {
-                if appState.hasPassedOnboardingThisSession {
-                    authFlow
-                        .transition(SplashMotion.loginInsertion)
+                if appState.isAuthenticated {
+                    MainTabView()
+                        .transition(SplashMotion.authenticatedTransition)
+                        .zIndex(1)
                 } else {
-                    onboardingFlow
-                        .transition(SplashMotion.onboardingRemoval)
+                    unauthenticatedContent
+                        .transition(SplashMotion.unauthenticatedTransition)
+                        .zIndex(0)
                 }
             }
-            .animation(SplashMotion.onboardingToLogin, value: appState.hasPassedOnboardingThisSession)
-
-        case .authenticated:
-            MainTabView()
+            .animation(SplashMotion.authStateSlide, value: appState.isAuthenticated)
         }
+    }
+
+    private var unauthenticatedContent: some View {
+        ZStack {
+            authFlow
+                .opacity(appState.hasPassedOnboardingThisSession ? 1 : 0)
+                .offset(x: appState.hasPassedOnboardingThisSession ? 0 : 28)
+                .allowsHitTesting(appState.hasPassedOnboardingThisSession)
+                .zIndex(appState.hasPassedOnboardingThisSession ? 1 : 0)
+
+            onboardingFlow
+                .opacity(appState.hasPassedOnboardingThisSession ? 0 : 1)
+                .offset(x: appState.hasPassedOnboardingThisSession ? -28 : 0)
+                .allowsHitTesting(!appState.hasPassedOnboardingThisSession)
+                .zIndex(appState.hasPassedOnboardingThisSession ? 0 : 1)
+        }
+        .animation(SplashMotion.onboardingToLogin, value: appState.hasPassedOnboardingThisSession)
     }
 
     // MARK: - Flows
