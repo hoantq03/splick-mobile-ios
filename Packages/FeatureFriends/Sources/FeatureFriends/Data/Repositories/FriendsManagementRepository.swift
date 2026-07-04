@@ -193,7 +193,7 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
                 displayName: displayName,
                 avatarURL: nil
             )
-        case .joinGroup:
+        case .joinGroup, .joinGroupByServerPayload:
             throw FriendsError.invalidQRCode
         }
     }

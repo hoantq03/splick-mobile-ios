@@ -131,8 +131,18 @@ public struct GroupsRepository: GroupsRepositoryProtocol {
 
     public func joinGroupFromQRCode(_ payload: String) async throws -> Group {
         let trimmed = payload.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let action = SplickQRParser.parse(trimmed), case .joinGroup(let code) = action {
-            return try await joinGroup(inviteCode: code)
+        if let action = SplickQRParser.parse(trimmed) {
+            switch action {
+            case .joinGroup(let code):
+                return try await joinGroup(inviteCode: code)
+            case .joinGroupByServerPayload(let serverPayload):
+                let joinResponse: JoinGroupResponseDTO = try await apiClient.request(
+                    SocialEndpoint.joinGroupByQr(qrPayload: serverPayload)
+                )
+                return try await fetchGroup(groupId: joinResponse.groupId)
+            case .addFriend, .addFriendByServerPayload:
+                throw FriendsError.invalidQRCode
+            }
         }
         let joinResponse: JoinGroupResponseDTO = try await apiClient.request(
             SocialEndpoint.joinGroupByQr(qrPayload: trimmed)

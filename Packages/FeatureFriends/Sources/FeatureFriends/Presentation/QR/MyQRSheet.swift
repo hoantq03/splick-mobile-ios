@@ -51,8 +51,7 @@ struct MyQRSheet: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, SplickTheme.Spacing.xl)
 
-                if let payload = viewModel.payload {
-                    ShareLink(item: payload) {
+                ShareLink(item: AppConstants.Links.profileInviteURL(username: username)) {
                         Label(languageService.text(.friendsMyQRShare), systemImage: "square.and.arrow.up")
                             .font(SplickTheme.Typography.headline)
                             .frame(maxWidth: .infinity)
@@ -60,9 +59,8 @@ struct MyQRSheet: View {
                             .background(SplickTheme.Colors.primaryGradientStart.opacity(0.12))
                             .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
                             .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small))
-                    }
-                    .padding(.horizontal, SplickTheme.Spacing.xl)
                 }
+                .padding(.horizontal, SplickTheme.Spacing.xl)
 
                 SplickButton(languageService.text(.friendsMyQRRefresh), style: .secondary, isDisabled: viewModel.state == .loading) {
                     Task { await viewModel.refresh() }

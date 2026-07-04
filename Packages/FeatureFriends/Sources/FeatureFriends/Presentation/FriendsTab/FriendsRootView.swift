@@ -500,7 +500,7 @@ public struct FriendsRootView: View {
             await addFriendViewModel.addByUsername()
         case .addFriendByServerPayload:
             await addFriendViewModel.addFromQR(payload)
-        case .joinGroup:
+        case .joinGroup, .joinGroupByServerPayload:
             await joinGroupViewModel.joinFromQR(payload)
         }
 

@@ -5,26 +5,69 @@ public enum SplickQRAction: Equatable {
     /// Server-issued personal QR (`POST /v1/social/qr/me` payload, base64url JSON).
     case addFriendByServerPayload(String)
     case joinGroup(inviteCode: String)
+    /// Server-issued group QR (`POST /v1/groups/{id}/qr` payload, base64url JSON).
+    case joinGroupByServerPayload(String)
 }
 
 public enum SplickQRParser {
+    private static let webHost = "splick.app"
+
     public static func parse(_ raw: String) -> SplickQRAction? {
         let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return nil }
 
-        if let url = URL(string: value), url.scheme?.lowercased() == "splick" {
+        if let url = URL(string: value) {
+            let scheme = url.scheme?.lowercased()
             let host = (url.host ?? "").lowercased()
             let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            if host == "friend", !path.isEmpty {
-                return .addFriend(username: path)
+
+            if scheme == "splick" {
+                if host == "friend", !path.isEmpty {
+                    return .addFriend(username: path)
+                }
+                if host == "group", !path.isEmpty {
+                    return .joinGroup(inviteCode: path)
+                }
             }
-            if host == "group", !path.isEmpty {
-                return .joinGroup(inviteCode: path)
+
+            if scheme == "https" || scheme == "http" {
+                let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+                let qrPayload = components?.queryItems?.first(where: { item in
+                    let name = item.name.lowercased()
+                    return name == "qr" || name == "payload"
+                })?.value
+                let pathComponents = path
+                    .split(separator: "/")
+                    .map(String.init)
+                    .filter { !$0.isEmpty }
+
+                if host == webHost || host == "www.\(webHost)" {
+                    if pathComponents.count == 2,
+                       pathComponents[0].lowercased() == "group",
+                       pathComponents[1].lowercased() == "join",
+                       let qrPayload,
+                       !qrPayload.isEmpty {
+                        return .joinGroupByServerPayload(qrPayload)
+                    }
+                    if pathComponents.count == 2, pathComponents[0].lowercased() == "group" {
+                        return .joinGroup(inviteCode: pathComponents[1])
+                    }
+                    if pathComponents.count == 2, pathComponents[0].lowercased() == "friend" {
+                        return .addFriend(username: pathComponents[1])
+                    }
+                    if pathComponents.count == 1 {
+                        return .addFriend(username: pathComponents[0])
+                    }
+                }
             }
         }
 
         if let serverPayload = parseServerPersonalPayload(value) {
             return .addFriendByServerPayload(serverPayload)
+        }
+
+        if let serverPayload = parseServerGroupPayload(value) {
+            return .joinGroupByServerPayload(serverPayload)
         }
 
         let lower = value.lowercased()
@@ -59,6 +102,21 @@ public enum SplickQRParser {
               json["userId"] != nil,
               json["qrVersion"] != nil,
               json["nonce"] != nil
+        else {
+            return nil
+        }
+        return raw
+    }
+
+    /// Returns the raw scanned string when it is a server-issued group QR envelope.
+    private static func parseServerGroupPayload(_ raw: String) -> String? {
+        guard let data = base64URLDecode(raw),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let type = json["type"] as? String,
+              type == "group",
+              json["groupId"] != nil,
+              json["nonce"] != nil,
+              json["issuedAt"] != nil
         else {
             return nil
         }

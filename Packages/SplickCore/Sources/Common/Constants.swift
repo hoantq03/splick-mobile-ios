@@ -87,6 +87,23 @@ public enum AppConstants {
             URL(string: "https://\(profileInvitePath(username: username))")!
         }
 
+        public static func groupInvitePath(inviteCode: String) -> String {
+            "\(webHost)/group/\(inviteCode)"
+        }
+
+        public static func groupInviteURL(inviteCode: String) -> URL {
+            URL(string: "https://\(groupInvitePath(inviteCode: inviteCode))")!
+        }
+
+        public static func groupQrJoinURL(payload: String) -> URL {
+            var components = URLComponents()
+            components.scheme = "https"
+            components.host = webHost
+            components.path = "/group/join"
+            components.queryItems = [URLQueryItem(name: "qr", value: payload)]
+            return components.url!
+        }
+
         public static let marketingURL = URL(string: "https://\(webHost)/")!
         public static let termsOfServiceURL = URL(string: "https://\(webHost)/terms/")!
         public static let privacyPolicyURL = URL(string: "https://\(webHost)/privacy/")!

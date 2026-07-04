@@ -49,8 +49,8 @@ struct GroupInviteQRSheet: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, SplickTheme.Spacing.xl)
 
-                if let payload = viewModel.qrPayload {
-                    ShareLink(item: payload) {
+                if let shareURL = viewModel.shareURL {
+                    ShareLink(item: shareURL) {
                         Label("Chia sẻ mã QR", systemImage: "square.and.arrow.up")
                             .font(SplickTheme.Typography.headline)
                             .frame(maxWidth: .infinity)

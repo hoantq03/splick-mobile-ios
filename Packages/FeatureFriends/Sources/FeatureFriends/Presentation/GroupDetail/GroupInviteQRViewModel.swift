@@ -1,4 +1,5 @@
 import Foundation
+import Common
 
 @MainActor
 final class GroupInviteQRViewModel: ObservableObject {
@@ -33,6 +34,15 @@ final class GroupInviteQRViewModel: ObservableObject {
 
     var qrPayload: String? {
         serverQR?.payload
+    }
+
+    var shareURL: URL? {
+        guard let payload = qrPayload else { return nil }
+        if let action = SplickQRParser.parse(payload),
+           case .joinGroup(let inviteCode) = action {
+            return AppConstants.Links.groupInviteURL(inviteCode: inviteCode)
+        }
+        return AppConstants.Links.groupQrJoinURL(payload: payload)
     }
 
     func load() async {

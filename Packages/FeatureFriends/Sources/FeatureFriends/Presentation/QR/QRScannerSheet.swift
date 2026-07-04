@@ -133,9 +133,9 @@ struct QRScannerSheet: View {
 
     private var manualPlaceholder: String {
         switch mode {
-        case .addFriend: return "Dán payload QR hoặc splick://friend/username"
-        case .joinGroup: return "splick://group/invite-code"
-        case .unified: return "splick://friend/username hoặc splick://group/mã-nhóm"
+        case .addFriend: return "Dán link https://splick.app/username hoặc splick://friend/username"
+        case .joinGroup: return "https://splick.app/group/invite-code"
+        case .unified: return "https://splick.app/username hoặc https://splick.app/group/mã-nhóm"
         }
     }
 }
