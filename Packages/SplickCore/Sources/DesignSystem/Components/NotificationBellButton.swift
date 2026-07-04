@@ -12,6 +12,8 @@ public struct NotificationBellButton: View {
     @State private var bellOpacity: Double = 1
 
     private static let reappearSpring = Animation.spring(response: 0.22, dampingFraction: 0.72)
+    private static let badgeHeight: CGFloat = 20
+    private static let badgeMinWidth: CGFloat = 20
 
     public init(
         unreadCount: Int,
@@ -43,18 +45,22 @@ public struct NotificationBellButton: View {
                     Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
                         .font(.system(size: unreadCount > 99 ? 8 : 9, weight: .bold))
                         .foregroundStyle(.white)
-                        .padding(.horizontal, unreadCount > 9 ? 5 : 0)
-                        .frame(minWidth: 18, minHeight: 18)
+                        .padding(.horizontal, unreadCount > 9 ? 5.5 : 3.5)
+                        .padding(.vertical, 1)
+                        .frame(
+                            minWidth: unreadCount > 9 ? Self.badgeMinWidth + 2 : Self.badgeMinWidth,
+                            minHeight: Self.badgeHeight
+                        )
                         .background {
                             Capsule(style: .continuous)
                                 .fill(SplickTheme.Colors.error)
                                 .overlay {
                                     Capsule(style: .continuous)
-                                        .stroke(.white.opacity(0.95), lineWidth: 2)
+                                        .strokeBorder(.white.opacity(0.95), lineWidth: 1.5)
                                 }
                                 .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
                         }
-                        .offset(x: 7, y: -4)
+                        .offset(x: 8, y: -5)
                 }
             }
             .frame(width: 34, height: 34)

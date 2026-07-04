@@ -135,7 +135,10 @@ struct PostCardView: View {
         .sheet(item: $activeSheet) { sheet in
             switch sheet {
             case .reactions:
-                ReactionDetailSheet(summaries: post.userReactionSummaries())
+                ReactionDetailSheet(
+                    summaries: post.userReactionSummaries(),
+                    onUserTap: onUserTap
+                )
             case .emojiPicker:
                 EmojiPickerSheet(
                     currentUserId: currentUser?.id,
