@@ -32,6 +32,9 @@ enum OptimisticPostBuilder {
             imageURL: imageURL,
             thumbnailURL: first?.thumbnailURL,
             caption: input.caption,
+            reactions: [],
+            comments: [],
+            groupId: input.groupId,
             createdAt: .now,
             mediaType: primaryType,
             videoURL: primaryType == .video ? first?.mediaURL : nil,
@@ -41,7 +44,9 @@ enum OptimisticPostBuilder {
             feedKind: input.feedKind,
             checkInPlace: input.checkInPlace,
             billSplit: input.billSplit,
-            viewCount: 0
+            viewCount: 0,
+            viewers: [],
+            audience: input.audience
         )
     }
 
