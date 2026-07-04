@@ -8,6 +8,12 @@ import Localization
 import SplickDomain
 import FeatureMedia
 
+private enum ComposeMetrics {
+    static let fieldCornerRadius: CGFloat = SplickTheme.CornerRadius.inset
+    static let companionTileWidth: CGFloat = 72
+    static let companionNameWidth: CGFloat = 64
+}
+
 public struct CreatePostComposeView: View {
     @EnvironmentObject private var languageService: LanguageService
     @StateObject private var viewModel: CreatePostComposeViewModel
@@ -18,6 +24,7 @@ public struct CreatePostComposeView: View {
     @State private var showPhotoLibraryPicker = false
     @State private var showCameraCapture = false
     @State private var reviewingMediaID: UUID?
+    @State private var showAudiencePicker = false
     @FocusState private var isFriendSearchFocused: Bool
 
     public init(
@@ -36,6 +43,7 @@ public struct CreatePostComposeView: View {
                 mediaPreview
                 captionSection
                 tagFriendsSection
+                audienceSection
                 locationSection
                 billSplitSection
             }
@@ -108,6 +116,9 @@ public struct CreatePostComposeView: View {
                     onDismiss: { reviewingMediaID = nil }
                 )
             }
+        }
+        .sheet(isPresented: $showAudiencePicker) {
+            PostAudiencePickerSheet(viewModel: viewModel)
         }
     }
 
@@ -210,7 +221,7 @@ public struct CreatePostComposeView: View {
     }
 
     private var captionSection: some View {
-        VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
             Text(languageService.text(.feedCreateCaption))
                 .font(SplickTheme.Typography.headline)
             MentionTextField(
@@ -220,8 +231,13 @@ public struct CreatePostComposeView: View {
                 minHeight: 88
             )
             .padding(SplickTheme.Spacing.sm)
-            .background(SplickTheme.Colors.secondaryBackground)
-            .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small))
+            .background(SplickTheme.Colors.tertiaryBackground)
+            .clipShape(
+                RoundedRectangle(
+                    cornerRadius: ComposeMetrics.fieldCornerRadius,
+                    style: .continuous
+                )
+            )
             .onChange(of: viewModel.caption) { newValue in
                 viewModel.syncMentionPicker(with: newValue)
             }
@@ -232,6 +248,7 @@ public struct CreatePostComposeView: View {
                 }
             }
         }
+        .splickCard()
     }
 
     private var tagFriendsSection: some View {
@@ -254,49 +271,41 @@ public struct CreatePostComposeView: View {
                     }
             }
             .padding(SplickTheme.Spacing.sm)
-            .background(SplickTheme.Colors.secondaryBackground)
-            .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small))
+            .background(SplickTheme.Colors.tertiaryBackground)
+            .clipShape(
+                RoundedRectangle(
+                    cornerRadius: ComposeMetrics.fieldCornerRadius,
+                    style: .continuous
+                )
+            )
 
             if !viewModel.selectedCompanions.isEmpty {
-                FlowLayout(spacing: SplickTheme.Spacing.xs) {
-                    ForEach(viewModel.selectedCompanions) { friend in
-                        HStack(spacing: 4) {
-                            Text(friend.displayName)
-                                .font(SplickTheme.Typography.caption)
-                            Button {
-                                viewModel.removeCompanion(friend)
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 14))
-                            }
-                        }
-                        .padding(.horizontal, SplickTheme.Spacing.sm)
-                        .padding(.vertical, SplickTheme.Spacing.xxs)
-                        .background(SplickTheme.Colors.primaryGradientStart.opacity(0.12))
-                        .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                        .clipShape(Capsule())
-                    }
-                }
+                selectedCompanionsStrip
             }
 
-            if viewModel.isSearchingFriends, viewModel.friendSearchResults.isEmpty {
-                SplickSpinner(size: .small)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } else if viewModel.shouldShowFriendSuggestions {
+            if viewModel.shouldShowFriendSuggestions {
                 friendSearchResultsList
             }
         }
+        .splickCard()
     }
 
     @ViewBuilder
     private var friendSearchResultsList: some View {
         VStack(spacing: 0) {
-            if viewModel.friendSearchResults.isEmpty, !viewModel.isSearchingFriends {
-                Text(languageService.text(.feedCreateFriendsNotFound))
-                    .font(SplickTheme.Typography.caption)
-                    .foregroundStyle(SplickTheme.Colors.textTertiary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(SplickTheme.Spacing.sm)
+            if viewModel.friendSearchResults.isEmpty {
+                if viewModel.isSearchingFriends {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, SplickTheme.Spacing.md)
+                } else {
+                    Text(languageService.text(.feedCreateFriendsNotFound))
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.textTertiary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(SplickTheme.Spacing.sm)
+                }
             } else {
                 ForEach(viewModel.friendSearchResults) { friend in
                     FriendTagRow(friend: friend) {
@@ -312,14 +321,20 @@ public struct CreatePostComposeView: View {
                 }
 
                 if viewModel.isSearchingFriends {
-                    SplickSpinner(size: .small)
+                    ProgressView()
+                        .controlSize(.small)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, SplickTheme.Spacing.sm)
                 }
             }
         }
-        .background(SplickTheme.Colors.secondaryBackground)
-        .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small))
+        .background(SplickTheme.Colors.tertiaryBackground)
+        .clipShape(
+            RoundedRectangle(
+                cornerRadius: ComposeMetrics.fieldCornerRadius,
+                style: .continuous
+            )
+        )
     }
 
     private var locationSection: some View {
@@ -328,6 +343,45 @@ public struct CreatePostComposeView: View {
                 .font(SplickTheme.Typography.headline)
             SplickTextField("Quán, địa điểm, thành phố...", text: $viewModel.location)
         }
+    }
+
+    private var audienceSection: some View {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+            Text("Ai có thể xem bài viết")
+                .font(SplickTheme.Typography.headline)
+
+            Button {
+                showAudiencePicker = true
+            } label: {
+                HStack(spacing: SplickTheme.Spacing.sm) {
+                    VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
+                        Text(viewModel.audienceSummaryTitle)
+                            .font(SplickTheme.Typography.callout)
+                            .foregroundStyle(SplickTheme.Colors.textPrimary)
+                        Text(viewModel.audienceSummarySubtitle)
+                            .font(SplickTheme.Typography.caption)
+                            .foregroundStyle(SplickTheme.Colors.textSecondary)
+                            .lineLimit(2)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(SplickTheme.Colors.textTertiary)
+                }
+                .padding(SplickTheme.Spacing.sm)
+                .background(SplickTheme.Colors.tertiaryBackground)
+                .clipShape(
+                    RoundedRectangle(
+                        cornerRadius: ComposeMetrics.fieldCornerRadius,
+                        style: .continuous
+                    )
+                )
+            }
+            .buttonStyle(.plain)
+        }
+        .splickCard()
     }
 
     private var billSplitSection: some View {
@@ -349,6 +403,15 @@ public struct CreatePostComposeView: View {
                     Text(languageService.text(.feedCreateTagFriendsHint))
                         .font(SplickTheme.Typography.caption)
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(SplickTheme.Spacing.sm)
+                        .background(SplickTheme.Colors.tertiaryBackground)
+                        .clipShape(
+                            RoundedRectangle(
+                                cornerRadius: ComposeMetrics.fieldCornerRadius,
+                                style: .continuous
+                            )
+                        )
                 } else {
                     billSplitDetailFields
                 }
@@ -380,7 +443,12 @@ public struct CreatePostComposeView: View {
             .padding(SplickTheme.Spacing.sm)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(SplickTheme.Colors.primaryGradientStart.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small))
+            .clipShape(
+                RoundedRectangle(
+                    cornerRadius: ComposeMetrics.fieldCornerRadius,
+                    style: .continuous
+                )
+            )
         }
     }
 
@@ -395,22 +463,19 @@ public struct CreatePostComposeView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(SplickTheme.Spacing.sm)
                     .background(SplickTheme.Colors.tertiaryBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small))
+                    .clipShape(
+                        RoundedRectangle(
+                            cornerRadius: ComposeMetrics.fieldCornerRadius,
+                            style: .continuous
+                        )
+                    )
             }
             if let share = viewModel.equalShareAmount {
                 ForEach(viewModel.billSplitParticipants) { user in
-                    HStack {
-                        participantNameLabel(user)
-                        Spacer()
-                        Text(VNDMoneyFormat.formatDisplay(share))
-                            .font(SplickTheme.Typography.callout)
-                            .foregroundStyle(
-                                viewModel.isCurrentUser(user)
-                                    ? SplickTheme.Colors.primaryGradientStart
-                                    : SplickTheme.Colors.textSecondary
-                            )
-                    }
-                    .padding(.vertical, SplickTheme.Spacing.xxs)
+                    participantAmountPreviewRow(
+                        for: user,
+                        amountLabel: VNDMoneyFormat.formatDisplay(share)
+                    )
                 }
             }
 
@@ -426,21 +491,110 @@ public struct CreatePostComposeView: View {
         }
     }
 
-    private func participantNameLabel(_ user: UserSummary) -> some View {
-        Text(viewModel.participantDisplayName(user))
-            .font(SplickTheme.Typography.callout)
-            .fontWeight(viewModel.isCurrentUser(user) ? .semibold : .regular)
-            .foregroundStyle(
-                viewModel.isCurrentUser(user)
-                    ? SplickTheme.Colors.primaryGradientStart
-                    : SplickTheme.Colors.textPrimary
+    private var selectedCompanionsStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(alignment: .top, spacing: SplickTheme.Spacing.sm) {
+                ForEach(viewModel.selectedCompanions) { friend in
+                    selectedCompanionTile(for: friend)
+                }
+            }
+            .padding(.vertical, SplickTheme.Spacing.xxxs)
+        }
+    }
+
+    private func selectedCompanionTile(for friend: UserSummary) -> some View {
+        VStack(spacing: SplickTheme.Spacing.xs) {
+            ZStack(alignment: .topTrailing) {
+                AvatarView(
+                    imageURL: friend.avatarURL,
+                    name: friend.displayName,
+                    size: .medium
+                )
+                .overlay {
+                    Circle()
+                        .strokeBorder(
+                            SplickTheme.Colors.primaryGradientStart.opacity(0.18),
+                            lineWidth: 1
+                        )
+                }
+
+                Button {
+                    viewModel.removeCompanion(friend)
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.white, .black.opacity(0.55))
+                }
+                .buttonStyle(.plain)
+                .offset(x: 5, y: -5)
+            }
+
+            Text(companionShortName(friend))
+                .font(SplickTheme.Typography.caption)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .multilineTextAlignment(.center)
+                .frame(width: ComposeMetrics.companionNameWidth)
+        }
+        .frame(width: ComposeMetrics.companionTileWidth)
+        .padding(.vertical, SplickTheme.Spacing.xxs)
+    }
+
+    private func participantIdentityView(_ user: UserSummary) -> some View {
+        HStack(spacing: SplickTheme.Spacing.xs) {
+            AvatarView(
+                imageURL: user.avatarURL,
+                name: user.displayName,
+                size: .small
             )
-            .lineLimit(1)
+
+            Text(viewModel.participantDisplayName(user))
+                .font(SplickTheme.Typography.callout)
+                .fontWeight(viewModel.isCurrentUser(user) ? .semibold : .regular)
+                .foregroundStyle(
+                    viewModel.isCurrentUser(user)
+                        ? SplickTheme.Colors.primaryGradientStart
+                        : SplickTheme.Colors.textPrimary
+                )
+                .lineLimit(1)
+        }
+    }
+
+    private func participantAmountPreviewRow(for user: UserSummary, amountLabel: String) -> some View {
+        HStack(spacing: SplickTheme.Spacing.sm) {
+            participantIdentityView(user)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(amountLabel)
+                .font(SplickTheme.Typography.callout)
+                .foregroundStyle(
+                    viewModel.isCurrentUser(user)
+                        ? SplickTheme.Colors.primaryGradientStart
+                        : SplickTheme.Colors.textSecondary
+                )
+        }
+        .padding(.horizontal, SplickTheme.Spacing.sm)
+        .padding(.vertical, SplickTheme.Spacing.xs)
+        .background(SplickTheme.Colors.tertiaryBackground)
+        .clipShape(
+            RoundedRectangle(
+                cornerRadius: ComposeMetrics.fieldCornerRadius,
+                style: .continuous
+            )
+        )
+    }
+
+    private func companionShortName(_ user: UserSummary) -> String {
+        let trimmedName = user.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return user.username }
+        let shortName = trimmedName.split(whereSeparator: \.isWhitespace).last.map(String.init) ?? trimmedName
+        return shortName
     }
 
     private func percentageRow(for user: UserSummary) -> some View {
         HStack(spacing: SplickTheme.Spacing.sm) {
-            participantNameLabel(user)
+            participantIdentityView(user)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 4) {
@@ -459,12 +613,20 @@ public struct CreatePostComposeView: View {
                 .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
                 .frame(width: 110, alignment: .trailing)
         }
-        .padding(.vertical, SplickTheme.Spacing.xxs)
+        .padding(.horizontal, SplickTheme.Spacing.sm)
+        .padding(.vertical, SplickTheme.Spacing.xs)
+        .background(SplickTheme.Colors.tertiaryBackground)
+        .clipShape(
+            RoundedRectangle(
+                cornerRadius: ComposeMetrics.fieldCornerRadius,
+                style: .continuous
+            )
+        )
     }
 
     private func exactAmountRow(for user: UserSummary) -> some View {
         HStack(spacing: SplickTheme.Spacing.sm) {
-            participantNameLabel(user)
+            participantIdentityView(user)
 
             Spacer()
 
@@ -481,7 +643,15 @@ public struct CreatePostComposeView: View {
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
             }
         }
-        .padding(.vertical, SplickTheme.Spacing.xxs)
+        .padding(.horizontal, SplickTheme.Spacing.sm)
+        .padding(.vertical, SplickTheme.Spacing.xs)
+        .background(SplickTheme.Colors.tertiaryBackground)
+        .clipShape(
+            RoundedRectangle(
+                cornerRadius: ComposeMetrics.fieldCornerRadius,
+                style: .continuous
+            )
+        )
     }
 
     private func percentageAmountLabel(for userId: UUID) -> String {

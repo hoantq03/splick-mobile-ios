@@ -79,6 +79,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
     public let billSplit: PostBillSplit?
     public let viewCount: Int
     public let viewers: [UserSummary]
+    public let audience: PostAudience
     public let groupId: UUID?
     public let createdAt: Date
 
@@ -105,7 +106,8 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         checkInPlace: String? = nil,
         billSplit: PostBillSplit? = nil,
         viewCount: Int = 0,
-        viewers: [UserSummary] = []
+        viewers: [UserSummary] = [],
+        audience: PostAudience = .everyone
     ) {
         self.id = id
         self.author = author
@@ -124,6 +126,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         self.billSplit = billSplit
         self.viewCount = viewCount
         self.viewers = viewers
+        self.audience = audience
         self.groupId = groupId
         self.createdAt = createdAt
     }
@@ -158,7 +161,8 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
             checkInPlace: checkInPlace,
             billSplit: billSplit,
             viewCount: viewCount ?? self.viewCount,
-            viewers: viewers ?? self.viewers
+            viewers: viewers ?? self.viewers,
+            audience: audience
         )
     }
 

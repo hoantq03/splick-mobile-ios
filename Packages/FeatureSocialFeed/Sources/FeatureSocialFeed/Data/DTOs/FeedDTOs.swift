@@ -46,6 +46,7 @@ struct PostDTO: Decodable {
     let comments: [CommentDTO]?
     let viewCount: Int?
     let viewers: [AuthorDTO]?
+    let audience: PostAudienceDTO?
 }
 
 struct PostLocationDTO: Decodable {
@@ -62,6 +63,12 @@ struct PostMediaItemDTO: Decodable {
     let mediaType: String
     let durationSeconds: Int?
     let sortOrder: Int?
+}
+
+struct PostAudienceDTO: Decodable {
+    let isPublic: Bool
+    let allowedGroupIds: [UUID]?
+    let allowedUserIds: [UUID]?
 }
 
 struct PostBillSplitDTO: Decodable {
@@ -141,6 +148,7 @@ struct CreatePostRequestDTO: Encodable {
     let companionIds: [UUID]
     let mediaId: UUID?
     let billSplit: CreatePostBillSplitRequestDTO?
+    let audience: CreatePostAudienceRequestDTO?
 }
 
 struct CreatePostLocationRequestDTO: Encodable {
@@ -156,6 +164,12 @@ struct CreatePostMediaItemRequestDTO: Encodable {
     let mediaType: String
     let durationSecs: Int?
     let sortOrder: Int?
+}
+
+struct CreatePostAudienceRequestDTO: Encodable {
+    let isPublic: Bool
+    let allowedGroupIds: [UUID]
+    let allowedUserIds: [UUID]
 }
 
 struct CreatePostBillSplitRequestDTO: Encodable {

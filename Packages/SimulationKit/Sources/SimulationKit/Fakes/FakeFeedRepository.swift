@@ -364,7 +364,8 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
             feedKind: input.feedKind,
             checkInPlace: input.checkInPlace,
             billSplit: input.billSplit,
-            viewCount: 0
+            viewCount: 0,
+            audience: input.audience
         )
         posts.insert(post, at: 0)
 

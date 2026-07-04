@@ -96,6 +96,11 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
         }
 
         let billSplitRequest = buildBillSplitRequest(from: input)
+        let audienceRequest = CreatePostAudienceRequestDTO(
+            isPublic: input.audience.isPublic,
+            allowedGroupIds: input.audience.allowedGroupIds,
+            allowedUserIds: input.audience.allowedUserIds
+        )
         let request = CreatePostRequestDTO(
             caption: input.caption,
             groupId: input.groupId,
@@ -105,7 +110,8 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
             mediaItems: requestMediaItems,
             companionIds: input.companionIds,
             mediaId: primaryMediaId,
-            billSplit: billSplitRequest
+            billSplit: billSplitRequest,
+            audience: audienceRequest
         )
 
         let dto: PostDTO = try await apiClient.request(FeedEndpoint.createPost(request))

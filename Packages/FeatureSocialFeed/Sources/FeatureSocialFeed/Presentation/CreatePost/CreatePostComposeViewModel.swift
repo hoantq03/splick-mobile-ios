@@ -4,6 +4,7 @@ import DesignSystem
 import Common
 import SplickDomain
 import AVFoundation
+import FeatureFriends
 
 public enum ComposeBillSplitMode: String, CaseIterable, Identifiable {
     case equal
@@ -17,6 +18,20 @@ public enum ComposeBillSplitMode: String, CaseIterable, Identifiable {
         case .equal: return "Chia đều"
         case .percentage: return "Theo %"
         case .exact: return "Từng người"
+        }
+    }
+}
+
+enum ComposeAudiencePickerTab: String, CaseIterable, Identifiable {
+    case groups
+    case users
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .groups: return "Nhóm"
+        case .users: return "Người dùng"
         }
     }
 }
@@ -47,19 +62,34 @@ public final class CreatePostComposeViewModel: ObservableObject {
     @Published private(set) var isSearchingFriends = false
     @Published private(set) var hasMoreFriendSearch = true
     @Published private(set) var isFriendSearchActive = false
+    @Published var isAudiencePublic = true
+    @Published var audiencePickerTab: ComposeAudiencePickerTab = .groups
+    @Published var audienceGroupSearchQuery = ""
+    @Published var audienceUserSearchQuery = ""
+    @Published private(set) var availableAudienceGroups: [Group] = []
+    @Published private(set) var selectedAudienceGroups: [Group] = []
+    @Published private(set) var selectedAudienceUsers: [UserSummary] = []
+    @Published private(set) var audienceUserSearchResults: [UserSummary] = []
+    @Published private(set) var audienceGroupsState: LoadingState<[Group]> = .idle
+    @Published private(set) var isSearchingAudienceUsers = false
     @Published private(set) var submitState: LoadingState<Post> = .idle
     @Published private(set) var selectedMediaItems: [ComposeMediaDraft] = []
     @Published private(set) var mentionPickerViewModel: MentionFriendsViewModel?
 
     private let fetchFriendsUseCase: FetchFriendsUseCaseProtocol
+    private let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol
+    private let searchUsersUseCase: SearchUsersUseCaseProtocol
     private let currentUser: UserSummary?
     private let currentUserId: UUID?
     private var friendSearchTask: Task<Void, Never>?
+    private var audienceUserSearchTask: Task<Void, Never>?
     private var activeMentionQuery = ""
     private var friendSearchPage = 0
     private var friendSearchActiveQuery = ""
+    private var hasLoadedAudienceGroups = false
 
     private let friendSearchPageSize = 10
+    private let audienceUserSearchPageSize = 20
 
     var shouldShowFriendSuggestions: Bool {
         isFriendSearchActive
@@ -74,10 +104,14 @@ public final class CreatePostComposeViewModel: ObservableObject {
         videoURL: URL? = nil,
         mediaType: PostMediaType = .image,
         fetchFriendsUseCase: FetchFriendsUseCaseProtocol,
+        fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol,
+        searchUsersUseCase: SearchUsersUseCaseProtocol,
         currentUser: UserSummary?,
         currentUserId: UUID?
     ) {
         self.fetchFriendsUseCase = fetchFriendsUseCase
+        self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
+        self.searchUsersUseCase = searchUsersUseCase
         self.currentUser = currentUser
         self.currentUserId = currentUserId ?? currentUser?.id
 
@@ -116,6 +150,58 @@ public final class CreatePostComposeViewModel: ObservableObject {
 
     var selectedCompanionIds: Set<UUID> {
         Set(selectedCompanions.map(\.id))
+    }
+
+    var selectedAudienceGroupIds: Set<UUID> {
+        Set(selectedAudienceGroups.map(\.id))
+    }
+
+    var selectedAudienceUserIds: Set<UUID> {
+        Set(selectedAudienceUsers.map(\.id))
+    }
+
+    var filteredAudienceGroups: [Group] {
+        let query = audienceGroupSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return availableAudienceGroups }
+        return availableAudienceGroups.filter {
+            $0.name.localizedCaseInsensitiveContains(query)
+                || $0.inviteCode.localizedCaseInsensitiveContains(query)
+                || ($0.description?.localizedCaseInsensitiveContains(query) ?? false)
+        }
+    }
+
+    var audienceSummaryTitle: String {
+        if isAudiencePublic {
+            return "Tất cả"
+        }
+
+        let groupCount = selectedAudienceGroups.count
+        let userCount = selectedAudienceUsers.count
+        if groupCount == 0, userCount == 0 {
+            return "Chọn đối tượng xem"
+        }
+
+        var parts: [String] = []
+        if groupCount > 0 {
+            parts.append("\(groupCount) nhóm")
+        }
+        if userCount > 0 {
+            parts.append("\(userCount) người")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    var audienceSummarySubtitle: String {
+        if isAudiencePublic {
+            return "Bài viết hiển thị theo phạm vi mặc định của feed."
+        }
+        if selectedAudienceGroups.isEmpty, selectedAudienceUsers.isEmpty {
+            return "Giới hạn bài viết cho một số nhóm hoặc người dùng cụ thể."
+        }
+
+        let groupNames = selectedAudienceGroups.prefix(2).map(\.name)
+        let userNames = selectedAudienceUsers.prefix(2).map(\.displayName)
+        return (groupNames + userNames).joined(separator: ", ")
     }
 
     var billSplitParticipants: [UserSummary] {
@@ -273,6 +359,97 @@ public final class CreatePostComposeViewModel: ObservableObject {
         exactAmountTexts.removeValue(forKey: user.id)
     }
 
+    func loadAudienceGroupsIfNeeded() async {
+        guard !hasLoadedAudienceGroups else { return }
+        audienceGroupsState = .loading
+        do {
+            let groups = try await fetchMyGroupsUseCase.execute().sorted {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+            availableAudienceGroups = groups
+            audienceGroupsState = .loaded(groups)
+            hasLoadedAudienceGroups = true
+        } catch {
+            audienceGroupsState = .failed(error.localizedDescription)
+        }
+    }
+
+    func selectEveryoneAudience() {
+        isAudiencePublic = true
+        selectedAudienceGroups = []
+        selectedAudienceUsers = []
+        audienceGroupSearchQuery = ""
+        audienceUserSearchQuery = ""
+        audienceUserSearchResults = []
+        audienceUserSearchTask?.cancel()
+        isSearchingAudienceUsers = false
+    }
+
+    func enableRestrictedAudience() {
+        isAudiencePublic = false
+    }
+
+    func isAudienceGroupSelected(_ group: Group) -> Bool {
+        selectedAudienceGroupIds.contains(group.id)
+    }
+
+    func toggleAudienceGroup(_ group: Group) {
+        enableRestrictedAudience()
+        if isAudienceGroupSelected(group) {
+            selectedAudienceGroups.removeAll { $0.id == group.id }
+        } else {
+            selectedAudienceGroups.append(group)
+            selectedAudienceGroups.sort {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+        }
+    }
+
+    func removeAudienceGroup(_ group: Group) {
+        selectedAudienceGroups.removeAll { $0.id == group.id }
+    }
+
+    func isAudienceUserSelected(_ user: UserSummary) -> Bool {
+        selectedAudienceUserIds.contains(user.id)
+    }
+
+    func toggleAudienceUser(_ user: UserSummary) {
+        enableRestrictedAudience()
+        if isAudienceUserSelected(user) {
+            selectedAudienceUsers.removeAll { $0.id == user.id }
+        } else {
+            selectedAudienceUsers.append(user)
+            selectedAudienceUsers.sort {
+                $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+            }
+        }
+
+        if !audienceUserSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            scheduleAudienceUserSearch()
+        } else {
+            audienceUserSearchResults.removeAll { $0.id == user.id }
+        }
+    }
+
+    func removeAudienceUser(_ user: UserSummary) {
+        selectedAudienceUsers.removeAll { $0.id == user.id }
+        if !audienceUserSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            scheduleAudienceUserSearch()
+        }
+    }
+
+    func updateAudienceUserSearch(_ query: String) {
+        audienceUserSearchQuery = query
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            audienceUserSearchTask?.cancel()
+            audienceUserSearchResults = []
+            isSearchingAudienceUsers = false
+            return
+        }
+        scheduleAudienceUserSearch()
+    }
+
     func prepareSubmit() -> PreparedPostSubmit? {
         guard let input = buildCreatePostInput() else { return nil }
         guard let author = currentUser else {
@@ -298,6 +475,14 @@ public final class CreatePostComposeViewModel: ObservableObject {
     private func buildCreatePostInput() -> CreatePostInput? {
         guard !selectedMediaItems.isEmpty else {
             submitState = .failed("Chọn ít nhất một ảnh hoặc video.")
+            return nil
+        }
+
+        let audience = buildAudience()
+        if audience.isRestricted,
+           audience.allowedGroupIds.isEmpty,
+           audience.allowedUserIds.isEmpty {
+            submitState = .failed("Chọn ít nhất một nhóm hoặc người dùng cụ thể.")
             return nil
         }
 
@@ -327,7 +512,16 @@ public final class CreatePostComposeViewModel: ObservableObject {
             feedKind: enableBillSplit ? .shareBill : .checkIn,
             billSplit: enableBillSplit ? buildBillSplit() : nil,
             billSplitType: enableBillSplit ? splitMode.apiSplitType : nil,
-            autoReminderEnabled: enableBillSplit && autoReminderEnabled
+            autoReminderEnabled: enableBillSplit && autoReminderEnabled,
+            audience: audience
+        )
+    }
+
+    private func buildAudience() -> PostAudience {
+        guard !isAudiencePublic else { return .everyone }
+        return PostAudience(
+            allowedGroupIds: selectedAudienceGroups.map(\.id),
+            allowedUserIds: selectedAudienceUsers.map(\.id)
         )
     }
 
@@ -387,6 +581,23 @@ public final class CreatePostComposeViewModel: ObservableObject {
         }
     }
 
+    private func scheduleAudienceUserSearch() {
+        audienceUserSearchTask?.cancel()
+        let query = audienceUserSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else {
+            audienceUserSearchResults = []
+            isSearchingAudienceUsers = false
+            return
+        }
+
+        isSearchingAudienceUsers = true
+        audienceUserSearchTask = Task {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            guard !Task.isCancelled else { return }
+            await fetchAudienceUserSearch(query: query)
+        }
+    }
+
     private func fetchFriendSearchPage(page: Int, reset: Bool) async {
         isSearchingFriends = true
         defer { isSearchingFriends = false }
@@ -421,6 +632,29 @@ public final class CreatePostComposeViewModel: ObservableObject {
                 friendSearchResults = []
             }
             hasMoreFriendSearch = false
+        }
+    }
+
+    private func fetchAudienceUserSearch(query: String) async {
+        isSearchingAudienceUsers = true
+        defer { isSearchingAudienceUsers = false }
+
+        do {
+            let results = try await searchUsersUseCase.execute(
+                query: query,
+                page: 0,
+                size: audienceUserSearchPageSize
+            )
+            guard !Task.isCancelled else { return }
+            audienceUserSearchResults = results
+                .map(\.user)
+                .filter { !selectedAudienceUserIds.contains($0.id) }
+                .sorted {
+                    $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+                }
+        } catch {
+            guard !Task.isCancelled else { return }
+            audienceUserSearchResults = []
         }
     }
 

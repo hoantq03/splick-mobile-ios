@@ -24,6 +24,7 @@ public struct CreatePostInput: Sendable {
     public let billSplit: PostBillSplit?
     public let billSplitType: String?
     public let autoReminderEnabled: Bool
+    public let audience: PostAudience
     public let groupId: UUID?
 
     public init(
@@ -35,6 +36,7 @@ public struct CreatePostInput: Sendable {
         billSplit: PostBillSplit? = nil,
         billSplitType: String? = nil,
         autoReminderEnabled: Bool = false,
+        audience: PostAudience = .everyone,
         groupId: UUID? = nil
     ) {
         self.mediaItems = mediaItems
@@ -45,6 +47,7 @@ public struct CreatePostInput: Sendable {
         self.billSplit = billSplit
         self.billSplitType = billSplitType
         self.autoReminderEnabled = autoReminderEnabled
+        self.audience = audience
         self.groupId = groupId
     }
 }
