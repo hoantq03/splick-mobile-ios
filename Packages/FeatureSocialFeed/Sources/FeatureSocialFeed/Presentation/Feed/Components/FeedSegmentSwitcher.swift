@@ -87,9 +87,19 @@ enum FeedSegmentPillLayout {
     static let segmentHeight: CGFloat = 28
     static let horizontalTextPadding: CGFloat = 6
     static let chromePadding: CGFloat = 2
+    static let stripSegmentCount: CGFloat = 3
+    static let stripWidth: CGFloat = (segmentWidth * stripSegmentCount) + (chromePadding * 2)
+    static let stripHeight: CGFloat = segmentHeight + (chromePadding * 2)
 
     static var morphOffset: CGFloat { segmentWidth }
 }
+
+private enum FeedSegmentStripMotion {
+    static let selectionSpring = Animation.spring(response: 0.28, dampingFraction: 0.80)
+    static let pressSpring = Animation.spring(response: 0.22, dampingFraction: 0.72)
+}
+
+private let feedSegmentStripOrder: [FeedContentSegment] = [.streak, .feed, .album]
 
 // MARK: - Material pills — iOS 16–25
 
@@ -100,20 +110,31 @@ private struct MaterialPills: View {
     let streakLabel: String
 
     @Namespace private var ns
+    @State private var hoverSegment: FeedContentSegment?
+    @State private var isInteracting = false
 
     var body: some View {
-        HStack(spacing: 0) {
-            pill(.streak, label: streakLabel)
-            pill(.feed, label: feedLabel)
-            pill(.album, label: albumLabel)
+        GeometryReader { proxy in
+            HStack(spacing: 0) {
+                pill(.streak, label: streakLabel)
+                pill(.feed, label: feedLabel)
+                pill(.album, label: albumLabel)
+            }
+            .padding(FeedSegmentPillLayout.chromePadding)
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .background(.ultraThinMaterial, in: Capsule(style: .continuous))
+            .contentShape(Capsule(style: .continuous))
+            .simultaneousGesture(stripGesture(totalWidth: proxy.size.width))
         }
-        .padding(FeedSegmentPillLayout.chromePadding)
-        .background(.ultraThinMaterial, in: Capsule(style: .continuous))
-        .animation(.spring(response: 0.28, dampingFraction: 0.8), value: selection)
+        .frame(width: FeedSegmentPillLayout.stripWidth, height: FeedSegmentPillLayout.stripHeight)
+        .animation(FeedSegmentStripMotion.selectionSpring, value: selection)
+        .animation(FeedSegmentStripMotion.pressSpring, value: hoverSegment)
+        .animation(FeedSegmentStripMotion.pressSpring, value: isInteracting)
     }
 
     private func pill(_ segment: FeedContentSegment, label: String) -> some View {
         let isSelected = selection == segment
+        let isEmphasized = isSelected && (hoverSegment == segment || (hoverSegment == nil && isInteracting))
         return Button {
             selection = segment
         } label: {
@@ -132,16 +153,58 @@ private struct MaterialPills: View {
                     width: FeedSegmentPillLayout.segmentWidth,
                     height: FeedSegmentPillLayout.segmentHeight
                 )
+                .scaleEffect(isEmphasized ? 1.03 : 1)
                 .background {
                     if isSelected {
                         Capsule(style: .continuous)
                             .fill(.regularMaterial)
+                            .overlay {
+                                Capsule(style: .continuous)
+                                    .stroke(.white.opacity(isEmphasized ? 0.75 : 0.45), lineWidth: 0.8)
+                            }
+                            .shadow(color: .black.opacity(isEmphasized ? 0.10 : 0.05), radius: isEmphasized ? 10 : 5, y: isEmphasized ? 4 : 2)
+                            .scaleEffect(isEmphasized ? 1.08 : 1)
                             .matchedGeometryEffect(id: "indicator", in: ns)
                     }
                 }
         }
         .buttonStyle(.plain)
+        .hoverEffect(.lift)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private func stripGesture(totalWidth: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .local)
+            .onChanged { value in
+                isInteracting = true
+                guard let segment = segment(at: value.location.x, totalWidth: totalWidth) else { return }
+                hoverSegment = segment
+                guard selection != segment else { return }
+                withAnimation(FeedSegmentStripMotion.selectionSpring) {
+                    selection = segment
+                }
+            }
+            .onEnded { value in
+                if let segment = segment(at: value.location.x, totalWidth: totalWidth) ?? hoverSegment,
+                   selection != segment {
+                    withAnimation(FeedSegmentStripMotion.selectionSpring) {
+                        selection = segment
+                    }
+                }
+                withAnimation(FeedSegmentStripMotion.pressSpring) {
+                    hoverSegment = nil
+                    isInteracting = false
+                }
+            }
+    }
+
+    private func segment(at locationX: CGFloat, totalWidth: CGFloat) -> FeedContentSegment? {
+        let leading = FeedSegmentPillLayout.chromePadding
+        let trailing = totalWidth - FeedSegmentPillLayout.chromePadding
+        guard locationX >= leading, locationX <= trailing else { return nil }
+        let relativeX = min(max(locationX - leading, 0), totalWidth - (FeedSegmentPillLayout.chromePadding * 2) - 1)
+        let index = min(Int(relativeX / FeedSegmentPillLayout.segmentWidth), feedSegmentStripOrder.count - 1)
+        return feedSegmentStripOrder[index]
     }
 }
 
@@ -155,24 +218,39 @@ private struct GlassPills: View {
     let streakLabel: String
 
     @Namespace private var ns
+    @State private var hoverSegment: FeedContentSegment?
+    @State private var isInteracting = false
 
     var body: some View {
-        HStack(spacing: 0) {
-            pill(.streak, label: streakLabel)
-            pill(.feed, label: feedLabel)
-            pill(.album, label: albumLabel)
+        GeometryReader { proxy in
+            HStack(spacing: 0) {
+                pill(.streak, label: streakLabel)
+                pill(.feed, label: feedLabel)
+                pill(.album, label: albumLabel)
+            }
+            .padding(FeedSegmentPillLayout.chromePadding)
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .background {
+                Capsule(style: .continuous)
+                    .fill(.clear)
+                    .glassEffect(.regular)
+                    .overlay {
+                        Capsule(style: .continuous)
+                            .stroke(.white.opacity(0.30), lineWidth: 0.8)
+                    }
+            }
+            .contentShape(Capsule(style: .continuous))
+            .simultaneousGesture(stripGesture(totalWidth: proxy.size.width))
         }
-        .padding(FeedSegmentPillLayout.chromePadding)
-        .background {
-            Capsule(style: .continuous)
-                .fill(.clear)
-                .glassEffect(.regular)
-        }
-        .animation(.spring(response: 0.28, dampingFraction: 0.8), value: selection)
+        .frame(width: FeedSegmentPillLayout.stripWidth, height: FeedSegmentPillLayout.stripHeight)
+        .animation(FeedSegmentStripMotion.selectionSpring, value: selection)
+        .animation(FeedSegmentStripMotion.pressSpring, value: hoverSegment)
+        .animation(FeedSegmentStripMotion.pressSpring, value: isInteracting)
     }
 
     private func pill(_ segment: FeedContentSegment, label: String) -> some View {
         let isSelected = selection == segment
+        let isEmphasized = isSelected && (hoverSegment == segment || (hoverSegment == nil && isInteracting))
         return Button {
             selection = segment
         } label: {
@@ -191,16 +269,58 @@ private struct GlassPills: View {
                     width: FeedSegmentPillLayout.segmentWidth,
                     height: FeedSegmentPillLayout.segmentHeight
                 )
+                .scaleEffect(isEmphasized ? 1.03 : 1)
                 .background {
                     if isSelected {
                         Capsule(style: .continuous)
                             .fill(.clear)
                             .glassEffect(.regular)
+                            .overlay {
+                                Capsule(style: .continuous)
+                                    .stroke(.white.opacity(isEmphasized ? 0.55 : 0.32), lineWidth: 0.9)
+                            }
+                            .shadow(color: .white.opacity(isEmphasized ? 0.18 : 0.08), radius: isEmphasized ? 12 : 6, y: isEmphasized ? 4 : 2)
+                            .scaleEffect(isEmphasized ? 1.10 : 1)
                             .matchedGeometryEffect(id: "indicator", in: ns)
                     }
                 }
         }
         .buttonStyle(.plain)
+        .hoverEffect(.lift)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private func stripGesture(totalWidth: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .local)
+            .onChanged { value in
+                isInteracting = true
+                guard let segment = segment(at: value.location.x, totalWidth: totalWidth) else { return }
+                hoverSegment = segment
+                guard selection != segment else { return }
+                withAnimation(FeedSegmentStripMotion.selectionSpring) {
+                    selection = segment
+                }
+            }
+            .onEnded { value in
+                if let segment = segment(at: value.location.x, totalWidth: totalWidth) ?? hoverSegment,
+                   selection != segment {
+                    withAnimation(FeedSegmentStripMotion.selectionSpring) {
+                        selection = segment
+                    }
+                }
+                withAnimation(FeedSegmentStripMotion.pressSpring) {
+                    hoverSegment = nil
+                    isInteracting = false
+                }
+            }
+    }
+
+    private func segment(at locationX: CGFloat, totalWidth: CGFloat) -> FeedContentSegment? {
+        let leading = FeedSegmentPillLayout.chromePadding
+        let trailing = totalWidth - FeedSegmentPillLayout.chromePadding
+        guard locationX >= leading, locationX <= trailing else { return nil }
+        let relativeX = min(max(locationX - leading, 0), totalWidth - (FeedSegmentPillLayout.chromePadding * 2) - 1)
+        let index = min(Int(relativeX / FeedSegmentPillLayout.segmentWidth), feedSegmentStripOrder.count - 1)
+        return feedSegmentStripOrder[index]
     }
 }

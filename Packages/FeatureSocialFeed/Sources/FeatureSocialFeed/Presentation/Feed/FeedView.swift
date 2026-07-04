@@ -30,7 +30,6 @@ public struct FeedView: View {
     private let isTabActive: Bool
     @State private var profileRoute: ProfileRoute?
     @State private var companionsRoute: CompanionsSheetRoute?
-    @State private var feedScrollLocked = false
     @State private var selectedSegment: FeedContentSegment = .feed
     @StateObject private var feedSegmentScrollState = FeedSegmentScrollState()
     @StateObject private var videoCoordinator = FeedVideoPlaybackCoordinator()
@@ -66,8 +65,13 @@ public struct FeedView: View {
     public var body: some View {
         NavigationStack(path: $navigationPath) {
             FeedContentPager(selection: $selectedSegment) {
-                feedPane
-                    .environment(\.scrollChromeTrackingEnabled, selectedSegment == .feed)
+                FeedPrimaryPage(
+                    viewModel: viewModel,
+                    navigationPath: $navigationPath,
+                    companionsRoute: $companionsRoute,
+                    videoCoordinator: videoCoordinator,
+                    onOpenProfile: openProfile
+                )
             } album: {
                 PhotoAlbumView(
                     viewModel: photoAlbumViewModel,
@@ -77,14 +81,12 @@ public struct FeedView: View {
                     fetchMyGroupsUseCase: fetchMyGroupsUseCase,
                     isEmbedded: true
                 )
-                .environment(\.scrollChromeTrackingEnabled, selectedSegment == .album)
             } streak: {
                 StreakView(
                     viewModel: streakViewModel,
                     feedViewModel: viewModel,
                     navigationPath: $navigationPath
                 )
-                .environment(\.scrollChromeTrackingEnabled, selectedSegment == .streak)
             }
             .background(SplickTheme.Colors.background.ignoresSafeArea())
             .navigationTitle("")
@@ -144,11 +146,6 @@ public struct FeedView: View {
             }
             onPendingPostHandled?()
         }
-        .onReceive(
-            NotificationCenter.default.publisher(for: FeedScrollLock.notification)
-        ) { notification in
-            feedScrollLocked = notification.userInfo?["locked"] as? Bool ?? false
-        }
         .onChange(of: isTabActive) { active in
             if !active {
                 videoCoordinator.suspendPlayback()
@@ -182,6 +179,34 @@ public struct FeedView: View {
                 openProfile(for: user)
             }
         }
+    }
+
+    private func openProfile(for user: UserSummary) {
+        guard user.id != currentUserSummary?.id else { return }
+        profileRoute = ProfileRoute(user: user)
+    }
+}
+
+private struct FeedPrimaryPage: View {
+    @EnvironmentObject private var languageService: LanguageService
+    @Environment(\.openPostCaptureFlow) private var openPostCaptureFlow
+    @Environment(\.tabBarScrollState) private var tabBarScrollState
+    @Environment(\.feedSegmentScrollState) private var feedSegmentScrollState
+    @ObservedObject var viewModel: FeedViewModel
+    @Binding var navigationPath: NavigationPath
+    @Binding var companionsRoute: CompanionsSheetRoute?
+    let videoCoordinator: FeedVideoPlaybackCoordinator
+    let onOpenProfile: (UserSummary) -> Void
+
+    @State private var feedScrollLocked = false
+
+    var body: some View {
+        feedPane
+            .onReceive(
+                NotificationCenter.default.publisher(for: FeedScrollLock.notification)
+            ) { notification in
+                feedScrollLocked = notification.userInfo?["locked"] as? Bool ?? false
+            }
     }
 
     @ViewBuilder
@@ -219,7 +244,7 @@ public struct FeedView: View {
             feedScrollLocked = false
             defer {
                 tabBarScrollState?.reset()
-                feedSegmentScrollState.reset()
+                feedSegmentScrollState?.reset()
                 viewModel.endRefreshingIfNeeded()
             }
             return await viewModel.loadFeed(isPullToRefresh: true)
@@ -238,7 +263,7 @@ public struct FeedView: View {
                             Task { await viewModel.deletePost(id: post.id) }
                         },
                         onUserTap: { user in
-                            openProfile(for: user)
+                            onOpenProfile(user)
                         },
                         onOpenComments: {
                             guard viewModel.postUploadState(for: post.id) == nil else { return }
@@ -321,10 +346,5 @@ public struct FeedView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, SplickTheme.Spacing.xl)
         .padding(.horizontal, SplickTheme.Spacing.sm)
-    }
-
-    private func openProfile(for user: UserSummary) {
-        guard user.id != currentUserSummary?.id else { return }
-        profileRoute = ProfileRoute(user: user)
     }
 }

@@ -1,94 +1,32 @@
 import SwiftUI
 import UIKit
+import DesignSystem
 
 // Segment order: Streak | Feed | Album  (left → right)
 private let feedSegmentOrder: [FeedContentSegment] = [.streak, .feed, .album]
 
 // MARK: - Shared tracking state
 
-private final class _PagerState: ObservableObject {
-    @Published var dragOffset: CGFloat = 0
-    @Published var currentIndex: Int = 1
-
-    var onIndexChanged: ((Int) -> Void)?
+private final class _PagerState {
+    var dragOffset: CGFloat = 0
+    var currentIndex: Int = 1
 
     func drag(to offset: CGFloat) {
         dragOffset = offset
     }
 
-    /// Settles to `targetIndex` with a spring that feels proportional to the
-    /// remaining travel distance — small bounce when nearly there, bigger when far.
-    ///
-    /// Key trick: we rewrite `(currentIndex, dragOffset)` to an equivalent pair
-    /// `(targetIndex, adjustedOffset)` that produces the SAME visual position,
-    /// then spring `adjustedOffset → 0`.  No visual jump, ever.
-    func settle(to targetIndex: Int, pageWidth: CGFloat) {
-        // adjustedOffset = visual distance the new "current" page is away from center.
-        // Formula preserves continuity: (idx - old) * w + dragOffset = (idx - new) * w + newOffset
-        // ⟹ newOffset = (new - old) * w + dragOffset   (evaluated at idx = targetIndex → 0 + …)
-        let adjusted = CGFloat(targetIndex - currentIndex) * pageWidth + dragOffset
-
-        // Instant, no animation — visual position unchanged.
-        var tx = Transaction()
-        tx.disablesAnimations = true
-        withTransaction(tx) {
-            currentIndex = targetIndex
-            dragOffset   = adjusted
-        }
-
-        // Spring the remaining gap to 0.
-        // fraction ∈ [0,1]: 0 = released right at destination (tiny spring),
-        //                    1 = snapped back from far away (bigger spring).
-        let fraction  = min(1, abs(adjusted) / max(pageWidth, 1))
-        let damping   = 0.92 - 0.18 * fraction   // 0.92 → 0.74 — subtler bounce
-        let response  = 0.24 + 0.08 * fraction   // 0.24 → 0.32
-
-        withAnimation(.spring(response: response, dampingFraction: damping)) {
-            dragOffset = 0
-        }
-
-        onIndexChanged?(targetIndex)
-    }
-
     func jump(to index: Int) {
-        var tx = Transaction()
-        tx.disablesAnimations = true
-        withTransaction(tx) {
-            dragOffset   = 0
-            currentIndex = index
-        }
+        dragOffset = 0
+        currentIndex = index
     }
 }
 
-// MARK: - Pages view (inside UIHostingController)
+@MainActor
+private final class _PagerActivityState: ObservableObject {
+    @Published var activeSelection: FeedContentSegment
 
-private struct _PagerPagesView<Feed: View, Album: View, Streak: View>: View {
-    @ObservedObject var state: _PagerState
-    let width: CGFloat
-    let height: CGFloat
-    let feed: () -> Feed
-    let album: () -> Album
-    let streak: () -> Streak
-
-    var body: some View {
-        ZStack(alignment: .topLeading) {
-            ForEach(0 ..< feedSegmentOrder.count, id: \.self) { idx in
-                pageView(at: idx)
-                    .frame(width: width, height: height)
-                    .offset(x: CGFloat(idx - state.currentIndex) * width + state.dragOffset)
-            }
-        }
-        .frame(width: width, height: height)
-        .clipped()
-    }
-
-    @ViewBuilder
-    private func pageView(at index: Int) -> some View {
-        switch feedSegmentOrder[index] {
-        case .streak: streak()
-        case .feed:   feed()
-        case .album:  album()
-        }
+    init(activeSelection: FeedContentSegment) {
+        self.activeSelection = activeSelection
     }
 }
 
@@ -109,6 +47,7 @@ struct FeedContentPager<Feed: View, Album: View, Streak: View>: View {
                 selection: $selection,
                 width: w,
                 height: h,
+                activeSelection: selection,
                 feed: feed,
                 album: album,
                 streak: streak
@@ -161,19 +100,13 @@ private enum _HorizontalPagingHitTest {
 private final class _PagerGestureCoordinator: NSObject, UIGestureRecognizerDelegate {
     let state = _PagerState()
     var onSelectionChanged: ((FeedContentSegment) -> Void)?
+    var onInteractiveDragChanged: ((CGFloat) -> Void)?
+    var onSettled: ((_ targetIndex: Int, _ adjustedOffset: CGFloat, _ response: CGFloat, _ damping: CGFloat) -> Void)?
 
     private weak var hostView: UIView?
     private var dragAxis: Axis?
     /// Saved `isScrollEnabled` while a horizontal page swipe is in progress.
     private var scrollLockStates: [(UIScrollView, Bool)] = []
-
-    override init() {
-        super.init()
-        state.onIndexChanged = { [weak self] idx in
-            let segment = feedSegmentOrder[idx]
-            self?.onSelectionChanged?(segment)
-        }
-    }
 
     func attachHostView(_ view: UIView) {
         hostView = view
@@ -198,6 +131,7 @@ private final class _PagerGestureCoordinator: NSObject, UIGestureRecognizerDeleg
             let atLeft = state.currentIndex == 0 && raw > 0
             let atRight = state.currentIndex == feedSegmentOrder.count - 1 && raw < 0
             state.drag(to: (atLeft || atRight) ? raw * 0.20 : raw)
+            onInteractiveDragChanged?(state.dragOffset)
         }
     }
 
@@ -215,7 +149,16 @@ private final class _PagerGestureCoordinator: NSObject, UIGestureRecognizerDeleg
         } else if translation.x > threshold || velocity.x > 350 {
             target = max(state.currentIndex - 1, 0)
         }
-        state.settle(to: target, pageWidth: containerWidth)
+
+        let adjustedOffset = CGFloat(target - state.currentIndex) * containerWidth + state.dragOffset
+        let fraction = min(1, abs(adjustedOffset) / max(containerWidth, 1))
+        let damping = 0.92 - 0.18 * fraction
+        let response = 0.24 + 0.08 * fraction
+
+        state.currentIndex = target
+        state.dragOffset = 0
+        onSettled?(target, adjustedOffset, response, damping)
+        onSelectionChanged?(feedSegmentOrder[target])
     }
 
     private func lockVerticalScrollingIfNeeded() {
@@ -288,6 +231,7 @@ private struct _PagerHostRep<Feed: View, Album: View, Streak: View>: UIViewContr
     @Binding var selection: FeedContentSegment
     let width: CGFloat
     let height: CGFloat
+    let activeSelection: FeedContentSegment
     let feed: () -> Feed
     let album: () -> Album
     let streak: () -> Streak
@@ -304,6 +248,7 @@ private struct _PagerHostRep<Feed: View, Album: View, Streak: View>: UIViewContr
             coordinator: coordinator,
             width: width,
             height: height,
+            activeSelection: activeSelection,
             feed: feed,
             album: album,
             streak: streak
@@ -321,7 +266,7 @@ private struct _PagerHostRep<Feed: View, Album: View, Streak: View>: UIViewContr
 
         let idx = feedSegmentOrder.firstIndex(of: selection) ?? 1
         if idx != coordinator.state.currentIndex {
-            coordinator.state.jump(to: idx)
+            viewController.jump(to: idx)
         }
 
         viewController.updatePages(
@@ -329,34 +274,52 @@ private struct _PagerHostRep<Feed: View, Album: View, Streak: View>: UIViewContr
             album: album,
             streak: streak,
             width: width,
-            height: height
+            height: height,
+            activeSelection: activeSelection
         )
     }
 }
 
 // MARK: - Container UIViewController
 
+private struct _PagerPageRoot<Content: View>: View {
+    let segment: FeedContentSegment
+    @ObservedObject var activityState: _PagerActivityState
+    let content: Content
+
+    var body: some View {
+        content.environment(\.scrollChromeTrackingEnabled, activityState.activeSelection == segment)
+    }
+}
+
 private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UIViewController {
     private let coordinator: _PagerGestureCoordinator
-    private var hostingController: UIHostingController<_PagerPagesView<Feed, Album, Streak>>?
+    private let activityState: _PagerActivityState
+    private var feedHostingController: UIHostingController<_PagerPageRoot<Feed>>?
+    private var albumHostingController: UIHostingController<_PagerPageRoot<Album>>?
+    private var streakHostingController: UIHostingController<_PagerPageRoot<Streak>>?
 
     private var currentFeed: () -> Feed
     private var currentAlbum: () -> Album
     private var currentStreak: () -> Streak
     private var currentWidth: CGFloat
     private var currentHeight: CGFloat
+    private var activeSelection: FeedContentSegment
 
     init(
         coordinator: _PagerGestureCoordinator,
         width: CGFloat,
         height: CGFloat,
+        activeSelection: FeedContentSegment,
         feed: @escaping () -> Feed,
         album: @escaping () -> Album,
         streak: @escaping () -> Streak
     ) {
         self.coordinator = coordinator
+        self.activityState = _PagerActivityState(activeSelection: activeSelection)
         self.currentWidth = width
         self.currentHeight = height
+        self.activeSelection = activeSelection
         self.currentFeed = feed
         self.currentAlbum = album
         self.currentStreak = streak
@@ -377,40 +340,108 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
         pan.delegate = coordinator
         view.addGestureRecognizer(pan)
 
+        bindCoordinatorCallbacks()
         embedHosting()
     }
 
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        applyLayout()
+    }
+
+    private func bindCoordinatorCallbacks() {
+        coordinator.onInteractiveDragChanged = { [weak self] _ in
+            self?.applyLayout()
+        }
+        coordinator.onSettled = { [weak self] targetIndex, adjustedOffset, response, damping in
+            self?.settle(to: targetIndex, adjustedOffset: adjustedOffset, response: response, damping: damping)
+        }
+    }
+
     private func embedHosting() {
-        let pages = makePagesView()
-        let hosting = UIHostingController(rootView: pages)
+        let streakHosting = UIHostingController(rootView: makeStreakRoot())
+        let feedHosting = UIHostingController(rootView: makeFeedRoot())
+        let albumHosting = UIHostingController(rootView: makeAlbumRoot())
+
+        prepareHost(streakHosting)
+        prepareHost(feedHosting)
+        prepareHost(albumHosting)
+
+        streakHostingController = streakHosting
+        feedHostingController = feedHosting
+        albumHostingController = albumHosting
+        coordinator.attachHostView(view)
+        applyLayout()
+    }
+
+    private func prepareHost<Content: View>(_ hosting: UIHostingController<Content>) {
         hosting.view.backgroundColor = .clear
         if #available(iOS 16.4, *) {
             hosting.safeAreaRegions = []
         }
 
         addChild(hosting)
-        hosting.view.translatesAutoresizingMaskIntoConstraints = false
+        hosting.view.translatesAutoresizingMaskIntoConstraints = true
         view.addSubview(hosting.view)
-        NSLayoutConstraint.activate([
-            hosting.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            hosting.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            hosting.view.topAnchor.constraint(equalTo: view.topAnchor),
-            hosting.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-        ])
         hosting.didMove(toParent: self)
-        hostingController = hosting
-        coordinator.attachHostView(view)
     }
 
-    private func makePagesView() -> _PagerPagesView<Feed, Album, Streak> {
-        _PagerPagesView(
-            state: coordinator.state,
-            width: currentWidth,
-            height: currentHeight,
-            feed: currentFeed,
-            album: currentAlbum,
-            streak: currentStreak
-        )
+    private func makeFeedRoot() -> _PagerPageRoot<Feed> {
+        _PagerPageRoot(segment: .feed, activityState: activityState, content: currentFeed())
+    }
+
+    private func makeAlbumRoot() -> _PagerPageRoot<Album> {
+        _PagerPageRoot(segment: .album, activityState: activityState, content: currentAlbum())
+    }
+
+    private func makeStreakRoot() -> _PagerPageRoot<Streak> {
+        _PagerPageRoot(segment: .streak, activityState: activityState, content: currentStreak())
+    }
+
+    private var hostedPageViews: [UIView] {
+        [
+            streakHostingController?.view,
+            feedHostingController?.view,
+            albumHostingController?.view,
+        ].compactMap { $0 }
+    }
+
+    private func applyLayout() {
+        guard isViewLoaded else { return }
+        let width = max(currentWidth, view.bounds.width, 1)
+        let height = max(currentHeight, view.bounds.height, 1)
+
+        for (index, pageView) in hostedPageViews.enumerated() {
+            let x = CGFloat(index - coordinator.state.currentIndex) * width + coordinator.state.dragOffset
+            pageView.frame = CGRect(x: x, y: 0, width: width, height: height)
+        }
+    }
+
+    private func settle(
+        to targetIndex: Int,
+        adjustedOffset: CGFloat,
+        response: CGFloat,
+        damping: CGFloat
+    ) {
+        coordinator.state.currentIndex = targetIndex
+        coordinator.state.dragOffset = adjustedOffset
+        applyLayout()
+
+        coordinator.state.dragOffset = 0
+        UIView.animate(
+            withDuration: TimeInterval(response),
+            delay: 0,
+            usingSpringWithDamping: damping,
+            initialSpringVelocity: 0,
+            options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseOut]
+        ) { [weak self] in
+            self?.applyLayout()
+        }
+    }
+
+    func jump(to index: Int) {
+        coordinator.state.jump(to: index)
+        applyLayout()
     }
 
     func updatePages(
@@ -418,7 +449,8 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
         album: @escaping () -> Album,
         streak: @escaping () -> Streak,
         width: CGFloat,
-        height: CGFloat
+        height: CGFloat,
+        activeSelection: FeedContentSegment
     ) {
         let geometryChanged = width != currentWidth || height != currentHeight
         currentFeed = feed
@@ -426,11 +458,11 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
         currentStreak = streak
         currentWidth = width
         currentHeight = height
-
-        hostingController?.rootView = makePagesView()
+        self.activeSelection = activeSelection
+        activityState.activeSelection = activeSelection
 
         if geometryChanged {
-            hostingController?.view.setNeedsLayout()
+            applyLayout()
         }
     }
 
