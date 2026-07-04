@@ -4,6 +4,7 @@ import FeatureNotification
 
 public actor FakeNotificationRepository: NotificationRepositoryProtocol {
     private var notifications: [AppNotification] = []
+    private var registeredTokens: Set<String> = []
     private let logger: StateLogger
 
     public init(logger: StateLogger) {
@@ -114,5 +115,21 @@ public actor FakeNotificationRepository: NotificationRepositoryProtocol {
             expenses: expenses,
             messages: 0
         )
+    }
+
+    public func registerDeviceToken(
+        token: String,
+        bundleId: String,
+        environment: String
+    ) async throws {
+        registeredTokens.insert(token)
+        logger.log(
+            "Register device token: bundleId=\(bundleId), environment=\(environment), total=\(registeredTokens.count)"
+        )
+    }
+
+    public func unregisterDeviceToken(token: String) async throws {
+        registeredTokens.remove(token)
+        logger.log("Unregister device token, remaining=\(registeredTokens.count)")
     }
 }

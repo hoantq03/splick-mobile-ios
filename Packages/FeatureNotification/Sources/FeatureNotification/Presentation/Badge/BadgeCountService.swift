@@ -17,6 +17,10 @@ public final class BadgeCountService: ObservableObject {
         self.pollInterval = pollInterval
     }
 
+    deinit {
+        pollingTask?.cancel()
+    }
+
     public func refresh() async {
         do {
             counts = try await fetchBadgeCountsUseCase.execute()
