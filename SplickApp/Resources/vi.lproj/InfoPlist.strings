@@ -1,4 +1,4 @@
-"NSCameraUsageDescription" = "Splick cần quyền camera để chụp và chia sẻ khoảnh khắc với bạn bè.";
-"NSMicrophoneUsageDescription" = "Splick cần quyền micro để ghi âm khi quay video.";
-"NSPhotoLibraryUsageDescription" = "Splick cần quyền thư viện ảnh để chia sẻ ảnh với bạn bè.";
-"NSPhotoLibraryAddUsageDescription" = "Splick cần quyền lưu ảnh đã chỉnh sửa vào thư viện ảnh của bạn.";
+"NSCameraUsageDescription" = "Splick sử dụng camera để bạn chụp và chia sẻ ảnh, video.";
+"NSMicrophoneUsageDescription" = "Splick sử dụng micro để bạn ghi âm khi quay video.";
+"NSPhotoLibraryUsageDescription" = "Splick sử dụng thư viện ảnh để bạn chọn và chia sẻ ảnh, video.";
+"NSPhotoLibraryAddUsageDescription" = "Splick sử dụng thư viện ảnh để bạn lưu ảnh, video.";
