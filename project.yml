@@ -20,8 +20,8 @@ settings:
   base:
     SWIFT_VERSION: "5.9"
     DEVELOPMENT_LANGUAGE: vi
-    MARKETING_VERSION: "1.0.0"
-    CURRENT_PROJECT_VERSION: 1
+    MARKETING_VERSION: "1.0.2"
+    CURRENT_PROJECT_VERSION: 3
     # DEVELOPMENT_TEAM: set in project.local.yml (see project.local.yml.example)
     CODE_SIGN_STYLE: Automatic
     ONLY_ACTIVE_ARCH: YES
