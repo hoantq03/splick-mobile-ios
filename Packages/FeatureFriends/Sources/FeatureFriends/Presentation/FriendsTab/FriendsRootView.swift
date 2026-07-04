@@ -655,15 +655,6 @@ public struct FriendsRootView: View {
                     await viewModel.loadGroups(isPullToRefresh: false)
                 }
             }
-        case items.isEmpty:
-            EmptyStateView(
-                icon: "person.2",
-                title: "No friends or groups yet",
-                message: "Search by name or username, scan QR, or create a group.",
-                actionTitle: languageService.text(.friendsCreateGroup)
-            ) {
-                showCreateGroup = true
-            }
         default:
             ScrollViewReader { proxy in
                 ScrollView {
@@ -671,8 +662,12 @@ public struct FriendsRootView: View {
                         Color.clear.frame(height: 0).id("directoryScrollTop")
                         friendRequestsRow
                         blockedUsersLink
-                        ForEach(items) { item in
-                            directoryRow(item)
+                        if items.isEmpty {
+                            directoryEmptyStateCard
+                        } else {
+                            ForEach(items) { item in
+                                directoryRow(item)
+                            }
                         }
                     }
                     .padding(.horizontal, SplickTheme.Spacing.md)
@@ -695,6 +690,32 @@ public struct FriendsRootView: View {
                 }
             }
         }
+    }
+
+    private var directoryEmptyStateCard: some View {
+        VStack(spacing: SplickTheme.Spacing.md) {
+            Image(systemName: "person.2")
+                .font(.system(size: 40))
+                .foregroundStyle(SplickTheme.Colors.textTertiary)
+
+            Text("No friends or groups yet")
+                .font(SplickTheme.Typography.title)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
+                .multilineTextAlignment(.center)
+
+            Text("Search by name or username, scan QR, or create a group.")
+                .font(SplickTheme.Typography.body)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+
+            SplickButton(languageService.text(.friendsCreateGroup), style: .primary) {
+                showCreateGroup = true
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, SplickTheme.Spacing.xl)
+        .padding(.horizontal, SplickTheme.Spacing.md)
+        .splickCard()
     }
 
     private var directoryLoadFailed: Bool {
