@@ -20,7 +20,9 @@ struct SplashScreenView: View {
                 Text("Splick")
                     .font(.system(size: 32, weight: .bold, design: .rounded))
                     .foregroundStyle(SplickTheme.Colors.primaryGradient)
-                SplickSpinner(size: .large)
+                ProgressView()
+                    .controlSize(.regular)
+                    .tint(SplickTheme.Colors.primaryGradientStart)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
