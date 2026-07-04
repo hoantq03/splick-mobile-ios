@@ -1,14 +1,19 @@
+import Foundation
 import UIKit
 import UserNotifications
-import Common
 
+@MainActor
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
-        PushNotificationCoordinator.shared.requestAuthorizationIfNeeded()
+
+        if let userInfo = launchOptions?[.remoteNotification] as? [AnyHashable: Any] {
+            PushNotificationCoordinator.shared.handleRemoteNotification(userInfo: userInfo)
+        }
+
         return true
     }
 
@@ -16,16 +21,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         _ application: UIApplication,
         didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
     ) {
-        Task { @MainActor in
-            PushNotificationCoordinator.shared.handleDeviceToken(deviceToken)
-        }
+        PushNotificationCoordinator.shared.handleDeviceTokenRegistration(deviceToken)
     }
 
     func application(
         _ application: UIApplication,
         didFailToRegisterForRemoteNotificationsWithError error: Error
     ) {
-        Log.error(error, category: .notification)
+        PushNotificationCoordinator.shared.handleDeviceTokenRegistrationFailure(error)
     }
 
     func application(
@@ -33,10 +36,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didReceiveRemoteNotification userInfo: [AnyHashable: Any],
         fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
     ) {
-        Task { @MainActor in
-            PushNotificationCoordinator.shared.handleRemoteNotificationPayload(userInfo: userInfo)
-            completionHandler(.newData)
-        }
+        PushNotificationCoordinator.shared.handleRemoteNotification(userInfo: userInfo)
+        completionHandler(.newData)
     }
 
     func userNotificationCenter(
@@ -44,12 +45,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        Task { @MainActor in
-            PushNotificationCoordinator.shared.handleRemoteNotificationPayload(
-                userInfo: notification.request.content.userInfo
-            )
-            completionHandler([.banner, .list, .sound, .badge])
-        }
+        PushNotificationCoordinator.shared.handleRemoteNotification(
+            userInfo: notification.request.content.userInfo
+        )
+        completionHandler([.banner, .badge, .sound])
     }
 
     func userNotificationCenter(
@@ -57,11 +56,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        Task { @MainActor in
-            PushNotificationCoordinator.shared.handleRemoteNotificationPayload(
-                userInfo: response.notification.request.content.userInfo
-            )
-            completionHandler()
-        }
+        PushNotificationCoordinator.shared.handleRemoteNotification(
+            userInfo: response.notification.request.content.userInfo
+        )
+        completionHandler()
     }
 }

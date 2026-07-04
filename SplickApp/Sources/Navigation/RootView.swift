@@ -27,6 +27,9 @@ struct RootView: View {
         .ignoresSafeArea()
         .dismissKeyboardOnTap()
         .animation(SplashMotion.reveal, value: appState.needsSplash)
+        .task {
+            pushNotificationCoordinator.refreshAuthorizationStatus()
+        }
         .onChange(of: scenePhase) { phase in
             defer { previousScenePhase = phase }
 
