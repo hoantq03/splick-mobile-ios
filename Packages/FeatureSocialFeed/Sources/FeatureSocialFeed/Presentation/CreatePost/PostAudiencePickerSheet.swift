@@ -12,8 +12,8 @@ struct PostAudiencePickerSheet: View {
                 VStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
                     audienceModeSection
 
-                    if !viewModel.isAudiencePublic {
-                        restrictedAudienceSection
+                    if viewModel.audienceMode != .friends {
+                        selectionDetailSection
                     }
                 }
                 .padding(SplickTheme.Spacing.md)
@@ -32,7 +32,14 @@ struct PostAudiencePickerSheet: View {
         }
         .presentationDetents([.medium, .large])
         .task {
-            await viewModel.loadAudienceGroupsIfNeeded()
+            switch viewModel.audienceMode {
+            case .friends:
+                break
+            case .groups:
+                await viewModel.loadAudienceGroupsIfNeeded()
+            case .specificUsers, .friendsExcept:
+                await viewModel.loadAudienceFriendsIfNeeded()
+            }
         }
     }
 
@@ -43,44 +50,81 @@ struct PostAudiencePickerSheet: View {
 
             VStack(spacing: SplickTheme.Spacing.sm) {
                 audienceModeRow(
-                    title: "Tất cả",
-                    subtitle: "Hiển thị theo phạm vi mặc định của feed.",
-                    isSelected: viewModel.isAudiencePublic,
-                    action: viewModel.selectEveryoneAudience
+                    title: "Bạn bè",
+                    subtitle: "Chỉ bạn bè của bạn có thể xem bài viết này.",
+                    isSelected: viewModel.audienceMode == .friends,
+                    action: { viewModel.selectAudienceMode(.friends) }
                 )
 
                 audienceModeRow(
-                    title: "Giới hạn",
-                    subtitle: "Chỉ nhóm và người dùng bạn chọn mới xem được.",
-                    isSelected: !viewModel.isAudiencePublic,
-                    action: viewModel.enableRestrictedAudience
+                    title: "Nhóm",
+                    subtitle: "Chỉ thành viên trong các nhóm bạn chọn mới xem được.",
+                    isSelected: viewModel.audienceMode == .groups,
+                    action: { viewModel.selectAudienceMode(.groups) }
+                )
+
+                audienceModeRow(
+                    title: "Người dùng cụ thể",
+                    subtitle: "Chỉ những người bạn chọn mới xem được bài viết.",
+                    isSelected: viewModel.audienceMode == .specificUsers,
+                    action: { viewModel.selectAudienceMode(.specificUsers) }
+                )
+
+                audienceModeRow(
+                    title: "Bạn bè ngoại trừ",
+                    subtitle: "Bạn bè vẫn xem được, trừ những người bạn loại ra.",
+                    isSelected: viewModel.audienceMode == .friendsExcept,
+                    action: { viewModel.selectAudienceMode(.friendsExcept) }
                 )
             }
         }
         .splickCard()
     }
 
-    private var restrictedAudienceSection: some View {
+    private var selectionDetailSection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
-            Picker("Đối tượng", selection: $viewModel.audiencePickerTab) {
-                ForEach(ComposeAudiencePickerTab.allCases) { tab in
-                    Text(tab.title).tag(tab)
-                }
-            }
-            .pickerStyle(.segmented)
+            Text(selectionDetailTitle)
+                .font(SplickTheme.Typography.callout)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
 
-            if !viewModel.selectedAudienceGroups.isEmpty || !viewModel.selectedAudienceUsers.isEmpty {
+            if hasSelections {
                 selectedAudienceSection
             }
 
-            switch viewModel.audiencePickerTab {
+            switch viewModel.audienceMode {
+            case .friends:
+                EmptyView()
             case .groups:
                 audienceGroupsPicker
-            case .users:
+            case .specificUsers, .friendsExcept:
                 audienceUsersPicker
             }
         }
         .splickCard()
+    }
+
+    private var selectionDetailTitle: String {
+        switch viewModel.audienceMode {
+        case .friends:
+            return ""
+        case .groups:
+            return "Chọn nhóm"
+        case .specificUsers:
+            return "Chọn bạn bè cụ thể"
+        case .friendsExcept:
+            return "Loại trừ bạn bè"
+        }
+    }
+
+    private var hasSelections: Bool {
+        switch viewModel.audienceMode {
+        case .friends:
+            return false
+        case .groups:
+            return !viewModel.selectedAudienceGroups.isEmpty
+        case .specificUsers, .friendsExcept:
+            return !viewModel.selectedAudienceUsers.isEmpty
+        }
     }
 
     private var selectedAudienceSection: some View {
@@ -89,11 +133,12 @@ struct PostAudiencePickerSheet: View {
                 .font(SplickTheme.Typography.callout)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
 
-            if !viewModel.selectedAudienceGroups.isEmpty {
+            if viewModel.audienceMode == .groups, !viewModel.selectedAudienceGroups.isEmpty {
                 audienceGroupChipStrip
             }
 
-            if !viewModel.selectedAudienceUsers.isEmpty {
+            if (viewModel.audienceMode == .specificUsers || viewModel.audienceMode == .friendsExcept),
+               !viewModel.selectedAudienceUsers.isEmpty {
                 audienceUserChipStrip
             }
         }
@@ -203,28 +248,26 @@ struct PostAudiencePickerSheet: View {
     private var audienceUsersPicker: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
             searchField(
-                placeholder: "Tìm người dùng...",
+                placeholder: userSearchPlaceholder,
                 text: Binding(
                     get: { viewModel.audienceUserSearchQuery },
                     set: { viewModel.updateAudienceUserSearch($0) }
                 )
             )
 
-            if viewModel.audienceUserSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text("Nhập tên hoặc username để tìm người dùng cụ thể.")
-                    .font(SplickTheme.Typography.caption)
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(SplickTheme.Spacing.sm)
-                    .background(SplickTheme.Colors.tertiaryBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.inset, style: .continuous))
-            } else if viewModel.audienceUserSearchResults.isEmpty {
-                if viewModel.isSearchingAudienceUsers {
+            Text(userSearchEmptyHint)
+                .font(SplickTheme.Typography.caption)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, SplickTheme.Spacing.xs)
+
+            if viewModel.audienceFriendOptions.isEmpty {
+                if viewModel.isLoadingAudienceFriends {
                     ProgressView()
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, SplickTheme.Spacing.md)
                 } else {
-                    Text("Không tìm thấy người dùng phù hợp.")
+                    Text("Không tìm thấy bạn bè phù hợp.")
                         .font(SplickTheme.Typography.caption)
                         .foregroundStyle(SplickTheme.Colors.textTertiary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -238,9 +281,27 @@ struct PostAudiencePickerSheet: View {
         }
     }
 
+    private var userSearchPlaceholder: String {
+        switch viewModel.audienceMode {
+        case .friendsExcept:
+            return "Tìm bạn bè cần loại trừ..."
+        default:
+            return "Tìm bạn bè..."
+        }
+    }
+
+    private var userSearchEmptyHint: String {
+        switch viewModel.audienceMode {
+        case .friendsExcept:
+            return "Hiển thị sẵn 10 người bạn đầu tiên để bạn loại trừ nhanh."
+        default:
+            return "Hiển thị sẵn 10 người bạn đầu tiên để chọn nhanh người xem."
+        }
+    }
+
     private var audienceUserResultsList: some View {
         VStack(spacing: 0) {
-            ForEach(viewModel.audienceUserSearchResults) { user in
+            ForEach(viewModel.audienceFriendOptions) { user in
                 Button {
                     viewModel.toggleAudienceUser(user)
                 } label: {
@@ -262,8 +323,12 @@ struct PostAudiencePickerSheet: View {
 
                         Spacer()
 
-                        Image(systemName: "plus.circle")
-                            .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                        Image(systemName: viewModel.isAudienceUserSelected(user) ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(
+                                viewModel.isAudienceUserSelected(user)
+                                    ? SplickTheme.Colors.primaryGradientStart
+                                    : SplickTheme.Colors.textTertiary
+                            )
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, SplickTheme.Spacing.sm)
@@ -271,12 +336,12 @@ struct PostAudiencePickerSheet: View {
                 }
                 .buttonStyle(.plain)
 
-                if user.id != viewModel.audienceUserSearchResults.last?.id {
+                if user.id != viewModel.audienceFriendOptions.last?.id {
                     Divider().padding(.leading, 48)
                 }
             }
 
-            if viewModel.isSearchingAudienceUsers {
+            if viewModel.isLoadingAudienceFriends {
                 ProgressView()
                     .controlSize(.small)
                     .frame(maxWidth: .infinity)

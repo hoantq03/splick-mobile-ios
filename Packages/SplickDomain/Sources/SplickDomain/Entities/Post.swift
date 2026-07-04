@@ -107,7 +107,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         billSplit: PostBillSplit? = nil,
         viewCount: Int = 0,
         viewers: [UserSummary] = [],
-        audience: PostAudience = .everyone
+        audience: PostAudience = .friends
     ) {
         self.id = id
         self.author = author

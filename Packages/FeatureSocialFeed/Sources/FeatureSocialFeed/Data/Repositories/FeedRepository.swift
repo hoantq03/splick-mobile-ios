@@ -97,9 +97,10 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
 
         let billSplitRequest = buildBillSplitRequest(from: input)
         let audienceRequest = CreatePostAudienceRequestDTO(
-            isPublic: input.audience.isPublic,
+            mode: input.audience.mode.rawValue,
             allowedGroupIds: input.audience.allowedGroupIds,
-            allowedUserIds: input.audience.allowedUserIds
+            allowedUserIds: input.audience.allowedUserIds,
+            excludedUserIds: input.audience.excludedUserIds
         )
         let request = CreatePostRequestDTO(
             caption: input.caption,

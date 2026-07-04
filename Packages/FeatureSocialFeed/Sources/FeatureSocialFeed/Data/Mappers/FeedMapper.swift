@@ -25,7 +25,7 @@ enum FeedMapper {
         let billSplit = dto.billSplit.map(toBillSplit)
         let viewCount = dto.viewCount ?? 0
         let viewers = dto.viewers?.map(toUserSummary) ?? []
-        let audience = dto.audience.map(toAudience) ?? .everyone
+        let audience = dto.audience.map(toAudience) ?? .friends
 
         return Post(
             id: dto.id,
@@ -139,9 +139,10 @@ enum FeedMapper {
 
     static func toAudience(_ dto: PostAudienceDTO) -> PostAudience {
         PostAudience(
-            isPublic: dto.isPublic,
+            mode: PostAudienceMode(rawValue: dto.mode?.lowercased() ?? "") ?? .friends,
             allowedGroupIds: dto.allowedGroupIds ?? [],
-            allowedUserIds: dto.allowedUserIds ?? []
+            allowedUserIds: dto.allowedUserIds ?? [],
+            excludedUserIds: dto.excludedUserIds ?? []
         )
     }
 

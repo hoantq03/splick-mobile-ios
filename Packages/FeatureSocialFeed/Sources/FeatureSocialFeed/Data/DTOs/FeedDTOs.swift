@@ -66,9 +66,10 @@ struct PostMediaItemDTO: Decodable {
 }
 
 struct PostAudienceDTO: Decodable {
-    let isPublic: Bool
+    let mode: String?
     let allowedGroupIds: [UUID]?
     let allowedUserIds: [UUID]?
+    let excludedUserIds: [UUID]?
 }
 
 struct PostBillSplitDTO: Decodable {
@@ -167,9 +168,10 @@ struct CreatePostMediaItemRequestDTO: Encodable {
 }
 
 struct CreatePostAudienceRequestDTO: Encodable {
-    let isPublic: Bool
+    let mode: String
     let allowedGroupIds: [UUID]
     let allowedUserIds: [UUID]
+    let excludedUserIds: [UUID]
 }
 
 struct CreatePostBillSplitRequestDTO: Encodable {

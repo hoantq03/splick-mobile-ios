@@ -36,7 +36,7 @@ public struct CreatePostInput: Sendable {
         billSplit: PostBillSplit? = nil,
         billSplitType: String? = nil,
         autoReminderEnabled: Bool = false,
-        audience: PostAudience = .everyone,
+        audience: PostAudience = .friends,
         groupId: UUID? = nil
     ) {
         self.mediaItems = mediaItems
