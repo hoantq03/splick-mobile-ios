@@ -2,107 +2,174 @@ import SwiftUI
 import DesignSystem
 import SplickDomain
 
+fileprivate enum FlightLaunchStyle: CaseIterable {
+    case straightUp
+    case upLeft
+    case upRight
+}
+
 struct FlyingEmojiFlight: Identifiable {
     let id = UUID()
     let emoji: String
-    /// Tap location in global screen space — converted to card-local at render time.
-    let startGlobal: CGPoint
+    /// Full source slot frame in global screen space — lets the animation reuse the tapped emoji footprint.
+    let sourceFrameGlobal: CGRect
     /// Destination in the post card's named coordinate space.
     let end: CGPoint
+    fileprivate let launchStyle: FlightLaunchStyle
     let popVector: CGVector
     let lateralDrift: CGFloat
-    let arcLift: CGFloat
+    let apexOvershoot: CGFloat
 
-    static func make(emoji: String, startGlobal: CGPoint, end: CGPoint) -> FlyingEmojiFlight {
-        let angle = Double.random(in: (-5.0 / 6.0) * .pi ... (-1.0 / 6.0) * .pi)
-        let distance = CGFloat.random(in: 22...40)
+    static func make(emoji: String, sourceFrameGlobal: CGRect, end: CGPoint) -> FlyingEmojiFlight {
+        let launchHorizontal: CGFloat
+        let lateralDrift: CGFloat
+        let launchStyle = FlightLaunchStyle.allCases.randomElement() ?? .straightUp
+
+        switch launchStyle {
+        case .upLeft:
+            launchHorizontal = CGFloat.random(in: -58 ... -24)
+            lateralDrift = CGFloat.random(in: -34 ... -10)
+        case .upRight:
+            launchHorizontal = CGFloat.random(in: 24 ... 58)
+            lateralDrift = CGFloat.random(in: 10 ... 34)
+        case .straightUp:
+            launchHorizontal = CGFloat.random(in: -12 ... 12)
+            lateralDrift = CGFloat.random(in: -18 ... 18)
+        }
+        let launchHeight = CGFloat.random(in: 92 ... 134)
         return FlyingEmojiFlight(
             emoji: emoji,
-            startGlobal: startGlobal,
+            sourceFrameGlobal: sourceFrameGlobal,
             end: end,
+            launchStyle: launchStyle,
             popVector: CGVector(
-                dx: CGFloat(cos(angle)) * distance,
-                dy: CGFloat(sin(angle)) * distance
+                dx: launchHorizontal,
+                dy: -launchHeight
             ),
-            lateralDrift: CGFloat.random(in: -36...36),
-            arcLift: CGFloat.random(in: 12...28)
+            lateralDrift: lateralDrift,
+            apexOvershoot: CGFloat.random(in: 6 ... 18)
         )
     }
 
     func startLocal(relativeTo cardOriginGlobal: CGPoint) -> CGPoint {
         CGPoint(
-            x: startGlobal.x - cardOriginGlobal.x,
-            y: startGlobal.y - cardOriginGlobal.y
+            x: sourceFrameGlobal.midX - cardOriginGlobal.x,
+            y: sourceFrameGlobal.midY - cardOriginGlobal.y
         )
+    }
+
+    func sourceSize() -> CGFloat {
+        max(20, min(sourceFrameGlobal.width, sourceFrameGlobal.height))
     }
 }
 
-/// Pop upward, arc toward target, shrink and fade (~0.22s total).
+/// Pop upward first, then fall naturally down into the avatar target.
 struct FlyingEmojiView: View {
     let flight: FlyingEmojiFlight
     let cardOriginGlobal: CGPoint
     let onComplete: () -> Void
 
-    @State private var position: CGPoint = .zero
-    @State private var scale: CGFloat = 1.35
-    @State private var opacity: Double = 1
+    @State private var animatedPosition: CGPoint = .zero
+    @State private var animatedScale: CGFloat = 1
+    @State private var animatedOpacity: Double = 1
+    @State private var animatedRotation: Double = 0
+    @State private var hasStarted = false
 
-    private let glyphSize: CGFloat = 28
+    private let launchDuration: TimeInterval = 0.19
+    private let fallDuration: TimeInterval = 0.46
+    private let apexHoldDuration: TimeInterval = 0.02
 
     var body: some View {
         EmojiView(value: flight.emoji, size: glyphSize)
             .frame(width: glyphSize, height: glyphSize)
-            .scaleEffect(scale)
-            .position(position)
-            .opacity(opacity)
+            .scaleEffect(animatedScale)
+            .rotationEffect(.degrees(animatedRotation))
+            .position(hasStarted ? animatedPosition : startPoint)
+            .opacity(animatedOpacity)
             .allowsHitTesting(false)
             .onAppear {
-                let start = flight.startLocal(relativeTo: cardOriginGlobal)
-                position = start
-                runAnimation(from: start)
+                runAnimation()
             }
     }
 
-    private func runAnimation(from start: CGPoint) {
-        let popEnd = CGPoint(
+    private var startPoint: CGPoint {
+        flight.startLocal(relativeTo: cardOriginGlobal)
+    }
+
+    private var glyphSize: CGFloat {
+        flight.sourceSize()
+    }
+    
+    private var apexPoint: CGPoint {
+        let start = startPoint
+        return CGPoint(
             x: start.x + flight.popVector.dx,
-            y: start.y + flight.popVector.dy
+            y: start.y + flight.popVector.dy - flight.apexOvershoot
         )
-        let arcMid = CGPoint(
-            x: (popEnd.x + flight.end.x) / 2 + flight.lateralDrift,
-            y: (popEnd.y + flight.end.y) / 2 - flight.arcLift
-        )
-        let landPoint = CGPoint(
-            x: flight.end.x + flight.lateralDrift * 0.35,
+    }
+
+    private var fallPoint: CGPoint {
+        CGPoint(
+            x: flight.end.x + flight.lateralDrift,
             y: flight.end.y
         )
+    }
 
-        withAnimation(.spring(response: 0.06, dampingFraction: 0.62)) {
-            scale = 1.55
-            position = popEnd
+    private var launchRotation: Double {
+        rotationDirection * 9
+    }
+
+    private var fallRotation: Double {
+        rotationDirection * -4
+    }
+
+    private var settledRotation: Double {
+        0
+    }
+
+    private var rotationDirection: Double {
+        switch flight.launchStyle {
+        case .upLeft:
+            return -1
+        case .upRight:
+            return 1
+        case .straightUp:
+            return flight.lateralDrift >= 0 ? 1 : -1
+        }
+    }
+    
+    private func runAnimation() {
+        hasStarted = true
+        animatedPosition = startPoint
+        animatedScale = 1
+        animatedOpacity = 1
+        animatedRotation = 0
+
+        withAnimation(.interpolatingSpring(stiffness: 260, damping: 24)) {
+            animatedPosition = apexPoint
+            animatedScale = 4
+            animatedRotation = launchRotation
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            withAnimation(.easeOut(duration: 0.09)) {
-                position = arcMid
-                scale = 0.58
+        DispatchQueue.main.asyncAfter(deadline: .now() + launchDuration + apexHoldDuration) {
+            withAnimation(.timingCurve(0.18, 0.78, 0.28, 1, duration: fallDuration)) {
+                animatedPosition = fallPoint
+                animatedScale = 0.42
+                animatedRotation = fallRotation
             }
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
-            withAnimation(.easeIn(duration: 0.07)) {
-                position = landPoint
-                scale = 0.28
+        DispatchQueue.main.asyncAfter(deadline: .now() + launchDuration + apexHoldDuration + fallDuration * 0.58) {
+            withAnimation(.easeOut(duration: fallDuration * 0.18)) {
+                animatedPosition = flight.end
+                animatedScale = 0.18
+                animatedOpacity = 0
+                animatedRotation = settledRotation
             }
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.21) {
-            withAnimation(.easeOut(duration: 0.05)) {
-                opacity = 0
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                onComplete()
-            }
+        DispatchQueue.main.asyncAfter(deadline: .now() + launchDuration + apexHoldDuration + fallDuration) {
+            onComplete()
         }
     }
 }

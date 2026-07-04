@@ -40,6 +40,9 @@ struct InlineReactionBar: View {
 
     private let slotSize: CGFloat = 36
     private let slotSpacing: CGFloat = 4
+    private let reactionCommitDelay: TimeInterval = 0.16
+    private static let selectionFeedback = UISelectionFeedbackGenerator()
+    private static let impactFeedback = UIImpactFeedbackGenerator(style: .light)
 
     var body: some View {
         HStack(spacing: slotSpacing) {
@@ -51,6 +54,10 @@ struct InlineReactionBar: View {
         .frame(height: 40, alignment: .leading)
         .onPreferenceChange(ReactionSlotFramesKey.self) { slotFrames = $0 }
         .simultaneousGesture(longPressDragGesture)
+        .onAppear {
+            Self.selectionFeedback.prepare()
+            Self.impactFeedback.prepare()
+        }
     }
 
     private func emojiSlot(emoji: String, index: Int) -> some View {
@@ -63,10 +70,10 @@ struct InlineReactionBar: View {
         } label: {
             EmojiView(value: emoji, size: slotSize)
                 .frame(width: slotSize, height: slotSize)
-                .scaleEffect(isHighlighted ? 1.5 : (isBouncing ? 1.28 : 1))
-                .offset(y: isHighlighted ? -10 : (isBouncing ? -4 : 0))
-                .animation(.spring(response: 0.12, dampingFraction: 0.68), value: isHighlighted)
-                .animation(.spring(response: 0.05, dampingFraction: 0.62), value: isBouncing)
+                .scaleEffect(isHighlighted ? 1.45 : (isBouncing ? 1.22 : 1))
+                .offset(y: isHighlighted ? -10 : 0)
+                .animation(.spring(response: 0.18, dampingFraction: 0.78), value: isHighlighted)
+                .animation(.spring(response: 0.24, dampingFraction: 0.72), value: isBouncing)
         }
         .buttonStyle(.plain)
         .reactionSlotFrame(index: index)
@@ -85,9 +92,9 @@ struct InlineReactionBar: View {
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
                 .frame(width: slotSize, height: slotSize)
                 .background(Circle().fill(SplickTheme.Colors.tertiaryBackground))
-                .scaleEffect(isHighlighted ? 1.5 : 1)
+                .scaleEffect(isHighlighted ? 1.45 : 1)
                 .offset(y: isHighlighted ? -10 : 0)
-                .animation(.spring(response: 0.12, dampingFraction: 0.68), value: isHighlighted)
+                .animation(.spring(response: 0.18, dampingFraction: 0.78), value: isHighlighted)
         }
         .buttonStyle(.plain)
         .reactionSlotFrame(index: plusIndex)
@@ -126,7 +133,8 @@ struct InlineReactionBar: View {
         guard index != highlightedIndex else { return }
         highlightedIndex = index
         if index != nil {
-            UISelectionFeedbackGenerator().selectionChanged()
+            Self.selectionFeedback.selectionChanged()
+            Self.selectionFeedback.prepare()
         }
     }
 
@@ -138,7 +146,8 @@ struct InlineReactionBar: View {
 
     private func commitDragSelection(at point: CGPoint) {
         guard let index = slotIndex(at: point) else { return }
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        Self.impactFeedback.impactOccurred()
+        Self.impactFeedback.prepare()
 
         if index == preferences.quickEmojis.count {
             onCustomEmoji()
@@ -148,14 +157,23 @@ struct InlineReactionBar: View {
     }
 
     private func commitReaction(emoji: String, index: Int) {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        Self.impactFeedback.impactOccurred()
+        Self.impactFeedback.prepare()
         bounceIndex = index
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
             if bounceIndex == index { bounceIndex = nil }
         }
         if let frame = slotFrames[index] {
             onDragRelease?(emoji, frame)
         }
-        onReact(emoji)
+
+        // Let the local bounce/fly animation breathe before the feed diff updates.
+        DispatchQueue.main.asyncAfter(deadline: .now() + reactionCommitDelay) {
+            var transaction = Transaction()
+            transaction.animation = nil
+            withTransaction(transaction) {
+                onReact(emoji)
+            }
+        }
     }
 }

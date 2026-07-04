@@ -47,7 +47,7 @@ public struct CustomEmojiUploadSheet: View {
                 .padding(SplickTheme.Spacing.md)
             }
             .background(SplickTheme.Colors.background)
-            .navigationTitle(languageService.text(.feedCustomEmojiUploadTitle))
+            .navigationTitle("Emoji của bạn")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -74,8 +74,12 @@ public struct CustomEmojiUploadSheet: View {
 
     private var uploadSection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-            Text(languageService.text(.feedCustomEmojiUploadSectionTitle))
+            Text("Tải emoji của bạn")
                 .font(SplickTheme.Typography.headline)
+
+            Text("Emoji bạn tải lên là emoji cá nhân. Chỉ bạn mới nhìn thấy và sử dụng được chúng.")
+                .font(SplickTheme.Typography.caption)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
 
             HStack(spacing: SplickTheme.Spacing.md) {
                 ZStack {
@@ -132,12 +136,12 @@ public struct CustomEmojiUploadSheet: View {
 
     private var existingSection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-            Text(languageService.text(.feedCustomEmojiExistingTitle))
+            Text("Emoji của bạn")
                 .font(SplickTheme.Typography.headline)
 
-            let emojis = currentUserId.map { emojiStore.emojis(ownedBy: $0) } ?? emojiStore.allEmojis
+            let emojis = currentUserId.map { emojiStore.emojis(ownedBy: $0) } ?? []
             if emojis.isEmpty {
-                Text(languageService.text(.feedCustomEmojiEmpty))
+                Text("Bạn chưa có emoji cá nhân nào.")
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
             } else {

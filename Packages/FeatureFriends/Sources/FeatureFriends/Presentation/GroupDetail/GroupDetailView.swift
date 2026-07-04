@@ -286,7 +286,7 @@ struct GroupDetailView: View {
             Button {
                 showCustomEmojiUpload = true
             } label: {
-                Label(languageService.text(.feedCustomEmojiUploadTitle), systemImage: "face.smiling")
+                Label("Emoji của bạn", systemImage: "face.smiling")
             }
 
             if viewModel.isOwner(currentUserId: currentUserSummary?.id) {
@@ -367,11 +367,11 @@ struct GroupDetailView: View {
     private var customEmojiSection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
             HStack {
-                Text(languageService.text(.feedCustomEmojiExistingTitle))
+                Text("Emoji của bạn")
                     .font(SplickTheme.Typography.headline)
                     .foregroundStyle(SplickTheme.Colors.textPrimary)
                 Spacer()
-                Button(languageService.text(.feedCustomEmojiUploadAction)) {
+                Button("Thêm emoji") {
                     showCustomEmojiUpload = true
                 }
                 .font(SplickTheme.Typography.caption.weight(.semibold))
@@ -386,7 +386,7 @@ struct GroupDetailView: View {
                         Image(systemName: "plus.circle.fill")
                             .font(.title3)
                             .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                        Text(languageService.text(.feedCustomEmojiEmpty))
+                        Text("Bạn chưa có emoji cá nhân nào.")
                             .font(SplickTheme.Typography.caption)
                             .foregroundStyle(SplickTheme.Colors.textSecondary)
                             .multilineTextAlignment(.leading)
@@ -418,7 +418,7 @@ struct GroupDetailView: View {
                                         RoundedRectangle(cornerRadius: 10, style: .continuous)
                                             .fill(SplickTheme.Colors.secondaryBackground)
                                     )
-                                Text(languageService.text(.feedCustomEmojiAddAction))
+                                Text("Thêm")
                                     .font(.caption2)
                                     .foregroundStyle(SplickTheme.Colors.textTertiary)
                             }
