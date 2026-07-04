@@ -165,7 +165,7 @@ struct MainTabView: View {
         }
         .overlay {
             if appState.showNotifications {
-                SplickNotificationRevealOverlay(
+                DesignSystem.SplickNotificationRevealOverlay(
                     isPresented: $appState.showNotifications,
                     anchorFrame: appState.notificationAnchorFrame,
                     unreadCount: badgeCounts.notifications
