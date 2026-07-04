@@ -34,16 +34,19 @@ struct MentionPickerPopup: View {
                     ForEach(viewModel.friends) { friend in
                         FriendTagRow(friend: friend, onTap: { onSelect(friend) }, horizontalPadding: 12)
                             .frame(height: rowHeight)
-                        .onAppear {
-                            Task { await viewModel.loadMoreIfNeeded(currentFriend: friend) }
-                        }
+                            .onAppear {
+                                Task { await viewModel.loadMoreIfNeeded(currentFriend: friend) }
+                            }
 
-                        Divider()
-                            .padding(.leading, 52)
+                        if friend.id != viewModel.friends.last?.id {
+                            Divider()
+                                .padding(.leading, 52)
+                        }
                     }
 
                     if viewModel.isLoading {
-                        SplickSpinner(size: .small)
+                        ProgressView()
+                            .controlSize(.small)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
                     }
