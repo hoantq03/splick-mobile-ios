@@ -2,8 +2,6 @@ import Foundation
 import Common
 import FeatureMessaging
 import FeatureNotification
-import FeatureSocialFeed
-import SplickDomain
 
 @MainActor
 public final class AppStartupCoordinator {
@@ -20,8 +18,13 @@ public final class AppStartupCoordinator {
         feedViewModel: FeedViewModel,
         conversationListViewModel: ConversationListViewModel,
         customEmojiStore: CustomEmojiStore,
+        customEmojiFetcher: any CustomEmojiFetching,
         streakViewModel: StreakViewModel
     ) async {
+        // Emoji metadata lives only in memory; reload it independently so a failed
+        // startup batch (badges, conversations, etc.) does not leave reactions broken.
+        await customEmojiStore.load(fetcher: customEmojiFetcher)
+
         if let cached = await repository.loadCached(userId: userId) {
             apply(
                 cached,
