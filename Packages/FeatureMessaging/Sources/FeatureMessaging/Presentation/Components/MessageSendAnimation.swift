@@ -9,6 +9,7 @@ enum MessageSendAnimation {
         let lateralSway: CGFloat
 
         @State private var phase: FloatPhase = .idle
+        @State private var didPlayAnimation = false
 
         private enum FloatPhase {
             case idle
@@ -24,20 +25,17 @@ enum MessageSendAnimation {
                 )
                 .scaleEffect(phase == .rising ? 0.85 : 1, anchor: .bottom)
                 .opacity(phase == .rising ? 0.72 : 1)
-                .onAppear {
-                    guard isActive else { return }
-                    phase = .rising
-                    withAnimation(riseSpring) {
-                        phase = .settled
-                    }
-                }
-                .onChange(of: isActive) { active in
-                    guard active else { return }
-                    phase = .rising
-                    withAnimation(riseSpring) {
-                        phase = .settled
-                    }
-                }
+                .onAppear { playFloatIfNeeded() }
+                .onChange(of: isActive) { _ in playFloatIfNeeded() }
+        }
+
+        private func playFloatIfNeeded() {
+            guard isActive, !didPlayAnimation else { return }
+            didPlayAnimation = true
+            phase = .rising
+            withAnimation(riseSpring) {
+                phase = .settled
+            }
         }
     }
 }
