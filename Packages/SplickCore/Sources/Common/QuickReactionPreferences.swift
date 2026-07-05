@@ -9,7 +9,7 @@ public final class QuickReactionPreferences: ObservableObject {
 
     private let storageKey = "splick.quick_reaction_emojis"
 
-    @Published public private(set) var quickEmojis: [String] = Self.defaultEmojis
+    @Published public private(set) var quickEmojis: [String] = QuickReactionPreferences.defaultEmojis
 
     private init() {
         if let saved = UserDefaults.standard.stringArray(forKey: storageKey),
