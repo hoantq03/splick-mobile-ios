@@ -2,9 +2,11 @@ import SwiftUI
 import DesignSystem
 import Common
 import Localization
+import SplickDomain
 
 struct OutgoingFriendRequestsSheet: View {
     @ObservedObject var viewModel: OutgoingFriendRequestsViewModel
+    let onProfileTap: (UserSummary, FriendRelationStatus) -> Void
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
 
@@ -28,10 +30,16 @@ struct OutgoingFriendRequestsSheet: View {
                     ScrollView {
                         LazyVStack(spacing: SplickTheme.Spacing.xs) {
                             ForEach(viewModel.requests) { request in
-                                OutgoingFriendRequestRowView(
-                                    request: request,
+                                FriendRowView(
+                                    user: request.addressee,
+                                    friendStatus: .requestSent,
                                     isProcessing: viewModel.processingRequestIds.contains(request.id),
-                                    onCancel: { Task { await viewModel.cancel(request) } }
+                                    onProfileTap: {
+                                        onProfileTap(request.addressee, .requestSent)
+                                    },
+                                    onAddFriend: {
+                                        Task { await viewModel.cancel(request) }
+                                    }
                                 )
                             }
                         }
@@ -57,42 +65,5 @@ struct OutgoingFriendRequestsSheet: View {
             }
             .task { await viewModel.load() }
         }
-    }
-}
-
-private struct OutgoingFriendRequestRowView: View {
-    @EnvironmentObject private var languageService: LanguageService
-    let request: OutgoingFriendRequest
-    let isProcessing: Bool
-    let onCancel: () -> Void
-
-    var body: some View {
-        HStack(spacing: SplickTheme.Spacing.sm) {
-            AvatarView(
-                imageURL: request.addressee.avatarURL,
-                name: request.addressee.displayName,
-                size: .medium
-            )
-
-            VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
-                Text(request.addressee.displayName)
-                    .font(SplickTheme.Typography.headline)
-                Text("@\(request.addressee.username)")
-                    .font(SplickTheme.Typography.caption)
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
-            }
-
-            Spacer(minLength: SplickTheme.Spacing.xs)
-
-            if isProcessing {
-                SplickSpinner(size: .medium)
-            } else {
-                Button(languageService.text(.friendsCancel), action: onCancel)
-                    .font(SplickTheme.Typography.caption.weight(.semibold))
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
-                    .buttonStyle(.plain)
-            }
-        }
-        .splickCard(padding: SplickTheme.Spacing.sm)
     }
 }
