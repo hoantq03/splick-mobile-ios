@@ -105,6 +105,9 @@ public struct FeedView: View {
                     }
                 }
             }
+            .overlay(alignment: .top) {
+                FeedScrollTopFadeOverlay()
+            }
             .navigationDestination(for: FeedPostDestination.self) { destination in
                 PostDetailContainerView(
                     destination: destination,
@@ -332,7 +335,6 @@ private struct FeedPrimaryPage: View {
         .scrollDisabled(feedScrollLocked)
         .environment(\.feedVideoCoordinator, videoCoordinator)
         .feedVideoVisibilityHandling(coordinator: videoCoordinator)
-        .tabBarHideOnScroll()
     }
 
     private var feedEndReachedFooter: some View {

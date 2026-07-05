@@ -2,14 +2,29 @@ import SwiftUI
 import DesignSystem
 import SplickDomain
 
+private struct PostMediaContainerWidthKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        let next = nextValue()
+        if next > 0 { value = next }
+    }
+}
+
 struct PostMediaView: View {
     let post: Post
     @Binding var selectedIndex: Int
     /// Called with the index of the tapped item. Nil = not tappable.
     var onTap: ((Int) -> Void)?
 
+    @State private var containerWidth: CGFloat = FeedMediaLayout.estimatedCardContentWidth
+
     private var items: [PostMediaItem] {
         post.displayMediaItems
+    }
+
+    private var resolvedWidth: CGFloat {
+        containerWidth > 0 ? containerWidth : FeedMediaLayout.estimatedCardContentWidth
     }
 
     var body: some View {
@@ -17,14 +32,27 @@ struct PostMediaView: View {
             if items.isEmpty {
                 EmptyView()
             } else if items.count == 1 {
-                mediaItemView(items[0])
+                mediaItemView(items[0], fixedHeight: nil)
                     .contentShape(Rectangle())
                     .onTapGesture { onTap?(0) }
             } else {
                 multiMediaCarousel
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small))
+        .frame(maxWidth: .infinity)
+        .background(
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: PostMediaContainerWidthKey.self,
+                    value: proxy.size.width
+                )
+            }
+        )
+        .onPreferenceChange(PostMediaContainerWidthKey.self) { width in
+            guard width > 0 else { return }
+            containerWidth = width
+        }
+        .clipShape(RoundedRectangle(cornerRadius: FeedMediaLayout.cornerRadius, style: .continuous))
         .onChange(of: post.id) { _ in
             selectedIndex = min(selectedIndex, max(items.count - 1, 0))
         }
@@ -40,10 +68,10 @@ struct PostMediaView: View {
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .automatic))
+            .frame(maxWidth: .infinity)
             .frame(height: carouselHeight)
-            .simultaneousGesture(
-                TapGesture().onEnded { onTap?(selectedIndex) }
-            )
+            .contentShape(Rectangle())
+            .onTapGesture { onTap?(selectedIndex) }
 
             Text("\(selectedIndex + 1)/\(items.count)")
                 .font(.system(size: 11, weight: .semibold))
@@ -59,11 +87,11 @@ struct PostMediaView: View {
         guard items.indices.contains(index) else {
             return FeedMediaLayout.defaultHeight
         }
-        return FeedMediaLayout.displayHeight(for: items[index])
+        return FeedMediaLayout.displayHeight(for: items[index], containerWidth: resolvedWidth)
     }
 
     @ViewBuilder
-    private func mediaItemView(_ item: PostMediaItem, fixedHeight: CGFloat? = nil) -> some View {
+    private func mediaItemView(_ item: PostMediaItem, fixedHeight: CGFloat?) -> some View {
         switch item.mediaType {
         case .image:
             imageContent(for: item, fixedHeight: fixedHeight)
@@ -73,20 +101,23 @@ struct PostMediaView: View {
     }
 
     private func imageContent(for item: PostMediaItem, fixedHeight: CGFloat?) -> some View {
-        let height = fixedHeight ?? FeedMediaLayout.displayHeight(for: item)
-        let clamped = FeedMediaLayout.isHeightClamped(for: item)
+        let width = resolvedWidth
+        let height = fixedHeight ?? FeedMediaLayout.displayHeight(for: item, containerWidth: width)
+        let fillFrame = FeedMediaLayout.shouldFillFrame(for: item, containerWidth: width)
 
         return RemoteImage(
             url: item.thumbnailURL ?? item.mediaURL,
-            maxPixelDimensions: FeedMediaLayout.feedMediaMaxPixelSize
+            maxPixelSize: FeedMediaLayout.feedMediaMaxDecodePixelSize(
+                containerWidth: width,
+                displayHeight: height
+            )
         ) { phase in
             switch phase {
             case .success(let image):
                 image
                     .resizable()
-                    .aspectRatio(contentMode: clamped ? .fill : .fit)
-                    .frame(height: height)
-                    .frame(maxWidth: .infinity)
+                    .aspectRatio(contentMode: fillFrame ? .fill : .fit)
+                    .frame(width: width, height: height)
                     .clipped()
             case .failure:
                 mediaPlaceholder(icon: "photo", height: height)
@@ -94,26 +125,29 @@ struct PostMediaView: View {
                 mediaPlaceholder(icon: nil, showProgress: true, height: height)
             }
         }
+        .frame(width: width, height: height)
     }
 
     private func videoContent(for item: PostMediaItem, fixedHeight: CGFloat?) -> some View {
-        let height = fixedHeight ?? FeedMediaLayout.displayHeight(for: item)
-        return Group {
-            FeedInlineVideoPlayer(
-                postId: post.id,
-                url: item.mediaURL,
-                posterURL: item.thumbnailURL ?? item.mediaURL,
-                durationSeconds: item.durationSeconds,
-                displayHeight: height
-            )
-        }
-        .frame(height: height)
+        let width = resolvedWidth
+        let height = fixedHeight ?? FeedMediaLayout.displayHeight(for: item, containerWidth: width)
+        return FeedInlineVideoPlayer(
+            postId: post.id,
+            url: item.mediaURL,
+            posterURL: item.thumbnailURL ?? item.mediaURL,
+            durationSeconds: item.durationSeconds,
+            displayHeight: height
+        )
+        .frame(width: width, height: height)
     }
 
-    private func mediaPlaceholder(icon: String?, showProgress: Bool = false, height: CGFloat = FeedMediaLayout.placeholderHeight) -> some View {
-        RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small)
-            .fill(SplickTheme.Colors.secondaryBackground)
-            .frame(height: height)
+    private func mediaPlaceholder(
+        icon: String?,
+        showProgress: Bool = false,
+        height: CGFloat = FeedMediaLayout.placeholderHeight
+    ) -> some View {
+        SplickTheme.Colors.secondaryBackground
+            .frame(width: resolvedWidth, height: height)
             .overlay {
                 if showProgress {
                     ProgressView()

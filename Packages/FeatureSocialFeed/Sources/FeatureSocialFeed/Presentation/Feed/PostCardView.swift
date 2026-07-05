@@ -274,9 +274,14 @@ struct PostCardView: View {
 
     // MARK: - Companions
 
+    private var hasCompanionsSummary: Bool {
+        if let groupName = post.companionGroupName, !groupName.isEmpty { return true }
+        return !post.companions.isEmpty
+    }
+
     @ViewBuilder
     private var companionsSection: some View {
-        if let summary = post.companionsSummaryText() {
+        if hasCompanionsSummary {
             Button(action: onShowCompanions) {
                 HStack(alignment: .center, spacing: 6) {
                     Image(systemName: "person.2.fill")
@@ -284,11 +289,7 @@ struct PostCardView: View {
                         .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
 
                     HStack(alignment: .center, spacing: 5) {
-                        Text(languageService.format(.feedCompanionsSummary, summary))
-                            .font(.system(size: 11))
-                            .foregroundStyle(SplickTheme.Colors.textSecondary)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.leading)
+                        companionsSummaryLabel
 
                         Image(systemName: "chevron.right")
                             .font(.system(size: 9, weight: .semibold))
@@ -300,6 +301,41 @@ struct PostCardView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+        }
+    }
+
+    @ViewBuilder
+    private var companionsSummaryLabel: some View {
+        let bodyFont = Font.system(size: 11)
+        let color = SplickTheme.Colors.textSecondary
+        let prefix = languageService.text(.feedCompanionsWith) + " "
+
+        if let groupName = post.companionGroupName, !groupName.isEmpty {
+            (Text(prefix) + Text(groupName).fontWeight(.semibold))
+                .font(bodyFont)
+                .foregroundStyle(color)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+        } else {
+            let maxNamed = 1
+            let companions = post.companions
+            if companions.count <= maxNamed {
+                let names = companions.map(\.displayName).joined(separator: ", ")
+                (Text(prefix) + Text(names).fontWeight(.semibold))
+                    .font(bodyFont)
+                    .foregroundStyle(color)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            } else {
+                let first = companions.prefix(maxNamed).map(\.displayName).joined(separator: ", ")
+                let others = companions.count - maxNamed
+                let suffix = languageService.format(.feedCompanionsAndOthers, others)
+                (Text(prefix) + Text(first).fontWeight(.semibold) + Text(suffix))
+                    .font(bodyFont)
+                    .foregroundStyle(color)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
         }
     }
 
