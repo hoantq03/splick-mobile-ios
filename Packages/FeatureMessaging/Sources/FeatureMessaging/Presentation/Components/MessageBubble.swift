@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import Common
 import DesignSystem
 import Localization
@@ -17,6 +18,8 @@ struct MessageBubble: View {
     let onRetry: (() -> Void)?
     let onLongPress: (() -> Void)?
 
+    private static let longPressImpact = UIImpactFeedbackGenerator(style: .medium)
+
     private var message: ChatMessage { displayMessage.message }
 
     var body: some View {
@@ -26,7 +29,7 @@ struct MessageBubble: View {
                 Spacer(minLength: 48)
             }
 
-            bubbleColumn
+            bubbleCluster
 
             if isOutgoing {
                 if message.deliveryStatus != .failed {
@@ -43,48 +46,55 @@ struct MessageBubble: View {
         .padding(.top, topSpacing)
     }
 
-    private var bubbleColumn: some View {
-        VStack(alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
-            ZStack(alignment: isOutgoing ? .bottomTrailing : .bottomLeading) {
-                bubbleContent
-                    .background(
-                        GeometryReader { geo in
-                            Color.clear.preference(
-                                key: MessageBubbleFrameKey.self,
-                                value: [message.id: geo.frame(in: .global)]
-                            )
-                        }
-                    )
-                    .simultaneousGesture(
-                        LongPressGesture(minimumDuration: 0.3)
-                            .onEnded { _ in onLongPress?() }
-                    )
+    private static let reactionAccessoryHeight: CGFloat = 26
+    /// Half the accessory sits below the bubble bottom edge, half overlaps the bubble.
+    private static let reactionAccessoryOverlap: CGFloat = reactionAccessoryHeight / 2
 
-                if let quickEmoji = quickReReactEmoji {
-                    quickReReactButton(emoji: quickEmoji)
-                        .offset(x: isOutgoing ? 6 : -6, y: 6)
+    private var bubbleCluster: some View {
+        bubbleContent
+            .simultaneousGesture(longPressGesture)
+            .background {
+                GeometryReader { geo in
+                    Color.clear.preference(
+                        key: MessageReactionAnchorFrameKey.self,
+                        value: [message.id: geo.frame(in: .global)]
+                    )
                 }
             }
-
-            if !message.reactions.isEmpty {
-                MessageReactionStrip(
-                    counts: message.reactionCounts(),
-                    currentUserId: currentUserId,
-                    reactions: message.reactions,
-                    isOutgoing: isOutgoing,
-                    onReact: onReact
-                )
+            .overlay(alignment: isOutgoing ? .bottomLeading : .bottomTrailing) {
+                if showsReactionAccessory {
+                    MessageReactionStrip(
+                        counts: message.reactionCountsInsideOut(isOutgoing: isOutgoing),
+                        currentUserId: currentUserId,
+                        reactions: message.reactions,
+                        onReact: onReact
+                    )
+                    .offset(y: Self.reactionAccessoryOverlap)
+                }
             }
-        }
-        .messageSendFloat(isActive: isFloatingSend, lateralSway: floatSway)
+            .padding(.bottom, showsReactionAccessory ? Self.reactionAccessoryOverlap : 0)
+            .messageSendFloat(isActive: isFloatingSend, lateralSway: floatSway)
+    }
+
+    private var showsReactionAccessory: Bool {
+        !message.reactions.isEmpty
+    }
+
+    private var longPressGesture: some Gesture {
+        LongPressGesture(minimumDuration: 0.28)
+            .onEnded { _ in
+                guard onLongPress != nil else { return }
+                Self.longPressImpact.impactOccurred()
+                onLongPress?()
+            }
     }
 
     private var bubbleContent: some View {
         Text(message.body)
             .font(SplickTheme.Typography.body)
             .foregroundStyle(isOutgoing ? .white : SplickTheme.Colors.textPrimary)
-            .padding(.horizontal, SplickTheme.Spacing.sm)
-            .padding(.vertical, SplickTheme.Spacing.xs)
+            .padding(.horizontal, SplickTheme.Spacing.sm + 2)
+            .padding(.vertical, SplickTheme.Spacing.xs + 2)
             .background(bubbleBackground)
             .clipShape(bubbleShape)
             .overlay {
@@ -149,25 +159,6 @@ struct MessageBubble: View {
         }
     }
 
-    private var quickReReactEmoji: String? {
-        guard !message.reactions.isEmpty else { return nil }
-        return message.lastReactionEmoji(for: currentUserId)
-            ?? message.reactionCounts().first?.emoji
-    }
-
-    private func quickReReactButton(emoji: String) -> some View {
-        Button {
-            onReact(emoji)
-        } label: {
-            EmojiView(value: emoji, size: 22)
-                .frame(width: 28, height: 28)
-                .background(Circle().fill(SplickTheme.Colors.background))
-                .overlay(Circle().stroke(SplickTheme.Colors.divider, lineWidth: 0.5))
-                .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
-        }
-        .buttonStyle(.plain)
-    }
-
     private func timestampRevealArea(alignment: HorizontalAlignment, dragDirection: CGFloat) -> some View {
         TimestampRevealSpacer(
             timestamp: message.createdAt,
@@ -177,73 +168,10 @@ struct MessageBubble: View {
         .frame(minWidth: 52, maxWidth: 72)
     }
 
-    private var bubbleShape: UnevenRoundedRectangle {
-        let large: CGFloat = 20
-        let small: CGFloat = 8
+    private static let bubbleCornerRadius: CGFloat = 24
 
-        if isOutgoing {
-            switch displayMessage.groupPosition {
-            case .standalone:
-                return UnevenRoundedRectangle(
-                    topLeadingRadius: large,
-                    bottomLeadingRadius: large,
-                    bottomTrailingRadius: large,
-                    topTrailingRadius: large
-                )
-            case .groupFirst:
-                return UnevenRoundedRectangle(
-                    topLeadingRadius: large,
-                    bottomLeadingRadius: small,
-                    bottomTrailingRadius: large,
-                    topTrailingRadius: large
-                )
-            case .groupMiddle:
-                return UnevenRoundedRectangle(
-                    topLeadingRadius: large,
-                    bottomLeadingRadius: large,
-                    bottomTrailingRadius: large,
-                    topTrailingRadius: large
-                )
-            case .groupLast:
-                return UnevenRoundedRectangle(
-                    topLeadingRadius: small,
-                    bottomLeadingRadius: large,
-                    bottomTrailingRadius: large,
-                    topTrailingRadius: large
-                )
-            }
-        } else {
-            switch displayMessage.groupPosition {
-            case .standalone:
-                return UnevenRoundedRectangle(
-                    topLeadingRadius: large,
-                    bottomLeadingRadius: large,
-                    bottomTrailingRadius: large,
-                    topTrailingRadius: large
-                )
-            case .groupFirst:
-                return UnevenRoundedRectangle(
-                    topLeadingRadius: large,
-                    bottomLeadingRadius: large,
-                    bottomTrailingRadius: large,
-                    topTrailingRadius: large
-                )
-            case .groupMiddle:
-                return UnevenRoundedRectangle(
-                    topLeadingRadius: large,
-                    bottomLeadingRadius: large,
-                    bottomTrailingRadius: large,
-                    topTrailingRadius: large
-                )
-            case .groupLast:
-                return UnevenRoundedRectangle(
-                    topLeadingRadius: large,
-                    bottomLeadingRadius: large,
-                    bottomTrailingRadius: large,
-                    topTrailingRadius: small
-                )
-            }
-        }
+    private var bubbleShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: Self.bubbleCornerRadius, style: .continuous)
     }
 
     private var topSpacing: CGFloat {
@@ -297,45 +225,66 @@ private struct MessageReactionStrip: View {
     let counts: [(emoji: String, count: Int)]
     let currentUserId: UUID
     let reactions: [Reaction]
-    let isOutgoing: Bool
     let onReact: (String) -> Void
+
+    @State private var bouncingEmoji: String?
+
+    private static let impactFeedback = UIImpactFeedbackGenerator(style: .light)
 
     var body: some View {
         HStack(spacing: 4) {
             ForEach(counts, id: \.emoji) { item in
                 let userReacted = reactions.contains { $0.userId == currentUserId && $0.emoji == item.emoji }
+                let isBouncing = bouncingEmoji == item.emoji
 
                 Button {
-                    onReact(item.emoji)
+                    commitReaction(emoji: item.emoji)
                 } label: {
                     HStack(spacing: 2) {
-                        EmojiView(value: item.emoji, size: 16)
+                        EmojiView(value: item.emoji, size: 18)
                         if item.count > 1 {
                             Text("\(item.count)")
-                                .font(.caption2)
+                                .font(.caption2.weight(.semibold))
                                 .foregroundStyle(SplickTheme.Colors.textSecondary)
+                                .monospacedDigit()
                         }
                     }
-                    .padding(.horizontal, 6)
+                    .padding(.horizontal, 5)
                     .padding(.vertical, 2)
-                    .background(
-                        Capsule()
-                            .fill(
-                                userReacted
-                                    ? SplickTheme.Colors.primaryGradientStart.opacity(0.12)
-                                    : SplickTheme.Colors.tertiaryBackground
-                            )
-                    )
-                    .overlay {
-                        if userReacted {
-                            Capsule()
-                                .stroke(SplickTheme.Colors.primaryGradientStart.opacity(0.35), lineWidth: 1)
-                        }
+                    .background {
+                        Capsule(style: .continuous)
+                            .fill(SplickTheme.Colors.background)
                     }
+                    .overlay {
+                        Capsule(style: .continuous)
+                            .strokeBorder(
+                                userReacted
+                                    ? SplickTheme.Colors.primaryGradientStart.opacity(0.55)
+                                    : SplickTheme.Colors.divider,
+                                lineWidth: 0.5
+                            )
+                    }
+                    .reactionTapBounce(isActive: isBouncing)
                 }
                 .buttonStyle(.plain)
             }
         }
-        .frame(maxWidth: .infinity, alignment: isOutgoing ? .trailing : .leading)
+        .onAppear { Self.impactFeedback.prepare() }
+    }
+
+    private func commitReaction(emoji: String) {
+        Self.impactFeedback.impactOccurred()
+        Self.impactFeedback.prepare()
+        bouncingEmoji = emoji
+        DispatchQueue.main.asyncAfter(deadline: .now() + ReactionTapBounce.settleDelay) {
+            if bouncingEmoji == emoji { bouncingEmoji = nil }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + ReactionTapBounce.commitDelay) {
+            var transaction = Transaction()
+            transaction.animation = nil
+            withTransaction(transaction) {
+                onReact(emoji)
+            }
+        }
     }
 }
