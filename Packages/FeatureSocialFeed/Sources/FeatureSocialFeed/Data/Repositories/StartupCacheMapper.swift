@@ -2,7 +2,6 @@ import Foundation
 import FeatureMessaging
 import FeatureNotification
 import SplickDomain
-import Storage
 
 struct StartupCachePayload: Codable, Sendable {
     let badgeCounts: CachedBadgeCounts
@@ -143,24 +142,5 @@ enum StartupCacheMapper {
             createdAt: cached.createdAt,
             updatedAt: cached.updatedAt
         )
-    }
-}
-
-extension AppStartupRepository {
-    public func loadCached(userId: UUID, diskCache: DiskCache = .shared) async -> AppStartupData? {
-        let key = cacheKey(for: userId)
-        guard let payload = await diskCache.read(StartupCachePayload.self, key: key) else {
-            return nil
-        }
-        return StartupCacheMapper.fromPayload(payload)
-    }
-
-    public func saveCached(_ data: AppStartupData, userId: UUID, diskCache: DiskCache = .shared) async {
-        let key = cacheKey(for: userId)
-        await diskCache.write(StartupCacheMapper.toPayload(data), key: key)
-    }
-
-    private func cacheKey(for userId: UUID) -> String {
-        "startup.\(userId.uuidString)"
     }
 }

@@ -3,6 +3,7 @@ import FeatureMessaging
 import FeatureNotification
 import Networking
 import SplickDomain
+import Storage
 
 public protocol AppStartupRepositoryProtocol: Sendable {
     func fetchStartupData() async throws -> AppStartupData
@@ -20,6 +21,23 @@ public final class AppStartupRepository: AppStartupRepositoryProtocol, Sendable 
     public func fetchStartupData() async throws -> AppStartupData {
         let dto: StartupDataResponseDTO = try await apiClient.request(AppStartupEndpoint.startup)
         return map(dto)
+    }
+
+    public func loadCached(userId: UUID) async -> AppStartupData? {
+        let key = cacheKey(for: userId)
+        guard let payload = await DiskCache.shared.read(StartupCachePayload.self, key: key) else {
+            return nil
+        }
+        return StartupCacheMapper.fromPayload(payload)
+    }
+
+    public func saveCached(_ data: AppStartupData, userId: UUID) async {
+        let key = cacheKey(for: userId)
+        await DiskCache.shared.write(StartupCacheMapper.toPayload(data), key: key)
+    }
+
+    private func cacheKey(for userId: UUID) -> String {
+        "startup.\(userId.uuidString)"
     }
 
     private func map(_ dto: StartupDataResponseDTO) -> AppStartupData {
