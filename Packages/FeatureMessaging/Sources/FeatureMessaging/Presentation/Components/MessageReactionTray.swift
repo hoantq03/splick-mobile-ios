@@ -12,46 +12,78 @@ struct MessageReactionTray: View {
     let onDismiss: () -> Void
 
     @State private var bounceIndex: Int?
+    @State private var revealedSlotCount = 0
 
     private let slotSize: CGFloat = 36
     private let slotSpacing: CGFloat = 4
     private static let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+
+    init(
+        onReact: @escaping (String) -> Void,
+        onOpenFullPicker: @escaping () -> Void,
+        onDismiss: @escaping () -> Void
+    ) {
+        self.onReact = onReact
+        self.onOpenFullPicker = onOpenFullPicker
+        self.onDismiss = onDismiss
+    }
+
+    private var totalSlots: Int {
+        preferences.quickEmojis.count + 1
+    }
 
     var body: some View {
         HStack(spacing: slotSpacing) {
             ForEach(Array(preferences.quickEmojis.enumerated()), id: \.offset) { index, emoji in
                 emojiSlot(emoji: emoji, index: index)
             }
-            plusButton
+            plusButton(index: preferences.quickEmojis.count)
         }
         .padding(.horizontal, SplickTheme.Spacing.sm)
         .padding(.vertical, SplickTheme.Spacing.xs)
         .background {
             Capsule(style: .continuous)
                 .fill(.ultraThinMaterial)
-                .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+                .shadow(color: .black.opacity(0.18), radius: 16, y: 8)
         }
         .onAppear {
             Self.impactFeedback.prepare()
+            animateSlotsIn()
+        }
+    }
+
+    private func animateSlotsIn() {
+        revealedSlotCount = 0
+        for index in 0..<totalSlots {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.04 * Double(index)) {
+                withAnimation(MessageReactionTrayMotion.emojiSlot) {
+                    revealedSlotCount = index + 1
+                }
+            }
         }
     }
 
     private func emojiSlot(emoji: String, index: Int) -> some View {
         let isBouncing = bounceIndex == index
+        let isVisible = index < revealedSlotCount
 
         return Button {
             commitReaction(emoji: emoji, index: index)
         } label: {
             EmojiView(value: emoji, size: slotSize)
                 .frame(width: slotSize, height: slotSize)
-                .scaleEffect(isBouncing ? 1.22 : 1)
-                .animation(.spring(response: 0.24, dampingFraction: 0.72), value: isBouncing)
+                .scaleEffect(isVisible ? 1 : 0.2)
+                .opacity(isVisible ? 1 : 0)
+                .animation(MessageReactionTrayMotion.emojiSlot, value: isVisible)
+                .reactionTapBounce(isActive: isBouncing)
         }
         .buttonStyle(.plain)
     }
 
-    private var plusButton: some View {
-        Button {
+    private func plusButton(index: Int) -> some View {
+        let isVisible = index < revealedSlotCount
+
+        return Button {
             onOpenFullPicker()
         } label: {
             Image(systemName: "plus")
@@ -59,6 +91,9 @@ struct MessageReactionTray: View {
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
                 .frame(width: slotSize, height: slotSize)
                 .background(Circle().fill(SplickTheme.Colors.tertiaryBackground))
+                .scaleEffect(isVisible ? 1 : 0.2)
+                .opacity(isVisible ? 1 : 0)
+                .animation(MessageReactionTrayMotion.emojiSlot, value: isVisible)
         }
         .buttonStyle(.plain)
     }
@@ -67,18 +102,16 @@ struct MessageReactionTray: View {
         Self.impactFeedback.impactOccurred()
         Self.impactFeedback.prepare()
         bounceIndex = index
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + ReactionTapBounce.settleDelay) {
             if bounceIndex == index { bounceIndex = nil }
         }
-        onReact(emoji)
-        onDismiss()
-    }
-}
-
-struct MessageBubbleFrameKey: PreferenceKey {
-    static var defaultValue: [UUID: CGRect] = [:]
-
-    static func reduce(value: inout [UUID: CGRect], nextValue: () -> [UUID: CGRect]) {
-        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+        DispatchQueue.main.asyncAfter(deadline: .now() + ReactionTapBounce.commitDelay) {
+            var transaction = Transaction()
+            transaction.animation = nil
+            withTransaction(transaction) {
+                onReact(emoji)
+            }
+            onDismiss()
+        }
     }
 }
