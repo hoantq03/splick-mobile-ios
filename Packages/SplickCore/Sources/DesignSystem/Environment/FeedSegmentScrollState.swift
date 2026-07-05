@@ -3,9 +3,9 @@ import SwiftUI
 // MARK: - Chrome metrics
 
 public enum FeedSegmentChromeMetrics {
-    public static let navigationBarHeight: CGFloat = 44
-    /// Capsule row: 28pt buttons + 8pt vertical padding.
-    public static let segmentRowHeight: CGFloat = 36
+    public static let navigationBarHeight: CGFloat = 48
+    /// Capsule row: 34pt buttons + vertical chrome padding.
+    public static let segmentRowHeight: CGFloat = 40
 }
 
 // MARK: - Scroll-driven collapse
@@ -19,8 +19,8 @@ public final class FeedSegmentScrollState: ObservableObject {
 
     private var lastOffset: CGFloat = 0
     private var offsetNormalizer = ScrollChromeOffsetNormalizer()
-    private let showAtTopThreshold: CGFloat = 24
-    private let collapseDistance: CGFloat = 72
+    private let showAtTopThreshold: CGFloat = 6
+    private let collapseDistance: CGFloat = 38
 
     public init() {}
 
@@ -33,11 +33,9 @@ public final class FeedSegmentScrollState: ObservableObject {
             return
         }
 
-        let delta = offset - lastOffset
-        if abs(delta) > 0.5 {
-            let next = min(1, max(0, collapseProgress + delta / collapseDistance))
-            setCollapseProgress(next)
-        }
+        let scrolledPastThreshold = offset - showAtTopThreshold
+        let next = min(1, scrolledPastThreshold / collapseDistance)
+        setCollapseProgress(next)
         lastOffset = offset
     }
 
@@ -88,17 +86,14 @@ public struct FeedSegmentHideOnScrollModifier: ViewModifier {
                 content
                     .onScrollGeometryChange(for: CGFloat.self) { geometry in
                         geometry.contentOffset.y + geometry.contentInsets.top
-                    } action: { _, offset in
+                    } action: { previous, offset in
                         guard scrollChromeTrackingEnabled else { return }
-                        Task { @MainActor in
-                            feedSegmentScrollState.updateScrollOffset(offset)
-                        }
+                        guard abs(previous - offset) > 0.25 else { return }
+                        feedSegmentScrollState.updateScrollOffset(offset)
                     }
                     .onScrollPhaseChange { oldPhase, newPhase in
                         if oldPhase == .interacting, newPhase != .interacting {
-                            Task { @MainActor in
-                                feedSegmentScrollState.snapCollapseProgress()
-                            }
+                            feedSegmentScrollState.snapCollapseProgress()
                         }
                     }
             } else {
@@ -113,5 +108,42 @@ public struct FeedSegmentHideOnScrollModifier: ViewModifier {
 extension View {
     public func feedSegmentHideOnScroll() -> some View {
         modifier(FeedSegmentHideOnScrollModifier())
+    }
+
+    /// Single scroll-geometry observer for tab bar hide + feed segment pill collapse (iOS 18+).
+    public func scrollChromeTracking() -> some View {
+        modifier(ScrollChromeTrackingModifier())
+    }
+}
+
+/// Preferred modifier when both tab bar and feed nav chrome should react to scroll.
+public struct ScrollChromeTrackingModifier: ViewModifier {
+    @Environment(\.tabBarScrollState) private var tabBarScrollState
+    @Environment(\.feedSegmentScrollState) private var feedSegmentScrollState
+    @Environment(\.scrollChromeTrackingEnabled) private var scrollChromeTrackingEnabled
+    @Environment(\.pullToRefreshActive) private var pullToRefreshActive
+
+    public init() {}
+
+    public func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content
+                .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                    geometry.contentOffset.y + geometry.contentInsets.top
+                } action: { previous, offsetY in
+                    guard scrollChromeTrackingEnabled, !pullToRefreshActive else { return }
+                    guard abs(previous - offsetY) > 0.25 else { return }
+                    feedSegmentScrollState?.updateScrollOffset(offsetY)
+                    tabBarScrollState?.updateScrollOffset(offsetY)
+                }
+                .onScrollPhaseChange { oldPhase, newPhase in
+                    if oldPhase == .interacting, newPhase != .interacting {
+                        guard scrollChromeTrackingEnabled, !pullToRefreshActive else { return }
+                        feedSegmentScrollState?.snapCollapseProgress()
+                    }
+                }
+        } else {
+            content
+        }
     }
 }

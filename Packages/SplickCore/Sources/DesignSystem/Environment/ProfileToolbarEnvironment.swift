@@ -90,7 +90,7 @@ private struct SplickProfileToolbarModifier: ViewModifier {
                                 name: user.displayName,
                                 size: .small
                             )
-                            .frame(width: 34, height: 34)
+                            .frame(width: 38, height: 38)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(

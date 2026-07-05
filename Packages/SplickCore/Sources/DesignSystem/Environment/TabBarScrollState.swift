@@ -122,13 +122,12 @@ public struct TabBarHideOnScrollModifier: ViewModifier {
             if #available(iOS 18.0, *) {
                 content.onScrollGeometryChange(for: CGFloat.self) { geometry in
                     geometry.contentOffset.y + geometry.contentInsets.top
-                } action: { _, offset in
+                } action: { previous, offset in
                     guard scrollChromeTrackingEnabled,
                           !pullToRefreshActive,
                           !notificationsPresented else { return }
-                    Task { @MainActor in
-                        tabBarScrollState.updateScrollOffset(offset)
-                    }
+                    guard abs(previous - offset) > 0.25 else { return }
+                    tabBarScrollState.updateScrollOffset(offset)
                 }
             } else {
                 content
