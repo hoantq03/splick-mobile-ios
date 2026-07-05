@@ -13,6 +13,7 @@ private enum AudienceSelectionMetrics {
 
 struct PostAudiencePickerSheet: View {
     @ObservedObject var viewModel: CreatePostComposeViewModel
+    let onUserTap: ((UserSummary) -> Void)?
     @Environment(\.dismiss) private var dismiss
     @State private var selectedDetent: PresentationDetent = .medium
 
@@ -242,18 +243,24 @@ struct PostAudiencePickerSheet: View {
     private func selectedAudienceUserTile(for user: UserSummary) -> some View {
         VStack(spacing: SplickTheme.Spacing.xs) {
             ZStack(alignment: .topTrailing) {
-                AvatarView(
-                    imageURL: user.avatarURL,
-                    name: user.displayName,
-                    size: .medium
-                )
-                .overlay {
-                    Circle()
-                        .strokeBorder(
-                            SplickTheme.Colors.primaryGradientStart.opacity(0.18),
-                            lineWidth: 1
-                        )
+                Button {
+                    dismiss()
+                    onUserTap?(user)
+                } label: {
+                    AvatarView(
+                        imageURL: user.avatarURL,
+                        name: user.displayName,
+                        size: .medium
+                    )
+                    .overlay {
+                        Circle()
+                            .strokeBorder(
+                                SplickTheme.Colors.primaryGradientStart.opacity(0.18),
+                                lineWidth: 1
+                            )
+                    }
                 }
+                .buttonStyle(.plain)
 
                 Button {
                     viewModel.removeAudienceUser(user)
@@ -266,13 +273,19 @@ struct PostAudiencePickerSheet: View {
                 .offset(x: 5, y: -5)
             }
 
-            Text(shortDisplayName(user.displayName, fallback: user.username))
-                .font(SplickTheme.Typography.caption)
-                .foregroundStyle(SplickTheme.Colors.textPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-                .multilineTextAlignment(.center)
-                .frame(width: AudienceSelectionMetrics.nameWidth)
+            Button {
+                dismiss()
+                onUserTap?(user)
+            } label: {
+                Text(shortDisplayName(user.displayName, fallback: user.username))
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .multilineTextAlignment(.center)
+                    .frame(width: AudienceSelectionMetrics.nameWidth)
+            }
+            .buttonStyle(.plain)
         }
         .frame(width: AudienceSelectionMetrics.tileWidth)
         .padding(.vertical, SplickTheme.Spacing.xxs)
@@ -412,39 +425,50 @@ struct PostAudiencePickerSheet: View {
     private var audienceUserResultsList: some View {
         VStack(spacing: 0) {
             ForEach(viewModel.audienceFriendOptions) { user in
-                Button {
-                    viewModel.toggleAudienceUser(user)
-                } label: {
-                    HStack(spacing: SplickTheme.Spacing.sm) {
-                        AvatarView(
-                            imageURL: user.avatarURL,
-                            name: user.displayName,
-                            size: .small
-                        )
+                HStack(spacing: SplickTheme.Spacing.sm) {
+                    Button {
+                        dismiss()
+                        onUserTap?(user)
+                    } label: {
+                        HStack(spacing: SplickTheme.Spacing.sm) {
+                            AvatarView(
+                                imageURL: user.avatarURL,
+                                name: user.displayName,
+                                size: .small
+                            )
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(user.displayName)
-                                .font(SplickTheme.Typography.callout)
-                                .foregroundStyle(SplickTheme.Colors.textPrimary)
-                            Text("@\(user.username)")
-                                .font(SplickTheme.Typography.caption)
-                                .foregroundStyle(SplickTheme.Colors.textTertiary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(user.displayName)
+                                    .font(SplickTheme.Typography.callout)
+                                    .foregroundStyle(SplickTheme.Colors.textPrimary)
+                                Text("@\(user.username)")
+                                    .font(SplickTheme.Typography.caption)
+                                    .foregroundStyle(SplickTheme.Colors.textTertiary)
+                            }
+
+                            Spacer()
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
 
-                        Spacer()
-
+                    Button {
+                        viewModel.toggleAudienceUser(user)
+                    } label: {
                         Image(systemName: viewModel.isAudienceUserSelected(user) ? "checkmark.circle.fill" : "circle")
                             .foregroundStyle(
                                 viewModel.isAudienceUserSelected(user)
                                     ? SplickTheme.Colors.primaryGradientStart
                                     : SplickTheme.Colors.textTertiary
                             )
+                            .frame(width: 28, height: 28)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, SplickTheme.Spacing.sm)
-                    .padding(.vertical, SplickTheme.Spacing.xs)
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, SplickTheme.Spacing.sm)
+                .padding(.vertical, SplickTheme.Spacing.xs)
 
                 if user.id != viewModel.audienceFriendOptions.last?.id {
                     Divider().padding(.leading, 48)

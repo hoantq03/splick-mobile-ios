@@ -7,6 +7,7 @@ import DesignSystem
 import Localization
 import SplickDomain
 import FeatureMedia
+import FeatureFriends
 
 private enum ComposeMetrics {
     static let fieldCornerRadius: CGFloat = SplickTheme.CornerRadius.inset
@@ -19,10 +20,16 @@ private enum ComposeOptionRoute: Hashable {
     case location
 }
 
+private struct ComposeProfileRoute: Identifiable {
+    let user: UserSummary
+    var id: UUID { user.id }
+}
+
 public struct CreatePostComposeView: View {
     @EnvironmentObject private var languageService: LanguageService
     @StateObject private var viewModel: CreatePostComposeViewModel
     @Environment(\.tabBarScrollState) private var tabBarScrollState
+    private let profileDependencies: FriendUserProfileDependencies?
     let onPostSubmit: (PreparedPostSubmit) -> Void
     let onCancel: () -> Void
     @State private var photoPickerItems: [PhotosPickerItem] = []
@@ -30,13 +37,16 @@ public struct CreatePostComposeView: View {
     @State private var showCameraCapture = false
     @State private var reviewingMediaID: UUID?
     @State private var showAudiencePicker = false
+    @State private var profileRoute: ComposeProfileRoute?
 
     public init(
         viewModel: @autoclosure @escaping () -> CreatePostComposeViewModel,
+        profileDependencies: FriendUserProfileDependencies? = nil,
         onPostSubmit: @escaping (PreparedPostSubmit) -> Void,
         onCancel: @escaping () -> Void
     ) {
         _viewModel = StateObject(wrappedValue: viewModel())
+        self.profileDependencies = profileDependencies
         self.onPostSubmit = onPostSubmit
         self.onCancel = onCancel
     }
@@ -121,16 +131,28 @@ public struct CreatePostComposeView: View {
             }
         }
         .sheet(isPresented: $showAudiencePicker) {
-            PostAudiencePickerSheet(viewModel: viewModel)
+            PostAudiencePickerSheet(viewModel: viewModel, onUserTap: openProfile)
+        }
+        .sheet(item: $profileRoute) { route in
+            if let profileDependencies {
+                FriendUserProfileView(
+                    viewModel: profileDependencies.makeViewModel(user: route.user)
+                )
+            }
         }
         .navigationDestination(for: ComposeOptionRoute.self) { route in
             switch route {
             case .companions:
-                ComposeCompanionsEditorView(viewModel: viewModel)
+                ComposeCompanionsEditorView(viewModel: viewModel, onUserTap: openProfile)
             case .location:
                 ComposeLocationEditorView(viewModel: viewModel)
             }
         }
+    }
+
+    private func openProfile(for user: UserSummary) {
+        guard !viewModel.isCurrentUser(user) else { return }
+        profileRoute = ComposeProfileRoute(user: user)
     }
 
     private var reviewCoverPresented: Binding<Bool> {
@@ -669,6 +691,7 @@ public struct CreatePostComposeView: View {
 private struct ComposeCompanionsEditorView: View {
     @EnvironmentObject private var languageService: LanguageService
     @ObservedObject var viewModel: CreatePostComposeViewModel
+    let onUserTap: (UserSummary) -> Void
     @FocusState private var isFriendSearchFocused: Bool
 
     private var companionsTitle: String {
@@ -750,7 +773,10 @@ private struct ComposeCompanionsEditorView: View {
     private func selectedCompanionTile(for friend: UserSummary) -> some View {
         VStack(spacing: SplickTheme.Spacing.xs) {
             ZStack(alignment: .topTrailing) {
-                AvatarView(
+                Button {
+                    onUserTap(friend)
+                } label: {
+                    AvatarView(
                         imageURL: friend.avatarURL,
                         name: friend.displayName,
                         size: .medium
@@ -776,13 +802,18 @@ private struct ComposeCompanionsEditorView: View {
                 .offset(x: 5, y: -5)
             }
 
-            Text(companionShortName(friend))
+            Button {
+                onUserTap(friend)
+            } label: {
+                Text(companionShortName(friend))
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
                     .multilineTextAlignment(.center)
                     .frame(width: ComposeMetrics.companionNameWidth)
+            }
+            .buttonStyle(.plain)
         }
         .frame(width: ComposeMetrics.companionTileWidth)
         .padding(.vertical, SplickTheme.Spacing.xxs)
@@ -817,8 +848,43 @@ private struct ComposeCompanionsEditorView: View {
                 }
 
                 ForEach(viewModel.friendSearchResults) { friend in
-                    FriendTagRow(friend: friend) {
-                        viewModel.addCompanion(friend)
+                    HStack(spacing: SplickTheme.Spacing.sm) {
+                        Button {
+                            onUserTap(friend)
+                        } label: {
+                            HStack(spacing: SplickTheme.Spacing.sm) {
+                                AvatarView(
+                                    imageURL: friend.avatarURL,
+                                    name: friend.displayName,
+                                    size: .small
+                                )
+                                .frame(width: 32, height: 32)
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(friend.displayName)
+                                        .font(SplickTheme.Typography.callout)
+                                        .foregroundStyle(SplickTheme.Colors.textPrimary)
+                                    Text("@\(friend.username)")
+                                        .font(SplickTheme.Typography.caption)
+                                        .foregroundStyle(SplickTheme.Colors.textTertiary)
+                                }
+
+                                Spacer(minLength: 0)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            viewModel.addCompanion(friend)
+                        } label: {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 18))
+                                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                                .frame(width: 28, height: 28)
+                        }
+                        .buttonStyle(.plain)
                     }
                     .padding(.horizontal, SplickTheme.Spacing.sm)
                     .padding(.vertical, SplickTheme.Spacing.xs)

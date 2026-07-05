@@ -51,6 +51,7 @@ struct PostCaptureFlowView: View {
                 currentUser: currentUser,
                 currentUserId: currentUser?.id
             ),
+            profileDependencies: container.friendUserProfileDependencies,
             onPostSubmit: { prepared in
                 container.feedViewModel.enqueuePostUpload(
                     optimisticPost: prepared.optimisticPost,
