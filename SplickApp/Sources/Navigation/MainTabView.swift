@@ -31,6 +31,10 @@ struct MainTabView: View {
     /// observes this, resets it, and runs `dismissAnimated()` so the collapse animation plays
     /// before the overlay is removed from the hierarchy.
     @State private var notificationDismissRequest = false
+    /// Set to `true` the moment the notification panel begins its collapse animation so the tab
+    /// bar chrome can start sliding in immediately, in parallel with the overlay collapsing.
+    /// Reset to `false` once `showNotifications` fully clears.
+    @State private var notificationIsDismissing = false
 
     private var currentUserSummary: UserSummary? {
         appState.currentUser.map {
@@ -46,7 +50,7 @@ struct MainTabView: View {
     private var isTabBarChromePresented: Bool {
         appState.selectedTab != .camera
             && appState.linkedPostPresentation == nil
-            && !appState.showNotifications
+            && (!appState.showNotifications || notificationIsDismissing)
     }
 
     private var tabBarChromeAnimationToken: TabBarChromeAnimationToken {
@@ -118,6 +122,7 @@ struct MainTabView: View {
                     feedViewModel: container.feedViewModel,
                     conversationListViewModel: container.conversationListViewModel,
                     customEmojiStore: container.customEmojiStore,
+                    customEmojiFetcher: container.customEmojiRepository,
                     streakViewModel: container.streakViewModel
                 )
             }
@@ -144,7 +149,7 @@ struct MainTabView: View {
                 }
             }
             .environment(\.notificationUnreadCount, badgeCounts.notifications)
-            .environment(\.notificationsPresented, appState.showNotifications)
+            .environment(\.notificationsPresented, appState.showNotifications && !notificationIsDismissing)
             .environment(\.openPostCaptureFlow) {
                 appState.selectedTab = .camera
             }
@@ -171,6 +176,9 @@ struct MainTabView: View {
                 .ignoresSafeArea(edges: .bottom)
             }
             .onChange(of: appState.selectedTab, perform: handleSelectedTabChange)
+            .onChange(of: appState.showNotifications) { isShown in
+                if !isShown { notificationIsDismissing = false }
+            }
         .task(id: scenePhase) {
             switch scenePhase {
             case .active:
@@ -196,7 +204,8 @@ struct MainTabView: View {
                     unreadCount: badgeCounts.notifications,
                     headerTitle: container.languageService.text(.notificationTitle),
                     closeAccessibilityLabel: container.languageService.text(.notificationBellAccessibility),
-                    dismissRequest: $notificationDismissRequest
+                    dismissRequest: $notificationDismissRequest,
+                    onDismissStarted: { notificationIsDismissing = true }
                 ) { dismiss in
                     NotificationListView(
                         viewModel: container.notificationListViewModel,
@@ -324,9 +333,6 @@ struct MainTabView: View {
         }
         if tab == .messages || tab == .friends || tab == .expenses {
             scheduleBadgeRefresh()
-        }
-        if tab == .expenses {
-            Task { await container.expenseListViewModel.load(isPullToRefresh: true) }
         }
     }
 
@@ -1201,7 +1207,8 @@ struct ProfileSettingsView: View {
 // MARK: - Main tab pager
 
 private enum MainTabPagerMotion {
-    static let spring = Animation.spring(response: 0.46, dampingFraction: 0.60, blendDuration: 0.05)
+    /// Faster than original, with a lighter spring bounce.
+    static let spring = Animation.spring(response: 0.36, dampingFraction: 0.72, blendDuration: 0.04)
 }
 
 private extension Tab {
