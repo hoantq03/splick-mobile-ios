@@ -24,28 +24,25 @@ struct QRScannerSheet: View {
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
     @State private var errorMessage: String?
-    @State private var manualCode = ""
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: SplickTheme.Spacing.md) {
-                    cameraSection
+            VStack(spacing: SplickTheme.Spacing.md) {
+                cameraSection
 
-                    if (mode == .addFriend || mode == .unified), let myQrContext {
-                        MyQRPreviewSection(
-                            username: myQrContext.username,
-                            displayName: myQrContext.displayName,
-                            avatarURL: myQrContext.avatarURL,
-                            generateMyQrUseCase: myQrContext.generateMyQrUseCase
-                        )
-                    }
-
-                    manualEntrySection
+                if (mode == .addFriend || mode == .unified), let myQrContext {
+                    MyQRAccessButton(
+                        username: myQrContext.username,
+                        displayName: myQrContext.displayName,
+                        avatarURL: myQrContext.avatarURL,
+                        generateMyQrUseCase: myQrContext.generateMyQrUseCase
+                    )
                 }
-                .padding(.top, SplickTheme.Spacing.md)
-                .padding(.bottom, SplickTheme.Spacing.lg)
+
+                Spacer(minLength: 0)
             }
+            .padding(.top, SplickTheme.Spacing.md)
+            .padding(.bottom, SplickTheme.Spacing.lg)
             .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -101,41 +98,11 @@ struct QRScannerSheet: View {
         .background(SplickTheme.Colors.secondaryBackground)
     }
 
-    private var manualEntrySection: some View {
-        VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
-            Text(languageService.text(.friendsScanManualHint))
-                .font(SplickTheme.Typography.caption)
-                .foregroundStyle(SplickTheme.Colors.textSecondary)
-
-            TextField(manualPlaceholder, text: $manualCode)
-                .textFieldStyle(.roundedBorder)
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-
-            SplickButton(
-                languageService.text(.friendsScanUseCode),
-                isDisabled: manualCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ) {
-                onScan(manualCode)
-                dismiss()
-            }
-        }
-        .padding(.horizontal, SplickTheme.Spacing.md)
-    }
-
     private var navigationTitle: String {
         switch mode {
         case .addFriend: return languageService.text(.friendsScanQRAddFriend)
         case .joinGroup: return languageService.text(.friendsScanQRJoinGroup)
         case .unified: return languageService.text(.friendsScanQRUnified)
-        }
-    }
-
-    private var manualPlaceholder: String {
-        switch mode {
-        case .addFriend: return "Dán link https://splick.app/username hoặc splick://friend/username"
-        case .joinGroup: return "https://splick.app/group/invite-code"
-        case .unified: return "https://splick.app/username hoặc https://splick.app/group/mã-nhóm"
         }
     }
 }
