@@ -122,7 +122,7 @@ public struct NotificationListView: View {
                     VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxs) {
                         Text(languageService.text(section.section.l10nKey))
                             .font(SplickTheme.Typography.captionBold)
-                            .foregroundStyle(SplickTheme.Colors.textSecondary)
+                            .foregroundColor(SplickTheme.Colors.textSecondary)
                             .textCase(nil)
                             .padding(.top, SplickTheme.Spacing.xxs)
 
@@ -160,18 +160,36 @@ public struct NotificationListView: View {
 struct NotificationRowView: View {
     let notification: AppNotification
 
+    private var bodySegments: (actorName: String?, remainder: String) {
+        NotificationActorPresentation.bodySegments(for: notification)
+    }
+
+    private var titleMatchesActorName: Bool {
+        guard let actorName = bodySegments.actorName else { return false }
+        return notification.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            .caseInsensitiveCompare(actorName) == .orderedSame
+    }
+
+    private var showsCategoryTitle: Bool {
+        !notification.title.isEmpty && !titleMatchesActorName
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: SplickTheme.Spacing.sm) {
             NotificationAvatarBadgeView(notification: notification)
 
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
-                HStack(alignment: .firstTextBaseline, spacing: SplickTheme.Spacing.xxs) {
+                if showsCategoryTitle {
                     Text(notification.title)
                         .font(SplickTheme.Typography.headline)
-                        .foregroundStyle(SplickTheme.Colors.textPrimary)
-                        .lineLimit(2)
+                        .foregroundColor(SplickTheme.Colors.textPrimary)
+                        .lineLimit(1)
+                }
 
-                    Spacer(minLength: 0)
+                HStack(alignment: .firstTextBaseline, spacing: SplickTheme.Spacing.xxs) {
+                    NotificationInlineBodyText(notification: notification)
+                        .lineLimit(3)
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
                     if !notification.isRead {
                         Circle()
@@ -181,13 +199,9 @@ struct NotificationRowView: View {
                     }
                 }
 
-                NotificationBodyText(notification: notification)
-                    .lineLimit(3)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
                 Text(notification.createdAt.relativeString)
                     .font(SplickTheme.Typography.caption)
-                    .foregroundStyle(SplickTheme.Colors.textTertiary)
+                    .foregroundColor(SplickTheme.Colors.textTertiary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -215,7 +229,7 @@ private struct NotificationAvatarBadgeView: View {
 
             Image(systemName: notification.type.icon)
                 .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundColor(.white)
                 .frame(width: badgeSize, height: badgeSize)
                 .background(
                     Circle()
@@ -244,6 +258,7 @@ private struct NotificationAvatarBadgeView: View {
             }
         } else {
             AvatarView(
+                imageURL: notification.actorAvatarURL,
                 name: NotificationActorPresentation.actorDisplayName(for: notification),
                 size: .medium,
                 userId: notification.actorUserId
@@ -252,33 +267,16 @@ private struct NotificationAvatarBadgeView: View {
     }
 }
 
-private struct NotificationBodyText: View {
+private struct NotificationInlineBodyText: View {
     let notification: AppNotification
 
     private var segments: (actorName: String?, remainder: String) {
         NotificationActorPresentation.bodySegments(for: notification)
     }
 
-    private var titleMatchesActorName: Bool {
-        guard let actorName = segments.actorName else { return false }
-        return notification.title.trimmingCharacters(in: .whitespacesAndNewlines)
-            .caseInsensitiveCompare(actorName) == .orderedSame
-    }
-
     var body: some View {
-        if titleMatchesActorName, !segments.remainder.isEmpty {
-            bodyText(segments.remainder)
-        } else if let actorName = segments.actorName, !actorName.isEmpty {
-            VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
-                Text(actorName)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(SplickTheme.Colors.textSecondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                if !segments.remainder.isEmpty {
-                    bodyText(segments.remainder)
-                }
-            }
+        if let actorName = segments.actorName, !actorName.isEmpty {
+            inlineActorMessage(actorName: actorName, remainder: segments.remainder)
         } else {
             MentionText(
                 notification.body,
@@ -288,12 +286,23 @@ private struct NotificationBodyText: View {
         }
     }
 
-    private func bodyText(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: 13))
-            .foregroundColor(SplickTheme.Colors.textSecondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .fixedSize(horizontal: false, vertical: true)
-            .multilineTextAlignment(.leading)
+    private func inlineActorMessage(actorName: String, remainder: String) -> some View {
+        Group {
+            if remainder.isEmpty {
+                Text(actorName)
+                    .font(SplickTheme.Typography.headline)
+                    .foregroundColor(SplickTheme.Colors.textPrimary)
+            } else {
+                (Text(actorName)
+                    .font(SplickTheme.Typography.headline)
+                    .foregroundColor(SplickTheme.Colors.textPrimary)
+                + Text(" \(remainder)")
+                    .font(.system(size: 13))
+                    .foregroundColor(SplickTheme.Colors.textSecondary)
+                )
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .multilineTextAlignment(.leading)
     }
 }
