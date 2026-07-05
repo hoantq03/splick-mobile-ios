@@ -583,4 +583,5 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case messagingGroupMembersTitle = "messaging.group.members.title"
     case messagingGroupNoFriends = "messaging.group.no_friends"
     case messagingLeaveGroup = "messaging.group.leave"
+    case messagingTapToRetry = "messaging.tap_to_retry"
 }

@@ -28,6 +28,7 @@ struct MessageResponseDTO: Decodable {
     let clientMessageId: UUID
     let createdAt: Date
     let reactions: [ReactionResponseDTO]?
+    let status: String?
 }
 
 struct ReactionResponseDTO: Decodable {

@@ -341,6 +341,7 @@ enum StringsFeatureEn {
         .messagingGroupMembersTitle: "Members",
         .messagingGroupNoFriends: "Add friends first to create a group.",
         .messagingLeaveGroup: "Leave group",
+        .messagingTapToRetry: "Tap to retry",
 
         // Common extras
         .commonClose: "Close",

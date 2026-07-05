@@ -1,4 +1,5 @@
 import Foundation
+import SplickDomain
 
 public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable {
     public let id: UUID
@@ -8,6 +9,7 @@ public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable {
     public let clientMessageId: UUID
     public let createdAt: Date
     public let reactions: [Reaction]
+    public let deliveryStatus: MessageDeliveryStatus
 
     public init(
         id: UUID,
@@ -16,7 +18,8 @@ public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable {
         body: String,
         clientMessageId: UUID,
         createdAt: Date,
-        reactions: [Reaction] = []
+        reactions: [Reaction] = [],
+        deliveryStatus: MessageDeliveryStatus = .sent
     ) {
         self.id = id
         self.conversationId = conversationId
@@ -25,6 +28,7 @@ public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable {
         self.clientMessageId = clientMessageId
         self.createdAt = createdAt
         self.reactions = reactions
+        self.deliveryStatus = deliveryStatus
     }
 
     public func updating(reactions: [Reaction]) -> ChatMessage {
@@ -35,7 +39,21 @@ public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable {
             body: body,
             clientMessageId: clientMessageId,
             createdAt: createdAt,
-            reactions: reactions
+            reactions: reactions,
+            deliveryStatus: deliveryStatus
+        )
+    }
+
+    public func updating(deliveryStatus: MessageDeliveryStatus) -> ChatMessage {
+        ChatMessage(
+            id: id,
+            conversationId: conversationId,
+            senderId: senderId,
+            body: body,
+            clientMessageId: clientMessageId,
+            createdAt: createdAt,
+            reactions: reactions,
+            deliveryStatus: deliveryStatus
         )
     }
 
@@ -48,5 +66,10 @@ public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable {
                 if lhs.count != rhs.count { return lhs.count > rhs.count }
                 return lhs.emoji < rhs.emoji
             }
+    }
+
+    /// Last emoji the given user reacted with on this message (most recent by append order).
+    public func lastReactionEmoji(for userId: UUID) -> String? {
+        reactions.last(where: { $0.userId == userId })?.emoji
     }
 }

@@ -304,16 +304,7 @@ struct MainTabView: View {
 
     @ViewBuilder
     private var messagesTabContent: some View {
-        ConversationListView(
-            viewModel: container.conversationListViewModel,
-            createGroupViewModel: container.createGroupConversationViewModel,
-            friendsProvider: {
-                try await container.fetchMyFriendsUseCase.execute()
-            }
-        )
-            .environmentObject(container.makeChatThreadViewModelFactory(
-                currentUserId: appState.currentUser?.id ?? UUID()
-            ))
+        MessagingTabRoot()
     }
 
     @ViewBuilder

@@ -8,9 +8,12 @@ public final class SendMessageUseCase: Sendable {
         self.repository = repository
     }
 
-    public func execute(conversationId: UUID, body: String) async throws -> ChatMessage {
-        let clientMessageId = UUID()
-        return try await repository.sendMessage(
+    public func execute(
+        conversationId: UUID,
+        body: String,
+        clientMessageId: UUID = UUID()
+    ) async throws -> ChatMessage {
+        try await repository.sendMessage(
             conversationId: conversationId,
             body: body,
             clientMessageId: clientMessageId

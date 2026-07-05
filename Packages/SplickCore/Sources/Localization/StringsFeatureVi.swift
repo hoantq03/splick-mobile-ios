@@ -341,6 +341,7 @@ enum StringsFeatureVi {
         .messagingGroupMembersTitle: "Thành viên",
         .messagingGroupNoFriends: "Hãy thêm bạn bè trước khi tạo nhóm.",
         .messagingLeaveGroup: "Rời nhóm",
+        .messagingTapToRetry: "Nhấn để gửi lại",
 
         // Common extras
         .commonClose: "Đóng",

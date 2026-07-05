@@ -36,8 +36,19 @@ enum MessagingMapper {
             body: dto.body,
             clientMessageId: dto.clientMessageId,
             createdAt: dto.createdAt,
-            reactions: (dto.reactions ?? []).map(toReaction)
+            reactions: (dto.reactions ?? []).map(toReaction),
+            deliveryStatus: mapDeliveryStatus(dto.status)
         )
+    }
+
+    private static func mapDeliveryStatus(_ raw: String?) -> MessageDeliveryStatus {
+        switch raw?.lowercased() {
+        case "delivered": return .delivered
+        case "read": return .read
+        case "failed": return .failed
+        case "sending": return .sending
+        default: return .sent
+        }
     }
 
     static func toReaction(_ dto: ReactionResponseDTO) -> Reaction {

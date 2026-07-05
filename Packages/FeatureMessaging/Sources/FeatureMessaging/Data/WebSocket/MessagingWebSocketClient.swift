@@ -6,6 +6,7 @@ import Common
 public enum MessagingWsEvent: Sendable {
     case newMessage(conversationId: UUID, message: ChatMessage)
     case readReceipt(conversationId: UUID, readerId: UUID, upToMessageId: UUID)
+    case deliveryAck(conversationId: UUID, messageId: UUID)
 }
 
 @MainActor
@@ -20,11 +21,10 @@ public final class MessagingWebSocketClient: ObservableObject {
     private let minReconnectDelay: TimeInterval = 5.0
     private let maxReconnectDelay: TimeInterval = 120.0
     private let decoder = JSONDecoder.apiDecoder
+    private let encoder = JSONEncoder()
 
-    // Token provider — refreshed before each connection attempt.
     private let tokenProvider: @Sendable () async -> String?
 
-    /// Multicast subject — all subscribers (ConversationListVM, ChatThreadVM, etc.) receive every event.
     public let eventSubject = PassthroughSubject<MessagingWsEvent, Never>()
 
     public init(tokenProvider: @escaping @Sendable () async -> String?) {
@@ -47,6 +47,22 @@ public final class MessagingWebSocketClient: ObservableObject {
         webSocketTask?.cancel(with: .normalClosure, reason: nil)
         webSocketTask = nil
         reconnectDelay = minReconnectDelay
+    }
+
+    public func sendDeliveryAck(conversationId: UUID, messageId: UUID) {
+        guard isConnected, let task = webSocketTask else { return }
+        let payload: [String: String] = [
+            "type": "message.delivered",
+            "conversationId": conversationId.uuidString,
+            "messageId": messageId.uuidString
+        ]
+        guard let data = try? encoder.encode(payload),
+              let text = String(data: data, encoding: .utf8) else { return }
+        task.send(.string(text)) { error in
+            if let error {
+                Log.warning("WS delivery ack failed: \(error.localizedDescription)", category: .network)
+            }
+        }
     }
 
     private func attemptConnect() async {
@@ -125,7 +141,8 @@ public final class MessagingWebSocketClient: ObservableObject {
                     senderId: event.message.senderId,
                     body: event.message.body,
                     clientMessageId: UUID(),
-                    createdAt: date
+                    createdAt: date,
+                    deliveryStatus: .sent
                 )
                 eventSubject.send(.newMessage(conversationId: event.conversationId, message: msg))
             }
@@ -135,6 +152,13 @@ public final class MessagingWebSocketClient: ObservableObject {
                     conversationId: event.conversationId,
                     readerId: event.readerId,
                     upToMessageId: event.upToMessageId
+                ))
+            }
+        case "message.delivered":
+            if let event = try? decoder.decode(WsDeliveryAckEvent.self, from: data) {
+                eventSubject.send(.deliveryAck(
+                    conversationId: event.conversationId,
+                    messageId: event.messageId
                 ))
             }
         default:
@@ -166,7 +190,6 @@ public final class MessagingWebSocketClient: ObservableObject {
     }
 }
 
-/// URLSessionWebSocketTask.sendPing may invoke its handler more than once when the task is cancelled.
 private final class ContinuationGate<T>: @unchecked Sendable {
     private let lock = NSLock()
     private var continuation: CheckedContinuation<T, Never>?

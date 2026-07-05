@@ -18,3 +18,8 @@ struct WsReadReceiptEvent: Decodable {
     let readerId: UUID
     let upToMessageId: UUID
 }
+
+struct WsDeliveryAckEvent: Decodable {
+    let conversationId: UUID
+    let messageId: UUID
+}

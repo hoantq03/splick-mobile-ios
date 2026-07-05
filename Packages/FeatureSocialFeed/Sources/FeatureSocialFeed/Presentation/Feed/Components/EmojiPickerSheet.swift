@@ -35,8 +35,8 @@ private enum EmojiPickerTab: String, CaseIterable, Identifiable {
 }
 
 /// Popup for picking a reaction emoji or inserting a custom emoji into text.
-struct EmojiPickerSheet: View {
-    enum Mode {
+public struct EmojiPickerSheet: View {
+    public enum Mode {
         /// Reaction bar: quick slots + optional Done to persist preferences.
         case reaction
         /// Comment composer: pick once and dismiss without quick-slot UI.
@@ -64,7 +64,7 @@ struct EmojiPickerSheet: View {
     @State private var showEmojiComposer = false
     @State private var searchQuery = ""
 
-    init(
+    public init(
         currentUserId: UUID?,
         mode: Mode = .reaction,
         onPick: @escaping (String) -> Void,
@@ -348,7 +348,7 @@ struct EmojiPickerSheet: View {
         }
     }
 
-    var body: some View {
+    public var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {

@@ -330,7 +330,7 @@ public final class FeedViewModel: ObservableObject {
         let distinctEmojis = Set(
             post.reactions.filter { $0.userId == userId }.map(\.emoji)
         )
-        if !distinctEmojis.contains(emoji), distinctEmojis.count >= 5 {
+        if !distinctEmojis.contains(emoji), distinctEmojis.count >= ReactionConstants.maxDistinctEmojiPerUser {
             return "Mỗi bài bạn chỉ được dùng tối đa 5 loại emoji."
         }
 
