@@ -120,7 +120,7 @@ public struct ConversationListView: View {
 
         case .loaded(let items) where items.isEmpty:
             EmptyStateView(
-                icon: "message.slash",
+                icon: "bubble.left.and.bubble.right",
                 title: languageService.text(.messagingEmptyTitle),
                 message: languageService.text(.messagingEmptyMessage)
             )
