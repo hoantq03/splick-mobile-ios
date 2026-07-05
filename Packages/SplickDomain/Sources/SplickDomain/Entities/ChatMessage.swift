@@ -68,6 +68,23 @@ public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable {
             }
     }
 
+    /// Pills ordered from the bubble inner edge outward (first-added sits next to the bubble).
+    public func reactionCountsInsideOut(isOutgoing: Bool) -> [(emoji: String, count: Int)] {
+        var emojiOrder: [String] = []
+        for reaction in reactions where !emojiOrder.contains(reaction.emoji) {
+            emojiOrder.append(reaction.emoji)
+        }
+
+        let grouped = Dictionary(grouping: reactions, by: \.emoji)
+        let ordered = emojiOrder.map { emoji in
+            (emoji: emoji, count: grouped[emoji]?.count ?? 0)
+        }
+
+        // Outgoing: grow left → right from inner (leading) edge.
+        // Incoming: grow right → left from inner (trailing) edge.
+        return isOutgoing ? ordered : ordered.reversed()
+    }
+
     /// Last emoji the given user reacted with on this message (most recent by append order).
     public func lastReactionEmoji(for userId: UUID) -> String? {
         reactions.last(where: { $0.userId == userId })?.emoji
