@@ -104,7 +104,9 @@ struct FeedInlineVideoPlayer: View {
             } else if let posterURL {
                 RemoteImage(
                     url: posterURL,
-                    maxPixelDimensions: FeedMediaLayout.feedMediaMaxPixelSize
+                    maxPixelSize: FeedMediaLayout.feedMediaMaxDecodePixelSize(
+                        displayHeight: displayHeight
+                    )
                 ) { phase in
                     switch phase {
                     case .success(let image):
@@ -313,8 +315,8 @@ final class FeedVideoPlaybackController: ObservableObject {
     init(url: URL) {
         playerItem = AVPlayerItem(url: url)
         playerItem.preferredMaximumResolution = CGSize(
-            width: min(1280 * UIScreen.main.scale, FeedMediaLayout.decodeMaxPixelSide),
-            height: min(720 * UIScreen.main.scale, FeedMediaLayout.decodeMaxPixelSide)
+            width: FeedMediaLayout.decodeMaxPixelSide,
+            height: FeedMediaLayout.decodeMaxPixelSide
         )
         player = AVPlayer(playerItem: playerItem)
         Self.configureAudioSession()

@@ -10,17 +10,13 @@ struct FeedPullToRefreshScrollView<Content: View>: View {
     let onRefresh: () async -> Bool
     @ViewBuilder var content: () -> Content
 
-    @State private var lastScrollOffset: CGFloat = 0
     @State private var refreshController = SplickRefreshController()
 
     @Environment(\.tabBarScrollState) private var tabBarScrollState
-    @Environment(\.feedSegmentScrollState) private var feedSegmentScrollState
-    @Environment(\.scrollChromeTrackingEnabled) private var scrollChromeTrackingEnabled
-    @Environment(\.pullToRefreshActive) private var pullToRefreshActive
     @Environment(\.feedTabIsActive) private var feedTabIsActive
 
     private var isScrolledToTop: Bool {
-        lastScrollOffset <= 12
+        tabBarScrollState?.isAtTop ?? true
     }
 
     var body: some View {
@@ -35,21 +31,9 @@ struct FeedPullToRefreshScrollView<Content: View>: View {
                 }
             }
             .feedPagerScrollInsets()
-            .applyFeedScrollOffsetTracking { offsetY in
-                lastScrollOffset = offsetY
-                guard !pullToRefreshActive else { return }
-                if scrollChromeTrackingEnabled {
-                    feedSegmentScrollState?.updateScrollOffset(offsetY)
-                    tabBarScrollState?.updateScrollOffset(offsetY)
-                }
-            }
+            .feedScrollSoftTopEdge()
+            .scrollChromeTracking()
             .applyFeedScrollBounceAlways()
-            .applyFeedScrollPhaseRelease {
-                guard !pullToRefreshActive else { return }
-                if scrollChromeTrackingEnabled {
-                    feedSegmentScrollState?.snapCollapseProgress()
-                }
-            }
             .splickNativeRefreshable(controller: refreshController) {
                 let succeeded = await onRefresh()
                 if succeeded {
@@ -69,35 +53,9 @@ struct FeedPullToRefreshScrollView<Content: View>: View {
     }
 }
 
-// MARK: - Scroll tracking
+// MARK: - Scroll helpers
 
 private extension View {
-    @ViewBuilder
-    func applyFeedScrollOffsetTracking(onChange: @escaping (CGFloat) -> Void) -> some View {
-        if #available(iOS 18.0, *) {
-            self.onScrollGeometryChange(for: CGFloat.self) { geometry in
-                geometry.contentOffset.y + geometry.contentInsets.top
-            } action: { _, offsetY in
-                onChange(offsetY)
-            }
-        } else {
-            self
-        }
-    }
-
-    @ViewBuilder
-    func applyFeedScrollPhaseRelease(onRelease: @escaping () -> Void) -> some View {
-        if #available(iOS 18.0, *) {
-            self.onScrollPhaseChange { oldPhase, newPhase in
-                if oldPhase == .interacting, newPhase != .interacting {
-                    onRelease()
-                }
-            }
-        } else {
-            self
-        }
-    }
-
     @ViewBuilder
     func applyFeedScrollBounceAlways() -> some View {
         if #available(iOS 16.4, *) {

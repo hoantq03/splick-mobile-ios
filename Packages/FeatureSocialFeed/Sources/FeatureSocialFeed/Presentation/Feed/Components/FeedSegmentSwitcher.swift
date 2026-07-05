@@ -41,9 +41,9 @@ struct FeedNavPills: View {
 
             // Active label only — morphs: drifts to centre and grows.
             Text(activeLabel)
-                .font(.system(size: 17, weight: .semibold))
+                .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(SplickTheme.Colors.textPrimary)
-                .scaleEffect((14 + 3 * t) / 17)
+                .scaleEffect((16 + 4 * t) / 20)
                 .offset(x: activeLabelStartX * (1 - t))
                 .opacity(t)
                 .allowsHitTesting(false)
@@ -82,11 +82,11 @@ enum FeedSegmentMorphLayout {
 }
 
 enum FeedSegmentPillLayout {
-    /// Equal width per segment; kept compact for small phones (principal toolbar + avatar + bell).
-    static let segmentWidth: CGFloat = 58
-    static let segmentHeight: CGFloat = 28
-    static let horizontalTextPadding: CGFloat = 6
-    static let chromePadding: CGFloat = 2
+    /// Equal width per segment; sized for principal toolbar + avatar + bell.
+    static let segmentWidth: CGFloat = 66
+    static let segmentHeight: CGFloat = 34
+    static let horizontalTextPadding: CGFloat = 8
+    static let chromePadding: CGFloat = 3
     static let stripSegmentCount: CGFloat = 3
     static let stripWidth: CGFloat = (segmentWidth * stripSegmentCount) + (chromePadding * 2)
     static let stripHeight: CGFloat = segmentHeight + (chromePadding * 2)
@@ -139,7 +139,7 @@ private struct MaterialPills: View {
             selection = segment
         } label: {
             Text(label)
-                .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
+                .font(.system(size: 15, weight: isSelected ? .semibold : .medium))
                 .foregroundStyle(
                     isSelected
                         ? SplickTheme.Colors.textPrimary
@@ -255,7 +255,7 @@ private struct GlassPills: View {
             selection = segment
         } label: {
             Text(label)
-                .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
+                .font(.system(size: 15, weight: isSelected ? .semibold : .medium))
                 .foregroundStyle(
                     isSelected
                         ? SplickTheme.Colors.textPrimary
