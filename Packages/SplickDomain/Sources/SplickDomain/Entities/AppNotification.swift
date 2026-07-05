@@ -9,6 +9,7 @@ public struct AppNotification: Identifiable, Codable, Equatable, Sendable {
     public let referenceId: UUID?
     public let destination: NotificationDestination?
     public let actorUserId: UUID?
+    public let actorAvatarURL: URL?
     public let createdAt: Date
 
     public init(
@@ -20,6 +21,7 @@ public struct AppNotification: Identifiable, Codable, Equatable, Sendable {
         referenceId: UUID? = nil,
         destination: NotificationDestination? = nil,
         actorUserId: UUID? = nil,
+        actorAvatarURL: URL? = nil,
         createdAt: Date = .now
     ) {
         self.id = id
@@ -30,6 +32,7 @@ public struct AppNotification: Identifiable, Codable, Equatable, Sendable {
         self.referenceId = referenceId
         self.destination = destination
         self.actorUserId = actorUserId
+        self.actorAvatarURL = actorAvatarURL
         self.createdAt = createdAt
     }
 
@@ -91,6 +94,7 @@ public struct AppNotification: Identifiable, Codable, Equatable, Sendable {
             referenceId: referenceId,
             destination: destination,
             actorUserId: actorUserId,
+            actorAvatarURL: actorAvatarURL,
             createdAt: createdAt
         )
     }

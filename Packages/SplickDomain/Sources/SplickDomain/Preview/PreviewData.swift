@@ -184,12 +184,14 @@ public enum PreviewData {
             id: UUID(), type: .expenseCreated,
             title: "New Expense", body: "Linh added 'Dinner at Korean BBQ' - 450,000₫",
             isRead: false, actorUserId: friendUser.id,
+            actorAvatarURL: friendUser.avatarURL,
             createdAt: Date().addingTimeInterval(-1800)
         ),
         AppNotification(
             id: UUID(), type: .reaction,
             title: "New Reaction", body: "Duc reacted ❤️ to your photo",
             isRead: false, actorUserId: friend2.id,
+            actorAvatarURL: friend2.avatarURL,
             createdAt: Date().addingTimeInterval(-3600)
         ),
         AppNotification(
