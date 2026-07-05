@@ -19,6 +19,8 @@ struct MessagingTabRoot: View {
                 try await container.fetchMyFriendsUseCase.execute()
             }
         )
+        .environmentObject(container.customEmojiStore)
+        .environment(\.customEmojiDependencies, container.customEmojiDependencies)
         .environmentObject(container.makeChatThreadViewModelFactory(
             currentUserId: appState.currentUser?.id ?? UUID()
         ))
