@@ -93,21 +93,22 @@ struct FriendRowView: View {
                 )
                 .disabled(onAddFriend == nil)
             case .requestReceived:
-                VStack(spacing: SplickTheme.Spacing.xxxs) {
-                    relationActionButton(
-                        title: languageService.text(.friendsAccept),
-                        style: .primary,
+                HStack(spacing: SplickTheme.Spacing.sm) {
+                    relationIconButton(
+                        systemImage: "checkmark",
+                        accessibilityLabel: languageService.text(.friendsAccept),
+                        style: .friend,
                         action: { onAddFriend?() }
                     )
                     .disabled(onAddFriend == nil)
 
                     if onRejectFriend != nil {
-                        Button(languageService.text(.friendsReject)) {
-                            onRejectFriend?()
-                        }
-                        .font(SplickTheme.Typography.caption.weight(.semibold))
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
-                        .buttonStyle(.plain)
+                        relationIconButton(
+                            systemImage: "xmark",
+                            accessibilityLabel: languageService.text(.friendsReject),
+                            style: .destructive,
+                            action: { onRejectFriend?() }
+                        )
                         .disabled(onRejectFriend == nil)
                     }
                 }

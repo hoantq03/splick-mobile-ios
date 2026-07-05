@@ -20,6 +20,7 @@ public struct FriendsRootView: View {
     @StateObject private var incomingRequestsViewModel: IncomingFriendRequestsViewModel
     @StateObject private var outgoingRequestsViewModel: OutgoingFriendRequestsViewModel
     @StateObject private var blockedUsersViewModel: BlockedUsersViewModel
+    @StateObject private var peopleYouMayKnowViewModel: PeopleYouMayKnowViewModel
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.currentUserSummary) private var currentUserSummary
     @Environment(\.tabBarScrollState) private var tabBarScrollState
@@ -50,6 +51,7 @@ public struct FriendsRootView: View {
     @State private var showIncomingRequests = false
     @State private var showOutgoingRequests = false
     @State private var showBlockedUsers = false
+    @State private var showPeopleYouMayKnow = false
     @State private var isJoiningGroupFromSearch = false
     @State private var profileRoute: UserProfileRoute?
     @State private var scrollTopSignal = 0
@@ -208,6 +210,20 @@ public struct FriendsRootView: View {
                 onRelationshipChanged: relationshipChanged
             )
         )
+        _peopleYouMayKnowViewModel = StateObject(
+            wrappedValue: PeopleYouMayKnowViewModel(
+                fetchPeopleYouMayKnowUseCase: FetchPeopleYouMayKnowUseCase(
+                    fetchMyGroupsUseCase: fetchMyGroupsUseCase,
+                    fetchGroupMembersUseCase: fetchGroupMembersUseCase,
+                    fetchMyFriendsUseCase: fetchMyFriendsUseCase,
+                    fetchIncomingFriendRequestsUseCase: fetchIncomingFriendRequestsUseCase,
+                    fetchOutgoingFriendRequestsUseCase: fetchOutgoingFriendRequestsUseCase,
+                    fetchBlockedUsersUseCase: fetchBlockedUsersUseCase
+                ),
+                addFriendUseCase: addFriendUseCase,
+                onRelationshipChanged: relationshipChanged
+            )
+        )
     }
 
     public var body: some View {
@@ -303,6 +319,17 @@ public struct FriendsRootView: View {
                     onProfileTap: openUserProfile
                 )
             }
+            .sheet(isPresented: $showPeopleYouMayKnow, onDismiss: {
+                Task {
+                    await peopleYouMayKnowViewModel.load(currentUserId: currentUserSummary?.id)
+                }
+            }) {
+                PeopleYouMayKnowSheet(
+                    viewModel: peopleYouMayKnowViewModel,
+                    currentUserId: currentUserSummary?.id,
+                    onProfileTap: openUserProfile
+                )
+            }
             .sheet(isPresented: $showQRScanner) {
                 if let user = currentUserSummary {
                     QRScannerSheet(
@@ -332,6 +359,7 @@ public struct FriendsRootView: View {
             Task {
                 await viewModel.load()
                 await blockedUsersViewModel.load()
+                await peopleYouMayKnowViewModel.load(currentUserId: currentUserSummary?.id)
             }
         }
         .onReceive(sameTabTapPublisher) { _ in
@@ -360,35 +388,46 @@ public struct FriendsRootView: View {
     }
 
     private var friendRequestsRow: some View {
-        HStack(spacing: SplickTheme.Spacing.sm) {
-            friendRequestShortcut(
-                icon: "person.crop.circle.badge.plus",
-                title: languageService.text(.friendsIncomingTitle),
-                count: viewModel.incomingRequestCount,
-                isHighlighted: viewModel.incomingRequestCount > 0
-            ) {
-                showIncomingRequests = true
-            }
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: SplickTheme.Spacing.sm) {
+                friendRequestShortcut(
+                    icon: "person.crop.circle.badge.plus",
+                    title: languageService.text(.friendsIncomingTitle),
+                    count: viewModel.incomingRequestCount,
+                    isHighlighted: viewModel.incomingRequestCount > 0
+                ) {
+                    showIncomingRequests = true
+                }
 
-            friendRequestShortcut(
-                icon: "paperplane.fill",
-                title: languageService.text(.friendsOutgoingTitle),
-                count: viewModel.outgoingRequestCount,
-                isHighlighted: false
-            ) {
-                showOutgoingRequests = true
-            }
+                friendRequestShortcut(
+                    icon: "paperplane.fill",
+                    title: languageService.text(.friendsOutgoingTitle),
+                    count: viewModel.outgoingRequestCount,
+                    isHighlighted: false
+                ) {
+                    showOutgoingRequests = true
+                }
 
-            friendRequestShortcut(
-                icon: "hand.raised.fill",
-                title: languageService.text(.friendsBlockedTitle),
-                count: blockedUsersViewModel.blockedUsers.count,
-                isHighlighted: false
-            ) {
-                showBlockedUsers = true
+                friendRequestShortcut(
+                    icon: "person.2.circle",
+                    title: languageService.text(.friendsPeopleYouMayKnowTitle),
+                    count: peopleYouMayKnowViewModel.suggestionCount,
+                    isHighlighted: peopleYouMayKnowViewModel.suggestionCount > 0
+                ) {
+                    showPeopleYouMayKnow = true
+                }
+
+                friendRequestShortcut(
+                    icon: "hand.raised.fill",
+                    title: languageService.text(.friendsBlockedTitle),
+                    count: blockedUsersViewModel.blockedUsers.count,
+                    isHighlighted: false
+                ) {
+                    showBlockedUsers = true
+                }
             }
         }
-        .padding(.top, SplickTheme.Spacing.sm)
+        .padding(.top, SplickTheme.Spacing.xxs)
     }
 
     private var friendsDirectoryListHeader: some View {
@@ -413,12 +452,16 @@ public struct FriendsRootView: View {
             ZStack(alignment: .topTrailing) {
                 VStack(spacing: SplickTheme.Spacing.xxxs) {
                     Image(systemName: icon)
-                        .font(.system(size: 20, weight: .medium))
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, SplickTheme.Spacing.xxxs)
+                        .font(.system(size: 16, weight: .medium))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(
+                            isHighlighted
+                                ? SplickTheme.Colors.primaryGradientStart
+                                : SplickTheme.Colors.textSecondary
+                        )
 
                     Text(title)
-                        .font(SplickTheme.Typography.captionBold)
+                        .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(
                             isHighlighted
                                 ? SplickTheme.Colors.primaryGradientStart
@@ -427,11 +470,13 @@ public struct FriendsRootView: View {
                         .lineLimit(2)
                         .multilineTextAlignment(.center)
                         .minimumScaleFactor(0.85)
-                        .frame(maxWidth: .infinity)
+                        .lineSpacing(0)
+                        .frame(minWidth: 68)
                 }
-                .padding(.vertical, SplickTheme.Spacing.sm)
+                .padding(.top, SplickTheme.Spacing.xxs)
+                .padding(.bottom, SplickTheme.Spacing.xs)
                 .padding(.horizontal, SplickTheme.Spacing.xs)
-                .frame(maxWidth: .infinity)
+                .frame(minWidth: 84)
                 .background(
                     isHighlighted
                         ? SplickTheme.Colors.primaryGradientStart.opacity(0.1)
@@ -441,11 +486,11 @@ public struct FriendsRootView: View {
 
                 if count > 0 {
                     friendRequestShortcutBadge(count: count)
-                        .padding(.trailing, 10)
-                        .padding(.top, 8)
+                        .padding(.trailing, 8)
+                        .padding(.top, 5)
                 }
             }
-            .frame(maxWidth: .infinity)
+            .frame(minWidth: 84)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(
@@ -457,10 +502,10 @@ public struct FriendsRootView: View {
 
     private func friendRequestShortcutBadge(count: Int) -> some View {
         Text(count > 99 ? "99+" : "\(count)")
-            .font(.system(size: 10, weight: .bold))
+            .font(.system(size: 9, weight: .bold))
             .foregroundStyle(.white)
-            .padding(.horizontal, count > 9 ? 4 : 5)
-            .padding(.vertical, 2)
+            .padding(.horizontal, count > 9 ? 3 : 4)
+            .padding(.vertical, 1.5)
             .background {
                 Capsule(style: .continuous)
                     .fill(SplickTheme.Colors.error)
@@ -779,6 +824,7 @@ public struct FriendsRootView: View {
                 .splickNativeRefreshable(controller: directoryRefreshController) {
                     await viewModel.refresh()
                     await blockedUsersViewModel.load()
+                    await peopleYouMayKnowViewModel.load(currentUserId: currentUserSummary?.id)
                 }
                 .onChange(of: scrollTopSignal) { _ in
                     withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
