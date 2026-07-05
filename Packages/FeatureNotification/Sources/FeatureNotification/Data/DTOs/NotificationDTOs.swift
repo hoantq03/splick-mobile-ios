@@ -13,6 +13,7 @@ struct NotificationResponseDTO: Decodable {
     let isRead: Bool
     let referenceId: UUID?
     let actorUserId: UUID?
+    let actorAvatarUrl: String?
     let destination: NotificationDestinationDTO?
     let createdAt: Date
 }
