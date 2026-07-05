@@ -1,5 +1,17 @@
 import SwiftUI
 
+private struct SuppressKeyboardAutoFocusKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    /// When `true`, OTP and similar fields should not auto-focus (e.g. splash overlay visible).
+    public var suppressKeyboardAutoFocus: Bool {
+        get { self[SuppressKeyboardAutoFocusKey.self] }
+        set { self[SuppressKeyboardAutoFocusKey.self] = newValue }
+    }
+}
+
 extension View {
     @ViewBuilder
     public func `if`<Content: View>(

@@ -25,6 +25,7 @@ struct RootView: View {
             }
         }
         .ignoresSafeArea()
+        .environment(\.suppressKeyboardAutoFocus, appState.needsSplash)
         .dismissKeyboardOnTap()
         .animation(SplashMotion.reveal, value: appState.needsSplash)
         .task {
@@ -59,6 +60,10 @@ struct RootView: View {
         .task(id: appState.splashSessionID) {
             guard appState.needsSplash else { return }
             await runSplashSequence()
+        }
+        .onChange(of: appState.needsSplash) { needsSplash in
+            guard needsSplash else { return }
+            hideKeyboard()
         }
     }
 

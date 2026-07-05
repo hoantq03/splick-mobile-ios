@@ -127,6 +127,8 @@ public enum NotificationType: String, Codable, Sendable {
             return "dollarsign.circle.fill"
         case .paymentEvidenceApproved, .expenseSettled:
             return "checkmark.circle.fill"
+        case .paymentEvidenceRejected:
+            return "xmark.circle.fill"
         case .expenseReminder:
             return "bell.fill"
         case .streakReminderMidday, .streakReminderEvening:

@@ -1,4 +1,5 @@
 import SwiftUI
+import Common
 
 /// Six-digit OTP entry with individual boxes and hidden `TextField` for keyboard / SMS autofill.
 public struct SplickOtpField: View {
@@ -12,6 +13,7 @@ public struct SplickOtpField: View {
     private let cornerRadius: CGFloat
 
     @FocusState private var isFocused: Bool
+    @Environment(\.suppressKeyboardAutoFocus) private var suppressKeyboardAutoFocus
 
     private let boxHeight: CGFloat = 56
     private let boxSpacing: CGFloat = 10
@@ -68,9 +70,20 @@ public struct SplickOtpField: View {
             }
         }
         .onAppear {
-            guard autoFocus else { return }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                isFocused = true
+            requestFocusIfNeeded()
+        }
+        .onChange(of: autoFocus) { shouldAutoFocus in
+            if shouldAutoFocus {
+                requestFocusIfNeeded()
+            } else {
+                isFocused = false
+            }
+        }
+        .onChange(of: suppressKeyboardAutoFocus) { isSuppressed in
+            if isSuppressed {
+                isFocused = false
+            } else {
+                requestFocusIfNeeded()
             }
         }
         .onChange(of: code) { newValue in
@@ -152,5 +165,13 @@ public struct SplickOtpField: View {
         guard index < code.count else { return "" }
         let stringIndex = code.index(code.startIndex, offsetBy: index)
         return String(code[stringIndex])
+    }
+
+    private func requestFocusIfNeeded() {
+        guard autoFocus, !suppressKeyboardAutoFocus else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            guard autoFocus, !suppressKeyboardAutoFocus else { return }
+            isFocused = true
+        }
     }
 }

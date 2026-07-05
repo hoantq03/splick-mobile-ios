@@ -21,6 +21,7 @@ public struct OtpVerificationView: View {
     private let onSubmit: () -> Void
     private let onBack: () -> Void
     private let onSecondaryAction: (() -> Void)?
+    private let autoFocus: Bool
 
     public init(
         otpCode: Binding<String>,
@@ -35,6 +36,7 @@ public struct OtpVerificationView: View {
         backTitle: String = "Back",
         resendTitle: String = "Resend code",
         isResendDisabled: Bool = false,
+        autoFocus: Bool = true,
         onResend: @escaping () -> Void,
         onSubmit: @escaping () -> Void,
         onBack: @escaping () -> Void,
@@ -58,6 +60,7 @@ public struct OtpVerificationView: View {
         self.onBack = onBack
         self.secondaryActionTitle = secondaryActionTitle
         self.onSecondaryAction = onSecondaryAction
+        self.autoFocus = autoFocus
     }
 
     public var body: some View {
@@ -81,7 +84,12 @@ public struct OtpVerificationView: View {
                     .multilineTextAlignment(.center)
             }
 
-            SplickOtpField(code: $otpCode, errorMessage: otpError, cornerRadius: cornerRadius)
+            SplickOtpField(
+                code: $otpCode,
+                errorMessage: otpError,
+                autoFocus: autoFocus,
+                cornerRadius: cornerRadius
+            )
 
             SplickButton(
                 submitTitle,

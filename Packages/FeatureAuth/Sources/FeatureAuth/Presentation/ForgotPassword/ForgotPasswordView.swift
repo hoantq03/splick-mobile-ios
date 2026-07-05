@@ -197,6 +197,7 @@ public struct ForgotPasswordView: View {
             showsBackButton: presentation == .sheet,
             resendTitle: resendTitle,
             isResendDisabled: !viewModel.canResendCode,
+            autoFocus: viewModel.step == .otp,
             onResend: { Task { await viewModel.resendCode() } },
             onSubmit: { Task { await viewModel.verifyResetCode() } },
             onBack: {
