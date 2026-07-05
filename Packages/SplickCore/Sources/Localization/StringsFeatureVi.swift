@@ -146,6 +146,7 @@ enum StringsFeatureVi {
 
         // Friends
         .friendsTitle: "Bạn bè",
+        .friendsListTitle: "Danh sách bạn bè",
         .friendsTabFriends: "Bạn bè",
         .friendsTabGroups: "Nhóm",
         .friendsIncomingRequests: "Lời mời kết bạn (%d)",

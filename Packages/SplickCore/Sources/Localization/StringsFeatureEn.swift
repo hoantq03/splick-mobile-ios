@@ -146,6 +146,7 @@ enum StringsFeatureEn {
 
         // Friends
         .friendsTitle: "Friends",
+        .friendsListTitle: "Friends list",
         .friendsTabFriends: "Friends",
         .friendsTabGroups: "Groups",
         .friendsIncomingRequests: "Friend requests (%d)",

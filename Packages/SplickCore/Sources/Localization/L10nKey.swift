@@ -374,6 +374,7 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
 
     // Friends
     case friendsTitle = "friends.title"
+    case friendsListTitle = "friends.list.title"
     case friendsTabFriends = "friends.tab.friends"
     case friendsTabGroups = "friends.tab.groups"
     case friendsIncomingRequests = "friends.incoming_requests"
