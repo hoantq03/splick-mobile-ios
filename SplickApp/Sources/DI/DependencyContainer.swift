@@ -499,6 +499,18 @@ final class DependencyContainer: ObservableObject {
         BadgeCountService(fetchBadgeCountsUseCase: fetchBadgeCountsUseCase)
     }()
 
+    lazy var appStartupRepository: AppStartupRepositoryProtocol = {
+        AppStartupRepository(apiClient: apiClient)
+    }()
+
+    lazy var fetchAppStartupUseCase: FetchAppStartupUseCaseProtocol = {
+        FetchAppStartupUseCase(repository: appStartupRepository)
+    }()
+
+    lazy var appStartupCoordinator: AppStartupCoordinator = {
+        AppStartupCoordinator(fetchAppStartupUseCase: fetchAppStartupUseCase)
+    }()
+
     // MARK: - Messaging
 
     lazy var messagingWebSocketClient: MessagingWebSocketClient = {

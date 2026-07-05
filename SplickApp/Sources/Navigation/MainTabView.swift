@@ -110,8 +110,16 @@ struct MainTabView: View {
                 }
             }
             .task(id: appState.currentUser?.id) {
-                guard appState.currentUser != nil else { return }
-                await container.customEmojiStore.load(fetcher: container.customEmojiRepository)
+                guard let userId = appState.currentUser?.id else { return }
+                await container.appStartupCoordinator.bootstrap(
+                    userId: userId,
+                    repository: container.appStartupRepository,
+                    badgeCountService: container.badgeCountService,
+                    feedViewModel: container.feedViewModel,
+                    conversationListViewModel: container.conversationListViewModel,
+                    customEmojiStore: container.customEmojiStore,
+                    streakViewModel: container.streakViewModel
+                )
             }
             .onReceive(container.badgeCountService.$counts) { newCounts in
                 Task { @MainActor in
@@ -168,9 +176,11 @@ struct MainTabView: View {
             case .active:
                 container.badgeCountService.startPolling()
                 container.messagingWebSocketClient.connect()
-            case .background, .inactive:
+            case .background:
                 container.badgeCountService.stopPolling()
                 container.messagingWebSocketClient.disconnect()
+            case .inactive:
+                break
             @unknown default:
                 break
             }
@@ -695,7 +705,10 @@ struct ProfileSettingsView: View {
                 .resizable()
                 .scaledToFill()
         } else if let url = user.avatarURL {
-            RemoteImage(url: url) { phase in
+            RemoteImage(
+                url: url,
+                maxPixelSize: RemoteImageMetrics.avatarMaxPixelWidth(pointSize: 96)
+            ) { phase in
                 switch phase {
                 case .success(let image):
                     image.resizable().scaledToFill()
@@ -728,7 +741,10 @@ struct ProfileSettingsView: View {
                         .resizable()
                         .scaledToFit()
                 } else if let url = appState.currentUser?.avatarURL {
-                    RemoteImage(url: url) { phase in
+                    RemoteImage(
+                url: url,
+                maxPixelSize: RemoteImageMetrics.avatarMaxPixelWidth(pointSize: 96)
+            ) { phase in
                         switch phase {
                         case .success(let image):
                             image.resizable().scaledToFit()
@@ -1225,6 +1241,7 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
     @ViewBuilder var camera: () -> Camera
 
     @State private var pagerIndex: Int = 0
+    @State private var activatedTabs: Set<Tab> = [.feed]
 
     var body: some View {
         GeometryReader { proxy in
@@ -1233,10 +1250,10 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
 
             ZStack(alignment: .topLeading) {
                 HStack(spacing: 0) {
-                    feed()    .frame(width: width)
-                    expenses().frame(width: width)
-                    friends() .frame(width: width)
-                    messages().frame(width: width)
+                    tabPage(.feed, width: width, content: feed)
+                    tabPage(.expenses, width: width, content: expenses)
+                    tabPage(.friends, width: width, content: friends)
+                    tabPage(.messages, width: width, content: messages)
                 }
                 .frame(width: width * pageCount, alignment: .leading)
                 .offset(x: -CGFloat(pagerIndex) * width)
@@ -1254,15 +1271,28 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(MainTabPagerMotion.spring, value: selectedTab == .camera)
         .onAppear {
-            pagerIndex = Tab.pagerTabs.firstIndex(
-                of: selectedTab.isPagerTab ? selectedTab : .feed
-            ) ?? 0
+            let initial = selectedTab.isPagerTab ? selectedTab : .feed
+            activatedTabs.insert(initial)
+            pagerIndex = Tab.pagerTabs.firstIndex(of: initial) ?? 0
         }
         .onChange(of: selectedTab) { newTab in
-            guard newTab.isPagerTab else { return }
-            let idx = Tab.pagerTabs.firstIndex(of: newTab) ?? 0
-            guard idx != pagerIndex else { return }
-            pagerIndex = idx
+            if newTab.isPagerTab {
+                activatedTabs.insert(newTab)
+                let idx = Tab.pagerTabs.firstIndex(of: newTab) ?? 0
+                guard idx != pagerIndex else { return }
+                pagerIndex = idx
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func tabPage<T: View>(_ tab: Tab, width: CGFloat, @ViewBuilder content: () -> T) -> some View {
+        if activatedTabs.contains(tab) {
+            content()
+                .frame(width: width)
+        } else {
+            Color.clear
+                .frame(width: width)
         }
     }
 }

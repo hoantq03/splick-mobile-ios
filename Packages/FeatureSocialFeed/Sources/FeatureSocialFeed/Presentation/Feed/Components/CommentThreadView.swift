@@ -514,7 +514,10 @@ private struct CommentAttachmentsView: View {
                     switch attachment.kind {
                     case .image:
                         if let url = attachment.url {
-                            RemoteImage(url: url) { phase in
+                            RemoteImage(
+                                url: url,
+                                maxPixelSize: RemoteImageMetrics.inlineAttachmentMaxPixelWidth(pointWidth: maxImageWidth)
+                            ) { phase in
                                 switch phase {
                                 case .success(let image):
                                     image.resizable().scaledToFill()
@@ -529,7 +532,11 @@ private struct CommentAttachmentsView: View {
                         }
                     case .gif:
                         if let url = attachment.url {
-                            AnimatedRemoteImage(url: url, contentMode: .fill)
+                            AnimatedRemoteImage(
+                                url: url,
+                                contentMode: .fill,
+                                maxPixelSize: RemoteImageMetrics.inlineAttachmentMaxPixelWidth(pointWidth: maxImageWidth)
+                            )
                                 .frame(maxWidth: maxImageWidth, maxHeight: 160)
                                 .clipShape(RoundedRectangle(cornerRadius: 8))
                         }

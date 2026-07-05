@@ -97,6 +97,15 @@ public final class FeedViewModel: ObservableObject {
         currentUserId = userId ?? user?.id
     }
 
+    public func applyStartupPosts(_ startupPosts: [Post]) {
+        guard !startupPosts.isEmpty else { return }
+        posts = startupPosts
+        state = .loaded(startupPosts)
+        currentPage = 0
+        canLoadMore = startupPosts.count >= 20
+        hasReachedFeedEnd = startupPosts.count < 20
+    }
+
     @discardableResult
     func loadFeed(isPullToRefresh: Bool = false) async -> Bool {
         if isPullToRefresh {

@@ -17,6 +17,12 @@ public final class CustomEmojiStore: ObservableObject {
     }
 
     @MainActor
+    public func applyStartupEmojis(_ emojis: [CustomEmoji]) {
+        guard !emojis.isEmpty else { return }
+        allEmojis = emojis.sorted { $0.shortcode < $1.shortcode }
+    }
+
+    @MainActor
     public func load(fetcher: any CustomEmojiFetching) async {
         if let existing = loadTask {
             await existing.value

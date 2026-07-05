@@ -305,6 +305,8 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
     private var currentWidth: CGFloat
     private var currentHeight: CGFloat
     private var activeSelection: FeedContentSegment
+    /// Lazy-mount segment UI; feed (index 1) is mounted on first layout.
+    private var mountedSegmentIndices: Set<Int> = []
 
     init(
         coordinator: _PagerGestureCoordinator,
@@ -354,24 +356,49 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
             self?.applyLayout()
         }
         coordinator.onSettled = { [weak self] targetIndex, adjustedOffset, response, damping in
+            self?.ensureSegmentMounted(at: targetIndex)
             self?.settle(to: targetIndex, adjustedOffset: adjustedOffset, response: response, damping: damping)
         }
     }
 
     private func embedHosting() {
-        let streakHosting = UIHostingController(rootView: makeStreakRoot())
-        let feedHosting = UIHostingController(rootView: makeFeedRoot())
-        let albumHosting = UIHostingController(rootView: makeAlbumRoot())
-
-        prepareHost(streakHosting)
-        prepareHost(feedHosting)
-        prepareHost(albumHosting)
-
-        streakHostingController = streakHosting
-        feedHostingController = feedHosting
-        albumHostingController = albumHosting
         coordinator.attachHostView(view)
+        let initialIndex = feedSegmentOrder.firstIndex(of: activeSelection) ?? 1
+        ensureSegmentMounted(at: initialIndex)
         applyLayout()
+    }
+
+    private func ensureSegmentMounted(at index: Int) {
+        guard feedSegmentOrder.indices.contains(index) else { return }
+        guard !mountedSegmentIndices.contains(index) else { return }
+        mountedSegmentIndices.insert(index)
+
+        switch feedSegmentOrder[index] {
+        case .streak:
+            let hosting = UIHostingController(rootView: makeStreakRoot())
+            prepareHost(hosting)
+            streakHostingController = hosting
+        case .feed:
+            let hosting = UIHostingController(rootView: makeFeedRoot())
+            prepareHost(hosting)
+            feedHostingController = hosting
+        case .album:
+            let hosting = UIHostingController(rootView: makeAlbumRoot())
+            prepareHost(hosting)
+            albumHostingController = hosting
+        }
+    }
+
+    private func refreshMountedRoots() {
+        if mountedSegmentIndices.contains(0), let streakHostingController {
+            streakHostingController.rootView = makeStreakRoot()
+        }
+        if mountedSegmentIndices.contains(1), let feedHostingController {
+            feedHostingController.rootView = makeFeedRoot()
+        }
+        if mountedSegmentIndices.contains(2), let albumHostingController {
+            albumHostingController.rootView = makeAlbumRoot()
+        }
     }
 
     private func prepareHost<Content: View>(_ hosting: UIHostingController<Content>) {
@@ -398,12 +425,12 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
         _PagerPageRoot(segment: .streak, activityState: activityState, content: currentStreak())
     }
 
-    private var hostedPageViews: [UIView] {
+    private var hostedPageViews: [UIView?] {
         [
             streakHostingController?.view,
             feedHostingController?.view,
             albumHostingController?.view,
-        ].compactMap { $0 }
+        ]
     }
 
     private func applyLayout() {
@@ -412,6 +439,7 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
         let height = max(currentHeight, view.bounds.height, 1)
 
         for (index, pageView) in hostedPageViews.enumerated() {
+            guard let pageView else { continue }
             let x = CGFloat(index - coordinator.state.currentIndex) * width + coordinator.state.dragOffset
             pageView.frame = CGRect(x: x, y: 0, width: width, height: height)
         }
@@ -440,6 +468,7 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
     }
 
     func jump(to index: Int) {
+        ensureSegmentMounted(at: index)
         coordinator.state.jump(to: index)
         applyLayout()
     }
@@ -465,6 +494,11 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
             }
         }
 
+        if let index = feedSegmentOrder.firstIndex(of: activeSelection) {
+            ensureSegmentMounted(at: index)
+        }
+        refreshMountedRoots()
+
         if geometryChanged {
             applyLayout()
         }
@@ -477,6 +511,9 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
         switch pan.state {
         case .began:
             coordinator.handleBegin()
+            let current = coordinator.state.currentIndex
+            ensureSegmentMounted(at: max(current - 1, 0))
+            ensureSegmentMounted(at: min(current + 1, feedSegmentOrder.count - 1))
         case .changed:
             coordinator.handleChanged(
                 translation: CGPoint(x: translation.x, y: translation.y)

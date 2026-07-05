@@ -25,6 +25,11 @@ public final class StreakViewModel: ObservableObject {
         self.fetchStreakUseCase = fetchStreakUseCase
     }
 
+    public func applyStartupSummary(currentStreak: Int, hasTodayPhoto: Bool) {
+        self.currentStreak = currentStreak
+        self.hasTodayPhoto = hasTodayPhoto
+    }
+
     var anchorMonthID: String {
         let components = calendar.dateComponents([.year, .month], from: Date())
         let year = components.year ?? 2026
@@ -134,18 +139,30 @@ public final class StreakViewModel: ObservableObject {
     }
 
     private func loadMonthRange(endingAt end: (year: Int, month: Int), count: Int) async throws -> [StreakMonthSection] {
+        var months: [(year: Int, month: Int)] = []
+        months.reserveCapacity(count)
         var cursor = end
-        var sections: [StreakMonthSection] = []
-        sections.reserveCapacity(count)
-
         for _ in 0..<count {
-            let days = try await fetchStreakUseCase.fetchCalendar(year: cursor.year, month: cursor.month)
-            sections.append(StreakMonthSection(year: cursor.year, month: cursor.month, days: days))
+            months.append(cursor)
             guard let previous = previousMonth(year: cursor.year, month: cursor.month) else { break }
             cursor = previous
         }
 
-        return sections
+        return try await withThrowingTaskGroup(of: StreakMonthSection.self) { group in
+            for (year, month) in months {
+                group.addTask { [fetchStreakUseCase] in
+                    let days = try await fetchStreakUseCase.fetchCalendar(year: year, month: month)
+                    return StreakMonthSection(year: year, month: month, days: days)
+                }
+            }
+
+            var sections: [StreakMonthSection] = []
+            sections.reserveCapacity(months.count)
+            for try await section in group {
+                sections.append(section)
+            }
+            return sections.sorted { $0.monthDate < $1.monthDate }
+        }
     }
 
     private func loadDayPhotos(_ day: StreakDay) async {

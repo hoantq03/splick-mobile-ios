@@ -94,7 +94,10 @@ struct FeedInlineVideoPlayer: View {
             if controller.showsVideoSurface {
                 FeedVideoPlayerLayerView(player: controller.player)
             } else if let posterURL {
-                RemoteImage(url: posterURL) { phase in
+                RemoteImage(
+                    url: posterURL,
+                    maxPixelSize: RemoteImageMetrics.feedMediaMaxPixelWidth
+                ) { phase in
                     switch phase {
                     case .success(let image):
                         image.resizable().scaledToFill()

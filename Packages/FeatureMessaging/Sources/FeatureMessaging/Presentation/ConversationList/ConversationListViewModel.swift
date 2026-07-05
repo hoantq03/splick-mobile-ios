@@ -48,7 +48,13 @@ public final class ConversationListViewModel: ObservableObject {
         return []
     }
 
+    public func applyStartupConversations(_ items: [Conversation]) {
+        guard !items.isEmpty else { return }
+        state = .loaded(items)
+    }
+
     public func load() async {
+        if case .loaded = state { return }
         state = .loading
         do {
             let items = try await fetchConversationsUseCase.execute()

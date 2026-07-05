@@ -65,7 +65,10 @@ struct PostMediaView: View {
     }
 
     private func imageContent(for item: PostMediaItem) -> some View {
-        RemoteImage(url: item.thumbnailURL ?? item.mediaURL) { phase in
+        RemoteImage(
+            url: item.thumbnailURL ?? item.mediaURL,
+            maxPixelSize: RemoteImageMetrics.feedMediaMaxPixelWidth
+        ) { phase in
             switch phase {
             case .success(let image):
                 image
