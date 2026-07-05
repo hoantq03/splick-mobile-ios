@@ -36,15 +36,12 @@ public struct GridThumbnailImage<Placeholder: View>: View {
                     }
             }
         }
-        .onDisappear(.lowerPriority)
+        .onDisappear(.cancel)
     }
 
     private var imageRequest: ImageRequest? {
         url.map { url in
-            ImageRequest(
-                url: url,
-                processors: [.resize(width: thumbnailWidth)]
-            )
+            RemoteImageRequestFactory.boundedRequest(url: url, maxPixelWidth: thumbnailWidth)
         }
     }
 }
@@ -61,7 +58,7 @@ public enum ImagePrefetching {
     /// Warms Nuke disk/memory cache for upcoming grid cells.
     public static func prefetch(urls: [URL], thumbnailWidth: CGFloat = 300) {
         let requests = urls.map { url in
-            ImageRequest(url: url, processors: [.resize(width: thumbnailWidth)])
+            RemoteImageRequestFactory.boundedRequest(url: url, maxPixelWidth: thumbnailWidth)
         }
         guard !requests.isEmpty else { return }
         ImagePrefetcher().startPrefetching(with: requests)

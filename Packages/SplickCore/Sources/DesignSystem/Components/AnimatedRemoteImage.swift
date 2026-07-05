@@ -53,10 +53,12 @@ public struct AnimatedRemoteImage: UIViewRepresentable {
                 return
             }
 
-            let processors: [ImageProcessing] = maxPixelSize.map {
-                [.resize(width: $0, unit: .pixels)]
-            } ?? []
-            let request = ImageRequest(url: url, processors: processors)
+            let request: ImageRequest
+            if let maxPixelSize, maxPixelSize > 0 {
+                request = RemoteImageRequestFactory.boundedRequest(url: url, maxPixelWidth: maxPixelSize)
+            } else {
+                request = ImageRequest(url: url)
+            }
             task = ImagePipeline.shared.loadImage(with: request) { result in
                 switch result {
                 case .success(let response):

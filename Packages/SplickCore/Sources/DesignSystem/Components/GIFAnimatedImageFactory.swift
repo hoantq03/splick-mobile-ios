@@ -11,16 +11,19 @@ enum GIFAnimatedImageFactory {
     }
 
     static func animatedImage(from data: Data, maxPixelSize: CGFloat? = nil) -> UIImage? {
+        let maxSide = maxPixelSize.map { max($0, 1) } ?? FeedMediaLayout.decodeMaxPixelSide
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
-            return UIImage(data: data)
+            return nil
         }
 
         let frameCount = CGImageSourceGetCount(source)
         guard frameCount > 1 else {
-            return UIImage(data: data)
+            guard let cgImage = createThumbnail(at: 0, source: source, maxPixelSize: maxSide) else {
+                return nil
+            }
+            return UIImage(cgImage: cgImage)
         }
 
-        let maxSide = maxPixelSize.map { max($0, 1) } ?? FeedMediaLayout.decodeMaxPixelSide
         var images: [UIImage] = []
         var totalDuration: TimeInterval = 0
 
@@ -33,7 +36,7 @@ enum GIFAnimatedImageFactory {
         }
 
         guard !images.isEmpty else {
-            return UIImage(data: data)
+            return nil
         }
 
         return UIImage.animatedImage(with: images, duration: max(totalDuration, 0.1))
