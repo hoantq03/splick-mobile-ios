@@ -81,6 +81,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
     public let viewers: [UserSummary]
     public let audience: PostAudience
     public let groupId: UUID?
+    public let companionGroupName: String?
     public let createdAt: Date
 
     public var shareURL: URL {
@@ -96,6 +97,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         reactions: [Reaction] = [],
         comments: [PostComment] = [],
         groupId: UUID? = nil,
+        companionGroupName: String? = nil,
         createdAt: Date = .now,
         mediaType: PostMediaType = .image,
         videoURL: URL? = nil,
@@ -128,6 +130,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         self.viewers = viewers
         self.audience = audience
         self.groupId = groupId
+        self.companionGroupName = companionGroupName
         self.createdAt = createdAt
     }
 
@@ -151,6 +154,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
             reactions: reactions ?? self.reactions,
             comments: comments ?? self.comments,
             groupId: groupId,
+            companionGroupName: companionGroupName,
             createdAt: createdAt,
             mediaType: mediaType,
             videoURL: videoURL,
@@ -273,6 +277,9 @@ public extension Post {
 
     /// e.g. "Linh Pham" or "Linh Pham và +50 người khác"
     func companionsSummaryText(maxNamed: Int = 1) -> String? {
+        if let companionGroupName, !companionGroupName.isEmpty {
+            return companionGroupName
+        }
         guard !companions.isEmpty else { return nil }
         if companions.count <= maxNamed {
             return companions.map(\.displayName).joined(separator: ", ")

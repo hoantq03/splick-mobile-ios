@@ -19,6 +19,7 @@ public struct CreatePostInput: Sendable {
     public let mediaItems: [CreatePostMediaInput]
     public let caption: String?
     public let companionIds: [UUID]
+    public let companionGroupName: String?
     public let checkInPlace: String?
     public let feedKind: PostFeedKind
     public let billSplit: PostBillSplit?
@@ -31,6 +32,7 @@ public struct CreatePostInput: Sendable {
         mediaItems: [CreatePostMediaInput],
         caption: String?,
         companionIds: [UUID] = [],
+        companionGroupName: String? = nil,
         checkInPlace: String? = nil,
         feedKind: PostFeedKind = .checkIn,
         billSplit: PostBillSplit? = nil,
@@ -42,6 +44,7 @@ public struct CreatePostInput: Sendable {
         self.mediaItems = mediaItems
         self.caption = caption
         self.companionIds = companionIds
+        self.companionGroupName = companionGroupName
         self.checkInPlace = checkInPlace
         self.feedKind = feedKind
         self.billSplit = billSplit

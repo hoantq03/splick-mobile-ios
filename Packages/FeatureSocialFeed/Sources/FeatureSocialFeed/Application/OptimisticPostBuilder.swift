@@ -35,6 +35,7 @@ enum OptimisticPostBuilder {
             reactions: [],
             comments: [],
             groupId: input.groupId,
+            companionGroupName: input.companionGroupName,
             createdAt: .now,
             mediaType: primaryType,
             videoURL: primaryType == .video ? first?.mediaURL : nil,

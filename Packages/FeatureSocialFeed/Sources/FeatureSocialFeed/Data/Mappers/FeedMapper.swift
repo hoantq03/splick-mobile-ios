@@ -36,6 +36,7 @@ enum FeedMapper {
             reactions: reactions,
             comments: comments,
             groupId: dto.groupId,
+            companionGroupName: nil,
             createdAt: dto.createdAt,
             mediaType: mediaType,
             videoURL: videoURL,

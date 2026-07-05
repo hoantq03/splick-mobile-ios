@@ -153,7 +153,8 @@ public final class FeedViewModel: ObservableObject {
 
         do {
             let posts = try await fetchFeedUseCase.execute(page: 0)
-            self.posts = mergeFeedPreservingPendingUploads(with: posts)
+            let hydratedPosts = posts.map { preserveClientMetadata(on: $0) }
+            self.posts = mergeFeedPreservingPendingUploads(with: hydratedPosts)
             state = .loaded(self.posts)
             canLoadMore = !posts.isEmpty
             updateHasReachedFeedEnd()
@@ -229,7 +230,7 @@ public final class FeedViewModel: ObservableObject {
         }
 
         do {
-            let updated = try await fetchPostUseCase.execute(postId: id)
+            let updated = preserveClientMetadata(on: try await fetchPostUseCase.execute(postId: id))
             if let index = posts.firstIndex(where: { $0.id == id }) {
                 posts[index] = updated
                 state = .loaded(posts)
@@ -525,10 +526,11 @@ public final class FeedViewModel: ObservableObject {
     }
 
     private func replaceOptimisticPost(localId: UUID, with serverPost: Post) {
+        let resolvedServerPost = preserveClientMetadata(on: serverPost)
         if let index = posts.firstIndex(where: { $0.id == localId }) {
-            posts[index] = serverPost
+            posts[index] = resolvedServerPost
         } else {
-            prependCreatedPost(serverPost)
+            prependCreatedPost(resolvedServerPost)
         }
         state = .loaded(posts)
     }
@@ -540,6 +542,36 @@ public final class FeedViewModel: ObservableObject {
         let pendingPosts = posts.filter { pendingIds.contains($0.id) }
         let rest = fetched.filter { !pendingIds.contains($0.id) }
         return pendingPosts + rest
+    }
+
+    private func preserveClientMetadata(on post: Post) -> Post {
+        guard let existing = posts.first(where: { $0.id == post.id }) else { return post }
+        guard post.companionGroupName == nil else { return post }
+        guard let companionGroupName = existing.companionGroupName else { return post }
+
+        return Post(
+            id: post.id,
+            author: post.author,
+            imageURL: post.imageURL,
+            thumbnailURL: post.thumbnailURL,
+            caption: post.caption,
+            reactions: post.reactions,
+            comments: post.comments,
+            groupId: post.groupId,
+            companionGroupName: companionGroupName,
+            createdAt: post.createdAt,
+            mediaType: post.mediaType,
+            videoURL: post.videoURL,
+            videoDurationSeconds: post.videoDurationSeconds,
+            mediaItems: post.mediaItems,
+            companions: post.companions,
+            feedKind: post.feedKind,
+            checkInPlace: post.checkInPlace,
+            billSplit: post.billSplit,
+            viewCount: post.viewCount,
+            viewers: post.viewers,
+            audience: post.audience
+        )
     }
 
     private func cancelPendingPostUpload(postId: UUID) {
