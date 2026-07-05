@@ -552,6 +552,43 @@ final class DependencyContainer: ObservableObject {
         )
     }
 
+    func makeChatPeerRelationshipActions() -> ChatPeerRelationshipActions {
+        let fetchProfile = fetchUserProfileUseCase
+        let block = blockUserUseCase
+        let unblock = unblockUserUseCase
+        let remove = removeFriendUseCase
+        let add = addFriendUseCase
+        let fetchIncoming = fetchIncomingFriendRequestsUseCase
+        let accept = acceptFriendRequestUseCase
+
+        return ChatPeerRelationshipActions(
+            fetchStatus: { userId in
+                guard let profile = try? await fetchProfile.execute(userId: userId) else {
+                    return .unknown
+                }
+                switch profile.friendStatus {
+                case .friends: return .friends
+                case .blocked: return .blocked
+                case .none: return .stranger
+                case .requestSent: return .requestSent
+                case .requestReceived: return .requestReceived
+                }
+            },
+            blockUser: { try await block.execute(userId: $0) },
+            unblockUser: { try await unblock.execute(userId: $0) },
+            removeFriend: { try await remove.execute(friendUserId: $0) },
+            addFriend: { userId in
+                let profile = try await fetchProfile.execute(userId: userId)
+                _ = try await add.execute(username: profile.user.username, message: nil)
+            },
+            acceptFriendRequest: { userId in
+                let incoming = try await fetchIncoming.executeAll()
+                guard let request = incoming.first(where: { $0.requester.id == userId }) else { return }
+                try await accept.execute(requestId: request.id)
+            }
+        )
+    }
+
     func getOrCreateConversationId(friendUserId: UUID) async -> UUID? {
         do {
             let conversation = try await messagingRepository.getOrCreateConversation(friendUserId: friendUserId)
