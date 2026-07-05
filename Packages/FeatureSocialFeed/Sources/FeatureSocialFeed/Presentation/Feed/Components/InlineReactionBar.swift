@@ -4,24 +4,12 @@ import Common
 import DesignSystem
 import SplickDomain
 
-private struct ReactionSlotFramesKey: PreferenceKey {
-    static var defaultValue: [Int: CGRect] = [:]
+private struct ReactionBarFrameKey: PreferenceKey {
+    static var defaultValue: CGRect = .zero
 
-    static func reduce(value: inout [Int: CGRect], nextValue: () -> [Int: CGRect]) {
-        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
-    }
-}
-
-private extension View {
-    func reactionSlotFrame(index: Int) -> some View {
-        background(
-            GeometryReader { geo in
-                Color.clear.preference(
-                    key: ReactionSlotFramesKey.self,
-                    value: [index: geo.frame(in: .global)]
-                )
-            }
-        )
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        let next = nextValue()
+        if next != .zero { value = next }
     }
 }
 
@@ -35,7 +23,7 @@ struct InlineReactionBar: View {
 
     @State private var highlightedIndex: Int?
     @State private var isDragSelecting = false
-    @State private var slotFrames: [Int: CGRect] = [:]
+    @State private var barFrame: CGRect = .zero
     @State private var bounceIndex: Int?
 
     private let slotSize: CGFloat = 36
@@ -43,6 +31,10 @@ struct InlineReactionBar: View {
     private let reactionCommitDelay: TimeInterval = 0.16
     private static let selectionFeedback = UISelectionFeedbackGenerator()
     private static let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+
+    private var slotCount: Int {
+        preferences.quickEmojis.count + 1
+    }
 
     var body: some View {
         HStack(spacing: slotSpacing) {
@@ -52,7 +44,18 @@ struct InlineReactionBar: View {
             plusButton
         }
         .frame(height: 40, alignment: .leading)
-        .onPreferenceChange(ReactionSlotFramesKey.self) { slotFrames = $0 }
+        .background(
+            GeometryReader { geo in
+                Color.clear.preference(
+                    key: ReactionBarFrameKey.self,
+                    value: geo.frame(in: .global)
+                )
+            }
+        )
+        .onPreferenceChange(ReactionBarFrameKey.self) { frame in
+            guard frame != .zero else { return }
+            barFrame = frame
+        }
         .simultaneousGesture(longPressDragGesture)
         .onAppear {
             Self.selectionFeedback.prepare()
@@ -76,7 +79,6 @@ struct InlineReactionBar: View {
                 .animation(.spring(response: 0.24, dampingFraction: 0.72), value: isBouncing)
         }
         .buttonStyle(.plain)
-        .reactionSlotFrame(index: index)
     }
 
     private var plusButton: some View {
@@ -97,7 +99,6 @@ struct InlineReactionBar: View {
                 .animation(.spring(response: 0.18, dampingFraction: 0.78), value: isHighlighted)
         }
         .buttonStyle(.plain)
-        .reactionSlotFrame(index: plusIndex)
     }
 
     private var longPressDragGesture: some Gesture {
@@ -138,10 +139,21 @@ struct InlineReactionBar: View {
         }
     }
 
+    private func slotFrame(for index: Int) -> CGRect {
+        CGRect(
+            x: barFrame.minX + CGFloat(index) * (slotSize + slotSpacing),
+            y: barFrame.minY,
+            width: slotSize,
+            height: slotSize
+        )
+    }
+
     private func slotIndex(at point: CGPoint) -> Int? {
-        slotFrames.first { _, frame in
-            frame.insetBy(dx: -4, dy: -8).contains(point)
-        }?.key
+        guard barFrame != .zero else { return nil }
+        for index in 0..<slotCount where slotFrame(for: index).insetBy(dx: -4, dy: -8).contains(point) {
+            return index
+        }
+        return nil
     }
 
     private func commitDragSelection(at point: CGPoint) {
@@ -163,7 +175,7 @@ struct InlineReactionBar: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
             if bounceIndex == index { bounceIndex = nil }
         }
-        if let frame = slotFrames[index] {
+        if let frame = barFrame == .zero ? nil : slotFrame(for: index) {
             onDragRelease?(emoji, frame)
         }
 

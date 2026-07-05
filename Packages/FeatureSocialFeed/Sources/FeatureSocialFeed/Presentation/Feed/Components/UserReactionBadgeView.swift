@@ -2,39 +2,47 @@ import SwiftUI
 import DesignSystem
 import SplickDomain
 
-/// Avatar on the left; emoji samples stacked on the right (1/2 overlap) overlapping the avatar edge.
+/// Avatar on the left; emoji samples tucked at the top-right corner, smaller than the avatar.
 struct UserReactionBadgeView: View {
     let summary: UserReactionSummary
 
-    private let avatarSize: CGFloat = 28
-    private let emojiFontSize: CGFloat = 13
+    private enum Metrics {
+        static let avatarSize: CGFloat = 28
+        static let emojiFontSize: CGFloat = 10
+        /// Sits on the upper-right rim of the avatar (slightly above the top edge).
+        static let emojiOffsetX: CGFloat = 17
+        static let emojiOffsetY: CGFloat = -5
+    }
 
     var body: some View {
-        ZStack(alignment: .leading) {
+        ZStack(alignment: .topLeading) {
             AvatarView(
                 imageURL: summary.user.avatarURL,
                 name: summary.user.displayName,
                 size: .small
             )
-            .frame(width: avatarSize, height: avatarSize)
-            .reactionTargetAnchor(id: "user:\(summary.userId.uuidString)")
+            .frame(width: Metrics.avatarSize, height: Metrics.avatarSize)
+            .reactionTargetAnchor(
+                id: "user:\(summary.userId.uuidString)",
+                placement: .topTrailing()
+            )
 
             if !summary.emojiCounts.isEmpty {
                 OverlappingEmojiStack(
                     emojiCounts: summary.emojiCounts,
-                    fontSize: emojiFontSize
+                    fontSize: Metrics.emojiFontSize
                 )
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 3)
-                    .background(
-                        Capsule()
-                            .fill(SplickTheme.Colors.background)
-                            .shadow(color: .black.opacity(0.06), radius: 1, y: 1)
-                    )
-                    .offset(x: avatarSize * 0.5)
+                .padding(.horizontal, 3)
+                .padding(.vertical, 2)
+                .background(
+                    Capsule()
+                        .fill(SplickTheme.Colors.background)
+                        .shadow(color: .black.opacity(0.06), radius: 1, y: 1)
+                )
+                .offset(x: Metrics.emojiOffsetX, y: Metrics.emojiOffsetY)
             }
         }
-        .frame(height: avatarSize)
+        .frame(width: Metrics.avatarSize + 10, height: Metrics.avatarSize, alignment: .topLeading)
     }
 }
 

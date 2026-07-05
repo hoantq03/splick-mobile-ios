@@ -154,7 +154,7 @@ struct FlyingEmojiView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + launchDuration + apexHoldDuration) {
             withAnimation(.timingCurve(0.18, 0.78, 0.28, 1, duration: fallDuration)) {
                 animatedPosition = fallPoint
-                animatedScale = 0.42
+                animatedScale = 0.32
                 animatedRotation = fallRotation
             }
         }
@@ -162,7 +162,7 @@ struct FlyingEmojiView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + launchDuration + apexHoldDuration + fallDuration * 0.58) {
             withAnimation(.easeOut(duration: fallDuration * 0.18)) {
                 animatedPosition = flight.end
-                animatedScale = 0.18
+                animatedScale = 0.14
                 animatedOpacity = 0
                 animatedRotation = settledRotation
             }
@@ -182,14 +182,30 @@ struct ReactionTargetAnchorsKey: PreferenceKey {
     }
 }
 
+enum ReactionAnchorPlacement {
+    case center
+    case topTrailing(xInset: CGFloat = 4, yInset: CGFloat = 4)
+}
+
 extension View {
-    func reactionTargetAnchor(id: String) -> some View {
+    func reactionTargetAnchor(
+        id: String,
+        placement: ReactionAnchorPlacement = .center
+    ) -> some View {
         background(
             GeometryReader { proxy in
+                let frame = proxy.frame(in: .named("postCard"))
+                let point: CGPoint = {
+                    switch placement {
+                    case .center:
+                        return CGPoint(x: frame.midX, y: frame.midY)
+                    case .topTrailing(let xInset, let yInset):
+                        return CGPoint(x: frame.maxX - xInset, y: frame.minY + yInset)
+                    }
+                }()
                 Color.clear.preference(
                     key: ReactionTargetAnchorsKey.self,
-                    value: [id: CGPoint(x: proxy.frame(in: .named("postCard")).midX,
-                                        y: proxy.frame(in: .named("postCard")).midY)]
+                    value: [id: point]
                 )
             }
         )
