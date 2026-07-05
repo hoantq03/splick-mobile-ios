@@ -229,34 +229,7 @@ public struct ExpenseListView: View {
                 overviewCollapsedSummary
             }
         }
-        .padding(SplickTheme.Spacing.sm)
-        .background {
-            RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            SplickTheme.Colors.success.opacity(0.1),
-                            SplickTheme.Colors.error.opacity(0.08)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous)
-                        .strokeBorder(
-                            LinearGradient(
-                                colors: [
-                                    SplickTheme.Colors.success.opacity(0.22),
-                                    SplickTheme.Colors.error.opacity(0.18)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 1
-                        )
-                }
-        }
+        .splickCard(padding: SplickTheme.Spacing.sm)
         .animation(pullToRefreshActive ? nil : overviewToggleAnimation, value: isOverviewExpanded)
     }
 
@@ -587,6 +560,9 @@ private struct ExpenseRowDescriptionText: View {
     let expense: Expense
     let currentUserId: UUID?
     let debtState: ExpenseUserDebtState
+    let userCashFlow: ExpenseUserCashFlow
+
+    private let bodyFont = Font.system(size: 13)
 
     var body: some View {
         Group {
@@ -604,11 +580,12 @@ private struct ExpenseRowDescriptionText: View {
                     tail: owedTail
                 )
             case .neutral:
-                Text(languageService.text(.expenseRowDescNeutral))
-                    .font(.system(size: 13))
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                (Text(languageService.text(.expenseRowDescNeutral))
+                    .foregroundColor(SplickTheme.Colors.textSecondary)
+                + amountTexts)
             }
         }
+        .font(bodyFont)
         .lineLimit(3)
         .fixedSize(horizontal: false, vertical: true)
         .multilineTextAlignment(.leading)
@@ -658,18 +635,51 @@ private struct ExpenseRowDescriptionText: View {
         return relevantSplits.map(\.user.displayName).joined(separator: ", ")
     }
 
+    private var amountTexts: Text {
+        let personalCompact = userCashFlow.amount.compactAmountString()
+        let totalCompact = expense.totalAmount.compactAmountString()
+        let currencySymbol = Decimal.currencySymbol(for: expense.currency)
+        let personalWithUnit = "\(personalCompact)\(currencySymbol)"
+        let totalWithUnit = "\(totalCompact)\(currencySymbol)"
+
+        return Text(" \(personalWithUnit)")
+            .fontWeight(.semibold)
+            .foregroundColor(amountColor)
+        + Text(" \(languageService.text(.expenseRowOfConnector)) ")
+            .foregroundColor(SplickTheme.Colors.textSecondary)
+        + Text(totalWithUnit)
+            .fontWeight(.semibold)
+            .foregroundColor(SplickTheme.Colors.textPrimary)
+    }
+
+    private var amountColor: Color {
+        switch userCashFlow.direction {
+        case .receiving:
+            return SplickTheme.Colors.success
+        case .paying:
+            return SplickTheme.Colors.error
+        case .neutral:
+            return SplickTheme.Colors.textPrimary
+        }
+    }
+
     private var accessibilityDescription: String {
+        let personal = formatAmount(userCashFlow.amount)
+        let total = formatAmount(expense.totalAmount)
+        let symbol = Decimal.currencySymbol(for: expense.currency)
+        let amountPart = " \(personal)\(symbol) \(languageService.text(.expenseRowOfConnector)) \(total)\(symbol)"
+
         switch debtState {
         case .oweUnpaid:
-            return languageService.text(.expenseRowDescOweUnpaidLead) + expense.paidBy.displayName
+            return languageService.text(.expenseRowDescOweUnpaidLead) + expense.paidBy.displayName + amountPart
         case .owePaid:
-            return languageService.text(.expenseRowDescOwePaidLead) + expense.paidBy.displayName
+            return languageService.text(.expenseRowDescOwePaidLead) + expense.paidBy.displayName + amountPart
         case .owedUnpaid:
-            return counterpartyNames + languageService.text(.expenseRowDescOwedUnpaidTail)
+            return counterpartyNames + languageService.text(.expenseRowDescOwedUnpaidTail) + amountPart
         case .owedPaid:
-            return counterpartyNames + languageService.text(.expenseRowDescOwedPaidTail)
+            return counterpartyNames + languageService.text(.expenseRowDescOwedPaidTail) + amountPart
         case .neutral:
-            return languageService.text(.expenseRowDescNeutral)
+            return languageService.text(.expenseRowDescNeutral) + amountPart
         }
     }
 
@@ -677,25 +687,31 @@ private struct ExpenseRowDescriptionText: View {
     private func inlineActorMessage(actorName: String, lead: String?, tail: String?) -> some View {
         if let lead {
             (Text(lead)
-                .font(.system(size: 13))
-                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                .foregroundColor(SplickTheme.Colors.textSecondary)
             + Text(actorName)
-                .font(SplickTheme.Typography.headline)
-                .foregroundStyle(SplickTheme.Colors.textPrimary)
-            )
+                .fontWeight(.semibold)
+                .foregroundColor(SplickTheme.Colors.textPrimary)
+            + amountTexts)
         } else if let tail {
             (Text(actorName)
-                .font(SplickTheme.Typography.headline)
-                .foregroundStyle(SplickTheme.Colors.textPrimary)
+                .fontWeight(.semibold)
+                .foregroundColor(SplickTheme.Colors.textPrimary)
             + Text(tail)
-                .font(.system(size: 13))
-                .foregroundStyle(SplickTheme.Colors.textSecondary)
-            )
+                .foregroundColor(SplickTheme.Colors.textSecondary)
+            + amountTexts)
         } else {
             Text(actorName)
-                .font(SplickTheme.Typography.headline)
-                .foregroundStyle(SplickTheme.Colors.textPrimary)
+                .fontWeight(.semibold)
+                .foregroundColor(SplickTheme.Colors.textPrimary)
         }
+    }
+
+    private func formatAmount(_ amount: Decimal) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = expense.currency
+        formatter.maximumFractionDigits = 0
+        return formatter.string(from: amount as NSDecimalNumber) ?? "\(amount)"
     }
 }
 
@@ -729,22 +745,29 @@ struct ExpenseRowView: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: SplickTheme.Spacing.sm) {
+        HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
             Button(action: onCreatorTap) {
                 creatorAvatar
             }
             .buttonStyle(.plain)
 
             Button(action: onTap) {
-                HStack(alignment: .top, spacing: SplickTheme.Spacing.sm) {
+                HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
                     VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
+                        if let caption = postCaptionHeader {
+                            Text(caption)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(SplickTheme.Colors.textPrimary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+
                         ExpenseRowDescriptionText(
                             expense: expense,
                             currentUserId: currentUserId,
-                            debtState: userDebtState
+                            debtState: userDebtState,
+                            userCashFlow: userCashFlow
                         )
-
-                        combinedAmountLine
 
                         Text(expense.createdAt.expenseListRelativeString)
                             .font(.system(size: 10, weight: .medium))
@@ -770,6 +793,12 @@ struct ExpenseRowView: View {
         .padding(.vertical, SplickTheme.Spacing.xs)
         .modifier(ExpenseRowChromeModifier(layout: layout))
         .opacity(isLinkedToPost ? 1 : 0.55)
+    }
+
+    private var postCaptionHeader: String? {
+        let caption = expense.description.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard expense.postId != nil, !caption.isEmpty else { return nil }
+        return caption
     }
 
     private let avatarSize: CGFloat = 46
@@ -825,74 +854,6 @@ struct ExpenseRowView: View {
             }
         }
         .frame(width: 32, height: 32)
-        .padding(.top, 2)
-    }
-
-    private var combinedAmountLine: some View {
-        let personalCompact = userCashFlow.amount.compactAmountString()
-        let totalCompact = expense.totalAmount.compactAmountString()
-        let currencySymbol = Decimal.currencySymbol(for: expense.currency)
-        let verb = amountVerb
-        let personalColor = amountColor(for: userCashFlow.direction)
-        let personalWithUnit = "\(personalCompact)\(currencySymbol)"
-        let totalWithUnit = "\(totalCompact)\(currencySymbol)"
-
-        return HStack(spacing: 0) {
-            Text("\(verb) ")
-                .foregroundStyle(SplickTheme.Colors.textSecondary)
-
-            Text(personalWithUnit)
-                .foregroundStyle(personalColor)
-                .fontWeight(.semibold)
-
-            Text(" \(languageService.text(.expenseRowOfConnector)) ")
-                .foregroundStyle(SplickTheme.Colors.textSecondary)
-
-            Text(totalWithUnit)
-                .foregroundStyle(SplickTheme.Colors.textPrimary)
-                .fontWeight(.semibold)
-        }
-        .font(.system(size: 12, weight: .medium))
-        .lineLimit(1)
-        .minimumScaleFactor(0.85)
-        .accessibilityLabel(combinedAmountAccessibilityLabel)
-    }
-
-    private var amountVerb: String {
-        switch userCashFlow.direction {
-        case .paying:
-            return languageService.text(.expenseRowPayVerb)
-        case .receiving:
-            return languageService.text(.expenseRowReceiveVerb)
-        case .neutral:
-            return languageService.text(.expenseRowShareVerb)
-        }
-    }
-
-    private var combinedAmountAccessibilityLabel: String {
-        let personal = formatAmount(userCashFlow.amount)
-        let total = formatAmount(expense.totalAmount)
-        let symbol = Decimal.currencySymbol(for: expense.currency)
-        return "\(amountVerb) \(personal)\(symbol) \(languageService.text(.expenseRowOfConnector)) \(total)\(symbol)"
-    }
-
-    private func amountColor(for direction: ExpenseUserCashFlow.Direction) -> Color {
-        switch direction {
-        case .receiving:
-            return SplickTheme.Colors.success
-        case .paying:
-            return SplickTheme.Colors.error
-        case .neutral:
-            return SplickTheme.Colors.textPrimary
-        }
-    }
-
-    private func formatAmount(_ amount: Decimal) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = expense.currency
-        formatter.maximumFractionDigits = 0
-        return formatter.string(from: amount as NSDecimalNumber) ?? "\(amount)"
     }
 }
 
@@ -1331,86 +1292,21 @@ private struct ExpenseRowPressStyle: ButtonStyle {
     }
 }
 
-private struct ExpenseOverviewExpandedHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
-private struct ExpenseOverviewCollapsedHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
 private struct ExpenseOverviewAnimatedBody<Expanded: View, Collapsed: View>: View {
     let isExpanded: Bool
     @ViewBuilder var expanded: () -> Expanded
     @ViewBuilder var collapsed: () -> Collapsed
 
-    @State private var expandedHeight: CGFloat = 0
-    @State private var collapsedHeight: CGFloat = 0
-
-    private var activeHeight: CGFloat? {
-        let height = isExpanded ? expandedHeight : collapsedHeight
-        return height > 0 ? height : nil
-    }
-
     var body: some View {
-        ZStack(alignment: .top) {
-            collapsed()
-                .opacity(isExpanded ? 0 : 1)
-                .scaleEffect(isExpanded ? 0.97 : 1, anchor: .top)
-                .offset(y: isExpanded ? -8 : 0)
-                .allowsHitTesting(!isExpanded)
-                .accessibilityHidden(isExpanded)
-
-            expanded()
-                .opacity(isExpanded ? 1 : 0)
-                .scaleEffect(isExpanded ? 1 : 0.97, anchor: .top)
-                .offset(y: isExpanded ? 0 : 8)
-                .allowsHitTesting(isExpanded)
-                .accessibilityHidden(!isExpanded)
-        }
-        .frame(height: activeHeight, alignment: .top)
-        .frame(maxWidth: .infinity, alignment: .top)
-        .clipped()
-        .background {
-            VStack(spacing: 0) {
+        Group {
+            if isExpanded {
                 expanded()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .measureExpenseOverviewHeight(key: ExpenseOverviewExpandedHeightKey.self) { expandedHeight = $0 }
-
+            } else {
                 collapsed()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .measureExpenseOverviewHeight(key: ExpenseOverviewCollapsedHeightKey.self) { collapsedHeight = $0 }
-            }
-            .hidden()
-            .accessibilityHidden(true)
-        }
-    }
-}
-
-private extension View {
-    func measureExpenseOverviewHeight<Key: PreferenceKey>(
-        key: Key.Type,
-        onChange: @escaping (CGFloat) -> Void
-    ) -> some View where Key.Value == CGFloat {
-        background {
-            GeometryReader { proxy in
-                Color.clear.preference(key: key, value: proxy.size.height)
             }
         }
-        .onPreferenceChange(key) { height in
-            guard height > 0 else { return }
-            onChange(height)
-        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .clipped()
     }
 }
 
