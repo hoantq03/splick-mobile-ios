@@ -1,4 +1,5 @@
 import SwiftUI
+import Nuke
 import NukeUI
 import Common
 import SplickDomain
@@ -25,7 +26,13 @@ public struct EmojiView: View {
 
         case .custom(let shortcode):
             if let url = emojiStore.resolve(shortcode: shortcode) {
-                LazyImage(url: url) { state in
+                let maxPixels = size * UIScreen.main.scale
+                LazyImage(
+                    request: RemoteImageRequestFactory.boundedRequest(
+                        url: url,
+                        maxPixelWidth: maxPixels
+                    )
+                ) { state in
                     if let image = state.image {
                         image
                             .resizable()
@@ -35,6 +42,7 @@ public struct EmojiView: View {
                             .fill(SplickTheme.Colors.tertiaryBackground)
                     }
                 }
+                .onDisappear(.cancel)
                 .frame(width: glyphDiameter, height: glyphDiameter)
                 .clipShape(Circle())
                 .frame(width: size, height: size)
