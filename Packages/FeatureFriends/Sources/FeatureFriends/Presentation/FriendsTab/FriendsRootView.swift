@@ -25,6 +25,13 @@ public struct FriendsRootView: View {
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.pullToRefreshActive) private var pullToRefreshActive
     @State private var isPullRefreshing = false
+    @FocusState private var isSearchFieldFocused: Bool
+
+    private var hasSearchText: Bool {
+        !viewModel.searchQuery.isEmpty
+    }
+
+    private let searchRowAnimation = Animation.spring(response: 0.38, dampingFraction: 0.86)
 
     private var suppressRefreshAnimations: Bool {
         pullToRefreshActive || isPullRefreshing
@@ -119,7 +126,8 @@ public struct FriendsRootView: View {
             addFriendUseCase: addFriendUseCase,
             acceptFriendRequestUseCase: acceptFriendRequestUseCase,
             fetchIncomingFriendRequestsUseCase: fetchIncomingFriendRequestsUseCase,
-            fetchOutgoingFriendRequestsUseCase: fetchOutgoingFriendRequestsUseCase
+            fetchOutgoingFriendRequestsUseCase: fetchOutgoingFriendRequestsUseCase,
+            cancelFriendRequestUseCase: cancelFriendRequestUseCase
         )
         self.fetchOutgoingFriendRequestsUseCase = fetchOutgoingFriendRequestsUseCase
         self.fetchBlockedUsersUseCase = fetchBlockedUsersUseCase
@@ -153,12 +161,17 @@ public struct FriendsRootView: View {
             fetchFriendPaymentProfileUseCase: fetchFriendPaymentProfileUseCase,
             addFriendUseCase: addFriendUseCase,
             fetchIncomingFriendRequestsUseCase: fetchIncomingFriendRequestsUseCase,
+            fetchOutgoingFriendRequestsUseCase: fetchOutgoingFriendRequestsUseCase,
             acceptFriendRequestUseCase: acceptFriendRequestUseCase,
+            cancelFriendRequestUseCase: cancelFriendRequestUseCase,
             removeFriendUseCase: removeFriendUseCase,
             setFriendNicknameUseCase: setFriendNicknameUseCase,
             blockUserUseCase: blockUserUseCase,
             unblockUserUseCase: unblockUserUseCase
         )
+        let relationshipChanged: (UUID, FriendRelationStatus) -> Void = { userId, status in
+            rootVM.handleRelationshipChanged(userId: userId, status: status)
+        }
         _viewModel = StateObject(wrappedValue: rootVM)
         _addFriendViewModel = StateObject(
             wrappedValue: AddFriendViewModel(addFriendUseCase: addFriendUseCase) {
@@ -175,8 +188,8 @@ public struct FriendsRootView: View {
                 fetchIncomingUseCase: fetchIncomingFriendRequestsUseCase,
                 acceptUseCase: acceptFriendRequestUseCase,
                 rejectUseCase: rejectFriendRequestUseCase,
-                onFriendshipChanged: {
-                    rootVM.onFriendAdded()
+                onRelationshipChanged: { userId, status in
+                    relationshipChanged(userId, status)
                     Task { await onBadgeCountsChanged?() }
                 }
             )
@@ -185,13 +198,14 @@ public struct FriendsRootView: View {
             wrappedValue: OutgoingFriendRequestsViewModel(
                 fetchOutgoingUseCase: fetchOutgoingFriendRequestsUseCase,
                 cancelUseCase: cancelFriendRequestUseCase,
-                onFriendshipChanged: { rootVM.onFriendAdded() }
+                onRelationshipChanged: relationshipChanged
             )
         )
         _blockedUsersViewModel = StateObject(
             wrappedValue: BlockedUsersViewModel(
                 fetchBlockedUsersUseCase: fetchBlockedUsersUseCase,
-                unblockUserUseCase: unblockUserUseCase
+                unblockUserUseCase: unblockUserUseCase,
+                onRelationshipChanged: relationshipChanged
             )
         )
     }
@@ -251,7 +265,9 @@ public struct FriendsRootView: View {
                     viewModel: profileDependencies.makeViewModel(
                         user: route.user,
                         initialFriendStatus: route.initialFriendStatus,
-                        onRelationshipChanged: { viewModel.onFriendAdded() }
+                        onRelationshipChanged: { userId, status in
+                            viewModel.handleRelationshipChanged(userId: userId, status: status)
+                        }
                     )
                 )
             }
@@ -266,15 +282,26 @@ public struct FriendsRootView: View {
             .sheet(isPresented: $showIncomingRequests, onDismiss: {
                 Task { await viewModel.refreshIncomingRequestCount() }
             }) {
-                IncomingFriendRequestsSheet(viewModel: incomingRequestsViewModel)
+                IncomingFriendRequestsSheet(
+                    viewModel: incomingRequestsViewModel,
+                    onProfileTap: openUserProfile
+                )
             }
             .sheet(isPresented: $showOutgoingRequests, onDismiss: {
                 Task { await viewModel.refreshOutgoingRequestCount() }
             }) {
-                OutgoingFriendRequestsSheet(viewModel: outgoingRequestsViewModel)
+                OutgoingFriendRequestsSheet(
+                    viewModel: outgoingRequestsViewModel,
+                    onProfileTap: openUserProfile
+                )
             }
-            .sheet(isPresented: $showBlockedUsers) {
-                BlockedUsersSheet(viewModel: blockedUsersViewModel)
+            .sheet(isPresented: $showBlockedUsers, onDismiss: {
+                Task { await blockedUsersViewModel.load() }
+            }) {
+                BlockedUsersSheet(
+                    viewModel: blockedUsersViewModel,
+                    onProfileTap: openUserProfile
+                )
             }
             .sheet(isPresented: $showQRScanner) {
                 if let user = currentUserSummary {
@@ -302,7 +329,10 @@ public struct FriendsRootView: View {
             Text(viewModel.alertMessage ?? "")
         }
         .onFirstAppear {
-            Task { await viewModel.load() }
+            Task {
+                await viewModel.load()
+                await blockedUsersViewModel.load()
+            }
         }
         .onReceive(sameTabTapPublisher) { _ in
             if tabBarScrollState?.isAtTop == true {
@@ -318,6 +348,10 @@ public struct FriendsRootView: View {
                 scrollTopSignal += 1
             }
         }
+    }
+
+    private func openUserProfile(user: UserSummary, status: FriendRelationStatus) {
+        profileRoute = UserProfileRoute(user: user, initialFriendStatus: status)
     }
 
     private var sameTabTapPublisher: AnyPublisher<Void, Never> {
@@ -344,8 +378,28 @@ public struct FriendsRootView: View {
             ) {
                 showOutgoingRequests = true
             }
+
+            friendRequestShortcut(
+                icon: "hand.raised.fill",
+                title: languageService.text(.friendsBlockedTitle),
+                count: blockedUsersViewModel.blockedUsers.count,
+                isHighlighted: false
+            ) {
+                showBlockedUsers = true
+            }
         }
-        .padding(.top, SplickTheme.Spacing.xs)
+        .padding(.top, SplickTheme.Spacing.sm)
+    }
+
+    private var friendsDirectoryListHeader: some View {
+        HStack {
+            Text(languageService.text(.friendsListTitle))
+                .font(SplickTheme.Typography.headline)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
+            Spacer(minLength: 0)
+        }
+        .padding(.top, SplickTheme.Spacing.sm)
+        .padding(.bottom, SplickTheme.Spacing.xxxs)
     }
 
     private func friendRequestShortcut(
@@ -356,45 +410,42 @@ public struct FriendsRootView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            VStack(spacing: SplickTheme.Spacing.xxxs) {
-                ZStack(alignment: .topTrailing) {
+            ZStack(alignment: .topTrailing) {
+                VStack(spacing: SplickTheme.Spacing.xxxs) {
                     Image(systemName: icon)
                         .font(.system(size: 20, weight: .medium))
                         .frame(maxWidth: .infinity)
                         .padding(.top, SplickTheme.Spacing.xxxs)
 
-                    if count > 0 {
-                        Text(count > 99 ? "99+" : "\(count)")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, count > 9 ? 4 : 5)
-                            .padding(.vertical, 2)
-                            .background(SplickTheme.Colors.primaryGradientStart, in: Capsule())
-                            .offset(x: 6, y: -4)
-                    }
+                    Text(title)
+                        .font(SplickTheme.Typography.captionBold)
+                        .foregroundStyle(
+                            isHighlighted
+                                ? SplickTheme.Colors.primaryGradientStart
+                                : SplickTheme.Colors.textSecondary
+                        )
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .minimumScaleFactor(0.85)
+                        .frame(maxWidth: .infinity)
                 }
+                .padding(.vertical, SplickTheme.Spacing.sm)
+                .padding(.horizontal, SplickTheme.Spacing.xs)
+                .frame(maxWidth: .infinity)
+                .background(
+                    isHighlighted
+                        ? SplickTheme.Colors.primaryGradientStart.opacity(0.1)
+                        : SplickTheme.Colors.secondaryBackground
+                )
+                .clipShape(Capsule(style: .continuous))
 
-                Text(title)
-                    .font(SplickTheme.Typography.captionBold)
-                    .foregroundStyle(
-                        isHighlighted
-                            ? SplickTheme.Colors.primaryGradientStart
-                            : SplickTheme.Colors.textSecondary
-                    )
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                    .minimumScaleFactor(0.85)
-                    .frame(maxWidth: .infinity)
+                if count > 0 {
+                    friendRequestShortcutBadge(count: count)
+                        .padding(.trailing, 10)
+                        .padding(.top, 8)
+                }
             }
-            .padding(.vertical, SplickTheme.Spacing.sm)
-            .padding(.horizontal, SplickTheme.Spacing.xs)
             .frame(maxWidth: .infinity)
-            .background(
-                isHighlighted
-                    ? SplickTheme.Colors.primaryGradientStart.opacity(0.1)
-                    : SplickTheme.Colors.secondaryBackground
-            )
-            .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(
@@ -404,35 +455,27 @@ public struct FriendsRootView: View {
         )
     }
 
-    @ViewBuilder
-    private var blockedUsersLink: some View {
-        Button {
-            showBlockedUsers = true
-        } label: {
-            HStack {
-                Image(systemName: "hand.raised")
-                Text(languageService.text(.friendsBlockedUsers))
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
+    private func friendRequestShortcutBadge(count: Int) -> some View {
+        Text(count > 99 ? "99+" : "\(count)")
+            .font(.system(size: 10, weight: .bold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, count > 9 ? 4 : 5)
+            .padding(.vertical, 2)
+            .background {
+                Capsule(style: .continuous)
+                    .fill(SplickTheme.Colors.error)
             }
-            .font(SplickTheme.Typography.callout.weight(.semibold))
-            .foregroundStyle(SplickTheme.Colors.textSecondary)
-            .padding(SplickTheme.Spacing.sm)
-            .background(SplickTheme.Colors.secondaryBackground)
-            .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium, style: .continuous))
-        }
-        .buttonStyle(.plain)
+            .fixedSize()
     }
 
     private func actionForSearchResult(_ result: UserSearchResult) -> (() -> Void)? {
         switch result.friendStatus {
         case .none:
-            return { Task { await viewModel.sendFriendRequest(to: result) } }
+            return { viewModel.sendFriendRequest(to: result) }
         case .requestReceived:
-            return { Task { await viewModel.acceptFriendRequest(from: result) } }
+            return { viewModel.acceptFriendRequest(from: result) }
         case .requestSent:
-            return { showOutgoingRequests = true }
+            return { viewModel.cancelFriendRequest(from: result) }
         case .friends, .blocked:
             return nil
         }
@@ -454,24 +497,48 @@ public struct FriendsRootView: View {
                 .font(SplickTheme.Typography.callout)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
+                .focused($isSearchFieldFocused)
+                .submitLabel(.search)
 
-            Button {
-                showQRScanner = true
-            } label: {
-                Image(systemName: "qrcode.viewfinder")
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                    .frame(width: 32, height: 32)
+            if hasSearchText {
+                Button(action: clearSearch) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(SplickTheme.Colors.textTertiary)
+                        .frame(width: 28, height: 28)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(languageService.text(.commonClose))
+                .transition(.opacity.combined(with: .scale(scale: 0.9)))
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(languageService.text(.friendsScanQRUnified))
+
+            if !hasSearchText {
+                Button {
+                    showQRScanner = true
+                } label: {
+                    Image(systemName: "qrcode.viewfinder")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                        .frame(width: 32, height: 32)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(languageService.text(.friendsScanQRUnified))
+                .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            }
         }
+        .animation(.easeOut(duration: 0.18), value: hasSearchText)
         .padding(.leading, SplickTheme.Spacing.md)
         .padding(.trailing, SplickTheme.Spacing.sm)
         .padding(.vertical, SplickTheme.Spacing.sm)
         .frame(maxWidth: .infinity)
         .background(SplickTheme.Colors.secondaryBackground)
         .clipShape(Capsule(style: .continuous))
+    }
+
+    private func clearSearch() {
+        isSearchFieldFocused = false
+        viewModel.searchQuery = ""
+        viewModel.onSearchQueryChanged("")
     }
 
     @ToolbarContentBuilder
@@ -529,49 +596,78 @@ public struct FriendsRootView: View {
     @ViewBuilder
     private var searchResultsContent: some View {
         let items = viewModel.combinedSearchItems
+        let itemIDs = items.map(\.id)
 
-        switch viewModel.searchState {
-        case .loading where items.isEmpty:
-            LoadingView(message: "Searching...")
-        case .failed(let message) where items.isEmpty:
-            ErrorView(message: message) {
-                viewModel.onSearchQueryChanged(viewModel.searchQuery)
-            }
-        case .loaded where items.isEmpty, .idle where items.isEmpty:
-            EmptyStateView(
-                icon: "magnifyingglass",
-                title: "No results found",
-                message: "Try another name or username."
-            )
-        default:
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: SplickTheme.Spacing.xs) {
-                        Color.clear.frame(height: 0).id("friendsSearchScrollTop")
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: SplickTheme.Spacing.xs) {
+                    Color.clear.frame(height: 0).id("friendsSearchScrollTop")
+
+                    if items.isEmpty {
+                        if viewModel.isSearchFetching {
+                            searchFetchingIndicator
+                                .padding(.top, SplickTheme.Spacing.xxl)
+                        } else if case .failed(let message) = viewModel.searchState {
+                            ErrorView(message: message) {
+                                viewModel.onSearchQueryChanged(viewModel.searchQuery)
+                            }
+                            .padding(.top, SplickTheme.Spacing.lg)
+                        } else {
+                            searchEmptyState
+                                .padding(.top, SplickTheme.Spacing.xxl)
+                        }
+                    } else {
                         ForEach(items) { item in
                             searchResultRow(item)
+                                .transition(
+                                    .asymmetric(
+                                        insertion: .move(edge: .top).combined(with: .opacity),
+                                        removal: .opacity
+                                    )
+                                )
                         }
-                    }
-                    .padding(.horizontal, SplickTheme.Spacing.md)
-                    .padding(.bottom, SplickTheme.Spacing.md)
-                    .transaction { transaction in
-                        if suppressRefreshAnimations {
-                            transaction.animation = nil
+
+                        if viewModel.isSearchFetching {
+                            searchFetchingIndicator
+                                .padding(.vertical, SplickTheme.Spacing.sm)
                         }
                     }
                 }
-                .id("friendsSearchScroll")
-                .tabBarHideOnScroll()
-                .splickNativeRefreshable(controller: searchRefreshController) {
-                    await viewModel.refreshSearch(query: viewModel.searchQuery)
-                }
-                .onChange(of: searchScrollTopSignal) { _ in
-                    withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
-                        proxy.scrollTo("friendsSearchScrollTop", anchor: .top)
+                .padding(.horizontal, SplickTheme.Spacing.md)
+                .padding(.bottom, SplickTheme.Spacing.md)
+                .animation(suppressRefreshAnimations ? nil : searchRowAnimation, value: itemIDs)
+                .transaction { transaction in
+                    if suppressRefreshAnimations {
+                        transaction.animation = nil
                     }
+                }
+            }
+            .id("friendsSearchScroll")
+            .tabBarHideOnScroll()
+            .dismissKeyboardOnTap()
+            .splickNativeRefreshable(controller: searchRefreshController) {
+                await viewModel.refreshSearch(query: viewModel.searchQuery)
+            }
+            .onChange(of: searchScrollTopSignal) { _ in
+                withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                    proxy.scrollTo("friendsSearchScrollTop", anchor: .top)
                 }
             }
         }
+    }
+
+    private var searchFetchingIndicator: some View {
+        ProgressView()
+            .controlSize(.regular)
+            .frame(maxWidth: .infinity)
+    }
+
+    private var searchEmptyState: some View {
+        EmptyStateView(
+            icon: "magnifyingglass",
+            title: "No results found",
+            message: "Try another name or username."
+        )
     }
 
     @ViewBuilder
@@ -581,8 +677,6 @@ public struct FriendsRootView: View {
             FriendRowView(
                 user: result.user,
                 friendStatus: result.friendStatus,
-                isSendingRequest: viewModel.sendingFriendRequestUserIds.contains(result.user.id)
-                    || viewModel.acceptingFriendRequestUserIds.contains(result.user.id),
                 onProfileTap: {
                     profileRoute = UserProfileRoute(
                         user: result.user,
@@ -625,7 +719,8 @@ public struct FriendsRootView: View {
                 Spacer()
 
                 if isJoiningGroupFromSearch {
-                    SplickSpinner(size: .small)
+                    ProgressView()
+                        .controlSize(.small)
                 } else {
                     Text(languageService.text(.friendsJoinGroupAction))
                         .font(SplickTheme.Typography.caption.weight(.semibold))
@@ -661,7 +756,7 @@ public struct FriendsRootView: View {
                     LazyVStack(spacing: SplickTheme.Spacing.xs) {
                         Color.clear.frame(height: 0).id("directoryScrollTop")
                         friendRequestsRow
-                        blockedUsersLink
+                        friendsDirectoryListHeader
                         if items.isEmpty {
                             directoryEmptyStateCard
                         } else {
@@ -680,8 +775,10 @@ public struct FriendsRootView: View {
                 }
                 .id("friendsDirectoryScroll")
                 .tabBarHideOnScroll()
+                .dismissKeyboardOnTap()
                 .splickNativeRefreshable(controller: directoryRefreshController) {
                     await viewModel.refresh()
+                    await blockedUsersViewModel.load()
                 }
                 .onChange(of: scrollTopSignal) { _ in
                     withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
@@ -734,12 +831,12 @@ public struct FriendsRootView: View {
     private func directoryRow(_ item: FriendsDirectoryItem) -> some View {
         switch item {
         case .friend(let friend):
-            Button {
-                profileRoute = UserProfileRoute(user: friend, initialFriendStatus: .friends)
-            } label: {
-                FriendRowView(user: friend)
-            }
-            .buttonStyle(.plain)
+            FriendRowView(
+                user: friend,
+                onProfileTap: {
+                    profileRoute = UserProfileRoute(user: friend, initialFriendStatus: .friends)
+                }
+            )
         case .group(let group):
             NavigationLink(value: group.id) {
                 GroupRowView(group: group)
