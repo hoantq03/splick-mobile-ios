@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import Common
 import DesignSystem
 import SplickDomain
@@ -10,14 +11,16 @@ struct ChatMessageListView: View {
     let messages: [ChatMessage]
     let currentUserId: UUID
 
-    @State private var reactionTrayMessageId: UUID?
-    @State private var bubbleFrames: [UUID: CGRect] = [:]
+    @State private var reactionFocusMessageId: UUID?
+    @State private var reactionAnchorFrames: [UUID: CGRect] = [:]
+
+    private static let longPressImpact = UIImpactFeedbackGenerator(style: .medium)
 
     var body: some View {
         let displayMessages = MessageTimelineGrouping.buildDisplayMessages(from: messages)
 
-        ZStack(alignment: .topLeading) {
-            ScrollViewReader { proxy in
+        ScrollViewReader { proxy in
+            ZStack {
                 ScrollView {
                     VStack(spacing: 0) {
                         ForEach(displayMessages) { item in
@@ -26,8 +29,8 @@ struct ChatMessageListView: View {
                                 isOutgoing: item.message.senderId == currentUserId,
                                 currentUserId: currentUserId,
                                 isHighlighted: viewModel.highlightedMessageId == item.message.id,
-                                isFloatingSend: viewModel.newlySentMessageIds.contains(item.message.id),
-                                floatSway: viewModel.floatSway(for: item.message.id),
+                                isFloatingSend: viewModel.newlySentMessageIds.contains(item.message.clientMessageId),
+                                floatSway: viewModel.floatSway(for: item.message.clientMessageId),
                                 onReact: { emoji in
                                     _ = viewModel.react(to: item.message.id, emoji: emoji)
                                 },
@@ -35,11 +38,10 @@ struct ChatMessageListView: View {
                                     Task { await viewModel.retrySend(messageId: item.message.id) }
                                 },
                                 onLongPress: {
-                                    InteractionScrollLock.setLocked(true)
-                                    reactionTrayMessageId = item.message.id
+                                    openReactionFocus(for: item)
                                 }
                             )
-                            .id(item.message.id)
+                            .id(item.message.clientMessageId)
                             .transition(ChatScrollAnimation.messageInsert)
                         }
 
@@ -51,61 +53,92 @@ struct ChatMessageListView: View {
                     .padding(.vertical, SplickTheme.Spacing.sm)
                 }
                 .modifier(ChatBottomScrollAnchorModifier())
-                .animation(ChatScrollAnimation.spring, value: messages.map(\.id))
-                .onPreferenceChange(MessageBubbleFrameKey.self) { bubbleFrames = $0 }
-                .onAppear {
-                    if viewModel.scrollToMessageToken == 0 {
-                        scrollToBottom(proxy: proxy, animated: false)
-                    }
+                .animation(ChatScrollAnimation.spring, value: messages.map(\.clientMessageId))
+                .onPreferenceChange(MessageReactionAnchorFrameKey.self) { frames in
+                    reactionAnchorFrames.merge(frames) { _, new in new }
                 }
-                .onChange(of: viewModel.scrollToBottomToken) { token in
-                    guard token > 0 else { return }
-                    scrollToBottom(proxy: proxy, animated: token > 1)
-                }
-                .onChange(of: viewModel.scrollToMessageToken) { token in
-                    guard token > 0, let targetId = viewModel.highlightedMessageId else { return }
-                    scrollToMessage(targetId, proxy: proxy)
-                }
-                .simultaneousGesture(
-                    DragGesture(minimumDistance: 12).onChanged { _ in
-                        dismissReactionTray()
-                    }
-                )
-            }
 
-            if let trayMessageId = reactionTrayMessageId,
-               let frame = bubbleFrames[trayMessageId] {
-                reactionTrayOverlay(messageId: trayMessageId, anchorFrame: frame)
+                GeometryReader { overlayGeometry in
+                    if reactionFocusMessageId != nil,
+                       let focusContext = reactionFocusContext(
+                        in: displayMessages,
+                        overlayOrigin: overlayGeometry.frame(in: .global).origin
+                       ) {
+                        MessageReactionFocusOverlay(
+                            context: focusContext,
+                            onReact: { emoji in
+                                _ = viewModel.react(to: focusContext.messageId, emoji: emoji)
+                            },
+                            onOpenFullPicker: {
+                                dismissReactionFocus()
+                                reactionPicker.present { emoji in
+                                    _ = viewModel.react(to: focusContext.messageId, emoji: emoji)
+                                }
+                            },
+                            onDismiss: { dismissReactionFocus() }
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .zIndex(100)
+                    }
+                }
+                .allowsHitTesting(reactionFocusMessageId != nil)
             }
+            .animation(MessageReactionTrayMotion.present, value: reactionFocusMessageId)
+            .onAppear {
+                if viewModel.scrollToMessageToken == 0 {
+                    scrollToBottom(proxy: proxy, animated: false)
+                }
+            }
+            .onChange(of: viewModel.scrollToBottomToken) { token in
+                guard token > 0 else { return }
+                scrollToBottom(proxy: proxy, animated: token > 1)
+            }
+            .onChange(of: viewModel.scrollToMessageToken) { token in
+                guard token > 0, let targetId = viewModel.highlightedMessageId else { return }
+                scrollToMessage(targetId, proxy: proxy)
+            }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 12).onChanged { _ in
+                    dismissReactionFocus()
+                }
+            )
         }
     }
 
-    @ViewBuilder
-    private func reactionTrayOverlay(messageId: UUID, anchorFrame: CGRect) -> some View {
-        Color.black.opacity(0.08)
-            .ignoresSafeArea()
-            .onTapGesture { dismissReactionTray() }
+    private func reactionFocusContext(
+        in displayMessages: [DisplayMessage],
+        overlayOrigin: CGPoint
+    ) -> MessageReactionFocusContext? {
+        guard let messageId = reactionFocusMessageId,
+              let globalFrame = reactionAnchorFrames[messageId],
+              globalFrame.width > 1,
+              globalFrame.height > 1,
+              let item = displayMessages.first(where: { $0.message.id == messageId })
+        else { return nil }
 
-        MessageReactionTray(
-            onReact: { emoji in
-                _ = viewModel.react(to: messageId, emoji: emoji)
-            },
-            onOpenFullPicker: {
-                dismissReactionTray()
-                reactionPicker.present { emoji in
-                    _ = viewModel.react(to: messageId, emoji: emoji)
-                }
-            },
-            onDismiss: { dismissReactionTray() }
-        )
-        .position(
-            x: anchorFrame.midX,
-            y: max(anchorFrame.minY - 28, 60)
+        let localFrame = globalFrame.offsetBy(dx: -overlayOrigin.x, dy: -overlayOrigin.y)
+
+        return MessageReactionFocusContext(
+            messageId: messageId,
+            isOutgoing: item.message.senderId == currentUserId,
+            frame: localFrame
         )
     }
 
-    private func dismissReactionTray() {
-        reactionTrayMessageId = nil
+    private func openReactionFocus(for item: DisplayMessage) {
+        guard reactionFocusMessageId == nil else { return }
+        Self.longPressImpact.impactOccurred()
+        InteractionScrollLock.setLocked(true)
+        withAnimation(MessageReactionTrayMotion.present) {
+            reactionFocusMessageId = item.message.id
+        }
+    }
+
+    private func dismissReactionFocus() {
+        guard reactionFocusMessageId != nil else { return }
+        withAnimation(MessageReactionTrayMotion.dismiss) {
+            reactionFocusMessageId = nil
+        }
         InteractionScrollLock.forceUnlock()
     }
 
