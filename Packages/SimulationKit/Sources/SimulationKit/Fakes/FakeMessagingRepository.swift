@@ -74,6 +74,52 @@ public actor FakeMessagingRepository: MessagingRepositoryProtocol {
         )
     }
 
+    public func createGroup(name: String, avatarUrl: String?, memberUserIds: [UUID]) async throws -> Conversation {
+        logger.log("createGroup name=\(name) members=\(memberUserIds.count)")
+        return Conversation(
+            id: UUID(),
+            type: .group,
+            unreadCount: 0,
+            peer: nil,
+            groupName: name,
+            groupAvatarUrl: avatarUrl,
+            memberCount: memberUserIds.count + 1,
+            lastMessage: nil,
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+    }
+
+    public func addGroupMember(groupId: UUID, memberUserId: UUID) async throws {
+        logger.log("addGroupMember groupId=\(groupId) memberUserId=\(memberUserId)")
+    }
+
+    public func removeGroupMember(groupId: UUID, memberUserId: UUID) async throws {
+        logger.log("removeGroupMember groupId=\(groupId) memberUserId=\(memberUserId)")
+    }
+
+    public func leaveGroup(groupId: UUID) async throws {
+        logger.log("leaveGroup groupId=\(groupId)")
+    }
+
+    public func renameGroup(groupId: UUID, name: String) async throws -> Conversation {
+        logger.log("renameGroup groupId=\(groupId) name=\(name)")
+        return Conversation(
+            id: groupId,
+            type: .group,
+            unreadCount: 0,
+            peer: nil,
+            groupName: name,
+            lastMessage: nil,
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+    }
+
+    public func transferGroupAdmin(groupId: UUID, newAdminUserId: UUID) async throws {
+        logger.log("transferGroupAdmin groupId=\(groupId) newAdminUserId=\(newAdminUserId)")
+    }
+
     public func fetchMessages(conversationId: UUID, page: Int, limit: Int) async throws -> [ChatMessage] {
         logger.log("fetchMessages conversationId=\(conversationId)")
         guard page == 0,

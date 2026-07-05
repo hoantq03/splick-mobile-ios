@@ -72,6 +72,7 @@ struct StreakMonthScrollView: View {
     }
 
     private func requestOlderMonthIfNeeded(for section: StreakMonthSection) {
+        guard didInitialScroll else { return }
         guard canLoadOlder else { return }
         guard section.id == sections.first?.id else { return }
         guard suppressLoadForSectionID != section.id else { return }

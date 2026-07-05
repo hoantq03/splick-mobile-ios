@@ -27,10 +27,3 @@ struct BadgeCountsDTO: Decodable {
     let expenses: Int
     let messages: Int
 }
-
-struct RegisterPushDeviceRequestDTO: Encodable {
-    let token: String
-    let platform: String
-    let bundleId: String
-    let environment: String
-}

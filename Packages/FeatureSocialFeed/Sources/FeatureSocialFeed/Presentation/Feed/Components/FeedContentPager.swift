@@ -459,7 +459,11 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
         currentWidth = width
         currentHeight = height
         self.activeSelection = activeSelection
-        activityState.activeSelection = activeSelection
+        if activityState.activeSelection != activeSelection {
+            Task { @MainActor in
+                activityState.activeSelection = activeSelection
+            }
+        }
 
         if geometryChanged {
             applyLayout()

@@ -8,10 +8,11 @@ private struct SplickTabNavigationBarChromeModifier: ViewModifier {
         content
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
+            .toolbar(notificationsPresented ? .hidden : .visible, for: .navigationBar)
             .splickProfileToolbar(
                 titleDisplayMode: .inline,
                 isSuppressed: notificationsPresented,
-                showsBell: showsBell
+                showsBell: showsBell && !notificationsPresented
             )
     }
 }

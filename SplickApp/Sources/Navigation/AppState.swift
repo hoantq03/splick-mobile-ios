@@ -123,8 +123,10 @@ final class AppState: ObservableObject {
 
     func presentNotifications(from bellFrame: CGRect) {
         guard bellFrame.width > 1, bellFrame.height > 1 else { return }
-        notificationAnchorFrame = bellFrame
-        showNotifications = true
+        Task { @MainActor in
+            notificationAnchorFrame = bellFrame
+            showNotifications = true
+        }
     }
 
     func routeRemoteNotification(_ destination: NotificationDestination) {

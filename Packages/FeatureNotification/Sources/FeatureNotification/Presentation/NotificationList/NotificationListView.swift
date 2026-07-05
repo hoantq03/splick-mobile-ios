@@ -56,8 +56,17 @@ public struct NotificationListView: View {
             }
         }
         .onFirstAppear {
-            guard viewModel.notifications.isEmpty else { return }
-            Task { await viewModel.load() }
+            if presentedAsSheet {
+                Task {
+                    // Defer fetch until panel reveal starts — avoids jank without changing layout.
+                    try? await Task.sleep(nanoseconds: 200_000_000)
+                    guard viewModel.notifications.isEmpty else { return }
+                    await viewModel.load()
+                }
+            } else {
+                guard viewModel.notifications.isEmpty else { return }
+                Task { await viewModel.load() }
+            }
         }
     }
 
@@ -108,15 +117,34 @@ public struct NotificationListView: View {
 
     private var notificationList: some View {
         ScrollView {
-            LazyVStack(spacing: SplickTheme.Spacing.xxs) {
-                ForEach(viewModel.notifications) { notification in
-                    NotificationRowView(notification: notification)
-                        .onTapGesture {
-                            Task {
-                                let target = await viewModel.handleTap(notification)
-                                onNavigate?(target)
-                            }
+            LazyVStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+                ForEach(viewModel.notificationSections) { section in
+                    VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxs) {
+                        Text(languageService.text(section.section.l10nKey))
+                            .font(SplickTheme.Typography.captionBold)
+                            .foregroundStyle(SplickTheme.Colors.textSecondary)
+                            .textCase(nil)
+                            .padding(.top, SplickTheme.Spacing.xxs)
+
+                        ForEach(section.notifications) { notification in
+                            NotificationRowView(notification: notification)
+                                .onTapGesture {
+                                    Task {
+                                        let target = await viewModel.handleTap(notification)
+                                        onNavigate?(target)
+                                    }
+                                }
+                                .onAppear {
+                                    Task { await viewModel.loadMoreIfNeeded(current: notification) }
+                                }
                         }
+                    }
+                }
+
+                if viewModel.isLoadingMore {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, SplickTheme.Spacing.md)
                 }
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
@@ -139,7 +167,7 @@ struct NotificationRowView: View {
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
                 HStack(alignment: .firstTextBaseline, spacing: SplickTheme.Spacing.xxs) {
                     Text(notification.title)
-                        .font(notification.isRead ? SplickTheme.Typography.callout : SplickTheme.Typography.headline)
+                        .font(SplickTheme.Typography.headline)
                         .foregroundStyle(SplickTheme.Colors.textPrimary)
                         .lineLimit(2)
 
@@ -153,13 +181,9 @@ struct NotificationRowView: View {
                     }
                 }
 
-                MentionText(
-                    notification.body,
-                    fontSize: 13,
-                    plainColor: SplickTheme.Colors.textSecondary
-                )
-                .lineLimit(3)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                NotificationBodyText(notification: notification)
+                    .lineLimit(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                 Text(notification.createdAt.relativeString)
                     .font(SplickTheme.Typography.caption)
@@ -181,7 +205,7 @@ private struct NotificationAvatarBadgeView: View {
     let notification: AppNotification
 
     private let avatarSize: CGFloat = 48
-    private let badgeSize: CGFloat = 20
+    private let badgeSize: CGFloat = 28
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -190,7 +214,7 @@ private struct NotificationAvatarBadgeView: View {
                 .clipShape(Circle())
 
             Image(systemName: notification.type.icon)
-                .font(.system(size: 10, weight: .bold))
+                .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(width: badgeSize, height: badgeSize)
                 .background(
@@ -203,11 +227,11 @@ private struct NotificationAvatarBadgeView: View {
                 )
                 .overlay {
                     Circle()
-                        .strokeBorder(Color.white, lineWidth: 1.5)
+                        .strokeBorder(Color.white, lineWidth: 2)
                 }
                 .offset(x: 2, y: 2)
         }
-        .frame(width: avatarSize, height: avatarSize)
+        .frame(width: avatarSize + 4, height: avatarSize + 4)
         .accessibilityHidden(true)
     }
 
@@ -225,5 +249,51 @@ private struct NotificationAvatarBadgeView: View {
                 userId: notification.actorUserId
             )
         }
+    }
+}
+
+private struct NotificationBodyText: View {
+    let notification: AppNotification
+
+    private var segments: (actorName: String?, remainder: String) {
+        NotificationActorPresentation.bodySegments(for: notification)
+    }
+
+    private var titleMatchesActorName: Bool {
+        guard let actorName = segments.actorName else { return false }
+        return notification.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            .caseInsensitiveCompare(actorName) == .orderedSame
+    }
+
+    var body: some View {
+        if titleMatchesActorName, !segments.remainder.isEmpty {
+            bodyText(segments.remainder)
+        } else if let actorName = segments.actorName, !actorName.isEmpty {
+            VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
+                Text(actorName)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(SplickTheme.Colors.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if !segments.remainder.isEmpty {
+                    bodyText(segments.remainder)
+                }
+            }
+        } else {
+            MentionText(
+                notification.body,
+                fontSize: 13,
+                plainColor: SplickTheme.Colors.textSecondary
+            )
+        }
+    }
+
+    private func bodyText(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 13))
+            .foregroundColor(SplickTheme.Colors.textSecondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .multilineTextAlignment(.leading)
     }
 }

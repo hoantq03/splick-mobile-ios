@@ -20,6 +20,7 @@ final class PushNotificationCoordinator: ObservableObject {
     private var userDefaultsService: UserDefaultsServiceProtocol?
     private var hasAccessToken: (@Sendable () async -> Bool)?
     private var serverSyncInFlight = false
+    private var lastSyncedToken: String?
 
     private init() {}
 
@@ -118,6 +119,7 @@ final class PushNotificationCoordinator: ObservableObject {
         do {
             try await deviceTokenService.unregisterDeviceToken(token)
             isRegisteredOnServer = false
+            lastSyncedToken = nil
         } catch {
             isRegisteredOnServer = true
         }
@@ -188,7 +190,12 @@ final class PushNotificationCoordinator: ObservableObject {
         switch settings.authorizationStatus {
         case .authorized, .provisional, .ephemeral:
             userDefaultsService?.setBool(true, for: AppConstants.UserDefaults.pushNotificationsEnabled)
-            await registerForRemoteNotifications()
+            if let token = storedDeviceToken {
+                localDeviceToken = token
+                await registerTokenOnServer(token)
+            } else {
+                await registerForRemoteNotifications()
+            }
         case .notDetermined:
             await requestAuthorizationIfNeeded(center: center)
         case .denied:
@@ -230,6 +237,9 @@ final class PushNotificationCoordinator: ObservableObject {
     }
 
     private func registerTokenOnServer(_ token: String) async {
+        if token == lastSyncedToken, isRegisteredOnServer {
+            return
+        }
         guard !serverSyncInFlight else { return }
         serverSyncInFlight = true
         defer { serverSyncInFlight = false }
@@ -268,6 +278,7 @@ final class PushNotificationCoordinator: ObservableObject {
             try await deviceTokenService.registerCurrentDeviceToken(token)
             await MainActor.run {
                 isRegisteredOnServer = true
+                lastSyncedToken = token
             }
         } catch {
             await MainActor.run {

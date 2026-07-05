@@ -19,6 +19,7 @@ public struct FeedView: View {
     private let onPendingPostHandled: (() -> Void)?
     @Environment(\.openPostCaptureFlow) private var openPostCaptureFlow
     @Environment(\.currentUserSummary) private var currentUserSummary
+    @Environment(\.notificationsPresented) private var notificationsPresented
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     private let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
     private let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol?
@@ -93,13 +94,15 @@ public struct FeedView: View {
             .splickTabNavigationBarChrome()
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    FeedNavPills(
-                        selection: $selectedSegment,
-                        collapseProgress: feedSegmentScrollState.collapseProgress,
-                        feedLabel: languageService.text(.feedTitle),
-                        albumLabel: languageService.text(.feedAlbumTitle),
-                        streakLabel: languageService.text(.feedStreakTitle)
-                    )
+                    if !notificationsPresented {
+                        FeedNavPills(
+                            selection: $selectedSegment,
+                            collapseProgress: feedSegmentScrollState.collapseProgress,
+                            feedLabel: languageService.text(.feedTitle),
+                            albumLabel: languageService.text(.feedAlbumTitle),
+                            streakLabel: languageService.text(.feedStreakTitle)
+                        )
+                    }
                 }
             }
             .navigationDestination(for: FeedPostDestination.self) { destination in
@@ -152,17 +155,21 @@ public struct FeedView: View {
             }
         }
         .onChange(of: selectedSegment) { segment in
-            feedSegmentScrollState.reset()
-            tabBarScrollState?.reset()
-            if segment != .feed {
-                videoCoordinator.suspendPlayback()
+            Task { @MainActor in
+                feedSegmentScrollState.reset()
+                tabBarScrollState?.reset()
+                if segment != .feed {
+                    videoCoordinator.suspendPlayback()
+                }
             }
         }
         .onChange(of: viewModel.state) { state in
             guard selectedSegment == .feed else { return }
             if case .loaded(let posts) = state, posts.isEmpty {
-                tabBarScrollState?.show()
-                feedSegmentScrollState.reset()
+                Task { @MainActor in
+                    tabBarScrollState?.show()
+                    feedSegmentScrollState.reset()
+                }
             }
         }
         .environment(\.feedTabIsActive, isTabActive && selectedSegment == .feed)

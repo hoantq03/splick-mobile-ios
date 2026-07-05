@@ -104,12 +104,20 @@ struct MainTabView: View {
             }
         }
         .animation(LinkedPostMotion.spring, value: appState.linkedPostPresentation)
-            .onAppear { badgeCounts = container.badgeCountService.counts }
+            .onAppear {
+                Task { @MainActor in
+                    badgeCounts = container.badgeCountService.counts
+                }
+            }
             .task(id: appState.currentUser?.id) {
                 guard appState.currentUser != nil else { return }
                 await container.customEmojiStore.load(fetcher: container.customEmojiRepository)
             }
-            .onReceive(container.badgeCountService.$counts) { badgeCounts = $0 }
+            .onReceive(container.badgeCountService.$counts) { newCounts in
+                Task { @MainActor in
+                    badgeCounts = newCounts
+                }
+            }
             .onReceive(container.messagingWebSocketClient.eventSubject) { event in
                 if case .newMessage = event {
                     Task { await container.badgeCountService.refresh() }
@@ -119,12 +127,12 @@ struct MainTabView: View {
                 appState.showProfileSettings = true
             }
             .environment(\.openNotifications) { bellFrame in
-                if appState.showNotifications {
-                    // Route through the overlay's dismissAnimated() so the collapse spring
-                    // plays to completion before the overlay is removed and the bell reappears.
-                    notificationDismissRequest = true
-                } else {
-                    appState.presentNotifications(from: bellFrame)
+                Task { @MainActor in
+                    if appState.showNotifications {
+                        notificationDismissRequest = true
+                    } else {
+                        appState.presentNotifications(from: bellFrame)
+                    }
                 }
             }
             .environment(\.notificationUnreadCount, badgeCounts.notifications)
@@ -151,7 +159,7 @@ struct MainTabView: View {
                 .allowsHitTesting(isTabBarChromePresented && tabBarScrollState.isVisible)
                 .frame(height: tabBarInsetHeight)
                 .clipped()
-                .animation(TabBarMotion.spring, value: tabBarChromeAnimationToken)
+                .animation(TabBarMotion.slide, value: tabBarChromeAnimationToken)
                 .ignoresSafeArea(edges: .bottom)
             }
             .onChange(of: appState.selectedTab, perform: handleSelectedTabChange)
@@ -167,9 +175,6 @@ struct MainTabView: View {
                 break
             }
         }
-        .task {
-            await container.badgeCountService.refresh()
-        }
         .sheet(isPresented: $appState.showProfileSettings) {
             ProfileSettingsView()
         }
@@ -180,13 +185,14 @@ struct MainTabView: View {
                     anchorFrame: appState.notificationAnchorFrame,
                     unreadCount: badgeCounts.notifications,
                     headerTitle: container.languageService.text(.notificationTitle),
+                    closeAccessibilityLabel: container.languageService.text(.notificationBellAccessibility),
                     dismissRequest: $notificationDismissRequest
                 ) { dismiss in
                     NotificationListView(
                         viewModel: container.notificationListViewModel,
                         onNavigate: { target in
                             dismiss()
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + SplickRevealMotion.collapseDuration) {
                                 appState.routeNotification(target: target)
                             }
                         },
@@ -195,6 +201,7 @@ struct MainTabView: View {
                     )
                     .environmentObject(container.languageService)
                 }
+                .zIndex(100)
             }
         }
         .tint(SplickTheme.Colors.primaryGradientStart)
@@ -280,7 +287,7 @@ struct MainTabView: View {
     private var messagesTabContent: some View {
         ConversationListView(
             viewModel: container.conversationListViewModel,
-            createGroupViewModel: container.createGroupViewModel,
+            createGroupViewModel: container.createGroupConversationViewModel,
             friendsProvider: {
                 try await container.fetchMyFriendsUseCase.execute()
             }

@@ -141,7 +141,7 @@ struct PostCardView: View {
             case .reactions:
                 ReactionDetailSheet(
                     summaries: post.userReactionSummaries(),
-                    onUserTap: onUserTap
+                    onUserTap: openProfileFromSheet
                 )
             case .emojiPicker:
                 EmojiPickerSheet(
@@ -150,7 +150,7 @@ struct PostCardView: View {
                     onOpenUpload: { openCustomEmojiUpload() }
                 )
             case .viewers:
-                ViewersListSheet(viewers: post.viewers, onUserTap: onUserTap)
+                ViewersListSheet(viewers: post.viewers, onUserTap: openProfileFromSheet)
             case .share:
                 SharePostSheet(post: post)
             }
@@ -372,6 +372,13 @@ struct PostCardView: View {
         activeSheet = nil
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
             showCustomEmojiUpload = true
+        }
+    }
+
+    private func openProfileFromSheet(for user: UserSummary) {
+        activeSheet = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            onUserTap(user)
         }
     }
 

@@ -6,6 +6,10 @@ public enum SplickRevealMotion {
     public static let collapse = Animation.spring(response: 0.36, dampingFraction: 0.62, blendDuration: 0.05)
     /// Matches `collapse` settle time — used to dismiss overlay after the spring finishes.
     public static let collapseDuration: TimeInterval = 0.44
+    /// Icon swap for opening: same response as `expand` but critically damped — no bounce for icon transitions.
+    public static let iconSwapOpen = Animation.spring(response: 0.40, dampingFraction: 0.88)
+    /// Icon swap for closing: same response as `collapse` but critically damped — no bounce for icon transitions.
+    public static let iconSwapClose = Animation.spring(response: 0.36, dampingFraction: 0.88)
 }
 
 /// Shared root coordinate space for anchored overlays (bell, notifications) across tab pager pages.

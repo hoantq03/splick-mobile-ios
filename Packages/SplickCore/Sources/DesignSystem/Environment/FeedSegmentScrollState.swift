@@ -90,11 +90,15 @@ public struct FeedSegmentHideOnScrollModifier: ViewModifier {
                         geometry.contentOffset.y + geometry.contentInsets.top
                     } action: { _, offset in
                         guard scrollChromeTrackingEnabled else { return }
-                        feedSegmentScrollState.updateScrollOffset(offset)
+                        Task { @MainActor in
+                            feedSegmentScrollState.updateScrollOffset(offset)
+                        }
                     }
                     .onScrollPhaseChange { oldPhase, newPhase in
                         if oldPhase == .interacting, newPhase != .interacting {
-                            feedSegmentScrollState.snapCollapseProgress()
+                            Task { @MainActor in
+                                feedSegmentScrollState.snapCollapseProgress()
+                            }
                         }
                     }
             } else {

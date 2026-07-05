@@ -82,35 +82,33 @@ private struct SplickProfileToolbarModifier: ViewModifier {
         content
             .navigationBarTitleDisplayMode(titleDisplayMode)
             .toolbar {
-                if !isSuppressed {
-                    ToolbarItem(placement: .topBarLeading) {
-                        if let openProfileSettings, let user = currentUserSummary {
-                            Button(action: openProfileSettings) {
-                                AvatarView(
-                                    imageURL: user.avatarURL,
-                                    name: user.displayName,
-                                    size: .small
-                                )
-                                .frame(width: 34, height: 34)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(
-                                languageService?.text(.profileSettingsAccessibility)
-                                    ?? L10n.string(.profileSettingsAccessibility, locale: .default)
+                ToolbarItem(placement: .topBarLeading) {
+                    if !isSuppressed, let openProfileSettings, let user = currentUserSummary {
+                        Button(action: openProfileSettings) {
+                            AvatarView(
+                                imageURL: user.avatarURL,
+                                name: user.displayName,
+                                size: .small
                             )
+                            .frame(width: 34, height: 34)
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(
+                            languageService?.text(.profileSettingsAccessibility)
+                                ?? L10n.string(.profileSettingsAccessibility, locale: .default)
+                        )
                     }
+                }
 
-                    ToolbarItem(placement: .topBarTrailing) {
-                        if showsBell, let openNotifications {
-                            NotificationBellButton(
-                                unreadCount: notificationUnreadCount,
-                                isPresented: notificationsPresented,
-                                accessibilityLabel: languageService?.text(.notificationBellAccessibility)
-                                    ?? L10n.string(.notificationBellAccessibility, locale: .default),
-                                onTap: openNotifications
-                            )
-                        }
+                ToolbarItem(placement: .topBarTrailing) {
+                    if showsBell, !notificationsPresented, let openNotifications {
+                        NotificationBellButton(
+                            unreadCount: notificationUnreadCount,
+                            isPresented: false,
+                            accessibilityLabel: languageService?.text(.notificationBellAccessibility)
+                                ?? L10n.string(.notificationBellAccessibility, locale: .default),
+                            onTap: openNotifications
+                        )
                     }
                 }
             }

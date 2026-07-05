@@ -2,7 +2,7 @@ import Foundation
 import SplickDomain
 
 @MainActor
-public final class CreateGroupViewModel: ObservableObject {
+public final class CreateGroupConversationViewModel: ObservableObject {
     @Published public var groupName = ""
     @Published public var selectedFriendIds: Set<UUID> = []
     @Published public private(set) var isSubmitting = false

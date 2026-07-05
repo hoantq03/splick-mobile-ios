@@ -46,6 +46,7 @@ struct ReactionDetailSheet: View {
     private func reactionSummaryRow(_ summary: UserReactionSummary) -> some View {
         HStack(alignment: .top, spacing: SplickTheme.Spacing.md) {
             Button {
+                dismiss()
                 onUserTap(summary.user)
             } label: {
                 VStack(spacing: SplickTheme.Spacing.xs) {

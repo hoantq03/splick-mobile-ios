@@ -9,8 +9,9 @@ public enum SplickTabBarMetrics {
 }
 
 public enum TabBarChromeMotion {
-    public static let spring = Animation.spring(response: 0.38, dampingFraction: 0.74, blendDuration: 0.06)
-    public static let show = Animation.spring(response: 0.34, dampingFraction: 0.82, blendDuration: 0.05)
+    /// Smooth vertical slide — no spring overshoot.
+    public static let slide = Animation.easeInOut(duration: 0.30)
+    public static let show = Animation.easeInOut(duration: 0.26)
 }
 
 @MainActor
@@ -60,27 +61,40 @@ public final class TabBarScrollState: ObservableObject {
     }
 
     public func reset() {
-        lastOffset = 0
-        offsetNormalizer.reset()
-        suppressesBottomInset = false
-        setVisible(true)
+        Task { @MainActor in
+            lastOffset = 0
+            offsetNormalizer.reset()
+            suppressesBottomInset = false
+            setVisibleImmediate(true)
+        }
     }
 
     public func show() {
-        suppressesBottomInset = false
-        setVisible(true)
+        Task { @MainActor in
+            suppressesBottomInset = false
+            setVisibleImmediate(true)
+        }
     }
 
     /// Hides the tab bar. Set `flushToBottom` on detail screens so bottom inset becomes zero.
     public func hide(flushToBottom: Bool = false) {
-        suppressesBottomInset = flushToBottom
-        setVisible(false)
+        Task { @MainActor in
+            suppressesBottomInset = flushToBottom
+            setVisibleImmediate(false)
+        }
+    }
+
+    private func setVisibleImmediate(_ visible: Bool) {
+        guard isVisible != visible else { return }
+        isVisible = visible
+        suppressUpdatesUntil = Date().addingTimeInterval(visibilityChangeCooldown)
     }
 
     private func setVisible(_ visible: Bool) {
         guard isVisible != visible else { return }
-        isVisible = visible
-        suppressUpdatesUntil = Date().addingTimeInterval(visibilityChangeCooldown)
+        Task { @MainActor in
+            setVisibleImmediate(visible)
+        }
     }
 }
 
@@ -99,6 +113,7 @@ public struct TabBarHideOnScrollModifier: ViewModifier {
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.scrollChromeTrackingEnabled) private var scrollChromeTrackingEnabled
     @Environment(\.pullToRefreshActive) private var pullToRefreshActive
+    @Environment(\.notificationsPresented) private var notificationsPresented
 
     public init() {}
 
@@ -108,8 +123,12 @@ public struct TabBarHideOnScrollModifier: ViewModifier {
                 content.onScrollGeometryChange(for: CGFloat.self) { geometry in
                     geometry.contentOffset.y + geometry.contentInsets.top
                 } action: { _, offset in
-                    guard scrollChromeTrackingEnabled, !pullToRefreshActive else { return }
-                    tabBarScrollState.updateScrollOffset(offset)
+                    guard scrollChromeTrackingEnabled,
+                          !pullToRefreshActive,
+                          !notificationsPresented else { return }
+                    Task { @MainActor in
+                        tabBarScrollState.updateScrollOffset(offset)
+                    }
                 }
             } else {
                 content
@@ -150,7 +169,7 @@ public struct TabBarContentPaddingModifier: ViewModifier {
     public func body(content: Content) -> some View {
         content
             .modifier(TabBarBottomInsetModifier(inset: bottomInset))
-            .animation(TabBarChromeMotion.spring, value: bottomInsetAnimationToken)
+            .animation(TabBarChromeMotion.slide, value: bottomInsetAnimationToken)
     }
 
     private var bottomInsetAnimationToken: String {

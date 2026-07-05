@@ -21,6 +21,23 @@ enum NotificationActorPresentation {
         return notification.title
     }
 
+    /// Splits notification body into a leading actor name (bold) and the remainder.
+    static func bodySegments(for notification: AppNotification) -> (actorName: String?, remainder: String) {
+        let body = notification.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !usesSystemAvatar(for: notification.type) else {
+            return (nil, body)
+        }
+
+        if let name = parseLeadingActorName(from: body),
+           body.lowercased().hasPrefix(name.lowercased()) {
+            let remainderIndex = body.index(body.startIndex, offsetBy: name.count)
+            let remainder = String(body[remainderIndex...]).trimmingCharacters(in: .whitespaces)
+            return (name, remainder)
+        }
+
+        return (nil, body)
+    }
+
     private static func parseLeadingActorName(from body: String) -> String? {
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }

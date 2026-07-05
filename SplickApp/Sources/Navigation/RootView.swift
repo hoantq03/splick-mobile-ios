@@ -45,18 +45,6 @@ struct RootView: View {
             appState.routeRemoteNotification(destination)
             pushNotificationCoordinator.clearPendingDestination()
         }
-        .onChange(of: appState.isAuthenticated) { isAuthenticated in
-            guard isAuthenticated else { return }
-            Task {
-                await pushNotificationCoordinator.ensureDeviceTokenRegistered()
-            }
-        }
-        .onChange(of: pushNotificationCoordinator.localDeviceToken) { token in
-            guard appState.isAuthenticated, token != nil else { return }
-            Task {
-                await pushNotificationCoordinator.ensureDeviceTokenRegistered()
-            }
-        }
         .task(id: appState.splashSessionID) {
             guard appState.needsSplash else { return }
             await runSplashSequence()

@@ -9,7 +9,7 @@ enum TabBarLayout {
 }
 
 enum TabBarMotion {
-    static let spring = TabBarChromeMotion.spring
+    static let slide = TabBarChromeMotion.slide
     static let show = TabBarChromeMotion.show
 }
 

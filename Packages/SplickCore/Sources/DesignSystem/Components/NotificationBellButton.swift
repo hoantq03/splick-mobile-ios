@@ -35,32 +35,37 @@ public struct NotificationBellButton: View {
                 onTap(frame)
             }
         } label: {
-            ZStack {
-                Image(systemName: unreadCount > 0 ? "bell.fill" : "bell")
-                    .font(.system(size: Self.bellIconFontSize, weight: .medium))
-                    .foregroundStyle(SplickTheme.Colors.textPrimary)
-                    .frame(width: Self.bellIconFrameSize, height: Self.bellIconFrameSize)
-                    .offset(x: -1, y: 1)
-                    .opacity(isPresented ? 0 : 1)
-                    .scaleEffect(isPresented ? 0.82 : 1)
+            // Outer ZStack keeps the badge in its own layer ABOVE the composited bell/X layer
+            // so it is never flattened into (or obscured by) the bell animation texture.
+            ZStack(alignment: .topTrailing) {
+                ZStack {
+                    Image(systemName: unreadCount > 0 ? "bell.fill" : "bell")
+                        .font(.system(size: Self.bellIconFontSize, weight: .medium))
+                        .foregroundStyle(SplickTheme.Colors.textPrimary)
+                        .frame(width: Self.bellIconFrameSize, height: Self.bellIconFrameSize)
+                        .opacity(isPresented ? 0 : 1)
+                        .scaleEffect(isPresented ? 0.82 : 1)
 
-                Image(systemName: "xmark")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(SplickTheme.Colors.textPrimary)
-                    .frame(width: Self.bellIconFrameSize, height: Self.bellIconFrameSize)
-                    .opacity(isPresented ? 1 : 0)
-                    .scaleEffect(isPresented ? 1 : 0.82)
-            }
-                .frame(width: Self.bellContainerSize, height: Self.bellContainerSize)
-                .overlay(alignment: .topTrailing) {
-                    if unreadCount > 0, !isPresented {
-                        badgeView
-                            .offset(x: 2, y: -2)
-                            .zIndex(10)
-                    }
+                    Image(systemName: "xmark")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(SplickTheme.Colors.textPrimary)
+                        .frame(width: Self.bellIconFrameSize, height: Self.bellIconFrameSize)
+                        .opacity(isPresented ? 1 : 0)
+                        .scaleEffect(isPresented ? 1 : 0.82)
                 }
+                .frame(width: Self.bellContainerSize, height: Self.bellContainerSize)
                 .compositingGroup()
-                .animation(.spring(response: 0.24, dampingFraction: 0.86), value: isPresented)
+                // Opening: match panel expand timing (same response, critically damped — no bounce on icon swap).
+                // Closing: match panel collapse timing.
+                .animation(isPresented ? SplickRevealMotion.iconSwapOpen : SplickRevealMotion.iconSwapClose, value: isPresented)
+
+                // Badge rendered outside the compositing group so it stays in its own
+                // render layer, always visually above the bell/X icon.
+                if unreadCount > 0, !isPresented {
+                    badgeView
+                        .offset(x: 2, y: -2)
+                }
+            }
         }
         .buttonStyle(.plain)
         .background {

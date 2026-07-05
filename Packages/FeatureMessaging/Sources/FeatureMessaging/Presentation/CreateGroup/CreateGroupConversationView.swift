@@ -4,7 +4,7 @@ import Localization
 import SplickDomain
 
 public struct CreateGroupConversationView: View {
-    @ObservedObject private var viewModel: CreateGroupViewModel
+    @ObservedObject private var viewModel: CreateGroupConversationViewModel
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
 
@@ -12,7 +12,7 @@ public struct CreateGroupConversationView: View {
     let onCreated: (Conversation) -> Void
 
     public init(
-        viewModel: CreateGroupViewModel,
+        viewModel: CreateGroupConversationViewModel,
         friends: [UserSummary],
         onCreated: @escaping (Conversation) -> Void
     ) {
@@ -48,7 +48,7 @@ public struct CreateGroupConversationView: View {
                                     Spacer()
                                     if viewModel.selectedFriendIds.contains(friend.id) {
                                         Image(systemName: "checkmark.circle.fill")
-                                            .foregroundStyle(SplickTheme.Colors.accent)
+                                            .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
                                     }
                                 }
                             }

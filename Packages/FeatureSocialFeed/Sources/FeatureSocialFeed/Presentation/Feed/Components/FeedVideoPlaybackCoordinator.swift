@@ -89,7 +89,9 @@ extension View {
     /// Collects per-post visibility ratios without `onChange(of: CGRect)` (fatal on iOS 26+).
     func feedVideoVisibilityHandling(coordinator: FeedVideoPlaybackCoordinator) -> some View {
         onPreferenceChange(FeedVideoVisibilityPreferenceKey.self) { reports in
-            coordinator.applyVisibilityReports(reports)
+            Task { @MainActor in
+                coordinator.applyVisibilityReports(reports)
+            }
         }
     }
 }

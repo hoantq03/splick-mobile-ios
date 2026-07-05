@@ -14,7 +14,7 @@ public struct ConversationListView: View {
     @State private var showsCreateGroup = false
     @State private var createGroupFriends: [UserSummary] = []
 
-    private let createGroupViewModel: CreateGroupViewModel
+    private let createGroupViewModel: CreateGroupConversationViewModel
     private let friendsProvider: () async throws -> [UserSummary]
 
     private var suppressRefreshAnimations: Bool {
@@ -39,7 +39,7 @@ public struct ConversationListView: View {
 
     public init(
         viewModel: ConversationListViewModel,
-        createGroupViewModel: CreateGroupViewModel,
+        createGroupViewModel: CreateGroupConversationViewModel,
         friendsProvider: @escaping () async throws -> [UserSummary] = { [] }
     ) {
         self._viewModel = ObservedObject(wrappedValue: viewModel)

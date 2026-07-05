@@ -560,8 +560,8 @@ final class DependencyContainer: ObservableObject {
 
     lazy var conversationListViewModel: ConversationListViewModel = makeConversationListViewModel()
 
-    lazy var createGroupViewModel: CreateGroupViewModel = {
-        CreateGroupViewModel(
+    lazy var createGroupConversationViewModel: CreateGroupConversationViewModel = {
+        CreateGroupConversationViewModel(
             createGroupUseCase: CreateGroupConversationUseCase(repository: messagingRepository)
         )
     }()

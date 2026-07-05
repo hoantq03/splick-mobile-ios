@@ -5,9 +5,13 @@ import SplickDomain
 
 @MainActor
 public final class NotificationListViewModel: ObservableObject {
+    static let pageSize = 20
+
     @Published var notifications: [AppNotification] = []
     @Published var state: LoadingState<[AppNotification]> = .idle
     @Published private(set) var isRefreshing = false
+    @Published private(set) var isLoadingMore = false
+    @Published private(set) var hasMorePages = true
 
     private let fetchNotificationsUseCase: FetchNotificationsUseCaseProtocol
     private let markReadUseCase: MarkNotificationReadUseCaseProtocol
@@ -30,6 +34,10 @@ public final class NotificationListViewModel: ObservableObject {
 
     var showsInitialLoading: Bool {
         notifications.isEmpty && state.isLoading
+    }
+
+    var notificationSections: [NotificationListSection] {
+        NotificationListSection.grouped(from: notifications)
     }
 
     func load(isPullToRefresh: Bool = false) async {
@@ -56,8 +64,42 @@ public final class NotificationListViewModel: ObservableObject {
         await performLoad(isPullToRefresh: false)
     }
 
+    func loadMoreIfNeeded(current notification: AppNotification) async {
+        guard notification.id == notifications.last?.id else { return }
+        await loadMore()
+    }
+
+    func loadMore() async {
+        guard hasMorePages, !isLoadingMore, !isRefreshing, !state.isLoading else { return }
+
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+
+        let nextPage = currentPage + 1
+        Log.info(
+            "Loading more notifications",
+            category: .notification,
+            metadata: ["page": String(nextPage)]
+        )
+
+        do {
+            let batch = try await fetchNotificationsUseCase.execute(page: nextPage)
+            hasMorePages = batch.count >= Self.pageSize
+            guard !batch.isEmpty else {
+                hasMorePages = false
+                return
+            }
+            currentPage = nextPage
+            notifications.append(contentsOf: batch)
+            state = .loaded(notifications)
+        } catch {
+            Log.error(error, category: .notification)
+        }
+    }
+
     private func performLoad(isPullToRefresh: Bool) async {
         currentPage = 0
+        hasMorePages = true
         Log.info(
             "Loading notifications",
             category: .notification,
@@ -65,18 +107,19 @@ public final class NotificationListViewModel: ObservableObject {
         )
 
         do {
-            let notifications = try await fetchNotificationsUseCase.execute(page: 0)
-            self.notifications = notifications
-            state = .loaded(notifications)
+            let batch = try await fetchNotificationsUseCase.execute(page: 0)
+            notifications = batch
+            hasMorePages = batch.count >= Self.pageSize
+            state = .loaded(batch)
             Log.info(
                 "Loaded notifications",
                 category: .notification,
-                metadata: ["count": String(notifications.count)]
+                metadata: ["count": String(batch.count), "hasMore": String(hasMorePages)]
             )
         } catch {
-            if isPullToRefresh, !self.notifications.isEmpty {
+            if isPullToRefresh, !notifications.isEmpty {
                 Log.error(error, category: .notification)
-                state = .loaded(self.notifications)
+                state = .loaded(notifications)
             } else {
                 state = .failed(error.localizedDescription)
                 Log.error(error, category: .notification)
