@@ -10,7 +10,7 @@ public enum ImagePipelineConfigurator {
     /// 500 MB on-disk cache for feed/album thumbnails and full images.
     private static let diskCacheSize = 500 * 1024 * 1024
     /// In-memory decoded image budget — avoids retaining full-resolution buffers for every visible cell.
-    private static let memoryCacheCostLimit = 64 * 1024 * 1024
+    private static let memoryCacheCostLimit = 48 * 1024 * 1024
 
     public static func configureIfNeeded() {
         lock.lock()
@@ -24,8 +24,10 @@ public enum ImagePipelineConfigurator {
         )
         configuration.imageCache = ImageCache(
             costLimit: memoryCacheCostLimit,
-            countLimit: 300
+            countLimit: 80
         )
+        // Thumbnails decode off the main path; skip eager RGBA decompression that spikes CVPixelBuffer usage.
+        configuration.isDecompressionEnabled = false
 
         ImagePipeline.shared = ImagePipeline(configuration: configuration)
 

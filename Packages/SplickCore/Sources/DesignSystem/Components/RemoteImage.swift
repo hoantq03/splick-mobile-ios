@@ -43,42 +43,61 @@ public struct RemoteImage<Content: View>: View {
                 content(.empty)
             }
         }
-        .onDisappear(.lowerPriority)
+        .onDisappear(.cancel)
     }
 
     private var imageRequest: ImageRequest? {
         guard let url else { return nil }
-        if let maxPixelDimensions, maxPixelDimensions.width > 0, maxPixelDimensions.height > 0 {
-            return ImageRequest(
-                url: url,
-                processors: [
-                    .resize(
-                        size: maxPixelDimensions,
-                        unit: .pixels,
-                        contentMode: .aspectFit
-                    ),
-                ]
-            )
-        }
-        if let maxPixelWidth, maxPixelWidth > 0 {
-            return ImageRequest(
-                url: url,
-                processors: [.resize(width: maxPixelWidth, unit: .pixels)]
-            )
+        return RemoteImageRequestFactory.boundedRequest(
+            url: url,
+            maxPixelDimensions: maxPixelDimensions,
+            maxPixelWidth: maxPixelWidth
+        )
+    }
+}
+
+/// Non-generic factory so call sites avoid inferring `RemoteImage<Content>`.
+public enum RemoteImageRequestFactory {
+    /// Builds a request that downscales at decode time (ImageIO thumbnail), not after a full-resolution decode.
+    public static func boundedRequest(
+        url: URL,
+        maxPixelDimensions: CGSize? = nil,
+        maxPixelWidth: CGFloat? = nil
+    ) -> ImageRequest {
+        if let userInfo = thumbnailUserInfo(
+            maxPixelDimensions: maxPixelDimensions,
+            maxPixelWidth: maxPixelWidth
+        ) {
+            return ImageRequest(url: url, userInfo: userInfo)
         }
         return ImageRequest(url: url)
+    }
+
+    private static func thumbnailUserInfo(
+        maxPixelDimensions: CGSize?,
+        maxPixelWidth: CGFloat?
+    ) -> [ImageRequest.UserInfoKey: Any]? {
+        if let maxPixelDimensions, maxPixelDimensions.width > 0, maxPixelDimensions.height > 0 {
+            let longestEdge = max(maxPixelDimensions.width, maxPixelDimensions.height)
+            return [.thumbnailKey: ImageRequest.ThumbnailOptions(maxPixelSize: Float(longestEdge))]
+        }
+        if let maxPixelWidth, maxPixelWidth > 0 {
+            return [.thumbnailKey: ImageRequest.ThumbnailOptions(maxPixelSize: Float(maxPixelWidth))]
+        }
+        return nil
     }
 }
 
 public enum RemoteImageMetrics {
-    /// Max decode width for full-width feed media (legacy width-only cap).
+    /// Max decode longest-edge for full-width feed media.
     public static var feedMediaMaxPixelWidth: CGFloat {
-        FeedMediaLayout.feedMediaMaxPixelSize.width
+        FeedMediaLayout.feedMediaMaxDecodePixelSize()
     }
 
-    /// Max decode dimensions for feed media (width + height cap).
+    /// Max decode longest-edge for feed media.
     public static var feedMediaMaxPixelSize: CGSize {
-        FeedMediaLayout.feedMediaMaxPixelSize
+        let side = FeedMediaLayout.feedMediaMaxDecodePixelSize()
+        return CGSize(width: side, height: side)
     }
 
     /// Max decode width for a square avatar at the given point size.
