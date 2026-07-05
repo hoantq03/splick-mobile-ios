@@ -102,6 +102,10 @@ targets:
         product: SimulationKit
       - package: GoogleSignIn
         product: GoogleSignIn
+    attributes:
+      SystemCapabilities:
+        com.apple.Push:
+          enabled: 1
     settings:
       base:
         PRODUCT_NAME: SplickApp
