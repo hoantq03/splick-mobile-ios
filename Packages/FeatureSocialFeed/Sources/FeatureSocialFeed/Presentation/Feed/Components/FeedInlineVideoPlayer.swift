@@ -21,6 +21,7 @@ struct FeedInlineVideoPlayer: View {
     let url: URL
     let posterURL: URL?
     let durationSeconds: Int?
+    var displayHeight: CGFloat = FeedMediaLayout.defaultHeight
 
     @Environment(\.feedVideoCoordinator) private var autoplayCoordinator
     @Environment(\.feedTabIsActive) private var feedTabIsActive
@@ -31,11 +32,18 @@ struct FeedInlineVideoPlayer: View {
 
     private let centerButtonSize: CGFloat = 88
 
-    init(postId: UUID, url: URL, posterURL: URL?, durationSeconds: Int?) {
+    init(
+        postId: UUID,
+        url: URL,
+        posterURL: URL?,
+        durationSeconds: Int?,
+        displayHeight: CGFloat = FeedMediaLayout.defaultHeight
+    ) {
         self.postId = postId
         self.url = url
         self.posterURL = posterURL
         self.durationSeconds = durationSeconds
+        self.displayHeight = displayHeight
         _controller = StateObject(wrappedValue: FeedVideoPlaybackController(url: url))
     }
 
@@ -72,7 +80,7 @@ struct FeedInlineVideoPlayer: View {
 
             controlsOverlay
         }
-        .frame(height: 350)
+        .frame(height: displayHeight)
         .background(FeedVideoVisibilityReporter(postId: postId))
         .onChange(of: isAutoplayActive) { active in
             controller.setAutoplayActive(active)
@@ -96,7 +104,7 @@ struct FeedInlineVideoPlayer: View {
             } else if let posterURL {
                 RemoteImage(
                     url: posterURL,
-                    maxPixelSize: RemoteImageMetrics.feedMediaMaxPixelWidth
+                    maxPixelDimensions: FeedMediaLayout.feedMediaMaxPixelSize
                 ) { phase in
                     switch phase {
                     case .success(let image):
@@ -304,6 +312,10 @@ final class FeedVideoPlaybackController: ObservableObject {
 
     init(url: URL) {
         playerItem = AVPlayerItem(url: url)
+        playerItem.preferredMaximumResolution = CGSize(
+            width: min(1280 * UIScreen.main.scale, FeedMediaLayout.decodeMaxPixelSide),
+            height: min(720 * UIScreen.main.scale, FeedMediaLayout.decodeMaxPixelSide)
+        )
         player = AVPlayer(playerItem: playerItem)
         Self.configureAudioSession()
         player.actionAtItemEnd = .pause

@@ -62,6 +62,8 @@ struct PostMediaItemDTO: Decodable {
     let thumbnailUrl: String?
     let mediaType: String
     let durationSeconds: Int?
+    let widthPx: Int?
+    let heightPx: Int?
     let sortOrder: Int?
 }
 

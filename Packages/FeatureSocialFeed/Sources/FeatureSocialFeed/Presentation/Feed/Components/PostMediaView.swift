@@ -31,15 +31,16 @@ struct PostMediaView: View {
     }
 
     private var multiMediaCarousel: some View {
-        ZStack(alignment: .topTrailing) {
+        let carouselHeight = carouselHeight(for: selectedIndex)
+        return ZStack(alignment: .topTrailing) {
             TabView(selection: $selectedIndex) {
                 ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                    mediaItemView(item)
+                    mediaItemView(item, fixedHeight: carouselHeight)
                         .tag(index)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .automatic))
-            .frame(height: 350)
+            .frame(height: carouselHeight)
             .simultaneousGesture(
                 TapGesture().onEnded { onTap?(selectedIndex) }
             )
@@ -54,52 +55,65 @@ struct PostMediaView: View {
         }
     }
 
+    private func carouselHeight(for index: Int) -> CGFloat {
+        guard items.indices.contains(index) else {
+            return FeedMediaLayout.defaultHeight
+        }
+        return FeedMediaLayout.displayHeight(for: items[index])
+    }
+
     @ViewBuilder
-    private func mediaItemView(_ item: PostMediaItem) -> some View {
+    private func mediaItemView(_ item: PostMediaItem, fixedHeight: CGFloat? = nil) -> some View {
         switch item.mediaType {
         case .image:
-            imageContent(for: item)
+            imageContent(for: item, fixedHeight: fixedHeight)
         case .video:
-            videoContent(for: item)
+            videoContent(for: item, fixedHeight: fixedHeight)
         }
     }
 
-    private func imageContent(for item: PostMediaItem) -> some View {
-        RemoteImage(
+    private func imageContent(for item: PostMediaItem, fixedHeight: CGFloat?) -> some View {
+        let height = fixedHeight ?? FeedMediaLayout.displayHeight(for: item)
+        let clamped = FeedMediaLayout.isHeightClamped(for: item)
+
+        return RemoteImage(
             url: item.thumbnailURL ?? item.mediaURL,
-            maxPixelSize: RemoteImageMetrics.feedMediaMaxPixelWidth
+            maxPixelDimensions: FeedMediaLayout.feedMediaMaxPixelSize
         ) { phase in
             switch phase {
             case .success(let image):
                 image
                     .resizable()
-                    .scaledToFill()
-                    .frame(maxHeight: 350)
+                    .aspectRatio(contentMode: clamped ? .fill : .fit)
+                    .frame(height: height)
+                    .frame(maxWidth: .infinity)
                     .clipped()
             case .failure:
-                mediaPlaceholder(icon: "photo")
+                mediaPlaceholder(icon: "photo", height: height)
             default:
-                mediaPlaceholder(icon: nil, showProgress: true)
+                mediaPlaceholder(icon: nil, showProgress: true, height: height)
             }
         }
     }
 
-    private func videoContent(for item: PostMediaItem) -> some View {
-        Group {
+    private func videoContent(for item: PostMediaItem, fixedHeight: CGFloat?) -> some View {
+        let height = fixedHeight ?? FeedMediaLayout.displayHeight(for: item)
+        return Group {
             FeedInlineVideoPlayer(
                 postId: post.id,
                 url: item.mediaURL,
                 posterURL: item.thumbnailURL ?? item.mediaURL,
-                durationSeconds: item.durationSeconds
+                durationSeconds: item.durationSeconds,
+                displayHeight: height
             )
         }
-        .frame(maxHeight: 350)
+        .frame(height: height)
     }
 
-    private func mediaPlaceholder(icon: String?, showProgress: Bool = false) -> some View {
+    private func mediaPlaceholder(icon: String?, showProgress: Bool = false, height: CGFloat = FeedMediaLayout.placeholderHeight) -> some View {
         RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small)
             .fill(SplickTheme.Colors.secondaryBackground)
-            .frame(height: 250)
+            .frame(height: height)
             .overlay {
                 if showProgress {
                     ProgressView()

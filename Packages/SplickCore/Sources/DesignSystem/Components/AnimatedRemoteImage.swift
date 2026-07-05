@@ -9,10 +9,16 @@ import Nuke
 public struct AnimatedRemoteImage: UIViewRepresentable {
     private let url: URL?
     private let contentMode: ContentMode
+    private let maxPixelSize: CGFloat?
 
-    public init(url: URL?, contentMode: ContentMode = .fill) {
+    public init(
+        url: URL?,
+        contentMode: ContentMode = .fill,
+        maxPixelSize: CGFloat? = nil
+    ) {
         self.url = url
         self.contentMode = contentMode
+        self.maxPixelSize = maxPixelSize
     }
 
     public func makeUIView(context: Context) -> UIImageView {
@@ -24,7 +30,7 @@ public struct AnimatedRemoteImage: UIViewRepresentable {
 
     public func updateUIView(_ imageView: UIImageView, context: Context) {
         imageView.contentMode = uiContentMode
-        context.coordinator.load(url: url, into: imageView)
+        context.coordinator.load(url: url, maxPixelSize: maxPixelSize, into: imageView)
     }
 
     public func makeCoordinator() -> Coordinator {
@@ -38,7 +44,7 @@ public struct AnimatedRemoteImage: UIViewRepresentable {
     public final class Coordinator {
         private var task: ImageTask?
 
-        func load(url: URL?, into imageView: UIImageView) {
+        func load(url: URL?, maxPixelSize: CGFloat?, into imageView: UIImageView) {
             task?.cancel()
             task = nil
 
@@ -47,11 +53,17 @@ public struct AnimatedRemoteImage: UIViewRepresentable {
                 return
             }
 
-            let request = ImageRequest(url: url, processors: [])
+            let processors: [ImageProcessing] = maxPixelSize.map {
+                [.resize(width: $0, unit: .pixels)]
+            } ?? []
+            let request = ImageRequest(url: url, processors: processors)
             task = ImagePipeline.shared.loadImage(with: request) { result in
                 switch result {
                 case .success(let response):
-                    imageView.image = GIFAnimatedImageFactory.uiImage(from: response.container)
+                    imageView.image = GIFAnimatedImageFactory.uiImage(
+                        from: response.container,
+                        maxPixelSize: maxPixelSize
+                    )
                 case .failure:
                     imageView.image = nil
                 }

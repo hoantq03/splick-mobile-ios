@@ -3,14 +3,14 @@ import Nuke
 import UIKit
 
 enum GIFAnimatedImageFactory {
-    static func uiImage(from container: ImageContainer) -> UIImage {
-        if let data = container.data, let animated = animatedImage(from: data) {
+    static func uiImage(from container: ImageContainer, maxPixelSize: CGFloat? = nil) -> UIImage {
+        if let data = container.data, let animated = animatedImage(from: data, maxPixelSize: maxPixelSize) {
             return animated
         }
         return container.image
     }
 
-    static func animatedImage(from data: Data) -> UIImage? {
+    static func animatedImage(from data: Data, maxPixelSize: CGFloat? = nil) -> UIImage? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
             return UIImage(data: data)
         }
@@ -20,11 +20,12 @@ enum GIFAnimatedImageFactory {
             return UIImage(data: data)
         }
 
+        let maxSide = maxPixelSize.map { max($0, 1) } ?? FeedMediaLayout.decodeMaxPixelSide
         var images: [UIImage] = []
         var totalDuration: TimeInterval = 0
 
         for index in 0..<frameCount {
-            guard let cgImage = CGImageSourceCreateImageAtIndex(source, index, nil) else {
+            guard let cgImage = createThumbnail(at: index, source: source, maxPixelSize: maxSide) else {
                 continue
             }
             images.append(UIImage(cgImage: cgImage))
@@ -36,6 +37,19 @@ enum GIFAnimatedImageFactory {
         }
 
         return UIImage.animatedImage(with: images, duration: max(totalDuration, 0.1))
+    }
+
+    private static func createThumbnail(
+        at index: Int,
+        source: CGImageSource,
+        maxPixelSize: CGFloat
+    ) -> CGImage? {
+        let options: [CFString: Any] = [
+            kCGImageSourceThumbnailMaxPixelSize: Int(maxPixelSize),
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+        ]
+        return CGImageSourceCreateThumbnailAtIndex(source, index, options as CFDictionary)
     }
 
     private static func frameDuration(at index: Int, source: CGImageSource) -> TimeInterval {

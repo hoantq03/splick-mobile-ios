@@ -61,6 +61,8 @@ enum FeedMapper {
             thumbnailURL: dto.thumbnailUrl.flatMap(URL.init(string:)),
             mediaType: mediaType,
             durationSeconds: dto.durationSeconds,
+            widthPx: dto.widthPx,
+            heightPx: dto.heightPx,
             sortOrder: dto.sortOrder ?? 0
         )
     }
