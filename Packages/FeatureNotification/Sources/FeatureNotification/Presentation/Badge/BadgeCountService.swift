@@ -7,6 +7,7 @@ public final class BadgeCountService: ObservableObject {
 
     private let fetchBadgeCountsUseCase: FetchBadgeCountsUseCaseProtocol
     private var pollingTask: Task<Void, Never>?
+    private var refreshTask: Task<Void, Never>?
     private let pollInterval: Duration
 
     public init(
@@ -22,15 +23,23 @@ public final class BadgeCountService: ObservableObject {
     }
 
     public func refresh() async {
-        do {
-            counts = try await fetchBadgeCountsUseCase.execute()
-        } catch {
-            Log.error(error, category: .notification, metadata: ["action": "refreshBadgeCounts"])
+        if let refreshTask {
+            await refreshTask.value
+            return
         }
+
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.performRefresh()
+        }
+        refreshTask = task
+        await task.value
+        refreshTask = nil
     }
 
     public func startPolling() {
-        pollingTask?.cancel()
+        guard pollingTask == nil else { return }
+
         pollingTask = Task { [weak self] in
             guard let self else { return }
             await self.refresh()
@@ -45,6 +54,14 @@ public final class BadgeCountService: ObservableObject {
     public func stopPolling() {
         pollingTask?.cancel()
         pollingTask = nil
+    }
+
+    private func performRefresh() async {
+        do {
+            counts = try await fetchBadgeCountsUseCase.execute()
+        } catch {
+            Log.error(error, category: .notification, metadata: ["action": "refreshBadgeCounts"])
+        }
     }
 
     public func apply(_ newCounts: TabBadgeCounts) {
