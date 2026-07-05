@@ -101,9 +101,11 @@ public actor FakeNotificationRepository: NotificationRepositoryProtocol {
         var expenses = 0
         for item in unread {
             switch item.type {
-            case .friendRequest, .friendRequestSent, .groupInvite:
+            case .friendRequest, .friendRequestSent, .friendRequestAccepted, .groupInvite:
                 friends += 1
-            case .expenseCreated, .expenseSplitBill, .expenseReminder, .expenseSettled:
+            case .expenseCreated, .expenseSplitBill, .expenseReminder, .expenseSettled,
+                 .paymentEvidenceSubmitted, .paymentEvidenceApproved, .paymentEvidenceRejected,
+                 .dailyDebtReminder:
                 expenses += 1
             default:
                 notificationsCount += 1

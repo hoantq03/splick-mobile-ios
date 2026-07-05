@@ -46,8 +46,8 @@ public final class NotificationListViewModel: ObservableObject {
         }
     }
 
-    func handleTap(_ notification: AppNotification) async -> UUID? {
-        let postId = notification.postNavigationId
+    func handleTap(_ notification: AppNotification) async -> NotificationNavigationTarget {
+        let target = notification.navigationTarget
 
         do {
             try await markClickedUseCase.execute(id: notification.id)
@@ -60,7 +60,7 @@ public final class NotificationListViewModel: ObservableObject {
             }
         }
 
-        return postId
+        return target
     }
 
     func markAllAsRead() async {

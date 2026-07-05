@@ -178,10 +178,10 @@ struct MainTabView: View {
                 ) { dismiss in
                     NotificationListView(
                         viewModel: container.notificationListViewModel,
-                        onNavigateToPost: { postId in
+                        onNavigate: { target in
                             dismiss()
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
-                                appState.openPostFromNotification(postId)
+                                appState.routeNotification(target: target)
                             }
                         },
                         onDismiss: dismiss,

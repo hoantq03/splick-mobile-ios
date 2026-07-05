@@ -128,22 +128,56 @@ final class AppState: ObservableObject {
     }
 
     func routeRemoteNotification(_ destination: NotificationDestination) {
+        routeNotification(target: navigationTarget(from: destination))
+    }
+
+    func routeNotification(target: NotificationNavigationTarget) {
+        switch target {
+        case .post(let postId):
+            openPostFromNotification(postId)
+        case .feed:
+            withAnimation(.easeInOut(duration: 0.35)) {
+                selectedTab = .feed
+            }
+            showNotifications = false
+        case .expenses:
+            withAnimation(.easeInOut(duration: 0.35)) {
+                selectedTab = .expenses
+            }
+            showNotifications = false
+        case .friends:
+            selectedTab = .friends
+            showNotifications = false
+        case .messages:
+            selectedTab = .messages
+            showNotifications = false
+        case .inbox:
+            selectedTab = .feed
+            showNotifications = true
+        case .none:
+            break
+        }
+    }
+
+    private func navigationTarget(from destination: NotificationDestination) -> NotificationNavigationTarget {
         switch destination.screen {
         case .postDetail:
             if let postId = destination.postDetailId {
-                openPostFromNotification(postId)
-            } else {
-                selectedTab = .feed
+                return .post(postId)
             }
-        case .friends:
-            selectedTab = .friends
+            return .feed
+        case .feed:
+            return .feed
         case .expenses:
-            selectedTab = .expenses
+            return .expenses
+        case .friends:
+            return .friends
         case .messages:
-            selectedTab = .messages
-        case .inbox, .unknown:
-            selectedTab = .feed
-            showNotifications = true
+            return .messages
+        case .inbox:
+            return .inbox
+        case .unknown:
+            return .none
         }
     }
 

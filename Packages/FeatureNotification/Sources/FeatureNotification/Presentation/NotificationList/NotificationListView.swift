@@ -8,18 +8,29 @@ public struct NotificationListView: View {
     @ObservedObject private var viewModel: NotificationListViewModel
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
-    private let onNavigateToPost: ((UUID) -> Void)?
+    private let onNavigate: ((NotificationNavigationTarget) -> Void)?
     private let onDismiss: (() -> Void)?
     private let presentedAsSheet: Bool
 
     public init(
         viewModel: NotificationListViewModel,
+        onNavigate: ((NotificationNavigationTarget) -> Void)? = nil,
         onNavigateToPost: ((UUID) -> Void)? = nil,
         onDismiss: (() -> Void)? = nil,
         presentedAsSheet: Bool = false
     ) {
         self._viewModel = ObservedObject(wrappedValue: viewModel)
-        self.onNavigateToPost = onNavigateToPost
+        if let onNavigate {
+            self.onNavigate = onNavigate
+        } else if let onNavigateToPost {
+            self.onNavigate = { target in
+                if case .post(let postId) = target {
+                    onNavigateToPost(postId)
+                }
+            }
+        } else {
+            self.onNavigate = nil
+        }
         self.onDismiss = onDismiss
         self.presentedAsSheet = presentedAsSheet
     }
@@ -114,9 +125,8 @@ public struct NotificationListView: View {
                     NotificationRowView(notification: notification)
                         .onTapGesture {
                             Task {
-                                if let postId = await viewModel.handleTap(notification) {
-                                    onNavigateToPost?(postId)
-                                }
+                                let target = await viewModel.handleTap(notification)
+                                onNavigate?(target)
                             }
                         }
                 }

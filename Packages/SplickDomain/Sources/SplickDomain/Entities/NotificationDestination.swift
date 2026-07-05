@@ -21,6 +21,7 @@ public struct NotificationDestination: Codable, Equatable, Sendable {
 
 public enum NotificationScreen: String, Codable, Sendable {
     case inbox = "INBOX"
+    case feed = "FEED"
     case postDetail = "POST_DETAIL"
     case friends = "FRIENDS"
     case expenses = "EXPENSES"
