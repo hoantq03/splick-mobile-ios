@@ -4,6 +4,12 @@ import Networking
 enum MessagingEndpoint: APIEndpoint {
     case listConversations(page: Int, limit: Int)
     case getOrCreateConversation(friendUserId: UUID)
+    case createGroup(CreateGroupConversationRequestDTO)
+    case addGroupMember(groupId: UUID, AddGroupMemberRequestDTO)
+    case removeGroupMember(groupId: UUID, memberUserId: UUID)
+    case leaveGroup(groupId: UUID)
+    case renameGroup(groupId: UUID, RenameGroupRequestDTO)
+    case transferGroupAdmin(groupId: UUID, TransferGroupAdminRequestDTO)
     case listMessages(conversationId: UUID, page: Int, limit: Int)
     case sendMessage(conversationId: UUID, body: String, clientMessageId: UUID)
     case markRead(conversationId: UUID, upToMessageId: UUID)
@@ -16,6 +22,18 @@ enum MessagingEndpoint: APIEndpoint {
         switch self {
         case .listConversations, .getOrCreateConversation:
             return "/v1/messaging/conversations"
+        case .createGroup:
+            return "/v1/messaging/groups"
+        case .addGroupMember(let groupId, _):
+            return "/v1/messaging/groups/\(groupId)/members"
+        case .removeGroupMember(let groupId, let memberUserId):
+            return "/v1/messaging/groups/\(groupId)/members/\(memberUserId)"
+        case .leaveGroup(let groupId):
+            return "/v1/messaging/groups/\(groupId)/leave"
+        case .renameGroup(let groupId, _):
+            return "/v1/messaging/groups/\(groupId)/name"
+        case .transferGroupAdmin(let groupId, _):
+            return "/v1/messaging/groups/\(groupId)/admin"
         case .listMessages(let id, _, _):
             return "/v1/messaging/conversations/\(id)/messages"
         case .sendMessage(let id, _, _):
@@ -36,8 +54,10 @@ enum MessagingEndpoint: APIEndpoint {
     var method: HTTPMethod {
         switch self {
         case .listConversations, .listMessages, .unreadCount, .searchMessages: return .get
-        case .getOrCreateConversation, .sendMessage, .markRead, .addReaction: return .post
-        case .removeReaction: return .delete
+        case .getOrCreateConversation, .sendMessage, .markRead, .addReaction, .createGroup, .addGroupMember: return .post
+        case .removeReaction, .removeGroupMember, .leaveGroup: return .delete
+        case .renameGroup: return .patch
+        case .transferGroupAdmin: return .put
         }
     }
 
@@ -67,6 +87,14 @@ enum MessagingEndpoint: APIEndpoint {
         switch self {
         case .getOrCreateConversation(let friendUserId):
             return CreateConversationRequestDTO(friendUserId: friendUserId)
+        case .createGroup(let dto):
+            return dto
+        case .addGroupMember(_, let dto):
+            return dto
+        case .renameGroup(_, let dto):
+            return dto
+        case .transferGroupAdmin(_, let dto):
+            return dto
         case .sendMessage(_, let msgBody, let clientId):
             return SendMessageRequestDTO(body: msgBody, clientMessageId: clientId)
         case .markRead(_, let messageId):

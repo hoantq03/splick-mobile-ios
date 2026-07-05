@@ -14,17 +14,25 @@ public struct ChatThreadView: View {
     private let currentUserId: UUID
     private let peer: ConversationPeer?
     private let navigationTitle: String
+    private let conversation: Conversation?
+    private let repository: MessagingRepositoryProtocol?
+
+    @State private var showsGroupInfo = false
 
     public init(
         viewModel: ChatThreadViewModel,
         currentUserId: UUID,
         peer: ConversationPeer? = nil,
-        navigationTitle: String = ""
+        navigationTitle: String = "",
+        conversation: Conversation? = nil,
+        repository: MessagingRepositoryProtocol? = nil
     ) {
         self._viewModel = ObservedObject(wrappedValue: viewModel)
         self.currentUserId = currentUserId
         self.peer = peer
         self.navigationTitle = navigationTitle
+        self.conversation = conversation
+        self.repository = repository
     }
 
     public var body: some View {
@@ -38,7 +46,9 @@ public struct ChatThreadView: View {
             ToolbarItem(placement: .principal) {
                 HStack(spacing: SplickTheme.Spacing.xs) {
                     AvatarView(
-                        imageURL: peer?.avatarUrl.flatMap(URL.init(string:)),
+                        imageURL: (conversation?.isGroup == true
+                            ? conversation?.groupAvatarUrl
+                            : peer?.avatarUrl)?.flatMap(URL.init(string:)),
                         name: navigationTitle,
                         size: .small
                     )
@@ -47,6 +57,25 @@ public struct ChatThreadView: View {
                         .foregroundStyle(SplickTheme.Colors.textPrimary)
                         .lineLimit(1)
                 }
+            }
+            if conversation?.isGroup == true, repository != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showsGroupInfo = true
+                    } label: {
+                        Image(systemName: "info.circle")
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showsGroupInfo) {
+            if let conversation, let repository {
+                GroupInfoView(
+                    conversation: conversation,
+                    repository: repository,
+                    currentUserId: currentUserId,
+                    onUpdated: {}
+                )
             }
         }
         .onAppear { tabBarScrollState?.hide(flushToBottom: true) }

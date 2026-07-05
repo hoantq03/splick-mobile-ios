@@ -7,12 +7,14 @@ import SplickDomain
 public final class NotificationListViewModel: ObservableObject {
     @Published var notifications: [AppNotification] = []
     @Published var state: LoadingState<[AppNotification]> = .idle
+    @Published private(set) var isRefreshing = false
 
     private let fetchNotificationsUseCase: FetchNotificationsUseCaseProtocol
     private let markReadUseCase: MarkNotificationReadUseCaseProtocol
     private let markClickedUseCase: MarkNotificationClickedUseCaseProtocol
     private let onBadgeCountsChanged: (() async -> Void)?
     private var currentPage = 0
+    private var pullToRefreshTask: Task<Void, Never>?
 
     public init(
         fetchNotificationsUseCase: FetchNotificationsUseCaseProtocol,
@@ -26,10 +28,41 @@ public final class NotificationListViewModel: ObservableObject {
         self.onBadgeCountsChanged = onBadgeCountsChanged
     }
 
-    func load() async {
-        state = .loading
+    var showsInitialLoading: Bool {
+        notifications.isEmpty && state.isLoading
+    }
+
+    func load(isPullToRefresh: Bool = false) async {
+        if isPullToRefresh {
+            if let existing = pullToRefreshTask {
+                await existing.value
+                return
+            }
+
+            let task = Task { @MainActor in
+                isRefreshing = true
+                defer { isRefreshing = false }
+                await performLoad(isPullToRefresh: true)
+            }
+            pullToRefreshTask = task
+            await task.value
+            pullToRefreshTask = nil
+            return
+        }
+
+        if notifications.isEmpty {
+            state = .loading
+        }
+        await performLoad(isPullToRefresh: false)
+    }
+
+    private func performLoad(isPullToRefresh: Bool) async {
         currentPage = 0
-        Log.info("Loading notifications", category: .notification)
+        Log.info(
+            "Loading notifications",
+            category: .notification,
+            metadata: ["pullToRefresh": String(isPullToRefresh)]
+        )
 
         do {
             let notifications = try await fetchNotificationsUseCase.execute(page: 0)
@@ -41,8 +74,13 @@ public final class NotificationListViewModel: ObservableObject {
                 metadata: ["count": String(notifications.count)]
             )
         } catch {
-            state = .failed(error.localizedDescription)
-            Log.error(error, category: .notification)
+            if isPullToRefresh, !self.notifications.isEmpty {
+                Log.error(error, category: .notification)
+                state = .loaded(self.notifications)
+            } else {
+                state = .failed(error.localizedDescription)
+                Log.error(error, category: .notification)
+            }
         }
     }
 

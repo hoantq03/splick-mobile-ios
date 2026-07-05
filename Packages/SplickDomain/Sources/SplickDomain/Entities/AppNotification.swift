@@ -8,6 +8,7 @@ public struct AppNotification: Identifiable, Codable, Equatable, Sendable {
     public let isRead: Bool
     public let referenceId: UUID?
     public let destination: NotificationDestination?
+    public let actorUserId: UUID?
     public let createdAt: Date
 
     public init(
@@ -18,6 +19,7 @@ public struct AppNotification: Identifiable, Codable, Equatable, Sendable {
         isRead: Bool = false,
         referenceId: UUID? = nil,
         destination: NotificationDestination? = nil,
+        actorUserId: UUID? = nil,
         createdAt: Date = .now
     ) {
         self.id = id
@@ -27,6 +29,7 @@ public struct AppNotification: Identifiable, Codable, Equatable, Sendable {
         self.isRead = isRead
         self.referenceId = referenceId
         self.destination = destination
+        self.actorUserId = actorUserId
         self.createdAt = createdAt
     }
 
@@ -70,6 +73,9 @@ public struct AppNotification: Identifiable, Codable, Equatable, Sendable {
             return .feed
         case .friendRequest, .friendRequestSent, .friendRequestAccepted, .groupInvite:
             return .friends
+        case .directMessage, .groupMessage, .groupCreated, .groupMemberAdded,
+             .groupMemberRemoved, .groupRenamed, .groupAdminTransferred:
+            return .messages
         case .system:
             return .none
         }
@@ -84,6 +90,7 @@ public struct AppNotification: Identifiable, Codable, Equatable, Sendable {
             isRead: true,
             referenceId: referenceId,
             destination: destination,
+            actorUserId: actorUserId,
             createdAt: createdAt
         )
     }
@@ -113,6 +120,13 @@ public enum NotificationType: String, Codable, Sendable {
     case friendRequestSent = "FRIEND_REQUEST_SENT"
     case friendRequestAccepted = "FRIEND_REQUEST_ACCEPTED"
     case groupInvite = "GROUP_INVITE"
+    case directMessage = "DIRECT_MESSAGE"
+    case groupMessage = "GROUP_MESSAGE"
+    case groupCreated = "GROUP_CREATED"
+    case groupMemberAdded = "GROUP_MEMBER_ADDED"
+    case groupMemberRemoved = "GROUP_MEMBER_REMOVED"
+    case groupRenamed = "GROUP_RENAMED"
+    case groupAdminTransferred = "GROUP_ADMIN_TRANSFERRED"
     case system = "SYSTEM"
 
     public var icon: String {
@@ -136,6 +150,11 @@ public enum NotificationType: String, Codable, Sendable {
         case .friendRequest, .friendRequestSent, .friendRequestAccepted:
             return "person.badge.plus"
         case .groupInvite:
+            return "person.3.fill"
+        case .directMessage:
+            return "message.fill"
+        case .groupMessage, .groupCreated, .groupMemberAdded, .groupMemberRemoved,
+             .groupRenamed, .groupAdminTransferred:
             return "person.3.fill"
         case .system:
             return "gear"

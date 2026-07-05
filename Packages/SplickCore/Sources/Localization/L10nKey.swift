@@ -547,4 +547,9 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case messagingStartConversationError = "messaging.start_conversation.error"
     case messagingBellAccessibility = "messaging.bell.accessibility"
     case messagingMessageButton = "messaging.message_button"
+    case messagingCreateGroupTitle = "messaging.create_group.title"
+    case messagingGroupNamePlaceholder = "messaging.group.name.placeholder"
+    case messagingGroupMembersTitle = "messaging.group.members.title"
+    case messagingGroupNoFriends = "messaging.group.no_friends"
+    case messagingLeaveGroup = "messaging.group.leave"
 }

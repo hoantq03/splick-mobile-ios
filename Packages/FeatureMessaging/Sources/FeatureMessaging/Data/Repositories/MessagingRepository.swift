@@ -23,6 +23,54 @@ public final class MessagingRepository: MessagingRepositoryProtocol, Sendable {
         return MessagingMapper.toConversation(dto)
     }
 
+    public func createGroup(name: String, avatarUrl: String?, memberUserIds: [UUID]) async throws -> Conversation {
+        let dto: ConversationResponseDTO = try await apiClient.request(
+            MessagingEndpoint.createGroup(
+                CreateGroupConversationRequestDTO(
+                    name: name,
+                    avatarUrl: avatarUrl,
+                    memberUserIds: memberUserIds
+                )
+            )
+        )
+        return MessagingMapper.toConversation(dto)
+    }
+
+    public func addGroupMember(groupId: UUID, memberUserId: UUID) async throws {
+        try await apiClient.request(
+            MessagingEndpoint.addGroupMember(
+                groupId: groupId,
+                AddGroupMemberRequestDTO(memberUserId: memberUserId)
+            )
+        )
+    }
+
+    public func removeGroupMember(groupId: UUID, memberUserId: UUID) async throws {
+        try await apiClient.request(
+            MessagingEndpoint.removeGroupMember(groupId: groupId, memberUserId: memberUserId)
+        )
+    }
+
+    public func leaveGroup(groupId: UUID) async throws {
+        try await apiClient.request(MessagingEndpoint.leaveGroup(groupId: groupId))
+    }
+
+    public func renameGroup(groupId: UUID, name: String) async throws -> Conversation {
+        let dto: ConversationResponseDTO = try await apiClient.request(
+            MessagingEndpoint.renameGroup(groupId: groupId, RenameGroupRequestDTO(name: name))
+        )
+        return MessagingMapper.toConversation(dto)
+    }
+
+    public func transferGroupAdmin(groupId: UUID, newAdminUserId: UUID) async throws {
+        try await apiClient.request(
+            MessagingEndpoint.transferGroupAdmin(
+                groupId: groupId,
+                TransferGroupAdminRequestDTO(newAdminUserId: newAdminUserId)
+            )
+        )
+    }
+
     public func fetchMessages(conversationId: UUID, page: Int, limit: Int) async throws -> [ChatMessage] {
         let dtos: [MessageResponseDTO] = try await apiClient.request(
             MessagingEndpoint.listMessages(conversationId: conversationId, page: page, limit: limit)

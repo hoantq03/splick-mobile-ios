@@ -560,6 +560,12 @@ final class DependencyContainer: ObservableObject {
 
     lazy var conversationListViewModel: ConversationListViewModel = makeConversationListViewModel()
 
+    lazy var createGroupViewModel: CreateGroupViewModel = {
+        CreateGroupViewModel(
+            createGroupUseCase: CreateGroupConversationUseCase(repository: messagingRepository)
+        )
+    }()
+
     func resetTabViewModels() {
         messagingWebSocketClient.disconnect()
         feedViewModel = makeFeedViewModel()

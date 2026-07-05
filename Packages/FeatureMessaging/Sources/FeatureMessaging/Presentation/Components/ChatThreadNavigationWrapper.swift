@@ -51,7 +51,9 @@ private struct ChatThreadScreen: View {
             viewModel: viewModel,
             currentUserId: factory.currentUserId,
             peer: conversation.peer,
-            navigationTitle: conversation.peer?.displayTitle ?? ""
+            navigationTitle: conversation.displayTitle,
+            conversation: conversation,
+            repository: factory.repository
         )
     }
 }
@@ -62,7 +64,7 @@ public final class ChatThreadViewModelFactory: ObservableObject {
     private let fetchMessagesUseCase: FetchMessagesUseCase
     private let sendMessageUseCase: SendMessageUseCase
     private let reactToMessageUseCase: ReactToMessageUseCaseProtocol
-    private let repository: MessagingRepositoryProtocol
+    public let repository: MessagingRepositoryProtocol
     private let wsClient: MessagingWebSocketClient
 
     public init(

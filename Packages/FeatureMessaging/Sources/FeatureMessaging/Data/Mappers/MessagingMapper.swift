@@ -4,10 +4,15 @@ import SplickDomain
 enum MessagingMapper {
 
     static func toConversation(_ dto: ConversationResponseDTO) -> Conversation {
-        Conversation(
+        let type = ConversationType(rawValue: dto.type ?? ConversationType.direct.rawValue) ?? .direct
+        return Conversation(
             id: dto.id,
+            type: type,
             unreadCount: dto.unreadCount,
             peer: dto.peer.map(toPeer),
+            groupName: dto.groupName,
+            groupAvatarUrl: dto.groupAvatarUrl,
+            memberCount: dto.memberCount,
             lastMessage: dto.lastMessage.map(toMessage),
             createdAt: dto.createdAt,
             updatedAt: dto.updatedAt

@@ -27,6 +27,10 @@ struct MainTabView: View {
     @StateObject private var tabBarScrollState = TabBarScrollState()
     @State private var badgeCounts: TabBadgeCounts = .zero
     @State private var badgeRefreshTask: Task<Void, Never>?
+    /// Toggled to `true` by the bell button while the panel is open; the overlay's onChange
+    /// observes this, resets it, and runs `dismissAnimated()` so the collapse animation plays
+    /// before the overlay is removed from the hierarchy.
+    @State private var notificationDismissRequest = false
 
     private var currentUserSummary: UserSummary? {
         appState.currentUser.map {
@@ -116,9 +120,9 @@ struct MainTabView: View {
             }
             .environment(\.openNotifications) { bellFrame in
                 if appState.showNotifications {
-                    withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
-                        appState.showNotifications = false
-                    }
+                    // Route through the overlay's dismissAnimated() so the collapse spring
+                    // plays to completion before the overlay is removed and the bell reappears.
+                    notificationDismissRequest = true
                 } else {
                     appState.presentNotifications(from: bellFrame)
                 }
@@ -174,7 +178,9 @@ struct MainTabView: View {
                 DesignSystem.SplickNotificationRevealOverlay(
                     isPresented: $appState.showNotifications,
                     anchorFrame: appState.notificationAnchorFrame,
-                    unreadCount: badgeCounts.notifications
+                    unreadCount: badgeCounts.notifications,
+                    headerTitle: container.languageService.text(.notificationTitle),
+                    dismissRequest: $notificationDismissRequest
                 ) { dismiss in
                     NotificationListView(
                         viewModel: container.notificationListViewModel,
@@ -272,7 +278,13 @@ struct MainTabView: View {
 
     @ViewBuilder
     private var messagesTabContent: some View {
-        ConversationListView(viewModel: container.conversationListViewModel)
+        ConversationListView(
+            viewModel: container.conversationListViewModel,
+            createGroupViewModel: container.createGroupViewModel,
+            friendsProvider: {
+                try await container.fetchMyFriendsUseCase.execute()
+            }
+        )
             .environmentObject(container.makeChatThreadViewModelFactory(
                 currentUserId: appState.currentUser?.id ?? UUID()
             ))

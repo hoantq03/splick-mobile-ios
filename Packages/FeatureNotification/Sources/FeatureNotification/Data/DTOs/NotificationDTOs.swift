@@ -12,6 +12,7 @@ struct NotificationResponseDTO: Decodable {
     let body: String
     let isRead: Bool
     let referenceId: UUID?
+    let actorUserId: UUID?
     let destination: NotificationDestinationDTO?
     let createdAt: Date
 }
@@ -25,4 +26,11 @@ struct BadgeCountsDTO: Decodable {
     let friends: Int
     let expenses: Int
     let messages: Int
+}
+
+struct RegisterPushDeviceRequestDTO: Encodable {
+    let token: String
+    let platform: String
+    let bundleId: String
+    let environment: String
 }

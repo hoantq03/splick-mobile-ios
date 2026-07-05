@@ -11,6 +11,11 @@ public struct ConversationListView: View {
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.pullToRefreshActive) private var pullToRefreshActive
     @State private var isPullRefreshing = false
+    @State private var showsCreateGroup = false
+    @State private var createGroupFriends: [UserSummary] = []
+
+    private let createGroupViewModel: CreateGroupViewModel
+    private let friendsProvider: () async throws -> [UserSummary]
 
     private var suppressRefreshAnimations: Bool {
         pullToRefreshActive || isPullRefreshing
@@ -32,8 +37,14 @@ public struct ConversationListView: View {
         !searchDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    public init(viewModel: ConversationListViewModel) {
+    public init(
+        viewModel: ConversationListViewModel,
+        createGroupViewModel: CreateGroupViewModel,
+        friendsProvider: @escaping () async throws -> [UserSummary] = { [] }
+    ) {
         self._viewModel = ObservedObject(wrappedValue: viewModel)
+        self.createGroupViewModel = createGroupViewModel
+        self.friendsProvider = friendsProvider
     }
 
     public var body: some View {
@@ -57,6 +68,28 @@ public struct ConversationListView: View {
             )
             .onPreferenceChange(PullToRefreshActivePreferenceKey.self) { isPullRefreshing = $0 }
             .splickTabScreenHeader(languageService.text(.messagingTitle), showsBell: false)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        Task {
+                            createGroupFriends = (try? await friendsProvider()) ?? []
+                            showsCreateGroup = true
+                        }
+                    } label: {
+                        Image(systemName: "person.3.fill")
+                    }
+                    .accessibilityLabel(languageService.text(.messagingCreateGroupTitle))
+                }
+            }
+            .sheet(isPresented: $showsCreateGroup) {
+                CreateGroupConversationView(
+                    viewModel: createGroupViewModel,
+                    friends: createGroupFriends
+                ) { conversation in
+                    path.append(ChatThreadRoute(conversation: conversation))
+                    Task { await viewModel.refresh() }
+                }
+            }
             .navigationDestination(for: ChatThreadRoute.self) { route in
                 ChatThreadNavigationWrapper(
                     conversation: route.conversation,

@@ -8,18 +8,31 @@ struct ConversationRowView: View {
 
     var body: some View {
         HStack(spacing: SplickTheme.Spacing.sm) {
-            AvatarView(
-                imageURL: conversation.peer?.avatarUrl.flatMap(URL.init(string:)),
-                name: conversation.peer?.displayTitle ?? "",
-                size: .medium
-            )
+            if conversation.isGroup {
+                AvatarView(
+                    imageURL: conversation.groupAvatarUrl.flatMap(URL.init(string:)),
+                    name: conversation.displayTitle,
+                    size: .medium
+                )
+            } else {
+                AvatarView(
+                    imageURL: conversation.peer?.avatarUrl.flatMap(URL.init(string:)),
+                    name: conversation.peer?.displayTitle ?? "",
+                    size: .medium
+                )
+            }
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack {
-                    Text(conversation.peer?.displayTitle ?? String(conversation.id.uuidString.prefix(8)))
+                    Text(conversation.displayTitle)
                         .font(SplickTheme.Typography.headline)
                         .foregroundStyle(SplickTheme.Colors.textPrimary)
                         .lineLimit(1)
+                    if conversation.isGroup, let memberCount = conversation.memberCount {
+                        Text("(\(memberCount))")
+                            .font(SplickTheme.Typography.caption)
+                            .foregroundStyle(SplickTheme.Colors.textTertiary)
+                    }
                     Spacer()
                     if let lastMessage = conversation.lastMessage {
                         Text(lastMessage.createdAt.relativeString)

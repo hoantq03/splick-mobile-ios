@@ -305,6 +305,11 @@ enum StringsFeatureVi {
         .messagingStartConversationError: "Không thể bắt đầu cuộc trò chuyện",
         .messagingBellAccessibility: "Thông báo",
         .messagingMessageButton: "Nhắn tin",
+        .messagingCreateGroupTitle: "Tạo nhóm",
+        .messagingGroupNamePlaceholder: "Tên nhóm",
+        .messagingGroupMembersTitle: "Thành viên",
+        .messagingGroupNoFriends: "Hãy thêm bạn bè trước khi tạo nhóm.",
+        .messagingLeaveGroup: "Rời nhóm",
 
         // Common extras
         .commonClose: "Đóng",

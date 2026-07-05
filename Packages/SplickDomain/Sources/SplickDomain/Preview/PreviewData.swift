@@ -183,12 +183,14 @@ public enum PreviewData {
         AppNotification(
             id: UUID(), type: .expenseCreated,
             title: "New Expense", body: "Linh added 'Dinner at Korean BBQ' - 450,000₫",
-            isRead: false, createdAt: Date().addingTimeInterval(-1800)
+            isRead: false, actorUserId: friendUser.id,
+            createdAt: Date().addingTimeInterval(-1800)
         ),
         AppNotification(
             id: UUID(), type: .reaction,
             title: "New Reaction", body: "Duc reacted ❤️ to your photo",
-            isRead: false, createdAt: Date().addingTimeInterval(-3600)
+            isRead: false, actorUserId: friend2.id,
+            createdAt: Date().addingTimeInterval(-3600)
         ),
         AppNotification(
             id: UUID(), type: .expenseReminder,
@@ -198,7 +200,8 @@ public enum PreviewData {
         AppNotification(
             id: UUID(), type: .friendRequest,
             title: "Friend Request", body: "Minh Thu wants to connect with you",
-            isRead: true, createdAt: Date().addingTimeInterval(-172800)
+            isRead: true, actorUserId: UUID(),
+            createdAt: Date().addingTimeInterval(-172800)
         ),
     ]
 

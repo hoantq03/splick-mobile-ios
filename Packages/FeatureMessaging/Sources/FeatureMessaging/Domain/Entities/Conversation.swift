@@ -1,6 +1,11 @@
 import Foundation
 import SplickDomain
 
+public enum ConversationType: String, Equatable, Sendable {
+    case direct = "DIRECT"
+    case group = "GROUP"
+}
+
 public struct ConversationPeer: Equatable, Hashable, Sendable {
     public let userId: UUID
     public let username: String
@@ -21,23 +26,46 @@ public struct ConversationPeer: Equatable, Hashable, Sendable {
 
 public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
     public let id: UUID
+    public let type: ConversationType
     public let unreadCount: Int
     public let peer: ConversationPeer?
+    public let groupName: String?
+    public let groupAvatarUrl: String?
+    public let memberCount: Int?
     public let lastMessage: ChatMessage?
     public let createdAt: Date
     public let updatedAt: Date
 
+    public var displayTitle: String {
+        if type == .group {
+            return groupName ?? "Group"
+        }
+        return peer?.displayTitle ?? String(id.uuidString.prefix(8))
+    }
+
+    public var isGroup: Bool {
+        type == .group
+    }
+
     public init(
         id: UUID,
+        type: ConversationType = .direct,
         unreadCount: Int,
         peer: ConversationPeer?,
+        groupName: String? = nil,
+        groupAvatarUrl: String? = nil,
+        memberCount: Int? = nil,
         lastMessage: ChatMessage?,
         createdAt: Date,
         updatedAt: Date
     ) {
         self.id = id
+        self.type = type
         self.unreadCount = unreadCount
         self.peer = peer
+        self.groupName = groupName
+        self.groupAvatarUrl = groupAvatarUrl
+        self.memberCount = memberCount
         self.lastMessage = lastMessage
         self.createdAt = createdAt
         self.updatedAt = updatedAt

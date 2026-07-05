@@ -13,6 +13,7 @@ enum NotificationMapper {
             destination: dto.destination.map {
                 NotificationDestination(screen: $0.screen, postId: $0.postId)
             },
+            actorUserId: dto.actorUserId,
             createdAt: dto.createdAt
         )
     }

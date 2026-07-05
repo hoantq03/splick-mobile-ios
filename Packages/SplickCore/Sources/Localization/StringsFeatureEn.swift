@@ -305,6 +305,11 @@ enum StringsFeatureEn {
         .messagingStartConversationError: "Unable to start conversation",
         .messagingBellAccessibility: "Notifications",
         .messagingMessageButton: "Message",
+        .messagingCreateGroupTitle: "Create group",
+        .messagingGroupNamePlaceholder: "Group name",
+        .messagingGroupMembersTitle: "Members",
+        .messagingGroupNoFriends: "Add friends first to create a group.",
+        .messagingLeaveGroup: "Leave group",
 
         // Common extras
         .commonClose: "Close",
