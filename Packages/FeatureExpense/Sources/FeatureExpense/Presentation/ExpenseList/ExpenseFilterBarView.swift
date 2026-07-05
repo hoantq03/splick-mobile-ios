@@ -126,19 +126,40 @@ struct ExpenseFilterBarView: View {
         VStack(alignment: .leading, spacing: 3) {
             filterLabel(languageService.text(.expenseFilterStatus))
 
-            Picker(languageService.text(.expenseFilterStatus), selection: Binding(
-                get: { filters.debtStatus },
-                set: { viewModel.setDebtStatus($0) }
-            )) {
-                ForEach(ExpenseDebtFilter.allCases) { status in
-                    Text(status.title(using: languageService)).tag(status)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(ExpenseDebtFilter.allCases) { status in
+                        statusFilterChip(status)
+                    }
                 }
             }
-            .pickerStyle(.segmented)
-            .controlSize(.small)
-            .scaleEffect(0.92)
-            .frame(maxWidth: .infinity)
         }
+    }
+
+    private func statusFilterChip(_ status: ExpenseDebtFilter) -> some View {
+        let isSelected = filters.debtStatus == status
+        return Button {
+            viewModel.setDebtStatus(status)
+        } label: {
+            Text(status.title(using: languageService))
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(
+                    isSelected
+                        ? SplickTheme.Colors.primaryGradientStart
+                        : SplickTheme.Colors.textSecondary
+                )
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background {
+                    Capsule(style: .continuous)
+                        .fill(
+                            isSelected
+                                ? SplickTheme.Colors.primaryGradientStart.opacity(0.14)
+                                : SplickTheme.Colors.secondaryBackground
+                        )
+                }
+        }
+        .buttonStyle(.plain)
     }
 
     private var userFilterSection: some View {

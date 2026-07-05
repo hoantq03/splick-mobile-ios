@@ -4,9 +4,16 @@ extension ExpenseDebtFilter {
     @MainActor
     public func title(using languageService: LanguageService) -> String {
         switch self {
-        case .all: return languageService.text(.expenseDebtAll)
-        case .owe: return languageService.text(.expenseDebtOwe)
-        case .owed: return languageService.text(.expenseDebtOwed)
+        case .all:
+            return languageService.text(.expenseDebtAll)
+        case .oweUnpaid:
+            return languageService.text(.expenseDebtOweUnpaid)
+        case .owePaid:
+            return languageService.text(.expenseDebtOwePaid)
+        case .owedUnpaid:
+            return languageService.text(.expenseDebtOwedUnpaid)
+        case .owedPaid:
+            return languageService.text(.expenseDebtOwedPaid)
         }
     }
 }

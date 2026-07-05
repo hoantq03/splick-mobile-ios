@@ -177,28 +177,52 @@ public struct ExpenseListView: View {
             ExpenseOverviewAnimatedBody(isExpanded: isOverviewExpanded) {
                 VStack(spacing: SplickTheme.Spacing.sm) {
                     debtSummaryRow(
-                        title: languageService.text(.expenseYouAreOwed),
+                        title: languageService.text(.expenseDebtOweUnpaid),
                         peopleSubtitle: languageService.format(
-                            .expenseOverviewOwedPeopleCount,
-                            viewModel.overviewOwedPeopleCount
+                            .expenseOverviewOweUnpaidCount,
+                            viewModel.overviewOweUnpaidCount
                         ),
-                        amount: viewModel.overviewTotalOwed,
-                        tint: SplickTheme.Colors.success,
-                        systemImage: "arrow.down.circle.fill",
-                        filter: .owed,
-                        isSelected: viewModel.filters.debtStatus == .owed
-                    )
-                    debtSummaryRow(
-                        title: languageService.text(.expenseYouOwe),
-                        peopleSubtitle: languageService.format(
-                            .expenseOverviewOwingPeopleCount,
-                            viewModel.overviewOwingPeopleCount
-                        ),
-                        amount: viewModel.overviewTotalOwing,
+                        amount: viewModel.overviewOweUnpaidTotal,
                         tint: SplickTheme.Colors.error,
                         systemImage: "arrow.up.circle.fill",
-                        filter: .owe,
-                        isSelected: viewModel.filters.debtStatus == .owe
+                        filter: .oweUnpaid,
+                        isSelected: viewModel.filters.debtStatus == .oweUnpaid
+                    )
+                    debtSummaryRow(
+                        title: languageService.text(.expenseDebtOwePaid),
+                        peopleSubtitle: languageService.format(
+                            .expenseOverviewOwePaidCount,
+                            viewModel.overviewOwePaidCount
+                        ),
+                        amount: viewModel.overviewOwePaidTotal,
+                        tint: SplickTheme.Colors.success,
+                        systemImage: "arrow.up.circle",
+                        filter: .owePaid,
+                        isSelected: viewModel.filters.debtStatus == .owePaid
+                    )
+                    debtSummaryRow(
+                        title: languageService.text(.expenseDebtOwedUnpaid),
+                        peopleSubtitle: languageService.format(
+                            .expenseOverviewOwedUnpaidCount,
+                            viewModel.overviewOwedUnpaidCount
+                        ),
+                        amount: viewModel.overviewOwedUnpaidTotal,
+                        tint: SplickTheme.Colors.warning,
+                        systemImage: "arrow.down.circle.fill",
+                        filter: .owedUnpaid,
+                        isSelected: viewModel.filters.debtStatus == .owedUnpaid
+                    )
+                    debtSummaryRow(
+                        title: languageService.text(.expenseDebtOwedPaid),
+                        peopleSubtitle: languageService.format(
+                            .expenseOverviewOwedPaidCount,
+                            viewModel.overviewOwedPaidCount
+                        ),
+                        amount: viewModel.overviewOwedPaidTotal,
+                        tint: SplickTheme.Colors.success,
+                        systemImage: "arrow.down.circle",
+                        filter: .owedPaid,
+                        isSelected: viewModel.filters.debtStatus == .owedPaid
                     )
                 }
             } collapsed: {
@@ -283,20 +307,40 @@ public struct ExpenseListView: View {
     }
 
     private var overviewCollapsedSummary: some View {
-        HStack(spacing: SplickTheme.Spacing.sm) {
+        LazyVGrid(
+            columns: [
+                GridItem(.flexible(), spacing: SplickTheme.Spacing.sm),
+                GridItem(.flexible(), spacing: SplickTheme.Spacing.sm)
+            ],
+            spacing: SplickTheme.Spacing.sm
+        ) {
             overviewCollapsedMetric(
-                title: languageService.text(.expenseYouAreOwed),
-                amount: viewModel.overviewTotalOwed,
-                tint: SplickTheme.Colors.success,
-                filter: .owed,
-                isSelected: viewModel.filters.debtStatus == .owed
+                title: languageService.text(.expenseDebtOweUnpaid),
+                amount: viewModel.overviewOweUnpaidTotal,
+                tint: SplickTheme.Colors.error,
+                filter: .oweUnpaid,
+                isSelected: viewModel.filters.debtStatus == .oweUnpaid
             )
             overviewCollapsedMetric(
-                title: languageService.text(.expenseYouOwe),
-                amount: viewModel.overviewTotalOwing,
-                tint: SplickTheme.Colors.error,
-                filter: .owe,
-                isSelected: viewModel.filters.debtStatus == .owe
+                title: languageService.text(.expenseDebtOwePaid),
+                amount: viewModel.overviewOwePaidTotal,
+                tint: SplickTheme.Colors.success,
+                filter: .owePaid,
+                isSelected: viewModel.filters.debtStatus == .owePaid
+            )
+            overviewCollapsedMetric(
+                title: languageService.text(.expenseDebtOwedUnpaid),
+                amount: viewModel.overviewOwedUnpaidTotal,
+                tint: SplickTheme.Colors.warning,
+                filter: .owedUnpaid,
+                isSelected: viewModel.filters.debtStatus == .owedUnpaid
+            )
+            overviewCollapsedMetric(
+                title: languageService.text(.expenseDebtOwedPaid),
+                amount: viewModel.overviewOwedPaidTotal,
+                tint: SplickTheme.Colors.success,
+                filter: .owedPaid,
+                isSelected: viewModel.filters.debtStatus == .owedPaid
             )
         }
         .padding(.horizontal, SplickTheme.Spacing.xxs)
@@ -537,6 +581,124 @@ public struct ExpenseListView: View {
     }
 }
 
+private struct ExpenseRowDescriptionText: View {
+    @EnvironmentObject private var languageService: LanguageService
+
+    let expense: Expense
+    let currentUserId: UUID?
+    let debtState: ExpenseUserDebtState
+
+    var body: some View {
+        Group {
+            switch debtState {
+            case .oweUnpaid, .owePaid:
+                inlineActorMessage(
+                    actorName: expense.paidBy.displayName,
+                    lead: oweLead,
+                    tail: nil
+                )
+            case .owedUnpaid, .owedPaid:
+                inlineActorMessage(
+                    actorName: counterpartyNames,
+                    lead: nil,
+                    tail: owedTail
+                )
+            case .neutral:
+                Text(languageService.text(.expenseRowDescNeutral))
+                    .font(.system(size: 13))
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+            }
+        }
+        .lineLimit(3)
+        .fixedSize(horizontal: false, vertical: true)
+        .multilineTextAlignment(.leading)
+        .accessibilityLabel(accessibilityDescription)
+    }
+
+    private var oweLead: String {
+        switch debtState {
+        case .oweUnpaid:
+            return languageService.text(.expenseRowDescOweUnpaidLead)
+        case .owePaid:
+            return languageService.text(.expenseRowDescOwePaidLead)
+        default:
+            return ""
+        }
+    }
+
+    private var owedTail: String {
+        switch debtState {
+        case .owedUnpaid:
+            return languageService.text(.expenseRowDescOwedUnpaidTail)
+        case .owedPaid:
+            return languageService.text(.expenseRowDescOwedPaidTail)
+        default:
+            return ""
+        }
+    }
+
+    private var counterpartyNames: String {
+        guard let currentUserId else {
+            return expense.splits
+                .filter { $0.user.id != expense.paidBy.id }
+                .map(\.user.displayName)
+                .joined(separator: ", ")
+        }
+
+        let relevantSplits: [ExpenseSplit]
+        switch debtState {
+        case .owedUnpaid:
+            relevantSplits = expense.splits.filter { $0.user.id != currentUserId && !$0.isPaid }
+        case .owedPaid:
+            relevantSplits = expense.splits.filter { $0.user.id != currentUserId && $0.isPaid }
+        default:
+            relevantSplits = expense.splits.filter { $0.user.id != currentUserId }
+        }
+
+        return relevantSplits.map(\.user.displayName).joined(separator: ", ")
+    }
+
+    private var accessibilityDescription: String {
+        switch debtState {
+        case .oweUnpaid:
+            return languageService.text(.expenseRowDescOweUnpaidLead) + expense.paidBy.displayName
+        case .owePaid:
+            return languageService.text(.expenseRowDescOwePaidLead) + expense.paidBy.displayName
+        case .owedUnpaid:
+            return counterpartyNames + languageService.text(.expenseRowDescOwedUnpaidTail)
+        case .owedPaid:
+            return counterpartyNames + languageService.text(.expenseRowDescOwedPaidTail)
+        case .neutral:
+            return languageService.text(.expenseRowDescNeutral)
+        }
+    }
+
+    @ViewBuilder
+    private func inlineActorMessage(actorName: String, lead: String?, tail: String?) -> some View {
+        if let lead {
+            (Text(lead)
+                .font(.system(size: 13))
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+            + Text(actorName)
+                .font(SplickTheme.Typography.headline)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
+            )
+        } else if let tail {
+            (Text(actorName)
+                .font(SplickTheme.Typography.headline)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
+            + Text(tail)
+                .font(.system(size: 13))
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+            )
+        } else {
+            Text(actorName)
+                .font(SplickTheme.Typography.headline)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
+        }
+    }
+}
+
 struct ExpenseRowView: View {
     enum Layout {
         case grouped
@@ -554,8 +716,8 @@ struct ExpenseRowView: View {
         expense.postId != nil
     }
 
-    private var isPaidForCurrentUser: Bool {
-        expense.isPaidFor(userId: currentUserId)
+    private var userDebtState: ExpenseUserDebtState {
+        expense.userDebtState(userId: currentUserId)
     }
 
     private var ageUrgency: ExpenseAgeUrgency {
@@ -567,22 +729,20 @@ struct ExpenseRowView: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
+        HStack(alignment: .top, spacing: SplickTheme.Spacing.sm) {
             Button(action: onCreatorTap) {
-                creatorColumn
+                creatorAvatar
             }
             .buttonStyle(.plain)
 
             Button(action: onTap) {
-                HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
+                HStack(alignment: .top, spacing: SplickTheme.Spacing.sm) {
                     VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
-                        if let caption = postCaptionHeader {
-                            Text(caption)
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(SplickTheme.Colors.textPrimary)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                        }
+                        ExpenseRowDescriptionText(
+                            expense: expense,
+                            currentUserId: currentUserId,
+                            debtState: userDebtState
+                        )
 
                         combinedAmountLine
 
@@ -612,67 +772,38 @@ struct ExpenseRowView: View {
         .opacity(isLinkedToPost ? 1 : 0.55)
     }
 
-    private var postCaptionHeader: String? {
-        let caption = expense.description.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard expense.postId != nil, !caption.isEmpty else { return nil }
-        return caption
-    }
-
     private let avatarSize: CGFloat = 46
 
-    private var isCurrentUserPayer: Bool {
-        guard let currentUserId else { return false }
-        return expense.paidBy.id == currentUserId
-    }
-
-    private var creatorColumn: some View {
-        VStack(spacing: SplickTheme.Spacing.xxxs) {
-            ZStack(alignment: .topTrailing) {
-                AvatarView(
-                    imageURL: expense.paidBy.avatarURL,
-                    name: expense.paidBy.displayName,
-                    size: .medium,
-                    userId: expense.paidBy.id
-                )
-                .scaleEffect(avatarSize / 48)
-                .frame(width: avatarSize, height: avatarSize)
-
-                Text(languageService.text(.expenseRowCreatorLabel))
-                    .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background {
-                        Capsule()
-                            .fill(SplickTheme.Colors.primaryGradientStart)
-                    }
-                    .offset(x: 4, y: -4)
-            }
+    private var creatorAvatar: some View {
+        ZStack(alignment: .topTrailing) {
+            AvatarView(
+                imageURL: expense.paidBy.avatarURL,
+                name: expense.paidBy.displayName,
+                size: .medium,
+                userId: expense.paidBy.id
+            )
+            .scaleEffect(avatarSize / 48)
             .frame(width: avatarSize, height: avatarSize)
 
-            HStack(spacing: 2) {
-                Text(expense.paidBy.displayName.givenNameOnly)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
-
-                if isCurrentUserPayer {
-                    Text(languageService.text(.expenseRowPaidByMe))
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(SplickTheme.Colors.textTertiary)
+            Text(languageService.text(.expenseRowCreatorLabel))
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background {
+                    Capsule()
+                        .fill(SplickTheme.Colors.primaryGradientStart)
                 }
-            }
-            .lineLimit(1)
-            .minimumScaleFactor(0.75)
-            .frame(maxWidth: 68)
+                .offset(x: 4, y: -4)
         }
-        .frame(width: 68)
+        .frame(width: avatarSize, height: avatarSize)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(creatorColumnAccessibilityLabel)
     }
 
     private var creatorColumnAccessibilityLabel: String {
         let name = expense.paidBy.displayName
-        if isCurrentUserPayer {
+        if expense.paidBy.id == currentUserId {
             return "\(languageService.text(.expenseRowCreatorLabel)), \(name), \(languageService.text(.expenseRowPaidByMe))"
         }
         return "\(languageService.text(.expenseRowCreatorLabel)), \(name)"
@@ -681,7 +812,7 @@ struct ExpenseRowView: View {
     @ViewBuilder
     private var paymentStatusIcon: some View {
         Group {
-            if isPaidForCurrentUser {
+            if userDebtState.isSettled {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(SplickTheme.Colors.success)
@@ -694,6 +825,7 @@ struct ExpenseRowView: View {
             }
         }
         .frame(width: 32, height: 32)
+        .padding(.top, 2)
     }
 
     private var combinedAmountLine: some View {

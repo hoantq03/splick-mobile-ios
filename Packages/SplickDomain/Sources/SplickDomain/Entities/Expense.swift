@@ -81,6 +81,46 @@ public struct Expense: Identifiable, Codable, Equatable, Sendable {
 
         return ExpenseUserCashFlow(direction: .neutral, amount: totalAmount)
     }
+
+    /// User-centric debt state for list rows, filters, and overview.
+    public func userDebtState(userId: UUID?) -> ExpenseUserDebtState {
+        guard let userId else { return status == .settled ? .owePaid : .oweUnpaid }
+
+        if paidBy.id == userId {
+            let otherSplits = splits.filter { $0.user.id != userId }
+            guard !otherSplits.isEmpty else { return .neutral }
+            return otherSplits.allSatisfy(\.isPaid) ? .owedPaid : .owedUnpaid
+        }
+
+        if let split = splits.first(where: { $0.user.id == userId }) {
+            return split.isPaid ? .owePaid : .oweUnpaid
+        }
+
+        return .neutral
+    }
+
+    /// Amount attributed to the current user for overview totals in a given debt state.
+    public func userDebtAmount(userId: UUID?, state: ExpenseUserDebtState) -> Decimal {
+        guard userDebtState(userId: userId) == state else { return .zero }
+        return userCashFlow(userId: userId).amount
+    }
+}
+
+public enum ExpenseUserDebtState: String, CaseIterable, Sendable {
+    case oweUnpaid
+    case owePaid
+    case owedUnpaid
+    case owedPaid
+    case neutral
+
+    public var isSettled: Bool {
+        switch self {
+        case .owePaid, .owedPaid, .neutral:
+            return true
+        case .oweUnpaid, .owedUnpaid:
+            return false
+        }
+    }
 }
 
 public struct ExpenseUserCashFlow: Equatable, Sendable {

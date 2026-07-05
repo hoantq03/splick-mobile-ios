@@ -3,16 +3,20 @@ import SplickDomain
 
 public enum ExpenseDebtFilter: String, CaseIterable, Identifiable {
     case all
-    case owe
-    case owed
+    case oweUnpaid
+    case owePaid
+    case owedUnpaid
+    case owedPaid
 
     public var id: String { rawValue }
 
-    public var title: String {
+    public var matchingDebtState: ExpenseUserDebtState? {
         switch self {
-        case .all: return "All"
-        case .owe: return "I owe"
-        case .owed: return "Owed to me"
+        case .all: return nil
+        case .oweUnpaid: return .oweUnpaid
+        case .owePaid: return .owePaid
+        case .owedUnpaid: return .owedUnpaid
+        case .owedPaid: return .owedPaid
         }
     }
 }

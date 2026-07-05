@@ -90,6 +90,48 @@ public final class ExpenseListViewModel: ObservableObject {
         debts.filter(\.owes).reduce(Decimal.zero) { $0 + abs($1.amount) }
     }
 
+    var overviewOweUnpaidTotal: Decimal {
+        overviewTotal(for: .oweUnpaid)
+    }
+
+    var overviewOweUnpaidCount: Int {
+        overviewCount(for: .oweUnpaid)
+    }
+
+    var overviewOwePaidTotal: Decimal {
+        overviewTotal(for: .owePaid)
+    }
+
+    var overviewOwePaidCount: Int {
+        overviewCount(for: .owePaid)
+    }
+
+    var overviewOwedUnpaidTotal: Decimal {
+        overviewTotal(for: .owedUnpaid)
+    }
+
+    var overviewOwedUnpaidCount: Int {
+        overviewCount(for: .owedUnpaid)
+    }
+
+    var overviewOwedPaidTotal: Decimal {
+        overviewTotal(for: .owedPaid)
+    }
+
+    var overviewOwedPaidCount: Int {
+        overviewCount(for: .owedPaid)
+    }
+
+    private func overviewTotal(for state: ExpenseUserDebtState) -> Decimal {
+        expenses.reduce(Decimal.zero) { partial, expense in
+            partial + expense.userDebtAmount(userId: currentUserId, state: state)
+        }
+    }
+
+    private func overviewCount(for state: ExpenseUserDebtState) -> Int {
+        expenses.filter { $0.userDebtState(userId: currentUserId) == state }.count
+    }
+
     public func load(isPullToRefresh: Bool = false) async {
         if isPullToRefresh {
             if let existing = pullToRefreshTask {
@@ -130,7 +172,9 @@ public final class ExpenseListViewModel: ObservableObject {
                 category: .expense,
                 metadata: ["expenseCount": String(fetchedExpenses.count), "debtCount": String(fetchedDebts.count)]
             )
-            await onBadgeCountsChanged?()
+            if isPullToRefresh {
+                await onBadgeCountsChanged?()
+            }
         } catch {
             if isPullToRefresh, !expenses.isEmpty {
                 state = .loaded(expenses)
@@ -275,9 +319,12 @@ public final class ExpenseListViewModel: ObservableObject {
 
     private func matchesDebtFilters(_ debt: DebtSummary) -> Bool {
         switch filters.debtStatus {
-        case .all: break
-        case .owe: guard debt.owes else { return false }
-        case .owed: guard debt.isOwed else { return false }
+        case .all:
+            break
+        case .oweUnpaid, .owePaid:
+            guard debt.owes else { return false }
+        case .owedUnpaid, .owedPaid:
+            guard debt.isOwed else { return false }
         }
 
         if let user = filters.selectedUser, debt.user.id != user.id {
@@ -288,38 +335,10 @@ public final class ExpenseListViewModel: ObservableObject {
     }
 
     private func matchesDebtStatus(_ expense: Expense) -> Bool {
-        switch filters.debtStatus {
-        case .all:
+        guard let targetState = filters.debtStatus.matchingDebtState else {
             return true
-        case .owe:
-            return expenseMatchesOweFilter(expense)
-        case .owed:
-            return expenseMatchesOwedFilter(expense)
         }
-    }
-
-    /// Align list with debt summary: expense involves a user in the filtered debt set.
-    private func expenseMatchesOweFilter(_ expense: Expense) -> Bool {
-        if let userId = currentUserId {
-            return expense.splits.contains { $0.user.id == userId && !$0.isPaid }
-        }
-
-        let owingUserIds = Set(debts.filter(\.owes).map(\.user.id))
-        guard !owingUserIds.isEmpty else {
-            return expense.splits.contains { !$0.isPaid }
-        }
-        return expense.splits.contains { !$0.isPaid && owingUserIds.contains($0.user.id) }
-    }
-
-    private func expenseMatchesOwedFilter(_ expense: Expense) -> Bool {
-        if let userId = currentUserId {
-            guard expense.paidBy.id == userId else { return false }
-            return expense.splits.contains { $0.user.id != userId && !$0.isPaid }
-        }
-
-        let owedUserIds = Set(debts.filter(\.isOwed).map(\.user.id))
-        guard !owedUserIds.isEmpty else { return false }
-        return expense.splits.contains { !$0.isPaid && owedUserIds.contains($0.user.id) }
+        return expense.userDebtState(userId: currentUserId) == targetState
     }
 
     private func matchesUser(_ expense: Expense) -> Bool {
