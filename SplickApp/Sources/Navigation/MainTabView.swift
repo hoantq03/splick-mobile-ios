@@ -115,7 +115,13 @@ struct MainTabView: View {
                 appState.showProfileSettings = true
             }
             .environment(\.openNotifications) { bellFrame in
-                appState.presentNotifications(from: bellFrame)
+                if appState.showNotifications {
+                    withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
+                        appState.showNotifications = false
+                    }
+                } else {
+                    appState.presentNotifications(from: bellFrame)
+                }
             }
             .environment(\.notificationUnreadCount, badgeCounts.notifications)
             .environment(\.notificationsPresented, appState.showNotifications)
