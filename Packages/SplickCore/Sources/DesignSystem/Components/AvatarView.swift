@@ -24,12 +24,14 @@ public struct AvatarView: View {
 
     private let imageURL: URL?
     private let userId: UUID?
+    private let displayName: String
     private let initials: String
     private let size: Size
 
     public init(imageURL: URL? = nil, name: String, size: Size = .medium, userId: UUID? = nil) {
         self.imageURL = imageURL
         self.userId = userId
+        self.displayName = name
         self.size = size
         self.initials = String(name.prefix(2)).uppercased()
     }
@@ -38,6 +40,10 @@ public struct AvatarView: View {
         Group {
             if SplickBot.isBot(userId) {
                 Image("SplickBotAvatar", bundle: .module)
+                    .resizable()
+                    .scaledToFill()
+            } else if DeletedUser.isDeleted(displayName: displayName) && imageURL == nil {
+                Image("DeletedUserAvatar", bundle: .module)
                     .resizable()
                     .scaledToFill()
             } else if let imageURL {
