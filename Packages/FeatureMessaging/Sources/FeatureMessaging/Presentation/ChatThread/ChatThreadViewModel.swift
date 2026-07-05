@@ -182,6 +182,27 @@ public final class ChatThreadViewModel: ObservableObject {
         }
 
         let message = messages[index]
+
+        if let existing = message.reactions.first(where: {
+            $0.userId == currentUserId && $0.emoji == emoji
+        }) {
+            let snapshot = message
+            removeReaction(messageId: messageId, reactionId: existing.id)
+            Task {
+                do {
+                    try await repository.removeReaction(
+                        conversationId: conversationId,
+                        messageId: messageId,
+                        reactionId: existing.id
+                    )
+                } catch {
+                    updateMessage(at: index, with: snapshot)
+                    Log.error(error, category: .network, metadata: ["action": "removeMessageReaction"])
+                }
+            }
+            return nil
+        }
+
         let distinctEmojis = Set(message.reactions.filter { $0.userId == currentUserId }.map(\.emoji))
         if !distinctEmojis.contains(emoji),
            distinctEmojis.count >= ReactionConstants.maxDistinctEmojiPerUser {
@@ -267,22 +288,26 @@ public final class ChatThreadViewModel: ObservableObject {
     private func replaceMessage(matching clientMessageId: UUID, with message: ChatMessage) {
         guard case .loaded(var messages) = state else { return }
         if let index = messages.firstIndex(where: { $0.clientMessageId == clientMessageId }) {
-            newlySentMessageIds.remove(messages[index].id)
             messages[index] = message
         } else {
             messages.append(message)
         }
-        withAnimation(ChatScrollAnimation.spring) {
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
             state = .loaded(messages)
         }
-        requestScrollToBottom()
     }
 
     private func updateDeliveryStatus(for clientMessageId: UUID, status: MessageDeliveryStatus) {
         guard case .loaded(var messages) = state,
               let index = messages.firstIndex(where: { $0.clientMessageId == clientMessageId }) else { return }
         messages[index] = messages[index].updating(deliveryStatus: status)
-        state = .loaded(messages)
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            state = .loaded(messages)
+        }
     }
 
     private func reconcileReaction(messageId: UUID, optimisticId: UUID, with server: Reaction) {
@@ -321,13 +346,13 @@ public final class ChatThreadViewModel: ObservableObject {
         scrollToBottomToken += 1
     }
 
-    private func registerFloatAnimation(for messageId: UUID) {
-        newlySentMessageIds.insert(messageId)
-        floatSwayByMessageId[messageId] = CGFloat.random(in: -4...4)
+    private func registerFloatAnimation(for clientMessageId: UUID) {
+        newlySentMessageIds.insert(clientMessageId)
+        floatSwayByMessageId[clientMessageId] = CGFloat.random(in: -4...4)
         Task {
             try? await Task.sleep(for: .seconds(MessageSendAnimation.duration))
-            newlySentMessageIds.remove(messageId)
-            floatSwayByMessageId.removeValue(forKey: messageId)
+            newlySentMessageIds.remove(clientMessageId)
+            floatSwayByMessageId.removeValue(forKey: clientMessageId)
         }
     }
 
