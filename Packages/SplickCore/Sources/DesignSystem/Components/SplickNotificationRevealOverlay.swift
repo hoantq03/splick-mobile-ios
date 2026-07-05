@@ -8,6 +8,7 @@ public struct SplickNotificationRevealOverlay<Content: View>: View {
     let unreadCount: Int
     let headerTitle: String?
     let closeAccessibilityLabel: String
+    let onDismissStarted: (() -> Void)?
     @ViewBuilder let content: (_ dismiss: @escaping () -> Void) -> Content
 
     @State private var isRevealed = false
@@ -21,6 +22,7 @@ public struct SplickNotificationRevealOverlay<Content: View>: View {
         headerTitle: String? = nil,
         closeAccessibilityLabel: String = "Close notifications",
         dismissRequest: Binding<Bool> = .constant(false),
+        onDismissStarted: (() -> Void)? = nil,
         @ViewBuilder content: @escaping (_ dismiss: @escaping () -> Void) -> Content
     ) {
         _isPresented = isPresented
@@ -29,6 +31,7 @@ public struct SplickNotificationRevealOverlay<Content: View>: View {
         self.unreadCount = unreadCount
         self.headerTitle = headerTitle
         self.closeAccessibilityLabel = closeAccessibilityLabel
+        self.onDismissStarted = onDismissStarted
         self.content = content
     }
 
@@ -39,10 +42,18 @@ public struct SplickNotificationRevealOverlay<Content: View>: View {
             let chromeBandHeight = chromeBand(safeTop: safeTop)
             let headerTopInset = max(safeTop + 8, chromeBandHeight - controlSize - SplickTheme.Spacing.xxs)
             let overlayFrame = proxy.frame(in: .global)
-            let closeButtonCenter = CGPoint(
-                x: anchorFrame.midX - overlayFrame.minX,
-                y: anchorFrame.midY - overlayFrame.minY
-            )
+            let closeButtonCenter: CGPoint = {
+                guard anchorFrame.width > 1, anchorFrame.height > 1 else {
+                    return CGPoint(
+                        x: proxy.size.width - SplickTheme.Spacing.md - controlSize / 2,
+                        y: safeTop + controlSize / 2 + SplickTheme.Spacing.xxs
+                    )
+                }
+                return CGPoint(
+                    x: anchorFrame.midX - overlayFrame.minX,
+                    y: anchorFrame.midY - overlayFrame.minY
+                )
+            }()
 
             ZStack(alignment: .topLeading) {
                 panelBody(
@@ -114,8 +125,10 @@ public struct SplickNotificationRevealOverlay<Content: View>: View {
 
     private func dismissAnimated() {
         guard isPresented else { return }
+        // Signal immediately so parent chrome can begin its re-appear animation in parallel.
+        onDismissStarted?()
         withAnimation(SplickRevealMotion.collapse) { isRevealed = false }
-        // Wait for collapse spring to settle before unmounting — prevents chrome popping back mid-animation.
+        // Wait for collapse spring to settle before unmounting — prevents overlay popping off mid-animation.
         DispatchQueue.main.asyncAfter(deadline: .now() + SplickRevealMotion.collapseDuration) {
             isPresented = false
         }
@@ -144,10 +157,15 @@ public struct SplickNotificationRevealOverlay<Content: View>: View {
 
     private func overlayCloseButton(action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: "xmark")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(SplickTheme.Colors.textPrimary)
-                .frame(width: controlSize, height: controlSize)
+            ZStack {
+                Circle()
+                    .fill(SplickTheme.Colors.secondaryBackground.opacity(0.85))
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(SplickTheme.Colors.textPrimary)
+            }
+            .frame(width: controlSize, height: controlSize)
+            .contentShape(Rectangle().inset(by: -8))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(closeAccessibilityLabel)
