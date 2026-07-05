@@ -1,5 +1,5 @@
 import SwiftUI
-import PhotosUI
+import UIKit
 import DesignSystem
 import Localization
 import SplickDomain
@@ -9,18 +9,27 @@ struct PaymentEvidenceSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let postAuthorName: String
-    let onSubmit: (String, [CommentSubmissionAttachment]) async throws -> Void
+    let onSubmit: (String?, [CommentSubmissionAttachment]) async throws -> Void
 
     @State private var message = ""
-    @State private var photoPickerItems: [PhotosPickerItem] = []
     @State private var pendingAttachments: [CommentSubmissionAttachment] = []
     @State private var validationMessage: String?
     @State private var isSubmitting = false
 
+    init(
+        postAuthorName: String,
+        initialAttachments: [CommentSubmissionAttachment],
+        onSubmit: @escaping (String?, [CommentSubmissionAttachment]) async throws -> Void
+    ) {
+        self.postAuthorName = postAuthorName
+        self.onSubmit = onSubmit
+        _pendingAttachments = State(initialValue: initialAttachments)
+    }
+
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
-                Text(languageService.format(.feedPaymentEvidenceHint, postAuthorName))
+                Text("Gửi tối đa 3 ảnh chuyển khoản cho \(postAuthorName). Bạn có thể thêm lời nhắn nếu cần.")
                     .font(.system(size: 13))
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
 
@@ -31,25 +40,43 @@ struct PaymentEvidenceSheet: View {
                 }
 
                 if !pendingAttachments.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(Array(pendingAttachments.enumerated()), id: \.offset) { index, item in
-                                HStack(spacing: 4) {
-                                    Image(systemName: "photo")
-                                        .font(.system(size: 10))
-                                    Text(item.fileName ?? "photo")
-                                        .font(.system(size: 10))
-                                        .lineLimit(1)
-                                    Button {
-                                        pendingAttachments.remove(at: index)
-                                    } label: {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .font(.system(size: 12))
+                    VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+                        Text("Ảnh chuyển khoản")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(SplickTheme.Colors.textPrimary)
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(Array(pendingAttachments.enumerated()), id: \.offset) { index, item in
+                                    ZStack(alignment: .topTrailing) {
+                                        Group {
+                                            if let image = previewImage(for: item) {
+                                                Image(uiImage: image)
+                                                    .resizable()
+                                                    .scaledToFill()
+                                            } else {
+                                                RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium)
+                                                    .fill(SplickTheme.Colors.tertiaryBackground)
+                                                    .overlay {
+                                                        Image(systemName: "photo")
+                                                            .font(.system(size: 24))
+                                                            .foregroundStyle(SplickTheme.Colors.textSecondary)
+                                                    }
+                                            }
+                                        }
+                                        .frame(width: 120, height: 156)
+                                        .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium))
+
+                                        Button {
+                                            pendingAttachments.remove(at: index)
+                                        } label: {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .font(.system(size: 20))
+                                                .foregroundStyle(.white, .black.opacity(0.45))
+                                        }
+                                        .padding(6)
                                     }
                                 }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Capsule().fill(SplickTheme.Colors.tertiaryBackground))
                             }
                         }
                     }
@@ -63,22 +90,10 @@ struct PaymentEvidenceSheet: View {
                             .fill(SplickTheme.Colors.tertiaryBackground)
                     )
 
-                PhotosPicker(
-                    selection: $photoPickerItems,
-                    maxSelectionCount: 3,
-                    matching: .images
-                ) {
-                    Label(languageService.text(.feedPaymentEvidencePickPhoto), systemImage: "photo.on.rectangle")
-                        .font(.system(size: 14, weight: .medium))
-                }
-                .onChange(of: photoPickerItems) { items in
-                    Task { await importPhotoPickerItems(items) }
-                }
-
                 Spacer(minLength: 0)
             }
             .padding()
-            .navigationTitle(languageService.text(.feedPaymentEvidenceTitle))
+            .navigationTitle("Upload ảnh chuyển khoản")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -97,32 +112,23 @@ struct PaymentEvidenceSheet: View {
     @MainActor
     private func submit() async {
         guard !pendingAttachments.isEmpty else {
-            validationMessage = languageService.text(.feedPaymentEvidenceAttachmentRequired)
+            validationMessage = "Vui lòng chọn ít nhất 1 ảnh chuyển khoản."
             return
         }
         isSubmitting = true
         validationMessage = nil
         defer { isSubmitting = false }
         do {
-            try await onSubmit(message, pendingAttachments)
+            let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
+            try await onSubmit(trimmedMessage.isEmpty ? nil : trimmedMessage, pendingAttachments)
             dismiss()
         } catch {
             validationMessage = error.localizedDescription
         }
     }
 
-    @MainActor
-    private func importPhotoPickerItems(_ items: [PhotosPickerItem]) async {
-        for item in items {
-            guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
-            let submission = CommentSubmissionAttachment(
-                kind: .image,
-                data: data,
-                mimeType: "image/jpeg",
-                fileName: "payment-proof.jpg"
-            )
-            pendingAttachments.append(submission)
-        }
-        photoPickerItems = []
+    private func previewImage(for attachment: CommentSubmissionAttachment) -> UIImage? {
+        guard let data = attachment.data else { return nil }
+        return UIImage(data: data)
     }
 }

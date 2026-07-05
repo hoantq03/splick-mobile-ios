@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 import DesignSystem
 import Common
 import Localization
@@ -51,7 +52,10 @@ struct PostCardView: View {
     @State private var activeSheet: PostCardSheet?
     @State private var showCustomEmojiUpload = false
     @State private var reminderSentMessage: String?
+    @State private var showPaymentEvidencePhotoPicker = false
     @State private var showPaymentEvidenceSheet = false
+    @State private var paymentEvidencePhotoPickerItems: [PhotosPickerItem] = []
+    @State private var paymentEvidenceAttachments: [CommentSubmissionAttachment] = []
     @State private var reactionAnchors: [String: CGPoint] = [:]
     @State private var flyingEmojis: [FlyingEmojiFlight] = []
 
@@ -77,9 +81,9 @@ struct PostCardView: View {
         return post.billSplitLine(for: currentUser.id)
     }
 
-    private var shouldShowPaymentCTA: Bool {
-        guard !isAuthor, currentUserSplitLine != nil else { return false }
-        return post.feedKind == .shareBill
+    private var shouldShowPaymentEvidenceAction: Bool {
+        guard !isAuthor, let currentUserSplitLine, post.feedKind == .shareBill else { return false }
+        return currentUserSplitLine.paymentStatus == .unpaid
     }
 
     var body: some View {
@@ -154,9 +158,24 @@ struct PostCardView: View {
         .sheet(isPresented: $showCustomEmojiUpload) {
             customEmojiUploadSheet
         }
-        .sheet(isPresented: $showPaymentEvidenceSheet) {
+        .photosPicker(
+            isPresented: $showPaymentEvidencePhotoPicker,
+            selection: $paymentEvidencePhotoPickerItems,
+            maxSelectionCount: 3,
+            matching: .images
+        )
+        .onChange(of: paymentEvidencePhotoPickerItems) { items in
+            Task { await preparePaymentEvidenceAttachments(from: items) }
+        }
+        .sheet(
+            isPresented: $showPaymentEvidenceSheet,
+            onDismiss: { paymentEvidenceAttachments = [] }
+        ) {
             if let split = currentUserSplitLine {
-                PaymentEvidenceSheet(postAuthorName: post.author.displayName) { message, attachments in
+                PaymentEvidenceSheet(
+                    postAuthorName: post.author.displayName,
+                    initialAttachments: paymentEvidenceAttachments
+                ) { message, attachments in
                     try await onSubmitPaymentEvidence?(post.id, split.id, message, attachments)
                 }
             }
@@ -321,13 +340,12 @@ struct PostCardView: View {
                             )
                         }
                         : nil,
-                    paymentStatus: shouldShowPaymentCTA ? currentUserSplitLine?.paymentStatus : nil,
-                    evidenceWasRejected: currentUserSplitLine?.lastRejectedAt != nil,
-                    onPaymentTap: shouldShowPaymentCTA
+                    paymentStatus: currentUserSplitLine?.paymentStatus,
+                    evidenceWasRejected: currentUserSplitLine?.paymentStatus == .unpaid
+                        && currentUserSplitLine?.lastRejectedAt != nil,
+                    onPaymentTap: shouldShowPaymentEvidenceAction
                         ? {
-                            if currentUserSplitLine?.paymentStatus == .unpaid {
-                                showPaymentEvidenceSheet = true
-                            }
+                            showPaymentEvidencePhotoPicker = true
                         }
                         : nil
                 )
@@ -527,5 +545,29 @@ struct PostCardView: View {
                 reminderSentMessage = languageService.localizedMessage(for: error)
             }
         }
+    }
+
+    @MainActor
+    private func preparePaymentEvidenceAttachments(from items: [PhotosPickerItem]) async {
+        guard !items.isEmpty else { return }
+
+        var attachments: [CommentSubmissionAttachment] = []
+        for (index, item) in items.prefix(3).enumerated() {
+            guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
+            attachments.append(
+                CommentSubmissionAttachment(
+                    kind: .image,
+                    data: data,
+                    mimeType: "image/jpeg",
+                    fileName: "payment-proof-\(index + 1).jpg"
+                )
+            )
+        }
+
+        paymentEvidencePhotoPickerItems = []
+
+        guard !attachments.isEmpty else { return }
+        paymentEvidenceAttachments = attachments
+        showPaymentEvidenceSheet = true
     }
 }
