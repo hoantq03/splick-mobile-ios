@@ -24,6 +24,7 @@ struct MessagingTabRoot: View {
         .environmentObject(container.makeChatThreadViewModelFactory(
             currentUserId: appState.currentUser?.id ?? UUID()
         ))
+        .environment(\.chatPeerRelationshipActions, container.makeChatPeerRelationshipActions())
         .environment(\.messagingReactionPicker, MessagingReactionPickerAction { onPick in
             reactionPickHandler = onPick
             showsReactionPicker = true
