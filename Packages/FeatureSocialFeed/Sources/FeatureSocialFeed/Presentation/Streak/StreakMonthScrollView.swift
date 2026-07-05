@@ -34,8 +34,8 @@ struct StreakMonthScrollView: View {
                 }
             }
             .refreshable { await onRefresh() }
-            .tabBarHideOnScroll()
-            .feedSegmentHideOnScroll()
+            .feedScrollSoftTopEdge()
+            .scrollChromeTracking()
             .onAppear {
                 trackedSectionCount = sections.count
                 scrollToCurrentMonth(using: proxy, animated: false)

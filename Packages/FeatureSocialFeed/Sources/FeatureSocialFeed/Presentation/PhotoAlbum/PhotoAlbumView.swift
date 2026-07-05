@@ -122,6 +122,8 @@ public struct PhotoAlbumView: View {
                     .padding(.vertical, SplickTheme.Spacing.md)
             }
         }
+        .feedPagerScrollInsets()
+        .feedScrollSoftTopEdge()
         .scrollContentBackground(.hidden)
         .background(SplickTheme.Colors.background)
         .tabBarHideOnScroll()
