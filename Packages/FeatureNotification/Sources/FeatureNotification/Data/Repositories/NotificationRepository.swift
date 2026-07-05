@@ -1,5 +1,6 @@
 import Foundation
 import Networking
+import Common
 import SplickDomain
 
 public final class NotificationRepository: NotificationRepositoryProtocol, Sendable {
@@ -48,6 +49,16 @@ public final class NotificationRepository: NotificationRepositoryProtocol, Senda
         bundleId: String,
         environment: String
     ) async throws {
+        Log.info(
+            "POST /v1/devices",
+            category: .notification,
+            metadata: [
+                "bundleId": bundleId,
+                "environment": environment,
+                "tokenSuffix": token.suffix(8).description,
+            ]
+        )
+
         let request = RegisterPushDeviceRequestDTO(
             token: token,
             platform: "ios",

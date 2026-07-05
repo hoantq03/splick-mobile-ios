@@ -44,9 +44,17 @@ struct RootView: View {
             appState.routeRemoteNotification(destination)
             pushNotificationCoordinator.clearPendingDestination()
         }
-        .task(id: appState.isAuthenticated) {
-            guard appState.isAuthenticated else { return }
-            await pushNotificationCoordinator.syncStoredDeviceTokenIfPossible()
+        .onChange(of: appState.isAuthenticated) { isAuthenticated in
+            guard isAuthenticated else { return }
+            Task {
+                await pushNotificationCoordinator.ensureDeviceTokenRegistered()
+            }
+        }
+        .onChange(of: pushNotificationCoordinator.localDeviceToken) { token in
+            guard appState.isAuthenticated, token != nil else { return }
+            Task {
+                await pushNotificationCoordinator.ensureDeviceTokenRegistered()
+            }
         }
         .task(id: appState.splashSessionID) {
             guard appState.needsSplash else { return }
@@ -131,6 +139,9 @@ struct RootView: View {
                 onAuthenticated: { user in
                     container.languageService.applyFromServer(user.preferredLocale)
                     appState.setAuthenticated(user: user)
+                    Task {
+                        await pushNotificationCoordinator.ensureDeviceTokenRegistered()
+                    }
                 }
             )
         }
@@ -158,6 +169,7 @@ struct RootView: View {
         if let session = await container.restoreSessionUseCase.execute() {
             container.languageService.applyFromServer(session.user.preferredLocale)
             appState.setAuthenticated(user: session.user)
+            await pushNotificationCoordinator.ensureDeviceTokenRegistered()
         } else {
             appState.markUnauthenticated(container: container)
         }

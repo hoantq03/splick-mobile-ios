@@ -16,7 +16,10 @@ struct SplickApp: App {
         let container = DependencyContainer.shared
         PushNotificationCoordinator.shared.configure(
             deviceTokenService: container.deviceTokenService,
-            userDefaultsService: container.userDefaultsService
+            userDefaultsService: container.userDefaultsService,
+            hasAccessToken: {
+                await container.tokenProvider.accessToken() != nil
+            }
         )
     }
 
