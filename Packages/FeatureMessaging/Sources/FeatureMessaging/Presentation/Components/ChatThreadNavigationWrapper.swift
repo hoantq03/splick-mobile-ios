@@ -7,6 +7,7 @@ struct ChatThreadNavigationWrapper: View {
     let highlightMessageId: UUID?
 
     @EnvironmentObject private var chatThreadViewModelFactory: ChatThreadViewModelFactory
+    @Environment(\.chatPeerRelationshipActions) private var peerRelationshipActions
 
     init(conversation: Conversation, highlightMessageId: UUID? = nil) {
         self.conversation = conversation
@@ -17,7 +18,8 @@ struct ChatThreadNavigationWrapper: View {
         ChatThreadScreen(
             conversation: conversation,
             highlightMessageId: highlightMessageId,
-            factory: chatThreadViewModelFactory
+            factory: chatThreadViewModelFactory,
+            peerRelationshipActions: peerRelationshipActions
         )
     }
 }
@@ -27,28 +29,43 @@ private struct ChatThreadScreen: View {
     let conversation: Conversation
     let highlightMessageId: UUID?
     let factory: ChatThreadViewModelFactory
+    let peerRelationshipActions: ChatPeerRelationshipActions
 
     @StateObject private var viewModel: ChatThreadViewModel
+    @StateObject private var relationshipViewModel: ChatPeerRelationshipViewModel
 
     init(
         conversation: Conversation,
         highlightMessageId: UUID?,
-        factory: ChatThreadViewModelFactory
+        factory: ChatThreadViewModelFactory,
+        peerRelationshipActions: ChatPeerRelationshipActions
     ) {
         self.conversation = conversation
         self.highlightMessageId = highlightMessageId
         self.factory = factory
+        self.peerRelationshipActions = peerRelationshipActions
         _viewModel = StateObject(
             wrappedValue: factory.make(
                 conversationId: conversation.id,
                 highlightMessageId: highlightMessageId
             )
         )
+        if let peer = conversation.peer, !conversation.isGroup {
+            _relationshipViewModel = StateObject(
+                wrappedValue: ChatPeerRelationshipViewModel(
+                    peerUserId: peer.userId,
+                    actions: peerRelationshipActions
+                )
+            )
+        } else {
+            _relationshipViewModel = StateObject(wrappedValue: ChatPeerRelationshipViewModel.inert())
+        }
     }
 
     var body: some View {
         ChatThreadView(
             viewModel: viewModel,
+            relationshipViewModel: relationshipViewModel,
             currentUserId: factory.currentUserId,
             peer: conversation.peer,
             navigationTitle: conversation.displayTitle,
