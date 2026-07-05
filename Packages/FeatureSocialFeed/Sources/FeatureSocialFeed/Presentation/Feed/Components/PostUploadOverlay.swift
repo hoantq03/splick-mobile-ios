@@ -13,7 +13,10 @@ struct PostUploadOverlay: View {
             VStack(spacing: SplickTheme.Spacing.sm) {
                 switch state {
                 case .uploading:
-                    SplickSpinner(size: .large)
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .controlSize(.large)
+                        .tint(.white)
                     Text(languageService.text(.feedCreatePosting))
                         .font(SplickTheme.Typography.callout)
                         .fontWeight(.semibold)

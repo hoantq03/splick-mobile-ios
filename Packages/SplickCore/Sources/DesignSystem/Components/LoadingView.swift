@@ -10,8 +10,8 @@ public struct LoadingView: View {
     public var body: some View {
         VStack(spacing: SplickTheme.Spacing.md) {
             ProgressView()
+                .progressViewStyle(.circular)
                 .controlSize(.regular)
-                .tint(SplickTheme.Colors.primaryGradientStart)
 
             if let message {
                 Text(message)

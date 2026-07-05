@@ -29,7 +29,9 @@ public struct GridThumbnailImage<Placeholder: View>: View {
                 placeholder()
                     .overlay {
                         if state.isLoading {
-                            SplickSpinner(size: .small)
+                            ProgressView()
+                                .progressViewStyle(.circular)
+                                .controlSize(.small)
                         }
                     }
             }

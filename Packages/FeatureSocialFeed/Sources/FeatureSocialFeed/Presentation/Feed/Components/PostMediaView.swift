@@ -99,7 +99,9 @@ struct PostMediaView: View {
             .frame(height: 250)
             .overlay {
                 if showProgress {
-                    SplickSpinner(size: .medium)
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .controlSize(.regular)
                 } else if let icon {
                     Image(systemName: icon)
                         .font(.largeTitle)
