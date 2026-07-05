@@ -135,9 +135,8 @@ struct InviteFriendsToGroupSheet: View {
             FriendRowView(
                 user: result.user,
                 friendStatus: result.friendStatus,
-                isSendingRequest: viewModel.sendingFriendRequestUserIds.contains(result.user.id),
                 onAddFriend: {
-                    Task { await viewModel.sendFriendRequest(to: result) }
+                    viewModel.sendFriendRequest(to: result)
                 }
             )
 

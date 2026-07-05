@@ -20,7 +20,7 @@ struct GroupRowView: View {
                 .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
                 .frame(width: 44, height: 44)
                 .background(SplickTheme.Colors.primaryGradientStart.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .clipShape(Circle())
 
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
                 Text(group.name)
@@ -40,6 +40,6 @@ struct GroupRowView: View {
 
             Spacer()
         }
-        .splickCard(padding: SplickTheme.Spacing.sm)
+        .splickCard(padding: SplickTheme.Spacing.sm, cornerRadius: SplickTheme.CornerRadius.pill)
     }
 }

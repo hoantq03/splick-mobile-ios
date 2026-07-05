@@ -16,7 +16,6 @@ final class InviteFriendsToGroupViewModel: ObservableObject {
     @Published var selectedIds: Set<UUID> = []
     @Published var alertMessage: String?
     @Published var successMessage: String?
-    @Published private(set) var sendingFriendRequestUserIds: Set<UUID> = []
 
     private let groupId: UUID
     private let existingMemberIds: Set<UUID>
@@ -26,6 +25,7 @@ final class InviteFriendsToGroupViewModel: ObservableObject {
     private let inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol
     private let onInvited: () -> Void
     private var searchTask: Task<Void, Never>?
+    private var inFlightRelationActionUserIds: Set<UUID> = []
 
     var isSearching: Bool {
         !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -88,19 +88,22 @@ final class InviteFriendsToGroupViewModel: ObservableObject {
         }
     }
 
-    func sendFriendRequest(to result: UserSearchResult) async {
+    func sendFriendRequest(to result: UserSearchResult) {
         guard result.friendStatus == .none else { return }
         let userId = result.user.id
-        guard !sendingFriendRequestUserIds.contains(userId) else { return }
+        guard !inFlightRelationActionUserIds.contains(userId) else { return }
 
-        sendingFriendRequestUserIds.insert(userId)
-        defer { sendingFriendRequestUserIds.remove(userId) }
+        inFlightRelationActionUserIds.insert(userId)
+        updateSearchResult(userId: userId, status: .requestSent)
 
-        do {
-            _ = try await addFriendUseCase.execute(username: result.user.username, message: nil)
-            updateSearchResult(userId: userId, status: .requestSent)
-        } catch {
-            alertMessage = error.localizedDescription
+        Task {
+            defer { inFlightRelationActionUserIds.remove(userId) }
+            do {
+                _ = try await addFriendUseCase.execute(username: result.user.username, message: nil)
+            } catch {
+                updateSearchResult(userId: userId, status: .none)
+                alertMessage = error.localizedDescription
+            }
         }
     }
 
