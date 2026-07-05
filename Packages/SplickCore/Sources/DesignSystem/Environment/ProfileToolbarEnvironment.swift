@@ -22,6 +22,10 @@ private struct NotificationsPresentedKey: EnvironmentKey {
     static let defaultValue: Bool = false
 }
 
+private struct OpenUserProfileKey: EnvironmentKey {
+    static let defaultValue: ((UserSummary) -> Void)? = nil
+}
+
 extension EnvironmentValues {
     public var openProfileSettings: (() -> Void)? {
         get { self[OpenProfileActionKey.self] }
@@ -46,6 +50,12 @@ extension EnvironmentValues {
     public var notificationsPresented: Bool {
         get { self[NotificationsPresentedKey.self] }
         set { self[NotificationsPresentedKey.self] = newValue }
+    }
+
+    /// Opens another user's profile sheet (not the signed-in user's settings).
+    public var openUserProfile: ((UserSummary) -> Void)? {
+        get { self[OpenUserProfileKey.self] }
+        set { self[OpenUserProfileKey.self] = newValue }
     }
 }
 
