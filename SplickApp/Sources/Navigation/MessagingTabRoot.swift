@@ -1,7 +1,13 @@
 import SwiftUI
 import FeatureMessaging
 import FeatureSocialFeed
+import FeatureFriends
 import SplickDomain
+
+private struct MessagingUserProfileRoute: Identifiable {
+    let user: UserSummary
+    var id: UUID { user.id }
+}
 
 /// App-layer host that wires the feed emoji picker into messaging reactions.
 struct MessagingTabRoot: View {
@@ -10,6 +16,7 @@ struct MessagingTabRoot: View {
 
     @State private var showsReactionPicker = false
     @State private var reactionPickHandler: ((String) -> Void)?
+    @State private var profileRoute: MessagingUserProfileRoute?
 
     var body: some View {
         ConversationListView(
@@ -29,6 +36,15 @@ struct MessagingTabRoot: View {
             reactionPickHandler = onPick
             showsReactionPicker = true
         })
+        .environment(\.openUserProfile) { user in
+            profileRoute = MessagingUserProfileRoute(user: user)
+        }
+        .sheet(item: $profileRoute) { route in
+            FriendUserProfileView(
+                viewModel: container.friendUserProfileDependencies.makeViewModel(user: route.user)
+            )
+            .environmentObject(container.languageService)
+        }
         .sheet(isPresented: $showsReactionPicker, onDismiss: {
             reactionPickHandler = nil
         }) {
