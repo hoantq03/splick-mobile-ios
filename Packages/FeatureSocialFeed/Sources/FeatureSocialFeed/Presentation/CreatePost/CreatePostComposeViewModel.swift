@@ -39,6 +39,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
     @Published var friendSearchQuery = ""
     @Published private(set) var friendSearchResults: [UserSummary] = []
     @Published private(set) var selectedCompanions: [UserSummary] = []
+    @Published private(set) var selectedCompanionGroup: Group?
     @Published var enableBillSplit = false
     @Published var autoReminderEnabled = false
     @Published var billTotalText = ""
@@ -137,6 +138,20 @@ public final class CreatePostComposeViewModel: ObservableObject {
         Set(selectedCompanions.map(\.id))
     }
 
+    var filteredCompanionGroups: [Group] {
+        guard enableBillSplit else { return [] }
+
+        let query = friendSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        let candidates = availableAudienceGroups.filter { $0.id != selectedCompanionGroup?.id }
+
+        guard !query.isEmpty else { return Array(candidates.prefix(6)) }
+        return candidates.filter {
+            $0.name.localizedCaseInsensitiveContains(query)
+                || $0.inviteCode.localizedCaseInsensitiveContains(query)
+                || ($0.description?.localizedCaseInsensitiveContains(query) ?? false)
+        }
+    }
+
     var selectedAudienceGroupIds: Set<UUID> {
         Set(selectedAudienceGroups.map(\.id))
     }
@@ -191,9 +206,42 @@ public final class CreatePostComposeViewModel: ObservableObject {
     }
 
     var billSplitParticipants: [UserSummary] {
-        guard let currentUser else { return selectedCompanions }
-        let others = selectedCompanions.filter { $0.id != currentUser.id }
-        return [currentUser] + others
+        var participants: [UserSummary] = []
+        var seen = Set<UUID>()
+
+        func append(_ user: UserSummary) {
+            guard seen.insert(user.id).inserted else { return }
+            participants.append(user)
+        }
+
+        if let currentUser {
+            append(currentUser)
+        }
+
+        selectedCompanions.forEach(append)
+        if enableBillSplit {
+            selectedCompanionGroup?.members.forEach(append)
+        }
+
+        return participants
+    }
+
+    var companionUsersForSubmit: [UserSummary] {
+        var companions: [UserSummary] = []
+        var seen = Set<UUID>()
+
+        func append(_ user: UserSummary) {
+            guard user.id != currentUserId else { return }
+            guard seen.insert(user.id).inserted else { return }
+            companions.append(user)
+        }
+
+        selectedCompanions.forEach(append)
+        if enableBillSplit {
+            selectedCompanionGroup?.members.forEach(append)
+        }
+
+        return companions
     }
 
     func isCurrentUser(_ user: UserSummary) -> Bool {
@@ -348,6 +396,18 @@ public final class CreatePostComposeViewModel: ObservableObject {
         exactAmountTexts.removeValue(forKey: user.id)
     }
 
+    func loadCompanionGroupsIfNeeded() async {
+        await loadAudienceGroupsIfNeeded()
+    }
+
+    func selectCompanionGroup(_ group: Group) {
+        selectedCompanionGroup = group
+    }
+
+    func removeCompanionGroup() {
+        selectedCompanionGroup = nil
+    }
+
     func loadAudienceGroupsIfNeeded() async {
         guard !hasLoadedAudienceGroups else { return }
         audienceGroupsState = .loading
@@ -453,7 +513,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
                 author: author,
                 input: input,
                 mediaDrafts: selectedMediaItems,
-                companions: selectedCompanions
+                companions: companionUsersForSubmit
             )
             submitState = .idle
             return PreparedPostSubmit(optimisticPost: optimisticPost, input: input)
@@ -496,7 +556,8 @@ public final class CreatePostComposeViewModel: ObservableObject {
                 )
             },
             caption: caption.nilIfBlank,
-            companionIds: selectedCompanions.map(\.id),
+            companionIds: companionUsersForSubmit.map(\.id),
+            companionGroupName: enableBillSplit ? selectedCompanionGroup?.name : nil,
             checkInPlace: location.nilIfBlank,
             feedKind: enableBillSplit ? .shareBill : .checkIn,
             billSplit: enableBillSplit ? buildBillSplit() : nil,

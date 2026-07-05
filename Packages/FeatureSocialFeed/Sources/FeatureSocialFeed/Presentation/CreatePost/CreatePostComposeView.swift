@@ -314,6 +314,16 @@ public struct CreatePostComposeView: View {
     private var companionsSummaryText: String {
         let companionNames = viewModel.selectedCompanions.map(\.displayName)
 
+        if viewModel.enableBillSplit,
+           let groupName = viewModel.selectedCompanionGroup?.name,
+           !groupName.isEmpty {
+            let otherCount = companionNames.count
+            if otherCount == 0 {
+                return groupName
+            }
+            return "\(groupName) và +\(otherCount) người khác"
+        }
+
         guard !companionNames.isEmpty else {
             return viewModel.enableBillSplit
                 ? "Chạm để chọn những người sẽ cùng chia bill với bạn."
@@ -699,11 +709,15 @@ private struct ComposeCompanionsEditorView: View {
                         )
                     )
 
+                    if viewModel.enableBillSplit, let group = viewModel.selectedCompanionGroup {
+                        selectedCompanionGroupCard(group)
+                    }
+
                     if !viewModel.selectedCompanions.isEmpty {
                         selectedCompanionsStrip
                     }
 
-                    if viewModel.shouldShowFriendSuggestions {
+                    if viewModel.enableBillSplit || viewModel.shouldShowFriendSuggestions {
                         friendSearchResultsList
                     }
                 }
@@ -716,6 +730,9 @@ private struct ComposeCompanionsEditorView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await viewModel.preloadFriendSuggestionsIfNeeded()
+            if viewModel.enableBillSplit {
+                await viewModel.loadCompanionGroupsIfNeeded()
+            }
         }
     }
 
@@ -734,17 +751,19 @@ private struct ComposeCompanionsEditorView: View {
         VStack(spacing: SplickTheme.Spacing.xs) {
             ZStack(alignment: .topTrailing) {
                 AvatarView(
-                    imageURL: friend.avatarURL,
-                    name: friend.displayName,
-                    size: .medium
-                )
-                .overlay {
-                    Circle()
-                        .strokeBorder(
-                            SplickTheme.Colors.primaryGradientStart.opacity(0.18),
-                            lineWidth: 1
-                        )
+                        imageURL: friend.avatarURL,
+                        name: friend.displayName,
+                        size: .medium
+                    )
+                    .overlay {
+                        Circle()
+                            .strokeBorder(
+                                SplickTheme.Colors.primaryGradientStart.opacity(0.18),
+                                lineWidth: 1
+                            )
+                    }
                 }
+                .buttonStyle(.plain)
 
                 Button {
                     viewModel.removeCompanion(friend)
@@ -758,12 +777,12 @@ private struct ComposeCompanionsEditorView: View {
             }
 
             Text(companionShortName(friend))
-                .font(SplickTheme.Typography.caption)
-                .foregroundStyle(SplickTheme.Colors.textPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-                .multilineTextAlignment(.center)
-                .frame(width: ComposeMetrics.companionNameWidth)
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .multilineTextAlignment(.center)
+                    .frame(width: ComposeMetrics.companionNameWidth)
         }
         .frame(width: ComposeMetrics.companionTileWidth)
         .padding(.vertical, SplickTheme.Spacing.xxs)
@@ -772,7 +791,10 @@ private struct ComposeCompanionsEditorView: View {
     @ViewBuilder
     private var friendSearchResultsList: some View {
         VStack(spacing: 0) {
-            if viewModel.friendSearchResults.isEmpty {
+            let showsGroups = viewModel.enableBillSplit && !viewModel.filteredCompanionGroups.isEmpty
+            let showsFriends = !viewModel.friendSearchResults.isEmpty
+
+            if !showsGroups && !showsFriends {
                 if viewModel.isSearchingFriends {
                     ProgressView()
                         .controlSize(.small)
@@ -786,10 +808,20 @@ private struct ComposeCompanionsEditorView: View {
                         .padding(SplickTheme.Spacing.sm)
                 }
             } else {
+                if showsGroups {
+                    groupSearchResultsSection
+                }
+
+                if showsGroups && showsFriends {
+                    Divider().padding(.leading, 48)
+                }
+
                 ForEach(viewModel.friendSearchResults) { friend in
                     FriendTagRow(friend: friend) {
                         viewModel.addCompanion(friend)
                     }
+                    .padding(.horizontal, SplickTheme.Spacing.sm)
+                    .padding(.vertical, SplickTheme.Spacing.xs)
                     .onAppear {
                         viewModel.loadMoreFriendSearchIfNeeded(currentFriend: friend)
                     }
@@ -814,6 +846,101 @@ private struct ComposeCompanionsEditorView: View {
                 style: .continuous
             )
         )
+    }
+
+    private var groupSearchResultsSection: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Nhóm")
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.textTertiary)
+                Spacer()
+            }
+            .padding(.horizontal, SplickTheme.Spacing.sm)
+            .padding(.top, SplickTheme.Spacing.sm)
+            .padding(.bottom, SplickTheme.Spacing.xxs)
+
+            ForEach(viewModel.filteredCompanionGroups) { group in
+                Button {
+                    viewModel.selectCompanionGroup(group)
+                } label: {
+                    companionGroupRow(group)
+                }
+                .buttonStyle(.plain)
+
+                if group.id != viewModel.filteredCompanionGroups.last?.id {
+                    Divider().padding(.leading, 48)
+                }
+            }
+        }
+    }
+
+    private func selectedCompanionGroupCard(_ group: SplickDomain.Group) -> some View {
+        HStack(spacing: SplickTheme.Spacing.sm) {
+            Image(systemName: "person.3.fill")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                .frame(width: 40, height: 40)
+                .background(SplickTheme.Colors.primaryGradientStart.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(group.name)
+                    .font(SplickTheme.Typography.callout)
+                    .foregroundStyle(SplickTheme.Colors.textPrimary)
+                Text("\(group.memberCount) thành viên")
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+            }
+
+            Spacer()
+
+            Button {
+                viewModel.removeCompanionGroup()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 18))
+                    .foregroundStyle(SplickTheme.Colors.textTertiary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(SplickTheme.Spacing.sm)
+        .background(SplickTheme.Colors.tertiaryBackground)
+        .clipShape(
+            RoundedRectangle(
+                cornerRadius: ComposeMetrics.fieldCornerRadius,
+                style: .continuous
+            )
+        )
+    }
+
+    private func companionGroupRow(_ group: SplickDomain.Group) -> some View {
+        HStack(spacing: SplickTheme.Spacing.sm) {
+            Image(systemName: "person.3.fill")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                .frame(width: 40, height: 40)
+                .background(SplickTheme.Colors.primaryGradientStart.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(group.name)
+                    .font(SplickTheme.Typography.callout)
+                    .foregroundStyle(SplickTheme.Colors.textPrimary)
+                Text("\(group.memberCount) thành viên")
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            Image(systemName: "plus.circle.fill")
+                .font(.system(size: 18))
+                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+        }
+        .padding(.horizontal, SplickTheme.Spacing.sm)
+        .padding(.vertical, 10)
     }
 
     private func companionShortName(_ user: UserSummary) -> String {
