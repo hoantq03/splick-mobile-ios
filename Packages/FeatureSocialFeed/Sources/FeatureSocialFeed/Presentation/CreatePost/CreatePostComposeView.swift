@@ -12,7 +12,6 @@ private enum ComposeMetrics {
     static let fieldCornerRadius: CGFloat = SplickTheme.CornerRadius.inset
     static let companionTileWidth: CGFloat = 72
     static let companionNameWidth: CGFloat = 64
-    static let companionsTitle = "Cùng với"
 }
 
 private enum ComposeOptionRoute: Hashable {
@@ -48,7 +47,7 @@ public struct CreatePostComposeView: View {
                 mediaPreview
                 captionSection
                 billSplitSection
-                audienceSection
+                companionsSection
                 additionalOptionsSection
             }
             .padding(SplickTheme.Spacing.md)
@@ -268,11 +267,13 @@ public struct CreatePostComposeView: View {
             Text("Tùy chọn khác")
                 .font(SplickTheme.Typography.headline)
 
-            NavigationLink(value: ComposeOptionRoute.companions) {
+            Button {
+                showAudiencePicker = true
+            } label: {
                 optionRow(
-                    icon: "person.crop.circle.badge.plus",
-                    title: ComposeMetrics.companionsTitle,
-                    summary: companionsSummaryText
+                    icon: "eye",
+                    title: "Ai có thể xem",
+                    summary: audienceOptionSummaryText
                 )
             }
             .buttonStyle(.plain)
@@ -289,38 +290,16 @@ public struct CreatePostComposeView: View {
         .splickCard()
     }
 
-    private var audienceSection: some View {
+    private var companionsSection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-            Text("Ai có thể xem bài viết")
+            Text(companionsSectionTitle)
                 .font(SplickTheme.Typography.headline)
 
-            Button {
-                showAudiencePicker = true
-            } label: {
-                HStack(spacing: SplickTheme.Spacing.sm) {
-                    VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
-                        Text(viewModel.audienceSummaryTitle)
-                            .font(SplickTheme.Typography.callout)
-                            .foregroundStyle(SplickTheme.Colors.textPrimary)
-                        Text(viewModel.audienceSummarySubtitle)
-                            .font(SplickTheme.Typography.caption)
-                            .foregroundStyle(SplickTheme.Colors.textSecondary)
-                            .lineLimit(2)
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(SplickTheme.Colors.textTertiary)
-                }
-                .padding(SplickTheme.Spacing.sm)
-                .background(SplickTheme.Colors.tertiaryBackground)
-                .clipShape(
-                    RoundedRectangle(
-                        cornerRadius: ComposeMetrics.fieldCornerRadius,
-                        style: .continuous
-                    )
+            NavigationLink(value: ComposeOptionRoute.companions) {
+                optionRow(
+                    icon: "person.crop.circle.badge.plus",
+                    title: companionsSectionTitle,
+                    summary: companionsSummaryText
                 )
             }
             .buttonStyle(.plain)
@@ -328,20 +307,32 @@ public struct CreatePostComposeView: View {
         .splickCard()
     }
 
+    private var audienceOptionSummaryText: String {
+        "\(viewModel.audienceSummaryTitle) • \(viewModel.audienceSummarySubtitle)"
+    }
+
     private var companionsSummaryText: String {
-        guard !viewModel.selectedCompanions.isEmpty else {
-            return "Chạm để chọn bạn bè cùng với bạn hoặc người sẽ được tag."
+        let companionNames = viewModel.selectedCompanions.map(\.displayName)
+
+        guard !companionNames.isEmpty else {
+            return viewModel.enableBillSplit
+                ? "Chạm để chọn những người sẽ cùng chia bill với bạn."
+                : "Chạm để chọn những người có trong khoảnh khắc này."
         }
 
-        if viewModel.selectedCompanions.count == 1 {
-            return viewModel.selectedCompanions[0].displayName
+        if companionNames.count == 1 {
+            return companionNames[0]
         }
 
-        let previewNames = viewModel.selectedCompanions.prefix(2).map(\.displayName)
-        if viewModel.selectedCompanions.count <= 2 {
+        let previewNames = Array(companionNames.prefix(2))
+        if companionNames.count <= 2 {
             return previewNames.joined(separator: ", ")
         }
-        return "\(previewNames.joined(separator: ", ")) và +\(viewModel.selectedCompanions.count - 2) người khác"
+        return "\(previewNames.joined(separator: ", ")) và +\(companionNames.count - 2) người khác"
+    }
+
+    private var companionsSectionTitle: String {
+        viewModel.enableBillSplit ? "Chia bill cùng với" : "Khoảnh khắc cùng với"
     }
 
     private var locationSummaryText: String {
@@ -670,17 +661,25 @@ private struct ComposeCompanionsEditorView: View {
     @ObservedObject var viewModel: CreatePostComposeViewModel
     @FocusState private var isFriendSearchFocused: Bool
 
+    private var companionsTitle: String {
+        viewModel.enableBillSplit ? "Chia bill cùng với" : "Khoảnh khắc cùng với"
+    }
+
+    private var friendSearchPlaceholder: String {
+        viewModel.enableBillSplit ? "Tìm bạn bè hoặc nhóm..." : "Tìm bạn bè..."
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
                 VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-                    Text(ComposeMetrics.companionsTitle)
+                    Text(companionsTitle)
                         .font(SplickTheme.Typography.headline)
 
                     HStack(spacing: SplickTheme.Spacing.xs) {
                         Image(systemName: "magnifyingglass")
                             .foregroundStyle(SplickTheme.Colors.textTertiary)
-                        TextField("Tìm bạn bè...", text: $viewModel.friendSearchQuery)
+                        TextField(friendSearchPlaceholder, text: $viewModel.friendSearchQuery)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .focused($isFriendSearchFocused)
@@ -713,7 +712,7 @@ private struct ComposeCompanionsEditorView: View {
             .padding(SplickTheme.Spacing.md)
             .padding(.bottom, SplickTheme.Spacing.xl)
         }
-        .navigationTitle(ComposeMetrics.companionsTitle)
+        .navigationTitle(companionsTitle)
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await viewModel.preloadFriendSuggestionsIfNeeded()
