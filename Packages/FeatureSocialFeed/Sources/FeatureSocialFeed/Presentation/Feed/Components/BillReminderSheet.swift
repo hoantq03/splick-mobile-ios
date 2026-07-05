@@ -21,6 +21,7 @@ struct BillReminderSheet: View {
     @EnvironmentObject private var languageService: LanguageService
     let user: UserSummary
     @Binding var message: String
+    let onUserTap: ((UserSummary) -> Void)?
     let onSend: () -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -28,20 +29,27 @@ struct BillReminderSheet: View {
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
-                HStack(spacing: SplickTheme.Spacing.sm) {
-                    AvatarView(
-                        imageURL: user.avatarURL,
-                        name: user.displayName,
-                        size: .medium
-                    )
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(user.displayName)
-                            .font(SplickTheme.Typography.headline)
-                        Text("@\(user.username)")
-                            .font(SplickTheme.Typography.caption)
-                            .foregroundStyle(SplickTheme.Colors.textTertiary)
+                Button {
+                    dismiss()
+                    onUserTap?(user)
+                } label: {
+                    HStack(spacing: SplickTheme.Spacing.sm) {
+                        AvatarView(
+                            imageURL: user.avatarURL,
+                            name: user.displayName,
+                            size: .medium
+                        )
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(user.displayName)
+                                .font(SplickTheme.Typography.headline)
+                            Text("@\(user.username)")
+                                .font(SplickTheme.Typography.caption)
+                                .foregroundStyle(SplickTheme.Colors.textTertiary)
+                        }
+                        Spacer(minLength: 0)
                     }
                 }
+                .buttonStyle(.plain)
 
                 MentionTextField(
                     "Lời nhắn",
@@ -89,6 +97,7 @@ struct BillReminderAllSheet: View {
     @EnvironmentObject private var languageService: LanguageService
     let users: [UserSummary]
     @Binding var message: String
+    let onUserTap: ((UserSummary) -> Void)?
     let onSend: () -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -103,17 +112,23 @@ struct BillReminderAllSheet: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: SplickTheme.Spacing.sm) {
                         ForEach(users) { user in
-                            VStack(spacing: 4) {
-                                AvatarView(
-                                    imageURL: user.avatarURL,
-                                    name: user.displayName,
-                                    size: .small
-                                )
-                                Text(user.displayName)
-                                    .font(.system(size: 10))
-                                    .lineLimit(1)
-                                    .frame(width: 56)
+                            Button {
+                                dismiss()
+                                onUserTap?(user)
+                            } label: {
+                                VStack(spacing: 4) {
+                                    AvatarView(
+                                        imageURL: user.avatarURL,
+                                        name: user.displayName,
+                                        size: .small
+                                    )
+                                    Text(user.displayName)
+                                        .font(.system(size: 10))
+                                        .lineLimit(1)
+                                        .frame(width: 56)
+                                }
                             }
+                            .buttonStyle(.plain)
                         }
                     }
                 }

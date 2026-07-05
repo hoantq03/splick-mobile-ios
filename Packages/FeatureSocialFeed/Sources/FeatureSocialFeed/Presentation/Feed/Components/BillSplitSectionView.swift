@@ -19,8 +19,25 @@ struct BillSplitSectionView: View {
     @State private var showSendAllReminder = false
     @State private var reminderMessage = ""
 
+    private enum Layout {
+        static let statusFrame: CGFloat = 32
+        static let statusIconSize: CGFloat = 18
+        static let participantColumnWidth: CGFloat = 116
+    }
+
+    private enum PaymentEvidenceDisplayState {
+        case upload
+        case rejected
+        case pendingApproval
+        case paid
+    }
+
     private var unpaidSplits: [PostBillSplitLine] {
         bill.splits.filter { !$0.isPaid }
+    }
+
+    private var paidCount: Int {
+        bill.splits.count - unpaidSplits.count
     }
 
     private var totalCount: Int {
@@ -33,6 +50,26 @@ struct BillSplitSectionView: View {
 
     private var canSendReminders: Bool {
         onSendReminder != nil && onSendAllReminders != nil
+    }
+
+    private var paymentEvidenceDisplayState: PaymentEvidenceDisplayState? {
+        guard let paymentStatus else { return nil }
+
+        switch paymentStatus {
+        case .paid:
+            return .paid
+        case .pendingApproval:
+            return .pendingApproval
+        case .unpaid:
+            return evidenceWasRejected ? .rejected : .upload
+        }
+    }
+
+    private var settlementBadgeTitle: String {
+        if isFullySettled {
+            return "Đã thanh tất toán"
+        }
+        return "\(paidCount)/\(totalCount) đã trả"
     }
 
     init(
@@ -72,6 +109,7 @@ struct BillSplitSectionView: View {
             BillReminderSheet(
                 user: user,
                 message: $reminderMessage,
+                onUserTap: onUserTap,
                 onSend: {
                     onSendReminder?(user, reminderMessage)
                 }
@@ -81,6 +119,7 @@ struct BillSplitSectionView: View {
             BillReminderAllSheet(
                 users: unpaidSplits.map(\.user),
                 message: $reminderMessage,
+                onUserTap: onUserTap,
                 onSend: {
                     onSendAllReminders?(unpaidSplits.map(\.user), reminderMessage)
                 }
@@ -97,36 +136,47 @@ struct BillSplitSectionView: View {
     }
 
     private var headerSummaryRow: some View {
-        VStack(spacing: SplickTheme.Spacing.xxs) {
+        VStack(spacing: 0) {
             HStack(spacing: SplickTheme.Spacing.xs) {
                 HStack(spacing: SplickTheme.Spacing.xs) {
                     Image(systemName: isFullySettled ? "checkmark.circle.fill" : "dollarsign.circle.fill")
                         .font(.body)
                         .scaleEffect(1.3)
-                        .foregroundStyle(SplickTheme.Colors.success)
-                        .accessibilityLabel(languageService.text(.feedBillSplitTitle))
-                    Text(formatMoney(bill.totalAmount, currency: bill.currency))
-                        .font(SplickTheme.Typography.headline)
                         .foregroundStyle(
                             isFullySettled
                                 ? SplickTheme.Colors.success
-                                : SplickTheme.Colors.textPrimary
+                                : SplickTheme.Colors.primaryGradientStart
                         )
-                }
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    toggleExpanded()
+                        .accessibilityLabel(languageService.text(.feedBillSplitTitle))
+                    HStack(spacing: 4) {
+                        Text("Tổng")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(SplickTheme.Colors.textSecondary)
+                        Text(formatMoney(bill.totalAmount, currency: bill.currency))
+                            .font(SplickTheme.Typography.headline)
+                            .foregroundStyle(
+                                isFullySettled
+                                    ? SplickTheme.Colors.success
+                                    : SplickTheme.Colors.textPrimary
+                            )
+                    }
                 }
 
                 Spacer(minLength: 0)
 
-                if let paymentStatus, let onPaymentTap {
-                    PaymentStatusCTA(
-                        status: paymentStatus,
-                        evidenceWasRejected: evidenceWasRejected,
-                        onPay: onPaymentTap
-                    )
-                }
+                settlementBadge
+            }
+            .padding(.horizontal, SplickTheme.Spacing.sm)
+            .padding(.horizontal, SplickTheme.Spacing.sm)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                toggleExpanded()
+            }
+
+            if let paymentEvidenceDisplayState {
+                paymentEvidenceStatusBlock(for: paymentEvidenceDisplayState)
+                    .padding(.top, SplickTheme.Spacing.md)
+                    .padding(.horizontal, SplickTheme.Spacing.sm)
             }
 
             Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
@@ -134,12 +184,14 @@ struct BillSplitSectionView: View {
                 .foregroundStyle(SplickTheme.Colors.textTertiary)
                 .frame(maxWidth: .infinity)
                 .frame(height: 16)
+                .padding(.top, SplickTheme.Spacing.xs)
                 .contentShape(Rectangle())
                 .onTapGesture {
                     toggleExpanded()
                 }
         }
-        .padding(.horizontal, SplickTheme.Spacing.sm)
+        .padding(.top, SplickTheme.Spacing.sm)
+        .padding(.bottom, SplickTheme.Spacing.xs)
     }
 
     private var expandedContent: some View {
@@ -185,7 +237,7 @@ struct BillSplitSectionView: View {
     private func splitRow(_ line: PostBillSplitLine) -> some View {
         let isCurrentUser = line.user.id == currentUserSummary?.id
 
-        HStack(spacing: SplickTheme.Spacing.xs) {
+        HStack(spacing: SplickTheme.Spacing.sm) {
             Button {
                 onUserTap(line.user)
             } label: {
@@ -195,7 +247,7 @@ struct BillSplitSectionView: View {
                         name: line.user.displayName,
                         size: .small
                     )
-                    Text(line.user.displayName)
+                    Text(compactDisplayName(for: line.user, isCurrentUser: isCurrentUser))
                         .font(.system(size: 12, weight: isCurrentUser ? .semibold : .regular))
                         .foregroundStyle(
                             isCurrentUser
@@ -203,37 +255,23 @@ struct BillSplitSectionView: View {
                                 : SplickTheme.Colors.textSecondary
                         )
                         .lineLimit(1)
-                    Spacer(minLength: 4)
-                    Text(formatMoney(line.amount, currency: bill.currency))
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(
-                            isCurrentUser
-                                ? SplickTheme.Colors.success
-                                : SplickTheme.Colors.textSecondary
-                        )
+                        .minimumScaleFactor(0.75)
+                    Spacer(minLength: 0)
                 }
+                .frame(width: Layout.participantColumnWidth)
             }
             .buttonStyle(.plain)
 
-            if line.isPaid {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(SplickTheme.Colors.success)
-                    .frame(width: 32, height: 32)
-                    .accessibilityLabel(languageService.text(.feedBillPaidAccessibility))
-            } else if canSendReminders {
-                Button {
-                    reminderMessage = BillReminderMessages.random()
-                    reminderTarget = line.user
-                } label: {
-                    Image(systemName: "bell.badge")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                        .frame(width: 32, height: 32)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(languageService.format(.feedBillRemindUserAccessibility, line.user.displayName))
-            }
+            Text(formatMoney(line.amount, currency: bill.currency))
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(
+                    isCurrentUser
+                        ? SplickTheme.Colors.success
+                        : SplickTheme.Colors.textPrimary
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            statusView(for: line)
         }
         .padding(.horizontal, SplickTheme.Spacing.sm)
         .padding(.vertical, SplickTheme.Spacing.xs)
@@ -243,6 +281,190 @@ struct BillSplitSectionView: View {
                     .fill(SplickTheme.Colors.success.opacity(0.12))
             }
         }
+    }
+
+    @ViewBuilder
+    private func statusView(for line: PostBillSplitLine) -> some View {
+        if line.isPaid {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: Layout.statusIconSize, weight: .semibold))
+                .foregroundStyle(SplickTheme.Colors.success)
+                .frame(width: Layout.statusFrame, height: Layout.statusFrame)
+                .accessibilityLabel(languageService.text(.feedBillPaidAccessibility))
+        } else if canSendReminders {
+            Button {
+                reminderMessage = BillReminderMessages.random()
+                reminderTarget = line.user
+            } label: {
+                Image(systemName: "bell.badge")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                    .frame(width: Layout.statusFrame, height: Layout.statusFrame)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(languageService.format(.feedBillRemindUserAccessibility, line.user.displayName))
+        } else {
+            Circle()
+                .strokeBorder(SplickTheme.Colors.textTertiary.opacity(0.35), lineWidth: 2)
+                .frame(width: Layout.statusIconSize, height: Layout.statusIconSize)
+                .frame(width: Layout.statusFrame, height: Layout.statusFrame)
+                .accessibilityLabel("Chưa thanh toán")
+        }
+    }
+
+    @ViewBuilder
+    private func paymentEvidenceStatusBlock(for state: PaymentEvidenceDisplayState) -> some View {
+        let content = paymentEvidenceStatusContent(for: state)
+
+        if case .upload = state, let onPaymentTap {
+            Button(action: onPaymentTap) {
+                content
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else if case .rejected = state, let onPaymentTap {
+            Button(action: onPaymentTap) {
+                content
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            content
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func paymentEvidenceStatusContent(for state: PaymentEvidenceDisplayState) -> some View {
+        HStack(spacing: SplickTheme.Spacing.xs) {
+            Image(systemName: paymentEvidenceIconName(for: state))
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(paymentEvidenceAccentColor(for: state))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(paymentEvidenceTitle(for: state))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(SplickTheme.Colors.textPrimary)
+                Text(paymentEvidenceSubtitle(for: state))
+                    .font(.system(size: 11))
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Spacer(minLength: 0)
+
+            if paymentEvidenceShowsChevron(for: state) {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(SplickTheme.Colors.textTertiary)
+            }
+        }
+        .padding(.horizontal, SplickTheme.Spacing.sm)
+        .padding(.vertical, 10)
+        .background {
+            RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.inset, style: .continuous)
+                .fill(paymentEvidenceBackgroundColor(for: state))
+        }
+    }
+
+    private func paymentEvidenceTitle(for state: PaymentEvidenceDisplayState) -> String {
+        switch state {
+        case .upload:
+            return "Upload ảnh chuyển khoản"
+        case .rejected:
+            return "Upload lại ảnh chuyển khoản"
+        case .pendingApproval:
+            return "Đang chờ duyệt"
+        case .paid:
+            return "Đã thanh toán"
+        }
+    }
+
+    private func paymentEvidenceSubtitle(for state: PaymentEvidenceDisplayState) -> String {
+        switch state {
+        case .upload:
+            return "Chọn ảnh và nộp để chủ xị duyệt ảnh chuyển khoản."
+        case .rejected:
+            return "Ồ nooo, ảnh của bạn bị chủ xị từ chối rồi, hãy upload lại."
+        case .pendingApproval:
+            return "Ảnh chuyển khoản của bạn đang chờ chủ xị xác nhận."
+        case .paid:
+            return "Tuyệt vời, khoản thanh toán của bạn đã được chủ xị xác nhận thành công."
+        }
+    }
+
+    private func paymentEvidenceIconName(for state: PaymentEvidenceDisplayState) -> String {
+        switch state {
+        case .upload:
+            return "icloud.and.arrow.up"
+        case .rejected:
+            return "exclamationmark.circle.fill"
+        case .pendingApproval:
+            return "clock.badge"
+        case .paid:
+            return "checkmark.circle.fill"
+        }
+    }
+
+    private func paymentEvidenceAccentColor(for state: PaymentEvidenceDisplayState) -> Color {
+        switch state {
+        case .upload:
+            return SplickTheme.Colors.primaryGradientStart
+        case .rejected:
+            return Color(red: 0.79, green: 0.56, blue: 0.08)
+        case .pendingApproval:
+            return Color(red: 0.79, green: 0.56, blue: 0.08)
+        case .paid:
+            return SplickTheme.Colors.success
+        }
+    }
+
+    private func paymentEvidenceBackgroundColor(for state: PaymentEvidenceDisplayState) -> Color {
+        switch state {
+        case .upload:
+            return SplickTheme.Colors.primaryGradientStart.opacity(0.08)
+        case .rejected, .pendingApproval:
+            return Color(red: 1.0, green: 0.96, blue: 0.84)
+        case .paid:
+            return SplickTheme.Colors.success.opacity(0.1)
+        }
+    }
+
+    private func paymentEvidenceShowsChevron(for state: PaymentEvidenceDisplayState) -> Bool {
+        switch state {
+        case .upload, .rejected:
+            return true
+        case .pendingApproval, .paid:
+            return false
+        }
+    }
+
+    private var settlementBadge: some View {
+        Text(settlementBadgeTitle)
+            .font(.system(size: 12, weight: .semibold))
+            .monospacedDigit()
+            .foregroundStyle(isFullySettled ? SplickTheme.Colors.success : Color(red: 0.72, green: 0.47, blue: 0.04))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background {
+                Capsule()
+                    .fill(
+                        isFullySettled
+                            ? SplickTheme.Colors.success.opacity(0.12)
+                            : Color(red: 0.98, green: 0.93, blue: 0.76)
+                    )
+            }
+    }
+
+    private func compactDisplayName(for user: UserSummary, isCurrentUser: Bool) -> String {
+        if isCurrentUser {
+            return "Tôi"
+        }
+
+        let trimmedName = user.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return user.displayName }
+
+        let components = trimmedName.split(whereSeparator: \.isWhitespace)
+        return components.last.map(String.init) ?? trimmedName
     }
 
     private func formatMoney(_ amount: Decimal, currency: String) -> String {
