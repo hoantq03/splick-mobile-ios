@@ -2,9 +2,11 @@ import SwiftUI
 import DesignSystem
 import Common
 import Localization
+import SplickDomain
 
 struct BlockedUsersSheet: View {
     @ObservedObject var viewModel: BlockedUsersViewModel
+    let onProfileTap: (UserSummary, FriendRelationStatus) -> Void
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
 
@@ -28,31 +30,17 @@ struct BlockedUsersSheet: View {
                     ScrollView {
                         LazyVStack(spacing: SplickTheme.Spacing.xs) {
                             ForEach(viewModel.blockedUsers) { blocked in
-                                HStack(spacing: SplickTheme.Spacing.sm) {
-                                    FriendRowView(user: blocked.user)
-                                    Button {
+                                FriendRowView(
+                                    user: blocked.user,
+                                    friendStatus: .blocked,
+                                    isProcessing: viewModel.processingUserIds.contains(blocked.user.id),
+                                    onProfileTap: {
+                                        onProfileTap(blocked.user, .blocked)
+                                    },
+                                    onUnblock: {
                                         Task { await viewModel.unblock(blocked) }
-                                    } label: {
-                                        Group {
-                                            if viewModel.processingUserIds.contains(blocked.user.id) {
-                                                SplickSpinner(size: .small)
-                                                    .controlSize(.small)
-                                            } else {
-                                                Text(languageService.text(.friendsUnblock))
-                                                    .font(SplickTheme.Typography.caption.weight(.semibold))
-                                            }
-                                        }
-                                        .frame(minWidth: 72)
-                                        .padding(.horizontal, SplickTheme.Spacing.xs)
-                                        .padding(.vertical, SplickTheme.Spacing.xxxs)
-                                        .background(SplickTheme.Colors.secondaryBackground)
-                                        .foregroundStyle(SplickTheme.Colors.textPrimary)
-                                        .clipShape(Capsule())
                                     }
-                                    .buttonStyle(.plain)
-                                    .disabled(viewModel.processingUserIds.contains(blocked.user.id))
-                                }
-                                .splickCard(padding: SplickTheme.Spacing.sm)
+                                )
                             }
                         }
                         .padding(.horizontal, SplickTheme.Spacing.md)
