@@ -342,6 +342,11 @@ enum StringsFeatureVi {
         .messagingGroupNoFriends: "Hãy thêm bạn bè trước khi tạo nhóm.",
         .messagingLeaveGroup: "Rời nhóm",
         .messagingTapToRetry: "Nhấn để gửi lại",
+        .messagingChatMoreAccessibility: "Tùy chọn cuộc trò chuyện",
+        .messagingChatBlockedMessage: "Bạn đã chặn người này.",
+        .messagingChatNotFriendsBanner: "Bạn chưa kết bạn với người này.",
+        .messagingChatRequestSentBanner: "Đã gửi lời mời kết bạn.",
+        .messagingChatRequestReceivedBanner: "Người này muốn kết bạn với bạn.",
 
         // Common extras
         .commonClose: "Đóng",

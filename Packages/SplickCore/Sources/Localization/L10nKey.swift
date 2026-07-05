@@ -584,4 +584,9 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case messagingGroupNoFriends = "messaging.group.no_friends"
     case messagingLeaveGroup = "messaging.group.leave"
     case messagingTapToRetry = "messaging.tap_to_retry"
+    case messagingChatMoreAccessibility = "messaging.chat.more.accessibility"
+    case messagingChatBlockedMessage = "messaging.chat.blocked.message"
+    case messagingChatNotFriendsBanner = "messaging.chat.not_friends.banner"
+    case messagingChatRequestSentBanner = "messaging.chat.request_sent.banner"
+    case messagingChatRequestReceivedBanner = "messaging.chat.request_received.banner"
 }

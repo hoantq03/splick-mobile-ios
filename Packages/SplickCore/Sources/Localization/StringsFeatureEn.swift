@@ -342,6 +342,11 @@ enum StringsFeatureEn {
         .messagingGroupNoFriends: "Add friends first to create a group.",
         .messagingLeaveGroup: "Leave group",
         .messagingTapToRetry: "Tap to retry",
+        .messagingChatMoreAccessibility: "Conversation options",
+        .messagingChatBlockedMessage: "You blocked this user.",
+        .messagingChatNotFriendsBanner: "You're not friends with this person.",
+        .messagingChatRequestSentBanner: "Friend request sent.",
+        .messagingChatRequestReceivedBanner: "This person wants to be your friend.",
 
         // Common extras
         .commonClose: "Close",
