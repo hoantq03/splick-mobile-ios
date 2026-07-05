@@ -47,14 +47,18 @@ public struct AvatarView: View {
                     .resizable()
                     .scaledToFill()
             } else if let imageURL {
-                RemoteImage(url: imageURL) { phase in
+                RemoteImage(
+                    url: imageURL,
+                    maxPixelSize: RemoteImageMetrics.avatarMaxPixelWidth(pointSize: size.dimension)
+                ) { phase in
                     switch phase {
                     case .success(let image):
                         image.resizable().scaledToFill()
                     case .failure:
                         initialsView
                     default:
-                        SplickSpinner(size: .small)
+                        ProgressView()
+                            .controlSize(loadingControlSize)
                     }
                 }
             } else {
@@ -63,6 +67,14 @@ public struct AvatarView: View {
         }
         .frame(width: size.dimension, height: size.dimension)
         .clipShape(Circle())
+    }
+
+    private var loadingControlSize: ControlSize {
+        switch size {
+        case .small: return .mini
+        case .medium: return .small
+        case .large: return .regular
+        }
     }
 
     private var initialsView: some View {
