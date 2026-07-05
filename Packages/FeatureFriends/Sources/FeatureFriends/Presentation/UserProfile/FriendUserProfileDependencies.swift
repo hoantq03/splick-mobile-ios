@@ -6,7 +6,9 @@ public struct FriendUserProfileDependencies {
     public let fetchFriendPaymentProfileUseCase: FetchFriendPaymentProfileUseCaseProtocol
     public let addFriendUseCase: AddFriendUseCaseProtocol
     public let fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol
+    public let fetchOutgoingFriendRequestsUseCase: FetchOutgoingFriendRequestsUseCaseProtocol
     public let acceptFriendRequestUseCase: AcceptFriendRequestUseCaseProtocol
+    public let cancelFriendRequestUseCase: CancelFriendRequestUseCaseProtocol
     public let removeFriendUseCase: RemoveFriendUseCaseProtocol
     public let setFriendNicknameUseCase: SetFriendNicknameUseCaseProtocol
     public let blockUserUseCase: BlockUserUseCaseProtocol
@@ -17,7 +19,9 @@ public struct FriendUserProfileDependencies {
         fetchFriendPaymentProfileUseCase: FetchFriendPaymentProfileUseCaseProtocol,
         addFriendUseCase: AddFriendUseCaseProtocol,
         fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol,
+        fetchOutgoingFriendRequestsUseCase: FetchOutgoingFriendRequestsUseCaseProtocol,
         acceptFriendRequestUseCase: AcceptFriendRequestUseCaseProtocol,
+        cancelFriendRequestUseCase: CancelFriendRequestUseCaseProtocol,
         removeFriendUseCase: RemoveFriendUseCaseProtocol,
         setFriendNicknameUseCase: SetFriendNicknameUseCaseProtocol,
         blockUserUseCase: BlockUserUseCaseProtocol,
@@ -27,7 +31,9 @@ public struct FriendUserProfileDependencies {
         self.fetchFriendPaymentProfileUseCase = fetchFriendPaymentProfileUseCase
         self.addFriendUseCase = addFriendUseCase
         self.fetchIncomingFriendRequestsUseCase = fetchIncomingFriendRequestsUseCase
+        self.fetchOutgoingFriendRequestsUseCase = fetchOutgoingFriendRequestsUseCase
         self.acceptFriendRequestUseCase = acceptFriendRequestUseCase
+        self.cancelFriendRequestUseCase = cancelFriendRequestUseCase
         self.removeFriendUseCase = removeFriendUseCase
         self.setFriendNicknameUseCase = setFriendNicknameUseCase
         self.blockUserUseCase = blockUserUseCase
@@ -38,7 +44,7 @@ public struct FriendUserProfileDependencies {
     public func makeViewModel(
         user: UserSummary,
         initialFriendStatus: FriendRelationStatus = .none,
-        onRelationshipChanged: @escaping () -> Void = {}
+        onRelationshipChanged: @escaping (UUID, FriendRelationStatus) -> Void = { _, _ in }
     ) -> FriendUserProfileViewModel {
         FriendUserProfileViewModel(
             user: user,
@@ -47,7 +53,9 @@ public struct FriendUserProfileDependencies {
             fetchFriendPaymentProfileUseCase: fetchFriendPaymentProfileUseCase,
             addFriendUseCase: addFriendUseCase,
             fetchIncomingFriendRequestsUseCase: fetchIncomingFriendRequestsUseCase,
+            fetchOutgoingFriendRequestsUseCase: fetchOutgoingFriendRequestsUseCase,
             acceptFriendRequestUseCase: acceptFriendRequestUseCase,
+            cancelFriendRequestUseCase: cancelFriendRequestUseCase,
             removeFriendUseCase: removeFriendUseCase,
             setNicknameUseCase: setFriendNicknameUseCase,
             blockUserUseCase: blockUserUseCase,

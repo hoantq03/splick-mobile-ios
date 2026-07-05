@@ -17,6 +17,7 @@ public final class FriendUserProfileViewModel: ObservableObject {
     @Published var profileError: String?
     @Published var alertMessage: String?
     @Published var showNicknameEditor = false
+    @Published var showPaymentSheet = false
     @Published var showRemoveConfirm = false
     @Published var showBlockConfirm = false
 
@@ -27,12 +28,14 @@ public final class FriendUserProfileViewModel: ObservableObject {
     private let fetchFriendPaymentProfileUseCase: FetchFriendPaymentProfileUseCaseProtocol?
     private let addFriendUseCase: AddFriendUseCaseProtocol?
     private let fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol?
+    private let fetchOutgoingFriendRequestsUseCase: FetchOutgoingFriendRequestsUseCaseProtocol?
     private let acceptFriendRequestUseCase: AcceptFriendRequestUseCaseProtocol?
+    private let cancelFriendRequestUseCase: CancelFriendRequestUseCaseProtocol?
     private let removeFriendUseCase: RemoveFriendUseCaseProtocol?
     private let setNicknameUseCase: SetFriendNicknameUseCaseProtocol?
     private let blockUserUseCase: BlockUserUseCaseProtocol?
     private let unblockUserUseCase: UnblockUserUseCaseProtocol?
-    private let onRelationshipChanged: () -> Void
+    private let onRelationshipChanged: (UUID, FriendRelationStatus) -> Void
 
     public init(
         user: UserSummary,
@@ -41,12 +44,14 @@ public final class FriendUserProfileViewModel: ObservableObject {
         fetchFriendPaymentProfileUseCase: FetchFriendPaymentProfileUseCaseProtocol? = nil,
         addFriendUseCase: AddFriendUseCaseProtocol? = nil,
         fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol? = nil,
+        fetchOutgoingFriendRequestsUseCase: FetchOutgoingFriendRequestsUseCaseProtocol? = nil,
         acceptFriendRequestUseCase: AcceptFriendRequestUseCaseProtocol? = nil,
+        cancelFriendRequestUseCase: CancelFriendRequestUseCaseProtocol? = nil,
         removeFriendUseCase: RemoveFriendUseCaseProtocol? = nil,
         setNicknameUseCase: SetFriendNicknameUseCaseProtocol? = nil,
         blockUserUseCase: BlockUserUseCaseProtocol? = nil,
         unblockUserUseCase: UnblockUserUseCaseProtocol? = nil,
-        onRelationshipChanged: @escaping () -> Void
+        onRelationshipChanged: @escaping (UUID, FriendRelationStatus) -> Void = { _, _ in }
     ) {
         self.user = user
         self.friendStatus = initialFriendStatus
@@ -54,7 +59,9 @@ public final class FriendUserProfileViewModel: ObservableObject {
         self.fetchFriendPaymentProfileUseCase = fetchFriendPaymentProfileUseCase
         self.addFriendUseCase = addFriendUseCase
         self.fetchIncomingFriendRequestsUseCase = fetchIncomingFriendRequestsUseCase
+        self.fetchOutgoingFriendRequestsUseCase = fetchOutgoingFriendRequestsUseCase
         self.acceptFriendRequestUseCase = acceptFriendRequestUseCase
+        self.cancelFriendRequestUseCase = cancelFriendRequestUseCase
         self.removeFriendUseCase = removeFriendUseCase
         self.setNicknameUseCase = setNicknameUseCase
         self.blockUserUseCase = blockUserUseCase
@@ -127,7 +134,7 @@ public final class FriendUserProfileViewModel: ObservableObject {
         do {
             _ = try await addFriendUseCase.execute(username: user.username, message: nil)
             friendStatus = .requestSent
-            onRelationshipChanged()
+            onRelationshipChanged(user.id, .requestSent)
             await loadProfile()
         } catch {
             alertMessage = error.localizedDescription
@@ -148,7 +155,28 @@ public final class FriendUserProfileViewModel: ObservableObject {
             }
             try await acceptFriendRequestUseCase.execute(requestId: request.id)
             friendStatus = .friends
-            onRelationshipChanged()
+            onRelationshipChanged(user.id, .friends)
+            await loadProfile()
+        } catch {
+            alertMessage = error.localizedDescription
+        }
+    }
+
+    func cancelFriendRequest() async {
+        guard let fetchOutgoingFriendRequestsUseCase,
+              let cancelFriendRequestUseCase,
+              friendStatus == .requestSent else { return }
+        isProcessing = true
+        defer { isProcessing = false }
+        do {
+            let outgoing = try await fetchOutgoingFriendRequestsUseCase.executeAll()
+            guard let request = outgoing.first(where: { $0.addressee.id == user.id }) else {
+                alertMessage = "Friend request not found."
+                return
+            }
+            try await cancelFriendRequestUseCase.execute(requestId: request.id)
+            friendStatus = .none
+            onRelationshipChanged(user.id, .none)
             await loadProfile()
         } catch {
             alertMessage = error.localizedDescription
@@ -161,7 +189,8 @@ public final class FriendUserProfileViewModel: ObservableObject {
         defer { isProcessing = false }
         do {
             try await removeFriendUseCase.execute(friendUserId: user.id)
-            onRelationshipChanged()
+            friendStatus = .none
+            onRelationshipChanged(user.id, .none)
         } catch {
             alertMessage = error.localizedDescription
         }
@@ -177,7 +206,7 @@ public final class FriendUserProfileViewModel: ObservableObject {
             user = try await setNicknameUseCase.execute(friendUserId: user.id, nickname: nickname)
             nicknameDraft = user.displayName
             showNicknameEditor = false
-            onRelationshipChanged()
+            onRelationshipChanged(user.id, friendStatus)
             await loadProfile()
         } catch {
             alertMessage = error.localizedDescription
@@ -190,7 +219,8 @@ public final class FriendUserProfileViewModel: ObservableObject {
         defer { isProcessing = false }
         do {
             try await blockUserUseCase.execute(userId: user.id)
-            onRelationshipChanged()
+            friendStatus = .blocked
+            onRelationshipChanged(user.id, .blocked)
         } catch {
             alertMessage = error.localizedDescription
         }
@@ -202,7 +232,8 @@ public final class FriendUserProfileViewModel: ObservableObject {
         defer { isProcessing = false }
         do {
             try await unblockUserUseCase.execute(userId: user.id)
-            onRelationshipChanged()
+            friendStatus = .none
+            onRelationshipChanged(user.id, .none)
         } catch {
             alertMessage = error.localizedDescription
         }

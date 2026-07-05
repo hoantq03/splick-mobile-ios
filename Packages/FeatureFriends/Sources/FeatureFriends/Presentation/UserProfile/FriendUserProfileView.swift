@@ -65,12 +65,7 @@ public struct FriendUserProfileView: View {
                         .padding(.horizontal, SplickTheme.Spacing.xl)
                     } else if !viewModel.isBotProfile {
                         relationshipActions
-                            .padding(.horizontal, SplickTheme.Spacing.xl)
-
-                        if viewModel.mode == .friend {
-                            friendPaymentContent
-                                .padding(.horizontal, SplickTheme.Spacing.xl)
-                        }
+                            .padding(.horizontal, SplickTheme.Spacing.md)
                     }
                 }
                 .padding(.bottom, SplickTheme.Spacing.xxl)
@@ -126,6 +121,15 @@ public struct FriendUserProfileView: View {
             }
             .sheet(isPresented: $viewModel.showNicknameEditor) {
                 nicknameEditorSheet
+            }
+            .sheet(isPresented: $viewModel.showPaymentSheet) {
+                FriendPaymentProfileSheet(
+                    user: viewModel.user,
+                    paymentProfile: viewModel.paymentProfile,
+                    isLoading: viewModel.isLoadingFriendPayment,
+                    notConfigured: viewModel.friendPaymentNotConfigured,
+                    errorMessage: viewModel.paymentProfileError
+                )
             }
         }
     }
@@ -192,29 +196,7 @@ public struct FriendUserProfileView: View {
         VStack(spacing: SplickTheme.Spacing.sm) {
             switch viewModel.mode {
             case .friend:
-                if let openDM = openDirectMessage {
-                    SplickButton(languageService.text(.messagingMessageButton), style: .primary) {
-                        Task { _ = await openDM(viewModel.user.id) }
-                    }
-                    .disabled(viewModel.isProcessing)
-                }
-
-                SplickButton(languageService.text(.friendsSetNickname), style: .secondary) {
-                    viewModel.showNicknameEditor = true
-                }
-                .disabled(viewModel.isProcessing)
-
-                SplickButton(languageService.text(.friendsRemoveFriend), style: .secondary) {
-                    viewModel.showRemoveConfirm = true
-                }
-                .disabled(viewModel.isProcessing)
-
-                Button(languageService.text(.friendsBlockUser)) {
-                    viewModel.showBlockConfirm = true
-                }
-                .font(SplickTheme.Typography.callout.weight(.semibold))
-                .foregroundStyle(.red)
-                .disabled(viewModel.isProcessing)
+                friendActionGrid
 
             case .stranger:
                 switch viewModel.friendStatus {
@@ -229,21 +211,20 @@ public struct FriendUserProfileView: View {
                     }
                     .disabled(viewModel.isProcessing)
                 case .requestSent:
-                    Text(languageService.text(.friendsRelationSent))
-                        .font(SplickTheme.Typography.callout)
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    SplickButton(languageService.text(.friendsRecallRequest), style: .destructive) {
+                        Task { await viewModel.cancelFriendRequest() }
+                    }
+                    .disabled(viewModel.isProcessing)
                 default:
                     EmptyView()
                 }
 
-                if viewModel.friendStatus != .requestSent {
-                    Button(languageService.text(.friendsBlockUser)) {
-                        viewModel.showBlockConfirm = true
-                    }
-                    .font(SplickTheme.Typography.callout.weight(.semibold))
-                    .foregroundStyle(.red)
-                    .disabled(viewModel.isProcessing)
+                Button(languageService.text(.friendsBlockUser)) {
+                    viewModel.showBlockConfirm = true
                 }
+                .font(SplickTheme.Typography.callout.weight(.semibold))
+                .foregroundStyle(.red)
+                .disabled(viewModel.isProcessing)
 
             case .blocked:
                 SplickButton(languageService.text(.friendsUnblock), style: .secondary) {
@@ -256,49 +237,64 @@ public struct FriendUserProfileView: View {
             }
 
             if viewModel.isProcessing {
-                SplickSpinner(size: .medium)
+                ProgressView()
+                    .controlSize(.regular)
             }
         }
     }
 
-    @ViewBuilder
-    private var friendPaymentContent: some View {
-        if viewModel.isLoadingFriendPayment {
-            HStack {
-                Spacer()
-                ProgressView()
-                Spacer()
+    private var friendActionGrid: some View {
+        VStack(spacing: SplickTheme.Spacing.xs) {
+            HStack(spacing: SplickTheme.Spacing.xs) {
+                if let openDM = openDirectMessage {
+                    ProfileCompactActionButton(
+                        icon: "message.fill",
+                        title: languageService.text(.messagingMessageButton),
+                        tint: SplickTheme.Colors.primaryGradientStart,
+                        isDisabled: viewModel.isProcessing
+                    ) {
+                        Task { _ = await openDM(viewModel.user.id) }
+                    }
+                }
+
+                ProfileCompactActionButton(
+                    icon: "person.text.rectangle",
+                    title: languageService.text(.friendsSetNickname),
+                    isDisabled: viewModel.isProcessing
+                ) {
+                    viewModel.showNicknameEditor = true
+                }
+
+                ProfileCompactActionButton(
+                    icon: "qrcode",
+                    title: languageService.text(.profilePaymentManage),
+                    isDisabled: viewModel.isProcessing
+                ) {
+                    viewModel.showPaymentSheet = true
+                }
             }
-            .padding(SplickTheme.Spacing.md)
-        } else if let paymentProfile = viewModel.paymentProfile {
-            PaymentProfileSummaryView(
-                profile: paymentProfile,
-                title: languageService.text(.profilePaymentFriendSection)
-            )
-        } else if let error = viewModel.paymentProfileError {
-            VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
-                Text(languageService.text(.profilePaymentFriendSection))
-                    .font(SplickTheme.Typography.headline)
-                Text(error)
-                    .font(SplickTheme.Typography.caption)
-                    .foregroundStyle(SplickTheme.Colors.error)
+
+            HStack(spacing: SplickTheme.Spacing.xs) {
+                ProfileCompactActionButton(
+                    icon: "person.badge.minus",
+                    title: languageService.text(.friendsRemoveFriend),
+                    isDisabled: viewModel.isProcessing
+                ) {
+                    viewModel.showRemoveConfirm = true
+                }
+
+                ProfileCompactActionButton(
+                    icon: "hand.raised.fill",
+                    title: languageService.text(.friendsBlockUser),
+                    tint: SplickTheme.Colors.error,
+                    isDisabled: viewModel.isProcessing
+                ) {
+                    viewModel.showBlockConfirm = true
+                }
+
+                Color.clear
+                    .frame(maxWidth: .infinity)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(SplickTheme.Spacing.md)
-            .background(SplickTheme.Colors.cardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium))
-        } else if viewModel.friendPaymentNotConfigured {
-            VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
-                Text(languageService.text(.profilePaymentFriendSection))
-                    .font(SplickTheme.Typography.headline)
-                Text(languageService.text(.profilePaymentEmptyFriend))
-                    .font(SplickTheme.Typography.callout)
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(SplickTheme.Spacing.md)
-            .background(SplickTheme.Colors.cardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium))
         }
     }
 
