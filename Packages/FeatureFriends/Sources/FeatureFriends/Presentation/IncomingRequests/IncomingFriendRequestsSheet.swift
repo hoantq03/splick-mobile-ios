@@ -2,9 +2,11 @@ import SwiftUI
 import DesignSystem
 import Common
 import Localization
+import SplickDomain
 
 struct IncomingFriendRequestsSheet: View {
     @ObservedObject var viewModel: IncomingFriendRequestsViewModel
+    let onProfileTap: (UserSummary, FriendRelationStatus) -> Void
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
 
@@ -28,11 +30,19 @@ struct IncomingFriendRequestsSheet: View {
                     ScrollView {
                         LazyVStack(spacing: SplickTheme.Spacing.xs) {
                             ForEach(viewModel.requests) { request in
-                                IncomingFriendRequestRowView(
-                                    request: request,
+                                FriendRowView(
+                                    user: request.requester,
+                                    friendStatus: .requestReceived,
                                     isProcessing: viewModel.processingRequestIds.contains(request.id),
-                                    onAccept: { Task { await viewModel.accept(request) } },
-                                    onReject: { Task { await viewModel.reject(request) } }
+                                    onProfileTap: {
+                                        onProfileTap(request.requester, .requestReceived)
+                                    },
+                                    onAddFriend: {
+                                        Task { await viewModel.accept(request) }
+                                    },
+                                    onRejectFriend: {
+                                        Task { await viewModel.reject(request) }
+                                    }
                                 )
                             }
                         }
@@ -58,60 +68,5 @@ struct IncomingFriendRequestsSheet: View {
             }
             .task { await viewModel.load() }
         }
-    }
-}
-
-private struct IncomingFriendRequestRowView: View {
-    @EnvironmentObject private var languageService: LanguageService
-    let request: IncomingFriendRequest
-    let isProcessing: Bool
-    let onAccept: () -> Void
-    let onReject: () -> Void
-
-    var body: some View {
-        HStack(spacing: SplickTheme.Spacing.sm) {
-            AvatarView(
-                imageURL: request.requester.avatarURL,
-                name: request.requester.displayName,
-                size: .medium
-            )
-
-            VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
-                Text(request.requester.displayName)
-                    .font(SplickTheme.Typography.headline)
-                    .foregroundStyle(SplickTheme.Colors.textPrimary)
-                Text("@\(request.requester.username)")
-                    .font(SplickTheme.Typography.caption)
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
-                if let message = request.message, !message.isEmpty {
-                    Text(message)
-                        .font(SplickTheme.Typography.caption)
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
-                        .lineLimit(2)
-                }
-            }
-
-            Spacer(minLength: SplickTheme.Spacing.xs)
-
-            if isProcessing {
-                SplickSpinner(size: .medium)
-            } else {
-                VStack(spacing: SplickTheme.Spacing.xxxs) {
-                    Button(languageService.text(.friendsAccept), action: onAccept)
-                        .font(SplickTheme.Typography.caption.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, SplickTheme.Spacing.xs)
-                        .padding(.vertical, SplickTheme.Spacing.xxxs)
-                        .background(SplickTheme.Colors.primaryGradientStart)
-                        .clipShape(Capsule())
-
-                    Button(languageService.text(.friendsReject), action: onReject)
-                        .font(SplickTheme.Typography.caption.weight(.semibold))
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .splickCard(padding: SplickTheme.Spacing.sm)
     }
 }
