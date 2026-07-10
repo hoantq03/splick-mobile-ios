@@ -1,6 +1,6 @@
 import SwiftUI
 import PhotosUI
-import UniformTypeIdentifiers
+import UIKit
 import Common
 import DesignSystem
 import Localization
@@ -11,6 +11,7 @@ struct CommentComposerView: View {
     @EnvironmentObject private var languageService: LanguageService
     @EnvironmentObject private var emojiStore: CustomEmojiStore
     @Environment(\.customEmojiDependencies) private var customEmojiDependencies
+    @Environment(\.commentImageUpload) private var commentImageUpload
 
     let placeholder: String
     /// When set (e.g. user tapped Reply), pre-fills `@username ` for mention + server push.
@@ -23,16 +24,16 @@ struct CommentComposerView: View {
 
     @State private var draft = ""
     @State private var appliedPrefillUsername: String?
-    @State private var pendingAttachments: [CommentSubmissionAttachment] = []
+    @State private var attachmentDrafts: [CommentAttachmentDraft] = []
     @State private var validationMessage: String?
     @State private var showMentionPicker = false
     @State private var activeMentionQuery = ""
     @State private var mentionViewModel: MentionFriendsViewModel?
     @State private var photoPickerItems: [PhotosPickerItem] = []
-    @State private var showFileImporter = false
     @State private var showGifPicker = false
     @State private var showEmojiInsertPicker = false
     @State private var showCustomEmojiUpload = false
+    @State private var attachmentPreviewRoute: LocalImagePreviewRoute?
 
     private let composerHeight: CGFloat = 36
 
@@ -69,39 +70,33 @@ struct CommentComposerView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
-            if !pendingAttachments.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(Array(pendingAttachments.enumerated()), id: \.offset) { index, item in
-                            attachmentChip(item, index: index)
-                        }
+            if !attachmentDrafts.isEmpty {
+                CommentAttachmentDraftStrip(
+                    drafts: attachmentDrafts,
+                    onTapDraft: { index in
+                        attachmentPreviewRoute = LocalImagePreviewRoute(index: index)
+                    },
+                    onRemoveDraft: { index in
+                        removeDraft(at: index)
                     }
-                }
+                )
             }
 
             HStack(alignment: .center, spacing: 8) {
                 HStack(spacing: 2) {
                     PhotosPicker(
                         selection: $photoPickerItems,
-                        maxSelectionCount: 10,
-                        matching: .any(of: [.images, .videos])
+                        maxSelectionCount: remainingImageSlots,
+                        matching: .images
                     ) {
                         Image(systemName: "photo")
                             .font(.system(size: 14))
                             .foregroundStyle(SplickTheme.Colors.textSecondary)
                             .frame(width: 28, height: composerHeight)
                     }
+                    .disabled(remainingImageSlots == 0)
                     .onChange(of: photoPickerItems) { items in
-                        Task { await importPhotoPickerItems(items) }
-                    }
-
-                    Button {
-                        showFileImporter = true
-                    } label: {
-                        Image(systemName: "paperclip")
-                            .font(.system(size: 14))
-                            .foregroundStyle(SplickTheme.Colors.textSecondary)
-                            .frame(width: 28, height: composerHeight)
+                        beginImportingPhotoPickerItems(items)
                     }
 
                     emojiMenuButton
@@ -144,31 +139,6 @@ struct CommentComposerView: View {
         .onAppear {
             applyPrefillMention(prefillMentionUsername)
         }
-        .fileImporter(
-            isPresented: $showFileImporter,
-            allowedContentTypes: [.pdf, .data, .item],
-            allowsMultipleSelection: true
-        ) { result in
-            importFiles(result)
-        }
-        .sheet(isPresented: $showGifPicker) {
-            if let gifPickerViewModel {
-                NavigationStack {
-                    GifPickerView(viewModel: gifPickerViewModel) { sticker in
-                        appendGifSticker(sticker)
-                        showGifPicker = false
-                    }
-                    .navigationTitle("Chọn GIF")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("Đóng") { showGifPicker = false }
-                        }
-                    }
-                }
-                .presentationDetents([.medium, .large])
-            }
-        }
         .sheet(isPresented: $showEmojiInsertPicker) {
             EmojiPickerSheet(
                 currentUserId: nil,
@@ -188,43 +158,45 @@ struct CommentComposerView: View {
                 )
             }
         }
-    }
-
-    private func openCustomEmojiUpload() {
-        showEmojiInsertPicker = false
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            showCustomEmojiUpload = true
+        .sheet(isPresented: $showGifPicker) {
+            if let gifPickerViewModel {
+                NavigationStack {
+                    GifPickerView(viewModel: gifPickerViewModel) { sticker in
+                        appendGifSticker(sticker)
+                        showGifPicker = false
+                    }
+                    .navigationTitle("Chọn GIF")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button(languageService.text(.commonCancel)) { showGifPicker = false }
+                        }
+                    }
+                }
+                .presentationDetents([.medium, .large])
+            }
+        }
+        .fullScreenCover(item: $attachmentPreviewRoute) { route in
+            attachmentFullscreenPreview(at: route.index)
         }
     }
 
     @ViewBuilder
     private var emojiMenuButton: some View {
-        let showsGif = gifPickerViewModel != nil
-        let showsEmoji = true
-
-        if showsGif && showsEmoji {
+        if gifPickerViewModel != nil {
             Menu {
-                if showsGif {
-                    Button {
-                        showGifPicker = true
-                    } label: {
-                        Label("GIF", systemImage: "photo.on.rectangle.angled")
-                    }
+                Button {
+                    showGifPicker = true
+                } label: {
+                    Label("GIF", systemImage: "photo.on.rectangle.angled")
                 }
+                .disabled(remainingGifSlots == 0)
+
                 Button {
                     showEmojiInsertPicker = true
                 } label: {
                     Label(languageService.text(.feedEmojiPickerTitle), systemImage: "face.smiling")
                 }
-            } label: {
-                Image(systemName: "face.smiling")
-                    .font(.system(size: 14))
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
-                    .frame(width: 28, height: composerHeight)
-            }
-        } else if showsGif {
-            Button {
-                showGifPicker = true
             } label: {
                 Image(systemName: "face.smiling")
                     .font(.system(size: 14))
@@ -240,6 +212,61 @@ struct CommentComposerView: View {
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
                     .frame(width: 28, height: composerHeight)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func attachmentFullscreenPreview(at index: Int) -> some View {
+        if attachmentDrafts.indices.contains(index) {
+            let draft = attachmentDrafts[index]
+            if draft.phase == .ready {
+                switch draft.kind {
+                case .image:
+                    if let image = draft.previewImage {
+                        LocalImageFullscreenPreview(
+                            images: [image],
+                            initialIndex: 0,
+                            onDismiss: { attachmentPreviewRoute = nil }
+                        )
+                    }
+                case .gif:
+                    if let url = draft.submission?.remoteURL {
+                        RemoteGifFullscreenPreview(url: url) {
+                            attachmentPreviewRoute = nil
+                        }
+                    }
+                default:
+                    EmptyView()
+                }
+            }
+        }
+    }
+
+    private var remainingImageSlots: Int {
+        let imageCount = attachmentDrafts.filter { $0.kind == .image }.count
+        return max(0, CommentAttachmentValidator.maxImages - imageCount)
+    }
+
+    private var remainingGifSlots: Int {
+        let gifCount = attachmentDrafts.filter { $0.kind == .gif }.count
+        return max(0, CommentAttachmentValidator.maxGifs - gifCount)
+    }
+
+    private var isProcessingAttachments: Bool {
+        attachmentDrafts.contains { $0.phase == .loading }
+    }
+
+    private var hasFailedAttachments: Bool {
+        attachmentDrafts.contains {
+            if case .failed = $0.phase { return true }
+            return false
+        }
+    }
+
+    private func openCustomEmojiUpload() {
+        showEmojiInsertPicker = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            showCustomEmojiUpload = true
         }
     }
 
@@ -294,106 +321,45 @@ struct CommentComposerView: View {
         }
     }
 
-    private func attachmentChip(_ item: CommentSubmissionAttachment, index: Int) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: iconName(for: item.kind))
-                .font(.system(size: 10))
-            Text(item.fileName ?? item.kind.rawValue)
-                .font(.system(size: 10))
-                .lineLimit(1)
-            Button {
-                pendingAttachments.remove(at: index)
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 12))
-            }
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(Capsule().fill(SplickTheme.Colors.tertiaryBackground))
-    }
-
     private var canSubmit: Bool {
-        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !pendingAttachments.isEmpty
+        guard !isProcessingAttachments, !hasFailedAttachments else { return false }
+        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasReadyAttachments = attachmentDrafts.contains { $0.phase == .ready && $0.submission != nil }
+        return !trimmed.isEmpty || hasReadyAttachments
     }
 
     private func submit() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let previewAttachments = pendingAttachments.map {
-            CommentAttachment(
-                kind: $0.kind,
-                fileName: $0.fileName,
-                sizeBytes: $0.data?.count ?? 0
-            )
+        let submissions = readySubmissions
+        let previewAttachmentModels = submissions.map {
+            CommentAttachment(kind: $0.kind, fileName: $0.fileName, sizeBytes: $0.uploadedSizeBytes ?? $0.data?.count ?? 0)
         }
-        if let error = CommentAttachmentValidator.validate(previewAttachments) {
+        if let error = CommentAttachmentValidator.validate(previewAttachmentModels) {
             validationMessage = error
             return
         }
         guard canSubmit else { return }
         validationMessage = nil
-        onSubmit(text, pendingAttachments)
+        onSubmit(text, submissions)
         draft = ""
-        pendingAttachments = []
+        attachmentDrafts = []
         photoPickerItems = []
         showMentionPicker = false
         appliedPrefillUsername = nil
     }
 
-    @MainActor
-    private func importPhotoPickerItems(_ items: [PhotosPickerItem]) async {
-        for item in items {
-            guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
-            let kind: CommentAttachmentKind = item.supportedContentTypes.contains(where: { $0.conforms(to: .movie) })
-                ? .video
-                : .image
-            let mimeType = kind == .video ? "video/mp4" : "image/jpeg"
-            let submission = CommentSubmissionAttachment(
-                kind: kind,
-                data: data,
-                mimeType: mimeType,
-                fileName: kind == .video ? "video.mp4" : "photo.jpg"
-            )
-            if let error = CommentAttachmentValidator.canAdd(
-                CommentAttachment(kind: kind, sizeBytes: data.count),
-                to: previewAttachments(from: pendingAttachments)
-            ) {
-                validationMessage = error
-                continue
-            }
-            validationMessage = nil
-            pendingAttachments.append(submission)
-        }
-        photoPickerItems = []
-    }
-
-    private func importFiles(_ result: Result<[URL], Error>) {
-        guard case .success(let urls) = result else { return }
-        for url in urls {
-            guard url.startAccessingSecurityScopedResource() else { continue }
-            defer { url.stopAccessingSecurityScopedResource() }
-            guard let data = try? Data(contentsOf: url) else { continue }
-            let submission = CommentSubmissionAttachment(
-                kind: .file,
-                data: data,
-                mimeType: mimeType(for: url),
-                fileName: url.lastPathComponent
-            )
-            if let error = CommentAttachmentValidator.canAdd(
-                CommentAttachment(kind: .file, fileName: url.lastPathComponent, sizeBytes: data.count),
-                to: previewAttachments(from: pendingAttachments)
-            ) {
-                validationMessage = error
-                continue
-            }
-            validationMessage = nil
-            pendingAttachments.append(submission)
+    private var readySubmissions: [CommentSubmissionAttachment] {
+        attachmentDrafts.compactMap { draft in
+            guard draft.phase == .ready else { return nil }
+            return draft.submission
         }
     }
 
-    private func previewAttachments(from submissions: [CommentSubmissionAttachment]) -> [CommentAttachment] {
-        submissions.map {
-            CommentAttachment(kind: $0.kind, fileName: $0.fileName, sizeBytes: $0.data?.count ?? 0)
+    private func removeDraft(at index: Int) {
+        guard attachmentDrafts.indices.contains(index) else { return }
+        attachmentDrafts.remove(at: index)
+        if let route = attachmentPreviewRoute, route.index >= attachmentDrafts.count {
+            attachmentPreviewRoute = nil
         }
     }
 
@@ -405,28 +371,152 @@ struct CommentComposerView: View {
         )
         if let error = CommentAttachmentValidator.canAdd(
             CommentAttachment(kind: .gif, fileName: submission.fileName),
-            to: previewAttachments(from: pendingAttachments)
+            to: previewAttachmentModels(from: readySubmissions)
         ) {
             validationMessage = error
             return
         }
         validationMessage = nil
-        pendingAttachments.append(submission)
+        attachmentDrafts.append(
+            CommentAttachmentDraft(
+                id: UUID(),
+                kind: .gif,
+                phase: .ready,
+                previewImage: nil,
+                submission: submission
+            )
+        )
     }
 
-    private func mimeType(for url: URL) -> String {
-        if url.pathExtension.lowercased() == "pdf" {
-            return "application/pdf"
+    private func beginImportingPhotoPickerItems(_ items: [PhotosPickerItem]) {
+        photoPickerItems = []
+        guard !items.isEmpty else { return }
+
+        for item in items {
+            guard remainingImageSlots > 0 else { break }
+            let draft = CommentAttachmentDraft(
+                id: UUID(),
+                kind: .image,
+                phase: .loading,
+                previewImage: nil,
+                submission: nil
+            )
+            attachmentDrafts.append(draft)
+            let draftId = draft.id
+            Task {
+                await processPhotoPickerItem(item, draftId: draftId)
+            }
         }
-        return "application/octet-stream"
     }
 
-    private func iconName(for kind: CommentAttachmentKind) -> String {
-        switch kind {
-        case .image: return "photo"
-        case .video: return "video"
-        case .file: return "doc"
-        case .gif: return "face.smiling"
+    @MainActor
+    private func processPhotoPickerItem(_ item: PhotosPickerItem, draftId: UUID) async {
+        let prepared = await Task.detached(priority: .userInitiated) {
+            guard let data = try? await item.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data)?.normalizedOrientation(),
+                  let jpegData = image.jpegData(compressionQuality: 0.92) else {
+                return nil as (UIImage, Data)?
+            }
+            return (image, jpegData)
+        }.value
+
+        guard attachmentDrafts.contains(where: { $0.id == draftId }) else { return }
+
+        guard let (image, jpegData) = prepared else {
+            markDraft(draftId, phase: .failed("Không thể mở ảnh đã chọn."))
+            return
         }
+
+        updateDraftPreview(draftId, previewImage: image)
+
+        let candidate = CommentAttachment(kind: .image, sizeBytes: jpegData.count)
+        if let error = CommentAttachmentValidator.canAdd(
+            candidate,
+            to: previewAttachmentModelsIncludingPending(from: draftId)
+        ) {
+            markDraft(draftId, phase: .failed(error))
+            return
+        }
+
+        if let commentImageUpload {
+            do {
+                let upload = try await commentImageUpload(jpegData, "image/jpeg")
+                let fileName = "photo-\(imageDraftCount).jpg"
+                let submission = CommentSubmissionAttachment(
+                    kind: .image,
+                    uploadedMediaId: upload.id,
+                    url: upload.url,
+                    thumbnailURL: upload.thumbnailURL,
+                    sizeBytes: upload.sizeBytes,
+                    fileName: fileName
+                )
+                markDraft(draftId, phase: .ready, previewImage: image, submission: submission)
+            } catch {
+                markDraft(draftId, phase: .failed(error.localizedDescription))
+            }
+            return
+        }
+
+        let submission = CommentSubmissionAttachment(
+            kind: .image,
+            data: jpegData,
+            mimeType: "image/jpeg",
+            fileName: "photo-\(imageDraftCount).jpg"
+        )
+        markDraft(draftId, phase: .ready, previewImage: image, submission: submission)
+    }
+
+    private var imageDraftCount: Int {
+        attachmentDrafts.filter { $0.kind == .image }.count
+    }
+
+    @MainActor
+    private func updateDraftPreview(_ draftId: UUID, previewImage: UIImage) {
+        guard let index = attachmentDrafts.firstIndex(where: { $0.id == draftId }) else { return }
+        attachmentDrafts[index].previewImage = previewImage
+    }
+
+    @MainActor
+    private func markDraft(
+        _ draftId: UUID,
+        phase: CommentAttachmentDraft.Phase,
+        previewImage: UIImage? = nil,
+        submission: CommentSubmissionAttachment? = nil
+    ) {
+        guard let index = attachmentDrafts.firstIndex(where: { $0.id == draftId }) else { return }
+        attachmentDrafts[index].phase = phase
+        if let previewImage {
+            attachmentDrafts[index].previewImage = previewImage
+        }
+        if let submission {
+            attachmentDrafts[index].submission = submission
+        }
+        if case .failed = phase {
+            validationMessage = attachmentDrafts[index].phase.failureMessage
+        } else if !hasFailedAttachments {
+            validationMessage = nil
+        }
+    }
+
+    private func previewAttachmentModels(from submissions: [CommentSubmissionAttachment]) -> [CommentAttachment] {
+        submissions.map {
+            CommentAttachment(kind: $0.kind, fileName: $0.fileName, sizeBytes: $0.uploadedSizeBytes ?? $0.data?.count ?? 0)
+        }
+    }
+
+    private func previewAttachmentModelsIncludingPending(from excludingDraftId: UUID) -> [CommentAttachment] {
+        var models = previewAttachmentModels(from: readySubmissions)
+        let pendingImages = attachmentDrafts.filter {
+            $0.kind == .image && $0.id != excludingDraftId && $0.phase == .loading
+        }
+        models.append(contentsOf: pendingImages.map { _ in CommentAttachment(kind: .image, sizeBytes: 0) })
+        return models
+    }
+}
+
+private extension CommentAttachmentDraft.Phase {
+    var failureMessage: String? {
+        if case .failed(let message) = self { return message }
+        return nil
     }
 }

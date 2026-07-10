@@ -407,7 +407,7 @@ public final class FeedViewModel: ObservableObject {
     func addComment(
         to postId: UUID,
         text: String,
-        submissionAttachments: [CommentSubmissionAttachment],
+        submissionAttachments: [CommentSubmissionAttachment] = [],
         parentCommentId: UUID? = nil
     ) async -> AddCommentResult {
         guard let author = currentUserSummary else {
@@ -420,7 +420,7 @@ public final class FeedViewModel: ObservableObject {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty && submissionAttachments.isEmpty {
             return AddCommentResult(
-                error: "Nội dung bình luận hoặc đính kèm không được để trống.",
+                error: "Nội dung bình luận hoặc ảnh đính kèm không được để trống.",
                 createdCommentId: nil
             )
         }

@@ -19,6 +19,7 @@ public struct LinkedPostDetailOverlay: View {
     let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
     let profileDependencies: FriendUserProfileDependencies?
     let makeGifPickerViewModel: GifPickerViewModelFactory?
+    let uploadCommentImage: CommentImageUploadHandler?
     let onDismiss: () -> Void
 
     @State private var dragOffset: CGFloat = 0
@@ -29,6 +30,7 @@ public struct LinkedPostDetailOverlay: View {
         fetchFriendsUseCase: FetchFriendsUseCaseProtocol? = nil,
         profileDependencies: FriendUserProfileDependencies? = nil,
         makeGifPickerViewModel: GifPickerViewModelFactory? = nil,
+        uploadCommentImage: CommentImageUploadHandler? = nil,
         onDismiss: @escaping () -> Void
     ) {
         self.presentation = presentation
@@ -36,6 +38,7 @@ public struct LinkedPostDetailOverlay: View {
         self.fetchFriendsUseCase = fetchFriendsUseCase
         self.profileDependencies = profileDependencies
         self.makeGifPickerViewModel = makeGifPickerViewModel
+        self.uploadCommentImage = uploadCommentImage
         self.onDismiss = onDismiss
     }
 
@@ -68,6 +71,7 @@ public struct LinkedPostDetailOverlay: View {
                 }
             }
         }
+        .environment(\.commentImageUpload, uploadCommentImage)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(SplickTheme.Colors.background.ignoresSafeArea())
         .shadow(color: .black.opacity(0.14), radius: 16, x: -6, y: 0)

@@ -98,6 +98,9 @@ struct MainTabView: View {
                     fetchFriendsUseCase: container.fetchFriendsUseCase,
                     profileDependencies: container.friendUserProfileDependencies,
                     makeGifPickerViewModel: container.makeGifPickerViewModel(groupId:),
+                    uploadCommentImage: { data, mimeType in
+                        try await container.uploadCommentAttachment(data: data, mimeType: mimeType)
+                    },
                     onDismiss: { appState.dismissLinkedPostPresentation() }
                 )
                 .environmentObject(container.languageService)
@@ -246,6 +249,12 @@ struct MainTabView: View {
         )
         .environmentObject(container.customEmojiStore)
         .environment(\.customEmojiDependencies, container.customEmojiDependencies)
+        .environment(
+            \.commentImageUpload,
+            { data, mimeType in
+                try await container.uploadCommentAttachment(data: data, mimeType: mimeType)
+            }
+        )
     }
 
     @ViewBuilder

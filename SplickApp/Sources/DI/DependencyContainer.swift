@@ -151,6 +151,15 @@ final class DependencyContainer: ObservableObject {
         UploadMediaUseCase(repository: mediaRepository)
     }()
 
+    func uploadCommentAttachment(data: Data, mimeType: String) async throws -> MediaUploadResult {
+        try await mediaRepository.uploadImage(
+            data: data,
+            mimeType: mimeType,
+            purpose: .commentAttachment,
+            groupId: nil
+        )
+    }
+
     lazy var uploadUserAvatarUseCase: UploadUserAvatarUseCaseProtocol = {
         UploadUserAvatarUseCase(repository: mediaRepository)
     }()

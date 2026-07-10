@@ -125,38 +125,7 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
         parentCommentId: UUID?,
         submissionAttachments: [CommentSubmissionAttachment] = []
     ) async throws {
-        var attachmentDTOs: [CreateCommentAttachmentRequestDTO] = []
-        for submission in submissionAttachments {
-            if submission.isRemoteOnly, let remoteURL = submission.remoteURL {
-                attachmentDTOs.append(
-                    CreateCommentAttachmentRequestDTO(
-                        kind: submission.kind.rawValue,
-                        mediaId: nil,
-                        url: remoteURL.absoluteString,
-                        fileName: submission.fileName,
-                        thumbnailUrl: remoteURL.absoluteString,
-                        sizeBytes: nil
-                    )
-                )
-            } else if let data = submission.data, let mimeType = submission.mimeType {
-                let upload = try await mediaRepository.uploadImage(
-                    data: data,
-                    mimeType: mimeType,
-                    purpose: .commentAttachment,
-                    groupId: nil
-                )
-                attachmentDTOs.append(
-                    CreateCommentAttachmentRequestDTO(
-                        kind: submission.kind.rawValue,
-                        mediaId: upload.id,
-                        url: upload.url.absoluteString,
-                        fileName: submission.fileName,
-                        thumbnailUrl: upload.thumbnailURL?.absoluteString,
-                        sizeBytes: upload.sizeBytes
-                    )
-                )
-            }
-        }
+        let attachmentDTOs = try await buildCommentAttachmentDTOs(from: submissionAttachments)
 
         let trimmedBody = body?.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedBody = (trimmedBody?.isEmpty ?? true) ? nil : trimmedBody
@@ -254,37 +223,70 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
     ) async throws -> [CreateCommentAttachmentRequestDTO] {
         var attachmentDTOs: [CreateCommentAttachmentRequestDTO] = []
         for submission in submissions {
+            if submission.isPreUploaded {
+                if let dto = makeAttachmentDTO(from: submission) {
+                    attachmentDTOs.append(dto)
+                }
+                continue
+            }
             if submission.isRemoteOnly, let remoteURL = submission.remoteURL {
-                attachmentDTOs.append(
-                    CreateCommentAttachmentRequestDTO(
-                        kind: submission.kind.rawValue,
-                        mediaId: nil,
-                        url: remoteURL.absoluteString,
-                        fileName: submission.fileName,
-                        thumbnailUrl: remoteURL.absoluteString,
-                        sizeBytes: nil
-                    )
-                )
-            } else if let data = submission.data, let mimeType = submission.mimeType {
+                if let dto = makeAttachmentDTO(from: submission) {
+                    attachmentDTOs.append(dto)
+                }
+                continue
+            }
+            if let data = submission.data, let mimeType = submission.mimeType {
                 let upload = try await mediaRepository.uploadImage(
                     data: data,
                     mimeType: mimeType,
                     purpose: .commentAttachment,
                     groupId: nil
                 )
-                attachmentDTOs.append(
-                    CreateCommentAttachmentRequestDTO(
-                        kind: submission.kind.rawValue,
-                        mediaId: upload.id,
-                        url: upload.url.absoluteString,
-                        fileName: submission.fileName,
-                        thumbnailUrl: upload.thumbnailURL?.absoluteString,
-                        sizeBytes: upload.sizeBytes
-                    )
-                )
+                if let dto = makeAttachmentDTO(from: submission, uploaded: upload) {
+                    attachmentDTOs.append(dto)
+                }
             }
         }
         return attachmentDTOs
+    }
+
+    private func makeAttachmentDTO(
+        from submission: CommentSubmissionAttachment,
+        uploaded: MediaUploadResult? = nil
+    ) -> CreateCommentAttachmentRequestDTO? {
+        if submission.isPreUploaded,
+           let mediaId = submission.uploadedMediaId,
+           let url = submission.remoteURL {
+            return CreateCommentAttachmentRequestDTO(
+                kind: submission.kind.rawValue,
+                mediaId: mediaId,
+                url: url.absoluteString,
+                fileName: submission.fileName,
+                thumbnailUrl: submission.uploadedThumbnailURL?.absoluteString,
+                sizeBytes: submission.uploadedSizeBytes
+            )
+        }
+        if submission.isRemoteOnly, let remoteURL = submission.remoteURL {
+            return CreateCommentAttachmentRequestDTO(
+                kind: submission.kind.rawValue,
+                mediaId: nil,
+                url: remoteURL.absoluteString,
+                fileName: submission.fileName,
+                thumbnailUrl: remoteURL.absoluteString,
+                sizeBytes: nil
+            )
+        }
+        if let upload = uploaded {
+            return CreateCommentAttachmentRequestDTO(
+                kind: submission.kind.rawValue,
+                mediaId: upload.id,
+                url: upload.url.absoluteString,
+                fileName: submission.fileName,
+                thumbnailUrl: upload.thumbnailURL?.absoluteString,
+                sizeBytes: upload.sizeBytes
+            )
+        }
+        return nil
     }
 
     public func fetchStreakSummary() async throws -> StreakSummary {
