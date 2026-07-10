@@ -356,17 +356,21 @@ struct CommentRowView: View {
             ))
 
             VStack(alignment: .leading, spacing: 3) {
-                if comment.isEvidence {
-                    evidenceBadge
-                }
-
-                HStack(spacing: 5) {
+                HStack(alignment: .center, spacing: 6) {
                     Button { onUserTap(comment.author) } label: {
                         Text(comment.author.displayName)
                             .font(.system(size: style.nameFontSize, weight: .semibold))
                             .foregroundStyle(SplickTheme.Colors.textPrimary)
                     }
                     .buttonStyle(.plain)
+
+                    if comment.isEvidence {
+                        evidenceBadge
+                    }
+
+                    if let outcome = comment.moderationOutcome {
+                        moderationOutcomeBadge(outcome)
+                    }
 
                     if comment.isEdited {
                         Text("· Đã chỉnh sửa")
@@ -404,26 +408,71 @@ struct CommentRowView: View {
         .padding(.vertical, depth == 0 ? 6 : 4)
         .padding(.horizontal, isHighlighted ? 6 : 0)
         .background {
-            if comment.isEvidence {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(SplickTheme.Colors.primaryGradientStart.opacity(0.06))
-            } else if isHighlighted {
-                RoundedRectangle(cornerRadius: 8)
+            if isHighlighted {
+                RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.inset, style: .continuous)
                     .fill(SplickTheme.Colors.tertiaryBackground.opacity(0.9))
             }
         }
     }
 
     private var evidenceBadge: some View {
-        HStack(spacing: 6) {
-            Label(languageService.text(.feedPaymentEvidenceBadge), systemImage: "banknote")
+        HStack(spacing: 4) {
+            Image(systemName: "banknote")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+            Text(languageService.text(.feedPaymentEvidenceBadge))
                 .font(.system(size: style.metaFontSize, weight: .semibold))
                 .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                .lineLimit(1)
             if let status = comment.evidenceStatus {
+                Text("·")
+                    .font(.system(size: style.metaFontSize, weight: .medium))
+                    .foregroundStyle(SplickTheme.Colors.textTertiary)
                 Text(evidenceStatusLabel(status))
                     .font(.system(size: style.metaFontSize, weight: .medium))
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    .lineLimit(1)
             }
+        }
+        .padding(.horizontal, SplickTheme.Spacing.xs)
+        .padding(.vertical, 3)
+        .background {
+            Capsule(style: .continuous)
+                .fill(SplickTheme.Colors.primaryGradientStart.opacity(0.12))
+        }
+        .overlay {
+            Capsule(style: .continuous)
+                .strokeBorder(SplickTheme.Colors.primaryGradientStart.opacity(0.2), lineWidth: 1)
+        }
+    }
+
+    private func moderationOutcomeBadge(_ outcome: EvidenceStatus) -> some View {
+        let label = moderationOutcomeLabel(outcome)
+        let tint: Color = outcome == .approved
+            ? SplickTheme.Colors.success
+            : SplickTheme.Colors.error
+
+        return Text(label)
+            .font(.system(size: style.metaFontSize, weight: .semibold))
+            .foregroundStyle(tint)
+            .lineLimit(1)
+            .padding(.horizontal, SplickTheme.Spacing.xs)
+            .padding(.vertical, 3)
+            .background {
+                Capsule(style: .continuous)
+                    .fill(tint.opacity(0.12))
+            }
+            .overlay {
+                Capsule(style: .continuous)
+                    .strokeBorder(tint.opacity(0.2), lineWidth: 1)
+            }
+    }
+
+    private func moderationOutcomeLabel(_ outcome: EvidenceStatus) -> String {
+        switch outcome {
+        case .approved: return languageService.text(.feedPaymentEvidenceModerationApproved)
+        case .rejected: return languageService.text(.feedPaymentEvidenceModerationRejected)
+        case .pending: return ""
         }
     }
 
@@ -442,8 +491,8 @@ struct CommentRowView: View {
     private func evidenceStatusLabel(_ status: EvidenceStatus) -> String {
         switch status {
         case .pending: return languageService.text(.feedPaymentPending)
-        case .approved: return languageService.text(.feedPaymentPaid)
-        case .rejected: return languageService.text(.feedPaymentEvidenceReject)
+        case .approved: return languageService.text(.feedPaymentEvidenceStatusApproved)
+        case .rejected: return languageService.text(.feedPaymentEvidenceStatusRejected)
         }
     }
 
@@ -507,50 +556,126 @@ private struct CommentAttachmentsView: View {
     let attachments: [CommentAttachment]
     var maxImageWidth: CGFloat = 220
 
+    @State private var mediaViewerRoute: MediaViewerRoute?
+
+    private var imageAttachments: [CommentAttachment] {
+        attachments.filter { $0.kind == .image && $0.url != nil }
+    }
+
+    private var otherAttachments: [CommentAttachment] {
+        attachments.filter { $0.kind != .image }
+    }
+
+    private var imagePreviewModels: [CommentAttachmentPreviewImage] {
+        imageAttachments.compactMap(\.previewImageModel)
+    }
+
+    private var mediaItems: [PostMediaItem] {
+        attachments.enumerated().compactMap { index, attachment in
+            guard let url = attachment.url else { return nil }
+            switch attachment.kind {
+            case .image, .gif:
+                return PostMediaItem(
+                    id: attachment.id,
+                    mediaURL: url,
+                    thumbnailURL: attachment.thumbnailURL,
+                    mediaType: .image,
+                    sortOrder: index
+                )
+            case .video:
+                return PostMediaItem(
+                    id: attachment.id,
+                    mediaURL: url,
+                    thumbnailURL: attachment.thumbnailURL,
+                    mediaType: .video,
+                    sortOrder: index
+                )
+            case .file:
+                return nil
+            }
+        }
+    }
+
     var body: some View {
         if !attachments.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
-                ForEach(attachments) { attachment in
+                if !imagePreviewModels.isEmpty {
+                    CommentAttachmentImageGrid(
+                        images: imagePreviewModels,
+                        maxWidth: maxImageWidth,
+                        onTapImage: { imageIndex in
+                            guard imageAttachments.indices.contains(imageIndex) else { return }
+                            openViewer(for: imageAttachments[imageIndex].id)
+                        }
+                    )
+                }
+
+                ForEach(otherAttachments) { attachment in
                     switch attachment.kind {
-                    case .image:
-                        if let url = attachment.url {
-                            RemoteImage(
-                                url: url,
-                                maxPixelSize: RemoteImageMetrics.inlineAttachmentMaxPixelWidth(pointWidth: maxImageWidth)
-                            ) { phase in
-                                switch phase {
-                                case .success(let image):
-                                    image.resizable().scaledToFill()
-                                default:
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(SplickTheme.Colors.tertiaryBackground)
-                                        .overlay { SplickSpinner(size: .small) }
-                                }
-                            }
-                            .frame(maxWidth: maxImageWidth, maxHeight: 160)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                        }
                     case .gif:
-                        if let url = attachment.url {
-                            AnimatedRemoteImage(
-                                url: url,
-                                contentMode: .fill,
-                                maxPixelSize: RemoteImageMetrics.inlineAttachmentMaxPixelWidth(pointWidth: maxImageWidth)
-                            )
-                                .frame(maxWidth: maxImageWidth, maxHeight: 160)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        if attachment.url != nil {
+                            attachmentThumbnail {
+                                AnimatedRemoteImage(
+                                    url: attachment.url!,
+                                    contentMode: .fill,
+                                    maxPixelSize: RemoteImageMetrics.inlineAttachmentMaxPixelWidth(pointWidth: maxImageWidth)
+                                )
+                            }
+                            .onTapGesture { openViewer(for: attachment.id) }
                         }
-                    case .video, .file:
+                    case .video:
+                        Button {
+                            openViewer(for: attachment.id)
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "video")
+                                Text(attachment.fileName ?? attachment.kind.rawValue)
+                                    .lineLimit(1)
+                            }
+                            .font(.system(size: 11))
+                            .foregroundStyle(SplickTheme.Colors.textSecondary)
+                        }
+                        .buttonStyle(.plain)
+                    case .file:
                         HStack(spacing: 6) {
-                            Image(systemName: attachment.kind == .video ? "video" : "doc")
+                            Image(systemName: "doc")
                             Text(attachment.fileName ?? attachment.kind.rawValue)
                                 .lineLimit(1)
                         }
                         .font(.system(size: 11))
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    case .image:
+                        EmptyView()
                     }
                 }
             }
+            .fullScreenCover(item: $mediaViewerRoute) { route in
+                let items = mediaItems
+                if !items.isEmpty {
+                    MediaViewerView(
+                        items: items,
+                        initialIndex: min(route.index, items.count - 1),
+                        isPresented: Binding(
+                            get: { mediaViewerRoute != nil },
+                            set: { if !$0 { mediaViewerRoute = nil } }
+                        )
+                    )
+                }
+            }
         }
+    }
+
+    private func attachmentThumbnail<Content: View>(
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        content()
+            .frame(maxWidth: maxImageWidth, maxHeight: 160)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .contentShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func openViewer(for attachmentId: UUID) {
+        guard let index = mediaItems.firstIndex(where: { $0.id == attachmentId }) else { return }
+        mediaViewerRoute = MediaViewerRoute(index: index)
     }
 }
