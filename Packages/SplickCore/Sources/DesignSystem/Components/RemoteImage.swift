@@ -64,27 +64,35 @@ public enum RemoteImageRequestFactory {
         maxPixelDimensions: CGSize? = nil,
         maxPixelWidth: CGFloat? = nil
     ) -> ImageRequest {
-        if let userInfo = thumbnailUserInfo(
+        var request = ImageRequest(url: url)
+        if let thumbnail = thumbnailOptions(
             maxPixelDimensions: maxPixelDimensions,
             maxPixelWidth: maxPixelWidth
         ) {
-            return ImageRequest(url: url, userInfo: userInfo)
+            request.thumbnail = thumbnail
         }
-        return ImageRequest(url: url)
+        return request
     }
 
-    private static func thumbnailUserInfo(
+    private static func thumbnailOptions(
         maxPixelDimensions: CGSize?,
         maxPixelWidth: CGFloat?
-    ) -> [ImageRequest.UserInfoKey: Any]? {
+    ) -> ImageRequest.ThumbnailOptions? {
+        let maxPixelSize: Float?
         if let maxPixelDimensions, maxPixelDimensions.width > 0, maxPixelDimensions.height > 0 {
-            let longestEdge = max(maxPixelDimensions.width, maxPixelDimensions.height)
-            return [.thumbnailKey: ImageRequest.ThumbnailOptions(maxPixelSize: Float(longestEdge))]
+            maxPixelSize = Float(max(maxPixelDimensions.width, maxPixelDimensions.height))
+        } else if let maxPixelWidth, maxPixelWidth > 0 {
+            maxPixelSize = Float(maxPixelWidth)
+        } else {
+            maxPixelSize = nil
         }
-        if let maxPixelWidth, maxPixelWidth > 0 {
-            return [.thumbnailKey: ImageRequest.ThumbnailOptions(maxPixelSize: Float(maxPixelWidth))]
-        }
-        return nil
+
+        guard let maxPixelSize else { return nil }
+
+        var options = ImageRequest.ThumbnailOptions(maxPixelSize: maxPixelSize)
+        // ImageIO already rotates pixels when true, but Nuke still applies EXIF on UIImage → upside-down.
+        options.createThumbnailWithTransform = false
+        return options
     }
 }
 
