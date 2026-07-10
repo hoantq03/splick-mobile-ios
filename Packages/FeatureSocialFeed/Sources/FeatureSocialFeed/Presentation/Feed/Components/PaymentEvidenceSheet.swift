@@ -13,8 +13,10 @@ struct PaymentEvidenceSheet: View {
 
     @State private var message = ""
     @State private var pendingAttachments: [CommentSubmissionAttachment] = []
+    @State private var previewImages: [UIImage] = []
     @State private var validationMessage: String?
     @State private var isSubmitting = false
+    @State private var fullScreenPreviewRoute: LocalImagePreviewRoute?
 
     init(
         postAuthorName: String,
@@ -24,6 +26,7 @@ struct PaymentEvidenceSheet: View {
         self.postAuthorName = postAuthorName
         self.onSubmit = onSubmit
         _pendingAttachments = State(initialValue: initialAttachments)
+        _previewImages = State(initialValue: LocalImagePreviewSupport.decodeImages(from: initialAttachments))
     }
 
     var body: some View {
@@ -39,46 +42,23 @@ struct PaymentEvidenceSheet: View {
                         .foregroundStyle(SplickTheme.Colors.error)
                 }
 
-                if !pendingAttachments.isEmpty {
+                if !previewImages.isEmpty {
                     VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
                         Text("Ảnh chuyển khoản")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(SplickTheme.Colors.textPrimary)
 
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(Array(pendingAttachments.enumerated()), id: \.offset) { index, item in
-                                    ZStack(alignment: .topTrailing) {
-                                        Group {
-                                            if let image = previewImage(for: item) {
-                                                Image(uiImage: image)
-                                                    .resizable()
-                                                    .scaledToFill()
-                                            } else {
-                                                RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium)
-                                                    .fill(SplickTheme.Colors.tertiaryBackground)
-                                                    .overlay {
-                                                        Image(systemName: "photo")
-                                                            .font(.system(size: 24))
-                                                            .foregroundStyle(SplickTheme.Colors.textSecondary)
-                                                    }
-                                            }
-                                        }
-                                        .frame(width: 120, height: 156)
-                                        .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium))
-
-                                        Button {
-                                            pendingAttachments.remove(at: index)
-                                        } label: {
-                                            Image(systemName: "xmark.circle.fill")
-                                                .font(.system(size: 20))
-                                                .foregroundStyle(.white, .black.opacity(0.45))
-                                        }
-                                        .padding(6)
-                                    }
-                                }
+                        LocalImageThumbnailStrip(
+                            images: previewImages,
+                            thumbnailWidth: 120,
+                            thumbnailHeight: 156,
+                            onTapImage: { index in
+                                fullScreenPreviewRoute = LocalImagePreviewRoute(index: index)
+                            },
+                            onRemoveImage: { index in
+                                removeAttachment(at: index)
                             }
-                        }
+                        )
                     }
                 }
 
@@ -106,6 +86,22 @@ struct PaymentEvidenceSheet: View {
                     .disabled(isSubmitting || pendingAttachments.isEmpty)
                 }
             }
+            .fullScreenCover(item: $fullScreenPreviewRoute) { route in
+                LocalImageFullscreenPreview(
+                    images: previewImages,
+                    initialIndex: min(route.index, max(previewImages.count - 1, 0)),
+                    onDismiss: { fullScreenPreviewRoute = nil }
+                )
+            }
+        }
+    }
+
+    private func removeAttachment(at index: Int) {
+        guard pendingAttachments.indices.contains(index) else { return }
+        pendingAttachments.remove(at: index)
+        previewImages = LocalImagePreviewSupport.decodeImages(from: pendingAttachments)
+        if let route = fullScreenPreviewRoute, route.index >= pendingAttachments.count {
+            fullScreenPreviewRoute = nil
         }
     }
 
@@ -125,10 +121,5 @@ struct PaymentEvidenceSheet: View {
         } catch {
             validationMessage = error.localizedDescription
         }
-    }
-
-    private func previewImage(for attachment: CommentSubmissionAttachment) -> UIImage? {
-        guard let data = attachment.data else { return nil }
-        return UIImage(data: data)
     }
 }

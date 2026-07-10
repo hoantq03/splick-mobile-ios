@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import UIKit
 import DesignSystem
 import Common
 import Localization
@@ -596,11 +597,13 @@ struct PostCardView: View {
 
         var attachments: [CommentSubmissionAttachment] = []
         for (index, item) in items.prefix(3).enumerated() {
-            guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
+            guard let data = try? await item.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data),
+                  let jpegData = image.jpegData(compressionQuality: 0.92) else { continue }
             attachments.append(
                 CommentSubmissionAttachment(
                     kind: .image,
-                    data: data,
+                    data: jpegData,
                     mimeType: "image/jpeg",
                     fileName: "payment-proof-\(index + 1).jpg"
                 )
