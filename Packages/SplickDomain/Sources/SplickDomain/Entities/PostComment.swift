@@ -35,6 +35,7 @@ public struct CommentAttachment: Identifiable, Codable, Equatable, Sendable {
 public enum CommentType: String, Codable, Equatable, Sendable {
     case standard = "STANDARD"
     case evidence = "EVIDENCE"
+    case evidenceModeration = "EVIDENCE_MODERATION"
 }
 
 public enum EvidenceStatus: String, Codable, Equatable, Sendable {
@@ -87,10 +88,17 @@ public struct PostComment: Identifiable, Codable, Equatable, Sendable {
 
     public var isEvidence: Bool { commentType == .evidence }
 
+    public var isEvidenceModeration: Bool { commentType == .evidenceModeration }
+
     public var isDeleted: Bool { deletedAt != nil }
 
+    /// Outcome badge for auto moderation replies (approve / reject).
+    public var moderationOutcome: EvidenceStatus? {
+        isEvidenceModeration ? evidenceStatus : nil
+    }
+
     public var isEdited: Bool {
-        guard let updatedAt, !isDeleted else { return false }
+        guard let updatedAt, !isDeleted, !isEvidence, !isEvidenceModeration else { return false }
         return updatedAt.timeIntervalSince(createdAt) > 1
     }
 
