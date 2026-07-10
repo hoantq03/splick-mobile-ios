@@ -235,12 +235,27 @@ struct PostDetailView: View {
             .id(replyTarget?.id ?? post.id)
         }
         .padding(.horizontal, SplickTheme.Spacing.md)
-        .padding(.top, SplickTheme.Spacing.xs)
-        .padding(.bottom, SplickTheme.Spacing.xs)
-        .background {
-            SplickTheme.Colors.background
-                .ignoresSafeArea(edges: .bottom)
+        .padding(.top, SplickTheme.Spacing.sm)
+        .padding(.bottom, SplickTheme.Spacing.sm)
+        .frame(maxWidth: .infinity)
+        .background { commentComposerDockBackground }
+    }
+
+    private var commentComposerDockBackground: some View {
+        UnevenRoundedRectangle(
+            topLeadingRadius: SplickTheme.CornerRadius.card,
+            topTrailingRadius: SplickTheme.CornerRadius.card
+        )
+        .fill(SplickTheme.Colors.cardBackground)
+        .overlay {
+            UnevenRoundedRectangle(
+                topLeadingRadius: SplickTheme.CornerRadius.card,
+                topTrailingRadius: SplickTheme.CornerRadius.card
+            )
+            .strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5)
         }
+        .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: -3)
+        .ignoresSafeArea(edges: .bottom)
     }
 
     private var composerPlaceholder: String {
