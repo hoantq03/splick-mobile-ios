@@ -20,6 +20,56 @@ public extension Decimal {
         return sign + formatCompactUnit(absolute, suffix: "")
     }
 
+    /// Short currency mark for tight UI — e.g. VND → `đ`, USD → `$`.
+    static func displayCurrencySymbol(for currencyCode: String, locale: Locale = .current) -> String {
+        switch currencyCode.uppercased() {
+        case "VND":
+            return "đ"
+        case "USD":
+            return "$"
+        default:
+            return currencySymbol(for: currencyCode, locale: locale)
+        }
+    }
+
+    /// Full digit amount with currency symbol for chart centers — e.g. `1.250.000đ`, `$1,250`.
+    /// Shows up to 10 integer digits; larger values fall back to compact `K`/`M` form.
+    func chartAmountString(currencyCode: String = "VND", locale: Locale = .current) -> String {
+        Self.chartAmountString(for: self, currencyCode: currencyCode, locale: locale)
+    }
+
+    static func chartAmountString(
+        for amount: Decimal,
+        currencyCode: String = "VND",
+        locale: Locale = .current
+    ) -> String {
+        let symbol = displayCurrencySymbol(for: currencyCode, locale: locale)
+        let value = NSDecimalNumber(decimal: amount).doubleValue
+        let sign = value < 0 ? "-" : ""
+        let absolute = abs(value).rounded()
+        let digitCount = absolute < 1 ? 1 : Int(floor(log10(absolute))) + 1
+
+        let numberPart: String
+        if digitCount > 10 {
+            numberPart = compactAmountString(for: Decimal(absolute))
+        } else {
+            let formatter = NumberFormatter()
+            formatter.numberStyle = .decimal
+            formatter.locale = locale
+            formatter.maximumFractionDigits = 0
+            formatter.minimumFractionDigits = 0
+            formatter.usesGroupingSeparator = true
+            numberPart = formatter.string(from: NSDecimalNumber(value: absolute))
+                ?? String(format: "%.0f", absolute)
+        }
+
+        let signedNumber = sign + numberPart
+        if currencyCode.uppercased() == "USD" {
+            return "\(symbol)\(signedNumber)"
+        }
+        return "\(signedNumber)\(symbol)"
+    }
+
     static func currencySymbol(for currencyCode: String, locale: Locale = .current) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency

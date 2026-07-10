@@ -167,70 +167,73 @@ public struct ExpenseListView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, SplickTheme.Spacing.xl)
-        .splickCard()
+        .splickCard(cornerRadius: ExpenseScreenChrome.cardRadius)
     }
 
     private var debtSummarySection: some View {
-        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
             overviewSectionHeader
 
             ExpenseOverviewAnimatedBody(isExpanded: isOverviewExpanded) {
-                VStack(spacing: SplickTheme.Spacing.sm) {
-                    debtSummaryRow(
-                        title: languageService.text(.expenseDebtOweUnpaid),
-                        peopleSubtitle: languageService.format(
-                            .expenseOverviewOweUnpaidCount,
-                            viewModel.overviewOweUnpaidCount
-                        ),
-                        amount: viewModel.overviewOweUnpaidTotal,
-                        tint: SplickTheme.Colors.error,
-                        systemImage: "arrow.up.circle.fill",
-                        filter: .oweUnpaid,
-                        isSelected: viewModel.filters.debtStatus == .oweUnpaid
-                    )
-                    debtSummaryRow(
-                        title: languageService.text(.expenseDebtOwePaid),
-                        peopleSubtitle: languageService.format(
-                            .expenseOverviewOwePaidCount,
-                            viewModel.overviewOwePaidCount
-                        ),
-                        amount: viewModel.overviewOwePaidTotal,
-                        tint: SplickTheme.Colors.success,
-                        systemImage: "arrow.up.circle",
-                        filter: .owePaid,
-                        isSelected: viewModel.filters.debtStatus == .owePaid
-                    )
-                    debtSummaryRow(
-                        title: languageService.text(.expenseDebtOwedUnpaid),
-                        peopleSubtitle: languageService.format(
-                            .expenseOverviewOwedUnpaidCount,
-                            viewModel.overviewOwedUnpaidCount
-                        ),
-                        amount: viewModel.overviewOwedUnpaidTotal,
-                        tint: SplickTheme.Colors.warning,
-                        systemImage: "arrow.down.circle.fill",
-                        filter: .owedUnpaid,
-                        isSelected: viewModel.filters.debtStatus == .owedUnpaid
-                    )
-                    debtSummaryRow(
-                        title: languageService.text(.expenseDebtOwedPaid),
-                        peopleSubtitle: languageService.format(
-                            .expenseOverviewOwedPaidCount,
-                            viewModel.overviewOwedPaidCount
-                        ),
-                        amount: viewModel.overviewOwedPaidTotal,
-                        tint: SplickTheme.Colors.success,
-                        systemImage: "arrow.down.circle",
-                        filter: .owedPaid,
-                        isSelected: viewModel.filters.debtStatus == .owedPaid
-                    )
-                }
+                overviewDebtCharts(showsDetailedLegend: true)
             } collapsed: {
-                overviewCollapsedSummary
+                overviewDebtCharts(showsDetailedLegend: false)
             }
         }
-        .splickCard(padding: SplickTheme.Spacing.sm)
+        .splickCard(
+            padding: SplickTheme.Spacing.md,
+            cornerRadius: ExpenseScreenChrome.cardRadius
+        )
         .animation(pullToRefreshActive ? nil : overviewToggleAnimation, value: isOverviewExpanded)
+    }
+
+    private func overviewDebtCharts(showsDetailedLegend: Bool) -> some View {
+        HStack(alignment: .top, spacing: SplickTheme.Spacing.md) {
+            ExpenseDebtDonutChart(
+                title: languageService.text(.expenseYouOwe),
+                unpaidAmount: viewModel.overviewOweUnpaidTotal,
+                paidAmount: viewModel.overviewOwePaidTotal,
+                unpaidCount: viewModel.overviewOweUnpaidCount,
+                paidCount: viewModel.overviewOwePaidCount,
+                unpaidFilter: .oweUnpaid,
+                paidFilter: .owePaid,
+                selectedFilter: viewModel.filters.debtStatus,
+                showsDetailedLegend: showsDetailedLegend,
+                unpaidLabel: languageService.text(.expenseOverviewUnpaid),
+                paidLabel: languageService.text(.expenseOverviewPaid),
+                emptyLabel: languageService.text(.expenseOverviewEmptyChart),
+                countFormat: { languageService.format(.expenseOverviewOweUnpaidCount, $0) },
+                filterHint: languageService.text(.expenseOverviewFilterHint),
+                onSelect: viewModel.applyOverviewDebtFilter,
+                onExpandRequest: expandOverviewIfNeeded
+            )
+
+            ExpenseDebtDonutChart(
+                title: languageService.text(.expenseYouAreOwed),
+                unpaidAmount: viewModel.overviewOwedUnpaidTotal,
+                paidAmount: viewModel.overviewOwedPaidTotal,
+                unpaidCount: viewModel.overviewOwedUnpaidCount,
+                paidCount: viewModel.overviewOwedPaidCount,
+                unpaidFilter: .owedUnpaid,
+                paidFilter: .owedPaid,
+                selectedFilter: viewModel.filters.debtStatus,
+                showsDetailedLegend: showsDetailedLegend,
+                unpaidLabel: languageService.text(.expenseOverviewUnpaid),
+                paidLabel: languageService.text(.expenseOverviewPaid),
+                emptyLabel: languageService.text(.expenseOverviewEmptyChart),
+                countFormat: { languageService.format(.expenseOverviewOwedUnpaidCount, $0) },
+                filterHint: languageService.text(.expenseOverviewFilterHint),
+                onSelect: viewModel.applyOverviewDebtFilter,
+                onExpandRequest: expandOverviewIfNeeded
+            )
+        }
+    }
+
+    private func expandOverviewIfNeeded() {
+        guard !isOverviewExpanded else { return }
+        withAnimation(overviewToggleAnimation) {
+            isOverviewExpanded = true
+        }
     }
 
     private var overviewSectionHeader: some View {
@@ -240,7 +243,7 @@ public struct ExpenseListView: View {
             }
         } label: {
             HStack(spacing: SplickTheme.Spacing.xs) {
-                Image(systemName: "chart.bar.doc.horizontal")
+                Image(systemName: "chart.pie.fill")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(SplickTheme.Colors.info)
                     .frame(width: 22, height: 22)
@@ -277,83 +280,6 @@ public struct ExpenseListView: View {
                 ? languageService.text(.expenseOverviewCollapseHint)
                 : languageService.text(.expenseOverviewExpandHint)
         )
-    }
-
-    private var overviewCollapsedSummary: some View {
-        LazyVGrid(
-            columns: [
-                GridItem(.flexible(), spacing: SplickTheme.Spacing.sm),
-                GridItem(.flexible(), spacing: SplickTheme.Spacing.sm)
-            ],
-            spacing: SplickTheme.Spacing.sm
-        ) {
-            overviewCollapsedMetric(
-                title: languageService.text(.expenseDebtOweUnpaid),
-                amount: viewModel.overviewOweUnpaidTotal,
-                tint: SplickTheme.Colors.error,
-                filter: .oweUnpaid,
-                isSelected: viewModel.filters.debtStatus == .oweUnpaid
-            )
-            overviewCollapsedMetric(
-                title: languageService.text(.expenseDebtOwePaid),
-                amount: viewModel.overviewOwePaidTotal,
-                tint: SplickTheme.Colors.success,
-                filter: .owePaid,
-                isSelected: viewModel.filters.debtStatus == .owePaid
-            )
-            overviewCollapsedMetric(
-                title: languageService.text(.expenseDebtOwedUnpaid),
-                amount: viewModel.overviewOwedUnpaidTotal,
-                tint: SplickTheme.Colors.warning,
-                filter: .owedUnpaid,
-                isSelected: viewModel.filters.debtStatus == .owedUnpaid
-            )
-            overviewCollapsedMetric(
-                title: languageService.text(.expenseDebtOwedPaid),
-                amount: viewModel.overviewOwedPaidTotal,
-                tint: SplickTheme.Colors.success,
-                filter: .owedPaid,
-                isSelected: viewModel.filters.debtStatus == .owedPaid
-            )
-        }
-        .padding(.horizontal, SplickTheme.Spacing.xxs)
-    }
-
-    private func overviewCollapsedMetric(
-        title: String,
-        amount: Decimal,
-        tint: Color,
-        filter: ExpenseDebtFilter,
-        isSelected: Bool
-    ) -> some View {
-        Button {
-            viewModel.applyOverviewDebtFilter(filter)
-        } label: {
-            VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
-                Text(title)
-                    .font(SplickTheme.Typography.caption)
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
-                    .lineLimit(1)
-                Text(formatAmount(amount))
-                    .font(SplickTheme.Typography.headline)
-                    .foregroundStyle(tint)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(SplickTheme.Spacing.sm)
-            .background {
-                RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.inset, style: .continuous)
-                    .fill(SplickTheme.Colors.background.opacity(isSelected ? 0.98 : 0.88))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.inset, style: .continuous)
-                            .strokeBorder(tint.opacity(isSelected ? 0.38 : 0.16), lineWidth: isSelected ? 1.5 : 1)
-                    }
-            }
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(title), \(formatAmount(amount))")
-        .accessibilityHint(languageService.text(.expenseOverviewFilterHint))
     }
 
     private func recordsSection<Content: View>(@ViewBuilder content: () -> Content) -> some View {
@@ -407,67 +333,6 @@ public struct ExpenseListView: View {
         }
     }
 
-    private func debtSummaryRow(
-        title: String,
-        peopleSubtitle: String,
-        amount: Decimal,
-        tint: Color,
-        systemImage: String,
-        filter: ExpenseDebtFilter,
-        isSelected: Bool
-    ) -> some View {
-        Button {
-            viewModel.applyOverviewDebtFilter(filter)
-        } label: {
-            HStack(spacing: SplickTheme.Spacing.sm) {
-                Image(systemName: systemImage)
-                    .font(.title2)
-                    .foregroundStyle(tint)
-                    .frame(width: 52, height: 52)
-                    .background {
-                        RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.inset, style: .continuous)
-                            .fill(tint.opacity(isSelected ? 0.2 : 0.12))
-                    }
-
-                VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
-                    Text(title)
-                        .font(SplickTheme.Typography.caption)
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
-                    Text(peopleSubtitle)
-                        .font(SplickTheme.Typography.caption)
-                        .foregroundStyle(SplickTheme.Colors.textTertiary)
-                    Text(formatAmount(amount))
-                        .font(SplickTheme.Typography.title)
-                        .foregroundStyle(tint)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                }
-
-                Spacer(minLength: 0)
-
-                Image(systemName: isSelected ? "line.3.horizontal.decrease.circle.fill" : "chevron.right")
-                    .font(.system(size: isSelected ? 18 : 12, weight: .semibold))
-                    .foregroundStyle(isSelected ? tint : SplickTheme.Colors.textTertiary)
-            }
-            .padding(SplickTheme.Spacing.md)
-            .background {
-                RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.inset, style: .continuous)
-                    .fill(SplickTheme.Colors.background.opacity(0.92))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.inset, style: .continuous)
-                            .strokeBorder(tint.opacity(isSelected ? 0.38 : 0.16), lineWidth: isSelected ? 1.5 : 1)
-                    }
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.inset, style: .continuous)
-                    .strokeBorder(tint.opacity(isSelected ? 0.45 : 0), lineWidth: 2)
-            }
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(title), \(peopleSubtitle), \(formatAmount(amount))")
-        .accessibilityHint(languageService.text(.expenseOverviewFilterHint))
-    }
-
     private func expensesList(_ expenses: [Expense]) -> some View {
         VStack(spacing: 0) {
             ForEach(Array(expenses.enumerated()), id: \.element.id) { index, expense in
@@ -505,7 +370,7 @@ public struct ExpenseListView: View {
             value: viewModel.displayedExpenses.map(\.id)
         )
         .background {
-            RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous)
+            RoundedRectangle(cornerRadius: ExpenseScreenChrome.cardRadius, style: .continuous)
                 .fill(SplickTheme.Colors.cardBackground)
                 .shadow(
                     color: SplickTheme.Shadow.card.color,
@@ -514,11 +379,11 @@ public struct ExpenseListView: View {
                     y: SplickTheme.Shadow.card.y
                 )
                 .overlay {
-                    RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous)
+                    RoundedRectangle(cornerRadius: ExpenseScreenChrome.cardRadius, style: .continuous)
                         .strokeBorder(SplickTheme.Colors.primaryGradientStart.opacity(0.08), lineWidth: 1)
                 }
         }
-        .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: ExpenseScreenChrome.cardRadius, style: .continuous))
     }
 
     private func openPostCapture() {
@@ -896,7 +761,7 @@ private struct ExpenseListSectionHeader<FilterPanel: View>: View {
         .padding(.bottom, isFilterPresented ? SplickTheme.Spacing.md : 0)
         .background {
             if isFilterPresented {
-                RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous)
+                RoundedRectangle(cornerRadius: ExpenseScreenChrome.cardRadius, style: .continuous)
                     .fill(SplickTheme.Colors.cardBackground)
                     .shadow(
                         color: SplickTheme.Shadow.card.color,
@@ -905,7 +770,7 @@ private struct ExpenseListSectionHeader<FilterPanel: View>: View {
                         y: SplickTheme.Shadow.card.y
                     )
                     .overlay {
-                        RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous)
+                        RoundedRectangle(cornerRadius: ExpenseScreenChrome.cardRadius, style: .continuous)
                             .strokeBorder(accent.opacity(0.1), lineWidth: 1)
                     }
             }
@@ -1064,7 +929,7 @@ private struct ExpenseListFilterPanel: View {
                 .padding(.horizontal, SplickTheme.Spacing.sm)
                 .padding(.vertical, SplickTheme.Spacing.sm)
                 .background(SplickTheme.Colors.secondaryBackground)
-                .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.inset, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: ExpenseScreenChrome.controlRadius, style: .continuous))
             }
 
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
@@ -1105,7 +970,7 @@ private struct ExpenseListFilterPanel: View {
                 .padding(.horizontal, SplickTheme.Spacing.sm)
                 .padding(.vertical, SplickTheme.Spacing.sm)
                 .background(SplickTheme.Colors.secondaryBackground)
-                .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.inset, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: ExpenseScreenChrome.controlRadius, style: .continuous))
 
                 friendsOptionsList
             }
@@ -1164,7 +1029,7 @@ private struct ExpenseListFilterPanel: View {
         .padding(.horizontal, SplickTheme.Spacing.sm)
         .padding(.vertical, SplickTheme.Spacing.xs)
         .background(SplickTheme.Colors.secondaryBackground)
-        .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.inset, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: ExpenseScreenChrome.controlRadius, style: .continuous))
     }
 
     private func filterSectionLabel(_ title: String) -> some View {
@@ -1274,7 +1139,7 @@ private struct ExpenseRowChromeModifier: ViewModifier {
             content
         case .standalone:
             content
-                .splickCard()
+                .splickCard(cornerRadius: ExpenseScreenChrome.cardRadius)
         }
     }
 }
@@ -1284,12 +1149,21 @@ private struct ExpenseRowPressStyle: ButtonStyle {
         configuration.label
             .background {
                 if configuration.isPressed {
-                    RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.inset, style: .continuous)
+                    RoundedRectangle(cornerRadius: ExpenseScreenChrome.insetRadius, style: .continuous)
                         .fill(SplickTheme.Colors.tertiaryBackground.opacity(0.7))
                 }
             }
             .animation(.spring(response: 0.32, dampingFraction: 0.86), value: configuration.isPressed)
     }
+}
+
+private enum ExpenseScreenChrome {
+    /// Outer cards on the expense screen — softer than the global default.
+    static let cardRadius: CGFloat = SplickTheme.CornerRadius.extraLarge
+    /// Nested chart / filter containers inside cards.
+    static let insetRadius: CGFloat = SplickTheme.CornerRadius.large
+    /// Text fields and compact rows nested one level deeper.
+    static let controlRadius: CGFloat = SplickTheme.CornerRadius.medium
 }
 
 private struct ExpenseOverviewAnimatedBody<Expanded: View, Collapsed: View>: View {
@@ -1307,6 +1181,258 @@ private struct ExpenseOverviewAnimatedBody<Expanded: View, Collapsed: View>: Vie
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .clipped()
+    }
+}
+
+private struct ExpenseDebtDonutChart: View {
+    let title: String
+    let unpaidAmount: Decimal
+    let paidAmount: Decimal
+    let unpaidCount: Int
+    let paidCount: Int
+    let unpaidFilter: ExpenseDebtFilter
+    let paidFilter: ExpenseDebtFilter
+    let selectedFilter: ExpenseDebtFilter
+    let showsDetailedLegend: Bool
+    let unpaidLabel: String
+    let paidLabel: String
+    let emptyLabel: String
+    let countFormat: (Int) -> String
+    let filterHint: String
+    let onSelect: (ExpenseDebtFilter) -> Void
+    var onExpandRequest: (() -> Void)? = nil
+
+    private var unpaidColor: Color { SplickTheme.Colors.error }
+    private var paidColor: Color { SplickTheme.Colors.success }
+    private let chartSize: CGFloat = 124
+    private let ringWidth: CGFloat = 18
+    private var chartCornerRadius: CGFloat { ExpenseScreenChrome.insetRadius }
+    private var rowCornerRadius: CGFloat { ExpenseScreenChrome.controlRadius }
+
+    private var totalAmount: Decimal { unpaidAmount + paidAmount }
+    private var hasData: Bool { totalAmount > 0 }
+    private var unpaidSelected: Bool { selectedFilter == unpaidFilter }
+    private var paidSelected: Bool { selectedFilter == paidFilter }
+    private var groupSelected: Bool { unpaidSelected || paidSelected }
+
+    private var unpaidFraction: CGFloat {
+        guard hasData else { return 0 }
+        return CGFloat(NSDecimalNumber(decimal: unpaidAmount / totalAmount).doubleValue)
+    }
+
+    private var paidFraction: CGFloat { 1 - unpaidFraction }
+
+    private func chartAmount(_ amount: Decimal) -> String {
+        amount.chartAmountString(currencyCode: "VND")
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Text(title)
+                .font(SplickTheme.Typography.captionBold)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, SplickTheme.Spacing.md)
+
+            donut
+                .frame(width: chartSize, height: chartSize)
+                .frame(maxWidth: .infinity)
+
+            if showsDetailedLegend {
+                VStack(spacing: SplickTheme.Spacing.xxs) {
+                    detailRow(
+                        label: unpaidLabel,
+                        amount: unpaidAmount,
+                        count: unpaidCount,
+                        tint: unpaidColor,
+                        filter: unpaidFilter,
+                        isSelected: unpaidSelected
+                    )
+                    detailRow(
+                        label: paidLabel,
+                        amount: paidAmount,
+                        count: paidCount,
+                        tint: paidColor,
+                        filter: paidFilter,
+                        isSelected: paidSelected
+                    )
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, SplickTheme.Spacing.md)
+            }
+        }
+        .padding(SplickTheme.Spacing.md)
+        .frame(maxWidth: .infinity, alignment: .top)
+        .background {
+            RoundedRectangle(cornerRadius: chartCornerRadius, style: .continuous)
+                .fill(SplickTheme.Colors.background.opacity(groupSelected ? 0.98 : 0.88))
+                .overlay {
+                    RoundedRectangle(cornerRadius: chartCornerRadius, style: .continuous)
+                        .strokeBorder(
+                            SplickTheme.Colors.textTertiary.opacity(groupSelected ? 0.28 : 0.12),
+                            lineWidth: groupSelected ? 1.5 : 1
+                        )
+                }
+        }
+    }
+
+    private var donut: some View {
+        ZStack {
+            Circle()
+                .stroke(SplickTheme.Colors.tertiaryBackground, lineWidth: ringWidth)
+
+            if hasData {
+                donutSlices
+            }
+
+            VStack(spacing: 2) {
+                if hasData {
+                    Text(chartAmount(totalAmount))
+                        .font(.system(size: 13, weight: .bold).monospacedDigit())
+                        .foregroundStyle(SplickTheme.Colors.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.42)
+                        .allowsTightening(true)
+                        .multilineTextAlignment(.center)
+                } else {
+                    Text(emptyLabel)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(SplickTheme.Colors.textTertiary)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .padding(.horizontal, 4)
+            .frame(width: chartSize - ringWidth * 2 - 4)
+        }
+        .contentShape(Circle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onEnded { value in
+                    if !showsDetailedLegend {
+                        onExpandRequest?()
+                        return
+                    }
+                    guard hasData else { return }
+                    onSelect(filter(at: value.location))
+                }
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilitySummary)
+        .accessibilityHint(filterHint)
+        .accessibilityAddTraits(.isButton)
+    }
+
+    @ViewBuilder
+    private var donutSlices: some View {
+        let unpaidIsDominant = unpaidFraction >= paidFraction
+
+        if unpaidIsDominant {
+            // Smaller paid slice — rounded ends (under the larger C tips).
+            if paidFraction > 0 {
+                Circle()
+                    .trim(from: unpaidFraction, to: 1)
+                    .stroke(
+                        paidColor,
+                        style: StrokeStyle(lineWidth: ringWidth, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                    .opacity(unpaidSelected && !paidSelected ? 0.35 : 1)
+            }
+
+            // Larger unpaid C — round tips sit over the junction.
+            Circle()
+                .trim(from: 0, to: unpaidFraction)
+                .stroke(
+                    unpaidColor,
+                    style: StrokeStyle(lineWidth: ringWidth, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+                .opacity(paidSelected && !unpaidSelected ? 0.35 : 1)
+        } else {
+            // Smaller unpaid slice — rounded ends (under the larger C tips).
+            if unpaidFraction > 0 {
+                Circle()
+                    .trim(from: 0, to: unpaidFraction)
+                    .stroke(
+                        unpaidColor,
+                        style: StrokeStyle(lineWidth: ringWidth, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                    .opacity(paidSelected && !unpaidSelected ? 0.35 : 1)
+            }
+
+            // Larger paid C — round tips sit over the junction.
+            Circle()
+                .trim(from: unpaidFraction, to: 1)
+                .stroke(
+                    paidColor,
+                    style: StrokeStyle(lineWidth: ringWidth, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+                .opacity(unpaidSelected && !paidSelected ? 0.35 : 1)
+        }
+    }
+
+    private func detailRow(
+        label: String,
+        amount: Decimal,
+        count: Int,
+        tint: Color,
+        filter: ExpenseDebtFilter,
+        isSelected: Bool
+    ) -> some View {
+        Button {
+            onSelect(filter)
+        } label: {
+            VStack(spacing: 2) {
+                HStack(spacing: SplickTheme.Spacing.xxs) {
+                    Circle()
+                        .fill(tint)
+                        .frame(width: 7, height: 7)
+                    Text(label)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+                        .lineLimit(1)
+                }
+
+                Text(chartAmount(amount))
+                    .font(.system(size: 13, weight: .bold).monospacedDigit())
+                    .foregroundStyle(tint)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.55)
+
+                Text(countFormat(count))
+                    .font(.system(size: 10, weight: .regular))
+                    .foregroundStyle(SplickTheme.Colors.textTertiary)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, SplickTheme.Spacing.sm)
+            .padding(.horizontal, SplickTheme.Spacing.xs)
+            .background {
+                RoundedRectangle(cornerRadius: rowCornerRadius, style: .continuous)
+                    .fill(tint.opacity(isSelected ? 0.14 : 0))
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(label), \(chartAmount(amount)), \(countFormat(count))")
+        .accessibilityHint(filterHint)
+    }
+
+    private func filter(at location: CGPoint) -> ExpenseDebtFilter {
+        let center = CGPoint(x: chartSize / 2, y: chartSize / 2)
+        let dx = location.x - center.x
+        let dy = location.y - center.y
+        var degrees = atan2(dy, dx) * 180 / .pi + 90
+        if degrees < 0 { degrees += 360 }
+        let unpaidDegrees = Double(unpaidFraction) * 360
+        return degrees <= unpaidDegrees ? unpaidFilter : paidFilter
+    }
+
+    private var accessibilitySummary: String {
+        "\(title), \(unpaidLabel) \(chartAmount(unpaidAmount)), \(paidLabel) \(chartAmount(paidAmount))"
     }
 }
 
