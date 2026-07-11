@@ -4,7 +4,11 @@ import SplickDomain
 public final class KlipyMetaRepositoryImpl: KlipyMetaRepositoryProtocol, Sendable {
     private let klipyDataSource: KlipyDataSourceProtocol
 
-    public init(klipyDataSource: KlipyDataSourceProtocol = KlipyDataSource()) {
+    public init() {
+        self.klipyDataSource = KlipyDataSource()
+    }
+
+    init(klipyDataSource: KlipyDataSourceProtocol) {
         self.klipyDataSource = klipyDataSource
     }
 

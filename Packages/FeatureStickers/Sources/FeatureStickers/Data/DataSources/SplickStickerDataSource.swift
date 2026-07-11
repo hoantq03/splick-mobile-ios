@@ -1,13 +1,6 @@
 import Foundation
 import Networking
-
-struct SplickStickerDTO: Decodable {
-    let id: String
-    let url: String
-    let previewUrl: String?
-    let width: Int?
-    let height: Int?
-}
+import SplickDomain
 
 enum SplickStickerEndpoint: APIEndpoint {
     case list(groupId: UUID, keyword: String?)
