@@ -21,7 +21,7 @@ public struct ConversationListView: View {
     @State private var composePresentation: NewMessageComposePresentation?
     private let onCreateGroup: () -> Void
     private let makeComposeViewModel: () -> NewMessageComposeViewModel
-    @Binding private var conversationToOpen: Conversation?
+    @Binding private var conversationToOpen: ChatThreadRoute?
 
     private var suppressRefreshAnimations: Bool {
         pullToRefreshActive || isPullRefreshing
@@ -48,7 +48,7 @@ public struct ConversationListView: View {
         viewModel: ConversationListViewModel,
         onCreateGroup: @escaping () -> Void = {},
         makeComposeViewModel: @escaping () -> NewMessageComposeViewModel,
-        conversationToOpen: Binding<Conversation?> = .constant(nil)
+        conversationToOpen: Binding<ChatThreadRoute?> = .constant(nil)
     ) {
         self._viewModel = ObservedObject(wrappedValue: viewModel)
         self.onCreateGroup = onCreateGroup
@@ -130,11 +130,10 @@ public struct ConversationListView: View {
             guard viewModel.conversations.isEmpty else { return }
             Task { await viewModel.load() }
         }
-        .onChange(of: conversationToOpen?.id) { _ in
-            guard let conversation = conversationToOpen else { return }
-            path.append(ChatThreadRoute(conversation: conversation))
+        .onChange(of: conversationToOpen?.conversation.id) { _ in
+            guard let route = conversationToOpen else { return }
+            path.append(route)
             conversationToOpen = nil
-            Task { await viewModel.refresh() }
         }
         .onReceive(sameTabTapPublisher) { _ in
             if tabBarScrollState?.isAtTop == true {
