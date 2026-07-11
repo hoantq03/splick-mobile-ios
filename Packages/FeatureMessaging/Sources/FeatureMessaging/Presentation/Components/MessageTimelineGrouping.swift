@@ -12,6 +12,7 @@ struct DisplayMessage: Identifiable, Equatable {
     let message: ChatMessage
     let groupPosition: MessageGroupPosition
     let showsTimestamp: Bool
+    let imageAttachments: [MessageImageAttachment]
 
     var id: UUID { message.id }
 }
@@ -44,7 +45,8 @@ enum MessageTimelineGrouping {
             return DisplayMessage(
                 message: message,
                 groupPosition: position,
-                showsTimestamp: !groupsWithNext
+                showsTimestamp: !groupsWithNext,
+                imageAttachments: message.imageAttachments
             )
         }
     }

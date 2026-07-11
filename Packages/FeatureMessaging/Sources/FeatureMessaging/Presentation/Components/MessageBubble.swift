@@ -17,13 +17,21 @@ struct MessageBubble: View {
     let onReact: (String) -> Void
     let onRetry: (() -> Void)?
     let onLongPress: (() -> Void)?
+    let onReply: (() -> Void)?
+
+    @State private var imageViewerRoute: AttachmentPreviewRoute?
+    @State private var replyDragTranslation: CGFloat = 0
 
     private static let longPressImpact = UIImpactFeedbackGenerator(style: .medium)
+    private static let replySwipeImpact = UIImpactFeedbackGenerator(style: .light)
+    private static let replySwipeThreshold: CGFloat = 56
+    private static let replySwipeMaxOffset: CGFloat = 88
 
     private var message: ChatMessage { displayMessage.message }
+    private var imageAttachments: [MessageImageAttachment] { displayMessage.imageAttachments }
 
     var body: some View {
-        HStack(alignment: .center, spacing: SplickTheme.Spacing.xxs) {
+        HStack(alignment: .messageDeliveryStatus, spacing: SplickTheme.Spacing.xxs) {
             if isOutgoing {
                 timestampRevealArea(alignment: .leading, dragDirection: -1)
                 Spacer(minLength: 48)
@@ -34,7 +42,9 @@ struct MessageBubble: View {
             if isOutgoing {
                 if message.deliveryStatus != .failed {
                     MessageStatusIndicator(status: message.deliveryStatus)
-                        .padding(.bottom, 2)
+                        .alignmentGuide(.messageDeliveryStatus) { dimensions in
+                            dimensions[VerticalAlignment.center]
+                        }
                 }
             }
 
@@ -51,29 +61,48 @@ struct MessageBubble: View {
     private static let reactionAccessoryOverlap: CGFloat = reactionAccessoryHeight / 2
 
     private var bubbleCluster: some View {
-        bubbleContent
-            .simultaneousGesture(longPressGesture)
-            .background {
-                GeometryReader { geo in
-                    Color.clear.preference(
-                        key: MessageReactionAnchorFrameKey.self,
-                        value: [message.id: geo.frame(in: .global)]
-                    )
-                }
+        ZStack(alignment: isOutgoing ? .trailing : .leading) {
+            if onReply != nil, replyDragTranslation != 0 {
+                Image(systemName: "arrowshape.turn.up.left.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(SplickTheme.Colors.textSecondary.opacity(0.75))
+                    .opacity(Double(min(abs(replyDragTranslation) / Self.replySwipeThreshold, 1)))
+                    .offset(x: replyIconOffset)
             }
-            .overlay(alignment: isOutgoing ? .bottomLeading : .bottomTrailing) {
-                if showsReactionAccessory {
-                    MessageReactionStrip(
-                        counts: message.reactionCountsInsideOut(isOutgoing: isOutgoing),
-                        currentUserId: currentUserId,
-                        reactions: message.reactions,
-                        onReact: onReact
-                    )
-                    .offset(y: Self.reactionAccessoryOverlap)
+
+            bubbleContent
+                .overlay(alignment: isOutgoing ? .bottomLeading : .bottomTrailing) {
+                    if showsReactionAccessory {
+                        MessageReactionStrip(
+                            counts: message.reactionCountsInsideOut(isOutgoing: isOutgoing),
+                            currentUserId: currentUserId,
+                            reactions: message.reactions,
+                            onReact: onReact
+                        )
+                        .offset(y: Self.reactionAccessoryOverlap)
+                    }
                 }
+                .padding(.bottom, showsReactionAccessory ? Self.reactionAccessoryOverlap : 0)
+        }
+        .offset(x: replyDragTranslation)
+        .simultaneousGesture(longPressGesture)
+        .simultaneousGesture(replySwipeGesture)
+        .background {
+            GeometryReader { geo in
+                Color.clear.preference(
+                    key: MessageReactionAnchorFrameKey.self,
+                    value: [message.id: geo.frame(in: .global)]
+                )
             }
-            .padding(.bottom, showsReactionAccessory ? Self.reactionAccessoryOverlap : 0)
-            .messageSendFloat(isActive: isFloatingSend, lateralSway: floatSway)
+        }
+        .messageSendFloat(isActive: isFloatingSend, lateralSway: floatSway)
+    }
+
+    private var replyIconOffset: CGFloat {
+        if isOutgoing {
+            return replyDragTranslation - 22
+        }
+        return replyDragTranslation + 22
     }
 
     private var showsReactionAccessory: Bool {
@@ -89,14 +118,83 @@ struct MessageBubble: View {
             }
     }
 
+    private var replySwipeGesture: some Gesture {
+        DragGesture(minimumDistance: 8)
+            .onChanged { value in
+                guard onReply != nil else { return }
+                let horizontal = value.translation.width
+                let vertical = abs(value.translation.height)
+                guard abs(horizontal) > vertical else { return }
+
+                let raw: CGFloat
+                if isOutgoing {
+                    raw = min(0, horizontal)
+                } else {
+                    raw = max(0, horizontal)
+                }
+                let clamped = min(abs(raw), Self.replySwipeMaxOffset) * (raw < 0 ? -1 : 1)
+
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    replyDragTranslation = clamped
+                }
+            }
+            .onEnded { value in
+                guard onReply != nil else { return }
+                let horizontal = value.translation.width
+                let vertical = abs(value.translation.height)
+                let triggered: Bool
+                if abs(horizontal) > vertical {
+                    triggered = isOutgoing
+                        ? horizontal <= -Self.replySwipeThreshold
+                        : horizontal >= Self.replySwipeThreshold
+                } else {
+                    triggered = false
+                }
+
+                if triggered {
+                    Self.replySwipeImpact.impactOccurred()
+                    onReply?()
+                }
+
+                withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.86)) {
+                    replyDragTranslation = 0
+                }
+            }
+    }
+
     private var bubbleContent: some View {
-        Text(message.body)
-            .font(SplickTheme.Typography.body)
-            .foregroundStyle(isOutgoing ? .white : SplickTheme.Colors.textPrimary)
-            .padding(.horizontal, SplickTheme.Spacing.sm + 2)
-            .padding(.vertical, SplickTheme.Spacing.xs + 2)
-            .background(bubbleBackground)
-            .clipShape(bubbleShape)
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+            if let preview = message.replyPreview {
+                MessageQuotedReplyView(preview: preview, isOutgoing: isOutgoing)
+                    .modifier(MessageDeliveryStatusAnchor(
+                        isActive: message.body.isEmpty && imageAttachments.isEmpty
+                    ))
+            }
+
+            if !imageAttachments.isEmpty {
+                InlineAttachmentImageGrid(
+                    images: imageAttachments.map(\.inlinePreviewImage),
+                    maxWidth: 220,
+                    onTapImage: { index in
+                        imageViewerRoute = AttachmentPreviewRoute(index: index)
+                    }
+                )
+                .modifier(MessageDeliveryStatusAnchor(isActive: message.body.isEmpty))
+            }
+
+            if !message.body.isEmpty {
+                Text(message.body)
+                    .font(SplickTheme.Typography.body)
+                    .foregroundStyle(isOutgoing ? .white : SplickTheme.Colors.textPrimary)
+                    .modifier(MessageDeliveryStatusAnchor(isActive: true))
+            }
+        }
+        .padding(.horizontal, SplickTheme.Spacing.sm + 2)
+        .padding(.vertical, SplickTheme.Spacing.xs + 2)
+        .background(bubbleBackground)
+        .clipShape(bubbleShape)
             .overlay {
                 if isHighlighted {
                     bubbleShape
@@ -115,6 +213,16 @@ struct MessageBubble: View {
             .onTapGesture {
                 if message.deliveryStatus == .failed {
                     onRetry?()
+                }
+            }
+            .fullScreenCover(item: $imageViewerRoute) { route in
+                let urls = imageAttachments.map(\.url)
+                if urls.indices.contains(route.index) {
+                    RemoteImageFullscreenPreview(
+                        urls: urls,
+                        initialIndex: route.index,
+                        onDismiss: { imageViewerRoute = nil }
+                    )
                 }
             }
     }
@@ -180,6 +288,30 @@ struct MessageBubble: View {
             return SplickTheme.Spacing.sm
         case .groupMiddle, .groupLast:
             return 2
+        }
+    }
+}
+
+private extension VerticalAlignment {
+    struct MessageDeliveryStatusAlignment: AlignmentID {
+        static func defaultValue(in context: ViewDimensions) -> CGFloat {
+            context[VerticalAlignment.center]
+        }
+    }
+
+    static let messageDeliveryStatus = VerticalAlignment(MessageDeliveryStatusAlignment.self)
+}
+
+private struct MessageDeliveryStatusAnchor: ViewModifier {
+    let isActive: Bool
+
+    func body(content: Content) -> some View {
+        if isActive {
+            content.alignmentGuide(.messageDeliveryStatus) { dimensions in
+                dimensions[VerticalAlignment.center]
+            }
+        } else {
+            content
         }
     }
 }

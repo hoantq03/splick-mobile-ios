@@ -10,6 +10,8 @@ struct ChatMessageListView: View {
     @ObservedObject var viewModel: ChatThreadViewModel
     let messages: [ChatMessage]
     let currentUserId: UUID
+    let senderDisplayName: (ChatMessage) -> String
+    let onRequestComposerFocus: () -> Void
 
     @State private var reactionFocusMessageId: UUID?
     @State private var reactionAnchorFrames: [UUID: CGRect] = [:]
@@ -39,6 +41,9 @@ struct ChatMessageListView: View {
                                 },
                                 onLongPress: {
                                     openReactionFocus(for: item)
+                                },
+                                onReply: {
+                                    beginReply(to: item.message)
                                 }
                             )
                             .id(item.message.clientMessageId)
@@ -68,6 +73,12 @@ struct ChatMessageListView: View {
                             context: focusContext,
                             onReact: { emoji in
                                 _ = viewModel.react(to: focusContext.messageId, emoji: emoji)
+                            },
+                            onReply: {
+                                guard let item = displayMessages.first(where: { $0.message.id == focusContext.messageId }) else {
+                                    return
+                                }
+                                beginReply(to: item.message)
                             },
                             onOpenFullPicker: {
                                 dismissReactionFocus()
@@ -132,6 +143,12 @@ struct ChatMessageListView: View {
         withAnimation(MessageReactionTrayMotion.present) {
             reactionFocusMessageId = item.message.id
         }
+    }
+
+    private func beginReply(to message: ChatMessage) {
+        dismissReactionFocus()
+        viewModel.beginReply(to: message, senderDisplayName: senderDisplayName(message))
+        onRequestComposerFocus()
     }
 
     private func dismissReactionFocus() {
