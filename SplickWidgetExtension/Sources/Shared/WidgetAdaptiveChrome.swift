@@ -91,14 +91,34 @@ struct WidgetSurfaceBackground: View {
 }
 
 extension View {
-    @ViewBuilder
     func widgetSplickContainerBackground(_ style: WidgetSurfaceStyle = .automatic) -> some View {
+        WidgetSplickContainerBackgroundContainer(view: self, style: style)
+    }
+}
+
+private struct WidgetSplickContainerBackgroundContainer<V: View>: View {
+    let view: V
+    let style: WidgetSurfaceStyle
+
+    var body: some View {
         if #available(iOS 17.0, *) {
-            containerBackground(for: .widget) {
-                WidgetSurfaceBackground(style: style)
-            }
+            modernBody
         } else {
-            self
+            legacyBody
+        }
+    }
+
+    @available(iOS 17.0, *)
+    private var modernBody: some View {
+        view.containerBackground(for: .widget) {
+            WidgetSurfaceBackground(style: style)
+        }
+    }
+
+    private var legacyBody: some View {
+        ZStack {
+            WidgetSurfaceBackground(style: style)
+            view
         }
     }
 }

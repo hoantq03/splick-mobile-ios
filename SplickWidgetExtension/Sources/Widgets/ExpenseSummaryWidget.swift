@@ -170,6 +170,7 @@ struct ExpenseSummaryWidgetEntryView: View {
         .widgetLegacyCardBackground()
     }
 
+    @ViewBuilder
     private var accessoryCircularView: some View {
         ZStack {
             AccessoryWidgetBackground()
