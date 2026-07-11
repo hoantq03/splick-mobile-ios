@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import DesignSystem
 import Common
 import FeatureMedia
@@ -82,24 +83,13 @@ struct GroupDetailView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
-                headerCard
-                if !viewModel.pendingMembers.isEmpty {
-                    pendingMembersSection
-                }
-                membersSection
-            }
-            .padding(SplickTheme.Spacing.md)
+        VStack(spacing: 0) {
+            groupDetailHeader
+            membersList
         }
         .background(SplickTheme.Colors.background)
         .navigationTitle(viewModel.group.name)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                groupActionsMenu
-            }
-        }
         .sheet(isPresented: $showGroupQR) {
             GroupInviteQRSheet(
                 groupName: viewModel.group.name,
@@ -180,7 +170,8 @@ struct GroupDetailView: View {
             }
             Button("Huỷ", role: .cancel) {}
         }
-        .confirmationDialog("Xóa nhóm?", isPresented: $confirmDelete, titleVisibility: .visible) {
+        .alert("Xóa nhóm?", isPresented: $confirmDelete) {
+            Button("Huỷ", role: .cancel) {}
             Button("Xóa nhóm", role: .destructive) {
                 Task {
                     if await viewModel.deleteGroup(currentUserId: currentUserSummary?.id) {
@@ -189,7 +180,8 @@ struct GroupDetailView: View {
                     }
                 }
             }
-            Button("Huỷ", role: .cancel) {}
+        } message: {
+            Text("Hành động này không thể hoàn tác. Bạn có chắc muốn xóa nhóm này?")
         }
     }
 
@@ -227,22 +219,39 @@ struct GroupDetailView: View {
         }
     }
 
-    @ViewBuilder
-    private var membersSection: some View {
-        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+    private var groupDetailHeader: some View {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
+            headerCard
+
+            if !viewModel.pendingMembers.isEmpty {
+                pendingMembersSection
+            }
+
             Text(languageService.format(.friendsGroupMembers, viewModel.displayedMemberCount))
                 .font(SplickTheme.Typography.headline)
                 .foregroundStyle(SplickTheme.Colors.textPrimary)
+        }
+        .padding(.horizontal, SplickTheme.Spacing.md)
+        .padding(.top, SplickTheme.Spacing.md)
+        .padding(.bottom, SplickTheme.Spacing.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(SplickTheme.Colors.background)
+    }
 
+    @ViewBuilder
+    private var membersList: some View {
+        ScrollView {
             switch viewModel.membersState {
             case .idle, .loading where viewModel.members.isEmpty:
                 LoadingView(message: "Đang tải thành viên...")
-                    .frame(minHeight: 80)
+                    .frame(minHeight: 120)
+                    .frame(maxWidth: .infinity)
             case .failed(let message) where viewModel.members.isEmpty:
                 ErrorView(message: message) {
                     Task { await viewModel.loadMembers() }
                 }
-                .frame(minHeight: 80)
+                .frame(minHeight: 120)
+                .frame(maxWidth: .infinity)
             default:
                 LazyVStack(spacing: SplickTheme.Spacing.xs) {
                     ForEach(viewModel.sortedMembers(currentUserId: currentUserSummary?.id)) { member in
@@ -251,95 +260,148 @@ struct GroupDetailView: View {
                 }
             }
         }
-    }
-
-    private var groupActionsMenu: some View {
-        Menu {
-            Button {
-                showGroupQR = true
-            } label: {
-                Label("Mã QR & mã nhóm", systemImage: "qrcode")
-            }
-
-            Button {
-                showInviteFriends = true
-            } label: {
-                Label("Thêm thành viên", systemImage: "person.badge.plus")
-            }
-
-            if viewModel.isOwner(currentUserId: currentUserSummary?.id) {
-                Button {
-                    showEditGroup = true
-                } label: {
-                    Label("Chỉnh sửa nhóm", systemImage: "pencil")
-                }
-
-                Button {
-                    showTransferOwnership = true
-                } label: {
-                    Label("Chuyển quyền chủ nhóm", systemImage: "person.crop.circle.badge.checkmark")
-                }
-
-                Divider()
-                Button(role: .destructive) {
-                    confirmDelete = true
-                } label: {
-                    Label("Xóa nhóm", systemImage: "trash")
-                }
-            } else {
-                Button(role: .destructive) {
-                    confirmLeave = true
-                } label: {
-                    Label("Rời nhóm", systemImage: "rectangle.portrait.and.arrow.right")
-                }
-            }
-        } label: {
-            Image(systemName: "ellipsis.circle.fill")
-                .font(.system(size: 28))
-                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-        }
-        .accessibilityLabel("Thao tác nhóm")
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, SplickTheme.Spacing.md)
+        .padding(.bottom, SplickTheme.Spacing.md)
     }
 
     private var headerCard: some View {
-        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-            HStack(spacing: SplickTheme.Spacing.sm) {
-                if let avatarURL = viewModel.group.avatarURL {
-                    AvatarView(imageURL: avatarURL, name: viewModel.group.name, size: .large)
-                } else {
-                    Image(systemName: "person.3.fill")
-                        .font(.title2)
-                        .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                        .frame(width: 52, height: 52)
-                        .background(SplickTheme.Colors.primaryGradientStart.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                }
+        HStack(alignment: .top, spacing: SplickTheme.Spacing.sm) {
+            VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+                headerIdentityRow
 
-                VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
-                    Text(viewModel.group.name)
-                        .font(SplickTheme.Typography.title)
-                    Text(languageService.format(.friendsGroupMemberCount, viewModel.displayedMemberCount))
-                        .font(SplickTheme.Typography.caption)
+                if let description = viewModel.group.description, !description.isEmpty {
+                    Text(description)
+                        .font(SplickTheme.Typography.callout)
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            if let description = viewModel.group.description, !description.isEmpty {
-                Text(description)
-                    .font(SplickTheme.Typography.callout)
+            headerQuickActions
+        }
+        .splickCard()
+    }
+
+    private var headerIdentityRow: some View {
+        HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
+            if let avatarURL = viewModel.group.avatarURL {
+                AvatarView(imageURL: avatarURL, name: viewModel.group.name, size: .large)
+            } else {
+                Image(systemName: "person.3.fill")
+                    .font(.title2)
+                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                    .frame(width: 52, height: 52)
+                    .background(SplickTheme.Colors.primaryGradientStart.opacity(0.12))
+                    .clipShape(Circle())
+            }
+
+            VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
+                Text(viewModel.group.name)
+                    .font(SplickTheme.Typography.title)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(languageService.format(.friendsGroupMemberCount, viewModel.displayedMemberCount))
+                    .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
 
-            if !viewModel.displayedInviteCode.isEmpty {
-                HStack {
-                    Text(languageService.format(.friendsGroupInviteCodeLabel, viewModel.displayedInviteCode))
-                        .font(SplickTheme.Typography.caption)
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
-                    Spacer()
+    private var headerQuickActions: some View {
+        let isOwner = viewModel.isOwner(currentUserId: currentUserSummary?.id)
+        let hasInviteCode = !viewModel.displayedInviteCode.isEmpty
+
+        return LazyVGrid(
+            columns: [
+                GridItem(.flexible(), spacing: SplickTheme.Spacing.xs),
+                GridItem(.flexible(), spacing: SplickTheme.Spacing.xs),
+            ],
+            spacing: SplickTheme.Spacing.xs
+        ) {
+            headerQuickActionButton(icon: "qrcode", title: "Mã QR") {
+                showGroupQR = true
+            }
+
+            headerQuickActionButton(
+                icon: "doc.on.doc",
+                title: "Mã nhóm",
+                isDisabled: !hasInviteCode
+            ) {
+                copyInviteCode()
+            }
+
+            if isOwner {
+                headerQuickActionButton(icon: "person.crop.circle.badge.checkmark", title: "Chuyển quyền") {
+                    showTransferOwnership = true
+                }
+
+                headerQuickActionButton(icon: "trash", title: "Xóa nhóm", isDestructive: true) {
+                    confirmDelete = true
                 }
             }
         }
-        .splickCard()
+        .frame(width: 168)
+    }
+
+    private func headerQuickActionButton(
+        icon: String,
+        title: String,
+        isDestructive: Bool = false,
+        isDisabled: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 11, weight: .medium))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .minimumScaleFactor(0.85)
+            }
+            .foregroundStyle(
+                isDisabled
+                    ? SplickTheme.Colors.textTertiary
+                    : (isDestructive ? SplickTheme.Colors.error : SplickTheme.Colors.primaryGradientStart)
+            )
+            .frame(maxWidth: .infinity, minHeight: 68)
+            .padding(.horizontal, SplickTheme.Spacing.xxs)
+            .padding(.vertical, SplickTheme.Spacing.xs)
+            .background {
+                RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.inset, style: .continuous)
+                    .fill(
+                        (isDestructive ? SplickTheme.Colors.error : SplickTheme.Colors.primaryGradientStart)
+                            .opacity(isDisabled ? 0.04 : 0.1)
+                    )
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+    }
+
+    private func copyInviteCode() {
+        let code = viewModel.displayedInviteCode.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !code.isEmpty else { return }
+        UIPasteboard.general.string = code
+        viewModel.actionMessage = "Đã sao chép mã nhóm."
+    }
+
+    private func memberDisplayName(_ member: GroupMemberItem, isMe: Bool) -> String {
+        if member.isOwner && isMe {
+            return "\(member.displayName) (Trưởng Nhóm, tôi)"
+        }
+        if member.isOwner {
+            return "\(member.displayName) (Trưởng Nhóm)"
+        }
+        if isMe {
+            return "\(member.displayName) (tôi)"
+        }
+        return member.displayName
     }
 
     @ViewBuilder
@@ -351,43 +413,18 @@ struct GroupDetailView: View {
             displayName: member.displayName,
             avatarURL: member.avatarURL
         )
+        let canRemove = viewModel.isOwner(currentUserId: currentUserSummary?.id)
+            && !member.isOwner
+            && !isMe
 
-        HStack(spacing: SplickTheme.Spacing.sm) {
-            Button {
-                onUserTap(userSummary)
-            } label: {
-                HStack(spacing: SplickTheme.Spacing.sm) {
-                    AvatarView(imageURL: member.avatarURL, name: member.displayName, size: .medium)
-                    VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
-                        Text(isMe ? "\(member.displayName) (tôi)" : member.displayName)
-                            .font(SplickTheme.Typography.headline)
-                            .foregroundStyle(SplickTheme.Colors.textPrimary)
-                        Text("@\(member.username)")
-                            .font(SplickTheme.Typography.caption)
-                            .foregroundStyle(SplickTheme.Colors.textSecondary)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(SplickTheme.Colors.textTertiary)
-                }
-            }
-            .buttonStyle(.plain)
-
-            if viewModel.isOwner(currentUserId: currentUserSummary?.id), !member.isOwner, !isMe {
-                Menu {
-                    Button(role: .destructive) {
-                        Task { await viewModel.remove(member, currentUserId: currentUserSummary?.id) }
-                    } label: {
-                        Label("Xóa khỏi nhóm", systemImage: "person.fill.xmark")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
-                        .padding(.horizontal, SplickTheme.Spacing.xs)
-                }
-            }
-        }
-        .splickCard(padding: SplickTheme.Spacing.sm)
+        GroupMemberRowView(
+            displayName: memberDisplayName(member, isMe: isMe),
+            username: member.username,
+            avatarURL: member.avatarURL,
+            onProfileTap: { onUserTap(userSummary) },
+            onRemove: canRemove ? {
+                Task { await viewModel.remove(member, currentUserId: currentUserSummary?.id) }
+            } : nil
+        )
     }
 }

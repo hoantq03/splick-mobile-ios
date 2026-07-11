@@ -289,11 +289,18 @@ public struct FriendsRootView: View {
             }
             .sheet(isPresented: $showCreateGroup) {
                 CreateGroupSheet(
-                    viewModel: CreateGroupViewModel(createGroupUseCase: createGroupUseCase) { group in
+                    viewModel: CreateGroupViewModel(
+                        friends: viewModel.friends,
+                        createGroupUseCase: createGroupUseCase,
+                        inviteFriendsUseCase: inviteFriendsToGroupUseCase,
+                        uploadGroupAvatarUseCase: uploadGroupAvatarUseCase,
+                        updateGroupAvatarUseCase: updateGroupAvatarUseCase
+                    ) { group, _ in
                         viewModel.onGroupCreated(group)
                         showCreateGroup = false
                     }
                 )
+                .environmentObject(languageService)
             }
             .sheet(isPresented: $showIncomingRequests, onDismiss: {
                 Task { await viewModel.refreshIncomingRequestCount() }

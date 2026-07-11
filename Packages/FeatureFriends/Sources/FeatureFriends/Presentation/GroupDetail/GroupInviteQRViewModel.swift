@@ -11,6 +11,7 @@ final class GroupInviteQRViewModel: ObservableObject {
     }
 
     @Published private(set) var state: State = .idle
+    @Published private(set) var isRefreshing = false
     @Published var alertMessage: String?
 
     private let groupId: UUID
@@ -61,6 +62,9 @@ final class GroupInviteQRViewModel: ObservableObject {
     }
 
     func refresh() async {
+        isRefreshing = true
+        defer { isRefreshing = false }
+
         if let existing = serverQR {
             do {
                 try await revokeGroupQrUseCase.execute(groupId: groupId, qrId: existing.id)
@@ -70,7 +74,8 @@ final class GroupInviteQRViewModel: ObservableObject {
             }
         }
         do {
-            try await regenerate()
+            let qr = try await generateGroupQrUseCase.execute(groupId: groupId, ttlSeconds: 86_400)
+            state = .loaded(qr)
         } catch {
             alertMessage = error.localizedDescription
         }
