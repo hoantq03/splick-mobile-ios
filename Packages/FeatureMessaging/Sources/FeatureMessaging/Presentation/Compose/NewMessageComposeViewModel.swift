@@ -177,8 +177,8 @@ public final class NewMessageComposeViewModel: ObservableObject {
                 conversationId: conversation.id,
                 body: body,
                 clientMessageId: UUID(),
-                imageAttachments: attachments,
-                replyToMessageId: nil
+                replyToMessageId: nil,
+                imageAttachments: attachments
             )
 
             messageBody = ""

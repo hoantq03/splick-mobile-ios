@@ -8,6 +8,10 @@ struct GroupExpenseIntent: WidgetConfigurationIntent {
 
     @Parameter(title: "Nhóm")
     var group: GroupEntity?
+
+    func perform() async throws -> some IntentResult {
+        .result()
+    }
 }
 
 struct GroupEntity: AppEntity, Identifiable {
