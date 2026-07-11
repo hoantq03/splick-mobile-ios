@@ -602,8 +602,18 @@ final class DependencyContainer: ObservableObject {
                     thumbnailURL: upload.thumbnailURL
                 )
             },
-            wsClient: messagingWebSocketClient
+            wsClient: messagingWebSocketClient,
+            onConversationRead: { [weak self] conversationId in
+                await self?.handleConversationRead(conversationId: conversationId)
+            }
         )
+    }
+
+    @MainActor
+    private func handleConversationRead(conversationId: UUID) async {
+        conversationListViewModel.markConversationAsRead(conversationId: conversationId)
+        await notificationListViewModel.markMessageNotificationsRead(conversationId: conversationId)
+        await badgeCountService.refresh()
     }
 
     func makeChatPeerRelationshipActions() -> ChatPeerRelationshipActions {
