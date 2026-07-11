@@ -1,0 +1,30 @@
+import SwiftUI
+
+public struct ChatGroupManagementActions: Sendable {
+    public var fetchMembers: @Sendable (UUID) async throws -> [GroupChatMember]
+    public var updateGroupAvatar: @Sendable (UUID, Data) async throws -> String
+
+    public init(
+        fetchMembers: @escaping @Sendable (UUID) async throws -> [GroupChatMember],
+        updateGroupAvatar: @escaping @Sendable (UUID, Data) async throws -> String
+    ) {
+        self.fetchMembers = fetchMembers
+        self.updateGroupAvatar = updateGroupAvatar
+    }
+
+    public static let disabled = ChatGroupManagementActions(
+        fetchMembers: { _ in [] },
+        updateGroupAvatar: { _, _ in "" }
+    )
+}
+
+private struct ChatGroupManagementActionsKey: EnvironmentKey {
+    static let defaultValue = ChatGroupManagementActions.disabled
+}
+
+public extension EnvironmentValues {
+    var chatGroupManagementActions: ChatGroupManagementActions {
+        get { self[ChatGroupManagementActionsKey.self] }
+        set { self[ChatGroupManagementActionsKey.self] = newValue }
+    }
+}
