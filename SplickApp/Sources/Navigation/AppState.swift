@@ -23,6 +23,8 @@ final class AppState: ObservableObject {
     /// Slides in over the current tab (e.g. expense row → post detail).
     @Published var linkedPostPresentation: PendingFeedPostNavigation?
 
+    @Published var pendingMessagingNavigation: PendingMessagingNavigation?
+
     /// In-memory only — `false` every cold launch and after logout.
     /// `true` only after the user taps through the 4-page onboarding this session.
     @Published private(set) var hasPassedOnboardingThisSession = false
@@ -68,6 +70,8 @@ final class AppState: ObservableObject {
         feedNavigationPath = NavigationPath()
         pendingFeedPostNavigation = nil
         linkedPostPresentation = nil
+        pendingMessagingNavigation = nil
+        PushNotificationCoordinator.shared.syncAppIconBadge(count: 0)
         Log.info("User signed out", category: .lifecycle)
     }
 
@@ -82,6 +86,12 @@ final class AppState: ObservableObject {
         feedNavigationPath = NavigationPath()
         pendingFeedPostNavigation = nil
         linkedPostPresentation = nil
+        pendingMessagingNavigation = nil
+        PushNotificationCoordinator.shared.syncAppIconBadge(count: 0)
+    }
+
+    func clearPendingMessagingNavigation() {
+        pendingMessagingNavigation = nil
     }
 
     /// Called when user taps through the last onboarding page.
@@ -185,7 +195,18 @@ final class AppState: ObservableObject {
             selectedTab = .friends
             showNotifications = false
         case .messages:
-            selectedTab = .messages
+            withAnimation(.easeInOut(duration: 0.35)) {
+                selectedTab = .messages
+            }
+            showNotifications = false
+        case .conversation(let conversationId, let highlightMessageId):
+            pendingMessagingNavigation = PendingMessagingNavigation(
+                conversationId: conversationId,
+                highlightMessageId: highlightMessageId
+            )
+            withAnimation(.easeInOut(duration: 0.35)) {
+                selectedTab = .messages
+            }
             showNotifications = false
         case .inbox:
             selectedTab = .feed
@@ -209,6 +230,9 @@ final class AppState: ObservableObject {
         case .friends:
             return .friends
         case .messages:
+            if let conversationId = destination.postId {
+                return .conversation(conversationId)
+            }
             return .messages
         case .inbox:
             return .inbox
@@ -231,6 +255,11 @@ final class AppState: ObservableObject {
         isLaunchSplashComplete = false
         splashSessionID = UUID()
     }
+}
+
+struct PendingMessagingNavigation: Equatable {
+    let conversationId: UUID
+    let highlightMessageId: UUID?
 }
 
 enum Tab: String, CaseIterable {
