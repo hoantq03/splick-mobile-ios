@@ -15,6 +15,7 @@ struct PostDetailView: View {
     let profileDependencies: FriendUserProfileDependencies?
     let makeGifPickerViewModel: GifPickerViewModelFactory?
     let expandBillSplitInitially: Bool
+    let focusComposerOnAppear: Bool
 
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.currentUserSummary) private var currentUserSummary
@@ -26,6 +27,7 @@ struct PostDetailView: View {
     @State private var showEmojiPicker = false
     @State private var mediaViewerRoute: MediaViewerRoute?
     @State private var composerFocused = false
+    @State private var composerHitTestingEnabled = false
     @State private var rejectEvidenceTarget: PostComment?
     @State private var rejectReason = ""
 
@@ -36,7 +38,8 @@ struct PostDetailView: View {
         fetchFriendsUseCase: FetchFriendsUseCaseProtocol? = nil,
         profileDependencies: FriendUserProfileDependencies? = nil,
         makeGifPickerViewModel: GifPickerViewModelFactory? = nil,
-        expandBillSplitInitially: Bool = false
+        expandBillSplitInitially: Bool = false,
+        focusComposerOnAppear: Bool = false
     ) {
         self.post = post
         self.initialMediaIndex = initialMediaIndex
@@ -45,6 +48,7 @@ struct PostDetailView: View {
         self.profileDependencies = profileDependencies
         self.makeGifPickerViewModel = makeGifPickerViewModel
         self.expandBillSplitInitially = expandBillSplitInitially
+        self.focusComposerOnAppear = focusComposerOnAppear
         _commentPager = StateObject(wrappedValue: PostDetailViewModel(comments: post.comments))
     }
 
@@ -136,6 +140,7 @@ struct PostDetailView: View {
             tabBarScrollState?.hide(flushToBottom: true)
             commentPager.refresh(with: livePost.comments)
             commentPager.loadInitial()
+            enableComposerInteraction()
         }
         .onDisappear {
             tabBarScrollState?.show()
@@ -239,6 +244,7 @@ struct PostDetailView: View {
         .padding(.bottom, SplickTheme.Spacing.sm)
         .frame(maxWidth: .infinity)
         .background { commentComposerDockBackground }
+        .allowsHitTesting(composerHitTestingEnabled)
     }
 
     private var commentComposerDockBackground: some View {
@@ -354,6 +360,18 @@ struct PostDetailView: View {
     private func openProfile(for user: UserSummary) {
         guard user.id != currentUserSummary?.id else { return }
         profileRoute = ProfileRoute(user: user)
+    }
+
+    /// Prevents the feed comment-row tap from passing through to the docked composer after push.
+    private func enableComposerInteraction() {
+        composerHitTestingEnabled = false
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            composerHitTestingEnabled = true
+            if focusComposerOnAppear {
+                composerFocused = true
+            }
+        }
     }
 }
 

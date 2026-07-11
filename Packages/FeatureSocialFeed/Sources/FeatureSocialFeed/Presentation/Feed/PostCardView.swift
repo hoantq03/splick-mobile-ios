@@ -537,11 +537,7 @@ struct PostCardView: View {
 
     private var commentPreviewRow: some View {
         Button {
-            if let onOpenDetail {
-                onOpenDetail(mediaPageIndex)
-            } else {
-                onOpenComments()
-            }
+            onOpenComments()
         } label: {
             HStack(spacing: 6) {
                 commentIconWithCount

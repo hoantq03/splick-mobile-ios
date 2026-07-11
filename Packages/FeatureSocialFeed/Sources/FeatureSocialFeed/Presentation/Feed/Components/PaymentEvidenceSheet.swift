@@ -13,10 +13,9 @@ struct PaymentEvidenceSheet: View {
 
     @State private var message = ""
     @State private var pendingAttachments: [CommentSubmissionAttachment] = []
-    @State private var previewImages: [UIImage] = []
     @State private var validationMessage: String?
     @State private var isSubmitting = false
-    @State private var fullScreenPreviewRoute: LocalImagePreviewRoute?
+    @State private var fullScreenPreviewRoute: AttachmentPreviewRoute?
 
     init(
         postAuthorName: String,
@@ -26,7 +25,6 @@ struct PaymentEvidenceSheet: View {
         self.postAuthorName = postAuthorName
         self.onSubmit = onSubmit
         _pendingAttachments = State(initialValue: initialAttachments)
-        _previewImages = State(initialValue: LocalImagePreviewSupport.decodeImages(from: initialAttachments))
     }
 
     var body: some View {
@@ -42,20 +40,20 @@ struct PaymentEvidenceSheet: View {
                         .foregroundStyle(SplickTheme.Colors.error)
                 }
 
-                if !previewImages.isEmpty {
+                if !pendingAttachments.isEmpty {
                     VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
                         Text("Ảnh chuyển khoản")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(SplickTheme.Colors.textPrimary)
 
-                        LocalImageThumbnailStrip(
-                            images: previewImages,
+                        PendingAttachmentStrip(
+                            attachments: pendingAttachments,
                             thumbnailWidth: 120,
                             thumbnailHeight: 156,
-                            onTapImage: { index in
-                                fullScreenPreviewRoute = LocalImagePreviewRoute(index: index)
+                            onTapAttachment: { index in
+                                fullScreenPreviewRoute = AttachmentPreviewRoute(index: index)
                             },
-                            onRemoveImage: { index in
+                            onRemoveAttachment: { index in
                                 removeAttachment(at: index)
                             }
                         )
@@ -87,11 +85,14 @@ struct PaymentEvidenceSheet: View {
                 }
             }
             .fullScreenCover(item: $fullScreenPreviewRoute) { route in
-                LocalImageFullscreenPreview(
-                    images: previewImages,
-                    initialIndex: min(route.index, max(previewImages.count - 1, 0)),
-                    onDismiss: { fullScreenPreviewRoute = nil }
-                )
+                let previewImages = LocalImagePreviewSupport.decodeImages(from: pendingAttachments)
+                if previewImages.indices.contains(route.index) {
+                    LocalImageFullscreenPreview(
+                        images: previewImages,
+                        initialIndex: route.index,
+                        onDismiss: { fullScreenPreviewRoute = nil }
+                    )
+                }
             }
         }
     }
@@ -99,7 +100,6 @@ struct PaymentEvidenceSheet: View {
     private func removeAttachment(at index: Int) {
         guard pendingAttachments.indices.contains(index) else { return }
         pendingAttachments.remove(at: index)
-        previewImages = LocalImagePreviewSupport.decodeImages(from: pendingAttachments)
         if let route = fullScreenPreviewRoute, route.index >= pendingAttachments.count {
             fullScreenPreviewRoute = nil
         }

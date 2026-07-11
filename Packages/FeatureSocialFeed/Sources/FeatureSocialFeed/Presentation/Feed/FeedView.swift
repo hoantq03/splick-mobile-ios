@@ -278,7 +278,11 @@ private struct FeedPrimaryPage: View {
                         onOpenComments: {
                             guard viewModel.postUploadState(for: post.id) == nil else { return }
                             navigationPath.append(
-                                FeedPostDestination(postId: post.id, mediaIndex: 0)
+                                FeedPostDestination(
+                                    postId: post.id,
+                                    mediaIndex: 0,
+                                    focusComposerOnAppear: post.commentCount == 0
+                                )
                             )
                         },
                         onShowCompanions: {

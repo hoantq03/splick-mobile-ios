@@ -566,8 +566,8 @@ private struct CommentAttachmentsView: View {
         attachments.filter { $0.kind != .image }
     }
 
-    private var imagePreviewModels: [CommentAttachmentPreviewImage] {
-        imageAttachments.compactMap(\.previewImageModel)
+    private var imagePreviewModels: [InlineAttachmentPreviewImage] {
+        imageAttachments.compactMap(\.inlinePreviewImage)
     }
 
     private var mediaItems: [PostMediaItem] {
@@ -600,7 +600,7 @@ private struct CommentAttachmentsView: View {
         if !attachments.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 if !imagePreviewModels.isEmpty {
-                    CommentAttachmentImageGrid(
+                    InlineAttachmentImageGrid(
                         images: imagePreviewModels,
                         maxWidth: maxImageWidth,
                         onTapImage: { imageIndex in
