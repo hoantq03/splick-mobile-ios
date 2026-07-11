@@ -64,14 +64,13 @@ public enum RemoteImageRequestFactory {
         maxPixelDimensions: CGSize? = nil,
         maxPixelWidth: CGFloat? = nil
     ) -> ImageRequest {
-        var request = ImageRequest(url: url)
         if let thumbnail = thumbnailOptions(
             maxPixelDimensions: maxPixelDimensions,
             maxPixelWidth: maxPixelWidth
         ) {
-            request.thumbnail = thumbnail
+            return ImageRequest(url: url, userInfo: [.thumbnailKey: thumbnail])
         }
-        return request
+        return ImageRequest(url: url)
     }
 
     private static func thumbnailOptions(
