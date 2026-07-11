@@ -9,6 +9,7 @@ import Foundation
 private actor StubMessagingRepository: MessagingRepositoryProtocol {
     var messages: [ChatMessage]
     var markReadCalls: [(UUID, UUID)] = []
+    private(set) var sendMessageCallCount = 0
 
     init(messages: [ChatMessage] = []) {
         self.messages = messages
@@ -18,9 +19,48 @@ private actor StubMessagingRepository: MessagingRepositoryProtocol {
     func getOrCreateConversation(friendUserId: UUID) async throws -> Conversation {
         Conversation(id: UUID(), unreadCount: 0, peer: nil, lastMessage: nil, createdAt: .now, updatedAt: .now)
     }
+    func createGroup(
+        name: String,
+        avatarUrl: String?,
+        memberUserIds: [UUID],
+        groupId: UUID?
+    ) async throws -> Conversation {
+        Conversation(
+            id: groupId ?? UUID(),
+            type: .group,
+            unreadCount: 0,
+            peer: nil,
+            groupName: name,
+            lastMessage: nil,
+            createdAt: .now,
+            updatedAt: .now
+        )
+    }
+    func addGroupMember(groupId: UUID, memberUserId: UUID) async throws {}
+    func removeGroupMember(groupId: UUID, memberUserId: UUID) async throws {}
+    func leaveGroup(groupId: UUID) async throws {}
+    func renameGroup(groupId: UUID, name: String) async throws -> Conversation {
+        Conversation(id: groupId, unreadCount: 0, peer: nil, lastMessage: nil, createdAt: .now, updatedAt: .now)
+    }
+    func transferGroupAdmin(groupId: UUID, newAdminUserId: UUID) async throws {}
     func fetchMessages(conversationId: UUID, page: Int, limit: Int) async throws -> [ChatMessage] { messages }
-    func sendMessage(conversationId: UUID, body: String, clientMessageId: UUID) async throws -> ChatMessage {
-        ChatMessage(id: UUID(), conversationId: conversationId, senderId: UUID(), body: body, clientMessageId: clientMessageId, createdAt: .now)
+    func sendMessage(
+        conversationId: UUID,
+        body: String,
+        clientMessageId: UUID,
+        imageAttachments: [MessageImageAttachment],
+        replyToMessageId: UUID? = nil
+    ) async throws -> ChatMessage {
+        sendMessageCallCount += 1
+        return ChatMessage(
+            id: UUID(),
+            conversationId: conversationId,
+            senderId: ChatThreadViewModelTestFixtures.currentUserId,
+            body: body,
+            clientMessageId: clientMessageId,
+            createdAt: .now,
+            imageAttachments: imageAttachments
+        )
     }
     func markRead(conversationId: UUID, upToMessageId: UUID) async throws {
         markReadCalls.append((conversationId, upToMessageId))
@@ -32,6 +72,7 @@ private actor StubMessagingRepository: MessagingRepositoryProtocol {
     func removeReaction(conversationId: UUID, messageId: UUID, reactionId: UUID) async throws {}
     func searchMessages(query: String, page: Int, limit: Int) async throws -> [MessageSearchHit] { [] }
     func recordedMarkReadCalls() async -> [(UUID, UUID)] { markReadCalls }
+    func recordedSendMessageCallCount() async -> Int { sendMessageCallCount }
 }
 
 private struct StubReactToMessageUseCase: ReactToMessageUseCaseProtocol {
@@ -67,6 +108,13 @@ final class ChatThreadViewModelTests: XCTestCase {
             sendMessageUseCase: SendMessageUseCase(repository: repo),
             reactToMessageUseCase: StubReactToMessageUseCase(),
             repository: repo,
+            uploadImage: { _, _ in
+                MessageImageAttachment(
+                    mediaId: UUID(),
+                    url: URL(string: "https://example.com/image.jpg")!,
+                    thumbnailURL: nil
+                )
+            },
             wsClient: wsClient
         )
     }
@@ -80,6 +128,31 @@ final class ChatThreadViewModelTests: XCTestCase {
             clientMessageId: UUID(),
             createdAt: .now
         )
+    }
+
+    func test_send_withMultipleImages_makesSingleRepositoryCall() async {
+        let repo = StubMessagingRepository(messages: [])
+        let wsClient = MessagingWebSocketClient(tokenProvider: { nil })
+        let vm = makeViewModel(repo: repo, wsClient: wsClient)
+
+        await vm.load()
+
+        let submissions = (0..<3).map { index in
+            CommentSubmissionAttachment(
+                kind: .image,
+                uploadedMediaId: UUID(),
+                url: URL(string: "https://example.com/\(index).jpg")!,
+                sizeBytes: 1024,
+                fileName: "photo-\(index).jpg"
+            )
+        }
+
+        await vm.send(body: "Album", submissions: submissions)
+
+        let sendCount = await repo.recordedSendMessageCallCount()
+        XCTAssertEqual(sendCount, 1)
+        XCTAssertEqual(vm.messages.count, 1)
+        XCTAssertEqual(vm.messages.first?.imageAttachments.count, 3)
     }
 
     // MARK: Deduplication

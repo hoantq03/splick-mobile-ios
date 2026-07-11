@@ -95,4 +95,37 @@ final class MessagingMapperTests: XCTestCase {
 
         XCTAssertEqual(peer.displayTitle, "bob_tran")
     }
+
+    func test_toMessage_mapsAttachmentsArray() {
+        let dto = MessageResponseDTO(
+            id: Self.messageId,
+            conversationId: Self.conversationId,
+            senderId: Self.senderId,
+            senderDisplayName: "Alice",
+            body: "Photo album",
+            clientMessageId: Self.clientMsgId,
+            createdAt: Self.createdAt,
+            reactions: nil,
+            status: nil,
+            attachments: [
+                MessageAttachmentResponseDTO(
+                    mediaId: UUID(),
+                    url: "https://example.com/one.jpg",
+                    thumbnailUrl: nil
+                ),
+                MessageAttachmentResponseDTO(
+                    mediaId: UUID(),
+                    url: "https://example.com/two.jpg",
+                    thumbnailUrl: "https://example.com/two-thumb.jpg"
+                ),
+            ],
+            replyPreview: nil
+        )
+
+        let message = MessagingMapper.toMessage(dto)
+
+        XCTAssertEqual(message.imageAttachments.count, 2)
+        XCTAssertEqual(message.imageAttachments[0].url.absoluteString, "https://example.com/one.jpg")
+        XCTAssertEqual(message.imageAttachments[1].thumbnailURL?.absoluteString, "https://example.com/two-thumb.jpg")
+    }
 }

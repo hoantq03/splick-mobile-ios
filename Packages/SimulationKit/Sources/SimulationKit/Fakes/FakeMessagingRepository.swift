@@ -74,10 +74,15 @@ public actor FakeMessagingRepository: MessagingRepositoryProtocol {
         )
     }
 
-    public func createGroup(name: String, avatarUrl: String?, memberUserIds: [UUID]) async throws -> Conversation {
+    public func createGroup(
+        name: String,
+        avatarUrl: String?,
+        memberUserIds: [UUID],
+        groupId: UUID?
+    ) async throws -> Conversation {
         logger.log("createGroup name=\(name) members=\(memberUserIds.count)")
         return Conversation(
-            id: UUID(),
+            id: groupId ?? UUID(),
             type: .group,
             unreadCount: 0,
             peer: nil,
@@ -138,6 +143,7 @@ public actor FakeMessagingRepository: MessagingRepositoryProtocol {
                 id: UUID(),
                 conversationId: conversationId,
                 senderId: peer.userId,
+                senderDisplayName: peer.displayTitle,
                 body: conv.lastMessage?.body ?? "Hello!",
                 clientMessageId: UUID(),
                 createdAt: Date().addingTimeInterval(-600)
@@ -145,15 +151,23 @@ public actor FakeMessagingRepository: MessagingRepositoryProtocol {
         ]
     }
 
-    public func sendMessage(conversationId: UUID, body: String, clientMessageId: UUID) async throws -> ChatMessage {
-        logger.log("sendMessage conversationId=\(conversationId) body=\(body)")
+    public func sendMessage(
+        conversationId: UUID,
+        body: String,
+        clientMessageId: UUID,
+        imageAttachments: [MessageImageAttachment],
+        replyToMessageId: UUID? = nil
+    ) async throws -> ChatMessage {
+        logger.log("sendMessage conversationId=\(conversationId) body=\(body) attachments=\(imageAttachments.count)")
         return ChatMessage(
             id: UUID(),
             conversationId: conversationId,
-            senderId: UUID(),
+            senderId: Self.myId,
+            senderDisplayName: "You",
             body: body,
             clientMessageId: clientMessageId,
-            createdAt: Date()
+            createdAt: Date(),
+            imageAttachments: imageAttachments
         )
     }
 

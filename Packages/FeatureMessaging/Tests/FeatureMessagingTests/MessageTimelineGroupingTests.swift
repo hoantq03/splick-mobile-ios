@@ -68,4 +68,40 @@ final class MessageTimelineGroupingTests: XCTestCase {
 
         XCTAssertEqual(display.map(\.groupPosition), [.standalone, .standalone])
     }
+
+    func test_buildDisplayMessages_rendersMultipleAttachmentsOnSingleMessage() {
+        let attachment = MessageImageAttachment(
+            mediaId: UUID(),
+            url: URL(string: "https://example.com/a.jpg")!,
+            thumbnailURL: nil
+        )
+        let second = MessageImageAttachment(
+            mediaId: UUID(),
+            url: URL(string: "https://example.com/b.jpg")!,
+            thumbnailURL: nil
+        )
+        let third = MessageImageAttachment(
+            mediaId: UUID(),
+            url: URL(string: "https://example.com/c.jpg")!,
+            thumbnailURL: nil
+        )
+
+        let messages = [
+            ChatMessage(
+                id: UUID(),
+                conversationId: Self.conversationId,
+                senderId: Self.senderA,
+                body: "Caption",
+                clientMessageId: UUID(),
+                createdAt: Date(timeIntervalSinceReferenceDate: 800_000_000),
+                imageAttachments: [attachment, second, third]
+            ),
+        ]
+
+        let display = MessageTimelineGrouping.buildDisplayMessages(from: messages)
+
+        XCTAssertEqual(display.count, 1)
+        XCTAssertEqual(display[0].imageAttachments.count, 3)
+        XCTAssertEqual(display[0].message.body, "Caption")
+    }
 }
