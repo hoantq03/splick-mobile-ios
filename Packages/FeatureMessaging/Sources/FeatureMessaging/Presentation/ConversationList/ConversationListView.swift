@@ -5,17 +5,23 @@ import DesignSystem
 import Localization
 import SplickDomain
 
+import SplickDomain
+
+private struct NewMessageComposePresentation: Identifiable {
+    let id = UUID()
+    let viewModel: NewMessageComposeViewModel
+}
+
 public struct ConversationListView: View {
     @ObservedObject private var viewModel: ConversationListViewModel
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.pullToRefreshActive) private var pullToRefreshActive
     @State private var isPullRefreshing = false
-    @State private var showsCreateGroup = false
-    @State private var createGroupFriends: [UserSummary] = []
-
-    private let createGroupViewModel: CreateGroupConversationViewModel
-    private let friendsProvider: () async throws -> [UserSummary]
+    @State private var composePresentation: NewMessageComposePresentation?
+    private let onCreateGroup: () -> Void
+    private let makeComposeViewModel: () -> NewMessageComposeViewModel
+    @Binding private var conversationToOpen: Conversation?
 
     private var suppressRefreshAnimations: Bool {
         pullToRefreshActive || isPullRefreshing
@@ -39,12 +45,14 @@ public struct ConversationListView: View {
 
     public init(
         viewModel: ConversationListViewModel,
-        createGroupViewModel: CreateGroupConversationViewModel,
-        friendsProvider: @escaping () async throws -> [UserSummary] = { [] }
+        onCreateGroup: @escaping () -> Void = {},
+        makeComposeViewModel: @escaping () -> NewMessageComposeViewModel,
+        conversationToOpen: Binding<Conversation?> = .constant(nil)
     ) {
         self._viewModel = ObservedObject(wrappedValue: viewModel)
-        self.createGroupViewModel = createGroupViewModel
-        self.friendsProvider = friendsProvider
+        self.onCreateGroup = onCreateGroup
+        self.makeComposeViewModel = makeComposeViewModel
+        self._conversationToOpen = conversationToOpen
     }
 
     public var body: some View {
@@ -70,24 +78,7 @@ public struct ConversationListView: View {
             .splickTabScreenHeader(languageService.text(.messagingTitle), showsBell: false)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        Task {
-                            createGroupFriends = (try? await friendsProvider()) ?? []
-                            showsCreateGroup = true
-                        }
-                    } label: {
-                        Image(systemName: "person.3.fill")
-                    }
-                    .accessibilityLabel(languageService.text(.messagingCreateGroupTitle))
-                }
-            }
-            .sheet(isPresented: $showsCreateGroup) {
-                CreateGroupConversationView(
-                    viewModel: createGroupViewModel,
-                    friends: createGroupFriends
-                ) { conversation in
-                    path.append(ChatThreadRoute(conversation: conversation))
-                    Task { await viewModel.refresh() }
+                    composeMenu
                 }
             }
             .navigationDestination(for: ChatThreadRoute.self) { route in
@@ -95,6 +86,14 @@ public struct ConversationListView: View {
                     conversation: route.conversation,
                     highlightMessageId: route.highlightMessageId
                 )
+            }
+            .sheet(item: $composePresentation) { presentation in
+                NewMessageComposeView(viewModel: presentation.viewModel) { conversation in
+                    composePresentation = nil
+                    path.append(ChatThreadRoute(conversation: conversation))
+                    Task { await viewModel.refresh() }
+                }
+                .environmentObject(languageService)
             }
         }
         .onChange(of: searchDraft) { newValue in
@@ -118,6 +117,12 @@ public struct ConversationListView: View {
             guard viewModel.conversations.isEmpty else { return }
             Task { await viewModel.load() }
         }
+        .onChange(of: conversationToOpen?.id) { _ in
+            guard let conversation = conversationToOpen else { return }
+            path.append(ChatThreadRoute(conversation: conversation))
+            conversationToOpen = nil
+            Task { await viewModel.refresh() }
+        }
         .onReceive(sameTabTapPublisher) { _ in
             if tabBarScrollState?.isAtTop == true {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -132,6 +137,39 @@ public struct ConversationListView: View {
                 scrollTopSignal += 1
             }
         }
+    }
+
+    private var composeMenu: some View {
+        Menu {
+            Button {
+                onCreateGroup()
+            } label: {
+                Label(
+                    languageService.text(.friendsCreateGroup),
+                    systemImage: "person.3.fill"
+                )
+            }
+
+            Button {
+                beginNewMessage()
+            } label: {
+                Label(
+                    languageService.text(.messagingNewConversation),
+                    systemImage: "square.and.pencil"
+                )
+            }
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+        }
+        .accessibilityLabel(languageService.text(.messagingNewConversation))
+    }
+
+    private func beginNewMessage() {
+        composePresentation = NewMessageComposePresentation(
+            viewModel: makeComposeViewModel()
+        )
     }
 
     private var startConversationErrorPresented: Binding<Bool> {
