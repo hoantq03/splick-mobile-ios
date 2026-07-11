@@ -55,16 +55,25 @@ public enum AppConstants {
         public static let maxExpenseDescriptionLength = 200
     }
 
-    public enum Giphy {
-        /// Read from `GIPHY_API_KEY` in Info.plist (inject via xcconfig / CI secret — never commit production keys).
+    public enum Klipy {
+        /// Read from `KLIPY_API_KEY` in Info.plist (inject via xcconfig / CI secret — never commit production keys).
         public static var apiKey: String {
-            Bundle.main.object(forInfoDictionaryKey: "GIPHY_API_KEY") as? String ?? ""
+            Bundle.main.object(forInfoDictionaryKey: "KLIPY_API_KEY") as? String ?? ""
         }
 
-        public static let baseURL = "https://api.giphy.com/v1/gifs"
+        public static let baseURL = "https://api.klipy.com/v2"
         public static let defaultPageLimit = 25
         public static let searchDebounceMilliseconds = 500
-        public static let attributionURL = URL(string: "https://giphy.com")!
+        public static let attributionURL = URL(string: "https://klipy.com")!
+
+        public static var locale: String {
+            let identifier = Locale.current.identifier.replacingOccurrences(of: "-", with: "_")
+            return identifier.isEmpty ? "vi_VN" : identifier
+        }
+
+        public static var country: String {
+            Locale.current.region?.identifier ?? "VN"
+        }
     }
 
     public enum Stickers {

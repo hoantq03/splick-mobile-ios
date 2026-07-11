@@ -6,8 +6,8 @@
 settings:
   base:
     DEVELOPMENT_TEAM: YOUR_TEAM_ID_HERE
-    # Optional: Giphy Developer API key for GIF picker (https://developers.giphy.com/)
-    GIPHY_API_KEY: YOUR_GIPHY_API_KEY_HERE
+    # Optional: KLIPY API key for GIF picker (https://partner.klipy.com/)
+    KLIPY_API_KEY: YOUR_KLIPY_API_KEY_HERE
 
 # --- Device build: Sign in with Apple provisioning ---
 #
