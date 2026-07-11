@@ -10,6 +10,13 @@ struct WsNewMessageEvent: Decodable {
         let senderId: UUID
         let body: String
         let createdAt: String
+        let attachments: [MessageAttachmentPayload]?
+    }
+
+    struct MessageAttachmentPayload: Decodable {
+        let mediaId: UUID?
+        let url: String
+        let thumbnailUrl: String?
     }
 }
 

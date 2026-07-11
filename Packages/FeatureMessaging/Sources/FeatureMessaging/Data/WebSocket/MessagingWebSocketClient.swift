@@ -135,6 +135,14 @@ public final class MessagingWebSocketClient: ObservableObject {
                 let iso = ISO8601DateFormatter()
                 iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
                 let date = iso.date(from: event.message.createdAt) ?? Date()
+                let imageAttachments = (event.message.attachments ?? []).compactMap { attachment -> MessageImageAttachment? in
+                    guard let url = URL(string: attachment.url) else { return nil }
+                    return MessageImageAttachment(
+                        mediaId: attachment.mediaId,
+                        url: url,
+                        thumbnailURL: attachment.thumbnailUrl.flatMap(URL.init(string:))
+                    )
+                }
                 let msg = ChatMessage(
                     id: event.message.id,
                     conversationId: event.conversationId,
@@ -142,7 +150,8 @@ public final class MessagingWebSocketClient: ObservableObject {
                     body: event.message.body,
                     clientMessageId: UUID(),
                     createdAt: date,
-                    deliveryStatus: .sent
+                    deliveryStatus: .sent,
+                    imageAttachments: imageAttachments
                 )
                 eventSubject.send(.newMessage(conversationId: event.conversationId, message: msg))
             }
