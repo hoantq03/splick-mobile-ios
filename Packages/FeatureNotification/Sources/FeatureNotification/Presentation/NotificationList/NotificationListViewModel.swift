@@ -130,6 +130,10 @@ public final class NotificationListViewModel: ObservableObject {
     func handleTap(_ notification: AppNotification) async -> NotificationNavigationTarget {
         let target = notification.navigationTarget
 
+        if !notification.isRead {
+            markLocalAsRead(notification)
+        }
+
         do {
             try await markClickedUseCase.execute(id: notification.id)
             markLocalAsRead(notification)
@@ -142,6 +146,27 @@ public final class NotificationListViewModel: ObservableObject {
         }
 
         return target
+    }
+
+    public func markMessageNotificationsRead(conversationId: UUID) async {
+        let unreadMessageNotifications = notifications.filter {
+            !$0.isRead && $0.referenceId == conversationId && $0.type.isMessagingNotification
+        }
+        guard !unreadMessageNotifications.isEmpty else { return }
+
+        for notification in unreadMessageNotifications {
+            markLocalAsRead(notification)
+        }
+
+        for notification in unreadMessageNotifications {
+            do {
+                try await markReadUseCase.execute(id: notification.id)
+            } catch {
+                Log.error(error, category: .notification)
+            }
+        }
+
+        await onBadgeCountsChanged?()
     }
 
     func markAllAsRead() async {
@@ -167,6 +192,7 @@ public final class NotificationListViewModel: ObservableObject {
         do {
             try await markReadUseCase.execute(id: notification.id)
             markLocalAsRead(notification)
+            await onBadgeCountsChanged?()
         } catch {
             Log.error(error, category: .notification)
         }
