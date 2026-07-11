@@ -31,14 +31,14 @@
 		<dict>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.702860718891-59e0chbkkidsbqvclul3d3a0klga4ve3</string>
+				<string>$(GOOGLE_URL_SCHEME)</string>
 			</array>
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>GIDClientID</key>
-	<string>702860718891-59e0chbkkidsbqvclul3d3a0klga4ve3.apps.googleusercontent.com</string>
+	<string>$(GID_CLIENT_ID)</string>
 	<key>KLIPY_API_KEY</key>
 	<string>$(KLIPY_API_KEY)</string>
 	<key>NSAppTransportSecurity</key>

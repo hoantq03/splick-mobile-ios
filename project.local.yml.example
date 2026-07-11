@@ -1,13 +1,13 @@
-# Copy to project.local.yml (gitignored), then run: make generate
+# Copy to project.local.yml (gitignored) for optional overrides — signing, entitlements, etc.
+#
+# Secrets (API keys, Google client ID) belong in `.env`:
+#   cp .env.example .env
+#   make generate
 #
 # Find Team ID: Xcode → Settings → Accounts → your team → Team ID
-# Or: security find-certificate -c "Apple Development" -p | openssl x509 -noout -subject
-#     (look for OU=XXXXXXXXXX)
 settings:
   base:
     DEVELOPMENT_TEAM: YOUR_TEAM_ID_HERE
-    # Optional: KLIPY API key for GIF picker (https://partner.klipy.com/)
-    KLIPY_API_KEY: YOUR_KLIPY_API_KEY_HERE
 
 # --- Device build: Sign in with Apple provisioning ---
 #

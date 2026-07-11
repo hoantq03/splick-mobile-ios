@@ -9,6 +9,11 @@ LOCAL_YML="$ROOT/project.local.yml"
 LOCAL_EXAMPLE="$ROOT/project.local.yml.example"
 
 ensure_local_signing() {
+  # DEVELOPMENT_TEAM is preferred via .env → Config/Secrets.xcconfig (see scripts/load-env.sh).
+  if [[ -f "$ROOT/Config/Secrets.xcconfig" ]] && grep -q '^DEVELOPMENT_TEAM = [^[:space:]]' "$ROOT/Config/Secrets.xcconfig" 2>/dev/null; then
+    return
+  fi
+
   if [[ -f "$LOCAL_YML" ]]; then
     return
   fi
@@ -40,6 +45,9 @@ EOF
 }
 
 ensure_local_signing
+
+chmod +x "$ROOT/scripts/load-env.sh"
+"$ROOT/scripts/load-env.sh"
 
 XCODEGEN_VERSION="${XCODEGEN_VERSION:-2.44.1}"
 CACHE_DIR="${XCODEGEN_CACHE_DIR:-$HOME/.cache/splick-xcodegen}"

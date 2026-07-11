@@ -10,7 +10,7 @@ public enum StickerError: LocalizedError, Equatable, Sendable {
     public var errorDescription: String? {
         switch self {
         case .apiKeyMissing:
-            return "KLIPY chưa được cấu hình. Thêm KLIPY_API_KEY vào Info.plist."
+            return "KLIPY chưa được cấu hình. Thêm KLIPY_API_KEY vào .env rồi chạy make generate."
         case .rateLimitExceeded:
             return "Đã hết hạn mức KLIPY hôm nay. Thử lại sau hoặc dùng sticker nhóm."
         case .groupRequired:

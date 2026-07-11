@@ -6,10 +6,13 @@
 
 ```bash
 cd splick-mobile-ios
+cp .env.example .env   # fill DEVELOPMENT_TEAM, GID_CLIENT_ID, KLIPY_API_KEY
 make setup
 # or: ./scripts/generate-xcodeproj.sh
 open Splick.xcodeproj
 ```
+
+Secrets live in **`.env`** (gitignored). `make generate` writes `Config/Secrets.xcconfig` and substitutes values into `Info.plist` at build time.
 
 If Xcode says *missing project.pbxproj*, run `make setup` again.
 

@@ -56,7 +56,7 @@ public enum AppConstants {
     }
 
     public enum Klipy {
-        /// Read from `KLIPY_API_KEY` in Info.plist (inject via xcconfig / CI secret — never commit production keys).
+        /// Read from `KLIPY_API_KEY` injected via `.env` → `Config/Secrets.xcconfig` → Info.plist.
         public static var apiKey: String {
             Bundle.main.object(forInfoDictionaryKey: "KLIPY_API_KEY") as? String ?? ""
         }
