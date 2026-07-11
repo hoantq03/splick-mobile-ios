@@ -122,6 +122,7 @@ enum StringsFeatureVi {
         .feedCustomEmojiUploadAction: "Tải emoji lên",
         .feedCustomEmojiExistingTitle: "Emoji của nhóm",
         .feedCustomEmojiEmpty: "Chưa có emoji riêng. Hãy tải lên cho nhóm của bạn.",
+        .stickersGifSearchPlaceholder: "Tìm kiếm trên KLIPY",
         .feedProfileMessage: "Nhắn tin",
         .feedProfileAddFriend: "Thêm bạn",
         .profileLoading: "Đang tải hồ sơ…",

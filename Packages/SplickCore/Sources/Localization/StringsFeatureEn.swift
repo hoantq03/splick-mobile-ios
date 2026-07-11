@@ -122,6 +122,7 @@ enum StringsFeatureEn {
         .feedCustomEmojiUploadAction: "Upload emoji",
         .feedCustomEmojiExistingTitle: "Group emojis",
         .feedCustomEmojiEmpty: "No custom emojis yet. Upload one for your group.",
+        .stickersGifSearchPlaceholder: "Search KLIPY",
         .feedProfileMessage: "Message",
         .feedProfileAddFriend: "Add friend",
         .profileLoading: "Loading profile…",

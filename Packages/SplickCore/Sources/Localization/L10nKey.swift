@@ -350,6 +350,7 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case feedCustomEmojiUploadAction = "feed.custom_emoji.upload.action"
     case feedCustomEmojiExistingTitle = "feed.custom_emoji.existing.title"
     case feedCustomEmojiEmpty = "feed.custom_emoji.empty"
+    case stickersGifSearchPlaceholder = "stickers.gif_search.placeholder"
     case feedProfileMessage = "feed.profile.message"
     case feedProfileAddFriend = "feed.profile.add_friend"
     case profileLoading = "profile.loading"
