@@ -7,11 +7,17 @@ public struct CreateGroupConversationUseCase: Sendable {
         self.repository = repository
     }
 
-    public func execute(name: String, avatarUrl: String?, memberUserIds: [UUID]) async throws -> Conversation {
+    public func execute(
+        name: String,
+        avatarUrl: String?,
+        memberUserIds: [UUID],
+        groupId: UUID? = nil
+    ) async throws -> Conversation {
         try await repository.createGroup(
             name: name,
             avatarUrl: avatarUrl,
-            memberUserIds: memberUserIds
+            memberUserIds: memberUserIds,
+            groupId: groupId
         )
     }
 }

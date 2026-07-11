@@ -11,12 +11,16 @@ public final class SendMessageUseCase: Sendable {
     public func execute(
         conversationId: UUID,
         body: String,
-        clientMessageId: UUID = UUID()
+        clientMessageId: UUID = UUID(),
+        imageAttachments: [MessageImageAttachment] = [],
+        replyToMessageId: UUID? = nil
     ) async throws -> ChatMessage {
         try await repository.sendMessage(
             conversationId: conversationId,
             body: body,
-            clientMessageId: clientMessageId
+            clientMessageId: clientMessageId,
+            imageAttachments: imageAttachments,
+            replyToMessageId: replyToMessageId
         )
     }
 }

@@ -23,10 +23,16 @@ public final class MessagingRepository: MessagingRepositoryProtocol, Sendable {
         return MessagingMapper.toConversation(dto)
     }
 
-    public func createGroup(name: String, avatarUrl: String?, memberUserIds: [UUID]) async throws -> Conversation {
+    public func createGroup(
+        name: String,
+        avatarUrl: String?,
+        memberUserIds: [UUID],
+        groupId: UUID?
+    ) async throws -> Conversation {
         let dto: ConversationResponseDTO = try await apiClient.request(
             MessagingEndpoint.createGroup(
                 CreateGroupConversationRequestDTO(
+                    groupId: groupId,
                     name: name,
                     avatarUrl: avatarUrl,
                     memberUserIds: memberUserIds
@@ -78,9 +84,28 @@ public final class MessagingRepository: MessagingRepositoryProtocol, Sendable {
         return dtos.map(MessagingMapper.toMessage)
     }
 
-    public func sendMessage(conversationId: UUID, body: String, clientMessageId: UUID) async throws -> ChatMessage {
+    public func sendMessage(
+        conversationId: UUID,
+        body: String,
+        clientMessageId: UUID,
+        imageAttachments: [MessageImageAttachment] = [],
+        replyToMessageId: UUID? = nil
+    ) async throws -> ChatMessage {
+        let attachmentDTOs = imageAttachments.map {
+            SendMessageRequestDTO.MessageAttachmentRequestDTO(
+                mediaId: $0.mediaId,
+                url: $0.url.absoluteString,
+                thumbnailUrl: $0.thumbnailURL?.absoluteString
+            )
+        }
         let dto: MessageResponseDTO = try await apiClient.request(
-            MessagingEndpoint.sendMessage(conversationId: conversationId, body: body, clientMessageId: clientMessageId)
+            MessagingEndpoint.sendMessage(
+                conversationId: conversationId,
+                body: body,
+                clientMessageId: clientMessageId,
+                attachments: attachmentDTOs,
+                replyToMessageId: replyToMessageId
+            )
         )
         return MessagingMapper.toMessage(dto)
     }

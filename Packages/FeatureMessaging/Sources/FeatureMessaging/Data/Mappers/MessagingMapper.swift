@@ -33,11 +33,33 @@ enum MessagingMapper {
             id: dto.id,
             conversationId: dto.conversationId,
             senderId: dto.senderId,
+            senderDisplayName: dto.senderDisplayName,
             body: dto.body,
             clientMessageId: dto.clientMessageId,
             createdAt: dto.createdAt,
             reactions: (dto.reactions ?? []).map(toReaction),
-            deliveryStatus: mapDeliveryStatus(dto.status)
+            deliveryStatus: mapDeliveryStatus(dto.status),
+            imageAttachments: (dto.attachments ?? []).compactMap(toImageAttachment),
+            replyPreview: dto.replyPreview.map(toReplyPreview)
+        )
+    }
+
+    private static func toReplyPreview(_ dto: MessageReplyPreviewResponseDTO) -> MessageReplyPreview {
+        MessageReplyPreview(
+            messageId: dto.messageId,
+            senderId: dto.senderId,
+            senderDisplayName: dto.senderDisplayName,
+            body: dto.body,
+            hasImageAttachment: dto.hasImageAttachment
+        )
+    }
+
+    private static func toImageAttachment(_ dto: MessageAttachmentResponseDTO) -> MessageImageAttachment? {
+        guard let url = URL(string: dto.url) else { return nil }
+        return MessageImageAttachment(
+            mediaId: dto.mediaId,
+            url: url,
+            thumbnailURL: dto.thumbnailUrl.flatMap(URL.init(string:))
         )
     }
 

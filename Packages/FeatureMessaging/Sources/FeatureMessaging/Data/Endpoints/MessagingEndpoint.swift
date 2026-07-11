@@ -11,7 +11,13 @@ enum MessagingEndpoint: APIEndpoint {
     case renameGroup(groupId: UUID, RenameGroupRequestDTO)
     case transferGroupAdmin(groupId: UUID, TransferGroupAdminRequestDTO)
     case listMessages(conversationId: UUID, page: Int, limit: Int)
-    case sendMessage(conversationId: UUID, body: String, clientMessageId: UUID)
+    case sendMessage(
+        conversationId: UUID,
+        body: String,
+        clientMessageId: UUID,
+        attachments: [SendMessageRequestDTO.MessageAttachmentRequestDTO],
+        replyToMessageId: UUID?
+    )
     case markRead(conversationId: UUID, upToMessageId: UUID)
     case unreadCount
     case searchMessages(q: String, page: Int, limit: Int)
@@ -36,7 +42,7 @@ enum MessagingEndpoint: APIEndpoint {
             return "/v1/messaging/groups/\(groupId)/admin"
         case .listMessages(let id, _, _):
             return "/v1/messaging/conversations/\(id)/messages"
-        case .sendMessage(let id, _, _):
+        case .sendMessage(let id, _, _, _, _):
             return "/v1/messaging/conversations/\(id)/messages"
         case .markRead(let id, _):
             return "/v1/messaging/conversations/\(id)/read"
@@ -95,8 +101,13 @@ enum MessagingEndpoint: APIEndpoint {
             return dto
         case .transferGroupAdmin(_, let dto):
             return dto
-        case .sendMessage(_, let msgBody, let clientId):
-            return SendMessageRequestDTO(body: msgBody, clientMessageId: clientId)
+        case .sendMessage(_, let msgBody, let clientId, let attachments, let replyToMessageId):
+            return SendMessageRequestDTO(
+                body: msgBody,
+                clientMessageId: clientId,
+                attachments: attachments.isEmpty ? nil : attachments,
+                replyToMessageId: replyToMessageId
+            )
         case .markRead(_, let messageId):
             return MarkReadRequestDTO(upToMessageId: messageId)
         case .addReaction(_, _, let dto):
