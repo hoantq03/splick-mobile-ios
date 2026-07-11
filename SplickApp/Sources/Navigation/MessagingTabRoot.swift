@@ -1,7 +1,9 @@
 import SwiftUI
+import DesignSystem
 import FeatureMessaging
 import FeatureSocialFeed
 import FeatureFriends
+import FeatureStickers
 import SplickDomain
 
 private struct MessagingUserProfileRoute: Identifiable {
@@ -17,21 +19,48 @@ struct MessagingTabRoot: View {
     @State private var showsReactionPicker = false
     @State private var reactionPickHandler: ((String) -> Void)?
     @State private var profileRoute: MessagingUserProfileRoute?
+    @State private var showCreateGroup = false
+    @State private var createGroupFriends: [UserSummary] = []
+    @State private var conversationToOpen: Conversation?
 
     var body: some View {
         ConversationListView(
             viewModel: container.conversationListViewModel,
-            createGroupViewModel: container.createGroupConversationViewModel,
-            friendsProvider: {
-                try await container.fetchMyFriendsUseCase.execute()
-            }
+            onCreateGroup: {
+                Task {
+                    createGroupFriends = (try? await container.fetchMyFriendsUseCase.execute()) ?? []
+                    showCreateGroup = true
+                }
+            },
+            makeComposeViewModel: {
+                container.makeNewMessageComposeViewModel(
+                    currentUserId: appState.currentUser?.id ?? UUID()
+                )
+            },
+            conversationToOpen: $conversationToOpen
         )
         .environmentObject(container.customEmojiStore)
         .environment(\.customEmojiDependencies, container.customEmojiDependencies)
+        .environment(\.messagingGifPickerFactory) {
+            container.makeGifPickerViewModel(groupId: nil)
+        }
+        .environment(
+            \.imageAttachmentUpload,
+            { data, mimeType in
+                let upload = try await container.uploadCommentAttachment(data: data, mimeType: mimeType)
+                return UploadedMediaReference(
+                    id: upload.id,
+                    url: upload.url,
+                    thumbnailURL: upload.thumbnailURL,
+                    sizeBytes: upload.sizeBytes
+                )
+            }
+        )
         .environmentObject(container.makeChatThreadViewModelFactory(
             currentUserId: appState.currentUser?.id ?? UUID()
         ))
         .environment(\.chatPeerRelationshipActions, container.makeChatPeerRelationshipActions())
+        .environment(\.chatGroupManagementActions, container.makeChatGroupManagementActions())
         .environment(\.messagingReactionPicker, MessagingReactionPickerAction { onPick in
             reactionPickHandler = onPick
             showsReactionPicker = true
@@ -42,6 +71,28 @@ struct MessagingTabRoot: View {
         .sheet(item: $profileRoute) { route in
             FriendUserProfileView(
                 viewModel: container.friendUserProfileDependencies.makeViewModel(user: route.user)
+            )
+            .environmentObject(container.languageService)
+        }
+        .sheet(isPresented: $showCreateGroup) {
+            CreateGroupSheet(
+                viewModel: CreateGroupViewModel(
+                    friends: createGroupFriends,
+                    createGroupUseCase: container.createGroupUseCase,
+                    inviteFriendsUseCase: container.inviteFriendsToGroupUseCase,
+                    uploadGroupAvatarUseCase: container.uploadGroupAvatarUseCase,
+                    updateGroupAvatarUseCase: container.updateGroupAvatarUseCase
+                ) { group, invitedMemberIds in
+                    showCreateGroup = false
+                    Task {
+                        await container.openMessagingGroupChat(
+                            group: group,
+                            invitedMemberIds: invitedMemberIds,
+                            conversationListViewModel: container.conversationListViewModel,
+                            onOpen: { conversationToOpen = $0 }
+                        )
+                    }
+                }
             )
             .environmentObject(container.languageService)
         }

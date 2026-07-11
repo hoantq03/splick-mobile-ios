@@ -99,7 +99,13 @@ struct MainTabView: View {
                     profileDependencies: container.friendUserProfileDependencies,
                     makeGifPickerViewModel: container.makeGifPickerViewModel(groupId:),
                     uploadCommentImage: { data, mimeType in
-                        try await container.uploadCommentAttachment(data: data, mimeType: mimeType)
+                        let upload = try await container.uploadCommentAttachment(data: data, mimeType: mimeType)
+                        return UploadedMediaReference(
+                            id: upload.id,
+                            url: upload.url,
+                            thumbnailURL: upload.thumbnailURL,
+                            sizeBytes: upload.sizeBytes
+                        )
                     },
                     onDismiss: { appState.dismissLinkedPostPresentation() }
                 )
@@ -250,9 +256,15 @@ struct MainTabView: View {
         .environmentObject(container.customEmojiStore)
         .environment(\.customEmojiDependencies, container.customEmojiDependencies)
         .environment(
-            \.commentImageUpload,
+            \.imageAttachmentUpload,
             { data, mimeType in
-                try await container.uploadCommentAttachment(data: data, mimeType: mimeType)
+                let upload = try await container.uploadCommentAttachment(data: data, mimeType: mimeType)
+                return UploadedMediaReference(
+                    id: upload.id,
+                    url: upload.url,
+                    thumbnailURL: upload.thumbnailURL,
+                    sizeBytes: upload.sizeBytes
+                )
             }
         )
     }

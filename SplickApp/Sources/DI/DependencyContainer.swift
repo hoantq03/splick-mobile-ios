@@ -550,6 +550,33 @@ final class DependencyContainer: ObservableObject {
         ReactToMessageUseCase(repository: messagingRepository)
     }()
 
+    func makeNewMessageComposeViewModel(currentUserId: UUID) -> NewMessageComposeViewModel {
+        NewMessageComposeViewModel(
+            currentUserId: currentUserId,
+            repository: messagingRepository,
+            sendMessageUseCase: sendMessageUseCase,
+            friendsProvider: { [fetchMyFriendsUseCase] in
+                try await fetchMyFriendsUseCase.execute()
+            },
+            groupsProvider: { [fetchMyGroupsUseCase] in
+                try await fetchMyGroupsUseCase.execute()
+            },
+            searchUsersProvider: { [searchUsersUseCase] query in
+                let results = try await searchUsersUseCase.execute(query: query, page: 0, size: 20)
+                return results.map(\.user)
+            },
+            uploadImage: { [weak self] data, mimeType in
+                guard let self else { throw URLError(.cancelled) }
+                let upload = try await self.uploadCommentAttachment(data: data, mimeType: mimeType)
+                return MessageImageAttachment(
+                    mediaId: upload.id,
+                    url: upload.url,
+                    thumbnailURL: upload.thumbnailURL
+                )
+            }
+        )
+    }
+
     func makeChatThreadViewModelFactory(currentUserId: UUID) -> ChatThreadViewModelFactory {
         ChatThreadViewModelFactory(
             currentUserId: currentUserId,
@@ -557,6 +584,15 @@ final class DependencyContainer: ObservableObject {
             sendMessageUseCase: sendMessageUseCase,
             reactToMessageUseCase: reactToMessageUseCase,
             repository: messagingRepository,
+            uploadImage: { [weak self] data, mimeType in
+                guard let self else { throw URLError(.cancelled) }
+                let upload = try await self.uploadCommentAttachment(data: data, mimeType: mimeType)
+                return MessageImageAttachment(
+                    mediaId: upload.id,
+                    url: upload.url,
+                    thumbnailURL: upload.thumbnailURL
+                )
+            },
             wsClient: messagingWebSocketClient
         )
     }
@@ -598,6 +634,36 @@ final class DependencyContainer: ObservableObject {
         )
     }
 
+    func makeChatGroupManagementActions() -> ChatGroupManagementActions {
+        let fetchMembers = fetchGroupMembersUseCase
+        let uploadAvatar = uploadGroupAvatarUseCase
+        let updateAvatar = updateGroupAvatarUseCase
+
+        return ChatGroupManagementActions(
+            fetchMembers: { groupId in
+                let members = try await fetchMembers.execute(groupId: groupId, status: "ACTIVE")
+                return members.map { member in
+                    GroupChatMember(
+                        id: member.id,
+                        userId: member.userId,
+                        username: member.username,
+                        displayName: member.displayName,
+                        avatarURL: member.avatarURL,
+                        isOwner: member.isOwner
+                    )
+                }
+            },
+            updateGroupAvatar: { groupId, imageData in
+                let upload = try await uploadAvatar.execute(imageData: imageData, groupId: groupId)
+                let updated = try await updateAvatar.execute(
+                    groupId: groupId,
+                    avatarURL: upload.url.absoluteString
+                )
+                return updated.avatarURL?.absoluteString ?? upload.url.absoluteString
+            }
+        )
+    }
+
     func getOrCreateConversationId(friendUserId: UUID) async -> UUID? {
         do {
             let conversation = try await messagingRepository.getOrCreateConversation(friendUserId: friendUserId)
@@ -625,6 +691,35 @@ final class DependencyContainer: ObservableObject {
             createGroupUseCase: CreateGroupConversationUseCase(repository: messagingRepository)
         )
     }()
+
+    func openMessagingGroupChat(
+        group: Group,
+        invitedMemberIds: [UUID],
+        conversationListViewModel: ConversationListViewModel,
+        onOpen: @escaping (Conversation) -> Void
+    ) async {
+        guard !invitedMemberIds.isEmpty else {
+            conversationListViewModel.startConversationError = languageService.text(
+                .messagingGroupChatRequiresMembers
+            )
+            return
+        }
+
+        do {
+            let conversation = try await CreateGroupConversationUseCase(
+                repository: messagingRepository
+            ).execute(
+                name: group.name,
+                avatarUrl: group.avatarURL?.absoluteString,
+                memberUserIds: invitedMemberIds,
+                groupId: group.id
+            )
+            onOpen(conversation)
+        } catch {
+            Log.error(error, category: .network, metadata: ["action": "openMessagingGroupChat"])
+            conversationListViewModel.startConversationError = error.localizedDescription
+        }
+    }
 
     func resetTabViewModels() {
         messagingWebSocketClient.disconnect()
