@@ -33,6 +33,7 @@ public struct ConversationListView: View {
     @State private var refreshController = SplickRefreshController()
     @State private var searchRefreshController = SplickRefreshController()
     @FocusState private var isSearchFocused: Bool
+    @State private var showCloseFriendsComingSoon = false
 
     private var sameTabTapPublisher: AnyPublisher<Void, Never> {
         tabBarScrollState?.sameTabTapSubject.eraseToAnyPublisher()
@@ -59,6 +60,10 @@ public struct ConversationListView: View {
         NavigationStack(path: $path) {
             VStack(spacing: 0) {
                 messagingSearchBar
+
+                if !isSearching {
+                    inboxFilterShortcuts
+                }
 
                 ZStack {
                     conversationListContent
@@ -112,6 +117,14 @@ public struct ConversationListView: View {
             }
         } message: {
             Text(viewModel.startConversationError ?? "")
+        }
+        .alert(
+            languageService.text(.messagingFilterCloseFriends),
+            isPresented: $showCloseFriendsComingSoon
+        ) {
+            Button(languageService.text(.commonOK), role: .cancel) {}
+        } message: {
+            Text(languageService.text(.messagingFilterComingSoon))
         }
         .onFirstAppear {
             guard viewModel.conversations.isEmpty else { return }
@@ -189,15 +202,18 @@ public struct ConversationListView: View {
         case .idle, .loading:
             LoadingView(message: languageService.text(.messagingLoading))
 
-        case .loaded(let items) where items.isEmpty:
+        case .loaded(let items) where items.isEmpty && viewModel.activeFilter == nil:
             EmptyStateView(
                 icon: "bubble.left.and.bubble.right",
                 title: languageService.text(.messagingEmptyTitle),
                 message: languageService.text(.messagingEmptyMessage)
             )
 
-        case .loaded(let items):
-            conversationList(items)
+        case .loaded where viewModel.conversations.isEmpty:
+            filterEmptyState
+
+        case .loaded:
+            conversationList(viewModel.conversations)
 
         case .failed(let message):
             ErrorView(message: message) {
@@ -326,8 +342,20 @@ public struct ConversationListView: View {
                             ConversationRowView(conversation: conversation)
                         }
                         .buttonStyle(.plain)
+                        .onAppear {
+                            Task { await viewModel.loadMoreIfNeeded(current: conversation) }
+                        }
                         Divider()
                             .padding(.leading, 56)
+                    }
+
+                    if viewModel.isLoadingMore {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                                .padding(.vertical, SplickTheme.Spacing.md)
+                            Spacer()
+                        }
                     }
                 }
                 .padding(.horizontal, SplickTheme.Spacing.md)
@@ -394,5 +422,172 @@ public struct ConversationListView: View {
             suppressRefreshAnimations ? nil : MessagingSearchChromeAnimation.focusSpring,
             value: isSearchFocused
         )
+    }
+
+    private var inboxFilterShortcuts: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: SplickTheme.Spacing.sm) {
+                inboxFilterShortcut(
+                    icon: "person.3.fill",
+                    title: languageService.text(.messagingFilterGroups),
+                    isHighlighted: viewModel.isFilterActive(.groups),
+                    badgeCount: 0
+                ) {
+                    viewModel.toggleFilter(.groups)
+                }
+
+                inboxFilterShortcut(
+                    icon: "person.fill",
+                    title: languageService.text(.messagingFilterUsers),
+                    isHighlighted: viewModel.isFilterActive(.users),
+                    badgeCount: 0
+                ) {
+                    viewModel.toggleFilter(.users)
+                }
+
+                inboxFilterShortcut(
+                    icon: "envelope.badge.fill",
+                    title: languageService.text(.messagingFilterUnread),
+                    isHighlighted: viewModel.isFilterActive(.unread),
+                    badgeCount: viewModel.unreadConversationCount
+                ) {
+                    viewModel.toggleFilter(.unread)
+                }
+
+                inboxFilterShortcut(
+                    icon: "heart.fill",
+                    title: languageService.text(.messagingFilterCloseFriends),
+                    isHighlighted: false,
+                    badgeCount: 0,
+                    isDisabled: true
+                ) {
+                    showCloseFriendsComingSoon = true
+                }
+            }
+            .padding(.horizontal, SplickTheme.Spacing.md)
+        }
+        .padding(.bottom, SplickTheme.Spacing.sm)
+    }
+
+    @ViewBuilder
+    private var filterEmptyState: some View {
+        let filter = viewModel.activeFilter
+        EmptyStateView(
+            icon: filterEmptyIcon(for: filter),
+            title: filterEmptyTitle(for: filter),
+            message: filterEmptyMessage(for: filter)
+        )
+    }
+
+    private func filterEmptyIcon(for filter: ConversationListViewModel.InboxFilter?) -> String {
+        switch filter {
+        case .groups: return "person.3"
+        case .users: return "person"
+        case .unread: return "envelope.open"
+        case .closeFriends, .none: return "line.3.horizontal.decrease.circle"
+        }
+    }
+
+    private func filterEmptyTitle(for filter: ConversationListViewModel.InboxFilter?) -> String {
+        switch filter {
+        case .groups:
+            return languageService.text(.messagingFilterEmptyGroupsTitle)
+        case .users:
+            return languageService.text(.messagingFilterEmptyUsersTitle)
+        case .unread:
+            return languageService.text(.messagingFilterEmptyUnreadTitle)
+        case .closeFriends, .none:
+            return languageService.text(.messagingEmptyTitle)
+        }
+    }
+
+    private func filterEmptyMessage(for filter: ConversationListViewModel.InboxFilter?) -> String {
+        switch filter {
+        case .groups:
+            return languageService.text(.messagingFilterEmptyGroupsMessage)
+        case .users:
+            return languageService.text(.messagingFilterEmptyUsersMessage)
+        case .unread:
+            return languageService.text(.messagingFilterEmptyUnreadMessage)
+        case .closeFriends, .none:
+            return languageService.text(.messagingEmptyMessage)
+        }
+    }
+
+    private func inboxFilterShortcut(
+        icon: String,
+        title: String,
+        isHighlighted: Bool,
+        badgeCount: Int,
+        isDisabled: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            ZStack(alignment: .topTrailing) {
+                VStack(spacing: SplickTheme.Spacing.xxxs) {
+                    Image(systemName: icon)
+                        .font(.system(size: 16, weight: .medium))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(
+                            isDisabled
+                                ? SplickTheme.Colors.textSecondary.opacity(0.55)
+                                : isHighlighted
+                                    ? SplickTheme.Colors.primaryGradientStart
+                                    : SplickTheme.Colors.textSecondary
+                        )
+
+                    Text(title)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(
+                            isDisabled
+                                ? SplickTheme.Colors.textSecondary.opacity(0.55)
+                                : isHighlighted
+                                    ? SplickTheme.Colors.primaryGradientStart
+                                    : SplickTheme.Colors.textSecondary
+                        )
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .minimumScaleFactor(0.85)
+                        .lineSpacing(0)
+                        .frame(minWidth: 68)
+                }
+                .padding(.top, SplickTheme.Spacing.xxs)
+                .padding(.bottom, SplickTheme.Spacing.xs)
+                .padding(.horizontal, SplickTheme.Spacing.xs)
+                .frame(minWidth: 84)
+                .background(
+                    isHighlighted
+                        ? SplickTheme.Colors.primaryGradientStart.opacity(0.1)
+                        : SplickTheme.Colors.secondaryBackground
+                )
+                .clipShape(Capsule(style: .continuous))
+                .opacity(isDisabled ? 0.72 : 1)
+
+                if badgeCount > 0 {
+                    inboxFilterShortcutBadge(count: badgeCount)
+                        .padding(.trailing, 8)
+                        .padding(.top, 5)
+                }
+            }
+            .frame(minWidth: 84)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(
+            isDisabled
+                ? "\(title), \(languageService.text(.messagingFilterComingSoon))"
+                : badgeCount > 0 ? "\(title), \(badgeCount)" : title
+        )
+    }
+
+    private func inboxFilterShortcutBadge(count: Int) -> some View {
+        Text(count > 99 ? "99+" : "\(count)")
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, count > 9 ? 3 : 4)
+            .padding(.vertical, 1.5)
+            .background {
+                Capsule(style: .continuous)
+                    .fill(SplickTheme.Colors.error)
+            }
     }
 }

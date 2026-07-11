@@ -2,7 +2,8 @@ import Foundation
 import Networking
 
 enum MessagingEndpoint: APIEndpoint {
-    case listConversations(page: Int, limit: Int)
+    case listConversations(ConversationInboxQuery)
+    case conversationInboxSummary
     case getOrCreateConversation(friendUserId: UUID)
     case createGroup(CreateGroupConversationRequestDTO)
     case addGroupMember(groupId: UUID, AddGroupMemberRequestDTO)
@@ -28,6 +29,8 @@ enum MessagingEndpoint: APIEndpoint {
         switch self {
         case .listConversations, .getOrCreateConversation:
             return "/v1/messaging/conversations"
+        case .conversationInboxSummary:
+            return "/v1/messaging/conversations/summary"
         case .createGroup:
             return "/v1/messaging/groups"
         case .addGroupMember(let groupId, _):
@@ -59,7 +62,7 @@ enum MessagingEndpoint: APIEndpoint {
 
     var method: HTTPMethod {
         switch self {
-        case .listConversations, .listMessages, .unreadCount, .searchMessages: return .get
+        case .listConversations, .listMessages, .unreadCount, .searchMessages, .conversationInboxSummary: return .get
         case .getOrCreateConversation, .sendMessage, .markRead, .addReaction, .createGroup, .addGroupMember: return .post
         case .removeReaction, .removeGroupMember, .leaveGroup: return .delete
         case .renameGroup: return .patch
@@ -69,11 +72,18 @@ enum MessagingEndpoint: APIEndpoint {
 
     var queryItems: [URLQueryItem]? {
         switch self {
-        case .listConversations(let page, let limit):
-            return [
-                URLQueryItem(name: "page", value: "\(page)"),
-                URLQueryItem(name: "limit", value: "\(limit)"),
+        case .listConversations(let query):
+            var items = [
+                URLQueryItem(name: "page", value: "\(query.page)"),
+                URLQueryItem(name: "limit", value: "\(query.limit)"),
             ]
+            if let type = query.type {
+                items.append(URLQueryItem(name: "type", value: type.rawValue))
+            }
+            if query.unreadOnly {
+                items.append(URLQueryItem(name: "unreadOnly", value: "true"))
+            }
+            return items
         case .listMessages(_, let page, let limit):
             return [
                 URLQueryItem(name: "page", value: "\(page)"),

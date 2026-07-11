@@ -15,7 +15,8 @@ private actor StubMessagingRepository: MessagingRepositoryProtocol {
         self.messages = messages
     }
 
-    func fetchConversations(page: Int, limit: Int) async throws -> [Conversation] { [] }
+    func fetchConversations(query: ConversationInboxQuery) async throws -> [Conversation] { [] }
+    func fetchConversationInboxSummary() async throws -> Int { 0 }
     func getOrCreateConversation(friendUserId: UUID) async throws -> Conversation {
         Conversation(id: UUID(), unreadCount: 0, peer: nil, lastMessage: nil, createdAt: .now, updatedAt: .now)
     }

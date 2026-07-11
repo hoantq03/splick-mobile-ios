@@ -2,7 +2,8 @@ import Foundation
 import SplickDomain
 
 public protocol MessagingRepositoryProtocol: Sendable {
-    func fetchConversations(page: Int, limit: Int) async throws -> [Conversation]
+    func fetchConversations(query: ConversationInboxQuery) async throws -> [Conversation]
+    func fetchConversationInboxSummary() async throws -> Int
     func getOrCreateConversation(friendUserId: UUID) async throws -> Conversation
     func createGroup(
         name: String,
@@ -28,6 +29,14 @@ public protocol MessagingRepositoryProtocol: Sendable {
     func addReaction(conversationId: UUID, messageId: UUID, emoji: String) async throws -> Reaction
     func removeReaction(conversationId: UUID, messageId: UUID, reactionId: UUID) async throws
     func searchMessages(query: String, page: Int, limit: Int) async throws -> [MessageSearchHit]
+}
+
+public extension MessagingRepositoryProtocol {
+    func fetchConversations(page: Int, limit: Int) async throws -> [Conversation] {
+        try await fetchConversations(
+            query: ConversationInboxQuery(page: page, limit: limit)
+        )
+    }
 }
 
 public extension MessagingRepositoryProtocol {

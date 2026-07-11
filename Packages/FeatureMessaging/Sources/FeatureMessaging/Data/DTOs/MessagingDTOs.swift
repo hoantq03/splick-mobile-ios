@@ -1,5 +1,9 @@
 import Foundation
 
+struct ConversationInboxSummaryResponseDTO: Decodable {
+    let unreadConversationCount: Int
+}
+
 struct ConversationPeerResponseDTO: Decodable {
     let userId: UUID
     let username: String

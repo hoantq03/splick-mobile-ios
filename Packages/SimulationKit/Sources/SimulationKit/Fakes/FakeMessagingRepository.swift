@@ -52,11 +52,23 @@ public actor FakeMessagingRepository: MessagingRepositoryProtocol {
         self.logger = logger
     }
 
-    public func fetchConversations(page: Int, limit: Int) async throws -> [Conversation] {
-        logger.log("fetchConversations page=\(page)")
+    public func fetchConversations(query: ConversationInboxQuery) async throws -> [Conversation] {
+        logger.log("fetchConversations page=\(query.page) limit=\(query.limit)")
         try await Task.sleep(for: .milliseconds(300))
-        guard page == 0 else { return [] }
-        return Self.sampleConversations
+        guard query.page == 0 else { return [] }
+
+        var items = Self.sampleConversations
+        if let type = query.type {
+            items = items.filter { $0.type == type }
+        }
+        if query.unreadOnly {
+            items = items.filter { $0.unreadCount > 0 }
+        }
+        return items
+    }
+
+    public func fetchConversationInboxSummary() async throws -> Int {
+        Self.sampleConversations.filter { $0.unreadCount > 0 }.count
     }
 
     public func getOrCreateConversation(friendUserId: UUID) async throws -> Conversation {
@@ -73,6 +85,7 @@ public actor FakeMessagingRepository: MessagingRepositoryProtocol {
             updatedAt: Date()
         )
     }
+
 
     public func createGroup(
         name: String,

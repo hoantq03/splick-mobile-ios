@@ -9,11 +9,18 @@ public final class MessagingRepository: MessagingRepositoryProtocol, Sendable {
         self.apiClient = apiClient
     }
 
-    public func fetchConversations(page: Int, limit: Int) async throws -> [Conversation] {
+    public func fetchConversations(query: ConversationInboxQuery) async throws -> [Conversation] {
         let dtos: [ConversationResponseDTO] = try await apiClient.request(
-            MessagingEndpoint.listConversations(page: page, limit: limit)
+            MessagingEndpoint.listConversations(query)
         )
         return dtos.map(MessagingMapper.toConversation)
+    }
+
+    public func fetchConversationInboxSummary() async throws -> Int {
+        let dto: ConversationInboxSummaryResponseDTO = try await apiClient.request(
+            MessagingEndpoint.conversationInboxSummary
+        )
+        return dto.unreadConversationCount
     }
 
     public func getOrCreateConversation(friendUserId: UUID) async throws -> Conversation {
