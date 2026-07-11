@@ -197,6 +197,20 @@ public final class ConversationListViewModel: ObservableObject {
         startConversationError = nil
     }
 
+    public func markConversationAsRead(conversationId: UUID) {
+        guard case .loaded(var items) = state,
+              let index = items.firstIndex(where: { $0.id == conversationId }),
+              items[index].unreadCount > 0 else { return }
+
+        items[index] = items[index].updating(unreadCount: 0)
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            state = .loaded(items)
+            unreadConversationCount = max(0, unreadConversationCount - 1)
+        }
+    }
+
     public func startConversation(with user: UserSummary) async -> ChatThreadRoute? {
         guard !isStartingConversation else { return nil }
         isStartingConversation = true

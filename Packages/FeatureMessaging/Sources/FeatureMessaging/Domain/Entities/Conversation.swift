@@ -71,6 +71,21 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
         self.updatedAt = updatedAt
     }
 
+    public func updating(unreadCount: Int) -> Conversation {
+        Conversation(
+            id: id,
+            type: type,
+            unreadCount: max(0, unreadCount),
+            peer: peer,
+            groupName: groupName,
+            groupAvatarUrl: groupAvatarUrl,
+            memberCount: memberCount,
+            lastMessage: lastMessage,
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
+    }
+
     public func updating(groupName: String) -> Conversation {
         Conversation(
             id: id,
