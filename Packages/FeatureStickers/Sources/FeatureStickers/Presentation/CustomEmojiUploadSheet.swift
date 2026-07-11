@@ -85,14 +85,14 @@ public struct CustomEmojiUploadSheet: View {
                 ZStack {
                     Circle()
                         .fill(SplickTheme.Colors.secondaryBackground)
-                        .frame(width: 96, height: 96)
+                        .frame(width: 192, height: 192)
                     if let previewImage {
                         Image(uiImage: previewImage)
                             .resizable()
                             .scaledToFill()
-                            .frame(width: 75, height: 75)
+                            .frame(width: 150, height: 150)
                             .clipShape(Circle())
-                            .frame(width: 88, height: 88)
+                            .frame(width: 176, height: 176)
                     } else {
                         Image(systemName: "photo.badge.plus")
                             .font(.title2)

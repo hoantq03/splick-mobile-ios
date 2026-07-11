@@ -25,7 +25,7 @@ public struct CustomEmojiComposerSheet: View {
     @State private var committedOffset: CGSize = .zero
     @State private var gestureOffset: CGSize = .zero
 
-    private let cropCanvasSize: CGFloat = 96
+    private let cropCanvasSize: CGFloat = 192
     private let maxScale: CGFloat = 6
 
     public init(
