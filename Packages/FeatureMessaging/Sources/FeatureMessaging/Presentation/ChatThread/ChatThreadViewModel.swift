@@ -3,6 +3,7 @@ import Combine
 import Common
 import SplickDomain
 import SwiftUI
+import UIKit
 
 @MainActor
 public final class ChatThreadViewModel: ObservableObject {
@@ -16,10 +17,12 @@ public final class ChatThreadViewModel: ObservableObject {
 
     @Published public private(set) var state: State = .idle
     @Published public private(set) var isSending = false
+    @Published public var attachmentDrafts: [CommentAttachmentDraft] = []
     @Published public private(set) var scrollToBottomToken = 0
     @Published public private(set) var scrollToMessageToken = 0
     @Published public private(set) var highlightedMessageId: UUID?
     @Published public private(set) var newlySentMessageIds: Set<UUID> = []
+    @Published public var replyDraft: MessageReplyDraft?
 
     private static let maxPagesForMessageLookup = 10
     private static let pageSize = 30
@@ -37,11 +40,14 @@ public final class ChatThreadViewModel: ObservableObject {
     private let sendMessageUseCase: SendMessageUseCase
     private let reactToMessageUseCase: ReactToMessageUseCaseProtocol
     private let repository: MessagingRepositoryProtocol
+    private let uploadImage: (Data, String) async throws -> MessageImageAttachment
     private let wsClient: MessagingWebSocketClient
     private var cancellables = Set<AnyCancellable>()
     private var highlightClearTask: Task<Void, Never>?
     private var floatSwayByMessageId: [UUID: CGFloat] = [:]
     private var pendingBodiesByClientId: [UUID: String] = [:]
+    private var pendingAttachmentsByClientId: [UUID: [MessageImageAttachment]] = [:]
+    private var pendingReplyByClientId: [UUID: UUID?] = [:]
 
     public init(
         conversationId: UUID,
@@ -51,6 +57,7 @@ public final class ChatThreadViewModel: ObservableObject {
         sendMessageUseCase: SendMessageUseCase,
         reactToMessageUseCase: ReactToMessageUseCaseProtocol,
         repository: MessagingRepositoryProtocol,
+        uploadImage: @escaping (Data, String) async throws -> MessageImageAttachment,
         wsClient: MessagingWebSocketClient
     ) {
         self.conversationId = conversationId
@@ -60,6 +67,7 @@ public final class ChatThreadViewModel: ObservableObject {
         self.sendMessageUseCase = sendMessageUseCase
         self.reactToMessageUseCase = reactToMessageUseCase
         self.repository = repository
+        self.uploadImage = uploadImage
         self.wsClient = wsClient
         bindWsEvents()
     }
@@ -104,43 +112,85 @@ public final class ChatThreadViewModel: ObservableObject {
         }
     }
 
-    public func send(body: String) async {
+    public func send(body: String, submissions: [CommentSubmissionAttachment]) async {
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty || !submissions.isEmpty else { return }
 
-        let clientMessageId = UUID()
-        let optimistic = ChatMessage(
-            id: clientMessageId,
-            conversationId: conversationId,
-            senderId: currentUserId,
-            body: trimmed,
-            clientMessageId: clientMessageId,
-            createdAt: Date(),
-            deliveryStatus: .sending
-        )
-
-        pendingBodiesByClientId[clientMessageId] = trimmed
-        registerFloatAnimation(for: clientMessageId)
-        appendMessage(optimistic)
         isSending = true
+        defer { isSending = false }
 
         do {
+            let attachments = try await resolveImageAttachments(from: submissions)
+            let imageSubmissions = submissions.filter { $0.kind == .image }
+            if !imageSubmissions.isEmpty, attachments.isEmpty {
+                Log.error("Image upload produced no attachments", category: .network)
+                return
+            }
+            let activeReplyDraft = replyDraft
+            let replyToMessageId = activeReplyDraft?.messageId
+            let clientMessageId = UUID()
+            let replyPreview = activeReplyDraft?.replyPreview
+            let optimistic = ChatMessage(
+                id: clientMessageId,
+                conversationId: conversationId,
+                senderId: currentUserId,
+                body: trimmed,
+                clientMessageId: clientMessageId,
+                createdAt: Date(),
+                deliveryStatus: .sending,
+                imageAttachments: attachments,
+                replyPreview: replyPreview
+            )
+
+            pendingBodiesByClientId[clientMessageId] = trimmed
+            pendingAttachmentsByClientId[clientMessageId] = attachments
+            pendingReplyByClientId[clientMessageId] = replyToMessageId
+            registerFloatAnimation(for: clientMessageId)
+            appendMessage(optimistic)
+
             let sent = try await sendMessageUseCase.execute(
                 conversationId: conversationId,
                 body: trimmed,
-                clientMessageId: clientMessageId
+                clientMessageId: clientMessageId,
+                imageAttachments: attachments,
+                replyToMessageId: replyToMessageId
             )
             replaceMessage(
                 matching: clientMessageId,
                 with: sent.updating(deliveryStatus: .sent)
             )
             pendingBodiesByClientId.removeValue(forKey: clientMessageId)
+            pendingAttachmentsByClientId.removeValue(forKey: clientMessageId)
+            pendingReplyByClientId.removeValue(forKey: clientMessageId)
+
+            attachmentDrafts = []
+            replyDraft = nil
         } catch {
             Log.error(error, category: .network, metadata: ["action": "sendMessage"])
-            updateDeliveryStatus(for: clientMessageId, status: .failed)
+            if case .loaded(let messages) = state,
+               let lastOptimistic = messages.last(where: { $0.deliveryStatus == .sending && $0.senderId == currentUserId }) {
+                updateDeliveryStatus(for: lastOptimistic.clientMessageId, status: .failed)
+            }
         }
+    }
 
-        isSending = false
+    public func send(body: String) async {
+        await send(body: body, submissions: [])
+    }
+
+    public func beginReply(to message: ChatMessage, senderDisplayName: String) {
+        let snippet = replySnippet(from: message)
+        replyDraft = MessageReplyDraft(
+            messageId: message.id,
+            senderId: message.senderId,
+            senderDisplayName: senderDisplayName,
+            bodySnippet: snippet,
+            hasImageAttachment: message.hasImageAttachments
+        )
+    }
+
+    public func cancelReply() {
+        replyDraft = nil
     }
 
     public func retrySend(messageId: UUID) async {
@@ -149,19 +199,25 @@ public final class ChatThreadViewModel: ObservableObject {
               message.deliveryStatus == .failed else { return }
 
         let body = pendingBodiesByClientId[message.clientMessageId] ?? message.body
+        let attachments = pendingAttachmentsByClientId[message.clientMessageId] ?? message.imageAttachments
+        let replyToMessageId = pendingReplyByClientId[message.clientMessageId] ?? message.replyPreview?.messageId
         updateDeliveryStatus(for: message.clientMessageId, status: .sending)
 
         do {
             let sent = try await sendMessageUseCase.execute(
                 conversationId: conversationId,
                 body: body,
-                clientMessageId: message.clientMessageId
+                clientMessageId: message.clientMessageId,
+                imageAttachments: attachments,
+                replyToMessageId: replyToMessageId
             )
             replaceMessage(
                 matching: message.clientMessageId,
                 with: sent.updating(deliveryStatus: .sent)
             )
             pendingBodiesByClientId.removeValue(forKey: message.clientMessageId)
+            pendingAttachmentsByClientId.removeValue(forKey: message.clientMessageId)
+            pendingReplyByClientId.removeValue(forKey: message.clientMessageId)
         } catch {
             Log.error(error, category: .network, metadata: ["action": "retrySendMessage"])
             updateDeliveryStatus(for: message.clientMessageId, status: .failed)
@@ -412,5 +468,30 @@ public final class ChatThreadViewModel: ObservableObject {
             changed = true
         }
         if changed { state = .loaded(messages) }
+    }
+
+    private func resolveImageAttachments(
+        from submissions: [CommentSubmissionAttachment]
+    ) async throws -> [MessageImageAttachment] {
+        var attachments: [MessageImageAttachment] = []
+        attachments.reserveCapacity(submissions.count)
+
+        for submission in submissions where submission.kind == .image {
+            if let attachment = MessageAttachmentMapper.messageImage(from: submission) {
+                attachments.append(attachment)
+            } else if let data = submission.data {
+                attachments.append(try await uploadImage(data, submission.mimeType ?? "image/jpeg"))
+            }
+        }
+
+        return attachments
+    }
+
+    private func replySnippet(from message: ChatMessage) -> String {
+        let trimmed = message.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            return String(trimmed.prefix(200))
+        }
+        return ""
     }
 }
