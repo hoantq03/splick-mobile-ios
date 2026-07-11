@@ -30,3 +30,17 @@ struct KlipyMediaObjectDTO: Decodable {
     let url: String
     let dims: [Int]?
 }
+
+struct KlipyCategoryResponseDTO: Decodable {
+    let tags: [KlipyCategoryDTO]
+}
+
+struct KlipyCategoryDTO: Decodable {
+    let searchterm: String
+    let name: String
+    let image: String?
+}
+
+struct KlipyStringListResponseDTO: Decodable {
+    let results: [String]
+}
