@@ -71,6 +71,11 @@ public enum AppConstants {
         public static let maxGifsPerComment = 5
     }
 
+    public enum Comments {
+        public static let maxImagesPerComment = 5
+        public static let maxVideosPerComment = 3
+    }
+
     public enum Splash {
         public static let minimumDisplayDuration: Duration = .milliseconds(1500)
         public static let dismissDuration: Duration = .milliseconds(850)

@@ -286,6 +286,11 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
             )
         case "VALIDATION_ERROR":
             return mapValidationError(body.message)
+        case "INVALID_ARGUMENT":
+            return NetworkError.unknown(
+                body.message.isEmpty ? "Yêu cầu không hợp lệ." : body.message,
+                traceId: resolvedTraceId
+            )
         case "VALIDATION_FAILED":
             return NetworkError.unknown(
                 body.message.isEmpty ? "Validation failed." : body.message,
