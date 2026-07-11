@@ -31,7 +31,9 @@ public struct GifPickerView: View {
         VStack(spacing: SplickTheme.Spacing.sm) {
             searchBar
             tabPicker
+            discoveryChips
             content
+            suggestionChips
         }
         .padding(.horizontal, SplickTheme.Spacing.md)
         .padding(.vertical, SplickTheme.Spacing.sm)
@@ -72,6 +74,49 @@ public struct GifPickerView: View {
     }
 
     @ViewBuilder
+    private var discoveryChips: some View {
+        if viewModel.selectedTab == .klipy, viewModel.isSearchEmpty {
+            VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+                if !viewModel.trendingTerms.isEmpty {
+                    chipSection(
+                        title: languageService.text(.stickersTrendingTerms),
+                        items: viewModel.trendingTerms.map { .term($0) },
+                        onTap: viewModel.onTrendingTermTapped
+                    )
+                }
+
+                if !viewModel.categories.isEmpty {
+                    chipSection(
+                        title: languageService.text(.stickersCategories),
+                        items: viewModel.categories.map { .category($0) },
+                        onTapCategory: viewModel.onCategoryTapped
+                    )
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var suggestionChips: some View {
+        if viewModel.selectedTab == .klipy, !viewModel.isSearchEmpty {
+            if case .loaded = viewModel.stickersState,
+               !viewModel.relatedSuggestions.isEmpty {
+                chipSection(
+                    title: languageService.text(.stickersTryAlso),
+                    items: viewModel.relatedSuggestions.map { .term($0) },
+                    onTap: viewModel.onSuggestionTapped
+                )
+            } else if !viewModel.autocompleteSuggestions.isEmpty {
+                chipSection(
+                    title: nil,
+                    items: viewModel.autocompleteSuggestions.map { .term($0) },
+                    onTap: viewModel.onSuggestionTapped
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
     private var content: some View {
         switch viewModel.stickersState {
         case .idle, .loading:
@@ -97,6 +142,7 @@ public struct GifPickerView: View {
                     LazyVGrid(columns: columns, spacing: GridLayout.spacing) {
                         ForEach(stickers) { sticker in
                             Button {
+                                viewModel.selectSticker(sticker)
                                 onSelect(sticker)
                             } label: {
                                 gifThumbnail(url: sticker.previewURL ?? sticker.url)
@@ -106,6 +152,69 @@ public struct GifPickerView: View {
                     }
                 }
                 .frame(maxHeight: 320)
+            }
+        }
+    }
+
+    private enum ChipItem: Identifiable {
+        case term(String)
+        case category(StickerCategory)
+
+        var id: String {
+            switch self {
+            case .term(let value):
+                return "term-\(value)"
+            case .category(let category):
+                return "category-\(category.id)"
+            }
+        }
+
+        var label: String {
+            switch self {
+            case .term(let value):
+                return value
+            case .category(let category):
+                return category.name
+            }
+        }
+    }
+
+    private func chipSection(
+        title: String?,
+        items: [ChipItem],
+        onTap: @escaping (String) -> Void = { _ in },
+        onTapCategory: @escaping (StickerCategory) -> Void = { _ in }
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let title {
+                Text(title)
+                    .font(SplickTheme.Typography.captionBold)
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(items) { item in
+                        Button {
+                            switch item {
+                            case .term(let term):
+                                onTap(term)
+                            case .category(let category):
+                                onTapCategory(category)
+                            }
+                        } label: {
+                            Text(item.label)
+                                .font(SplickTheme.Typography.caption)
+                                .foregroundStyle(SplickTheme.Colors.textPrimary)
+                                .lineLimit(1)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(SplickTheme.Colors.secondaryBackground)
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
             }
         }
     }
