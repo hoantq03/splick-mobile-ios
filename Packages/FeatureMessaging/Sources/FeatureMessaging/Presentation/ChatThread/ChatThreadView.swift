@@ -21,7 +21,12 @@ public struct ChatThreadView: View {
     private let conversation: Conversation?
     private let repository: MessagingRepositoryProtocol?
 
-    @State private var showsGroupInfo = false
+    @State private var groupConversation: Conversation?
+    @State private var activeGroupSheet: GroupChatSheet?
+    @State private var confirmLeaveGroup = false
+
+    @Environment(\.chatGroupManagementActions) private var groupManagementActions
+    @Environment(\.dismiss) private var dismiss
 
     public init(
         viewModel: ChatThreadViewModel,
@@ -48,8 +53,10 @@ public struct ChatThreadView: View {
                 Divider()
             }
             messageArea
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             Divider()
             bottomBar
+                .fixedSize(horizontal: false, vertical: true)
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -57,13 +64,13 @@ public struct ChatThreadView: View {
                 Button(action: openChatHeader) {
                     HStack(spacing: SplickTheme.Spacing.xs) {
                         AvatarView(
-                            imageURL: (conversation?.isGroup == true
-                                ? conversation?.groupAvatarUrl
+                            imageURL: (displayConversation?.isGroup == true
+                                ? displayConversation?.groupAvatarUrl
                                 : peer?.avatarUrl)?.flatMap(URL.init(string:)),
                             name: navigationTitle,
                             size: .small
                         )
-                        Text(navigationTitle)
+                        Text(displayConversation?.displayTitle ?? navigationTitle)
                             .font(SplickTheme.Typography.headline)
                             .foregroundStyle(SplickTheme.Colors.textPrimary)
                             .lineLimit(1)
@@ -74,26 +81,59 @@ public struct ChatThreadView: View {
                 .disabled(!canOpenChatHeader)
             }
             ToolbarItem(placement: .topBarTrailing) {
-                if conversation?.isGroup == true, repository != nil {
-                    Button {
-                        showsGroupInfo = true
-                    } label: {
-                        Image(systemName: "info.circle")
-                    }
+                if displayConversation?.isGroup == true, repository != nil {
+                    groupChatOptionsMenu
                 } else if relationshipViewModel.isActive, !relationshipViewModel.isBlocked {
                     directChatOptionsMenu
                 }
             }
         }
-        .sheet(isPresented: $showsGroupInfo) {
-            if let conversation, let repository {
-                GroupInfoView(
-                    conversation: conversation,
-                    repository: repository,
-                    currentUserId: currentUserId,
-                    onUpdated: {}
-                )
+        .sheet(item: $activeGroupSheet) { sheet in
+            if let displayConversation, let repository {
+                switch sheet {
+                case .rename:
+                    GroupRenameSheet(groupName: displayConversation.groupName ?? "") { name in
+                        let updated = try await repository.renameGroup(groupId: displayConversation.id, name: name)
+                        applyConversationUpdate(updated)
+                    }
+                case .avatar:
+                    GroupAvatarSheet(
+                        groupName: displayConversation.displayTitle,
+                        currentAvatarURL: displayConversation.groupAvatarUrl.flatMap(URL.init(string:))
+                    ) { imageData in
+                        let avatarURL = try await groupManagementActions.updateGroupAvatar(
+                            displayConversation.id,
+                            imageData
+                        )
+                        applyConversationUpdate(
+                            displayConversation.updating(groupAvatarUrl: avatarURL)
+                        )
+                        return avatarURL
+                    }
+                case .members:
+                    GroupMembersSheet(
+                        groupId: displayConversation.id,
+                        currentUserId: currentUserId,
+                        fetchMembers: groupManagementActions.fetchMembers,
+                        removeMember: { groupId, memberUserId in
+                            try await repository.removeGroupMember(
+                                groupId: groupId,
+                                memberUserId: memberUserId
+                            )
+                        }
+                    )
+                }
             }
+        }
+        .confirmationDialog(
+            languageService.text(.messagingLeaveGroupConfirmTitle),
+            isPresented: $confirmLeaveGroup,
+            titleVisibility: .visible
+        ) {
+            Button(languageService.text(.messagingLeaveGroup), role: .destructive) {
+                Task { await leaveGroup() }
+            }
+            Button(languageService.text(.commonCancel), role: .cancel) {}
         }
         .confirmationDialog(
             languageService.text(.friendsRemoveFriendConfirmTitle),
@@ -116,14 +156,96 @@ public struct ChatThreadView: View {
         .onChange(of: relationshipViewModel.isBlocked) { isBlocked in
             guard isBlocked else { return }
             inputText = ""
+            viewModel.attachmentDrafts = []
+            viewModel.cancelReply()
             isInputFocused = false
         }
-        .onAppear { tabBarScrollState?.hide(flushToBottom: true) }
+        .onAppear {
+            tabBarScrollState?.hide(flushToBottom: true)
+            if groupConversation == nil {
+                groupConversation = conversation
+            }
+        }
         .onDisappear { tabBarScrollState?.show() }
         .task {
             async let messages: Void = viewModel.loadIfNeeded()
             async let relationship: Void = relationshipViewModel.loadIfNeeded()
             _ = await (messages, relationship)
+        }
+    }
+
+    private var displayConversation: Conversation? {
+        groupConversation ?? conversation
+    }
+
+    private var groupChatOptionsMenu: some View {
+        Menu {
+            Button {
+                activeGroupSheet = .avatar
+            } label: {
+                Label(
+                    languageService.text(.messagingGroupChangeAvatar),
+                    systemImage: "photo.circle"
+                )
+            }
+
+            Button {
+                activeGroupSheet = .rename
+            } label: {
+                Label(
+                    languageService.text(.messagingGroupChangeName),
+                    systemImage: "pencil"
+                )
+            }
+
+            Button {
+                activeGroupSheet = .members
+            } label: {
+                Label(
+                    languageService.text(.messagingGroupManageMembers),
+                    systemImage: "person.2"
+                )
+            }
+
+            Button(role: .destructive) {
+                confirmLeaveGroup = true
+            } label: {
+                Label(
+                    languageService.text(.messagingLeaveGroup),
+                    systemImage: "rectangle.portrait.and.arrow.right"
+                )
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+        }
+        .accessibilityLabel(languageService.text(.messagingChatMoreAccessibility))
+    }
+
+    private enum GroupChatSheet: Identifiable {
+        case rename
+        case avatar
+        case members
+
+        var id: String {
+            switch self {
+            case .rename: return "rename"
+            case .avatar: return "avatar"
+            case .members: return "members"
+            }
+        }
+    }
+
+    private func applyConversationUpdate(_ updated: Conversation) {
+        groupConversation = updated
+    }
+
+    private func leaveGroup() async {
+        guard let displayConversation, let repository else { return }
+        do {
+            try await repository.leaveGroup(groupId: displayConversation.id)
+            dismiss()
+        } catch {
+            // Leave errors surface on next navigation refresh; keep UX simple here.
         }
     }
 
@@ -257,18 +379,13 @@ public struct ChatThreadView: View {
     }
 
     private var canOpenChatHeader: Bool {
-        if conversation?.isGroup == true {
-            return repository != nil
+        if displayConversation?.isGroup == true {
+            return false
         }
         return peer != nil && openUserProfile != nil
     }
 
     private func openChatHeader() {
-        if conversation?.isGroup == true {
-            guard repository != nil else { return }
-            showsGroupInfo = true
-            return
-        }
         guard let peer, let openUserProfile else { return }
         let user = UserSummary(
             id: peer.userId,
@@ -295,7 +412,9 @@ public struct ChatThreadView: View {
             ChatMessageListView(
                 viewModel: viewModel,
                 messages: messages,
-                currentUserId: currentUserId
+                currentUserId: currentUserId,
+                senderDisplayName: senderDisplayName(for:),
+                onRequestComposerFocus: { isInputFocused = true }
             )
         case .failed(let error):
             ErrorView(message: error) {
@@ -306,31 +425,61 @@ public struct ChatThreadView: View {
 
     @ViewBuilder
     private var inputBar: some View {
-        HStack(spacing: SplickTheme.Spacing.sm) {
-            TextField(languageService.text(.messagingInputPlaceholder), text: $inputText, axis: .vertical)
-                .lineLimit(1...5)
-                .font(SplickTheme.Typography.body)
-                .focused($isInputFocused)
-                .padding(.horizontal, SplickTheme.Spacing.sm)
-                .padding(.vertical, SplickTheme.Spacing.xs)
-                .background(SplickTheme.Colors.secondaryBackground)
-                .clipShape(RoundedRectangle(cornerRadius: 20))
-
-            Button {
-                let text = inputText
-                inputText = ""
-                Task { await viewModel.send(body: text) }
-            } label: {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 32))
-                    .foregroundStyle(inputText.trimmingCharacters(in: .whitespaces).isEmpty
-                        ? SplickTheme.Colors.textTertiary
-                        : SplickTheme.Colors.primaryGradientStart)
-            }
-            .disabled(inputText.trimmingCharacters(in: .whitespaces).isEmpty || viewModel.isSending)
+        VStack(spacing: 0) {
+            MessageComposerInputBar(
+                text: $inputText,
+                attachmentDrafts: $viewModel.attachmentDrafts,
+                replyDraft: viewModel.replyDraft,
+                onCancelReply: { viewModel.cancelReply() },
+                placeholder: languageService.text(.messagingInputPlaceholder),
+                isSending: viewModel.isSending,
+                errorMessage: nil,
+                onSend: { text, submissions in
+                    inputText = ""
+                    Task { await viewModel.send(body: text, submissions: submissions) }
+                },
+                isFocused: $isInputFocused
+            )
         }
-        .padding(.horizontal, SplickTheme.Spacing.md)
-        .padding(.vertical, SplickTheme.Spacing.sm)
-        .background(SplickTheme.Colors.background)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func senderDisplayName(for message: ChatMessage) -> String {
+        if message.senderId == currentUserId {
+            return languageService.text(.messagingYou)
+        }
+        if let resolved = resolvedSenderDisplayName(message.senderId, on: message) {
+            return resolved
+        }
+        return languageService.text(.messagingReplyUnknownSender)
+    }
+
+    private func resolvedSenderDisplayName(_ senderId: UUID, on message: ChatMessage) -> String? {
+        if let peer, peer.userId == senderId {
+            return peer.displayTitle
+        }
+        if let name = trimmedDisplayName(message.senderDisplayName) {
+            return name
+        }
+        for loaded in viewModel.messages {
+            if loaded.senderId == senderId,
+               let name = trimmedDisplayName(loaded.senderDisplayName) {
+                return name
+            }
+            if let preview = loaded.replyPreview,
+               preview.senderId == senderId,
+               let name = trimmedDisplayName(preview.senderDisplayName) {
+                return name
+            }
+        }
+        return nil
+    }
+
+    private func trimmedDisplayName(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
     }
 }

@@ -82,6 +82,7 @@ public final class ChatThreadViewModelFactory: ObservableObject {
     private let sendMessageUseCase: SendMessageUseCase
     private let reactToMessageUseCase: ReactToMessageUseCaseProtocol
     public let repository: MessagingRepositoryProtocol
+    private let uploadImage: (Data, String) async throws -> MessageImageAttachment
     private let wsClient: MessagingWebSocketClient
 
     public init(
@@ -90,6 +91,7 @@ public final class ChatThreadViewModelFactory: ObservableObject {
         sendMessageUseCase: SendMessageUseCase,
         reactToMessageUseCase: ReactToMessageUseCaseProtocol,
         repository: MessagingRepositoryProtocol,
+        uploadImage: @escaping (Data, String) async throws -> MessageImageAttachment,
         wsClient: MessagingWebSocketClient
     ) {
         self.currentUserId = currentUserId
@@ -97,6 +99,7 @@ public final class ChatThreadViewModelFactory: ObservableObject {
         self.sendMessageUseCase = sendMessageUseCase
         self.reactToMessageUseCase = reactToMessageUseCase
         self.repository = repository
+        self.uploadImage = uploadImage
         self.wsClient = wsClient
     }
 
@@ -110,6 +113,7 @@ public final class ChatThreadViewModelFactory: ObservableObject {
             sendMessageUseCase: sendMessageUseCase,
             reactToMessageUseCase: reactToMessageUseCase,
             repository: repository,
+            uploadImage: uploadImage,
             wsClient: wsClient
         )
     }
