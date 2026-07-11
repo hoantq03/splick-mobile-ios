@@ -187,6 +187,10 @@ final class DependencyContainer: ObservableObject {
 
     // MARK: - Stickers
 
+    private lazy var klipyMetaRepository: KlipyMetaRepositoryProtocol = {
+        KlipyMetaRepositoryImpl()
+    }()
+
     private lazy var stickerRepository: StickerRepositoryProtocol = {
         StickerRepositoryImpl(apiClient: apiClient)
     }()
@@ -195,8 +199,31 @@ final class DependencyContainer: ObservableObject {
         FetchStickersUseCase(repository: stickerRepository)
     }()
 
+    lazy var fetchStickerCategoriesUseCase: FetchStickerCategoriesUseCaseProtocol = {
+        FetchStickerCategoriesUseCase(repository: klipyMetaRepository)
+    }()
+
+    lazy var fetchTrendingTermsUseCase: FetchTrendingTermsUseCaseProtocol = {
+        FetchTrendingTermsUseCase(repository: klipyMetaRepository)
+    }()
+
+    lazy var fetchSuggestionsUseCase: FetchSuggestionsUseCaseProtocol = {
+        FetchSuggestionsUseCase(repository: klipyMetaRepository)
+    }()
+
+    lazy var registerStickerShareUseCase: RegisterStickerShareUseCaseProtocol = {
+        RegisterStickerShareUseCase(repository: klipyMetaRepository)
+    }()
+
     func makeGifPickerViewModel(groupId: UUID?) -> GifPickerViewModel {
-        GifPickerViewModel(fetchStickersUseCase: fetchStickersUseCase, groupId: groupId)
+        GifPickerViewModel(
+            fetchStickersUseCase: fetchStickersUseCase,
+            fetchCategoriesUseCase: fetchStickerCategoriesUseCase,
+            fetchTrendingTermsUseCase: fetchTrendingTermsUseCase,
+            fetchSuggestionsUseCase: fetchSuggestionsUseCase,
+            registerShareUseCase: registerStickerShareUseCase,
+            groupId: groupId
+        )
     }
 
     lazy var customEmojiRepository: CustomEmojiRepositoryProtocol = {
