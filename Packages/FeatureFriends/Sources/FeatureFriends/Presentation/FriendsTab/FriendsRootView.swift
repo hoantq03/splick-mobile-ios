@@ -81,6 +81,8 @@ public struct FriendsRootView: View {
     private let revokeGroupQrUseCase: RevokeGroupQrUseCaseProtocol
     private let profileDependencies: FriendUserProfileDependencies
     private let onBadgeCountsChanged: (() async -> Void)?
+    private let onDirectoryLoaded: (([SplickDomain.Group]) async -> Void)?
+    private let onFriendRequestsLoaded: (([IncomingFriendRequest]) async -> Void)?
 
     public init(
         fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol,
@@ -118,9 +120,13 @@ public struct FriendsRootView: View {
         transferGroupOwnershipUseCase: TransferGroupOwnershipUseCaseProtocol,
         generateGroupQrUseCase: GenerateGroupQrUseCaseProtocol,
         revokeGroupQrUseCase: RevokeGroupQrUseCaseProtocol,
-        onBadgeCountsChanged: (() async -> Void)? = nil
+        onBadgeCountsChanged: (() async -> Void)? = nil,
+        onDirectoryLoaded: (([SplickDomain.Group]) async -> Void)? = nil,
+        onFriendRequestsLoaded: (([IncomingFriendRequest]) async -> Void)? = nil
     ) {
         self.onBadgeCountsChanged = onBadgeCountsChanged
+        self.onDirectoryLoaded = onDirectoryLoaded
+        self.onFriendRequestsLoaded = onFriendRequestsLoaded
         let rootVM = FriendsRootViewModel(
             fetchMyFriendsUseCase: fetchMyFriendsUseCase,
             fetchMyGroupsUseCase: fetchMyGroupsUseCase,
@@ -129,7 +135,9 @@ public struct FriendsRootView: View {
             acceptFriendRequestUseCase: acceptFriendRequestUseCase,
             fetchIncomingFriendRequestsUseCase: fetchIncomingFriendRequestsUseCase,
             fetchOutgoingFriendRequestsUseCase: fetchOutgoingFriendRequestsUseCase,
-            cancelFriendRequestUseCase: cancelFriendRequestUseCase
+            cancelFriendRequestUseCase: cancelFriendRequestUseCase,
+            onDirectoryLoaded: onDirectoryLoaded,
+            onFriendRequestsLoaded: onFriendRequestsLoaded
         )
         self.fetchOutgoingFriendRequestsUseCase = fetchOutgoingFriendRequestsUseCase
         self.fetchBlockedUsersUseCase = fetchBlockedUsersUseCase

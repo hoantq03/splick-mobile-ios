@@ -12,6 +12,7 @@ import FeatureNotification
 import FeatureFriends
 import FeatureMessaging
 import FeatureStickers
+import SplickWidgetKit
 
 @MainActor
 final class DependencyContainer: ObservableObject {
@@ -510,6 +511,14 @@ final class DependencyContainer: ObservableObject {
         BadgeCountService(fetchBadgeCountsUseCase: fetchBadgeCountsUseCase)
     }()
 
+    lazy var widgetSyncBridge: WidgetSyncBridge = {
+        WidgetSyncBridge(
+            fetchIncomingFriendRequestsUseCase: fetchIncomingFriendRequestsUseCase,
+            fetchExpensesUseCase: fetchExpensesUseCase,
+            fetchDebtSummaryUseCase: fetchDebtSummaryUseCase
+        )
+    }()
+
     lazy var appStartupRepository: AppStartupRepositoryProtocol = {
         AppStartupRepository(apiClient: apiClient)
     }()
@@ -736,7 +745,12 @@ final class DependencyContainer: ObservableObject {
     }
 
     private func makeStreakViewModel() -> StreakViewModel {
-        StreakViewModel(fetchStreakUseCase: fetchStreakUseCase)
+        StreakViewModel(
+            fetchStreakUseCase: fetchStreakUseCase,
+            onStreakUpdated: { [weak self] summary in
+                self?.widgetSyncBridge.syncStreak(summary)
+            }
+        )
     }
 
     private func makeFeedViewModel() -> FeedViewModel {
@@ -750,7 +764,10 @@ final class DependencyContainer: ObservableObject {
             submitPaymentEvidenceUseCase: submitPaymentEvidenceUseCase,
             approvePaymentEvidenceUseCase: approvePaymentEvidenceUseCase,
             rejectPaymentEvidenceUseCase: rejectPaymentEvidenceUseCase,
-            createPostUseCase: createPostUseCase
+            createPostUseCase: createPostUseCase,
+            onFeedLoaded: { [weak self] posts, userId in
+                await self?.widgetSyncBridge.syncFeed(posts: posts, currentUserId: userId)
+            }
         )
     }
 
@@ -760,6 +777,14 @@ final class DependencyContainer: ObservableObject {
             fetchDebtSummaryUseCase: fetchDebtSummaryUseCase,
             onBadgeCountsChanged: { [weak self] in
                 await self?.badgeCountService.refresh()
+            },
+            onDataLoaded: { [weak self] debts, expenses, userId in
+                await self?.widgetSyncBridge.syncExpenses(
+                    debts: debts,
+                    expenses: expenses,
+                    group: nil,
+                    currentUserId: userId
+                )
             }
         )
     }
@@ -772,7 +797,10 @@ final class DependencyContainer: ObservableObject {
                 messagingRepository: messagingRepository
             ),
             repository: messagingRepository,
-            wsClient: messagingWebSocketClient
+            wsClient: messagingWebSocketClient,
+            onInboxLoaded: { [weak self] conversations, unreadCount in
+                self?.widgetSyncBridge.syncConversations(conversations, totalUnreadCount: unreadCount)
+            }
         )
     }
 

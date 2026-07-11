@@ -16,13 +16,18 @@ public final class StreakViewModel: ObservableObject {
     @Published private(set) var hasReachedOldestMonth = false
 
     private let fetchStreakUseCase: FetchStreakUseCaseProtocol
+    private let onStreakUpdated: ((StreakSummary) async -> Void)?
     private let calendar = Calendar.current
     private var loadTask: Task<Void, Never>?
     private let initialMonthCount = 4
     private static let maxMonthsInPast = 24
 
-    public init(fetchStreakUseCase: FetchStreakUseCaseProtocol) {
+    public init(
+        fetchStreakUseCase: FetchStreakUseCaseProtocol,
+        onStreakUpdated: ((StreakSummary) async -> Void)? = nil
+    ) {
         self.fetchStreakUseCase = fetchStreakUseCase
+        self.onStreakUpdated = onStreakUpdated
     }
 
     public func applyStartupSummary(currentStreak: Int, hasTodayPhoto: Bool) {
@@ -128,6 +133,7 @@ public final class StreakViewModel: ObservableObject {
             hasReachedOldestMonth = false
             monthSections = months.sorted { $0.monthDate < $1.monthDate }
             state = .loaded(monthSections)
+            await onStreakUpdated?(summary)
         } catch {
             guard !Task.isCancelled else { return }
             if error.isRequestCancellation { return }

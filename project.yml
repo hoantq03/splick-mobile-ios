@@ -51,6 +51,8 @@ packages:
     path: Packages/FeatureStickers
   SimulationKit:
     path: Packages/SimulationKit
+  SplickWidgetKit:
+    path: Packages/SplickWidgetKit
   GoogleSignIn:
     url: https://github.com/google/GoogleSignIn-iOS
     from: "8.0.0"
@@ -100,8 +102,12 @@ targets:
         product: FeatureStickers
       - package: SimulationKit
         product: SimulationKit
+      - package: SplickWidgetKit
+        product: SplickWidgetKit
       - package: GoogleSignIn
         product: GoogleSignIn
+      - target: SplickWidgetExtension
+        embed: true
     attributes:
       SystemCapabilities:
         com.apple.Push:
@@ -126,11 +132,36 @@ targets:
           APS_ENVIRONMENT: production
           CODE_SIGN_ENTITLEMENTS: SplickApp/SplickApp.entitlements
 
+  SplickWidgetExtension:
+    type: app-extension
+    platform: iOS
+    deploymentTarget:
+      iOS: "17.0"
+    sources:
+      - path: SplickWidgetExtension/Sources
+    dependencies:
+      - package: SplickWidgetKit
+        product: SplickWidgetKit
+    settings:
+      base:
+        PRODUCT_NAME: SplickWidgetExtension
+        PRODUCT_BUNDLE_IDENTIFIER: com.splick.app.widgets
+        INFOPLIST_FILE: SplickWidgetExtension/Resources/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
+      configs:
+        Debug:
+          CODE_SIGN_ENTITLEMENTS: SplickWidgetExtension/SplickWidgetExtension.entitlements
+        Release:
+          CODE_SIGN_ENTITLEMENTS: SplickWidgetExtension/SplickWidgetExtension.entitlements
+
 schemes:
   SplickApp:
     build:
       targets:
         SplickApp: all
+        SplickWidgetExtension: all
     run:
       config: Debug
     test:

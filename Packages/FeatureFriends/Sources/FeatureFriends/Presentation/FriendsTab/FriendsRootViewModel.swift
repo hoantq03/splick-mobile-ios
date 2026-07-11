@@ -77,6 +77,8 @@ public final class FriendsRootViewModel: ObservableObject {
     private let fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol
     private let fetchOutgoingFriendRequestsUseCase: FetchOutgoingFriendRequestsUseCaseProtocol
     private let cancelFriendRequestUseCase: CancelFriendRequestUseCaseProtocol
+    private let onDirectoryLoaded: (([SplickDomain.Group]) async -> Void)?
+    private let onFriendRequestsLoaded: (([IncomingFriendRequest]) async -> Void)?
     private var searchTask: Task<Void, Never>?
     private var refreshTask: Task<Void, Never>?
     private var inFlightRelationActionUserIds: Set<UUID> = []
@@ -124,7 +126,9 @@ public final class FriendsRootViewModel: ObservableObject {
         acceptFriendRequestUseCase: AcceptFriendRequestUseCaseProtocol,
         fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol,
         fetchOutgoingFriendRequestsUseCase: FetchOutgoingFriendRequestsUseCaseProtocol,
-        cancelFriendRequestUseCase: CancelFriendRequestUseCaseProtocol
+        cancelFriendRequestUseCase: CancelFriendRequestUseCaseProtocol,
+        onDirectoryLoaded: (([SplickDomain.Group]) async -> Void)? = nil,
+        onFriendRequestsLoaded: (([IncomingFriendRequest]) async -> Void)? = nil
     ) {
         self.fetchMyFriendsUseCase = fetchMyFriendsUseCase
         self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
@@ -134,6 +138,8 @@ public final class FriendsRootViewModel: ObservableObject {
         self.fetchIncomingFriendRequestsUseCase = fetchIncomingFriendRequestsUseCase
         self.fetchOutgoingFriendRequestsUseCase = fetchOutgoingFriendRequestsUseCase
         self.cancelFriendRequestUseCase = cancelFriendRequestUseCase
+        self.onDirectoryLoaded = onDirectoryLoaded
+        self.onFriendRequestsLoaded = onFriendRequestsLoaded
     }
 
     func load() async {
@@ -211,6 +217,9 @@ public final class FriendsRootViewModel: ObservableObject {
             incomingRequestCount = incoming
             outgoingRequestCount = outgoing
         }
+        if case .success(let loadedGroups) = groups {
+            await onDirectoryLoaded?(loadedGroups)
+        }
     }
 
     private func fetchFriendsForRefresh() async -> Result<[UserSummary], Error> {
@@ -273,6 +282,7 @@ public final class FriendsRootViewModel: ObservableObject {
         do {
             let incoming = try await fetchIncomingFriendRequestsUseCase.executeAll()
             incomingRequestCount = incoming.count
+            await onFriendRequestsLoaded?(incoming)
         } catch {
             incomingRequestCount = 0
         }
@@ -319,6 +329,7 @@ public final class FriendsRootViewModel: ObservableObject {
             groups = items
             groupsState = .loaded(items)
             Log.info("Loaded groups", category: .friends, metadata: ["count": String(items.count)])
+            await onDirectoryLoaded?(items)
         } catch {
             if isPullToRefresh, !groups.isEmpty {
                 groupsState = .loaded(groups)

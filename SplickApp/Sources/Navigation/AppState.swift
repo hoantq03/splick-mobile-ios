@@ -59,6 +59,7 @@ final class AppState: ObservableObject {
 
     func setUnauthenticated(container: DependencyContainer) {
         container.resetTabViewModels()
+        container.widgetSyncBridge.clearAll()
         authState = .unauthenticated
         hasPassedOnboardingThisSession = false
         isLaunchSplashComplete = true
@@ -74,6 +75,7 @@ final class AppState: ObservableObject {
     /// Does NOT replay the splash — caller controls that.
     func markUnauthenticated(container: DependencyContainer) {
         container.resetTabViewModels()
+        container.widgetSyncBridge.clearAll()
         authState = .unauthenticated
         selectedTab = .feed
         showNotifications = false
@@ -85,6 +87,38 @@ final class AppState: ObservableObject {
     /// Called when user taps through the last onboarding page.
     func passOnboardingGate() {
         hasPassedOnboardingThisSession = true
+    }
+
+    func openPostCapture() {
+        withAnimation(.easeInOut(duration: 0.35)) {
+            selectedTab = .camera
+        }
+    }
+
+    func handleDeepLink(_ url: URL) -> Bool {
+        guard url.scheme?.lowercased() == "splick" else { return false }
+        switch url.host?.lowercased() {
+        case "capture", "postcapture":
+            openPostCapture()
+            return true
+        case "expenses":
+            withAnimation(.easeInOut(duration: 0.35)) {
+                selectedTab = .expenses
+            }
+            return true
+        case "messages":
+            withAnimation(.easeInOut(duration: 0.35)) {
+                selectedTab = .messages
+            }
+            return true
+        case "friends":
+            withAnimation(.easeInOut(duration: 0.35)) {
+                selectedTab = .friends
+            }
+            return true
+        default:
+            return false
+        }
     }
 
     func openPostFromNotification(_ postId: UUID) {

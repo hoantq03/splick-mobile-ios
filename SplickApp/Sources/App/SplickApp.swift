@@ -32,7 +32,9 @@ struct SplickApp: App {
                 .environmentObject(container.languageService)
                 .languageService(container.languageService)
                 .onOpenURL { url in
-                    GIDSignIn.sharedInstance.handle(url)
+                    if !appState.handleDeepLink(url) {
+                        GIDSignIn.sharedInstance.handle(url)
+                    }
                 }
         }
     }

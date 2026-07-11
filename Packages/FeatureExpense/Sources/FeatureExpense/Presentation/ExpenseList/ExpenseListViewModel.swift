@@ -23,6 +23,7 @@ public final class ExpenseListViewModel: ObservableObject {
     private let fetchExpensesUseCase: FetchExpensesUseCaseProtocol
     private let fetchDebtSummaryUseCase: FetchDebtSummaryUseCaseProtocol
     private let onBadgeCountsChanged: (() async -> Void)?
+    private let onDataLoaded: (([DebtSummary], [Expense], UUID?) async -> Void)?
     private let groupId: UUID?
     private(set) var currentUserId: UUID?
     private var currentPage = 0
@@ -33,11 +34,13 @@ public final class ExpenseListViewModel: ObservableObject {
         fetchDebtSummaryUseCase: FetchDebtSummaryUseCaseProtocol,
         groupId: UUID? = nil,
         currentUserId: UUID? = nil,
-        onBadgeCountsChanged: (() async -> Void)? = nil
+        onBadgeCountsChanged: (() async -> Void)? = nil,
+        onDataLoaded: (([DebtSummary], [Expense], UUID?) async -> Void)? = nil
     ) {
         self.fetchExpensesUseCase = fetchExpensesUseCase
         self.fetchDebtSummaryUseCase = fetchDebtSummaryUseCase
         self.onBadgeCountsChanged = onBadgeCountsChanged
+        self.onDataLoaded = onDataLoaded
         self.groupId = groupId
         self.currentUserId = currentUserId
     }
@@ -175,6 +178,7 @@ public final class ExpenseListViewModel: ObservableObject {
             if isPullToRefresh {
                 await onBadgeCountsChanged?()
             }
+            await onDataLoaded?(fetchedDebts, fetchedExpenses, currentUserId)
         } catch {
             if isPullToRefresh, !expenses.isEmpty {
                 state = .loaded(expenses)

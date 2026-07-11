@@ -317,7 +317,13 @@ struct MainTabView: View {
             transferGroupOwnershipUseCase: container.transferGroupOwnershipUseCase,
             generateGroupQrUseCase: container.generateGroupQrUseCase,
             revokeGroupQrUseCase: container.revokeGroupQrUseCase,
-            onBadgeCountsChanged: { await container.badgeCountService.refresh() }
+            onBadgeCountsChanged: { await container.badgeCountService.refresh() },
+            onDirectoryLoaded: { groups in
+                container.widgetSyncBridge.syncGroups(groups)
+            },
+            onFriendRequestsLoaded: { requests in
+                container.widgetSyncBridge.syncFriendRequests(requests)
+            }
         )
         .environmentObject(container.customEmojiStore)
         .environment(\.customEmojiDependencies, container.customEmojiDependencies)

@@ -24,6 +24,7 @@ public final class FeedViewModel: ObservableObject {
     private let approvePaymentEvidenceUseCase: ApprovePaymentEvidenceUseCaseProtocol
     private let rejectPaymentEvidenceUseCase: RejectPaymentEvidenceUseCaseProtocol
     private let createPostUseCase: CreatePostUseCaseProtocol
+    private let onFeedLoaded: (([Post], UUID?) async -> Void)?
     private var currentPage = 0
     private var canLoadMore = true
     private var trackedViewPostIds = Set<UUID>()
@@ -68,7 +69,8 @@ public final class FeedViewModel: ObservableObject {
         rejectPaymentEvidenceUseCase: RejectPaymentEvidenceUseCaseProtocol,
         createPostUseCase: CreatePostUseCaseProtocol,
         currentUserId: UUID? = nil,
-        currentUser: UserSummary? = nil
+        currentUser: UserSummary? = nil,
+        onFeedLoaded: (([Post], UUID?) async -> Void)? = nil
     ) {
         self.fetchFeedUseCase = fetchFeedUseCase
         self.fetchPostUseCase = fetchPostUseCase
@@ -80,6 +82,7 @@ public final class FeedViewModel: ObservableObject {
         self.approvePaymentEvidenceUseCase = approvePaymentEvidenceUseCase
         self.rejectPaymentEvidenceUseCase = rejectPaymentEvidenceUseCase
         self.createPostUseCase = createPostUseCase
+        self.onFeedLoaded = onFeedLoaded
         self.currentUserId = currentUserId
         self.currentUserSummary = currentUser
     }
@@ -168,6 +171,7 @@ public final class FeedViewModel: ObservableObject {
             canLoadMore = !posts.isEmpty
             updateHasReachedFeedEnd()
             Log.info("Loaded feed", category: .feed, metadata: ["count": String(posts.count)])
+            await onFeedLoaded?(self.posts, currentUserId)
             return true
         } catch {
             if error.isRequestCancellation {
