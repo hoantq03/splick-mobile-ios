@@ -41,6 +41,7 @@ public final class ChatThreadViewModel: ObservableObject {
     private let reactToMessageUseCase: ReactToMessageUseCaseProtocol
     private let repository: MessagingRepositoryProtocol
     private let uploadImage: (Data, String) async throws -> MessageImageAttachment
+    private let onConversationRead: ((UUID) async -> Void)?
     private let wsClient: MessagingWebSocketClient
     private var cancellables = Set<AnyCancellable>()
     private var highlightClearTask: Task<Void, Never>?
@@ -58,7 +59,8 @@ public final class ChatThreadViewModel: ObservableObject {
         reactToMessageUseCase: ReactToMessageUseCaseProtocol,
         repository: MessagingRepositoryProtocol,
         uploadImage: @escaping (Data, String) async throws -> MessageImageAttachment,
-        wsClient: MessagingWebSocketClient
+        wsClient: MessagingWebSocketClient,
+        onConversationRead: ((UUID) async -> Void)? = nil
     ) {
         self.conversationId = conversationId
         self.currentUserId = currentUserId
@@ -69,6 +71,7 @@ public final class ChatThreadViewModel: ObservableObject {
         self.repository = repository
         self.uploadImage = uploadImage
         self.wsClient = wsClient
+        self.onConversationRead = onConversationRead
         bindWsEvents()
     }
 
@@ -226,7 +229,12 @@ public final class ChatThreadViewModel: ObservableObject {
 
     public func markRead(upToMessageId: UUID) {
         Task {
-            try? await repository.markRead(conversationId: conversationId, upToMessageId: upToMessageId)
+            do {
+                try await repository.markRead(conversationId: conversationId, upToMessageId: upToMessageId)
+                await onConversationRead?(conversationId)
+            } catch {
+                Log.error(error, category: .network, metadata: ["action": "markRead"])
+            }
         }
     }
 
