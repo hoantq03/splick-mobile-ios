@@ -52,6 +52,9 @@ public struct AppNotification: Identifiable, Codable, Equatable, Sendable {
         case .friends:
             return .friends
         case .messages:
+            if let referenceId {
+                return .conversation(referenceId)
+            }
             return .messages
         case .feed:
             return .feed
@@ -78,6 +81,9 @@ public struct AppNotification: Identifiable, Codable, Equatable, Sendable {
             return .friends
         case .directMessage, .groupMessage, .groupCreated, .groupMemberAdded,
              .groupMemberRemoved, .groupRenamed, .groupAdminTransferred:
+            if let referenceId {
+                return .conversation(referenceId)
+            }
             return .messages
         case .system:
             return .none
@@ -132,6 +138,16 @@ public enum NotificationType: String, Codable, Sendable {
     case groupRenamed = "GROUP_RENAMED"
     case groupAdminTransferred = "GROUP_ADMIN_TRANSFERRED"
     case system = "SYSTEM"
+
+    public var isMessagingNotification: Bool {
+        switch self {
+        case .directMessage, .groupMessage, .groupCreated, .groupMemberAdded,
+             .groupMemberRemoved, .groupRenamed, .groupAdminTransferred:
+            return true
+        default:
+            return false
+        }
+    }
 
     public var icon: String {
         switch self {

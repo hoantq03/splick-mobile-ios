@@ -6,6 +6,7 @@ public enum NotificationNavigationTarget: Equatable, Sendable {
     case expenses
     case friends
     case messages
+    case conversation(UUID, highlightMessageId: UUID? = nil)
     case inbox
     case none
 }
