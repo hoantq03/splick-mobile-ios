@@ -1,16 +1,23 @@
 import SwiftUI
+import UIKit
 import DesignSystem
+import Localization
 
 struct MessageReactionFocusOverlay: View {
+    @EnvironmentObject private var languageService: LanguageService
+
     let context: MessageReactionFocusContext
     let onReact: (String) -> Void
+    let onReply: () -> Void
     let onOpenFullPicker: () -> Void
     let onDismiss: () -> Void
 
     @State private var isRevealed = false
-    @State private var traySize: CGSize = CGSize(width: 280, height: 52)
+    @State private var actionStackSize: CGSize = CGSize(width: 280, height: 96)
 
+    private let stackSpacing: CGFloat = 10
     private let traySpacing: CGFloat = 10
+    private static let replyImpact = UIImpactFeedbackGenerator(style: .light)
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -20,21 +27,24 @@ struct MessageReactionFocusOverlay: View {
                 .contentShape(Rectangle())
                 .onTapGesture { dismissAnimated() }
 
-            MessageReactionTray(
-                onReact: onReact,
-                onOpenFullPicker: onOpenFullPicker,
-                onDismiss: dismissAnimated
-            )
+            VStack(alignment: context.isOutgoing ? .trailing : .leading, spacing: stackSpacing) {
+                replyButton
+                MessageReactionTray(
+                    onReact: onReact,
+                    onOpenFullPicker: onOpenFullPicker,
+                    onDismiss: dismissAnimated
+                )
+            }
             .background {
                 GeometryReader { geo in
-                    Color.clear.preference(key: TrayMeasuredSizeKey.self, value: geo.size)
+                    Color.clear.preference(key: ActionStackMeasuredSizeKey.self, value: geo.size)
                 }
             }
-            .onPreferenceChange(TrayMeasuredSizeKey.self) { traySize = $0 }
+            .onPreferenceChange(ActionStackMeasuredSizeKey.self) { actionStackSize = $0 }
             .scaleEffect(isRevealed ? 1 : 0.55, anchor: scaleAnchor)
             .opacity(isRevealed ? 1 : 0)
             .offset(y: isRevealed ? 0 : 14)
-            .position(trayPosition)
+            .offset(x: stackOffsetX, y: stackOffsetY)
         }
         .animation(MessageReactionTrayMotion.present, value: isRevealed)
         .onAppear {
@@ -45,18 +55,42 @@ struct MessageReactionFocusOverlay: View {
         }
     }
 
+    private var replyButton: some View {
+        Button {
+            Self.replyImpact.impactOccurred()
+            onReply()
+            dismissAnimated()
+        } label: {
+            HStack(spacing: SplickTheme.Spacing.xs) {
+                Image(systemName: "arrowshape.turn.up.left.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                Text(languageService.text(.messagingReplyAction))
+                    .font(SplickTheme.Typography.callout.weight(.semibold))
+            }
+            .foregroundStyle(SplickTheme.Colors.textPrimary)
+            .padding(.horizontal, SplickTheme.Spacing.md)
+            .padding(.vertical, SplickTheme.Spacing.sm)
+            .background {
+                Capsule(style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .shadow(color: .black.opacity(0.14), radius: 12, y: 6)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
     private var scaleAnchor: UnitPoint {
         context.isOutgoing ? .bottomTrailing : .bottomLeading
     }
 
-    private var trayPosition: CGPoint {
-        let halfWidth = traySize.width / 2
-        let halfHeight = traySize.height / 2
-        let x = context.isOutgoing
-            ? context.frame.maxX - halfWidth
-            : context.frame.minX + halfWidth
-        let y = context.frame.minY - traySpacing - halfHeight
-        return CGPoint(x: x, y: y)
+    private var stackOffsetX: CGFloat {
+        context.isOutgoing
+            ? context.frame.maxX - actionStackSize.width
+            : context.frame.minX
+    }
+
+    private var stackOffsetY: CGFloat {
+        context.frame.minY - traySpacing - actionStackSize.height
     }
 
     private func dismissAnimated() {
@@ -67,8 +101,8 @@ struct MessageReactionFocusOverlay: View {
     }
 }
 
-private struct TrayMeasuredSizeKey: PreferenceKey {
-    static var defaultValue: CGSize = CGSize(width: 280, height: 52)
+private struct ActionStackMeasuredSizeKey: PreferenceKey {
+    static var defaultValue: CGSize = CGSize(width: 280, height: 96)
 
     static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
         let next = nextValue()
