@@ -23,6 +23,7 @@ private struct TabBarChromeAnimationToken: Equatable {
 struct MainTabView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var container: DependencyContainer
+    @EnvironmentObject private var pushNotificationCoordinator: PushNotificationCoordinator
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var tabBarScrollState = TabBarScrollState()
     @State private var badgeCounts: TabBadgeCounts = .zero
@@ -120,6 +121,7 @@ struct MainTabView: View {
             .onAppear {
                 Task { @MainActor in
                     badgeCounts = container.badgeCountService.counts
+                    pushNotificationCoordinator.syncAppIconBadge(count: badgeCounts.total)
                 }
             }
             .task(id: appState.currentUser?.id) {
@@ -138,6 +140,7 @@ struct MainTabView: View {
             .onReceive(container.badgeCountService.$counts) { newCounts in
                 Task { @MainActor in
                     badgeCounts = newCounts
+                    pushNotificationCoordinator.syncAppIconBadge(count: newCounts.total)
                 }
             }
             .onReceive(container.messagingWebSocketClient.eventSubject) { event in
@@ -193,6 +196,8 @@ struct MainTabView: View {
             case .active:
                 container.badgeCountService.startPolling()
                 container.messagingWebSocketClient.connect()
+                await container.badgeCountService.refresh()
+                pushNotificationCoordinator.syncAppIconBadge(count: container.badgeCountService.counts.total)
             case .background:
                 container.badgeCountService.stopPolling()
                 container.messagingWebSocketClient.disconnect()

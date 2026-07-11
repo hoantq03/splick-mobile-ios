@@ -153,7 +153,7 @@ final class PushNotificationCoordinator: ObservableObject {
 
     func handleRemoteNotification(userInfo: [AnyHashable: Any]) {
         if let badge = ((userInfo["aps"] as? [String: Any])?["badge"] as? Int) {
-            UIApplication.shared.applicationIconBadgeNumber = max(0, badge)
+            syncAppIconBadge(count: badge)
         }
 
         guard let destination = parseDestination(from: userInfo) else {
@@ -171,6 +171,20 @@ final class PushNotificationCoordinator: ObservableObject {
 
     func clearPendingDestination() {
         pendingDestination = nil
+    }
+
+    /// Keeps the home-screen app icon badge aligned with server unread totals.
+    func syncAppIconBadge(count: Int) {
+        let safeCount = max(0, count)
+        UNUserNotificationCenter.current().setBadgeCount(safeCount) { error in
+            if let error {
+                Log.error(
+                    error,
+                    category: .notification,
+                    metadata: ["action": "syncAppIconBadge", "count": String(safeCount)]
+                )
+            }
+        }
     }
 
     func openSystemSettings() {

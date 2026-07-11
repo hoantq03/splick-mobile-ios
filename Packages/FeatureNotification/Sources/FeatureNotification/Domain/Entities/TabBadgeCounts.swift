@@ -14,4 +14,9 @@ public struct TabBadgeCounts: Equatable, Sendable {
     }
 
     public static let zero = TabBadgeCounts(notifications: 0, friends: 0, expenses: 0, messages: 0)
+
+    /// Matches notification-service `countUnreadByUserId` / APNS `aps.badge`.
+    public var total: Int {
+        notifications + friends + expenses + messages
+    }
 }
