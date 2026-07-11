@@ -1,34 +1,42 @@
 import Foundation
-import SplickDomain
 
 public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable {
     public let id: UUID
     public let conversationId: UUID
     public let senderId: UUID
+    public let senderDisplayName: String?
     public let body: String
     public let clientMessageId: UUID
     public let createdAt: Date
     public let reactions: [Reaction]
     public let deliveryStatus: MessageDeliveryStatus
+    public let imageAttachments: [MessageImageAttachment]
+    public let replyPreview: MessageReplyPreview?
 
     public init(
         id: UUID,
         conversationId: UUID,
         senderId: UUID,
+        senderDisplayName: String? = nil,
         body: String,
         clientMessageId: UUID,
         createdAt: Date,
         reactions: [Reaction] = [],
-        deliveryStatus: MessageDeliveryStatus = .sent
+        deliveryStatus: MessageDeliveryStatus = .sent,
+        imageAttachments: [MessageImageAttachment] = [],
+        replyPreview: MessageReplyPreview? = nil
     ) {
         self.id = id
         self.conversationId = conversationId
         self.senderId = senderId
+        self.senderDisplayName = senderDisplayName
         self.body = body
         self.clientMessageId = clientMessageId
         self.createdAt = createdAt
         self.reactions = reactions
         self.deliveryStatus = deliveryStatus
+        self.imageAttachments = imageAttachments
+        self.replyPreview = replyPreview
     }
 
     public func updating(reactions: [Reaction]) -> ChatMessage {
@@ -36,11 +44,14 @@ public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable {
             id: id,
             conversationId: conversationId,
             senderId: senderId,
+            senderDisplayName: senderDisplayName,
             body: body,
             clientMessageId: clientMessageId,
             createdAt: createdAt,
             reactions: reactions,
-            deliveryStatus: deliveryStatus
+            deliveryStatus: deliveryStatus,
+            imageAttachments: imageAttachments,
+            replyPreview: replyPreview
         )
     }
 
@@ -49,12 +60,19 @@ public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable {
             id: id,
             conversationId: conversationId,
             senderId: senderId,
+            senderDisplayName: senderDisplayName,
             body: body,
             clientMessageId: clientMessageId,
             createdAt: createdAt,
             reactions: reactions,
-            deliveryStatus: deliveryStatus
+            deliveryStatus: deliveryStatus,
+            imageAttachments: imageAttachments,
+            replyPreview: replyPreview
         )
+    }
+
+    public var hasImageAttachments: Bool {
+        !imageAttachments.isEmpty
     }
 
     /// Aggregated emoji counts for compact display, e.g. ❤️×3 😂×1
@@ -80,8 +98,6 @@ public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable {
             (emoji: emoji, count: grouped[emoji]?.count ?? 0)
         }
 
-        // Outgoing: grow left → right from inner (leading) edge.
-        // Incoming: grow right → left from inner (trailing) edge.
         return isOutgoing ? ordered : ordered.reversed()
     }
 
