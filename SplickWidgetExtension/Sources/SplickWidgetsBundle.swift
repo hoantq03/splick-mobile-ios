@@ -1,5 +1,6 @@
 import WidgetKit
 import SwiftUI
+import SplickWidgetKit
 
 @main
 struct SplickWidgetsBundle: WidgetBundle {

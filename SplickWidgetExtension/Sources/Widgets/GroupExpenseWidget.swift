@@ -5,6 +5,7 @@ import SplickWidgetKit
 struct GroupExpenseWidgetEntryView: View {
     @Environment(\.widgetFamily) private var family
     let entry: GroupExpenseEntry
+    var emptyMessage: String = "Mở Splick để đồng bộ nhóm"
 
     var body: some View {
         switch family {
@@ -19,16 +20,14 @@ struct GroupExpenseWidgetEntryView: View {
 
     private var mediumView: some View {
         ZStack {
-            ContainerRelativeShape().fill(Color(.systemBackground))
             if let snapshot = entry.snapshot {
                 VStack(alignment: .leading, spacing: 10) {
-                    WidgetBrandHeader("Chi tiêu nhóm")
+                    WidgetTierHeader("Chi tiêu nhóm")
                     Text(snapshot.groupName)
                         .font(.headline.weight(.bold))
                         .lineLimit(2)
                     HStack {
-                        Text(snapshot.totalAmount)
-                            .font(.title3.weight(.bold))
+                        WidgetMetricText(text: snapshot.totalAmount, color: .primary)
                         Spacer()
                         Text("\(snapshot.settledPercentage)% settled")
                             .font(.caption.weight(.semibold))
@@ -39,24 +38,24 @@ struct GroupExpenseWidgetEntryView: View {
                 }
                 .padding()
             } else {
-                WidgetEmptyStateView("Chọn nhóm trong cài đặt widget")
+                WidgetEmptyStateView(emptyMessage)
+                    .padding()
             }
         }
+        .widgetLegacyCardBackground()
     }
 
     private var largeView: some View {
         ZStack {
-            ContainerRelativeShape().fill(Color(.systemBackground))
             if let snapshot = entry.snapshot {
                 VStack(alignment: .leading, spacing: 10) {
-                    WidgetBrandHeader("Nhóm • \(snapshot.groupName)")
+                    WidgetTierHeader("Nhóm • \(snapshot.groupName)")
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Tổng")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                            Text(snapshot.totalAmount)
-                                .font(.title2.weight(.bold))
+                            WidgetMetricText(text: snapshot.totalAmount, color: .primary)
                         }
                         Spacer()
                         VStack(alignment: .trailing, spacing: 4) {
@@ -83,11 +82,14 @@ struct GroupExpenseWidgetEntryView: View {
                 }
                 .padding()
             } else {
-                WidgetEmptyStateView("Chọn nhóm trong cài đặt widget")
+                WidgetEmptyStateView(emptyMessage)
+                    .padding()
             }
         }
+        .widgetLegacyCardBackground()
     }
 
+    @ViewBuilder
     private var rectangularView: some View {
         if let snapshot = entry.snapshot {
             VStack(alignment: .leading, spacing: 2) {
@@ -108,15 +110,38 @@ struct GroupExpenseWidget: Widget {
     let kind = WidgetKind.groupExpense
 
     var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: GroupExpenseStaticProvider()) { entry in
+            GroupExpenseWidgetEntryView(
+                entry: GroupExpenseEntry(
+                    date: entry.date,
+                    groupId: entry.snapshot?.groupId,
+                    snapshot: entry.snapshot
+                )
+            )
+            .widgetSplickContainerBackground()
+        }
+        .configurationDisplayName("Chi tiêu nhóm")
+        .description("Theo dõi chi tiêu nhóm (nhóm đầu tiên trong cache).")
+        .supportedFamilies([.systemMedium, .systemLarge, .accessoryRectangular])
+    }
+}
+
+/// iOS 17+ configurable variant — kept for when widget extension min target moves to 17.
+@available(iOSApplicationExtension 17.0, *)
+struct GroupExpenseConfigurableWidget: Widget {
+    let kind = WidgetKind.groupExpense
+
+    var body: some WidgetConfiguration {
         AppIntentConfiguration(
             kind: kind,
             intent: GroupExpenseIntent.self,
             provider: GroupExpenseProvider()
         ) { entry in
-            GroupExpenseWidgetEntryView(entry: entry)
-                .containerBackground(for: .widget) {
-                    Color(.systemBackground)
-                }
+            GroupExpenseWidgetEntryView(
+                entry: entry,
+                emptyMessage: "Chọn nhóm trong cài đặt widget"
+            )
+            .widgetSplickContainerBackground()
         }
         .configurationDisplayName("Chi tiêu nhóm")
         .description("Theo dõi chi tiêu của một nhóm cụ thể.")

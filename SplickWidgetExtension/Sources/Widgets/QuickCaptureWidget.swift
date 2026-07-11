@@ -27,17 +27,7 @@ struct QuickCaptureWidgetEntryView: View {
 
     var body: some View {
         Link(destination: URL(string: "splick://capture")!) {
-            ZStack {
-                ContainerRelativeShape()
-                    .fill(WidgetColors.brandGradient)
-                VStack(spacing: 10) {
-                    Image(systemName: "camera.fill")
-                        .font(.system(size: 34, weight: .semibold))
-                    Text("Chia sẻ ngay")
-                        .font(.headline.weight(.bold))
-                }
-                .foregroundStyle(.white)
-            }
+            WidgetCaptureHero()
         }
     }
 }
@@ -48,13 +38,10 @@ struct QuickCaptureWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: QuickCaptureProvider()) { entry in
             QuickCaptureWidgetEntryView(entry: entry)
-                .containerBackground(for: .widget) {
-                    WidgetColors.brandGradient
-                }
+                .widgetSplickContainerBackground(.brandGradient)
         }
         .configurationDisplayName("Chụp nhanh")
         .description("Mở thẳng camera Splick từ màn hình chính.")
         .supportedFamilies([.systemSmall])
-        .contentMarginsDisabled()
     }
 }

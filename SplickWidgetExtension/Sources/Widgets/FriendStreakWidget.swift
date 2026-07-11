@@ -45,16 +45,18 @@ struct FriendStreakWidgetEntryView: View {
 
     private var smallView: some View {
         ZStack {
-            ContainerRelativeShape().fill(Color(.systemBackground))
             if let snapshot = entry.snapshot {
                 VStack(alignment: .leading, spacing: 8) {
-                    WidgetBrandHeader("Streak")
+                    WidgetTierHeader("Streak")
                     Spacer(minLength: 0)
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text("🔥")
-                        Text("\(snapshot.currentStreak)")
-                            .font(.system(size: 36, weight: .bold, design: .rounded))
-                            .foregroundStyle(WidgetColors.warning)
+                    WidgetAccentGroup {
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Text("🔥")
+                            WidgetMetricText(
+                                text: "\(snapshot.currentStreak)",
+                                color: WidgetColors.warning
+                            )
+                        }
                     }
                     Text(streakCaption(for: snapshot))
                         .font(.caption)
@@ -63,24 +65,19 @@ struct FriendStreakWidgetEntryView: View {
                 .padding()
             } else {
                 WidgetEmptyStateView("Mở Splick để xem streak")
+                    .padding()
             }
         }
+        .widgetLegacyCardBackground()
     }
 
     private var mediumView: some View {
         ZStack {
-            ContainerRelativeShape()
-                .fill(
-                    LinearGradient(
-                        colors: [WidgetColors.warning.opacity(0.15), Color(.systemBackground)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+            mediumBackground
             if let snapshot = entry.snapshot {
                 HStack(spacing: 16) {
                     VStack(alignment: .leading, spacing: 8) {
-                        WidgetBrandHeader("Streak ảnh")
+                        WidgetTierHeader("Streak ảnh")
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
                             Text("🔥")
                             Text("\(snapshot.currentStreak) ngày")
@@ -92,22 +89,38 @@ struct FriendStreakWidgetEntryView: View {
                     }
                     Spacer(minLength: 0)
                     Link(destination: URL(string: "splick://capture")!) {
-                        VStack(spacing: 6) {
-                            Image(systemName: "camera.fill")
-                                .font(.title2)
-                            Text("Chụp ngay")
-                                .font(.caption.weight(.semibold))
-                        }
-                        .foregroundStyle(.white)
-                        .frame(width: 88, height: 88)
-                        .background(WidgetColors.brandGradient)
-                        .clipShape(RoundedRectangle(cornerRadius: 18))
+                        WidgetCaptureChip()
                     }
                 }
                 .padding()
             } else {
                 WidgetEmptyStateView("Chưa có streak")
+                    .padding()
             }
+        }
+        .widgetLegacyCardBackground()
+    }
+
+    @ViewBuilder
+    private var mediumBackground: some View {
+        switch WidgetOSTier.current {
+        case .legacy:
+            ContainerRelativeShape()
+                .fill(
+                    LinearGradient(
+                        colors: [WidgetColors.warning.opacity(0.15), Color(.secondarySystemGroupedBackground)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        case .modern, .vibrant:
+            LinearGradient(
+                colors: [WidgetColors.warning.opacity(0.15), Color.clear],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .liquidGlass:
+            Color.clear
         }
     }
 
@@ -144,9 +157,7 @@ struct FriendStreakWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: FriendStreakProvider()) { entry in
             FriendStreakWidgetEntryView(entry: entry)
-                .containerBackground(for: .widget) {
-                    Color(.systemBackground)
-                }
+                .widgetSplickContainerBackground()
         }
         .configurationDisplayName("Streak ảnh")
         .description("Nhắc giữ streak đăng ảnh mỗi ngày.")

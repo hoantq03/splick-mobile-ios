@@ -1,8 +1,10 @@
 import Foundation
 import SplickDomain
 import SplickWidgetKit
+import FeatureExpense
 import FeatureMessaging
 import FeatureFriends
+import FeatureSocialFeed
 
 @MainActor
 final class WidgetSyncBridge {

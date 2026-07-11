@@ -54,14 +54,16 @@ struct FriendRequestWidgetEntryView: View {
 
     private var smallView: some View {
         ZStack {
-            ContainerRelativeShape().fill(Color(.systemBackground))
             if let snapshot = entry.snapshot, snapshot.pendingCount > 0 {
                 VStack(alignment: .leading, spacing: 8) {
-                    WidgetBrandHeader("Lời mời kết bạn")
+                    WidgetTierHeader("Lời mời kết bạn")
                     Spacer(minLength: 0)
-                    Text("\(snapshot.pendingCount)")
-                        .font(.largeTitle.weight(.bold))
-                        .foregroundStyle(WidgetColors.primaryStart)
+                    WidgetAccentGroup {
+                        WidgetMetricText(
+                            text: "\(snapshot.pendingCount)",
+                            color: WidgetColors.primaryStart
+                        )
+                    }
                     if let latest = snapshot.requests.first {
                         HStack(spacing: 8) {
                             Circle()
@@ -81,8 +83,10 @@ struct FriendRequestWidgetEntryView: View {
                 .padding()
             } else {
                 WidgetEmptyStateView("Không có lời mời mới")
+                    .padding()
             }
         }
+        .widgetLegacyCardBackground()
     }
 
     private var accessoryCircularView: some View {
@@ -104,9 +108,7 @@ struct FriendRequestWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: FriendRequestProvider()) { entry in
             FriendRequestWidgetEntryView(entry: entry)
-                .containerBackground(for: .widget) {
-                    Color(.systemBackground)
-                }
+                .widgetSplickContainerBackground()
         }
         .configurationDisplayName("Lời mời kết bạn")
         .description("Xem nhanh lời mời kết bạn đang chờ.")

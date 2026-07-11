@@ -2,6 +2,7 @@ import AppIntents
 import WidgetKit
 import SplickWidgetKit
 
+@available(iOS 17.0, *)
 struct GroupExpenseIntent: WidgetConfigurationIntent {
     static var title: LocalizedStringResource = "Chọn nhóm"
     static var description = IntentDescription("Chọn nhóm để hiển thị chi tiêu trên widget.")
@@ -14,6 +15,7 @@ struct GroupExpenseIntent: WidgetConfigurationIntent {
     }
 }
 
+@available(iOS 17.0, *)
 struct GroupEntity: AppEntity, Identifiable {
     static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "Nhóm")
     static var defaultQuery = GroupEntityQuery()
@@ -26,6 +28,7 @@ struct GroupEntity: AppEntity, Identifiable {
     }
 }
 
+@available(iOS 17.0, *)
 struct GroupEntityQuery: EntityQuery {
     func entities(for identifiers: [UUID]) async throws -> [GroupEntity] {
         let groups = WidgetCacheService.shared.loadGroups()?.groups ?? []
@@ -50,6 +53,7 @@ struct GroupExpenseEntry: TimelineEntry {
     let snapshot: WidgetGroupExpenseSnapshot?
 }
 
+@available(iOS 17.0, *)
 struct GroupExpenseProvider: AppIntentTimelineProvider {
     private let cache = WidgetCacheService.shared
 

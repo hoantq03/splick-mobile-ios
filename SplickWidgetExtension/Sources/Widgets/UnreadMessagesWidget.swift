@@ -61,14 +61,16 @@ struct UnreadMessagesWidgetEntryView: View {
 
     private var smallView: some View {
         ZStack {
-            ContainerRelativeShape().fill(Color(.systemBackground))
             if let snapshot = entry.snapshot, snapshot.totalUnreadCount > 0 {
                 VStack(alignment: .leading, spacing: 8) {
-                    WidgetBrandHeader("Tin nhắn")
+                    WidgetTierHeader("Tin nhắn")
                     Spacer(minLength: 0)
-                    Text("\(snapshot.totalUnreadCount)")
-                        .font(.largeTitle.weight(.bold))
-                        .foregroundStyle(WidgetColors.primaryStart)
+                    WidgetAccentGroup {
+                        WidgetMetricText(
+                            text: "\(snapshot.totalUnreadCount)",
+                            color: WidgetColors.primaryStart
+                        )
+                    }
                     if let latest = snapshot.conversations.first {
                         Text(latest.displayTitle)
                             .font(.caption.weight(.semibold))
@@ -82,25 +84,28 @@ struct UnreadMessagesWidgetEntryView: View {
                 .padding()
             } else {
                 WidgetEmptyStateView("Không có tin nhắn mới")
+                    .padding()
             }
         }
+        .widgetLegacyCardBackground()
     }
 
     private var mediumView: some View {
         ZStack {
-            ContainerRelativeShape().fill(Color(.systemBackground))
             if let snapshot = entry.snapshot {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
-                        WidgetBrandHeader("Tin nhắn")
+                        WidgetTierHeader("Tin nhắn")
                         Spacer()
                         if snapshot.totalUnreadCount > 0 {
-                            Text("\(snapshot.totalUnreadCount)")
-                                .font(.caption.weight(.bold))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(WidgetColors.primaryStart.opacity(0.15))
-                                .clipShape(Capsule())
+                            WidgetAccentGroup {
+                                Text("\(snapshot.totalUnreadCount)")
+                                    .font(.caption.weight(.bold))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(WidgetColors.primaryStart.opacity(0.15))
+                                    .clipShape(Capsule())
+                            }
                         }
                     }
                     ForEach(Array(snapshot.conversations.prefix(2).enumerated()), id: \.offset) { _, conversation in
@@ -139,8 +144,10 @@ struct UnreadMessagesWidgetEntryView: View {
                 .padding()
             } else {
                 WidgetEmptyStateView("Mở Splick để đồng bộ")
+                    .padding()
             }
         }
+        .widgetLegacyCardBackground()
     }
 
     private var accessoryCircularView: some View {
@@ -155,6 +162,7 @@ struct UnreadMessagesWidgetEntryView: View {
         }
     }
 
+    @ViewBuilder
     private var accessoryRectangularView: some View {
         if let conversation = entry.snapshot?.conversations.first {
             VStack(alignment: .leading, spacing: 2) {
@@ -174,9 +182,7 @@ struct UnreadMessagesWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: UnreadMessagesProvider()) { entry in
             UnreadMessagesWidgetEntryView(entry: entry)
-                .containerBackground(for: .widget) {
-                    Color(.systemBackground)
-                }
+                .widgetSplickContainerBackground()
         }
         .configurationDisplayName("Tin nhắn chưa đọc")
         .description("Xem nhanh tin nhắn mới từ bạn bè.")

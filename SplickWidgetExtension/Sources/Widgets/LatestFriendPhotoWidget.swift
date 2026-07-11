@@ -64,26 +64,26 @@ struct LatestFriendPhotoWidgetEntryView: View {
 
     private var smallView: some View {
         ZStack {
-            if hasPhoto, let imageURL = entry.imageURL, let uiImage = UIImage(contentsOfFile: imageURL.path) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                WidgetPlaceholderView(title: "Ảnh bạn bè", systemImage: "photo.on.rectangle.angled")
-            }
-
+            photoBackground
             LinearGradient(
-                colors: [.clear, .black.opacity(0.75)],
+                colors: [.clear, .black.opacity(WidgetOSTier.current == .liquidGlass ? 0.55 : 0.75)],
                 startPoint: .center,
                 endPoint: .bottom
             )
-
             if let snapshot = entry.snapshot, hasPhoto {
                 VStack(alignment: .leading, spacing: 4) {
                     Spacer()
-                    Text(snapshot.authorName)
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(.white)
+                    if WidgetOSTier.current == .liquidGlass {
+                        WidgetPrimaryGroup {
+                            Text(snapshot.authorName)
+                                .font(.headline.weight(.semibold))
+                                .foregroundStyle(.white)
+                        }
+                    } else {
+                        Text(snapshot.authorName)
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(.white)
+                    }
                     HStack(spacing: 8) {
                         Text(WidgetRelativeDateFormatter.shortString(from: snapshot.createdAt))
                         if snapshot.reactionCount > 0 {
@@ -103,20 +103,14 @@ struct LatestFriendPhotoWidgetEntryView: View {
     private var mediumView: some View {
         HStack(spacing: 0) {
             ZStack {
-                if hasPhoto, let imageURL = entry.imageURL, let uiImage = UIImage(contentsOfFile: imageURL.path) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .scaledToFill()
-                } else {
-                    WidgetPlaceholderView(title: "Ảnh mới", systemImage: "photo")
-                }
+                photoBackground
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
 
             if let snapshot = entry.snapshot, hasPhoto {
                 VStack(alignment: .leading, spacing: 8) {
-                    WidgetBrandHeader("Locket")
+                    WidgetTierHeader("Locket")
                     Text(snapshot.authorName)
                         .font(.title3.weight(.bold))
                         .lineLimit(2)
@@ -135,8 +129,31 @@ struct LatestFriendPhotoWidgetEntryView: View {
                 }
                 .padding()
                 .frame(width: 150)
-                .background(Color(.systemBackground))
+                .background(mediumSidePanelBackground)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var photoBackground: some View {
+        if hasPhoto, let imageURL = entry.imageURL, let uiImage = UIImage(contentsOfFile: imageURL.path) {
+            Image(uiImage: uiImage)
+                .resizable()
+                .scaledToFill()
+        } else {
+            WidgetPlaceholderView(title: "Ảnh bạn bè", systemImage: "photo.on.rectangle.angled")
+        }
+    }
+
+    @ViewBuilder
+    private var mediumSidePanelBackground: some View {
+        switch WidgetOSTier.current {
+        case .legacy:
+            Color(.secondarySystemGroupedBackground)
+        case .modern, .vibrant:
+            Color(.systemBackground)
+        case .liquidGlass:
+            Color.clear
         }
     }
 }
@@ -147,13 +164,10 @@ struct LatestFriendPhotoWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: LatestFriendPhotoProvider()) { entry in
             LatestFriendPhotoWidgetEntryView(entry: entry)
-                .containerBackground(for: .widget) {
-                    Color(.systemBackground)
-                }
+                .widgetSplickContainerBackground(.photo)
         }
         .configurationDisplayName("Ảnh bạn bè")
         .description("Ảnh mới nhất từ bạn bè ngay trên màn hình chính.")
         .supportedFamilies([.systemSmall, .systemMedium])
-        .contentMarginsDisabled()
     }
 }
