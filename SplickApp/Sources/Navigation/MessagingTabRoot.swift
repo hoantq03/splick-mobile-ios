@@ -21,7 +21,7 @@ struct MessagingTabRoot: View {
     @State private var profileRoute: MessagingUserProfileRoute?
     @State private var showCreateGroup = false
     @State private var createGroupFriends: [UserSummary] = []
-    @State private var conversationToOpen: Conversation?
+    @State private var conversationRouteToOpen: ChatThreadRoute?
 
     var body: some View {
         ConversationListView(
@@ -37,7 +37,7 @@ struct MessagingTabRoot: View {
                     currentUserId: appState.currentUser?.id ?? UUID()
                 )
             },
-            conversationToOpen: $conversationToOpen
+            conversationToOpen: $conversationRouteToOpen
         )
         .environmentObject(container.customEmojiStore)
         .environment(\.customEmojiDependencies, container.customEmojiDependencies)
@@ -68,6 +68,13 @@ struct MessagingTabRoot: View {
         .environment(\.openUserProfile) { user in
             profileRoute = MessagingUserProfileRoute(user: user)
         }
+        .onChange(of: appState.pendingMessagingNavigation?.conversationId) { _ in
+            guard let navigation = appState.pendingMessagingNavigation else { return }
+            Task {
+                await openConversation(from: navigation)
+                appState.clearPendingMessagingNavigation()
+            }
+        }
         .sheet(item: $profileRoute) { route in
             FriendUserProfileView(
                 viewModel: container.friendUserProfileDependencies.makeViewModel(user: route.user)
@@ -89,7 +96,7 @@ struct MessagingTabRoot: View {
                             group: group,
                             invitedMemberIds: invitedMemberIds,
                             conversationListViewModel: container.conversationListViewModel,
-                            onOpen: { conversationToOpen = $0 }
+                            onOpen: { conversationRouteToOpen = ChatThreadRoute(conversation: $0) }
                         )
                     }
                 }
@@ -110,5 +117,38 @@ struct MessagingTabRoot: View {
             .environmentObject(container.customEmojiStore)
             .environment(\.customEmojiDependencies, container.customEmojiDependencies)
         }
+    }
+
+    private func openConversation(from navigation: PendingMessagingNavigation) async {
+        let conversationId = navigation.conversationId
+        if let existing = container.conversationListViewModel.conversations.first(where: { $0.id == conversationId }) {
+            conversationRouteToOpen = ChatThreadRoute(
+                conversation: existing,
+                highlightMessageId: navigation.highlightMessageId
+            )
+            return
+        }
+
+        await container.conversationListViewModel.refresh()
+        if let refreshed = container.conversationListViewModel.conversations.first(where: { $0.id == conversationId }) {
+            conversationRouteToOpen = ChatThreadRoute(
+                conversation: refreshed,
+                highlightMessageId: navigation.highlightMessageId
+            )
+            return
+        }
+
+        let fallback = Conversation(
+            id: conversationId,
+            unreadCount: 0,
+            peer: nil,
+            lastMessage: nil,
+            createdAt: .now,
+            updatedAt: .now
+        )
+        conversationRouteToOpen = ChatThreadRoute(
+            conversation: fallback,
+            highlightMessageId: navigation.highlightMessageId
+        )
     }
 }
