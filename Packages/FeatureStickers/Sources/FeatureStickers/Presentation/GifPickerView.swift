@@ -1,15 +1,26 @@
 import SwiftUI
 import Common
 import DesignSystem
+import Localization
 import SplickDomain
 
 public struct GifPickerView: View {
     @ObservedObject private var viewModel: GifPickerViewModel
+    @EnvironmentObject private var languageService: LanguageService
     private let onSelect: (Sticker) -> Void
 
-    private let columns = [
-        GridItem(.adaptive(minimum: 96, maximum: 120), spacing: 8),
-    ]
+    private enum GridLayout {
+        static let columnsPerRow = 4
+        static let spacing: CGFloat = 10
+        static let cornerRadius: CGFloat = SplickTheme.CornerRadius.tile
+    }
+
+    private var columns: [GridItem] {
+        Array(
+            repeating: GridItem(.flexible(), spacing: GridLayout.spacing),
+            count: GridLayout.columnsPerRow
+        )
+    }
 
     public init(viewModel: GifPickerViewModel, onSelect: @escaping (Sticker) -> Void) {
         self.viewModel = viewModel
@@ -21,9 +32,6 @@ public struct GifPickerView: View {
             searchBar
             tabPicker
             content
-            if viewModel.showsGiphyAttribution {
-                giphyAttribution
-            }
         }
         .padding(.horizontal, SplickTheme.Spacing.md)
         .padding(.vertical, SplickTheme.Spacing.sm)
@@ -34,7 +42,7 @@ public struct GifPickerView: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
-            TextField("Tìm GIF...", text: Binding(
+            TextField(languageService.text(.stickersGifSearchPlaceholder), text: Binding(
                 get: { viewModel.searchText },
                 set: { viewModel.onSearchTextChanged($0) }
             ))
@@ -60,7 +68,7 @@ public struct GifPickerView: View {
     }
 
     private var availableTabs: [StickerPickerTab] {
-        viewModel.showsCustomTab ? StickerPickerTab.allCases : [.giphy]
+        viewModel.showsCustomTab ? StickerPickerTab.allCases : [.klipy]
     }
 
     @ViewBuilder
@@ -86,18 +94,12 @@ public struct GifPickerView: View {
                 .frame(maxWidth: .infinity, minHeight: 220)
             } else {
                 ScrollView {
-                    LazyVGrid(columns: columns, spacing: 8) {
+                    LazyVGrid(columns: columns, spacing: GridLayout.spacing) {
                         ForEach(stickers) { sticker in
                             Button {
                                 onSelect(sticker)
                             } label: {
-                                AnimatedRemoteImage(url: sticker.previewURL ?? sticker.url)
-                                    .frame(height: 96)
-                                    .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small))
-                                    .overlay {
-                                        RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small)
-                                            .stroke(SplickTheme.Colors.divider.opacity(0.6), lineWidth: 1)
-                                    }
+                                gifThumbnail(url: sticker.previewURL ?? sticker.url)
                             }
                             .buttonStyle(.plain)
                         }
@@ -108,25 +110,33 @@ public struct GifPickerView: View {
         }
     }
 
+    private func gifThumbnail(url: URL) -> some View {
+        let shape = RoundedRectangle(cornerRadius: GridLayout.cornerRadius, style: .continuous)
+
+        return shape
+            .fill(SplickTheme.Colors.secondaryBackground)
+            .aspectRatio(1, contentMode: .fit)
+            .overlay {
+                AnimatedRemoteImage(
+                    url: url,
+                    contentMode: .fill,
+                    maxPixelSize: RemoteImageMetrics.inlineAttachmentMaxPixelWidth(pointWidth: 88)
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .clipShape(shape)
+            .overlay {
+                shape.strokeBorder(SplickTheme.Colors.divider.opacity(0.4), lineWidth: 0.5)
+            }
+            .contentShape(shape)
+    }
+
     private var emptyMessage: String {
         switch viewModel.selectedTab {
-        case .giphy:
-            return "Thử từ khóa khác hoặc kiểm tra GIPHY_API_KEY."
+        case .klipy:
+            return "Thử từ khóa khác hoặc kiểm tra KLIPY_API_KEY."
         case .custom:
             return "Nhóm chưa có sticker tùy chỉnh."
         }
-    }
-
-    private var giphyAttribution: some View {
-        Link(destination: AppConstants.Giphy.attributionURL) {
-            HStack(spacing: 4) {
-                Text("Powered by")
-                    .font(.system(size: 11))
-                Text("GIPHY")
-                    .font(.system(size: 11, weight: .bold))
-            }
-            .foregroundStyle(SplickTheme.Colors.textSecondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 }

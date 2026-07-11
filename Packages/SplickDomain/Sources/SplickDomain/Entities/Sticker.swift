@@ -1,7 +1,7 @@
 import Foundation
 
 public enum StickerSource: Equatable, Sendable {
-    case giphy
+    case klipy
     case custom(groupId: UUID)
 }
 

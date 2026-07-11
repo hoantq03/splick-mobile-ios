@@ -3,30 +3,30 @@ import Networking
 import SplickDomain
 
 public final class StickerRepositoryImpl: StickerRepositoryProtocol, Sendable {
-    private let giphyDataSource: GiphyDataSourceProtocol
+    private let klipyDataSource: KlipyDataSourceProtocol
     private let splickDataSource: SplickStickerDataSourceProtocol
 
     public init(apiClient: APIClientProtocol) {
-        self.giphyDataSource = GiphyDataSource()
+        self.klipyDataSource = KlipyDataSource()
         self.splickDataSource = SplickStickerDataSource(apiClient: apiClient)
     }
 
     init(
-        giphyDataSource: GiphyDataSourceProtocol,
+        klipyDataSource: KlipyDataSourceProtocol,
         splickDataSource: SplickStickerDataSourceProtocol
     ) {
-        self.giphyDataSource = giphyDataSource
+        self.klipyDataSource = klipyDataSource
         self.splickDataSource = splickDataSource
     }
 
     public func fetchStickers(query: String, source: StickerSource) async throws -> [Sticker] {
         switch source {
-        case .giphy:
+        case .klipy:
             let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.isEmpty {
-                return try await giphyDataSource.trending()
+                return try await klipyDataSource.trending()
             }
-            return try await giphyDataSource.search(query: trimmed)
+            return try await klipyDataSource.search(query: trimmed)
 
         case .custom(let groupId):
             return try await splickDataSource.fetchStickers(groupId: groupId, keyword: query)

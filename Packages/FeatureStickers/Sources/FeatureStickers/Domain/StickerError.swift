@@ -10,9 +10,9 @@ public enum StickerError: LocalizedError, Equatable, Sendable {
     public var errorDescription: String? {
         switch self {
         case .apiKeyMissing:
-            return "Giphy chưa được cấu hình. Thêm GIPHY_API_KEY vào Info.plist."
+            return "KLIPY chưa được cấu hình. Thêm KLIPY_API_KEY vào Info.plist."
         case .rateLimitExceeded:
-            return "Đã hết hạn mức Giphy hôm nay. Thử lại sau hoặc dùng sticker nhóm."
+            return "Đã hết hạn mức KLIPY hôm nay. Thử lại sau hoặc dùng sticker nhóm."
         case .groupRequired:
             return "Chọn nhóm để xem sticker tùy chỉnh."
         case .network(let message):
