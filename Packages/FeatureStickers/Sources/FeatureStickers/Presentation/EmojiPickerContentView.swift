@@ -37,7 +37,11 @@ public struct EmojiPickerContentView: View {
     }
 
     private var myEmojis: [CustomEmoji] {
-        currentUserId.map { emojiStore.emojis(ownedBy: $0) } ?? []
+        if let currentUserId {
+            return emojiStore.emojis(ownedBy: currentUserId)
+        }
+        // Fallback when caller forgot user id — still surface loaded custom emojis.
+        return emojiStore.allEmojis
     }
 
     private var allEntries: [EmojiPickerEntry] {
