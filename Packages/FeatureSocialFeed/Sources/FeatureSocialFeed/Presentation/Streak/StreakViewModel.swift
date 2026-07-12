@@ -19,7 +19,8 @@ public final class StreakViewModel: ObservableObject {
     private let onStreakUpdated: ((StreakSummary) async -> Void)?
     private let calendar = Calendar.current
     private var loadTask: Task<Void, Never>?
-    private let initialMonthCount = 4
+    /// Current month only on first open; older months load via `loadOlderMonthIfNeeded`.
+    private let initialMonthCount = 1
     private static let maxMonthsInPast = 24
 
     public init(
@@ -44,7 +45,17 @@ public final class StreakViewModel: ObservableObject {
 
     func loadIfNeeded() async {
         guard monthSections.isEmpty else { return }
-        await refresh()
+        // Single-flight: pager remounts must not cancel+restart calendar fetches.
+        if let loadTask {
+            await loadTask.value
+            return
+        }
+        let task = Task { await performRefresh() }
+        loadTask = task
+        await task.value
+        if loadTask == task {
+            loadTask = nil
+        }
     }
 
     func refresh() async {
@@ -52,6 +63,9 @@ public final class StreakViewModel: ObservableObject {
         let task = Task { await performRefresh() }
         loadTask = task
         await task.value
+        if loadTask == task {
+            loadTask = nil
+        }
     }
 
     func loadOlderMonthIfNeeded(for section: StreakMonthSection) async -> Bool {
