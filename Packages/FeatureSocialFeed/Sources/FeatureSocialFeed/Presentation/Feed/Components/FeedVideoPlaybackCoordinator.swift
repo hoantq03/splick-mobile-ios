@@ -42,10 +42,14 @@ final class FeedVideoPlaybackCoordinator: ObservableObject {
     private func pickActivePost() {
         guard let best = visibilityByPost.max(by: { $0.value < $1.value }),
               best.value >= activationThreshold else {
-            activePostId = nil
+            if activePostId != nil {
+                activePostId = nil
+            }
             return
         }
-        activePostId = best.key
+        if activePostId != best.key {
+            activePostId = best.key
+        }
     }
 }
 
