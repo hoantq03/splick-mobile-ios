@@ -15,6 +15,7 @@ public struct InlineAttachmentPreviewImage: Identifiable, Equatable {
     public let progress: Double?
     public let width: CGFloat?
     public let height: CGFloat?
+    public let isAnimated: Bool
     public let accessibilityLabel: String
 
     public init(
@@ -25,6 +26,7 @@ public struct InlineAttachmentPreviewImage: Identifiable, Equatable {
         progress: Double? = nil,
         width: CGFloat? = nil,
         height: CGFloat? = nil,
+        isAnimated: Bool = false,
         accessibilityLabel: String = "Ảnh đính kèm"
     ) {
         self.id = id
@@ -34,6 +36,7 @@ public struct InlineAttachmentPreviewImage: Identifiable, Equatable {
         self.progress = progress
         self.width = width
         self.height = height
+        self.isAnimated = isAnimated
         self.accessibilityLabel = accessibilityLabel
     }
 }
@@ -53,12 +56,14 @@ public extension CommentAttachment {
 
 public extension MessageImageAttachment {
     var inlinePreviewImage: InlineAttachmentPreviewImage {
-        InlineAttachmentPreviewImage(
+        let animated = url.isLikelyAnimatedImage
+        return InlineAttachmentPreviewImage(
             id: mediaId ?? UUID(),
             localPreview: nil,
-            remoteURL: thumbnailURL ?? url,
+            remoteURL: animated ? url : (thumbnailURL ?? url),
             uploadStatus: .uploaded,
-            accessibilityLabel: "Ảnh đính kèm"
+            isAnimated: animated,
+            accessibilityLabel: animated ? "GIF" : "Ảnh đính kèm"
         )
     }
 }

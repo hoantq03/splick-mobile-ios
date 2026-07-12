@@ -61,25 +61,37 @@ struct InlineAttachmentImageCell: View, Equatable {
                 .resizable()
                 .scaledToFill()
         } else if let remoteURL = image.remoteURL {
-            Color.clear
-                .overlay {
-                    RemoteImage(
-                        url: remoteURL,
-                        maxPixelSize: RemoteImageMetrics.inlineAttachmentMaxPixelWidth(pointWidth: 320)
-                    ) { phase in
-                        switch phase {
-                        case .success(let loadedImage):
-                            loadedImage
-                                .resizable()
-                                .scaledToFill()
-                        default:
-                            Rectangle()
-                                .fill(SplickTheme.Colors.tertiaryBackground)
-                                .overlay { SplickSpinner(size: .small) }
+            if image.isAnimated {
+                Color.clear
+                    .overlay {
+                        AnimatedRemoteImage(
+                            url: remoteURL,
+                            contentMode: .fill,
+                            maxPixelSize: RemoteImageMetrics.inlineAttachmentMaxPixelWidth(pointWidth: 320)
+                        )
+                    }
+                    .clipped()
+            } else {
+                Color.clear
+                    .overlay {
+                        RemoteImage(
+                            url: remoteURL,
+                            maxPixelSize: RemoteImageMetrics.inlineAttachmentMaxPixelWidth(pointWidth: 320)
+                        ) { phase in
+                            switch phase {
+                            case .success(let loadedImage):
+                                loadedImage
+                                    .resizable()
+                                    .scaledToFill()
+                            default:
+                                Rectangle()
+                                    .fill(SplickTheme.Colors.tertiaryBackground)
+                                    .overlay { SplickSpinner(size: .small) }
+                            }
                         }
                     }
-                }
-                .clipped()
+                    .clipped()
+            }
         } else {
             Rectangle()
                 .fill(SplickTheme.Colors.tertiaryBackground)
