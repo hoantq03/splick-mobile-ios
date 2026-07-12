@@ -8,7 +8,9 @@ public protocol FavoriteStickerRepositoryProtocol: Sendable {
         externalId: String,
         url: URL,
         previewURL: URL?,
-        name: String?
-    ) async throws
+        name: String?,
+        width: Int?,
+        height: Int?
+    ) async throws -> Sticker
     func removeFavorite(id: UUID) async throws
 }
