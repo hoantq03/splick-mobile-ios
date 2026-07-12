@@ -46,12 +46,17 @@ public final class TabBarScrollState: ObservableObject {
         let offset = offsetNormalizer.normalize(rawOffset)
 
         if offset <= showAtTopThreshold {
+            if isVisible, abs(offset - lastOffset) < 1 {
+                lastOffset = offset
+                return
+            }
             setVisible(true)
             lastOffset = offset
             return
         }
 
         let delta = offset - lastOffset
+        guard abs(delta) > hideThreshold else { return }
         if delta > hideThreshold {
             setVisible(false)
         } else if delta < -hideThreshold {
@@ -126,7 +131,7 @@ public struct TabBarHideOnScrollModifier: ViewModifier {
                     guard scrollChromeTrackingEnabled,
                           !pullToRefreshActive,
                           !notificationsPresented else { return }
-                    guard abs(previous - offset) > 0.25 else { return }
+                    guard abs(previous - offset) > 1 else { return }
                     tabBarScrollState.updateScrollOffset(offset)
                 }
             } else {
