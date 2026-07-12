@@ -9,6 +9,7 @@ struct MessageComposerInputBar: View {
     @EnvironmentObject private var languageService: LanguageService
     @EnvironmentObject private var emojiStore: CustomEmojiStore
     @Environment(\.customEmojiDependencies) private var customEmojiDependencies
+    @Environment(\.currentUserSummary) private var currentUserSummary
 
     @Environment(\.messagingGifPickerFactory) private var messagingGifPickerFactory
 
@@ -27,6 +28,8 @@ struct MessageComposerInputBar: View {
     @State private var showAttachmentPicker = false
     @State private var showEmojiInsertPicker = false
     @State private var showCustomEmojiUpload = false
+
+    private var currentUserId: UUID? { currentUserSummary?.id }
 
     private var composerConfiguration: AttachmentComposerConfiguration {
         AttachmentComposerConfiguration(
@@ -93,7 +96,7 @@ struct MessageComposerInputBar: View {
         }
         .sheet(isPresented: $showEmojiInsertPicker) {
             EmojiPickerSheet(
-                currentUserId: nil,
+                currentUserId: currentUserId,
                 mode: .inlineInsert,
                 onPick: { emoji in insertEmoji(emoji) },
                 onOpenUpload: { openCustomEmojiUpload() }
@@ -102,7 +105,7 @@ struct MessageComposerInputBar: View {
         .sheet(isPresented: $showCustomEmojiUpload) {
             if let deps = customEmojiDependencies {
                 CustomEmojiUploadSheet(
-                    currentUserId: nil,
+                    currentUserId: currentUserId,
                     customEmojiFetcher: deps.fetcher,
                     uploadMediaUseCase: deps.uploadMediaUseCase,
                     addEmojiUseCase: deps.addEmojiUseCase,
@@ -114,6 +117,7 @@ struct MessageComposerInputBar: View {
             if let gifPickerViewModel {
                 AttachmentPickerView(
                     viewModel: gifPickerViewModel,
+                    currentUserId: currentUserId,
                     onSelectGif: { sticker in
                         showAttachmentPicker = false
                         sendGifImmediately(sticker)
@@ -125,6 +129,8 @@ struct MessageComposerInputBar: View {
                 )
                 .environmentObject(languageService)
                 .environmentObject(emojiStore)
+                .environment(\.currentUserSummary, currentUserSummary)
+                .environment(\.customEmojiDependencies, customEmojiDependencies)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
