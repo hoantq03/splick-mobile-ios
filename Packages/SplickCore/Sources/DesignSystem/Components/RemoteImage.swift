@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 import Nuke
 import NukeUI
+import Common
 
 /// Drop-in replacement for `AsyncImage` backed by Nuke memory + disk cache.
 /// Nuke is an implementation detail — feature packages import `DesignSystem` only.
@@ -64,6 +65,10 @@ public enum RemoteImageRequestFactory {
         maxPixelDimensions: CGSize? = nil,
         maxPixelWidth: CGFloat? = nil
     ) -> ImageRequest {
+        // Thumbnail decode on GIF/WebP often triggers CVPixelBuffer RGBA (-6680) warnings.
+        if url.isLikelyAnimatedImage {
+            return ImageRequest(url: url)
+        }
         if let thumbnail = thumbnailOptions(
             maxPixelDimensions: maxPixelDimensions,
             maxPixelWidth: maxPixelWidth
