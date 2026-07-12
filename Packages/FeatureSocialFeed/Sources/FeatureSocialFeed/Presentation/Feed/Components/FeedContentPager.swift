@@ -390,15 +390,16 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
     }
 
     private func refreshMountedRoots() {
-        if mountedSegmentIndices.contains(0), let streakHostingController {
-            streakHostingController.rootView = makeStreakRoot()
-        }
+        // Feed/album need live root updates (language, session, upload state).
         if mountedSegmentIndices.contains(1), let feedHostingController {
             feedHostingController.rootView = makeFeedRoot()
         }
         if mountedSegmentIndices.contains(2), let albumHostingController {
             albumHostingController.rootView = makeAlbumRoot()
         }
+        // Streak: keep the first mounted root. Replacing it resets `onFirstAppear` and
+        // can restart calendar fetches while ViewModel is still loading. StreakViewModel
+        // is a shared ObservedObject so UI still updates without remounting.
     }
 
     private func prepareHost<Content: View>(_ hosting: UIHostingController<Content>) {
