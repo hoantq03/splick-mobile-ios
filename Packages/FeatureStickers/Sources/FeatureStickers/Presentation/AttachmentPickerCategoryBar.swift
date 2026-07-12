@@ -127,11 +127,17 @@ struct AttachmentPickerCategoryBar: View {
     @ViewBuilder
     private func packThumbnail(url: URL?, fallback: String) -> some View {
         if let url {
-            AnimatedRemoteImage(
-                url: url,
-                contentMode: .fill,
-                maxPixelSize: RemoteImageMetrics.inlineAttachmentMaxPixelWidth(pointWidth: Metrics.itemSize)
-            )
+            let maxPixelSize = RemoteImageMetrics.inlineAttachmentMaxPixelWidth(pointWidth: Metrics.itemSize)
+            RemoteImage(url: url, maxPixelSize: maxPixelSize) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                default:
+                    Color.clear
+                }
+            }
             .clipShape(RoundedRectangle(cornerRadius: Metrics.cornerRadius - 2, style: .continuous))
         } else {
             Text(String(fallback.prefix(1)).uppercased())
