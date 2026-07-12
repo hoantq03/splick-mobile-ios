@@ -9,6 +9,9 @@ public final class BadgeCountService: ObservableObject {
     private var pollingTask: Task<Void, Never>?
     private var refreshTask: Task<Void, Never>?
     private let pollInterval: Duration
+    /// Skip redundant network fetches shortly after startup `apply` or a successful refresh.
+    private let minRefreshInterval: TimeInterval = 25
+    private var lastFreshAt: Date?
 
     public init(
         fetchBadgeCountsUseCase: FetchBadgeCountsUseCaseProtocol,
@@ -22,7 +25,12 @@ public final class BadgeCountService: ObservableObject {
         pollingTask?.cancel()
     }
 
-    public func refresh() async {
+    /// - Parameter force: When true, bypasses the freshness window (use after mutations).
+    public func refresh(force: Bool = false) async {
+        if !force, let lastFreshAt, Date().timeIntervalSince(lastFreshAt) < minRefreshInterval {
+            return
+        }
+
         if let refreshTask {
             await refreshTask.value
             return
@@ -42,7 +50,7 @@ public final class BadgeCountService: ObservableObject {
 
         pollingTask = Task { [weak self] in
             guard let self else { return }
-            await self.refresh()
+            // Defer the first poll — startup / scene activation already hydrate badges.
             while !Task.isCancelled {
                 try? await Task.sleep(for: self.pollInterval)
                 guard !Task.isCancelled else { return }
@@ -59,6 +67,7 @@ public final class BadgeCountService: ObservableObject {
     private func performRefresh() async {
         do {
             counts = try await fetchBadgeCountsUseCase.execute()
+            lastFreshAt = Date()
         } catch {
             Log.error(error, category: .notification, metadata: ["action": "refreshBadgeCounts"])
         }
@@ -66,5 +75,6 @@ public final class BadgeCountService: ObservableObject {
 
     public func apply(_ newCounts: TabBadgeCounts) {
         counts = newCounts
+        lastFreshAt = Date()
     }
 }
