@@ -227,6 +227,10 @@ final class DependencyContainer: ObservableObject {
         AddFavoriteStickerUseCase(repository: favoriteStickerRepository)
     }()
 
+    lazy var removeFavoriteStickerUseCase: RemoveFavoriteStickerUseCaseProtocol = {
+        RemoveFavoriteStickerUseCase(repository: favoriteStickerRepository)
+    }()
+
     func makeGifPickerViewModel(groupId: UUID?) -> GifPickerViewModel {
         GifPickerViewModel(
             fetchStickersUseCase: fetchStickersUseCase,
@@ -234,6 +238,7 @@ final class DependencyContainer: ObservableObject {
             fetchSuggestionsUseCase: fetchSuggestionsUseCase,
             fetchFavoriteStickersUseCase: fetchFavoriteStickersUseCase,
             addFavoriteStickerUseCase: addFavoriteStickerUseCase,
+            removeFavoriteStickerUseCase: removeFavoriteStickerUseCase,
             registerShareUseCase: registerStickerShareUseCase,
             groupId: groupId
         )
