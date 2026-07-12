@@ -12,6 +12,8 @@ public struct Sticker: Identifiable, Equatable, Sendable {
     public let source: StickerSource
     public let width: Int?
     public let height: Int?
+    /// Server-side favorite row id when loaded from or saved to favorites API.
+    public let favoriteId: UUID?
 
     public init(
         id: String,
@@ -19,7 +21,8 @@ public struct Sticker: Identifiable, Equatable, Sendable {
         previewURL: URL? = nil,
         source: StickerSource,
         width: Int? = nil,
-        height: Int? = nil
+        height: Int? = nil,
+        favoriteId: UUID? = nil
     ) {
         self.id = id
         self.url = url
@@ -27,5 +30,18 @@ public struct Sticker: Identifiable, Equatable, Sendable {
         self.source = source
         self.width = width
         self.height = height
+        self.favoriteId = favoriteId
+    }
+
+    public func withFavoriteId(_ favoriteId: UUID?) -> Sticker {
+        Sticker(
+            id: id,
+            url: url,
+            previewURL: previewURL,
+            source: source,
+            width: width,
+            height: height,
+            favoriteId: favoriteId
+        )
     }
 }
