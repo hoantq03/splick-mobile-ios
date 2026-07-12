@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import Common
 import DesignSystem
 import Localization
@@ -7,11 +8,18 @@ import SplickDomain
 public struct AttachmentPickerView: View {
     @ObservedObject private var viewModel: GifPickerViewModel
     @EnvironmentObject private var languageService: LanguageService
+    @Environment(\.currentUserSummary) private var currentUserSummary
 
     private let options: AttachmentPickerOptions
     private let currentUserId: UUID?
     private let onSelectGif: (Sticker) -> Void
     private let onSelectEmoji: (String) -> Void
+
+    @State private var peekedSticker: Sticker?
+
+    private var resolvedUserId: UUID? {
+        currentUserId ?? currentUserSummary?.id
+    }
 
     private enum GridLayout {
         static let columnsPerRow = 4
@@ -50,7 +58,8 @@ public struct AttachmentPickerView: View {
                 options: options,
                 onSelect: viewModel.onCategorySelected
             )
-            .padding(.top, SplickTheme.Spacing.xxs)
+            .padding(.top, SplickTheme.Spacing.sm)
+            .padding(.bottom, SplickTheme.Spacing.xs)
 
             if viewModel.isSearchActive, options.allowsGifSelection {
                 searchBar
@@ -81,6 +90,29 @@ public struct AttachmentPickerView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear { viewModel.onAppear() }
+        .overlay {
+            if let peekedSticker {
+                StickerGifPeekOverlay(
+                    sticker: peekedSticker,
+                    isFavorite: viewModel.isFavorite(peekedSticker.id),
+                    isTogglingFavorite: viewModel.isTogglingFavorite(peekedSticker.id),
+                    addFavoriteTitle: languageService.text(.stickersAddFavorite),
+                    removeFavoriteTitle: languageService.text(.stickersRemoveFavorite),
+                    onToggleFavorite: {
+                        viewModel.toggleFavorite(peekedSticker)
+                    },
+                    onDismiss: {
+                        self.peekedSticker = nil
+                    },
+                    onSelect: {
+                        let sticker = peekedSticker
+                        self.peekedSticker = nil
+                        handleStickerSelection(sticker)
+                    }
+                )
+                .zIndex(10)
+            }
+        }
     }
 
     private var searchBar: some View {
@@ -106,7 +138,7 @@ public struct AttachmentPickerView: View {
         case .emoji:
             ScrollView {
                 EmojiPickerContentView(
-                    currentUserId: currentUserId,
+                    currentUserId: resolvedUserId,
                     searchQuery: viewModel.searchText,
                     onPick: onSelectEmoji
                 )
@@ -214,69 +246,15 @@ public struct AttachmentPickerView: View {
 
     @ViewBuilder
     private func stickerCell(sticker: Sticker) -> some View {
-        gifThumbnail(url: sticker.previewURL ?? sticker.url)
-            .overlay(alignment: .topTrailing) {
-                if options.allowsGifSelection {
-                    favoriteStarButton(for: sticker)
-                }
+        StickerGifGridCell(
+            sticker: sticker,
+            allowsPeek: options.allowsGifSelection,
+            isPeeking: peekedSticker?.id == sticker.id,
+            thumbnail: { gifThumbnail(url: sticker.previewURL ?? sticker.url) },
+            onSelect: { handleStickerSelection(sticker) },
+            onPeek: {
+                peekedSticker = sticker
             }
-            .contentShape(
-                RoundedRectangle(cornerRadius: GridLayout.cornerRadius, style: .continuous)
-            )
-            .onTapGesture {
-                handleStickerSelection(sticker)
-            }
-            .contextMenu {
-                if options.allowsGifSelection {
-                    if viewModel.isFavorite(sticker.id) {
-                        Button(role: .destructive) {
-                            viewModel.toggleFavorite(sticker)
-                        } label: {
-                            Label(
-                                languageService.text(.stickersRemoveFavorite),
-                                systemImage: "star.slash"
-                            )
-                        }
-                    } else {
-                        Button {
-                            viewModel.toggleFavorite(sticker)
-                        } label: {
-                            Label(
-                                languageService.text(.stickersAddFavorite),
-                                systemImage: "star"
-                            )
-                        }
-                    }
-                }
-            }
-    }
-
-    private func favoriteStarButton(for sticker: Sticker) -> some View {
-        Button {
-            viewModel.toggleFavorite(sticker)
-        } label: {
-            Group {
-                if viewModel.isTogglingFavorite(sticker.id) {
-                    ProgressView()
-                        .scaleEffect(0.7)
-                } else {
-                    Image(systemName: viewModel.isFavorite(sticker.id) ? "star.fill" : "star")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(
-                            viewModel.isFavorite(sticker.id) ? Color.yellow : Color.white
-                        )
-                }
-            }
-            .frame(width: 32, height: 32)
-            .background(Color.black.opacity(0.25), in: Circle())
-            .shadow(color: .black.opacity(0.35), radius: 2, x: 0, y: 1)
-        }
-        .buttonStyle(.plain)
-        .padding(4)
-        .accessibilityLabel(
-            viewModel.isFavorite(sticker.id)
-                ? languageService.text(.stickersRemoveFavorite)
-                : languageService.text(.stickersAddFavorite)
         )
     }
 
@@ -373,3 +351,92 @@ public struct AttachmentPickerView: View {
         }
     }
 }
+
+// MARK: - Grid cell with iOS-like press → peek
+
+private enum StickerGifPressMetrics {
+    /// Matches UILongPressGestureRecognizer default feel.
+    static let duration: Double = 0.5
+    /// Subtle grow while finger is down (before the pop).
+    static let highlightScale: CGFloat = 1.1
+    static let maximumDistance: CGFloat = 14
+    static let peekImpact = UIImpactFeedbackGenerator(style: .rigid)
+}
+
+private struct StickerGifGridCell<Thumbnail: View>: View {
+    let sticker: Sticker
+    let allowsPeek: Bool
+    let isPeeking: Bool
+    let thumbnail: () -> Thumbnail
+    let onSelect: () -> Void
+    let onPeek: () -> Void
+
+    @State private var isPressing = false
+    @State private var didTriggerPeek = false
+
+    var body: some View {
+        thumbnail()
+            .contentShape(
+                RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.tile, style: .continuous)
+            )
+            .scaleEffect(cellScale)
+            .shadow(
+                color: .black.opacity(isPressing && !isPeeking ? 0.22 : 0),
+                radius: isPressing && !isPeeking ? 10 : 0,
+                y: isPressing && !isPeeking ? 6 : 0
+            )
+            .zIndex(isPressing || isPeeking ? 2 : 0)
+            .opacity(isPeeking ? 0 : 1)
+            .animation(.easeOut(duration: 0.12), value: isPeeking)
+            .onTapGesture(perform: onSelect)
+            .onLongPressGesture(
+                minimumDuration: StickerGifPressMetrics.duration,
+                maximumDistance: StickerGifPressMetrics.maximumDistance,
+                pressing: handlePressing(_:),
+                perform: handlePeekTriggered
+            )
+            .onChange(of: isPeeking) { peeking in
+                if !peeking {
+                    didTriggerPeek = false
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                        isPressing = false
+                    }
+                }
+            }
+    }
+
+    private var cellScale: CGFloat {
+        if isPeeking { return StickerGifPressMetrics.highlightScale }
+        return isPressing ? StickerGifPressMetrics.highlightScale : 1
+    }
+
+    private func handlePressing(_ pressing: Bool) {
+        guard allowsPeek else { return }
+
+        if pressing {
+            didTriggerPeek = false
+            StickerGifPressMetrics.peekImpact.prepare()
+            // Gradual grow while holding — duration matches long-press threshold.
+            withAnimation(.easeIn(duration: StickerGifPressMetrics.duration)) {
+                isPressing = true
+            }
+            return
+        }
+
+        // Finger lifted before threshold, or after peek already opened.
+        if !didTriggerPeek {
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                isPressing = false
+            }
+        }
+    }
+
+    private func handlePeekTriggered() {
+        guard allowsPeek else { return }
+        didTriggerPeek = true
+        StickerGifPressMetrics.peekImpact.impactOccurred(intensity: 1.0)
+        onPeek()
+    }
+}
+
+
