@@ -132,8 +132,8 @@ public struct FeedView: View {
         .environment(\.feedSegmentScrollState, feedSegmentScrollState)
         .onFirstAppear {
             viewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
-            guard viewModel.posts.isEmpty else { return }
-            Task { await viewModel.loadFeed() }
+            // Initial posts come from AppStartupCoordinator (`GET /v1/app/startup`).
+            // Fallback load runs from bootstrap when startup leaves the feed empty.
         }
         .onChange(of: currentUserSummary?.id) { _ in
             viewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
