@@ -2,82 +2,114 @@ import Foundation
 import Common
 import SplickDomain
 
-public enum StickerPickerTab: String, CaseIterable, Identifiable, Sendable {
-    case klipy
-    case custom
-
-    public var id: String { rawValue }
-
-    public var title: String {
-        switch self {
-        case .klipy: return "KLIPY Trending"
-        case .custom: return "Splick Custom"
-        }
-    }
-}
-
 public typealias GifPickerViewModelFactory = (UUID?) -> GifPickerViewModel
 
 @MainActor
 public final class GifPickerViewModel: ObservableObject {
-    @Published public var selectedTab: StickerPickerTab = .klipy
+    @Published public var selectedCategory: AttachmentPickerCategory = .trending
+    @Published public var isSearchActive = false
     @Published public var searchText = ""
     @Published public var stickersState: LoadingState<[Sticker]> = .idle
+    @Published public var favoritesState: LoadingState<[Sticker]> = .idle
     @Published public var errorMessage: String?
 
     @Published public var categories: [StickerCategory] = []
-    @Published public var trendingTerms: [String] = []
     @Published public var autocompleteSuggestions: [String] = []
     @Published public var relatedSuggestions: [String] = []
+    @Published public var isLoadingMore = false
 
     public let groupId: UUID?
 
     private let fetchStickersUseCase: FetchStickersUseCaseProtocol
     private let fetchCategoriesUseCase: FetchStickerCategoriesUseCaseProtocol
-    private let fetchTrendingTermsUseCase: FetchTrendingTermsUseCaseProtocol
     private let fetchSuggestionsUseCase: FetchSuggestionsUseCaseProtocol
+    private let fetchFavoriteStickersUseCase: FetchFavoriteStickersUseCaseProtocol
+    private let addFavoriteStickerUseCase: AddFavoriteStickerUseCaseProtocol
     private let registerShareUseCase: RegisterStickerShareUseCaseProtocol
 
     private var searchTask: Task<Void, Never>?
+    private var nextStickerPosition: String?
+    private var supportsStickerPagination = true
 
     public init(
         fetchStickersUseCase: FetchStickersUseCaseProtocol,
         fetchCategoriesUseCase: FetchStickerCategoriesUseCaseProtocol,
-        fetchTrendingTermsUseCase: FetchTrendingTermsUseCaseProtocol,
         fetchSuggestionsUseCase: FetchSuggestionsUseCaseProtocol,
+        fetchFavoriteStickersUseCase: FetchFavoriteStickersUseCaseProtocol,
+        addFavoriteStickerUseCase: AddFavoriteStickerUseCaseProtocol,
         registerShareUseCase: RegisterStickerShareUseCaseProtocol,
         groupId: UUID?
     ) {
         self.fetchStickersUseCase = fetchStickersUseCase
         self.fetchCategoriesUseCase = fetchCategoriesUseCase
-        self.fetchTrendingTermsUseCase = fetchTrendingTermsUseCase
         self.fetchSuggestionsUseCase = fetchSuggestionsUseCase
+        self.fetchFavoriteStickersUseCase = fetchFavoriteStickersUseCase
+        self.addFavoriteStickerUseCase = addFavoriteStickerUseCase
         self.registerShareUseCase = registerShareUseCase
         self.groupId = groupId
     }
 
-    public var showsCustomTab: Bool { groupId != nil }
+    public var showsCustomPack: Bool { groupId != nil }
 
     public var isSearchEmpty: Bool {
         searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    public func onAppear() {
-        loadStickers(immediate: true)
-        loadDiscoveryMetadata()
+    public var showsStickerContent: Bool {
+        selectedCategory != .emoji
     }
 
-    public func onTabChanged(_ tab: StickerPickerTab) {
-        selectedTab = tab
-        clearSuggestionState()
+    public func onAppear() {
+        loadDiscoveryMetadata()
         loadStickers(immediate: true)
-        if tab == .klipy {
-            loadDiscoveryMetadata()
+    }
+
+    public func onCategorySelected(_ category: AttachmentPickerCategory) {
+        switch category {
+        case .search:
+            isSearchActive.toggle()
+            if isSearchActive {
+                selectedCategory = .trending
+            }
+            return
+        case .emoji:
+            selectedCategory = .emoji
+            isSearchActive = false
+            return
+        case .favorites:
+            selectedCategory = .favorites
+            isSearchActive = false
+            loadFavorites()
+            return
+        case .trending:
+            selectedCategory = .trending
+            isSearchActive = false
+            searchText = ""
+            autocompleteSuggestions = []
+            relatedSuggestions = []
+            loadStickers(immediate: true)
+            return
+        case .klipyPack(let stickerCategory):
+            selectedCategory = .klipyPack(stickerCategory)
+            isSearchActive = false
+            applySearchTerm(stickerCategory.id)
+            return
+        case .customPack:
+            selectedCategory = .customPack
+            isSearchActive = false
+            searchText = ""
+            autocompleteSuggestions = []
+            relatedSuggestions = []
+            loadStickers(immediate: true)
+            return
         }
     }
 
     public func onSearchTextChanged(_ text: String) {
         searchText = text
+        isSearchActive = true
+        selectedCategory = .trending
+
         searchTask?.cancel()
         searchTask = Task {
             try? await Task.sleep(for: .milliseconds(AppConstants.Klipy.searchDebounceMilliseconds))
@@ -87,7 +119,6 @@ public final class GifPickerViewModel: ObservableObject {
             if trimmed.isEmpty {
                 autocompleteSuggestions = []
                 relatedSuggestions = []
-                loadDiscoveryMetadata()
             } else {
                 await loadAutocomplete(for: trimmed)
             }
@@ -95,16 +126,9 @@ public final class GifPickerViewModel: ObservableObject {
         }
     }
 
-    public func onCategoryTapped(_ category: StickerCategory) {
-        applySearchTerm(category.id)
-    }
-
     public func onSuggestionTapped(_ term: String) {
         applySearchTerm(term)
-    }
-
-    public func onTrendingTermTapped(_ term: String) {
-        applySearchTerm(term)
+        isSearchActive = true
     }
 
     public func selectSticker(_ sticker: Sticker) {
@@ -115,14 +139,34 @@ public final class GifPickerViewModel: ObservableObject {
                     gifId: sticker.id,
                     searchQuery: query.isEmpty ? nil : query
                 )
+                try? await addFavoriteStickerUseCase.execute(sticker: sticker, name: nil)
             }
         }
     }
 
+    public func loadMoreStickersIfNeeded(currentStickerId: String) {
+        guard supportsStickerPagination,
+              let nextPosition = nextStickerPosition,
+              !nextPosition.isEmpty,
+              !isLoadingMore,
+              case .loaded(let stickers) = stickersState,
+              stickers.last?.id == currentStickerId else {
+            return
+        }
+        loadMoreStickers()
+    }
+
     public func retry() {
-        loadStickers(immediate: true)
-        if selectedTab == .klipy, isSearchEmpty {
-            loadDiscoveryMetadata()
+        switch selectedCategory {
+        case .favorites:
+            loadFavorites()
+        case .emoji:
+            break
+        default:
+            loadStickers(immediate: true)
+            if isSearchEmpty {
+                loadDiscoveryMetadata()
+            }
         }
     }
 
@@ -134,37 +178,30 @@ public final class GifPickerViewModel: ObservableObject {
         loadStickers(immediate: true)
     }
 
-    private func clearSuggestionState() {
-        autocompleteSuggestions = []
-        relatedSuggestions = []
-        if selectedTab != .klipy {
-            categories = []
-            trendingTerms = []
+    private func loadDiscoveryMetadata() {
+        Task {
+            if let loadedCategories = try? await fetchCategoriesUseCase.execute() {
+                categories = loadedCategories
+            }
         }
     }
 
-    private func loadDiscoveryMetadata() {
-        guard selectedTab == .klipy else { return }
+    private func loadFavorites() {
+        favoritesState = .loading
+        errorMessage = nil
 
         Task {
-            async let categoriesResult = fetchCategoriesUseCase.execute()
-            async let trendingResult = fetchTrendingTermsUseCase.execute()
-
-            if let loadedCategories = try? await categoriesResult {
-                categories = loadedCategories
-            }
-            if let loadedTerms = try? await trendingResult {
-                trendingTerms = loadedTerms
+            do {
+                let stickers = try await fetchFavoriteStickersUseCase.execute()
+                favoritesState = .loaded(stickers)
+            } catch {
+                favoritesState = .failed(error.localizedDescription)
+                errorMessage = error.localizedDescription
             }
         }
     }
 
     private func loadAutocomplete(for query: String) async {
-        guard selectedTab == .klipy else {
-            autocompleteSuggestions = []
-            return
-        }
-
         if let suggestions = try? await fetchSuggestionsUseCase.execute(
             query: query,
             type: .autocomplete
@@ -176,11 +213,6 @@ public final class GifPickerViewModel: ObservableObject {
     }
 
     private func loadRelatedSuggestions(for query: String) async {
-        guard selectedTab == .klipy else {
-            relatedSuggestions = []
-            return
-        }
-
         if let suggestions = try? await fetchSuggestionsUseCase.execute(
             query: query,
             type: .searchSuggestions
@@ -198,23 +230,28 @@ public final class GifPickerViewModel: ObservableObject {
 
         stickersState = .loading
         errorMessage = nil
+        isLoadingMore = false
+        nextStickerPosition = nil
+        supportsStickerPagination = selectedCategory != .customPack
 
         let query = searchText
         let source = currentSource
 
         Task {
             do {
-                if selectedTab == .custom, groupId == nil {
+                if selectedCategory == .customPack, groupId == nil {
                     throw StickerError.groupRequired
                 }
-                let stickers = try await fetchStickersUseCase.execute(
+                let page = try await fetchStickersUseCase.execute(
                     query: query,
-                    source: source
+                    source: source,
+                    position: nil
                 )
-                stickersState = .loaded(stickers)
+                stickersState = .loaded(page.stickers)
+                nextStickerPosition = page.nextPosition
 
                 let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-                if selectedTab == .klipy, !trimmed.isEmpty {
+                if selectedCategory != .customPack, !trimmed.isEmpty {
                     await loadRelatedSuggestions(for: trimmed)
                 } else {
                     relatedSuggestions = []
@@ -229,15 +266,46 @@ public final class GifPickerViewModel: ObservableObject {
         }
     }
 
+    private func loadMoreStickers() {
+        guard supportsStickerPagination,
+              let position = nextStickerPosition,
+              !position.isEmpty,
+              !isLoadingMore,
+              case .loaded(let currentStickers) = stickersState else {
+            return
+        }
+
+        isLoadingMore = true
+        let query = searchText
+        let source = currentSource
+
+        Task {
+            defer { isLoadingMore = false }
+
+            do {
+                let page = try await fetchStickersUseCase.execute(
+                    query: query,
+                    source: source,
+                    position: position
+                )
+                let merged = currentStickers + page.stickers
+                stickersState = .loaded(merged)
+                nextStickerPosition = page.nextPosition
+            } catch {
+                // Keep existing results if pagination fails.
+            }
+        }
+    }
+
     private var currentSource: StickerSource {
-        switch selectedTab {
-        case .klipy:
-            return .klipy
-        case .custom:
+        switch selectedCategory {
+        case .customPack:
             guard let groupId else {
                 return .klipy
             }
             return .custom(groupId: groupId)
+        default:
+            return .klipy
         }
     }
 }
