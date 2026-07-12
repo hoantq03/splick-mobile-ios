@@ -102,6 +102,9 @@ public final class FeedViewModel: ObservableObject {
 
     public func applyStartupPosts(_ startupPosts: [Post]) {
         guard !startupPosts.isEmpty else { return }
+        // Cancel any in-flight `GET /v1/feed` that raced startup.
+        loadFeedTask?.cancel()
+        loadFeedTask = nil
         posts = startupPosts
         state = .loaded(startupPosts)
         currentPage = 0
