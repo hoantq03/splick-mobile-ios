@@ -18,7 +18,7 @@ public final class FetchFavoriteStickersUseCase: FetchFavoriteStickersUseCasePro
 }
 
 public protocol AddFavoriteStickerUseCaseProtocol: Sendable {
-    func execute(sticker: Sticker, name: String?) async throws
+    func execute(sticker: Sticker, name: String?) async throws -> Sticker
 }
 
 public final class AddFavoriteStickerUseCase: AddFavoriteStickerUseCaseProtocol, Sendable {
@@ -28,7 +28,7 @@ public final class AddFavoriteStickerUseCase: AddFavoriteStickerUseCaseProtocol,
         self.repository = repository
     }
 
-    public func execute(sticker: Sticker, name: String?) async throws {
+    public func execute(sticker: Sticker, name: String?) async throws -> Sticker {
         let provider: String
         switch sticker.source {
         case .klipy:
@@ -37,12 +37,30 @@ public final class AddFavoriteStickerUseCase: AddFavoriteStickerUseCaseProtocol,
             provider = "custom"
         }
 
-        try await repository.addFavorite(
+        return try await repository.addFavorite(
             provider: provider,
             externalId: sticker.id,
             url: sticker.url,
             previewURL: sticker.previewURL,
-            name: name
+            name: name,
+            width: sticker.width,
+            height: sticker.height
         )
+    }
+}
+
+public protocol RemoveFavoriteStickerUseCaseProtocol: Sendable {
+    func execute(favoriteId: UUID) async throws
+}
+
+public final class RemoveFavoriteStickerUseCase: RemoveFavoriteStickerUseCaseProtocol, Sendable {
+    private let repository: FavoriteStickerRepositoryProtocol
+
+    public init(repository: FavoriteStickerRepositoryProtocol) {
+        self.repository = repository
+    }
+
+    public func execute(favoriteId: UUID) async throws {
+        try await repository.removeFavorite(id: favoriteId)
     }
 }
