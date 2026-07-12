@@ -12,6 +12,8 @@ public final class GifPickerViewModel: ObservableObject {
     @Published public var stickersState: LoadingState<[Sticker]> = .idle
     @Published public var favoritesState: LoadingState<[Sticker]> = .idle
     @Published public var errorMessage: String?
+    @Published private(set) var favoriteExternalIds: Set<String> = []
+    @Published private(set) var togglingFavoriteIds: Set<String> = []
 
     @Published public var categories: [StickerCategory] = []
     @Published public var autocompleteSuggestions: [String] = []
@@ -25,11 +27,13 @@ public final class GifPickerViewModel: ObservableObject {
     private let fetchSuggestionsUseCase: FetchSuggestionsUseCaseProtocol
     private let fetchFavoriteStickersUseCase: FetchFavoriteStickersUseCaseProtocol
     private let addFavoriteStickerUseCase: AddFavoriteStickerUseCaseProtocol
+    private let removeFavoriteStickerUseCase: RemoveFavoriteStickerUseCaseProtocol
     private let registerShareUseCase: RegisterStickerShareUseCaseProtocol
 
     private var searchTask: Task<Void, Never>?
     private var nextStickerPosition: String?
     private var supportsStickerPagination = true
+    private var favoriteIdByExternalId: [String: UUID] = [:]
 
     public init(
         fetchStickersUseCase: FetchStickersUseCaseProtocol,
@@ -37,6 +41,7 @@ public final class GifPickerViewModel: ObservableObject {
         fetchSuggestionsUseCase: FetchSuggestionsUseCaseProtocol,
         fetchFavoriteStickersUseCase: FetchFavoriteStickersUseCaseProtocol,
         addFavoriteStickerUseCase: AddFavoriteStickerUseCaseProtocol,
+        removeFavoriteStickerUseCase: RemoveFavoriteStickerUseCaseProtocol,
         registerShareUseCase: RegisterStickerShareUseCaseProtocol,
         groupId: UUID?
     ) {
@@ -45,6 +50,7 @@ public final class GifPickerViewModel: ObservableObject {
         self.fetchSuggestionsUseCase = fetchSuggestionsUseCase
         self.fetchFavoriteStickersUseCase = fetchFavoriteStickersUseCase
         self.addFavoriteStickerUseCase = addFavoriteStickerUseCase
+        self.removeFavoriteStickerUseCase = removeFavoriteStickerUseCase
         self.registerShareUseCase = registerShareUseCase
         self.groupId = groupId
     }
@@ -59,9 +65,18 @@ public final class GifPickerViewModel: ObservableObject {
         selectedCategory != .emoji
     }
 
+    public func isFavorite(_ externalId: String) -> Bool {
+        favoriteExternalIds.contains(externalId)
+    }
+
+    public func isTogglingFavorite(_ externalId: String) -> Bool {
+        togglingFavoriteIds.contains(externalId)
+    }
+
     public func onAppear() {
         loadDiscoveryMetadata()
         loadStickers(immediate: true)
+        refreshFavoriteIndex()
     }
 
     public func onCategorySelected(_ category: AttachmentPickerCategory) {
@@ -132,15 +147,25 @@ public final class GifPickerViewModel: ObservableObject {
     }
 
     public func selectSticker(_ sticker: Sticker) {
-        if case .klipy = sticker.source {
-            let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-            Task {
+        Task {
+            if case .klipy = sticker.source {
+                let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
                 await registerShareUseCase.execute(
                     gifId: sticker.id,
                     searchQuery: query.isEmpty ? nil : query
                 )
-                try? await addFavoriteStickerUseCase.execute(sticker: sticker, name: nil)
             }
+            await addFavoriteIfNeeded(sticker)
+        }
+    }
+
+    public func toggleFavorite(_ sticker: Sticker) {
+        guard !togglingFavoriteIds.contains(sticker.id) else { return }
+
+        if isFavorite(sticker.id) {
+            removeFavorite(sticker)
+        } else {
+            saveFavorite(sticker)
         }
     }
 
@@ -193,12 +218,134 @@ public final class GifPickerViewModel: ObservableObject {
         Task {
             do {
                 let stickers = try await fetchFavoriteStickersUseCase.execute()
-                favoritesState = .loaded(stickers)
+                applyFavoritesSnapshot(stickers)
             } catch {
-                favoritesState = .failed(error.localizedDescription)
-                errorMessage = error.localizedDescription
+                favoritesState = .failed(userFacingMessage(from: error))
+                errorMessage = userFacingMessage(from: error)
             }
         }
+    }
+
+    private func refreshFavoriteIndex() {
+        Task {
+            do {
+                let stickers = try await fetchFavoriteStickersUseCase.execute()
+                syncFavoriteIndex(from: stickers)
+            } catch {
+                // Star state may be stale until favorites load succeeds.
+            }
+        }
+    }
+
+    private func saveFavorite(_ sticker: Sticker) {
+        togglingFavoriteIds.insert(sticker.id)
+        errorMessage = nil
+
+        Task {
+            defer { togglingFavoriteIds.remove(sticker.id) }
+
+            do {
+                let saved = try await addFavoriteStickerUseCase.execute(sticker: sticker, name: nil)
+                applySavedFavorite(saved)
+            } catch {
+                errorMessage = userFacingMessage(from: error)
+            }
+        }
+    }
+
+    private func removeFavorite(_ sticker: Sticker) {
+        guard let favoriteId = sticker.favoriteId ?? favoriteIdByExternalId[sticker.id] else {
+            errorMessage = userFacingMessage(from: NetworkError.notFound)
+            return
+        }
+
+        togglingFavoriteIds.insert(sticker.id)
+        errorMessage = nil
+
+        Task {
+            defer { togglingFavoriteIds.remove(sticker.id) }
+
+            do {
+                try await removeFavoriteStickerUseCase.execute(favoriteId: favoriteId)
+                unmarkFavorite(externalId: sticker.id)
+            } catch {
+                errorMessage = userFacingMessage(from: error)
+            }
+        }
+    }
+
+    private func addFavoriteIfNeeded(_ sticker: Sticker) async {
+        guard !isFavorite(sticker.id) else { return }
+
+        togglingFavoriteIds.insert(sticker.id)
+        defer { togglingFavoriteIds.remove(sticker.id) }
+
+        do {
+            let saved = try await addFavoriteStickerUseCase.execute(sticker: sticker, name: nil)
+            applySavedFavorite(saved)
+        } catch {
+            errorMessage = userFacingMessage(from: error)
+        }
+    }
+
+    private func applySavedFavorite(_ saved: Sticker) {
+        markFavorite(saved)
+        appendToFavoritesList(saved)
+    }
+
+    private func applyFavoritesSnapshot(_ stickers: [Sticker]) {
+        syncFavoriteIndex(from: stickers)
+        favoritesState = .loaded(stickers)
+    }
+
+    private func syncFavoriteIndex(from stickers: [Sticker]) {
+        favoriteExternalIds = Set(stickers.map(\.id))
+        favoriteIdByExternalId = Dictionary(
+            uniqueKeysWithValues: stickers.compactMap { sticker in
+                guard let favoriteId = sticker.favoriteId else { return nil }
+                return (sticker.id, favoriteId)
+            }
+        )
+    }
+
+    private func markFavorite(_ sticker: Sticker) {
+        favoriteExternalIds.insert(sticker.id)
+        if let favoriteId = sticker.favoriteId {
+            favoriteIdByExternalId[sticker.id] = favoriteId
+        }
+    }
+
+    private func unmarkFavorite(externalId: String) {
+        favoriteExternalIds.remove(externalId)
+        favoriteIdByExternalId.removeValue(forKey: externalId)
+        if case .loaded(let stickers) = favoritesState {
+            let filtered = stickers.filter { $0.id != externalId }
+            favoritesState = .loaded(filtered)
+        }
+    }
+
+    private func appendToFavoritesList(_ sticker: Sticker) {
+        switch favoritesState {
+        case .loaded(let stickers):
+            guard !stickers.contains(where: { $0.id == sticker.id }) else { return }
+            favoritesState = .loaded([sticker] + stickers)
+        case .idle, .failed:
+            favoritesState = .loaded([sticker])
+        case .loading:
+            break
+        }
+    }
+
+    private func userFacingMessage(from error: Error) -> String {
+        if let networkError = error as? NetworkError {
+            return networkError.userMessage
+        }
+        if let localized = error as? LocalizedError,
+           let description = localized.errorDescription,
+           !description.isEmpty {
+            return description
+        }
+        return error.localizedDescription
     }
 
     private func loadAutocomplete(for query: String) async {
@@ -260,8 +407,8 @@ public final class GifPickerViewModel: ObservableObject {
                 stickersState = .failed(error.localizedDescription)
                 errorMessage = error.localizedDescription
             } catch {
-                stickersState = .failed(error.localizedDescription)
-                errorMessage = error.localizedDescription
+                stickersState = .failed(userFacingMessage(from: error))
+                errorMessage = userFacingMessage(from: error)
             }
         }
     }
