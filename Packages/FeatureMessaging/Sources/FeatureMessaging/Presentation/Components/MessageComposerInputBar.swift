@@ -115,8 +115,8 @@ struct MessageComposerInputBar: View {
                 AttachmentPickerView(
                     viewModel: gifPickerViewModel,
                     onSelectGif: { sticker in
-                        appendGifSticker(sticker)
                         showAttachmentPicker = false
+                        sendGifImmediately(sticker)
                     },
                     onSelectEmoji: { emoji in
                         insertEmoji(emoji)
@@ -155,11 +155,6 @@ struct MessageComposerInputBar: View {
         }
     }
 
-    private var remainingGifSlots: Int {
-        let gifCount = attachmentDrafts.filter { $0.kind == .gif }.count
-        return Swift.max(0, CommentAttachmentValidator.maxGifs - gifCount)
-    }
-
     private var canSend: Bool {
         guard !isSending else { return false }
         guard !attachmentDrafts.contains(where: { $0.phase == .loading }) else { return false }
@@ -188,30 +183,16 @@ struct MessageComposerInputBar: View {
         }
     }
 
-    private func appendGifSticker(_ sticker: Sticker) {
+    /// Tap-to-send: GIF goes out immediately (multi-select stays photo/video only).
+    private func sendGifImmediately(_ sticker: Sticker) {
         let submission = CommentSubmissionAttachment(
             kind: .gif,
             remoteURL: sticker.url,
             fileName: "gif-\(sticker.id).gif"
         )
-        if let error = CommentAttachmentValidator.canAdd(
-            CommentAttachment(kind: .gif, fileName: submission.fileName),
-            to: CommentAttachmentValidator.previewModels(
-                from: AttachmentDraftImporter.readySubmissions(from: attachmentDrafts)
-            )
-        ) {
-            validationMessage = error
-            return
-        }
         validationMessage = nil
-        attachmentDrafts.append(
-            CommentAttachmentDraft(
-                id: UUID(),
-                kind: .gif,
-                phase: .ready,
-                previewImage: nil,
-                submission: submission
-            )
-        )
+        let messageText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        text = ""
+        onSend(messageText, [submission])
     }
 }
