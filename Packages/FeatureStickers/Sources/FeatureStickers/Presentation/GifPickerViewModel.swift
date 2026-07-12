@@ -294,17 +294,19 @@ public final class GifPickerViewModel: ObservableObject {
     }
 
     private func applyFavoritesSnapshot(_ stickers: [Sticker]) {
-        syncFavoriteIndex(from: stickers)
-        favoritesState = .loaded(stickers)
+        let unique = Self.uniqueStickers(stickers)
+        syncFavoriteIndex(from: unique)
+        favoritesState = .loaded(unique)
     }
 
     private func syncFavoriteIndex(from stickers: [Sticker]) {
         favoriteExternalIds = Set(stickers.map(\.id))
         favoriteIdByExternalId = Dictionary(
-            uniqueKeysWithValues: stickers.compactMap { sticker in
+            stickers.compactMap { sticker -> (String, UUID)? in
                 guard let favoriteId = sticker.favoriteId else { return nil }
                 return (sticker.id, favoriteId)
-            }
+            },
+            uniquingKeysWith: { _, latest in latest }
         )
     }
 
@@ -394,7 +396,7 @@ public final class GifPickerViewModel: ObservableObject {
                     source: source,
                     position: nil
                 )
-                stickersState = .loaded(page.stickers)
+                stickersState = .loaded(Self.uniqueStickers(page.stickers))
                 nextStickerPosition = page.nextPosition
 
                 let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -435,13 +437,26 @@ public final class GifPickerViewModel: ObservableObject {
                     source: source,
                     position: position
                 )
-                let merged = currentStickers + page.stickers
-                stickersState = .loaded(merged)
+                stickersState = .loaded(Self.mergeUniqueStickers(currentStickers, page.stickers))
                 nextStickerPosition = page.nextPosition
             } catch {
                 // Keep existing results if pagination fails.
             }
         }
+    }
+
+    /// KLIPY pagination can overlap page boundaries; SwiftUI ForEach requires unique `Sticker.id`.
+    private static func uniqueStickers(_ stickers: [Sticker]) -> [Sticker] {
+        mergeUniqueStickers([], stickers)
+    }
+
+    private static func mergeUniqueStickers(_ existing: [Sticker], _ incoming: [Sticker]) -> [Sticker] {
+        var seen = Set(existing.map(\.id))
+        var merged = existing
+        for sticker in incoming where seen.insert(sticker.id).inserted {
+            merged.append(sticker)
+        }
+        return merged
     }
 
     private var currentSource: StickerSource {
