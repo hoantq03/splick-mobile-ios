@@ -10,6 +10,23 @@ enum GIFAnimatedImageFactory {
         return container.image
     }
 
+    /// Cheap still frame for grids / off-screen placeholders — does not decode the full animation.
+    static func firstFrame(from container: ImageContainer, maxPixelSize: CGFloat? = nil) -> UIImage {
+        if let data = container.data, let frame = firstFrame(from: data, maxPixelSize: maxPixelSize) {
+            return frame
+        }
+        return container.image
+    }
+
+    static func firstFrame(from data: Data, maxPixelSize: CGFloat? = nil) -> UIImage? {
+        let maxSide = maxPixelSize.map { max($0, 1) } ?? FeedMediaLayout.decodeMaxPixelSide
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let cgImage = createThumbnail(at: 0, source: source, maxPixelSize: maxSide) else {
+            return nil
+        }
+        return UIImage(cgImage: cgImage)
+    }
+
     static func animatedImage(from data: Data, maxPixelSize: CGFloat? = nil) -> UIImage? {
         let maxSide = maxPixelSize.map { max($0, 1) } ?? FeedMediaLayout.decodeMaxPixelSide
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
@@ -27,6 +44,7 @@ enum GIFAnimatedImageFactory {
         var images: [UIImage] = []
         var totalDuration: TimeInterval = 0
 
+        // Keep every frame — skipping frames makes playback look low-FPS / stuttery.
         for index in 0..<frameCount {
             guard let cgImage = createThumbnail(at: index, source: source, maxPixelSize: maxSide) else {
                 continue
@@ -66,11 +84,11 @@ enum GIFAnimatedImageFactory {
 
         if let unclamped = gifProperties[kCGImagePropertyGIFUnclampedDelayTime] as? TimeInterval,
            unclamped > 0 {
-            return unclamped
+            return unclamped < 0.02 ? 0.1 : unclamped
         }
 
         if let delay = gifProperties[kCGImagePropertyGIFDelayTime] as? TimeInterval, delay > 0 {
-            return delay
+            return delay < 0.02 ? 0.1 : delay
         }
 
         return defaultDuration
