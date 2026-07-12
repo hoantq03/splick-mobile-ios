@@ -64,7 +64,9 @@ public struct InlineGifAttachmentView: View {
                     onPixelSize: { size in
                         guard size.width > 0, size.height > 0 else { return }
                         let next = size.width / size.height
-                        if abs(next - pixelAspectRatio) > 0.01 {
+                        guard abs(next - pixelAspectRatio) > 0.01 else { return }
+                        Task { @MainActor in
+                            guard abs(next - pixelAspectRatio) > 0.01 else { return }
                             pixelAspectRatio = next
                         }
                     }
