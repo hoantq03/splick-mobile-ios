@@ -60,6 +60,9 @@ packages:
   GoogleSignIn:
     url: https://github.com/google/GoogleSignIn-iOS
     from: "8.0.0"
+  Nuke:
+    url: https://github.com/kean/Nuke.git
+    exactVersion: 12.9.0
 
 targets:
   SplickApp:
