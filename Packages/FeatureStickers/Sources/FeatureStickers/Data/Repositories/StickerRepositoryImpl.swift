@@ -19,17 +19,22 @@ public final class StickerRepositoryImpl: StickerRepositoryProtocol, Sendable {
         self.splickDataSource = splickDataSource
     }
 
-    public func fetchStickers(query: String, source: StickerSource) async throws -> [Sticker] {
+    public func fetchStickers(
+        query: String,
+        source: StickerSource,
+        position: String? = nil
+    ) async throws -> StickerFetchResult {
         switch source {
         case .klipy:
             let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.isEmpty {
-                return try await klipyDataSource.trending()
+                return try await klipyDataSource.trending(position: position)
             }
-            return try await klipyDataSource.search(query: trimmed)
+            return try await klipyDataSource.search(query: trimmed, position: position)
 
         case .custom(let groupId):
-            return try await splickDataSource.fetchStickers(groupId: groupId, keyword: query)
+            let stickers = try await splickDataSource.fetchStickers(groupId: groupId, keyword: query)
+            return StickerFetchResult(stickers: stickers)
         }
     }
 }

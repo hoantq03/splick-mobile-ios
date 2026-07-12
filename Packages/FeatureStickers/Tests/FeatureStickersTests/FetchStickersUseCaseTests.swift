@@ -9,9 +9,9 @@ final class FetchStickersUseCaseTests: XCTestCase {
         ])
         let useCase = FetchStickersUseCase(repository: repository)
 
-        let result = try await useCase.execute(query: "cat", source: .klipy)
+        let result = try await useCase.execute(query: "cat", source: .klipy, position: nil)
 
-        XCTAssertEqual(result.count, 1)
+        XCTAssertEqual(result.stickers.count, 1)
         XCTAssertEqual(repository.lastQuery, "cat")
         XCTAssertEqual(repository.lastSource, .klipy)
     }
@@ -26,9 +26,13 @@ private final class FakeStickerRepository: StickerRepositoryProtocol, @unchecked
         self.stickers = stickers
     }
 
-    func fetchStickers(query: String, source: StickerSource) async throws -> [Sticker] {
+    func fetchStickers(
+        query: String,
+        source: StickerSource,
+        position: String? = nil
+    ) async throws -> StickerFetchResult {
         lastQuery = query
         lastSource = source
-        return stickers
+        return StickerFetchResult(stickers: stickers)
     }
 }

@@ -3,8 +3,8 @@ import Common
 import SplickDomain
 
 protocol KlipyDataSourceProtocol: Sendable {
-    func search(query: String) async throws -> [Sticker]
-    func trending() async throws -> [Sticker]
+    func search(query: String, position: String?) async throws -> StickerFetchResult
+    func trending(position: String?) async throws -> StickerFetchResult
     func categories() async throws -> [StickerCategory]
     func autocomplete(query: String) async throws -> [String]
     func searchSuggestions(query: String) async throws -> [String]
@@ -21,23 +21,23 @@ final class KlipyDataSource: KlipyDataSourceProtocol, @unchecked Sendable {
         self.decoder = JSONDecoder()
     }
 
-    func search(query: String) async throws -> [Sticker] {
+    func search(query: String, position: String? = nil) async throws -> StickerFetchResult {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            return try await trending()
+            return try await trending(position: position)
         }
 
         var components = URLComponents(string: "\(AppConstants.Klipy.baseURL)/search")
-        components?.queryItems = baseQueryItems + [
+        components?.queryItems = stickerQueryItems(position: position) + [
             URLQueryItem(name: "q", value: trimmed),
         ]
-        return try await fetchStickers(from: components)
+        return try await fetchStickerPage(from: components)
     }
 
-    func trending() async throws -> [Sticker] {
+    func trending(position: String? = nil) async throws -> StickerFetchResult {
         var components = URLComponents(string: "\(AppConstants.Klipy.baseURL)/featured")
-        components?.queryItems = baseQueryItems
-        return try await fetchStickers(from: components)
+        components?.queryItems = stickerQueryItems(position: position)
+        return try await fetchStickerPage(from: components)
     }
 
     func categories() async throws -> [StickerCategory] {
@@ -116,9 +116,18 @@ final class KlipyDataSource: KlipyDataSourceProtocol, @unchecked Sendable {
         ]
     }
 
-    private func fetchStickers(from components: URLComponents?) async throws -> [Sticker] {
+    private func stickerQueryItems(position: String?) -> [URLQueryItem] {
+        var items = baseQueryItems
+        if let position, !position.isEmpty {
+            items.append(URLQueryItem(name: "pos", value: position))
+        }
+        return items
+    }
+
+    private func fetchStickerPage(from components: URLComponents?) async throws -> StickerFetchResult {
         let payload: KlipySearchResponseDTO = try await fetchJSON(from: components)
-        return payload.results.compactMap(StickerMapper.toSticker)
+        let stickers = payload.results.compactMap(StickerMapper.toSticker)
+        return StickerFetchResult(stickers: stickers, nextPosition: payload.next)
     }
 
     private func fetchJSON<T: Decodable>(from components: URLComponents?) async throws -> T {

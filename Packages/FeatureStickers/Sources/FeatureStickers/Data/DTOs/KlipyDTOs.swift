@@ -2,6 +2,7 @@ import Foundation
 
 struct KlipySearchResponseDTO: Decodable {
     let results: [KlipyGifDTO]
+    let next: String?
 }
 
 struct KlipyGifDTO: Decodable {
