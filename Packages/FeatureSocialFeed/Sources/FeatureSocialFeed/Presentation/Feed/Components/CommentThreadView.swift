@@ -613,15 +613,9 @@ private struct CommentAttachmentsView: View {
                 ForEach(otherAttachments) { attachment in
                     switch attachment.kind {
                     case .gif:
-                        if attachment.url != nil {
-                            attachmentThumbnail {
-                                AnimatedRemoteImage(
-                                    url: attachment.url!,
-                                    contentMode: .fill,
-                                    maxPixelSize: RemoteImageMetrics.inlineAttachmentMaxPixelWidth(pointWidth: maxImageWidth)
-                                )
-                            }
-                            .onTapGesture { openViewer(for: attachment.id) }
+                        if let url = attachment.url {
+                            InlineGifAttachmentView(url: url)
+                                .onTapGesture { openViewer(for: attachment.id) }
                         }
                     case .video:
                         Button {
@@ -663,15 +657,6 @@ private struct CommentAttachmentsView: View {
                 }
             }
         }
-    }
-
-    private func attachmentThumbnail<Content: View>(
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        content()
-            .frame(maxWidth: maxImageWidth, maxHeight: 160)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .contentShape(RoundedRectangle(cornerRadius: 8))
     }
 
     private func openViewer(for attachmentId: UUID) {
