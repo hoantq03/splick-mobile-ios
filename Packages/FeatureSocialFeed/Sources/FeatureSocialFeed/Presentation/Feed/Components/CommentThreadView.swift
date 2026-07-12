@@ -614,8 +614,12 @@ private struct CommentAttachmentsView: View {
                     switch attachment.kind {
                     case .gif:
                         if let url = attachment.url {
-                            InlineGifAttachmentView(url: url)
-                                .onTapGesture { openViewer(for: attachment.id) }
+                            InlineGifAttachmentView(
+                                url: url,
+                                previewURL: attachment.thumbnailURL,
+                                maxWidth: maxImageWidth
+                            )
+                            .onTapGesture { openViewer(for: attachment.id) }
                         }
                     case .video:
                         Button {
