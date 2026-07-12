@@ -15,6 +15,18 @@ enum MessageAttachmentMapper {
             thumbnailURL: submission.uploadedThumbnailURL
         )
     }
+
+    static func messageGif(from submission: CommentSubmissionAttachment) -> MessageImageAttachment? {
+        guard submission.kind == .gif,
+              let url = submission.remoteURL else {
+            return nil
+        }
+        return MessageImageAttachment(
+            mediaId: nil,
+            url: url,
+            thumbnailURL: nil
+        )
+    }
 }
 
 enum MessageImageLimits {
