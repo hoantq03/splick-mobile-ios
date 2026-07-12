@@ -130,6 +130,8 @@ enum StringsFeatureVi {
         .stickersFavorites: "Yêu thích",
         .stickersEmoji: "Emoji",
         .stickersFavoritesEmpty: "Chưa có nhãn dán yêu thích. Chọn GIF để lưu vào đây.",
+        .stickersRemoveFavorite: "Bỏ yêu thích",
+        .stickersAddFavorite: "Thêm yêu thích",
         .stickersNoResultsTitle: "Không có nhãn dán",
         .feedProfileMessage: "Nhắn tin",
         .feedProfileAddFriend: "Thêm bạn",

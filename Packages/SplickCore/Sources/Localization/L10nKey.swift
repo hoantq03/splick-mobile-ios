@@ -358,6 +358,8 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case stickersFavorites = "stickers.favorites"
     case stickersEmoji = "stickers.emoji"
     case stickersFavoritesEmpty = "stickers.favorites_empty"
+    case stickersRemoveFavorite = "stickers.remove_favorite"
+    case stickersAddFavorite = "stickers.add_favorite"
     case stickersNoResultsTitle = "stickers.no_results_title"
     case feedProfileMessage = "feed.profile.message"
     case feedProfileAddFriend = "feed.profile.add_friend"

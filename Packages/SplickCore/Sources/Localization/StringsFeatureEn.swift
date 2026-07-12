@@ -130,6 +130,8 @@ enum StringsFeatureEn {
         .stickersFavorites: "Favorites",
         .stickersEmoji: "Emoji",
         .stickersFavoritesEmpty: "No favorite stickers yet. Tap a GIF to save it here.",
+        .stickersRemoveFavorite: "Remove from favorites",
+        .stickersAddFavorite: "Add to favorites",
         .stickersNoResultsTitle: "No stickers",
         .feedProfileMessage: "Message",
         .feedProfileAddFriend: "Add friend",
