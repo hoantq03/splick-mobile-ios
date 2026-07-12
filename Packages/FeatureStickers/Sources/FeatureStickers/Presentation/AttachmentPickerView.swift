@@ -62,6 +62,11 @@ public struct AttachmentPickerView: View {
                 AttachmentPickerPanelHeader(title: panelTitle)
                     .padding(.horizontal, SplickTheme.Spacing.md)
 
+                if let errorMessage = viewModel.errorMessage {
+                    favoriteErrorBanner(message: errorMessage)
+                        .padding(.horizontal, SplickTheme.Spacing.md)
+                }
+
                 content
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .layoutPriority(1)
@@ -111,10 +116,16 @@ public struct AttachmentPickerView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
         case .favorites:
-            stickerGrid(state: viewModel.favoritesState, emptyMessage: languageService.text(.stickersFavoritesEmpty))
+            stickerGrid(
+                state: viewModel.favoritesState,
+                emptyMessage: languageService.text(.stickersFavoritesEmpty)
+            )
 
         default:
-            stickerGrid(state: viewModel.stickersState, emptyMessage: emptyStickerMessage)
+            stickerGrid(
+                state: viewModel.stickersState,
+                emptyMessage: emptyStickerMessage
+            )
         }
     }
 
@@ -147,7 +158,10 @@ public struct AttachmentPickerView: View {
     }
 
     @ViewBuilder
-    private func stickerGrid(state: LoadingState<[Sticker]>, emptyMessage: String) -> some View {
+    private func stickerGrid(
+        state: LoadingState<[Sticker]>,
+        emptyMessage: String
+    ) -> some View {
         switch state {
         case .idle, .loading:
             LoadingView()
@@ -171,15 +185,10 @@ public struct AttachmentPickerView: View {
                 ScrollView {
                     LazyVGrid(columns: columns, spacing: GridLayout.spacing) {
                         ForEach(stickers) { sticker in
-                            Button {
-                                handleStickerSelection(sticker)
-                            } label: {
-                                gifThumbnail(url: sticker.previewURL ?? sticker.url)
-                            }
-                            .buttonStyle(.plain)
-                            .onAppear {
-                                viewModel.loadMoreStickersIfNeeded(currentStickerId: sticker.id)
-                            }
+                            stickerCell(sticker: sticker)
+                                .onAppear {
+                                    viewModel.loadMoreStickersIfNeeded(currentStickerId: sticker.id)
+                                }
                         }
 
                         if viewModel.isLoadingMore {
@@ -201,6 +210,85 @@ public struct AttachmentPickerView: View {
         guard options.allowsGifSelection else { return }
         viewModel.selectSticker(sticker)
         onSelectGif(sticker)
+    }
+
+    @ViewBuilder
+    private func stickerCell(sticker: Sticker) -> some View {
+        gifThumbnail(url: sticker.previewURL ?? sticker.url)
+            .overlay(alignment: .topTrailing) {
+                if options.allowsGifSelection {
+                    favoriteStarButton(for: sticker)
+                }
+            }
+            .contentShape(
+                RoundedRectangle(cornerRadius: GridLayout.cornerRadius, style: .continuous)
+            )
+            .onTapGesture {
+                handleStickerSelection(sticker)
+            }
+            .contextMenu {
+                if options.allowsGifSelection {
+                    if viewModel.isFavorite(sticker.id) {
+                        Button(role: .destructive) {
+                            viewModel.toggleFavorite(sticker)
+                        } label: {
+                            Label(
+                                languageService.text(.stickersRemoveFavorite),
+                                systemImage: "star.slash"
+                            )
+                        }
+                    } else {
+                        Button {
+                            viewModel.toggleFavorite(sticker)
+                        } label: {
+                            Label(
+                                languageService.text(.stickersAddFavorite),
+                                systemImage: "star"
+                            )
+                        }
+                    }
+                }
+            }
+    }
+
+    private func favoriteStarButton(for sticker: Sticker) -> some View {
+        Button {
+            viewModel.toggleFavorite(sticker)
+        } label: {
+            Group {
+                if viewModel.isTogglingFavorite(sticker.id) {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                } else {
+                    Image(systemName: viewModel.isFavorite(sticker.id) ? "star.fill" : "star")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(
+                            viewModel.isFavorite(sticker.id) ? Color.yellow : Color.white
+                        )
+                }
+            }
+            .frame(width: 32, height: 32)
+            .background(Color.black.opacity(0.25), in: Circle())
+            .shadow(color: .black.opacity(0.35), radius: 2, x: 0, y: 1)
+        }
+        .buttonStyle(.plain)
+        .padding(4)
+        .accessibilityLabel(
+            viewModel.isFavorite(sticker.id)
+                ? languageService.text(.stickersRemoveFavorite)
+                : languageService.text(.stickersAddFavorite)
+        )
+    }
+
+    private func favoriteErrorBanner(message: String) -> some View {
+        Text(message)
+            .font(SplickTheme.Typography.caption)
+            .foregroundStyle(SplickTheme.Colors.error)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(SplickTheme.Colors.error.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small))
     }
 
     private func suggestionSection(title: String?, items: [String]) -> some View {
@@ -235,16 +323,23 @@ public struct AttachmentPickerView: View {
 
     private func gifThumbnail(url: URL) -> some View {
         let shape = RoundedRectangle(cornerRadius: GridLayout.cornerRadius, style: .continuous)
+        let maxPixelSize = RemoteImageMetrics.inlineAttachmentMaxPixelWidth(pointWidth: 88)
 
         return shape
             .fill(SplickTheme.Colors.secondaryBackground)
             .aspectRatio(1, contentMode: .fit)
             .overlay {
-                AnimatedRemoteImage(
-                    url: url,
-                    contentMode: .fill,
-                    maxPixelSize: RemoteImageMetrics.inlineAttachmentMaxPixelWidth(pointWidth: 88)
-                )
+                // Still frames only — animating every grid cell spikes CPU hard.
+                RemoteImage(url: url, maxPixelSize: maxPixelSize) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    default:
+                        Color.clear
+                    }
+                }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .clipShape(shape)
