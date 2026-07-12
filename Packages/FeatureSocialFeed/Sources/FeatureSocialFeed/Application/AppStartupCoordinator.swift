@@ -50,6 +50,11 @@ public final class AppStartupCoordinator {
         } catch {
             Log.error(error, category: .network, metadata: ["action": "fetchStartupData"])
         }
+
+        // Fallback when startup failed or returned an empty feed page.
+        if feedViewModel.posts.isEmpty {
+            await feedViewModel.loadFeed()
+        }
     }
 
     private func apply(
