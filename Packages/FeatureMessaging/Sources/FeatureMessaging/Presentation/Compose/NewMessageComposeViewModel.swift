@@ -168,8 +168,8 @@ public final class NewMessageComposeViewModel: ObservableObject {
         do {
             let conversation = try await resolveConversation()
             let attachments = try await resolveImageAttachments(from: submissions)
-            let imageSubmissions = submissions.filter { $0.kind == .image }
-            if !imageSubmissions.isEmpty, attachments.isEmpty {
+            let mediaSubmissions = submissions.filter { $0.kind == .image || $0.kind == .gif }
+            if !mediaSubmissions.isEmpty, attachments.isEmpty {
                 errorMessage = "Không tải được ảnh. Vui lòng thử lại."
                 return nil
             }
@@ -196,11 +196,20 @@ public final class NewMessageComposeViewModel: ObservableObject {
         var attachments: [MessageImageAttachment] = []
         attachments.reserveCapacity(submissions.count)
 
-        for submission in submissions where submission.kind == .image {
-            if let attachment = MessageAttachmentMapper.messageImage(from: submission) {
-                attachments.append(attachment)
-            } else if let data = submission.data {
-                attachments.append(try await uploadImage(data, submission.mimeType ?? "image/jpeg"))
+        for submission in submissions {
+            switch submission.kind {
+            case .image:
+                if let attachment = MessageAttachmentMapper.messageImage(from: submission) {
+                    attachments.append(attachment)
+                } else if let data = submission.data {
+                    attachments.append(try await uploadImage(data, submission.mimeType ?? "image/jpeg"))
+                }
+            case .gif:
+                if let attachment = MessageAttachmentMapper.messageGif(from: submission) {
+                    attachments.append(attachment)
+                }
+            default:
+                break
             }
         }
 
