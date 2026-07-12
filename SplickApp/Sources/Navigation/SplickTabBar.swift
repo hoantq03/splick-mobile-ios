@@ -99,6 +99,7 @@ private struct ModernSplickTabBar: View {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .fill(.clear)
                     .glassEffect(.regular)
+                    .transaction { $0.animation = nil }
             }
             .clipShape(
                 SidePanelMaskShape(side: side, notchRadius: notchRadius, cornerRadius: cornerRadius),
