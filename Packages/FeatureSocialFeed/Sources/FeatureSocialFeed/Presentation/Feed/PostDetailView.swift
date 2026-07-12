@@ -30,6 +30,7 @@ struct PostDetailView: View {
     @State private var composerHitTestingEnabled = false
     @State private var rejectEvidenceTarget: PostComment?
     @State private var rejectReason = ""
+    @State private var gifPickerViewModel: GifPickerViewModel?
 
     init(
         post: Post,
@@ -63,7 +64,7 @@ struct PostDetailView: View {
     var body: some View {
         ScrollViewReader { scrollProxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
+                LazyVStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
                     PostCardView(
                         post: livePost,
                         currentUser: feedViewModel.currentUser,
@@ -233,7 +234,7 @@ struct PostDetailView: View {
                 isFocused: $composerFocused,
                 groupId: livePost.groupId,
                 fetchFriendsUseCase: fetchFriendsUseCase,
-                gifPickerViewModel: makeGifPickerViewModel?(livePost.groupId)
+                gifPickerViewModel: gifPickerViewModel
             ) { text, attachments in
                 Task { await submitComment(text: text, attachments: attachments) }
             }
@@ -245,6 +246,11 @@ struct PostDetailView: View {
         .frame(maxWidth: .infinity)
         .background { commentComposerDockBackground }
         .allowsHitTesting(composerHitTestingEnabled)
+        .onAppear {
+            if gifPickerViewModel == nil {
+                gifPickerViewModel = makeGifPickerViewModel?(livePost.groupId)
+            }
+        }
     }
 
     private var commentComposerDockBackground: some View {
