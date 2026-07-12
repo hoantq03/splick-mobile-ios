@@ -8,6 +8,7 @@ struct MessageQuotedReplyView: View {
 
     let preview: MessageReplyPreview
     let isOutgoing: Bool
+    var usesBubbleTextColors: Bool = true
 
     var body: some View {
         HStack(spacing: SplickTheme.Spacing.xs) {
@@ -47,14 +48,23 @@ struct MessageQuotedReplyView: View {
     }
 
     private var accentColor: Color {
-        isOutgoing ? Color.white.opacity(0.85) : SplickTheme.Colors.primaryGradientStart
+        guard usesBubbleTextColors, isOutgoing else {
+            return SplickTheme.Colors.primaryGradientStart
+        }
+        return Color.white.opacity(0.85)
     }
 
     private var nameColor: Color {
-        isOutgoing ? Color.white.opacity(0.95) : SplickTheme.Colors.primaryGradientStart
+        guard usesBubbleTextColors, isOutgoing else {
+            return SplickTheme.Colors.primaryGradientStart
+        }
+        return Color.white.opacity(0.95)
     }
 
     private var textColor: Color {
-        isOutgoing ? Color.white.opacity(0.78) : SplickTheme.Colors.textSecondary
+        guard usesBubbleTextColors, isOutgoing else {
+            return SplickTheme.Colors.textSecondary
+        }
+        return Color.white.opacity(0.78)
     }
 }

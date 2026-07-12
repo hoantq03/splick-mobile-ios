@@ -164,67 +164,128 @@ struct MessageBubble: View {
             }
     }
 
+    private static let mediaMaxWidth: CGFloat = 220
+    private static let mediaCornerRadius: CGFloat = SplickTheme.CornerRadius.medium
+
+    private var hasTextBody: Bool {
+        !message.body.isEmpty
+    }
+
     private var bubbleContent: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
             if let preview = message.replyPreview {
-                MessageQuotedReplyView(preview: preview, isOutgoing: isOutgoing)
-                    .modifier(MessageDeliveryStatusAnchor(
-                        isActive: message.body.isEmpty && imageAttachments.isEmpty
-                    ))
+                replyPreviewView(preview)
             }
 
             if !imageAttachments.isEmpty {
-                InlineAttachmentImageGrid(
-                    images: imageAttachments.map(\.inlinePreviewImage),
-                    maxWidth: 220,
-                    onTapImage: { index in
-                        imageViewerRoute = AttachmentPreviewRoute(index: index)
-                    }
-                )
-                .modifier(MessageDeliveryStatusAnchor(isActive: message.body.isEmpty))
+                messageMediaAttachments
+                    .modifier(MessageDeliveryStatusAnchor(isActive: !hasTextBody))
             }
 
-            if !message.body.isEmpty {
-                Text(message.body)
-                    .font(SplickTheme.Typography.body)
-                    .foregroundStyle(isOutgoing ? .white : SplickTheme.Colors.textPrimary)
+            if hasTextBody {
+                textBubbleBody
                     .modifier(MessageDeliveryStatusAnchor(isActive: true))
             }
         }
-        .padding(.horizontal, SplickTheme.Spacing.sm + 2)
-        .padding(.vertical, SplickTheme.Spacing.xs + 2)
-        .background(bubbleBackground)
-        .clipShape(bubbleShape)
-            .overlay {
-                if isHighlighted {
-                    bubbleShape
-                        .stroke(SplickTheme.Colors.primaryGradientStart.opacity(0.85), lineWidth: 2)
-                        .background(
-                            bubbleShape.fill(SplickTheme.Colors.primaryGradientStart.opacity(0.15))
-                        )
-                }
-            }
-            .overlay {
-                if message.deliveryStatus == .failed {
-                    failedOverlay
-                }
-            }
-            .contentShape(bubbleShape)
-            .onTapGesture {
-                if message.deliveryStatus == .failed {
-                    onRetry?()
-                }
-            }
-            .fullScreenCover(item: $imageViewerRoute) { route in
-                let urls = imageAttachments.map(\.url)
-                if urls.indices.contains(route.index) {
-                    RemoteImageFullscreenPreview(
-                        urls: urls,
-                        initialIndex: route.index,
-                        onDismiss: { imageViewerRoute = nil }
+        .overlay {
+            if isHighlighted {
+                RoundedRectangle(cornerRadius: Self.mediaCornerRadius, style: .continuous)
+                    .stroke(SplickTheme.Colors.primaryGradientStart.opacity(0.85), lineWidth: 2)
+                    .background(
+                        RoundedRectangle(cornerRadius: Self.mediaCornerRadius, style: .continuous)
+                            .fill(SplickTheme.Colors.primaryGradientStart.opacity(0.15))
                     )
-                }
             }
+        }
+        .overlay {
+            if message.deliveryStatus == .failed {
+                failedOverlay
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if message.deliveryStatus == .failed {
+                onRetry?()
+            }
+        }
+        .fullScreenCover(item: $imageViewerRoute) { route in
+            attachmentFullscreenPreview(at: route.index)
+        }
+    }
+
+    @ViewBuilder
+    private func replyPreviewView(_ preview: MessageReplyPreview) -> some View {
+        let standalone = !hasTextBody
+        MessageQuotedReplyView(
+            preview: preview,
+            isOutgoing: isOutgoing,
+            usesBubbleTextColors: !standalone
+        )
+        .padding(.horizontal, standalone ? SplickTheme.Spacing.xs : 0)
+        .padding(.vertical, standalone ? SplickTheme.Spacing.xxs : 1)
+        .background {
+            if standalone {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(SplickTheme.Colors.secondaryBackground)
+            }
+        }
+        .modifier(MessageDeliveryStatusAnchor(
+            isActive: !hasTextBody && imageAttachments.isEmpty
+        ))
+    }
+
+    private var textBubbleBody: some View {
+        Text(message.body)
+            .font(SplickTheme.Typography.body)
+            .foregroundStyle(isOutgoing ? .white : SplickTheme.Colors.textPrimary)
+            .padding(.horizontal, SplickTheme.Spacing.sm + 2)
+            .padding(.vertical, SplickTheme.Spacing.xs + 2)
+            .background(bubbleBackground)
+            .clipShape(bubbleShape)
+    }
+
+    @ViewBuilder
+    private var messageMediaAttachments: some View {
+        if imageAttachments.count == 1,
+           let attachment = imageAttachments.first,
+           attachment.url.isLikelyAnimatedImage {
+            InlineGifAttachmentView(
+                url: attachment.url,
+                widthFraction: Self.mediaMaxWidth / max(UIScreen.main.bounds.width, 1),
+                cornerRadius: Self.mediaCornerRadius
+            )
+            .onTapGesture {
+                imageViewerRoute = AttachmentPreviewRoute(index: 0)
+            }
+        } else {
+            InlineAttachmentImageGrid(
+                images: imageAttachments.map(\.inlinePreviewImage),
+                maxWidth: Self.mediaMaxWidth,
+                cornerRadius: Self.mediaCornerRadius,
+                onTapImage: { index in
+                    imageViewerRoute = AttachmentPreviewRoute(index: index)
+                }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func attachmentFullscreenPreview(at index: Int) -> some View {
+        if imageAttachments.indices.contains(index) {
+            let attachment = imageAttachments[index]
+            if attachment.url.isLikelyAnimatedImage {
+                RemoteGifFullscreenPreview(url: attachment.url) {
+                    imageViewerRoute = nil
+                }
+            } else {
+                let urls = imageAttachments.map(\.url)
+                RemoteImageFullscreenPreview(
+                    urls: urls,
+                    initialIndex: index,
+                    onDismiss: { imageViewerRoute = nil }
+                )
+            }
+        }
     }
 
     private var failedOverlay: some View {
@@ -238,7 +299,6 @@ struct MessageBubble: View {
                 startRadius: 0,
                 endRadius: 120
             )
-            .clipShape(bubbleShape)
 
             Text(languageService.text(.messagingTapToRetry))
                 .font(SplickTheme.Typography.caption.weight(.semibold))
@@ -246,6 +306,7 @@ struct MessageBubble: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, SplickTheme.Spacing.xs)
         }
+        .clipShape(RoundedRectangle(cornerRadius: Self.mediaCornerRadius, style: .continuous))
         .allowsHitTesting(false)
     }
 
