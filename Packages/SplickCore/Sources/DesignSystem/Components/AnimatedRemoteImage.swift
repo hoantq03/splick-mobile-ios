@@ -21,16 +21,31 @@ public struct AnimatedRemoteImage: UIViewRepresentable {
         self.maxPixelSize = maxPixelSize
     }
 
-    public func makeUIView(context: Context) -> UIImageView {
+    public func makeUIView(context: Context) -> UIView {
+        let container = UIView()
+        container.backgroundColor = .clear
+        container.clipsToBounds = true
+
         let imageView = UIImageView()
+        imageView.translatesAutoresizingMaskIntoConstraints = false
         imageView.clipsToBounds = true
         imageView.contentMode = uiContentMode
-        return imageView
+        container.addSubview(imageView)
+
+        NSLayoutConstraint.activate([
+            imageView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            imageView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            imageView.topAnchor.constraint(equalTo: container.topAnchor),
+            imageView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+
+        context.coordinator.imageView = imageView
+        return container
     }
 
-    public func updateUIView(_ imageView: UIImageView, context: Context) {
-        imageView.contentMode = uiContentMode
-        context.coordinator.load(url: url, maxPixelSize: maxPixelSize, into: imageView)
+    public func updateUIView(_ uiView: UIView, context: Context) {
+        context.coordinator.imageView?.contentMode = uiContentMode
+        context.coordinator.load(url: url, maxPixelSize: maxPixelSize)
     }
 
     public func makeCoordinator() -> Coordinator {
@@ -43,10 +58,15 @@ public struct AnimatedRemoteImage: UIViewRepresentable {
 
     public final class Coordinator {
         private var task: ImageTask?
+        fileprivate weak var imageView: UIImageView?
 
-        func load(url: URL?, maxPixelSize: CGFloat?, into imageView: UIImageView) {
+        func load(url: URL?, maxPixelSize: CGFloat?) {
             task?.cancel()
             task = nil
+
+            guard let imageView else {
+                return
+            }
 
             guard let url else {
                 imageView.image = nil
