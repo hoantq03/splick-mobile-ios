@@ -658,7 +658,7 @@ final class DependencyContainer: ObservableObject {
     private func handleConversationRead(conversationId: UUID) async {
         conversationListViewModel.markConversationAsRead(conversationId: conversationId)
         await notificationListViewModel.markMessageNotificationsRead(conversationId: conversationId)
-        await badgeCountService.refresh()
+        await badgeCountService.refresh(force: true)
     }
 
     func makeChatPeerRelationshipActions() -> ChatPeerRelationshipActions {
@@ -831,7 +831,7 @@ final class DependencyContainer: ObservableObject {
             fetchExpensesUseCase: fetchExpensesUseCase,
             fetchDebtSummaryUseCase: fetchDebtSummaryUseCase,
             onBadgeCountsChanged: { [weak self] in
-                await self?.badgeCountService.refresh()
+                await self?.badgeCountService.refresh(force: true)
             },
             onDataLoaded: { [weak self] debts, expenses, userId in
                 await self?.widgetSyncBridge.syncExpenses(
@@ -865,7 +865,7 @@ final class DependencyContainer: ObservableObject {
             markReadUseCase: markNotificationReadUseCase,
             markClickedUseCase: markNotificationClickedUseCase,
             onBadgeCountsChanged: { [weak self] in
-                await self?.badgeCountService.refresh()
+                await self?.badgeCountService.refresh(force: true)
             }
         )
     }
