@@ -3,7 +3,6 @@ import Common
 import DesignSystem
 import Localization
 import SplickDomain
-import SplickDomain
 import FeatureStickers
 
 struct MessageComposerInputBar: View {
@@ -25,7 +24,7 @@ struct MessageComposerInputBar: View {
 
     @State private var validationMessage: String?
     @State private var gifPickerViewModel: GifPickerViewModel?
-    @State private var showGifPicker = false
+    @State private var showAttachmentPicker = false
     @State private var showEmojiInsertPicker = false
     @State private var showCustomEmojiUpload = false
 
@@ -33,12 +32,7 @@ struct MessageComposerInputBar: View {
         AttachmentComposerConfiguration(
             maxImages: MessageImageLimits.maxImages,
             photoIconSize: 22,
-            composerHeight: 36,
-            forbiddenSubmissionKinds: [.gif],
-            forbiddenKindMessage: { kind in
-                guard kind == .gif else { return nil }
-                return "Tin nhắn chưa hỗ trợ GIF."
-            }
+            composerHeight: 36
         )
     }
 
@@ -116,22 +110,24 @@ struct MessageComposerInputBar: View {
                 )
             }
         }
-        .sheet(isPresented: $showGifPicker) {
+        .sheet(isPresented: $showAttachmentPicker) {
             if let gifPickerViewModel {
-                NavigationStack {
-                    GifPickerView(viewModel: gifPickerViewModel) { sticker in
+                AttachmentPickerView(
+                    viewModel: gifPickerViewModel,
+                    onSelectGif: { sticker in
                         appendGifSticker(sticker)
-                        showGifPicker = false
+                        showAttachmentPicker = false
+                    },
+                    onSelectEmoji: { emoji in
+                        insertEmoji(emoji)
+                        showAttachmentPicker = false
                     }
-                    .navigationTitle("Chọn GIF")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button(languageService.text(.commonCancel)) { showGifPicker = false }
-                        }
-                    }
-                }
+                )
+                .environmentObject(languageService)
+                .environmentObject(emojiStore)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
             }
         }
     }
@@ -139,19 +135,8 @@ struct MessageComposerInputBar: View {
     @ViewBuilder
     private var emojiMenuButton: some View {
         if gifPickerViewModel != nil {
-            Menu {
-                Button {
-                    showGifPicker = true
-                } label: {
-                    Label("GIF", systemImage: "photo.on.rectangle.angled")
-                }
-                .disabled(remainingGifSlots == 0)
-
-                Button {
-                    showEmojiInsertPicker = true
-                } label: {
-                    Label(languageService.text(.feedEmojiPickerTitle), systemImage: "face.smiling")
-                }
+            Button {
+                showAttachmentPicker = true
             } label: {
                 Image(systemName: "face.smiling")
                     .font(.system(size: 22))
@@ -209,6 +194,16 @@ struct MessageComposerInputBar: View {
             remoteURL: sticker.url,
             fileName: "gif-\(sticker.id).gif"
         )
+        if let error = CommentAttachmentValidator.canAdd(
+            CommentAttachment(kind: .gif, fileName: submission.fileName),
+            to: CommentAttachmentValidator.previewModels(
+                from: AttachmentDraftImporter.readySubmissions(from: attachmentDrafts)
+            )
+        ) {
+            validationMessage = error
+            return
+        }
+        validationMessage = nil
         attachmentDrafts.append(
             CommentAttachmentDraft(
                 id: UUID(),
@@ -218,6 +213,5 @@ struct MessageComposerInputBar: View {
                 submission: submission
             )
         )
-        validationMessage = "Tin nhắn chưa hỗ trợ GIF."
     }
 }
