@@ -122,7 +122,11 @@ struct PostCardView: View {
             appliedInitialMediaIndex = true
         }
         .coordinateSpace(name: "postCard")
-        .onPreferenceChange(ReactionTargetAnchorsKey.self) { reactionAnchors = $0 }
+        .onPreferenceChange(ReactionTargetAnchorsKey.self) { anchors in
+            // Avoid AttributeGraph churn when GeometryReader republishes identical points.
+            guard anchors != reactionAnchors else { return }
+            reactionAnchors = anchors
+        }
         .overlay {
             GeometryReader { geo in
                 let cardOrigin = geo.frame(in: .global).origin
