@@ -19,6 +19,8 @@ struct UpsertStickerFavoriteRequestDTO: Encodable, Sendable {
     let url: String
     let previewUrl: String?
     let name: String?
+    let width: Int?
+    let height: Int?
 }
 
 enum FavoriteStickerEndpoint: APIEndpoint {
@@ -29,9 +31,9 @@ enum FavoriteStickerEndpoint: APIEndpoint {
     var path: String {
         switch self {
         case .list, .upsert:
-            return "/v1/stickers/favorites"
+            return "/v1/feed/sticker-favorites"
         case .delete(let id):
-            return "/v1/stickers/favorites/\(id.uuidString)"
+            return "/v1/feed/sticker-favorites/\(id.uuidString)"
         }
     }
 
@@ -57,14 +59,18 @@ enum FavoriteStickerEndpoint: APIEndpoint {
 }
 
 enum FavoriteStickerMapper {
-    static func toSticker(_ dto: StickerFavoriteDTO) -> Sticker? {
+    static func toSticker(_ dto: StickerFavoriteDTO, fallbackGroupId: UUID? = nil) -> Sticker? {
         guard let url = URL(string: dto.url) else { return nil }
         let source: StickerSource
         switch dto.provider.lowercased() {
         case "klipy":
             source = .klipy
         case "custom":
-            source = .klipy
+            if let fallbackGroupId {
+                source = .custom(groupId: fallbackGroupId)
+            } else {
+                source = .klipy
+            }
         default:
             source = .klipy
         }
@@ -75,7 +81,8 @@ enum FavoriteStickerMapper {
             previewURL: dto.previewUrl.flatMap(URL.init(string:)),
             source: source,
             width: dto.width,
-            height: dto.height
+            height: dto.height,
+            favoriteId: dto.id
         )
     }
 }
@@ -91,7 +98,7 @@ final class FavoriteStickerDataSource: @unchecked Sendable {
         try await apiClient.request(FavoriteStickerEndpoint.list)
     }
 
-    func upsert(_ request: UpsertStickerFavoriteRequestDTO) async throws {
+    func upsert(_ request: UpsertStickerFavoriteRequestDTO) async throws -> StickerFavoriteDTO {
         try await apiClient.request(FavoriteStickerEndpoint.upsert(request))
     }
 
@@ -102,14 +109,16 @@ final class FavoriteStickerDataSource: @unchecked Sendable {
 
 public final class FavoriteStickerRepositoryImpl: FavoriteStickerRepositoryProtocol, @unchecked Sendable {
     private let dataSource: FavoriteStickerDataSource
+    private let fallbackGroupId: UUID?
 
-    public init(apiClient: APIClientProtocol) {
+    public init(apiClient: APIClientProtocol, fallbackGroupId: UUID? = nil) {
         self.dataSource = FavoriteStickerDataSource(apiClient: apiClient)
+        self.fallbackGroupId = fallbackGroupId
     }
 
     public func fetchFavorites() async throws -> [Sticker] {
         let dtos = try await dataSource.fetchFavorites()
-        return dtos.compactMap(FavoriteStickerMapper.toSticker)
+        return dtos.compactMap { FavoriteStickerMapper.toSticker($0, fallbackGroupId: fallbackGroupId) }
     }
 
     public func addFavorite(
@@ -117,17 +126,25 @@ public final class FavoriteStickerRepositoryImpl: FavoriteStickerRepositoryProto
         externalId: String,
         url: URL,
         previewURL: URL?,
-        name: String?
-    ) async throws {
-        try await dataSource.upsert(
+        name: String?,
+        width: Int?,
+        height: Int?
+    ) async throws -> Sticker {
+        let dto = try await dataSource.upsert(
             UpsertStickerFavoriteRequestDTO(
                 provider: provider,
                 externalId: externalId,
                 url: url.absoluteString,
                 previewUrl: previewURL?.absoluteString,
-                name: name
+                name: name,
+                width: width,
+                height: height
             )
         )
+        guard let sticker = FavoriteStickerMapper.toSticker(dto, fallbackGroupId: fallbackGroupId) else {
+            throw URLError(.badURL)
+        }
+        return sticker
     }
 
     public func removeFavorite(id: UUID) async throws {
