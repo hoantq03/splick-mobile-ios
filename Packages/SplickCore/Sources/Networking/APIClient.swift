@@ -34,6 +34,9 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
 
     public func request<T: Decodable>(_ endpoint: APIEndpoint) async throws -> T {
         let data = try await performRequest(endpoint, didRetryAfterRefresh: false)
+        if data.isEmpty, let emptyArray = decodeEmptyArray(as: T.self) {
+            return emptyArray
+        }
         guard !data.isEmpty else {
             throw NetworkError.decodingFailed
         }
@@ -355,5 +358,10 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
         default:
             return NetworkError.unknown(error.localizedDescription)
         }
+    }
+
+    private func decodeEmptyArray<T: Decodable>(as type: T.Type) -> T? {
+        guard String(reflecting: type).hasPrefix("Array<") else { return nil }
+        return try? decoder.decode(T.self, from: Data("[]".utf8))
     }
 }
