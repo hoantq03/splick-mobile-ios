@@ -221,7 +221,8 @@ public struct AttachmentDraftStrip: View {
                 AnimatedRemoteImage(
                     url: url,
                     contentMode: .fill,
-                    maxPixelSize: RemoteImageMetrics.inlineAttachmentMaxPixelWidth(pointWidth: thumbnailWidth)
+                    maxPixelSize: RemoteImageMetrics.inlineAttachmentMaxPixelWidth(pointWidth: thumbnailWidth),
+                    isAnimating: false
                 )
             } else {
                 loadingThumbnail
@@ -309,7 +310,8 @@ public struct PendingAttachmentStrip: View {
                 AnimatedRemoteImage(
                     url: url,
                     contentMode: .fill,
-                    maxPixelSize: RemoteImageMetrics.inlineAttachmentMaxPixelWidth(pointWidth: thumbnailWidth)
+                    maxPixelSize: RemoteImageMetrics.inlineAttachmentMaxPixelWidth(pointWidth: thumbnailWidth),
+                    isAnimating: false
                 )
             } else {
                 attachmentPlaceholder(icon: "face.smiling")
