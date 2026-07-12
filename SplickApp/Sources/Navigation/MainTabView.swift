@@ -27,7 +27,6 @@ struct MainTabView: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var tabBarScrollState = TabBarScrollState()
     @State private var badgeCounts: TabBadgeCounts = .zero
-    @State private var badgeRefreshTask: Task<Void, Never>?
     /// Toggled to `true` by the bell button while the panel is open; the overlay's onChange
     /// observes this, resets it, and runs `dismissAnimated()` so the collapse animation plays
     /// before the overlay is removed from the hierarchy.
@@ -66,8 +65,9 @@ struct MainTabView: View {
     }
 
     private var tabBarSlideOffset: CGFloat {
+        // Scroll hide uses opacity only — sliding glassEffect every scroll tick floods console warnings.
         guard isTabBarChromePresented else { return TabBarLayout.tabBarSlideDistance }
-        return tabBarScrollState.isVisible ? 0 : TabBarLayout.tabBarSlideDistance
+        return 0
     }
 
     private var tabBarOpacity: Double {
@@ -145,7 +145,7 @@ struct MainTabView: View {
             }
             .onReceive(container.messagingWebSocketClient.eventSubject) { event in
                 if case .newMessage = event {
-                    Task { await container.badgeCountService.refresh() }
+                    Task { await container.badgeCountService.refresh(force: true) }
                 }
             }
             .environment(\.openProfileSettings) {
@@ -196,7 +196,7 @@ struct MainTabView: View {
             case .active:
                 container.badgeCountService.startPolling()
                 container.messagingWebSocketClient.connect()
-                await container.badgeCountService.refresh()
+                // Badges come from startup `apply` + 30s polling + force refresh on mutations.
                 pushNotificationCoordinator.syncAppIconBadge(count: container.badgeCountService.counts.total)
             case .background:
                 container.badgeCountService.stopPolling()
@@ -322,7 +322,7 @@ struct MainTabView: View {
             transferGroupOwnershipUseCase: container.transferGroupOwnershipUseCase,
             generateGroupQrUseCase: container.generateGroupQrUseCase,
             revokeGroupQrUseCase: container.revokeGroupQrUseCase,
-            onBadgeCountsChanged: { await container.badgeCountService.refresh() },
+            onBadgeCountsChanged: { await container.badgeCountService.refresh(force: true) },
             onDirectoryLoaded: { groups in
                 container.widgetSyncBridge.syncGroups(groups)
             },
@@ -354,18 +354,8 @@ struct MainTabView: View {
         } else {
             tabBarScrollState.reset()
         }
-        if tab == .messages || tab == .friends || tab == .expenses {
-            scheduleBadgeRefresh()
-        }
-    }
-
-    private func scheduleBadgeRefresh() {
-        badgeRefreshTask?.cancel()
-        badgeRefreshTask = Task {
-            try? await Task.sleep(for: .milliseconds(400))
-            guard !Task.isCancelled else { return }
-            await container.badgeCountService.refresh()
-        }
+        // Badge counts: startup apply + 30s polling + force refresh on mutations.
+        // Do not refresh on every tab select — that races and floods /badge-counts.
     }
 }
 
