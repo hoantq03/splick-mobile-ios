@@ -20,6 +20,7 @@ public enum RemoteUIImageLoader {
     public static func load(
         url: URL,
         maxPixelSize: CGFloat? = nil,
+        animated: Bool = true,
         completion: @escaping (UIImage?) -> Void
     ) -> RemoteUIImageLoadHandle {
         let request: ImageRequest
@@ -32,18 +33,31 @@ public enum RemoteUIImageLoader {
         let task = ImagePipeline.shared.loadImage(with: request) { result in
             switch result {
             case .success(let response):
-                let image: UIImage
-                if url.isLikelyAnimatedImage {
-                    image = GIFAnimatedImageFactory.uiImage(
-                        from: response.container,
-                        maxPixelSize: maxPixelSize
-                    )
-                } else {
-                    image = response.image
+                let container = response.container
+                let wantsAnimation = animated && url.isLikelyAnimatedImage
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let image: UIImage
+                    if wantsAnimation {
+                        image = GIFAnimatedImageFactory.uiImage(
+                            from: container,
+                            maxPixelSize: maxPixelSize
+                        )
+                    } else if url.isLikelyAnimatedImage {
+                        image = GIFAnimatedImageFactory.firstFrame(
+                            from: container,
+                            maxPixelSize: maxPixelSize
+                        )
+                    } else {
+                        image = container.image
+                    }
+                    DispatchQueue.main.async {
+                        completion(image)
+                    }
                 }
-                completion(image)
             case .failure:
-                completion(nil)
+                DispatchQueue.main.async {
+                    completion(nil)
+                }
             }
         }
 
