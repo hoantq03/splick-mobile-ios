@@ -215,12 +215,25 @@ final class DependencyContainer: ObservableObject {
         RegisterStickerShareUseCase(repository: klipyMetaRepository)
     }()
 
+    lazy var favoriteStickerRepository: FavoriteStickerRepositoryProtocol = {
+        FavoriteStickerRepositoryImpl(apiClient: apiClient)
+    }()
+
+    lazy var fetchFavoriteStickersUseCase: FetchFavoriteStickersUseCaseProtocol = {
+        FetchFavoriteStickersUseCase(repository: favoriteStickerRepository)
+    }()
+
+    lazy var addFavoriteStickerUseCase: AddFavoriteStickerUseCaseProtocol = {
+        AddFavoriteStickerUseCase(repository: favoriteStickerRepository)
+    }()
+
     func makeGifPickerViewModel(groupId: UUID?) -> GifPickerViewModel {
         GifPickerViewModel(
             fetchStickersUseCase: fetchStickersUseCase,
             fetchCategoriesUseCase: fetchStickerCategoriesUseCase,
-            fetchTrendingTermsUseCase: fetchTrendingTermsUseCase,
             fetchSuggestionsUseCase: fetchSuggestionsUseCase,
+            fetchFavoriteStickersUseCase: fetchFavoriteStickersUseCase,
+            addFavoriteStickerUseCase: addFavoriteStickerUseCase,
             registerShareUseCase: registerStickerShareUseCase,
             groupId: groupId
         )
