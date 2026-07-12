@@ -77,7 +77,8 @@ public enum AppConstants {
     }
 
     public enum Stickers {
-        public static let maxGifsPerComment = 5
+        /// GIF is sent immediately on tap — never multi-selected with other GIFs.
+        public static let maxGifsPerComment = 1
     }
 
     public enum Comments {
