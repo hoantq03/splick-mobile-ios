@@ -2,15 +2,6 @@ import SwiftUI
 import DesignSystem
 import SplickDomain
 
-private struct PostMediaContainerWidthKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        let next = nextValue()
-        if next > 0 { value = next }
-    }
-}
-
 struct PostMediaView: View {
     let post: Post
     @Binding var selectedIndex: Int
@@ -40,21 +31,27 @@ struct PostMediaView: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .background(
+        // Measure width without PreferenceKey → @State in the same AttributeGraph pass
+        // (that pattern causes "AttributeGraph: cycle detected" on post detail + keyboard).
+        .background {
             GeometryReader { proxy in
-                Color.clear.preference(
-                    key: PostMediaContainerWidthKey.self,
-                    value: proxy.size.width
-                )
+                Color.clear
+                    .onAppear { scheduleWidthUpdate(proxy.size.width) }
+                    .onChange(of: proxy.size.width) { scheduleWidthUpdate($0) }
             }
-        )
-        .onPreferenceChange(PostMediaContainerWidthKey.self) { width in
-            guard width > 0 else { return }
-            containerWidth = width
         }
         .clipShape(RoundedRectangle(cornerRadius: FeedMediaLayout.cornerRadius, style: .continuous))
         .onChange(of: post.id) { _ in
             selectedIndex = min(selectedIndex, max(items.count - 1, 0))
+        }
+    }
+
+    /// Defers `@State` writes off the layout pass to break AttributeGraph cycles.
+    private func scheduleWidthUpdate(_ width: CGFloat) {
+        guard width > 0, abs(width - containerWidth) > 1 else { return }
+        DispatchQueue.main.async {
+            guard abs(width - containerWidth) > 1 else { return }
+            containerWidth = width
         }
     }
 
