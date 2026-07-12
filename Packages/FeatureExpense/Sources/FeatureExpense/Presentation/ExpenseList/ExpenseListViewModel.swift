@@ -28,6 +28,7 @@ public final class ExpenseListViewModel: ObservableObject {
     private(set) var currentUserId: UUID?
     private var currentPage = 0
     private var pullToRefreshTask: Task<Void, Never>?
+    private var loadTask: Task<Void, Never>?
 
     public init(
         fetchExpensesUseCase: FetchExpensesUseCaseProtocol,
@@ -153,8 +154,18 @@ public final class ExpenseListViewModel: ObservableObject {
             return
         }
 
+        if let existing = loadTask {
+            await existing.value
+            return
+        }
+
         state = .loading
-        await performLoad(isPullToRefresh: false)
+        let task = Task { @MainActor in
+            await performLoad(isPullToRefresh: false)
+        }
+        loadTask = task
+        await task.value
+        loadTask = nil
     }
 
     private func performLoad(isPullToRefresh: Bool) async {
@@ -183,10 +194,23 @@ public final class ExpenseListViewModel: ObservableObject {
             if isPullToRefresh, !expenses.isEmpty {
                 state = .loaded(expenses)
             } else {
-                state = .failed(error.localizedDescription)
+                state = .failed(Self.userFacingMessage(for: error))
             }
             Log.error(error, category: .expense)
         }
+    }
+
+    private static func userFacingMessage(for error: Error) -> String {
+        if let storage = error as? StorageError {
+            return storage.userMessage
+        }
+        if let appError = error as? AppError, case .storage(let storage) = appError {
+            return storage.userMessage
+        }
+        if let auth = error as? AuthError {
+            return auth.userMessage
+        }
+        return error.localizedDescription
     }
 
     func loadMore() async {
