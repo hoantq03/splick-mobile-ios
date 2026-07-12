@@ -1,6 +1,8 @@
 import SwiftUI
 import AVKit
 import UIKit
+import Common
+import DesignSystem
 import SplickDomain
 
 // MARK: - SwiftUI entry
@@ -278,6 +280,7 @@ private final class MediaPageViewController: UIViewController, UIScrollViewDeleg
     private let imageView = UIImageView()
     private var videoController: AVPlayerViewController?
     private var verticalDismissPan: UIPanGestureRecognizer!
+    private var imageLoadHandle: RemoteUIImageLoadHandle?
 
     var isZoomed: Bool { scrollView.zoomScale > scrollView.minimumZoomScale + 0.01 }
 
@@ -288,6 +291,10 @@ private final class MediaPageViewController: UIViewController, UIScrollViewDeleg
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
+
+    deinit {
+        imageLoadHandle?.cancel()
+    }
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
@@ -330,10 +337,12 @@ private final class MediaPageViewController: UIViewController, UIScrollViewDeleg
         ])
 
         let url = item.mediaURL
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            guard let (data, _) = try? await URLSession.shared.data(from: url),
-                  let image = UIImage(data: data) else { return }
+        imageLoadHandle?.cancel()
+        imageLoadHandle = RemoteUIImageLoader.load(
+            url: url,
+            maxPixelSize: 2048
+        ) { [weak self] image in
+            guard let self, let image else { return }
             imageView.image = image
             layoutImage(image)
         }
