@@ -1,10 +1,12 @@
 import DesignSystem
+import Localization
 import Photos
 import SwiftUI
 import UIKit
 
 /// In-app photo grid with multi-select; user confirms with the bottom bar or toolbar checkmark.
 public struct MultiPhotoLibraryPickerView: View {
+    @EnvironmentObject private var languageService: LanguageService
     public let maxSelectionCount: Int
     public let onConfirm: ([UIImage]) -> Void
     public let onCancel: () -> Void
@@ -50,11 +52,11 @@ public struct MultiPhotoLibraryPickerView: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Huỷ", action: onCancel)
+                    Button(languageService.text(.commonCancel), action: onCancel)
                         .foregroundStyle(.white)
                 }
                 ToolbarItem(placement: .principal) {
-                    Text("Thư viện ảnh")
+                    Text(languageService.text(.mediaLibraryTitle))
                         .font(SplickTheme.Typography.headline)
                         .foregroundStyle(.white)
                 }
@@ -93,7 +95,7 @@ public struct MultiPhotoLibraryPickerView: View {
                 }
         }
         .disabled(viewModel.selectedAssetIDs.isEmpty || viewModel.isImporting)
-        .accessibilityLabel("Xác nhận chọn ảnh")
+        .accessibilityLabel(languageService.text(.mediaConfirmSelectionA11y))
     }
 
     @ViewBuilder
@@ -101,10 +103,10 @@ public struct MultiPhotoLibraryPickerView: View {
         if !viewModel.selectedAssetIDs.isEmpty {
             HStack(spacing: SplickTheme.Spacing.md) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Đã chọn \(viewModel.selectedAssetIDs.count)/\(maxSelectionCount)")
+                    Text(languageService.format(.mediaSelectedCount, viewModel.selectedAssetIDs.count, maxSelectionCount))
                         .font(SplickTheme.Typography.callout.weight(.semibold))
                         .foregroundStyle(.white)
-                    Text("Bấm ✓ để thêm vào bài viết")
+                    Text(languageService.text(.mediaAddToPostHint))
                         .font(SplickTheme.Typography.caption)
                         .foregroundStyle(.white.opacity(0.55))
                 }
@@ -117,7 +119,7 @@ public struct MultiPhotoLibraryPickerView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "checkmark")
                             .font(.system(size: 14, weight: .bold))
-                        Text("Thêm")
+                        Text(languageService.text(.mediaAdd))
                             .font(SplickTheme.Typography.callout.weight(.bold))
                     }
                     .foregroundStyle(.white)
@@ -149,7 +151,7 @@ public struct MultiPhotoLibraryPickerView: View {
             ProgressView()
                 .tint(.white)
                 .scaleEffect(1.1)
-            Text("Đang tải thư viện...")
+            Text(languageService.text(.mediaLibraryLoading))
                 .font(SplickTheme.Typography.callout)
                 .foregroundStyle(.white.opacity(0.7))
         }
@@ -199,7 +201,7 @@ public struct MultiPhotoLibraryPickerView: View {
         HStack(spacing: SplickTheme.Spacing.sm) {
             Image(systemName: "photo.badge.exclamationmark")
                 .foregroundStyle(SplickTheme.Colors.warning)
-            Text("Bạn đang cấp quyền truy cập một phần thư viện.")
+            Text(languageService.text(.mediaLibraryLimitedAccess))
                 .font(SplickTheme.Typography.caption)
                 .foregroundStyle(.white.opacity(0.75))
             Spacer(minLength: 0)
@@ -216,10 +218,10 @@ public struct MultiPhotoLibraryPickerView: View {
             Image(systemName: "photo.on.rectangle.angled")
                 .font(.system(size: 48))
                 .foregroundStyle(.white.opacity(0.35))
-            Text("Không có ảnh trong thư viện")
+            Text(languageService.text(.mediaLibraryEmptyTitle))
                 .font(SplickTheme.Typography.headline)
                 .foregroundStyle(.white)
-            Text("Chụp ảnh mới hoặc thêm ảnh vào thư viện.")
+            Text(languageService.text(.mediaLibraryEmptyMessage))
                 .font(SplickTheme.Typography.callout)
                 .foregroundStyle(.white.opacity(0.55))
                 .multilineTextAlignment(.center)
@@ -232,14 +234,14 @@ public struct MultiPhotoLibraryPickerView: View {
             Image(systemName: "photo.on.rectangle.angled")
                 .font(.system(size: 48))
                 .foregroundStyle(.white.opacity(0.5))
-            Text("Cần quyền truy cập Thư viện ảnh")
+            Text(languageService.text(.mediaLibraryPermissionTitle))
                 .font(SplickTheme.Typography.headline)
                 .foregroundStyle(.white)
-            Text("Bật quyền trong Cài đặt để chọn ảnh đăng bài.")
+            Text(languageService.text(.mediaLibraryPermissionMessage))
                 .font(SplickTheme.Typography.callout)
                 .foregroundStyle(.white.opacity(0.65))
                 .multilineTextAlignment(.center)
-            Button("Mở Cài đặt") {
+            Button(languageService.text(.notificationSettingsOpenSystemSettingsAction)) {
                 guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
                 UIApplication.shared.open(url)
             }
@@ -258,7 +260,7 @@ public struct MultiPhotoLibraryPickerView: View {
             VStack(spacing: SplickTheme.Spacing.sm) {
                 ProgressView()
                     .tint(.white)
-                Text("Đang tải ảnh đã chọn...")
+                Text(languageService.text(.mediaLoadingSelected))
                     .font(SplickTheme.Typography.callout)
                     .foregroundStyle(.white)
             }

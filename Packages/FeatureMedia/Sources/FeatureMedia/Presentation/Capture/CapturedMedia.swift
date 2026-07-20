@@ -1,3 +1,4 @@
+import Localization
 import UIKit
 
 public enum CapturedMedia: Equatable {
@@ -5,10 +6,11 @@ public enum CapturedMedia: Equatable {
     case images([UIImage])
     case video(URL)
 
-    public var mediaTypeLabel: String {
+    @MainActor
+    public func mediaTypeLabel(using languageService: LanguageService) -> String {
         switch self {
-        case .image, .images: return "Ảnh"
-        case .video: return "Video"
+        case .image, .images: return languageService.text(.mediaTypePhoto)
+        case .video: return languageService.text(.mediaTypeVideo)
         }
     }
 }

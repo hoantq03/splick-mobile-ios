@@ -1,10 +1,12 @@
 import AVFoundation
 import DesignSystem
+import Localization
 import SwiftUI
 import UIKit
 
 /// Orchestrates camera capture, album picker, photo preview, and editor.
 public struct MediaCaptureView: View {
+    @EnvironmentObject private var languageService: LanguageService
     let onMediaCaptured: (CapturedMedia) -> Void
     let onCancel: () -> Void
 
@@ -104,10 +106,10 @@ public struct MediaCaptureView: View {
                 .foregroundStyle(.white.opacity(0.5))
 
             VStack(spacing: SplickTheme.Spacing.sm) {
-                Text("Camera không khả dụng")
+                Text(languageService.text(.mediaCameraUnavailable))
                     .font(SplickTheme.Typography.headline)
                     .foregroundStyle(.white)
-                Text("Bạn vẫn có thể chọn ảnh từ thư viện để tiếp tục.")
+                Text(languageService.text(.mediaCameraUnavailableHint))
                     .font(SplickTheme.Typography.callout)
                     .foregroundStyle(.white.opacity(0.65))
                     .multilineTextAlignment(.center)
@@ -116,7 +118,7 @@ public struct MediaCaptureView: View {
             Button {
                 route = .library
             } label: {
-                Label("Chọn từ thư viện ảnh", systemImage: "photo.on.rectangle.angled")
+                Label(languageService.text(.mediaPickFromLibrary), systemImage: "photo.on.rectangle.angled")
                     .font(SplickTheme.Typography.callout.weight(.semibold))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
@@ -125,7 +127,7 @@ public struct MediaCaptureView: View {
             }
             .buttonStyle(.plain)
 
-            Button("Quay lại", action: onCancel)
+            Button(languageService.text(.commonBack), action: onCancel)
                 .font(SplickTheme.Typography.callout)
                 .foregroundStyle(.white.opacity(0.7))
         }

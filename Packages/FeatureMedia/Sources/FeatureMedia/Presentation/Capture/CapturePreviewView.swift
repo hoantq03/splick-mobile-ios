@@ -1,4 +1,5 @@
 import DesignSystem
+import Localization
 import SwiftUI
 
 enum CapturePreviewStyle {
@@ -9,6 +10,7 @@ enum CapturePreviewStyle {
 }
 
 struct CapturePreviewView: View {
+    @EnvironmentObject private var languageService: LanguageService
     let image: UIImage
     var style: CapturePreviewStyle = .capture
     let onRetake: () -> Void
@@ -47,7 +49,7 @@ struct CapturePreviewView: View {
 
             Spacer()
 
-            Text("Xem trước")
+            Text(languageService.text(.mediaPreviewTitle))
                 .font(SplickTheme.Typography.headline)
                 .foregroundStyle(.white)
 
@@ -63,7 +65,7 @@ struct CapturePreviewView: View {
         VStack(spacing: SplickTheme.Spacing.sm) {
             if style == .capture {
                 Button(action: onUsePhoto) {
-                    Text("Dùng ảnh này")
+                    Text(languageService.text(.mediaUsePhoto))
                         .font(SplickTheme.Typography.callout.weight(.bold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
@@ -72,12 +74,12 @@ struct CapturePreviewView: View {
                 }
 
                 HStack(spacing: SplickTheme.Spacing.sm) {
-                    secondaryButton(title: "Chụp lại", icon: "arrow.counterclockwise", action: onRetake)
-                    secondaryButton(title: "Chỉnh sửa", icon: "slider.horizontal.3", action: onEdit)
+                    secondaryButton(title: languageService.text(.mediaRetake), icon: "arrow.counterclockwise", action: onRetake)
+                    secondaryButton(title: languageService.text(.mediaEdit), icon: "slider.horizontal.3", action: onEdit)
                 }
             } else {
                 Button(action: onEdit) {
-                    Label("Chỉnh sửa", systemImage: "slider.horizontal.3")
+                    Label(languageService.text(.mediaEdit), systemImage: "slider.horizontal.3")
                         .font(SplickTheme.Typography.callout.weight(.bold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
