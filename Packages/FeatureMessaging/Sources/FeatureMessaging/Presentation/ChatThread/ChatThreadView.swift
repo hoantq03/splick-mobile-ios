@@ -49,8 +49,14 @@ public struct ChatThreadView: View {
     public var body: some View {
         VStack(spacing: 0) {
             if relationshipViewModel.showsAddFriendBanner {
-                addFriendBanner
-                Divider()
+                ChatAddFriendBanner(
+                    message: addFriendBannerMessage,
+                    actionTitle: addFriendBannerActionTitle,
+                    actionSystemImage: addFriendBannerActionSystemImage,
+                    isProcessing: relationshipViewModel.isProcessing
+                ) {
+                    Task { await performAddFriendBannerAction() }
+                }
             }
             messageArea
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -276,30 +282,6 @@ public struct ChatThreadView: View {
         .disabled(relationshipViewModel.isProcessing)
     }
 
-    private var addFriendBanner: some View {
-        VStack(spacing: SplickTheme.Spacing.xxs) {
-            Text(addFriendBannerMessage)
-                .font(SplickTheme.Typography.caption)
-                .foregroundStyle(SplickTheme.Colors.textSecondary)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .frame(maxWidth: .infinity)
-
-            if let bannerActionTitle = addFriendBannerActionTitle {
-                Button(bannerActionTitle) {
-                    Task { await performAddFriendBannerAction() }
-                }
-                .font(SplickTheme.Typography.caption.weight(.semibold))
-                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                .disabled(relationshipViewModel.isProcessing)
-            }
-        }
-        .padding(.horizontal, SplickTheme.Spacing.md)
-        .padding(.vertical, SplickTheme.Spacing.sm)
-        .frame(maxWidth: .infinity)
-        .background(SplickTheme.Colors.secondaryBackground)
-    }
-
     private var addFriendBannerMessage: String {
         switch relationshipViewModel.status {
         case .requestSent:
@@ -319,6 +301,17 @@ public struct ChatThreadView: View {
             return languageService.text(.friendsAccept)
         case .requestSent:
             return nil
+        default:
+            return nil
+        }
+    }
+
+    private var addFriendBannerActionSystemImage: String? {
+        switch relationshipViewModel.status {
+        case .stranger:
+            return "person.badge.plus"
+        case .requestReceived:
+            return "checkmark"
         default:
             return nil
         }
