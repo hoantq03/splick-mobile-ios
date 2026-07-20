@@ -59,44 +59,48 @@ public struct RemoteImage<Content: View>: View {
 
 /// Non-generic factory so call sites avoid inferring `RemoteImage<Content>`.
 public enum RemoteImageRequestFactory {
-    /// Builds a request that downscales at decode time (ImageIO thumbnail), not after a full-resolution decode.
+    /// Builds a request that downscales via Nuke `Resize` (not ImageIO `ThumbnailOptions`).
+    ///
+    /// ImageIO thumbnails frequently hit `CVPixelBufferCreate … RGBA (-6680)` on simulator/device
+    /// and can yield corrupt or mis-sized images (feed media rendering as a thin vertical strip).
     public static func boundedRequest(
         url: URL,
         maxPixelDimensions: CGSize? = nil,
         maxPixelWidth: CGFloat? = nil
     ) -> ImageRequest {
-        // Thumbnail decode on GIF/WebP often triggers CVPixelBuffer RGBA (-6680) warnings.
+        // Keep animated formats on the full decode path (GIF/WebP).
         if url.isLikelyAnimatedImage {
             return ImageRequest(url: url)
         }
-        if let thumbnail = thumbnailOptions(
+        guard let maxPixelSize = resolvedMaxPixelSize(
             maxPixelDimensions: maxPixelDimensions,
             maxPixelWidth: maxPixelWidth
-        ) {
-            return ImageRequest(url: url, userInfo: [.thumbnailKey: thumbnail])
+        ) else {
+            return ImageRequest(url: url)
         }
-        return ImageRequest(url: url)
+        return ImageRequest(
+            url: url,
+            processors: [
+                ImageProcessors.Resize(
+                    size: CGSize(width: maxPixelSize, height: maxPixelSize),
+                    unit: .pixels,
+                    contentMode: .aspectFit
+                )
+            ]
+        )
     }
 
-    private static func thumbnailOptions(
+    private static func resolvedMaxPixelSize(
         maxPixelDimensions: CGSize?,
         maxPixelWidth: CGFloat?
-    ) -> ImageRequest.ThumbnailOptions? {
-        let maxPixelSize: Float?
+    ) -> CGFloat? {
         if let maxPixelDimensions, maxPixelDimensions.width > 0, maxPixelDimensions.height > 0 {
-            maxPixelSize = Float(max(maxPixelDimensions.width, maxPixelDimensions.height))
-        } else if let maxPixelWidth, maxPixelWidth > 0 {
-            maxPixelSize = Float(maxPixelWidth)
-        } else {
-            maxPixelSize = nil
+            return max(maxPixelDimensions.width, maxPixelDimensions.height)
         }
-
-        guard let maxPixelSize else { return nil }
-
-        var options = ImageRequest.ThumbnailOptions(maxPixelSize: maxPixelSize)
-        // ImageIO already rotates pixels when true, but Nuke still applies EXIF on UIImage → upside-down.
-        options.createThumbnailWithTransform = false
-        return options
+        if let maxPixelWidth, maxPixelWidth > 0 {
+            return maxPixelWidth
+        }
+        return nil
     }
 }
 

@@ -26,7 +26,8 @@ public enum ImagePipelineConfigurator {
             costLimit: memoryCacheCostLimit,
             countLimit: 80
         )
-        // Thumbnails decode off the main path; skip eager RGBA decompression that spikes CVPixelBuffer usage.
+        // Skip eager RGBA decompression that used to spike CVPixelBuffer usage with ImageIO thumbnails.
+        // Feed images now downscale via ImageProcessors.Resize instead.
         configuration.isDecompressionEnabled = false
 
         ImagePipeline.shared = ImagePipeline(configuration: configuration)
