@@ -1,8 +1,34 @@
 import Foundation
 import SplickDomain
 
+/// Preloaded social directory used to avoid re-fetching the same lists for PYMK.
+public struct PeopleYouMayKnowDirectorySnapshot: Sendable {
+    public let friends: [UserSummary]
+    public let groups: [Group]
+    public let incoming: [IncomingFriendRequest]
+    public let outgoing: [OutgoingFriendRequest]
+    public let blocked: [BlockedUser]
+
+    public init(
+        friends: [UserSummary],
+        groups: [Group],
+        incoming: [IncomingFriendRequest],
+        outgoing: [OutgoingFriendRequest],
+        blocked: [BlockedUser]
+    ) {
+        self.friends = friends
+        self.groups = groups
+        self.incoming = incoming
+        self.outgoing = outgoing
+        self.blocked = blocked
+    }
+}
+
 public protocol FetchPeopleYouMayKnowUseCaseProtocol: Sendable {
-    func execute(currentUserId: UUID?) async throws -> [PeopleYouMayKnowSuggestion]
+    func execute(
+        currentUserId: UUID?,
+        snapshot: PeopleYouMayKnowDirectorySnapshot?
+    ) async throws -> [PeopleYouMayKnowSuggestion]
 }
 
 public struct FetchPeopleYouMayKnowUseCase: FetchPeopleYouMayKnowUseCaseProtocol {
@@ -32,29 +58,48 @@ public struct FetchPeopleYouMayKnowUseCase: FetchPeopleYouMayKnowUseCaseProtocol
         self.fetchBlockedUsersUseCase = fetchBlockedUsersUseCase
     }
 
-    public func execute(currentUserId: UUID?) async throws -> [PeopleYouMayKnowSuggestion] {
-        async let groupsTask = fetchMyGroupsUseCase.execute()
-        async let friendsTask = fetchMyFriendsUseCase.execute()
-        async let incomingTask = fetchIncomingFriendRequestsUseCase.executeAll()
-        async let outgoingTask = fetchOutgoingFriendRequestsUseCase.executeAll()
-        async let blockedTask = fetchBlockedUsersUseCase.executeAll()
+    public func execute(
+        currentUserId: UUID?,
+        snapshot: PeopleYouMayKnowDirectorySnapshot? = nil
+    ) async throws -> [PeopleYouMayKnowSuggestion] {
+        let directory: PeopleYouMayKnowDirectorySnapshot
+        if let snapshot {
+            directory = snapshot
+        } else {
+            async let groupsTask = fetchMyGroupsUseCase.execute()
+            async let friendsTask = fetchMyFriendsUseCase.execute()
+            async let incomingTask = fetchIncomingFriendRequestsUseCase.executeAll()
+            async let outgoingTask = fetchOutgoingFriendRequestsUseCase.executeAll()
+            async let blockedTask = fetchBlockedUsersUseCase.executeAll()
 
-        let (groups, friends, incoming, outgoing, blocked) = try await (
-            groupsTask,
-            friendsTask,
-            incomingTask,
-            outgoingTask,
-            blockedTask
+            let (groups, friends, incoming, outgoing, blocked) = try await (
+                groupsTask,
+                friendsTask,
+                incomingTask,
+                outgoingTask,
+                blockedTask
+            )
+            directory = PeopleYouMayKnowDirectorySnapshot(
+                friends: friends,
+                groups: groups,
+                incoming: incoming,
+                outgoing: outgoing,
+                blocked: blocked
+            )
+        }
+
+        let friendIds = Set(directory.friends.map(\.id))
+        let blockedIds = Set(directory.blocked.map(\.user.id))
+        let incomingByUserId = Dictionary(
+            uniqueKeysWithValues: directory.incoming.map { ($0.requester.id, $0) }
         )
-
-        let friendIds = Set(friends.map(\.id))
-        let blockedIds = Set(blocked.map(\.user.id))
-        let incomingByUserId = Dictionary(uniqueKeysWithValues: incoming.map { ($0.requester.id, $0) })
-        let outgoingByUserId = Dictionary(uniqueKeysWithValues: outgoing.map { ($0.addressee.id, $0) })
+        let outgoingByUserId = Dictionary(
+            uniqueKeysWithValues: directory.outgoing.map { ($0.addressee.id, $0) }
+        )
 
         var suggestionsByUserId: [UUID: PeopleYouMayKnowSuggestion] = [:]
 
-        for group in groups.prefix(Self.maxGroupsToScan) {
+        for group in directory.groups.prefix(Self.maxGroupsToScan) {
             let members: [GroupMemberItem]
             do {
                 members = try await fetchGroupMembersUseCase.execute(groupId: group.id, status: "ACTIVE")
