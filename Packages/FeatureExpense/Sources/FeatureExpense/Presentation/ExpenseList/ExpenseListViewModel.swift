@@ -126,13 +126,23 @@ public final class ExpenseListViewModel: ObservableObject {
     }
 
     private func overviewTotal(for state: ExpenseUserDebtState) -> Decimal {
-        expenses.reduce(Decimal.zero) { partial, expense in
+        overviewScopedExpenses.reduce(Decimal.zero) { partial, expense in
             partial + expense.userDebtAmount(userId: currentUserId, state: state)
         }
     }
 
     private func overviewCount(for state: ExpenseUserDebtState) -> Int {
-        expenses.filter { $0.userDebtState(userId: currentUserId) == state }.count
+        overviewScopedExpenses.filter { $0.userDebtState(userId: currentUserId) == state }.count
+    }
+
+    /// Expenses that feed overview charts — same date/caption/friend scope as history,
+    /// but without debt-status so all chart segments stay visible for selection.
+    private var overviewScopedExpenses: [Expense] {
+        expenses.filter { expense in
+            matchesCaption(expense)
+                && matchesUser(expense)
+                && matchesDateRange(expense)
+        }
     }
 
     /// Loads expenses when idle/failed, or when data is older than the freshness window.
