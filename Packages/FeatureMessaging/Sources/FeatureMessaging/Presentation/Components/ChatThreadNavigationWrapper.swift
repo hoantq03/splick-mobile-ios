@@ -1,5 +1,6 @@
 import SwiftUI
 import Storage
+import Localization
 import SplickDomain
 
 struct ChatThreadNavigationWrapper: View {
@@ -84,6 +85,7 @@ public final class ChatThreadViewModelFactory: ObservableObject {
     public let repository: MessagingRepositoryProtocol
     private let uploadImage: (Data, String) async throws -> MessageImageAttachment
     private let wsClient: MessagingWebSocketClient
+    private let languageService: LanguageService
     private let onConversationRead: ((UUID) async -> Void)?
 
     public init(
@@ -94,6 +96,7 @@ public final class ChatThreadViewModelFactory: ObservableObject {
         repository: MessagingRepositoryProtocol,
         uploadImage: @escaping (Data, String) async throws -> MessageImageAttachment,
         wsClient: MessagingWebSocketClient,
+        languageService: LanguageService,
         onConversationRead: ((UUID) async -> Void)? = nil
     ) {
         self.currentUserId = currentUserId
@@ -103,6 +106,7 @@ public final class ChatThreadViewModelFactory: ObservableObject {
         self.repository = repository
         self.uploadImage = uploadImage
         self.wsClient = wsClient
+        self.languageService = languageService
         self.onConversationRead = onConversationRead
     }
 
@@ -118,6 +122,7 @@ public final class ChatThreadViewModelFactory: ObservableObject {
             repository: repository,
             uploadImage: uploadImage,
             wsClient: wsClient,
+            languageService: languageService,
             onConversationRead: onConversationRead
         )
     }

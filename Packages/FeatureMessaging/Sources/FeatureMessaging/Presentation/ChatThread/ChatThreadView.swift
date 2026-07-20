@@ -411,6 +411,7 @@ public struct ChatThreadView: View {
                 messages: messages,
                 currentUserId: currentUserId,
                 senderDisplayName: senderDisplayName(for:),
+                userDisplayName: userDisplayName(for:),
                 onRequestComposerFocus: { isInputFocused = true }
             )
         case .failed(let error):
@@ -451,11 +452,24 @@ public struct ChatThreadView: View {
         return languageService.text(.messagingReplyUnknownSender)
     }
 
-    private func resolvedSenderDisplayName(_ senderId: UUID, on message: ChatMessage) -> String? {
+    private func userDisplayName(for userId: UUID) -> String {
+        if userId == currentUserId {
+            return languageService.text(.messagingYou)
+        }
+        if let peer, peer.userId == userId {
+            return peer.displayTitle
+        }
+        if let name = resolvedSenderDisplayName(userId, on: nil) {
+            return name
+        }
+        return languageService.text(.messagingReplyUnknownSender)
+    }
+
+    private func resolvedSenderDisplayName(_ senderId: UUID, on message: ChatMessage?) -> String? {
         if let peer, peer.userId == senderId {
             return peer.displayTitle
         }
-        if let name = trimmedDisplayName(message.senderDisplayName) {
+        if let message, let name = trimmedDisplayName(message.senderDisplayName) {
             return name
         }
         for loaded in viewModel.messages {

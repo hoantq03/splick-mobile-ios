@@ -11,6 +11,7 @@ struct ChatMessageListView: View {
     let messages: [ChatMessage]
     let currentUserId: UUID
     let senderDisplayName: (ChatMessage) -> String
+    let userDisplayName: (UUID) -> String
     let onRequestComposerFocus: () -> Void
 
     @State private var reactionFocusMessageId: UUID?
@@ -20,18 +21,27 @@ struct ChatMessageListView: View {
     @State private var reactionFocusFrozenFrame: CGRect?
     /// Ignore drag / dim-tap dismiss until the long-press finger has lifted.
     @State private var reactionFocusDismissArmed = false
+    @State private var detailsMessage: ChatMessage?
     @State private var reactionAnchorFrames: [UUID: CGRect] = [:]
     @State private var timestampRevealTranslation: CGFloat = 0
-    /// Once a drag is classified as bubble-reply vs whitespace-reveal, stick with it.
-    @State private var timestampRevealSession: TimestampRevealSession = .undecided
+    /// Driven from the list pan so bubble-local DragGesture cannot steal vertical scroll.
+    @State private var replySwipeMessageId: UUID?
+    @State private var replySwipeTranslation: CGFloat = 0
+    /// Once a drag is classified (scroll / reply / timestamp), stick with it.
+    @State private var listPanSession: ListPanSession = .undecided
 
     private static let longPressImpact = UIImpactFeedbackGenerator(style: .medium)
+    private static let replySwipeImpact = UIImpactFeedbackGenerator(style: .light)
     private static let reactionFocusDismissArmDelay: TimeInterval = 0.45
+    private static let replySwipeThreshold: CGFloat = 56
+    private static let replySwipeMaxOffset: CGFloat = 88
 
-    private enum TimestampRevealSession {
+    private enum ListPanSession {
         case undecided
-        case revealing
-        case ignored
+        case revealingTimestamps
+        case replySwiping(messageId: UUID, isOutgoing: Bool)
+        /// Vertical pan — leave scrolling to ScrollView.
+        case scrolling
     }
 
     var body: some View {
@@ -50,6 +60,9 @@ struct ChatMessageListView: View {
                                 isFloatingSend: viewModel.newlySentMessageIds.contains(item.message.clientMessageId),
                                 floatSway: viewModel.floatSway(for: item.message.clientMessageId),
                                 timestampRevealTranslation: timestampRevealTranslation,
+                                replySwipeTranslation: replySwipeMessageId == item.message.id
+                                    ? replySwipeTranslation
+                                    : 0,
                                 onReact: { emoji in
                                     _ = viewModel.react(to: item.message.id, emoji: emoji)
                                 },
@@ -84,7 +97,12 @@ struct ChatMessageListView: View {
                         reactionAnchorFrames[id] = frame
                     }
                 }
-                .simultaneousGesture(timestampRevealGesture)
+                .simultaneousGesture(
+                    listPanGesture,
+                    // Keep list pan off while focus is open — it steals vertical pans from
+                    // the capped-message ScrollView inside the overlay.
+                    including: reactionFocusMessageId == nil ? .all : .none
+                )
 
                 GeometryReader { overlayGeometry in
                     if reactionFocusMessageId != nil,
@@ -103,8 +121,16 @@ struct ChatMessageListView: View {
                                 }
                                 beginReply(to: item.message)
                             },
+                            onCopy: {
+                                let body = focusContext.displayMessage.message.body
+                                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                                guard !body.isEmpty else { return }
+                                UIPasteboard.general.string = body
+                            },
+                            onDetails: {
+                                detailsMessage = focusContext.displayMessage.message
+                            },
                             onOpenFullPicker: {
-                                dismissReactionFocus(force: true)
                                 reactionPicker.present { emoji in
                                     _ = viewModel.react(to: focusContext.messageId, emoji: emoji)
                                 }
@@ -132,56 +158,112 @@ struct ChatMessageListView: View {
                 guard token > 0, let targetId = viewModel.highlightedMessageId else { return }
                 scrollToMessage(targetId, proxy: proxy)
             }
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 12).onChanged { _ in
-                    dismissReactionFocus(force: false)
-                }
-            )
+            .sheet(item: $detailsMessage) { message in
+                MessageDetailsSheet(
+                    message: message,
+                    displayNameForUserId: userDisplayName
+                )
+            }
         }
     }
 
-    private var timestampRevealGesture: some Gesture {
+    private var listPanGesture: some Gesture {
         DragGesture(minimumDistance: 8, coordinateSpace: .global)
             .onChanged { value in
                 let horizontal = value.translation.width
                 let vertical = abs(value.translation.height)
 
-                switch timestampRevealSession {
-                case .ignored:
+                switch listPanSession {
+                case .scrolling:
                     return
                 case .undecided:
-                    guard abs(horizontal) > vertical * 1.15 else { return }
-                    if isTouchOnMessageBubble(value.startLocation) {
-                        timestampRevealSession = .ignored
+                    // Wait until axis is clear; do not claim vertical pans (ScrollView owns them).
+                    guard abs(horizontal) > 8 || vertical > 8 else { return }
+                    if vertical >= abs(horizontal) * 0.95 {
+                        listPanSession = .scrolling
                         return
                     }
-                    timestampRevealSession = .revealing
-                case .revealing:
+                    guard abs(horizontal) > vertical * 1.15 else { return }
+
+                    if let hit = messageHit(at: value.startLocation) {
+                        listPanSession = .replySwiping(
+                            messageId: hit.messageId,
+                            isOutgoing: hit.isOutgoing
+                        )
+                        replySwipeMessageId = hit.messageId
+                    } else {
+                        listPanSession = .revealingTimestamps
+                    }
+                case .revealingTimestamps, .replySwiping:
                     break
                 }
 
-                let signed = horizontal < 0 ? -abs(horizontal) : abs(horizontal)
                 var transaction = Transaction()
                 transaction.disablesAnimations = true
-                withTransaction(transaction) {
-                    // Keep 1:1 with the finger; bubbles clip to the label width.
-                    timestampRevealTranslation = signed
+
+                switch listPanSession {
+                case .revealingTimestamps:
+                    let signed = horizontal < 0 ? -abs(horizontal) : abs(horizontal)
+                    withTransaction(transaction) {
+                        timestampRevealTranslation = signed
+                    }
+                case .replySwiping(_, let isOutgoing):
+                    let raw: CGFloat = isOutgoing ? min(0, horizontal) : max(0, horizontal)
+                    let clamped = min(abs(raw), Self.replySwipeMaxOffset) * (raw < 0 ? -1 : 1)
+                    withTransaction(transaction) {
+                        replySwipeTranslation = clamped
+                    }
+                case .undecided, .scrolling:
+                    break
                 }
             }
-            .onEnded { _ in
-                let shouldReset = timestampRevealSession == .revealing
-                timestampRevealSession = .undecided
-                guard shouldReset else { return }
-                withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.86)) {
-                    timestampRevealTranslation = 0
+            .onEnded { value in
+                let endedSession = listPanSession
+                listPanSession = .undecided
+
+                switch endedSession {
+                case .revealingTimestamps:
+                    withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.86)) {
+                        timestampRevealTranslation = 0
+                    }
+                case .replySwiping(let messageId, let isOutgoing):
+                    let horizontal = value.translation.width
+                    let vertical = abs(value.translation.height)
+                    let triggered = abs(horizontal) > vertical && (
+                        isOutgoing
+                            ? horizontal <= -Self.replySwipeThreshold
+                            : horizontal >= Self.replySwipeThreshold
+                    )
+                    if triggered,
+                       let item = messages.first(where: { $0.id == messageId }) {
+                        Self.replySwipeImpact.impactOccurred()
+                        beginReply(to: item)
+                    }
+                    withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.86)) {
+                        replySwipeTranslation = 0
+                    }
+                    replySwipeMessageId = nil
+                case .undecided, .scrolling:
+                    replySwipeMessageId = nil
+                    replySwipeTranslation = 0
                 }
             }
     }
 
-    private func isTouchOnMessageBubble(_ globalPoint: CGPoint) -> Bool {
-        reactionAnchorFrames.values.contains { frame in
-            frame.insetBy(dx: -6, dy: -4).contains(globalPoint)
+    private struct MessageHit {
+        let messageId: UUID
+        let isOutgoing: Bool
+    }
+
+    private func messageHit(at globalPoint: CGPoint) -> MessageHit? {
+        for (id, frame) in reactionAnchorFrames where frame.insetBy(dx: -6, dy: -4).contains(globalPoint) {
+            guard let message = messages.first(where: { $0.id == id }) else { continue }
+            return MessageHit(
+                messageId: id,
+                isOutgoing: message.senderId == currentUserId
+            )
         }
+        return nil
     }
 
     private func reactionFocusContext(
@@ -239,7 +321,9 @@ struct ChatMessageListView: View {
     private func dismissReactionFocus(force: Bool) {
         guard reactionFocusMessageId != nil else { return }
         guard force || reactionFocusDismissArmed else { return }
-        reactionFocusMessageId = nil
+        withAnimation(MessageReactionTrayMotion.dismiss) {
+            reactionFocusMessageId = nil
+        }
         reactionFocusFrozenFrame = nil
         reactionFocusDismissArmed = false
         InteractionScrollLock.forceUnlock()
