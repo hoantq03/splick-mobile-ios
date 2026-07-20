@@ -10,12 +10,20 @@ struct ChatAddFriendBanner: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
-            Text(message)
-                .font(SplickTheme.Typography.caption)
-                .foregroundStyle(SplickTheme.Colors.textSecondary)
-                .multilineTextAlignment(.leading)
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(alignment: .center, spacing: SplickTheme.Spacing.xs) {
+                Image(systemName: "info.circle")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    .accessibilityHidden(true)
+
+                Text(message)
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(2)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
 
             if let actionTitle {
                 Button(action: onAction) {
