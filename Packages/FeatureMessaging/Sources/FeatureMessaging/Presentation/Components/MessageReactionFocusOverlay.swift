@@ -24,6 +24,8 @@ struct MessageReactionFocusOverlay: View {
     /// In-place pop — message stays put and grows toward the viewer.
     private let messageFocusScale: CGFloat = 1.12
     private static let replyImpact = UIImpactFeedbackGenerator(style: .light)
+    /// Fallback until the options stack has been measured.
+    private let estimatedOptionsHeight: CGFloat = 96
 
     private var contentAlignment: Alignment {
         context.isOutgoing ? .trailing : .leading
@@ -40,10 +42,25 @@ struct MessageReactionFocusOverlay: View {
 
     var body: some View {
         GeometryReader { geo in
-            let contentWidth = max(geo.size.width - horizontalMargin * 2, 120)
+            let columnWidth = max(geo.size.width - horizontalMargin * 2, 120)
+            // Layout narrower so after scale the bubble still fits inside equal side margins.
+            let messageLayoutWidth = floor(columnWidth / messageFocusScale)
+            let resolvedOptionsHeight = max(optionsSize.height, estimatedOptionsHeight)
             let placeOptionsAbove = shouldPlaceOptionsAbove(
                 containerHeight: geo.size.height,
-                optionsHeight: optionsSize.height
+                optionsHeight: resolvedOptionsHeight
+            )
+            // Always leave room for options + gap + safe margins.
+            let maxMessageVisualHeight = max(
+                geo.size.height - resolvedOptionsHeight - stackSpacing - verticalMargin * 2,
+                120
+            )
+            let maxMessageLayoutHeight = floor(maxMessageVisualHeight / messageFocusScale)
+            let layout = verticalLayout(
+                placeAbove: placeOptionsAbove,
+                containerHeight: geo.size.height,
+                optionsHeight: resolvedOptionsHeight,
+                messageLayoutHeight: min(max(messageSize.height, 1), maxMessageLayoutHeight)
             )
 
             ZStack {
@@ -53,7 +70,24 @@ struct MessageReactionFocusOverlay: View {
                     .contentShape(Rectangle())
                     .onTapGesture { dismissAnimated() }
 
-                focusColumn(width: contentWidth) {
+                // Message under options so a tall bubble never covers emoji/reply.
+                focusColumn(width: columnWidth) {
+                    liftedMessage(
+                        maxContentWidth: messageLayoutWidth,
+                        maxLayoutHeight: maxMessageLayoutHeight,
+                        pinToBottom: placeOptionsAbove
+                    )
+                }
+                .scaleEffect(
+                    isRevealed ? messageFocusScale : 0.92,
+                    anchor: UnitPoint(
+                        x: horizontalScaleAnchorX,
+                        y: placeOptionsAbove ? 1 : 0
+                    )
+                )
+                .position(x: geo.size.width / 2, y: layout.messageCenterY)
+
+                focusColumn(width: columnWidth) {
                     optionsStack(placeAbove: placeOptionsAbove)
                 }
                 .background {
@@ -71,25 +105,7 @@ struct MessageReactionFocusOverlay: View {
                 )
                 .opacity(isRevealed ? 1 : 0)
                 .offset(y: isRevealed ? 0 : (placeOptionsAbove ? 14 : -14))
-                .position(
-                    x: geo.size.width / 2,
-                    y: optionsCenterY(
-                        placeAbove: placeOptionsAbove,
-                        containerHeight: geo.size.height
-                    )
-                )
-
-                focusColumn(width: contentWidth) {
-                    liftedMessage(maxContentWidth: contentWidth)
-                }
-                .scaleEffect(
-                    isRevealed ? messageFocusScale : 0.92,
-                    anchor: UnitPoint(x: horizontalScaleAnchorX, y: 0.5)
-                )
-                .position(
-                    x: geo.size.width / 2,
-                    y: context.frame.midY
-                )
+                .position(x: geo.size.width / 2, y: layout.optionsCenterY)
             }
         }
         .animation(MessageReactionTrayMotion.present, value: isRevealed)
@@ -132,8 +148,12 @@ struct MessageReactionFocusOverlay: View {
         )
     }
 
-    private func liftedMessage(maxContentWidth: CGFloat) -> some View {
-        MessageBubble(
+    private func liftedMessage(
+        maxContentWidth: CGFloat,
+        maxLayoutHeight: CGFloat,
+        pinToBottom: Bool
+    ) -> some View {
+        let bubble = MessageBubble(
             displayMessage: context.displayMessage,
             isOutgoing: context.isOutgoing,
             currentUserId: context.currentUserId,
@@ -147,19 +167,25 @@ struct MessageReactionFocusOverlay: View {
         )
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: maxContentWidth, alignment: contentAlignment)
-        .frame(maxWidth: .infinity, alignment: contentAlignment)
         .background {
             GeometryReader { proxy in
                 Color.clear.preference(key: MessageMeasuredSizeKey.self, value: proxy.size)
             }
         }
         .onPreferenceChange(MessageMeasuredSizeKey.self) { messageSize = $0 }
+
+        return ScrollView(showsIndicators: false) {
+            bubble
+        }
+        .frame(maxHeight: maxLayoutHeight, alignment: pinToBottom ? .bottom : .top)
+        .frame(maxWidth: .infinity, alignment: contentAlignment)
         .shadow(
             color: .black.opacity(isRevealed ? 0.22 : 0.08),
             radius: isRevealed ? 18 : 6,
             y: isRevealed ? 8 : 2
         )
-        .allowsHitTesting(false)
+        // Only intercept scrolls when content actually overflows.
+        .allowsHitTesting(messageSize.height > maxLayoutHeight + 1)
     }
 
     private var replyButton: some View {
@@ -186,14 +212,18 @@ struct MessageReactionFocusOverlay: View {
         .buttonStyle(.plain)
     }
 
+    private struct VerticalLayout {
+        let messageCenterY: CGFloat
+        let optionsCenterY: CGFloat
+    }
+
     private func shouldPlaceOptionsAbove(
         containerHeight: CGFloat,
         optionsHeight: CGFloat
     ) -> Bool {
-        let scaledMessageHalf = max(messageSize.height, context.frame.height) * messageFocusScale / 2
         let needed = optionsHeight + stackSpacing
-        let spaceAbove = context.frame.midY - scaledMessageHalf - verticalMargin
-        let spaceBelow = containerHeight - context.frame.midY - scaledMessageHalf - verticalMargin
+        let spaceAbove = context.frame.minY - verticalMargin
+        let spaceBelow = containerHeight - context.frame.maxY - verticalMargin
 
         if spaceAbove >= needed, spaceBelow >= needed {
             return spaceAbove >= spaceBelow
@@ -203,20 +233,52 @@ struct MessageReactionFocusOverlay: View {
         return spaceAbove >= spaceBelow
     }
 
-    private func optionsCenterY(placeAbove: Bool, containerHeight: CGFloat) -> CGFloat {
-        let scaledMessageHalf = max(messageSize.height, context.frame.height) * messageFocusScale / 2
-        let optionsHalf = optionsSize.height / 2
+    /// Options stay visible; short messages keep near the original bubble, long ones fill the rest.
+    private func verticalLayout(
+        placeAbove: Bool,
+        containerHeight: CGFloat,
+        optionsHeight: CGFloat,
+        messageLayoutHeight: CGFloat
+    ) -> VerticalLayout {
+        let visualMessageHeight = messageLayoutHeight * messageFocusScale
+        let minY = verticalMargin
+        let maxY = containerHeight - verticalMargin
 
-        let raw: CGFloat
         if placeAbove {
-            raw = context.frame.midY - scaledMessageHalf - stackSpacing - optionsHalf
-        } else {
-            raw = context.frame.midY + scaledMessageHalf + stackSpacing + optionsHalf
-        }
+            var messageBottom = min(context.frame.maxY, maxY)
+            var messageTop = messageBottom - visualMessageHeight
+            var optionsBottom = messageTop - stackSpacing
+            var optionsTop = optionsBottom - optionsHeight
 
-        let minY = verticalMargin + optionsHalf
-        let maxY = containerHeight - verticalMargin - optionsHalf
-        return min(max(raw, minY), max(maxY, minY))
+            if optionsTop < minY {
+                optionsTop = minY
+                optionsBottom = optionsTop + optionsHeight
+                messageTop = optionsBottom + stackSpacing
+                messageBottom = min(messageTop + visualMessageHeight, maxY)
+            }
+
+            return VerticalLayout(
+                messageCenterY: (messageTop + messageBottom) / 2,
+                optionsCenterY: (optionsTop + optionsBottom) / 2
+            )
+        } else {
+            var messageTop = max(context.frame.minY, minY)
+            var messageBottom = messageTop + visualMessageHeight
+            var optionsTop = messageBottom + stackSpacing
+            var optionsBottom = optionsTop + optionsHeight
+
+            if optionsBottom > maxY {
+                optionsBottom = maxY
+                optionsTop = optionsBottom - optionsHeight
+                messageBottom = optionsTop - stackSpacing
+                messageTop = max(messageBottom - visualMessageHeight, minY)
+            }
+
+            return VerticalLayout(
+                messageCenterY: (messageTop + messageBottom) / 2,
+                optionsCenterY: (optionsTop + optionsBottom) / 2
+            )
+        }
     }
 
     private func dismissAnimated() {
