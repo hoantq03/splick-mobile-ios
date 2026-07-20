@@ -597,22 +597,58 @@ public final class FeedViewModel: ObservableObject {
         OptimisticPostBuilder.cleanupPendingMedia(postId: postId)
     }
 
+    public enum PostLoadResult: Equatable {
+        case loaded
+        case unavailable
+        case failed
+    }
+
     @discardableResult
-    func ensurePostLoaded(id: UUID) async -> Bool {
+    public func ensurePostLoaded(id: UUID) async -> PostLoadResult {
         if posts.contains(where: { $0.id == id }) {
-            return true
+            return .loaded
         }
 
         do {
             let post = try await fetchPostUseCase.execute(postId: id)
             posts.insert(post, at: 0)
             state = .loaded(posts)
-            return true
+            return .loaded
         } catch {
-            alertMessage = "Không thể tải bài viết."
+            let unavailable = Self.isPostUnavailable(error)
+            alertMessage = unavailable
+                ? "Bài viết không còn khả dụng. Có thể đã bị xoá hoặc bạn không còn quyền xem."
+                : "Không thể tải bài viết."
             Log.error(error, category: .feed)
-            return false
+            return unavailable ? .unavailable : .failed
         }
+    }
+
+    private static func isPostUnavailable(_ error: Error) -> Bool {
+        if let network = error as? NetworkError {
+            switch network {
+            case .forbidden, .notFound:
+                return true
+            case .apiError(_, let message, _), .unknown(let message, _):
+                return messageSuggestsUnavailablePost(message)
+            default:
+                return false
+            }
+        }
+        if let app = error as? AppError, case .network(let network) = app {
+            return isPostUnavailable(network)
+        }
+        return messageSuggestsUnavailablePost(error.localizedDescription)
+    }
+
+    private static func messageSuggestsUnavailablePost(_ message: String) -> Bool {
+        let lowered = message.lowercased()
+        return lowered.contains("cannot access")
+            || lowered.contains("forbidden")
+            || lowered.contains("not found")
+            || lowered.contains("deleted")
+            || lowered.contains("không còn")
+            || lowered.contains("không có quyền")
     }
 
     func sendBillReminder(
