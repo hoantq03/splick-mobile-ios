@@ -108,11 +108,13 @@ struct MessageReactionFocusOverlay: View {
                 .position(x: geo.size.width / 2, y: layout.optionsCenterY)
             }
         }
-        .animation(MessageReactionTrayMotion.present, value: isRevealed)
         .onAppear {
+            // Defer so the first frame paints collapsed; same-runloop false→true can no-op.
             isRevealed = false
-            withAnimation(MessageReactionTrayMotion.present) {
-                isRevealed = true
+            DispatchQueue.main.async {
+                withAnimation(MessageReactionTrayMotion.present) {
+                    isRevealed = true
+                }
             }
         }
     }
