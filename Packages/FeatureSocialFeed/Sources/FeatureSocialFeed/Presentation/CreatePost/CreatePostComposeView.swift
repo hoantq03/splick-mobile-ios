@@ -70,7 +70,7 @@ public struct CreatePostComposeView: View {
                 Button(languageService.text(.commonCancel), action: onCancel)
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button("Đăng") {
+                Button(languageService.text(.feedCreatePostAction)) {
                     if let prepared = viewModel.prepareSubmit() {
                         onPostSubmit(prepared)
                     }
@@ -78,7 +78,7 @@ public struct CreatePostComposeView: View {
             }
         }
         .alert(
-            "Không thể đăng",
+            languageService.text(.feedCreatePostFailedTitle),
             isPresented: Binding(
                 get: { viewModel.submitState.error != nil },
                 set: { if !$0 { viewModel.clearSubmitError() } }
@@ -179,7 +179,7 @@ public struct CreatePostComposeView: View {
                                             .scaledToFill()
                                     }
                                     .buttonStyle(.plain)
-                                    .accessibilityLabel("Xem và chỉnh sửa ảnh")
+                                    .accessibilityLabel(languageService.text(.feedCreateEditMediaA11y))
                                 } else {
                                     ZStack {
                                         SplickTheme.Colors.tertiaryBackground
@@ -209,12 +209,12 @@ public struct CreatePostComposeView: View {
                                 Button {
                                     showCameraCapture = true
                                 } label: {
-                                    Label("Chụp ảnh", systemImage: "camera")
+                                    Label(languageService.text(.feedCreateTakePhoto), systemImage: "camera")
                                 }
                                 Button {
                                     showPhotoLibraryPicker = true
                                 } label: {
-                                    Label("Chọn từ thư viện", systemImage: "photo.on.rectangle")
+                                    Label(languageService.text(.feedCreatePickLibrary), systemImage: "photo.on.rectangle")
                                 }
                             }
                             if viewModel.remainingVideoSlots > 0 {
@@ -223,7 +223,7 @@ public struct CreatePostComposeView: View {
                                     maxSelectionCount: 1,
                                     matching: .videos
                                 ) {
-                                    Label("Chọn video", systemImage: "video")
+                                    Label(languageService.text(.feedCreatePickVideo), systemImage: "video")
                                 }
                             }
                         } label: {
@@ -258,7 +258,7 @@ public struct CreatePostComposeView: View {
             Text(languageService.text(.feedCreateCaption))
                 .font(SplickTheme.Typography.headline)
             MentionTextField(
-                "Viết gì đó về khoảnh khắc này...",
+                languageService.text(.feedCreateCaptionPlaceholder),
                 text: $viewModel.caption,
                 fontSize: 15,
                 minHeight: 88
@@ -286,7 +286,7 @@ public struct CreatePostComposeView: View {
 
     private var additionalOptionsSection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-            Text("Tùy chọn khác")
+            Text(languageService.text(.feedCreateMoreOptions))
                 .font(SplickTheme.Typography.headline)
 
             Button {
@@ -294,7 +294,7 @@ public struct CreatePostComposeView: View {
             } label: {
                 optionRow(
                     icon: "eye",
-                    title: "Ai có thể xem",
+                    title: languageService.text(.feedAudienceTitle),
                     summary: audienceOptionSummaryText
                 )
             }
@@ -343,13 +343,13 @@ public struct CreatePostComposeView: View {
             if otherCount == 0 {
                 return groupName
             }
-            return "\(groupName) và +\(otherCount) người khác"
+            return groupName + languageService.format(.feedCompanionsAndOthers, otherCount)
         }
 
         guard !companionNames.isEmpty else {
             return viewModel.enableBillSplit
-                ? "Chạm để chọn những người sẽ cùng chia bill với bạn."
-                : "Chạm để chọn những người có trong khoảnh khắc này."
+                ? languageService.text(.feedCreateBillCompanionsHint)
+                : languageService.text(.feedCreateMomentCompanionsHint)
         }
 
         if companionNames.count == 1 {
@@ -360,16 +360,19 @@ public struct CreatePostComposeView: View {
         if companionNames.count <= 2 {
             return previewNames.joined(separator: ", ")
         }
-        return "\(previewNames.joined(separator: ", ")) và +\(companionNames.count - 2) người khác"
+        return previewNames.joined(separator: ", ")
+            + languageService.format(.feedCompanionsAndOthers, companionNames.count - 2)
     }
 
     private var companionsSectionTitle: String {
-        viewModel.enableBillSplit ? "Chia bill cùng với" : "Khoảnh khắc cùng với"
+        viewModel.enableBillSplit
+            ? languageService.text(.feedCreateBillWith)
+            : languageService.text(.feedCreateMomentWith)
     }
 
     private var locationSummaryText: String {
         let trimmed = viewModel.location.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "Chạm để thêm địa điểm hoặc nơi check-in." : trimmed
+        return trimmed.isEmpty ? languageService.text(.feedCreateLocationHint) : trimmed
     }
 
     private func optionRow(icon: String, title: String, summary: String) -> some View {
@@ -410,7 +413,7 @@ public struct CreatePostComposeView: View {
     private var billSplitSection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
             Toggle(
-                "Chia bill",
+                languageService.text(.feedBillSplitTitle),
                 isOn: Binding(
                     get: { viewModel.enableBillSplit },
                     set: { isEnabled in
@@ -426,9 +429,9 @@ public struct CreatePostComposeView: View {
                 VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
                     totalAmountField
 
-                    Picker("Cách chia", selection: $viewModel.splitMode) {
+                    Picker(languageService.text(.expenseCreateSplitType), selection: $viewModel.splitMode) {
                         ForEach(ComposeBillSplitMode.allCases) { mode in
-                            Text(mode.title).tag(mode)
+                            Text(languageService.text(mode.titleKey)).tag(mode)
                         }
                     }
                     .pickerStyle(.segmented)
@@ -450,7 +453,7 @@ public struct CreatePostComposeView: View {
                         billSplitDetailFields
                     }
 
-                    Toggle("Nhắc nhở tự động hàng ngày", isOn: $viewModel.autoReminderEnabled)
+                    Toggle(languageService.text(.feedCreateAutoReminder), isOn: $viewModel.autoReminderEnabled)
                         .font(SplickTheme.Typography.callout)
                 }
                 .transition(.move(edge: .top).combined(with: .opacity))
@@ -636,7 +639,7 @@ public struct CreatePostComposeView: View {
 
     private func percentageAmountLabel(for userId: UUID) -> String {
         guard let amount = viewModel.amountForPercentage(userId: userId) else {
-            return "— đ"
+            return "— " + languageService.text(.feedCreateCurrencySymbol)
         }
         return VNDMoneyFormat.formatDisplay(amount)
     }
@@ -695,11 +698,15 @@ private struct ComposeCompanionsEditorView: View {
     @FocusState private var isFriendSearchFocused: Bool
 
     private var companionsTitle: String {
-        viewModel.enableBillSplit ? "Chia bill cùng với" : "Khoảnh khắc cùng với"
+        viewModel.enableBillSplit
+            ? languageService.text(.feedCreateBillWith)
+            : languageService.text(.feedCreateMomentWith)
     }
 
     private var friendSearchPlaceholder: String {
-        viewModel.enableBillSplit ? "Tìm bạn bè hoặc nhóm..." : "Tìm bạn bè..."
+        viewModel.enableBillSplit
+            ? languageService.text(.feedCreateSearchFriendsGroups)
+            : languageService.text(.feedCreateSearchFriends)
     }
 
     var body: some View {
@@ -917,7 +924,7 @@ private struct ComposeCompanionsEditorView: View {
     private var groupSearchResultsSection: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("Nhóm")
+                Text(languageService.text(.friendsTabGroups))
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textTertiary)
                 Spacer()
@@ -954,7 +961,7 @@ private struct ComposeCompanionsEditorView: View {
                 Text(group.name)
                     .font(SplickTheme.Typography.callout)
                     .foregroundStyle(SplickTheme.Colors.textPrimary)
-                Text("\(group.memberCount) thành viên")
+                Text(languageService.format(.friendsMemberCount, group.memberCount))
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
             }
@@ -993,7 +1000,7 @@ private struct ComposeCompanionsEditorView: View {
                 Text(group.name)
                     .font(SplickTheme.Typography.callout)
                     .foregroundStyle(SplickTheme.Colors.textPrimary)
-                Text("\(group.memberCount) thành viên")
+                Text(languageService.format(.friendsMemberCount, group.memberCount))
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
                     .lineLimit(1)
@@ -1027,7 +1034,7 @@ private struct ComposeLocationEditorView: View {
                 VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
                     Text(languageService.text(.feedCreateLocation))
                         .font(SplickTheme.Typography.headline)
-                    SplickTextField("Quán, địa điểm, thành phố...", text: $viewModel.location)
+                    SplickTextField(languageService.text(.feedCreateLocationPlaceholder), text: $viewModel.location)
                 }
                 .splickCard()
             }

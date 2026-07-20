@@ -2,6 +2,7 @@ import Foundation
 import UIKit
 import DesignSystem
 import Common
+import Localization
 import SplickDomain
 import AVFoundation
 import FeatureFriends
@@ -13,11 +14,11 @@ public enum ComposeBillSplitMode: String, CaseIterable, Identifiable {
 
     public var id: String { rawValue }
 
-    public var title: String {
+    public var titleKey: L10nKey {
         switch self {
-        case .equal: return "Chia đều"
-        case .percentage: return "Theo %"
-        case .exact: return "Từng người"
+        case .equal: return .expenseSplitEqual
+        case .percentage: return .expenseSplitPercentage
+        case .exact: return .expenseSplitExact
         }
     }
 }
@@ -64,6 +65,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
 
     private let fetchFriendsUseCase: FetchFriendsUseCaseProtocol
     private let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol
+    private let languageService: LanguageService
     private let currentUser: UserSummary?
     private let currentUserId: UUID?
     private var friendSearchTask: Task<Void, Never>?
@@ -93,11 +95,13 @@ public final class CreatePostComposeViewModel: ObservableObject {
         mediaType: PostMediaType = .image,
         fetchFriendsUseCase: FetchFriendsUseCaseProtocol,
         fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol,
+        languageService: LanguageService,
         currentUser: UserSummary?,
         currentUserId: UUID?
     ) {
         self.fetchFriendsUseCase = fetchFriendsUseCase
         self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
+        self.languageService = languageService
         self.currentUser = currentUser
         self.currentUserId = currentUserId ?? currentUser?.id
 
@@ -173,33 +177,39 @@ public final class CreatePostComposeViewModel: ObservableObject {
     var audienceSummaryTitle: String {
         switch audienceMode {
         case .friends:
-            return "Bạn bè"
+            return languageService.text(.friendsTabFriends)
         case .groups:
-            return selectedAudienceGroups.isEmpty ? "Nhóm" : "\(selectedAudienceGroups.count) nhóm"
+            return selectedAudienceGroups.isEmpty
+                ? languageService.text(.feedAudienceGroups)
+                : languageService.format(.feedAudienceGroupsCount, selectedAudienceGroups.count)
         case .specificUsers:
-            return selectedAudienceUsers.isEmpty ? "Người dùng cụ thể" : "\(selectedAudienceUsers.count) người dùng"
+            return selectedAudienceUsers.isEmpty
+                ? languageService.text(.feedAudienceUsers)
+                : languageService.format(.feedAudienceUsersCount, selectedAudienceUsers.count)
         case .friendsExcept:
-            return selectedAudienceUsers.isEmpty ? "Bạn bè ngoại trừ" : "Bạn bè ngoại trừ \(selectedAudienceUsers.count) người"
+            return selectedAudienceUsers.isEmpty
+                ? languageService.text(.feedAudienceFriendsExcept)
+                : languageService.format(.feedAudienceFriendsExceptCount, selectedAudienceUsers.count)
         }
     }
 
     var audienceSummarySubtitle: String {
         switch audienceMode {
         case .friends:
-            return "Chỉ bạn bè của bạn có thể xem bài viết này."
+            return languageService.text(.feedAudienceFriendsSubtitle)
         case .groups:
             if selectedAudienceGroups.isEmpty {
-                return "Chỉ thành viên trong các nhóm bạn chọn mới xem được."
+                return languageService.text(.feedAudienceGroupsSubtitle)
             }
             return selectedAudienceGroups.prefix(2).map(\.name).joined(separator: ", ")
         case .specificUsers:
             if selectedAudienceUsers.isEmpty {
-                return "Chỉ những người bạn chọn mới xem được."
+                return languageService.text(.feedAudienceUsersSubtitle)
             }
             return selectedAudienceUsers.prefix(2).map(\.displayName).joined(separator: ", ")
         case .friendsExcept:
             if selectedAudienceUsers.isEmpty {
-                return "Bạn bè đều xem được, trừ những người bạn loại ra."
+                return languageService.text(.feedAudienceExceptSubtitle)
             }
             return selectedAudienceUsers.prefix(2).map(\.displayName).joined(separator: ", ")
         }
@@ -249,7 +259,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
     }
 
     func participantDisplayName(_ user: UserSummary) -> String {
-        isCurrentUser(user) ? "Tôi" : user.displayName
+        isCurrentUser(user) ? languageService.text(.commonMe) : user.displayName
     }
 
     var parsedBillTotal: Decimal? {
@@ -265,7 +275,12 @@ public final class CreatePostComposeViewModel: ObservableObject {
         guard let total = parsedBillTotal,
               let share = equalShareAmount
         else { return nil }
-        return "\(VNDMoneyFormat.formatDisplay(total)) ÷ \(billSplitParticipants.count) người = \(VNDMoneyFormat.formatDisplay(share)) / người"
+        return languageService.format(
+            .feedCreateEqualSplitPreview,
+            VNDMoneyFormat.formatDisplay(total),
+            billSplitParticipants.count,
+            VNDMoneyFormat.formatDisplay(share)
+        )
     }
 
     func amountForPercentage(userId: UUID) -> Decimal? {
@@ -419,7 +434,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
             audienceGroupsState = .loaded(groups)
             hasLoadedAudienceGroups = true
         } catch {
-            audienceGroupsState = .failed(error.localizedDescription)
+            audienceGroupsState = .failed(languageService.localizedMessage(for: error))
         }
     }
 
@@ -504,7 +519,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
     func prepareSubmit() -> PreparedPostSubmit? {
         guard let input = buildCreatePostInput() else { return nil }
         guard let author = currentUser else {
-            submitState = .failed("Không xác định được tài khoản.")
+            submitState = .failed(languageService.text(.feedErrorAccountUnknown))
             return nil
         }
 
@@ -518,14 +533,14 @@ public final class CreatePostComposeViewModel: ObservableObject {
             submitState = .idle
             return PreparedPostSubmit(optimisticPost: optimisticPost, input: input)
         } catch {
-            submitState = .failed(error.localizedDescription)
+            submitState = .failed(languageService.localizedMessage(for: error))
             return nil
         }
     }
 
     private func buildCreatePostInput() -> CreatePostInput? {
         guard !selectedMediaItems.isEmpty else {
-            submitState = .failed("Chọn ít nhất một ảnh hoặc video.")
+            submitState = .failed(languageService.text(.feedCreateNeedMedia))
             return nil
         }
 
@@ -537,11 +552,11 @@ public final class CreatePostComposeViewModel: ObservableObject {
 
         if enableBillSplit {
             guard buildBillSplit() != nil else {
-                submitState = .failed("Kiểm tra lại thông tin chia bill.")
+                submitState = .failed(languageService.text(.feedCreateBillInvalid))
                 return nil
             }
             if billSplitParticipants.isEmpty {
-                submitState = .failed("Chọn ít nhất một người để chia bill.")
+                submitState = .failed(languageService.text(.feedCreateBillNeedPeople))
                 return nil
             }
         }
@@ -641,11 +656,11 @@ public final class CreatePostComposeViewModel: ObservableObject {
         case .friends:
             return ""
         case .groups:
-            return "Chọn ít nhất một nhóm."
+            return languageService.text(.feedAudienceNeedGroup)
         case .specificUsers:
-            return "Chọn ít nhất một người dùng cụ thể."
+            return languageService.text(.feedAudienceNeedUser)
         case .friendsExcept:
-            return "Chọn ít nhất một người để loại khỏi danh sách bạn bè."
+            return languageService.text(.feedAudienceNeedExcept)
         }
     }
 

@@ -1,5 +1,6 @@
 import SwiftUI
 import DesignSystem
+import Localization
 import SplickDomain
 
 private enum AudiencePickerScrollTarget: Hashable {
@@ -12,6 +13,7 @@ private enum AudienceSelectionMetrics {
 }
 
 struct PostAudiencePickerSheet: View {
+    @EnvironmentObject private var languageService: LanguageService
     @ObservedObject var viewModel: CreatePostComposeViewModel
     let onUserTap: ((UserSummary) -> Void)?
     @Environment(\.dismiss) private var dismiss
@@ -32,14 +34,14 @@ struct PostAudiencePickerSheet: View {
                     .padding(SplickTheme.Spacing.md)
                     .padding(.bottom, SplickTheme.Spacing.xl)
                 }
-                .navigationTitle("Ai có thể xem")
+                .navigationTitle(languageService.text(.feedAudienceTitle))
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Đóng") { dismiss() }
+                        Button(languageService.text(.commonClose)) { dismiss() }
                     }
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Xong") { dismiss() }
+                        Button(languageService.text(.commonDone)) { dismiss() }
                     }
                 }
                 .onChange(of: viewModel.audienceMode) { mode in
@@ -77,34 +79,34 @@ struct PostAudiencePickerSheet: View {
 
     private var audienceModeSection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-            Text("Quyền xem")
+            Text(languageService.text(.feedAudienceSection))
                 .font(SplickTheme.Typography.headline)
 
             VStack(spacing: SplickTheme.Spacing.sm) {
                 audienceModeRow(
-                    title: "Bạn bè",
-                    subtitle: "Chỉ bạn bè của bạn có thể xem bài viết này.",
+                    title: languageService.text(.friendsTabFriends),
+                    subtitle: languageService.text(.feedAudienceFriendsSubtitle),
                     isSelected: viewModel.audienceMode == .friends,
                     action: { viewModel.selectAudienceMode(.friends) }
                 )
 
                 audienceModeRow(
-                    title: "Nhóm",
-                    subtitle: "Chỉ thành viên trong các nhóm bạn chọn mới xem được.",
+                    title: languageService.text(.feedAudienceGroups),
+                    subtitle: languageService.text(.feedAudienceGroupsSubtitle),
                     isSelected: viewModel.audienceMode == .groups,
                     action: { viewModel.selectAudienceMode(.groups) }
                 )
 
                 audienceModeRow(
-                    title: "Người dùng cụ thể",
-                    subtitle: "Chỉ những người bạn chọn mới xem được bài viết.",
+                    title: languageService.text(.feedAudienceUsers),
+                    subtitle: languageService.text(.feedAudienceUsersSubtitle),
                     isSelected: viewModel.audienceMode == .specificUsers,
                     action: { viewModel.selectAudienceMode(.specificUsers) }
                 )
 
                 audienceModeRow(
-                    title: "Bạn bè ngoại trừ",
-                    subtitle: "Bạn bè vẫn xem được, trừ những người bạn loại ra.",
+                    title: languageService.text(.feedAudienceFriendsExcept),
+                    subtitle: languageService.text(.feedAudienceExceptSubtitle),
                     isSelected: viewModel.audienceMode == .friendsExcept,
                     action: { viewModel.selectAudienceMode(.friendsExcept) }
                 )
@@ -140,11 +142,11 @@ struct PostAudiencePickerSheet: View {
         case .friends:
             return ""
         case .groups:
-            return "Chọn nhóm"
+            return languageService.text(.feedAudiencePickGroups)
         case .specificUsers:
-            return "Chọn bạn bè cụ thể"
+            return languageService.text(.feedAudiencePickUsers)
         case .friendsExcept:
-            return "Loại trừ bạn bè"
+            return languageService.text(.feedAudienceExcludeFriends)
         }
     }
 
@@ -161,7 +163,7 @@ struct PostAudiencePickerSheet: View {
 
     private var selectedAudienceSection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-            Text("Đã chọn")
+            Text(languageService.text(.feedAudienceSelected))
                 .font(SplickTheme.Typography.callout)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
 
@@ -294,7 +296,7 @@ struct PostAudiencePickerSheet: View {
     private var audienceGroupsPicker: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
             searchField(
-                placeholder: "Tìm nhóm...",
+                placeholder: languageService.text(.feedAudienceSearchGroups),
                 text: $viewModel.audienceGroupSearchQuery
             )
 
@@ -309,7 +311,7 @@ struct PostAudiencePickerSheet: View {
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
             default:
                 if viewModel.filteredAudienceGroups.isEmpty {
-                    Text("Không tìm thấy nhóm phù hợp.")
+                    Text(languageService.text(.feedAudienceGroupsNotFound))
                         .font(SplickTheme.Typography.caption)
                         .foregroundStyle(SplickTheme.Colors.textTertiary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -339,7 +341,7 @@ struct PostAudiencePickerSheet: View {
                             Text(group.name)
                                 .font(SplickTheme.Typography.callout)
                                 .foregroundStyle(SplickTheme.Colors.textPrimary)
-                            Text("\(group.memberCount) thành viên")
+                            Text(languageService.format(.friendsMemberCount, group.memberCount))
                                 .font(SplickTheme.Typography.caption)
                                 .foregroundStyle(SplickTheme.Colors.textSecondary)
                         }
@@ -390,7 +392,7 @@ struct PostAudiencePickerSheet: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, SplickTheme.Spacing.md)
                 } else {
-                    Text("Không tìm thấy bạn bè phù hợp.")
+                    Text(languageService.text(.feedAudienceFriendsNotFound))
                         .font(SplickTheme.Typography.caption)
                         .foregroundStyle(SplickTheme.Colors.textTertiary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -407,18 +409,18 @@ struct PostAudiencePickerSheet: View {
     private var userSearchPlaceholder: String {
         switch viewModel.audienceMode {
         case .friendsExcept:
-            return "Tìm bạn bè cần loại trừ..."
+            return languageService.text(.feedAudienceSearchExcept)
         default:
-            return "Tìm bạn bè..."
+            return languageService.text(.feedCreateSearchFriends)
         }
     }
 
     private var userSearchEmptyHint: String {
         switch viewModel.audienceMode {
         case .friendsExcept:
-            return "Hiển thị sẵn 10 người bạn đầu tiên để bạn loại trừ nhanh."
+            return languageService.text(.feedAudienceExceptHint)
         default:
-            return "Hiển thị sẵn 10 người bạn đầu tiên để chọn nhanh người xem."
+            return languageService.text(.feedAudienceUsersHint)
         }
     }
 
