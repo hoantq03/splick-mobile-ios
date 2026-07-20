@@ -398,6 +398,7 @@ enum StringsFeatureEn {
         .messagingChatNotFriendsBanner: "You're not friends with this person.",
         .messagingChatRequestSentBanner: "Friend request sent.",
         .messagingChatRequestReceivedBanner: "This person wants to be your friend.",
+        .messagingChatUndoRequest: "Undo",
 
         // Common extras
         .commonClose: "Close",

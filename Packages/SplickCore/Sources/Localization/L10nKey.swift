@@ -640,4 +640,5 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case messagingChatNotFriendsBanner = "messaging.chat.not_friends.banner"
     case messagingChatRequestSentBanner = "messaging.chat.request_sent.banner"
     case messagingChatRequestReceivedBanner = "messaging.chat.request_received.banner"
+    case messagingChatUndoRequest = "messaging.chat.undo_request"
 }

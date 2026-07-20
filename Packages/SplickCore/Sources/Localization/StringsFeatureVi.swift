@@ -398,6 +398,7 @@ enum StringsFeatureVi {
         .messagingChatNotFriendsBanner: "Bạn chưa kết bạn với người này.",
         .messagingChatRequestSentBanner: "Đã gửi lời mời kết bạn.",
         .messagingChatRequestReceivedBanner: "Người này muốn kết bạn với bạn.",
+        .messagingChatUndoRequest: "Hoàn tác",
 
         // Common extras
         .commonClose: "Đóng",
