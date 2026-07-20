@@ -6,22 +6,30 @@ public struct LegalDocumentView: View {
     @EnvironmentObject private var languageService: LanguageService
 
     private let documentType: LegalDocumentType
+    @State private var isLoading = true
 
     public init(documentType: LegalDocumentType) {
         self.documentType = documentType
     }
 
     public var body: some View {
-        Group {
-            if let bundled = LegalDocumentLoader.loadBundled(
-                documentType,
-                languageCode: languageService.locale.rawValue
-            ) {
-                LegalWebView(html: bundled.html, baseURL: bundled.baseURL)
-            } else {
-                LegalWebView(
-                    remoteURL: documentType.webURL(languageCode: languageService.locale.rawValue)
-                )
+        let languageCode = languageService.locale.rawValue
+        let remoteURL = documentType.webURL(languageCode: languageCode)
+        let bundled = LegalDocumentLoader.loadBundled(documentType, languageCode: languageCode)
+
+        ZStack {
+            LegalWebView(
+                remoteURL: remoteURL,
+                fallbackHTML: bundled?.html,
+                fallbackBaseURL: bundled?.baseURL,
+                onLoadingChange: { loading in
+                    isLoading = loading
+                }
+            )
+
+            if isLoading {
+                ProgressView()
+                    .controlSize(.regular)
             }
         }
         .background(Color(red: 250 / 255, green: 250 / 255, blue: 250 / 255))
