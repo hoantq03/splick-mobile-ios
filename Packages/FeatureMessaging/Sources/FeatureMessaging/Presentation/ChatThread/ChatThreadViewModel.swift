@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import Common
+import Localization
 import SplickDomain
 import SwiftUI
 import UIKit
@@ -43,6 +44,7 @@ public final class ChatThreadViewModel: ObservableObject {
     private let uploadImage: (Data, String) async throws -> MessageImageAttachment
     private let onConversationRead: ((UUID) async -> Void)?
     private let wsClient: MessagingWebSocketClient
+    private let languageService: LanguageService
     private var cancellables = Set<AnyCancellable>()
     private var highlightClearTask: Task<Void, Never>?
     private var floatSwayByMessageId: [UUID: CGFloat] = [:]
@@ -60,6 +62,7 @@ public final class ChatThreadViewModel: ObservableObject {
         repository: MessagingRepositoryProtocol,
         uploadImage: @escaping (Data, String) async throws -> MessageImageAttachment,
         wsClient: MessagingWebSocketClient,
+        languageService: LanguageService,
         onConversationRead: ((UUID) async -> Void)? = nil
     ) {
         self.conversationId = conversationId
@@ -71,6 +74,7 @@ public final class ChatThreadViewModel: ObservableObject {
         self.repository = repository
         self.uploadImage = uploadImage
         self.wsClient = wsClient
+        self.languageService = languageService
         self.onConversationRead = onConversationRead
         bindWsEvents()
     }
@@ -111,7 +115,7 @@ public final class ChatThreadViewModel: ObservableObject {
             }
         } catch {
             Log.error(error, category: .network, metadata: ["action": "loadMessages"])
-            state = .failed(error.localizedDescription)
+            state = .failed(languageService.localizedMessage(for: error))
         }
     }
 
@@ -270,7 +274,7 @@ public final class ChatThreadViewModel: ObservableObject {
         let distinctEmojis = Set(message.reactions.filter { $0.userId == currentUserId }.map(\.emoji))
         if !distinctEmojis.contains(emoji),
            distinctEmojis.count >= ReactionConstants.maxDistinctEmojiPerUser {
-            return "Mỗi tin nhắn bạn chỉ được dùng tối đa 5 loại emoji."
+            return languageService.text(.messagingReactionEmojiLimit)
         }
 
         let optimisticId = UUID()

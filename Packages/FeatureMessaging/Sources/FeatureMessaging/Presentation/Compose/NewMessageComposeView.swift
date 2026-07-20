@@ -58,7 +58,7 @@ public struct NewMessageComposeView: View {
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
 
-            TextField("Tìm người dùng hoặc nhóm...", text: $viewModel.searchQuery)
+            TextField(languageService.text(.messagingComposeSearchPlaceholder), text: $viewModel.searchQuery)
                 .font(SplickTheme.Typography.callout)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
@@ -104,7 +104,7 @@ public struct NewMessageComposeView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
                     if !viewModel.filteredRemoteUsers.isEmpty {
-                        directorySection(title: "Kết quả tìm kiếm") {
+                        directorySection(title: languageService.text(.messagingSearchResults)) {
                             ForEach(viewModel.filteredRemoteUsers) { user in
                                 userRow(user)
                             }
@@ -112,7 +112,7 @@ public struct NewMessageComposeView: View {
                     }
 
                     if !viewModel.filteredFriends.isEmpty {
-                        directorySection(title: "Bạn bè") {
+                        directorySection(title: languageService.text(.friendsTabFriends)) {
                             ForEach(viewModel.filteredFriends) { user in
                                 userRow(user)
                             }
@@ -120,7 +120,7 @@ public struct NewMessageComposeView: View {
                     }
 
                     if !viewModel.filteredGroups.isEmpty {
-                        directorySection(title: "Nhóm") {
+                        directorySection(title: languageService.text(.friendsTabGroups)) {
                             ForEach(viewModel.filteredGroups) { group in
                                 groupRow(group)
                             }
@@ -204,7 +204,7 @@ public struct NewMessageComposeView: View {
                     Text(group.name)
                         .font(SplickTheme.Typography.headline)
                         .foregroundStyle(SplickTheme.Colors.textPrimary)
-                    Text("\(group.memberCount) thành viên")
+                    Text(languageService.format(.friendsMemberCount, group.memberCount))
                         .font(SplickTheme.Typography.caption)
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
                 }

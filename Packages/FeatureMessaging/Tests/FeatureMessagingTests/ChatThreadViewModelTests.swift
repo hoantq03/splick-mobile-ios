@@ -1,6 +1,8 @@
 import XCTest
 import Combine
 @testable import FeatureMessaging
+import Localization
+import Storage
 import SplickDomain
 import Foundation
 
@@ -116,7 +118,8 @@ final class ChatThreadViewModelTests: XCTestCase {
                     thumbnailURL: nil
                 )
             },
-            wsClient: wsClient
+            wsClient: wsClient,
+            languageService: LanguageService(userDefaults: UserDefaultsService())
         )
     }
 

@@ -1,5 +1,6 @@
 import Foundation
 import Common
+import Localization
 import SplickDomain
 
 @MainActor
@@ -24,6 +25,7 @@ public final class NewMessageComposeViewModel: ObservableObject {
     private let groupsProvider: () async throws -> [Group]
     private let searchUsersProvider: (_ query: String) async throws -> [UserSummary]
     private let uploadImage: (Data, String) async throws -> MessageImageAttachment
+    private let languageService: LanguageService
     private var searchTask: Task<Void, Never>?
 
     public init(
@@ -33,7 +35,8 @@ public final class NewMessageComposeViewModel: ObservableObject {
         friendsProvider: @escaping () async throws -> [UserSummary],
         groupsProvider: @escaping () async throws -> [Group],
         searchUsersProvider: @escaping (_ query: String) async throws -> [UserSummary],
-        uploadImage: @escaping (Data, String) async throws -> MessageImageAttachment
+        uploadImage: @escaping (Data, String) async throws -> MessageImageAttachment,
+        languageService: LanguageService
     ) {
         self.currentUserId = currentUserId
         self.repository = repository
@@ -42,6 +45,7 @@ public final class NewMessageComposeViewModel: ObservableObject {
         self.groupsProvider = groupsProvider
         self.searchUsersProvider = searchUsersProvider
         self.uploadImage = uploadImage
+        self.languageService = languageService
     }
 
     public var canSend: Bool {
@@ -170,7 +174,7 @@ public final class NewMessageComposeViewModel: ObservableObject {
             let attachments = try await resolveImageAttachments(from: submissions)
             let mediaSubmissions = submissions.filter { $0.kind == .image || $0.kind == .gif }
             if !mediaSubmissions.isEmpty, attachments.isEmpty {
-                errorMessage = "Không tải được ảnh. Vui lòng thử lại."
+                errorMessage = languageService.text(.messagingImageUploadFailed)
                 return nil
             }
             _ = try await sendMessageUseCase.execute(
@@ -185,7 +189,7 @@ public final class NewMessageComposeViewModel: ObservableObject {
             attachmentDrafts = []
             return conversation
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = languageService.localizedMessage(for: error)
             return nil
         }
     }
@@ -243,7 +247,7 @@ public final class NewMessageComposeViewModel: ObservableObject {
             .joined(separator: ", ")
         let memberIds = selectedUsers.map(\.id)
         return try await repository.createGroup(
-            name: name.isEmpty ? "Nhóm chat" : name,
+            name: name.isEmpty ? languageService.text(.messagingComposeDefaultGroupName) : name,
             avatarUrl: nil,
             memberUserIds: memberIds
         )
