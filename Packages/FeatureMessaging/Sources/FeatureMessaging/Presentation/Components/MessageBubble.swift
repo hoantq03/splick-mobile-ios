@@ -27,7 +27,7 @@ struct MessageBubble: View {
     /// Shared list drag: negative (swipe left) reveals right/outgoing times;
     /// positive (swipe right) reveals left/incoming times.
     var timestampRevealTranslation: CGFloat = 0
-    /// List-owned reply swipe offset (avoids a bubble DragGesture that blocks scroll).
+    /// List-owned reply swipe (1:1) — reveals reply icon in the timestamp/status slot.
     var replySwipeTranslation: CGFloat = 0
     let onReact: (String) -> Void
     let onRetry: (() -> Void)?
@@ -36,11 +36,14 @@ struct MessageBubble: View {
 
     @State private var imageViewerRoute: AttachmentPreviewRoute?
 
-    private static let replySwipeThreshold: CGFloat = 56
+    /// Same optical width as the time slot so reply/time swap in place.
+    private static let accessorySlotWidth: CGFloat = 46
+    private static let replyIconSize: CGFloat = 16
     /// Fits `HH:mm` with caption + monospaced digits.
     private static let timestampLabelWidth: CGFloat = 46
     private static let mediaMaxWidth: CGFloat = 220
     private static let mediaCornerRadius: CGFloat = SplickTheme.CornerRadius.medium
+    private static let rowSideSpacer: CGFloat = 48
 
     private static let timestampFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -62,10 +65,17 @@ struct MessageBubble: View {
     /// 1:1 with finger travel; capped once the full time label is visible.
     /// Swipe left → outgoing (right); swipe right → incoming (left).
     private var revealedTimestampWidth: CGFloat {
+        // Reply swipe owns the accessory slot on this row — hide time while replying.
+        guard replySwipeTranslation == 0 else { return 0 }
         let dragged = isOutgoing
             ? max(-timestampRevealTranslation, 0)
             : max(timestampRevealTranslation, 0)
         return min(dragged, Self.timestampLabelWidth)
+    }
+
+    /// Reply icon opens in the same slot as time, 1:1 with the finger — springs shut on release.
+    private var revealedReplyIconWidth: CGFloat {
+        min(abs(replySwipeTranslation), Self.accessorySlotWidth)
     }
 
     private var formattedTimestamp: String {
@@ -90,10 +100,10 @@ struct MessageBubble: View {
     private var threadRow: some View {
         HStack(alignment: .messageDeliveryStatus, spacing: SplickTheme.Spacing.xxs) {
             if isOutgoing {
-                Spacer(minLength: 48)
+                Spacer(minLength: Self.rowSideSpacer)
                     .allowsHitTesting(false)
             } else {
-                timestampRevealLabel
+                incomingLeadingMeta
             }
 
             bubbleCluster
@@ -101,11 +111,24 @@ struct MessageBubble: View {
             if isOutgoing {
                 outgoingTrailingMeta
             } else {
-                Spacer(minLength: 48)
+                Spacer(minLength: Self.rowSideSpacer)
                     .allowsHitTesting(false)
             }
         }
         .padding(.top, topSpacing)
+    }
+
+    @ViewBuilder
+    private var incomingLeadingMeta: some View {
+        HStack(alignment: .center, spacing: SplickTheme.Spacing.xxs) {
+            replyRevealIcon
+            timestampRevealLabel
+        }
+        .fixedSize(horizontal: true, vertical: true)
+        .alignmentGuide(.messageDeliveryStatus) { dimensions in
+            dimensions[VerticalAlignment.center]
+        }
+        .allowsHitTesting(false)
     }
 
     @ViewBuilder
@@ -114,6 +137,7 @@ struct MessageBubble: View {
             if message.deliveryStatus != .failed {
                 MessageStatusIndicator(status: message.deliveryStatus)
             }
+            replyRevealIcon
             timestampRevealLabel
         }
         .fixedSize(horizontal: true, vertical: true)
@@ -121,6 +145,22 @@ struct MessageBubble: View {
             dimensions[VerticalAlignment.center]
         }
         .allowsHitTesting(false)
+    }
+
+    /// Reply affordance in the time slot — width tracks the finger 1:1, then snaps closed.
+    private var replyRevealIcon: some View {
+        Image(systemName: "arrowshape.turn.up.left.fill")
+            .font(.system(size: Self.replyIconSize, weight: .semibold))
+            .foregroundStyle(SplickTheme.Colors.textSecondary)
+            .frame(width: Self.accessorySlotWidth, height: Self.accessorySlotWidth)
+            .frame(
+                width: revealedReplyIconWidth,
+                alignment: isOutgoing ? .leading : .trailing
+            )
+            .clipped()
+            .opacity(revealedReplyIconWidth < 4 ? 0 : Double(min(revealedReplyIconWidth / 14, 1)))
+            .accessibilityHidden(revealedReplyIconWidth < 8)
+            .allowsHitTesting(false)
     }
 
     /// Time stays tucked under the outer edge; width opens 1:1 with the finger.
@@ -152,14 +192,6 @@ struct MessageBubble: View {
 
     private var bubbleCluster: some View {
         ZStack(alignment: isOutgoing ? .trailing : .leading) {
-            if onReply != nil, replySwipeTranslation != 0 {
-                Image(systemName: "arrowshape.turn.up.left.fill")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(SplickTheme.Colors.textSecondary.opacity(0.75))
-                    .opacity(Double(min(abs(replySwipeTranslation) / Self.replySwipeThreshold, 1)))
-                    .offset(x: replyIconOffset)
-            }
-
             bubbleContent
                 .frame(
                     minWidth: reactionStripMinWidth,
@@ -180,7 +212,6 @@ struct MessageBubble: View {
                 }
                 .padding(.bottom, showsReactionAccessory ? Self.reactionAccessoryOverlap : 0)
         }
-        .offset(x: replySwipeTranslation)
         .simultaneousGesture(longPressGesture)
         .background {
             GeometryReader { geo in
@@ -191,13 +222,6 @@ struct MessageBubble: View {
             }
         }
         .messageSendFloat(isActive: isFloatingSend && presentation == .threadRow, lateralSway: floatSway)
-    }
-
-    private var replyIconOffset: CGFloat {
-        if isOutgoing {
-            return replySwipeTranslation - 22
-        }
-        return replySwipeTranslation + 22
     }
 
     private var showsReactionAccessory: Bool {
