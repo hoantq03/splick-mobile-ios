@@ -152,25 +152,23 @@ struct CommentComposerView: View {
 
     @ViewBuilder
     private var emojiMenuButton: some View {
-        if gifPickerViewModel != nil {
-            Button {
+        Button {
+            if gifPickerViewModel != nil {
                 showAttachmentPicker = true
-            } label: {
-                Image(systemName: "face.smiling")
-                    .font(.system(size: 14))
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
-                    .frame(width: 28, height: composerHeight)
-            }
-        } else {
-            Button {
+            } else {
                 showEmojiInsertPicker = true
-            } label: {
-                Image(systemName: "face.smiling")
-                    .font(.system(size: 14))
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
-                    .frame(width: 28, height: composerHeight)
             }
+        } label: {
+            Image(systemName: "face.smiling")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                .frame(width: 36, height: 36)
+                .background {
+                    Circle()
+                        .fill(SplickTheme.Colors.secondaryBackground)
+                }
         }
+        .buttonStyle(.plain)
     }
 
     private var canSubmit: Bool {
