@@ -195,6 +195,7 @@ public struct ForgotPasswordView: View {
             isLoading: viewModel.state.isLoading && viewModel.step == .otp,
             cornerRadius: fieldCornerRadius,
             showsBackButton: presentation == .sheet,
+            backTitle: languageService.text(.commonBack),
             resendTitle: resendTitle,
             isResendDisabled: !viewModel.canResendCode,
             autoFocus: viewModel.step == .otp,
