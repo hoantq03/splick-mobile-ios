@@ -1,4 +1,5 @@
 import DesignSystem
+import Localization
 import SwiftUI
 import UIKit
 
@@ -15,6 +16,7 @@ enum EditorLayout {
 }
 
 struct PhotoEditorView: View {
+    @EnvironmentObject private var languageService: LanguageService
     @StateObject private var viewModel: PhotoEditorViewModel
     @State private var layoutMetrics = ImageDisplayMetrics(imageSize: .zero, displayFrame: .zero)
     @State private var editingText = ""
@@ -73,7 +75,7 @@ struct PhotoEditorView: View {
                 return
             }
             // New items have the sentinel placeholder — start with empty field so
-            // the user types from scratch without having to clear "Nhập chữ" first.
+            // the user types from scratch without having to clear the placeholder text first.
             let isNew = item.text == EditorTextItem.placeholderText
             isEditingNewItem = isNew
             editingText = isNew ? "" : item.text
@@ -85,7 +87,7 @@ struct PhotoEditorView: View {
 
     private var textInputBar: some View {
         HStack(spacing: SplickTheme.Spacing.sm) {
-            TextField("Nhập chữ...", text: $editingText)
+            TextField(languageService.text(.mediaTextPlaceholder), text: $editingText)
                 .textFieldStyle(.roundedBorder)
                 .focused($isTextFieldFocused)
                 .submitLabel(.done)
@@ -100,7 +102,7 @@ struct PhotoEditorView: View {
                     viewModel.updateText(id, text: displayText)
                 }
 
-            Button("Xong", action: commitTextEditing)
+            Button(languageService.text(.commonDone), action: commitTextEditing)
                 .font(SplickTheme.Typography.callout.weight(.semibold))
         }
         .padding(SplickTheme.Spacing.md)

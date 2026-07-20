@@ -1,3 +1,4 @@
+import Localization
 import SwiftUI
 import UIKit
 
@@ -9,12 +10,13 @@ enum EditorStickerCategory: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var label: String {
+    @MainActor
+    func title(using languageService: LanguageService) -> String {
         switch self {
-        case .widget: return "Widget"
-        case .icon: return "Icon"
-        case .emoji: return "Emoji"
-        case .gif: return "GIF"
+        case .widget: return languageService.text(.mediaStickerTabWidget)
+        case .icon: return languageService.text(.mediaStickerTabIcon)
+        case .emoji: return languageService.text(.mediaStickerTabEmoji)
+        case .gif: return languageService.text(.mediaStickerTabGif)
         }
     }
 
@@ -44,20 +46,21 @@ enum WidgetStickerTemplate: String, CaseIterable, Identifiable, Equatable {
 
     var id: String { rawValue }
 
-    var label: String {
+    @MainActor
+    func title(using languageService: LanguageService) -> String {
         switch self {
-        case .weather: return "Thời tiết"
-        case .clock: return "Giờ"
-        case .calendar: return "Lịch"
-        case .music: return "Nhạc"
-        case .fitness: return "Bước chân"
-        case .battery: return "Pin"
-        case .network: return "Mạng"
-        case .location: return "Vị trí"
-        case .reminder: return "Nhắc nhở"
-        case .countdown: return "Đếm ngược"
-        case .storage: return "Bộ nhớ"
-        case .photos: return "Ảnh"
+        case .weather: return languageService.text(.mediaWidgetWeather)
+        case .clock: return languageService.text(.mediaWidgetClock)
+        case .calendar: return languageService.text(.mediaWidgetCalendar)
+        case .music: return languageService.text(.mediaWidgetMusic)
+        case .fitness: return languageService.text(.mediaWidgetSteps)
+        case .battery: return languageService.text(.mediaWidgetBattery)
+        case .network: return languageService.text(.mediaWidgetNetwork)
+        case .location: return languageService.text(.mediaWidgetLocation)
+        case .reminder: return languageService.text(.mediaWidgetReminder)
+        case .countdown: return languageService.text(.mediaWidgetCountdown)
+        case .storage: return languageService.text(.mediaWidgetStorage)
+        case .photos: return languageService.text(.mediaWidgetPhoto)
         }
     }
 }

@@ -1,4 +1,5 @@
 import Foundation
+import Localization
 
 enum EditorEmojiCategory: String, CaseIterable, Identifiable {
     case recent
@@ -14,18 +15,19 @@ enum EditorEmojiCategory: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var label: String {
+    @MainActor
+    func title(using languageService: LanguageService) -> String {
         switch self {
-        case .recent: return "Gần đây"
-        case .smileys: return "Cảm xúc"
-        case .people: return "Con người"
-        case .animals: return "Động vật"
-        case .food: return "Ẩm thực"
-        case .activities: return "Hoạt động"
-        case .travel: return "Du lịch"
-        case .objects: return "Đồ vật"
-        case .symbols: return "Ký hiệu"
-        case .flags: return "Cờ"
+        case .recent: return languageService.text(.mediaEmojiCategoryRecent)
+        case .smileys: return languageService.text(.mediaEmojiCategorySmileys)
+        case .people: return languageService.text(.mediaEmojiCategoryPeople)
+        case .animals: return languageService.text(.mediaEmojiCategoryAnimals)
+        case .food: return languageService.text(.mediaEmojiCategoryFood)
+        case .activities: return languageService.text(.mediaEmojiCategoryActivities)
+        case .travel: return languageService.text(.mediaEmojiCategoryTravel)
+        case .objects: return languageService.text(.mediaEmojiCategoryObjects)
+        case .symbols: return languageService.text(.mediaEmojiCategorySymbols)
+        case .flags: return languageService.text(.mediaEmojiCategoryFlags)
         }
     }
 }

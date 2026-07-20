@@ -1,4 +1,5 @@
 import Combine
+import Localization
 import PencilKit
 import SwiftUI
 import UIKit
@@ -11,12 +12,13 @@ enum EditorTool: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var label: String {
+    @MainActor
+    func title(using languageService: LanguageService) -> String {
         switch self {
-        case .crop: return "Cắt"
-        case .draw: return "Vẽ"
-        case .text: return "Chữ"
-        case .sticker: return "Sticker"
+        case .crop: return languageService.text(.mediaToolCrop)
+        case .draw: return languageService.text(.mediaToolDraw)
+        case .text: return languageService.text(.mediaToolText)
+        case .sticker: return languageService.text(.mediaToolSticker)
         }
     }
 
@@ -31,7 +33,13 @@ enum EditorTool: String, CaseIterable, Identifiable {
 }
 
 struct EditorTextItem: Identifiable, Equatable {
-    static let placeholderText = "Nhập chữ"
+    /// Language-neutral sentinel for empty canvas text; UI shows `.mediaTextDefault` instead.
+    static let placeholderText = "\u{FFFC}"
+
+    @MainActor
+    static func defaultText(using languageService: LanguageService) -> String {
+        languageService.text(.mediaTextDefault)
+    }
 
     let id: UUID
     var text: String

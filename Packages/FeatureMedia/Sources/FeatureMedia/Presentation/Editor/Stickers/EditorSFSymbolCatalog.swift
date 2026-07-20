@@ -1,3 +1,4 @@
+import Localization
 import UIKit
 
 enum EditorSymbolCategory: String, CaseIterable, Identifiable {
@@ -16,20 +17,21 @@ enum EditorSymbolCategory: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var label: String {
+    @MainActor
+    func title(using languageService: LanguageService) -> String {
         switch self {
-        case .popular: return "Phổ biến"
-        case .communication: return "Liên lạc"
-        case .weather: return "Thời tiết"
-        case .nature: return "Thiên nhiên"
-        case .devices: return "Thiết bị"
-        case .transport: return "Di chuyển"
-        case .sport: return "Thể thao"
-        case .media: return "Media"
-        case .commerce: return "Mua sắm"
-        case .health: return "Sức khỏe"
-        case .shapes: return "Hình dạng"
-        case .arrows: return "Mũi tên"
+        case .popular: return languageService.text(.mediaIconCategoryPopular)
+        case .communication: return languageService.text(.mediaIconCategoryCommunication)
+        case .weather: return languageService.text(.mediaIconCategoryWeather)
+        case .nature: return languageService.text(.mediaIconCategoryNature)
+        case .devices: return languageService.text(.mediaIconCategoryDevices)
+        case .transport: return languageService.text(.mediaIconCategoryTransport)
+        case .sport: return languageService.text(.mediaIconCategorySports)
+        case .media: return languageService.text(.mediaIconCategoryMedia)
+        case .commerce: return languageService.text(.mediaIconCategoryCommerce)
+        case .health: return languageService.text(.mediaIconCategoryHealth)
+        case .shapes: return languageService.text(.mediaIconCategoryShapes)
+        case .arrows: return languageService.text(.mediaIconCategoryArrows)
         }
     }
 }

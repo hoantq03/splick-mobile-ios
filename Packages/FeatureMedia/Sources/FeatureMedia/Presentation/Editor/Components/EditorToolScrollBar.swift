@@ -1,7 +1,9 @@
 import DesignSystem
+import Localization
 import SwiftUI
 
 struct EditorToolScrollBar: View {
+    @EnvironmentObject private var languageService: LanguageService
     @ObservedObject var viewModel: PhotoEditorViewModel
     let onUndo: () -> Void
     let onRedo: () -> Void
@@ -77,7 +79,7 @@ struct EditorToolScrollBar: View {
                         }
                     }
 
-                Text(tool.label)
+                Text(tool.title(using: languageService))
                     .font(.system(size: 11, weight: isActive ? .bold : .medium))
                     .foregroundStyle(isActive ? .white : .white.opacity(0.65))
                     .lineLimit(1)

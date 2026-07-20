@@ -1,9 +1,11 @@
 import DesignSystem
+import Localization
 import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
 
 struct EditorStickerPickerBar: View {
+    @EnvironmentObject private var languageService: LanguageService
     @ObservedObject var viewModel: PhotoEditorViewModel
     @State private var category: EditorStickerCategory = .widget
     @State private var symbolCategory: EditorSymbolCategory = .popular
@@ -46,7 +48,7 @@ struct EditorStickerPickerBar: View {
                             HStack(spacing: 4) {
                                 Image(systemName: tab.icon)
                                     .font(.caption.weight(.semibold))
-                                Text(tab.label)
+                                Text(tab.title(using: languageService))
                                     .font(SplickTheme.Typography.captionBold)
                             }
                             .foregroundStyle(category == tab ? .white : .white.opacity(0.65))
@@ -87,7 +89,7 @@ struct EditorStickerPickerBar: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(EditorSymbolCategory.allCases) { tab in
-                        subcategoryChip(title: tab.label, isActive: symbolCategory == tab) {
+                        subcategoryChip(title: tab.title(using: languageService), isActive: symbolCategory == tab) {
                             symbolCategory = tab
                         }
                     }
@@ -101,7 +103,7 @@ struct EditorStickerPickerBar: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(EditorEmojiCategory.allCases) { tab in
-                        subcategoryChip(title: tab.label, isActive: emojiCategory == tab) {
+                        subcategoryChip(title: tab.title(using: languageService), isActive: emojiCategory == tab) {
                             emojiCategory = tab
                         }
                     }
@@ -121,7 +123,10 @@ struct EditorStickerPickerBar: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.white.opacity(0.55))
-            TextField(category == .icon ? "Tìm SF Symbol..." : "Tìm emoji...", text: $searchText)
+            TextField(
+                category == .icon ? languageService.text(.stickersSearch) : languageService.text(.stickersEmojiSearch),
+                text: $searchText
+            )
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .foregroundStyle(.white)
@@ -190,7 +195,7 @@ struct EditorStickerPickerBar: View {
                     VStack(spacing: 6) {
                         Image(systemName: "plus.circle.fill")
                             .font(.title2)
-                        Text("Thư viện")
+                        Text(languageService.text(.mediaLibraryTitle))
                             .font(.caption2.weight(.semibold))
                     }
                     .foregroundStyle(.white)

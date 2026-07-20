@@ -1,4 +1,5 @@
 import DesignSystem
+import Localization
 import SwiftUI
 
 struct PhotoEditorTextLayer: View {
@@ -26,6 +27,7 @@ struct PhotoEditorTextLayer: View {
 }
 
 private struct TextOverlayItemView: View {
+    @EnvironmentObject private var languageService: LanguageService
     let item: EditorTextItem
     let center: CGPoint
     let isSelected: Bool
@@ -41,10 +43,13 @@ private struct TextOverlayItemView: View {
     @State private var liveScale: CGFloat = 1
     @State private var liveRotation: Angle = .zero
 
+    private var isPlaceholder: Bool {
+        item.text == EditorTextItem.placeholderText
+    }
+
     private var displayText: String {
-        let trimmed = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty, isSelected {
-            return "Nhập chữ"
+        if isPlaceholder {
+            return EditorTextItem.defaultText(using: languageService)
         }
         return item.text
     }
@@ -53,7 +58,7 @@ private struct TextOverlayItemView: View {
         Text(displayText)
             .font(.system(size: 32 * item.scale * liveScale, weight: .bold, design: .rounded))
             .foregroundStyle(Color(item.color))
-            .opacity(displayText == "Nhập chữ" && isSelected ? 0.55 : 1)
+            .opacity(isPlaceholder && isSelected ? 0.55 : 1)
             .shadow(color: .black.opacity(0.45), radius: 3, y: 1)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)

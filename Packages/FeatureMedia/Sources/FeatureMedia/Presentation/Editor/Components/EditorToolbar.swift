@@ -1,7 +1,9 @@
 import DesignSystem
+import Localization
 import SwiftUI
 
 struct EditorToolbar: View {
+    @EnvironmentObject private var languageService: LanguageService
     @ObservedObject var viewModel: PhotoEditorViewModel
     let onDone: () -> Void
     let onCancel: () -> Void
@@ -38,14 +40,14 @@ struct EditorToolbar: View {
 
             Spacer()
 
-            Text("Chỉnh sửa")
+            Text(languageService.text(.mediaEdit))
                 .font(SplickTheme.Typography.headline)
                 .foregroundStyle(.white)
 
             Spacer()
 
             Button(action: onDone) {
-                Text("Xong")
+                Text(languageService.text(.commonDone))
                     .font(SplickTheme.Typography.callout.weight(.bold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, SplickTheme.Spacing.md)
