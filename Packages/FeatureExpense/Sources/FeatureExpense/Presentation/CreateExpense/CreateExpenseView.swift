@@ -115,7 +115,7 @@ public struct CreateExpenseView: View {
         } label: {
             HStack(spacing: SplickTheme.Spacing.xxs) {
                 Image(systemName: category.icon)
-                Text(category.displayName)
+                Text(category.title(using: languageService))
                     .font(SplickTheme.Typography.caption)
             }
             .padding(.horizontal, SplickTheme.Spacing.sm)

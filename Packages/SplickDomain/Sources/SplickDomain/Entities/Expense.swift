@@ -171,6 +171,10 @@ public enum ExpenseCategory: String, Codable, CaseIterable, Sendable {
     case travel = "TRAVEL"
     case general = "GENERAL"
 
+    /// English-only fallback. Domain layer has no access to `LanguageService`;
+    /// UI call sites must use `ExpenseCategory.title(using:)` from `FeatureExpense`'s
+    /// `ExpenseL10n` instead so labels are localized.
+    @available(*, deprecated, message: "Use ExpenseCategory.title(using:) for localized UI text.")
     public var displayName: String {
         switch self {
         case .food: return "Food & Drinks"

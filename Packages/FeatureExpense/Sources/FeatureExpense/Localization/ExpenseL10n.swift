@@ -1,4 +1,21 @@
 import Localization
+import SplickDomain
+
+extension ExpenseCategory {
+    @MainActor
+    public func title(using languageService: LanguageService) -> String {
+        switch self {
+        case .food: return languageService.text(.expenseCategoryFood)
+        case .transport: return languageService.text(.expenseCategoryTransport)
+        case .housing: return languageService.text(.expenseCategoryHousing)
+        case .entertainment: return languageService.text(.expenseCategoryEntertainment)
+        case .shopping: return languageService.text(.expenseCategoryShopping)
+        case .utilities: return languageService.text(.expenseCategoryUtilities)
+        case .travel: return languageService.text(.expenseCategoryTravel)
+        case .general: return languageService.text(.expenseCategoryGeneral)
+        }
+    }
+}
 
 extension ExpenseDebtFilter {
     @MainActor

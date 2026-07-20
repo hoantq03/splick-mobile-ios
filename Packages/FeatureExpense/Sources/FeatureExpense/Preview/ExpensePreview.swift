@@ -1,5 +1,7 @@
 import Foundation
 import SwiftUI
+import Localization
+import Storage
 import SplickDomain
 
 #if DEBUG
@@ -51,11 +53,14 @@ final class MockUserSearchUseCase: UserSearchUseCaseProtocol, Sendable {
 }
 
 #Preview("Create Expense") {
-    CreateExpenseView(
+    let previewLanguageService = LanguageService(userDefaults: UserDefaultsService())
+    return CreateExpenseView(
         viewModel: CreateExpenseViewModel(
-            createExpenseUseCase: MockCreateExpenseUseCase()
+            createExpenseUseCase: MockCreateExpenseUseCase(),
+            languageService: previewLanguageService
         )
     )
+    .environmentObject(previewLanguageService)
 }
 
 #endif
