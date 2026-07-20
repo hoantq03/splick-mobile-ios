@@ -1,4 +1,5 @@
 import Foundation
+import Localization
 import SplickDomain
 import SplickWidgetKit
 import FeatureExpense
@@ -12,6 +13,7 @@ final class WidgetSyncBridge {
     private let fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol
     private let fetchExpensesUseCase: FetchExpensesUseCaseProtocol
     private let fetchDebtSummaryUseCase: FetchDebtSummaryUseCaseProtocol
+    private let languageService: LanguageService
 
     /// Opening Friends reloads the group directory often — don't refetch widget expenses every time.
     private static let groupExpenseSyncInterval: TimeInterval = 10 * 60
@@ -23,12 +25,14 @@ final class WidgetSyncBridge {
         syncService: WidgetDataSyncService = .shared,
         fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol,
         fetchExpensesUseCase: FetchExpensesUseCaseProtocol,
-        fetchDebtSummaryUseCase: FetchDebtSummaryUseCaseProtocol
+        fetchDebtSummaryUseCase: FetchDebtSummaryUseCaseProtocol,
+        languageService: LanguageService
     ) {
         self.syncService = syncService
         self.fetchIncomingFriendRequestsUseCase = fetchIncomingFriendRequestsUseCase
         self.fetchExpensesUseCase = fetchExpensesUseCase
         self.fetchDebtSummaryUseCase = fetchDebtSummaryUseCase
+        self.languageService = languageService
     }
 
     func syncExpenses(debts: [DebtSummary], expenses: [Expense], group: Group?, currentUserId: UUID?) {
@@ -156,15 +160,15 @@ final class WidgetSyncBridge {
 
     private func messagePreview(for conversation: Conversation) -> String {
         guard let message = conversation.lastMessage else {
-            return "Không có tin nhắn"
+            return languageService.text(.widgetNoMessages)
         }
         if !message.body.isEmpty {
             return message.body
         }
         if !message.imageAttachments.isEmpty {
-            return "📷 Ảnh"
+            return languageService.text(.widgetMessagePhoto)
         }
-        return "Tin nhắn mới"
+        return languageService.text(.messagingNewConversation)
     }
 
     private func avatarURL(for conversation: Conversation) -> String? {

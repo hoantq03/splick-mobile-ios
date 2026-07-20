@@ -1,10 +1,12 @@
 import SwiftUI
 import DesignSystem
 import Common
+import Localization
 
 struct OnboardingView: View {
     let onComplete: () -> Void
 
+    @EnvironmentObject private var languageService: LanguageService
     @State private var currentPage = 0
     @State private var hasCompleted = false
 
@@ -12,30 +14,32 @@ struct OnboardingView: View {
         currentPage == pages.count - 1
     }
 
-    private let pages: [OnboardingPage] = [
-        OnboardingPage(kind: .brand, background: .brand),
-        OnboardingPage(
-            kind: .feature,
-            background: .capture,
-            title: "Click to capture the moments",
-            illustration: .cameraLens,
-            accent: SplickTheme.Colors.primaryGradientStart
-        ),
-        OnboardingPage(
-            kind: .feature,
-            background: .bills,
-            title: "Split the bills together",
-            illustration: .splitBill,
-            accent: SplickTheme.Colors.primaryGradientEnd
-        ),
-        OnboardingPage(
-            kind: .feature,
-            background: .friends,
-            title: "Keep friends relationship",
-            illustration: .overlappingHearts,
-            accent: SplickTheme.Colors.primaryGradientMid
-        ),
-    ]
+    private var pages: [OnboardingPage] {
+        [
+            OnboardingPage(kind: .brand, background: .brand),
+            OnboardingPage(
+                kind: .feature,
+                background: .capture,
+                title: languageService.text(.onboardingSlide1Title),
+                illustration: .cameraLens,
+                accent: SplickTheme.Colors.primaryGradientStart
+            ),
+            OnboardingPage(
+                kind: .feature,
+                background: .bills,
+                title: languageService.text(.onboardingSlide2Title),
+                illustration: .splitBill,
+                accent: SplickTheme.Colors.primaryGradientEnd
+            ),
+            OnboardingPage(
+                kind: .feature,
+                background: .friends,
+                title: languageService.text(.onboardingSlide3Title),
+                illustration: .overlappingHearts,
+                accent: SplickTheme.Colors.primaryGradientMid
+            ),
+        ]
+    }
 
     var body: some View {
         ZStack {
@@ -55,7 +59,7 @@ struct OnboardingView: View {
                 Spacer()
                 pageIndicator
                 if isLastPage {
-                    Text("Tap or swipe to get started")
+                    Text(languageService.text(.onboardingCtaHint))
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(SplickTheme.Colors.textTertiary)
                         .padding(.top, SplickTheme.Spacing.xs)
@@ -97,7 +101,7 @@ struct OnboardingView: View {
                 .font(.system(size: 44, weight: .bold, design: .rounded))
                 .foregroundStyle(SplickTheme.Colors.primaryGradient)
 
-            Text("Click moments, Split bills, Keep relationship")
+            Text(languageService.text(.onboardingTagline))
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
