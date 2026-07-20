@@ -1,11 +1,14 @@
 import SwiftUI
 import UIKit
 import DesignSystem
+import Localization
 import SplickDomain
 
 /// Long-press peek: 2× animated GIF + favorite action.
 /// Opens with a quick spring pop (iOS context-menu style) after the cell's press grow.
 struct StickerGifPeekOverlay: View {
+    @EnvironmentObject private var languageService: LanguageService
+
     let sticker: Sticker
     let isFavorite: Bool
     let isTogglingFavorite: Bool
@@ -102,8 +105,8 @@ struct StickerGifPeekOverlay: View {
             .shadow(color: .black.opacity(0.4), radius: 22, x: 0, y: 12)
             .contentShape(shape)
             .onTapGesture(perform: onSelect)
-            .accessibilityLabel("GIF preview")
-            .accessibilityHint("Double tap to send")
+            .accessibilityLabel(languageService.text(.stickersGifPreviewA11y))
+            .accessibilityHint(languageService.text(.stickersGifDoubleTapSend))
     }
 
     private var favoriteButton: some View {

@@ -51,7 +51,7 @@ public struct CustomEmojiComposerSheet: View {
                 .padding(SplickTheme.Spacing.md)
             }
             .background(SplickTheme.Colors.background)
-            .navigationTitle("Thêm Emoji")
+            .navigationTitle(languageService.text(.stickersAddEmojiTitle))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -75,10 +75,10 @@ public struct CustomEmojiComposerSheet: View {
 
     private var cropSection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-            Text("Căn vùng emoji")
+            Text(languageService.text(.stickersEmojiCropTitle))
                 .font(SplickTheme.Typography.headline)
 
-            Text("Kéo để canh, chụm để phóng to thu nhỏ và xoay để lấy đúng phần ảnh tròn bạn muốn.")
+            Text(languageService.text(.stickersEmojiCropHint))
                 .font(SplickTheme.Typography.caption)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
 
@@ -115,7 +115,7 @@ public struct CustomEmojiComposerSheet: View {
 
     private var aliasSection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-            Text("Tên emoji")
+            Text(languageService.text(.stickersEmojiName))
                 .font(SplickTheme.Typography.headline)
 
             TextField(languageService.text(.feedCustomEmojiShortcodePlaceholder), text: $alias)
@@ -124,11 +124,11 @@ public struct CustomEmojiComposerSheet: View {
                 .textFieldStyle(.roundedBorder)
 
             if !alias.isEmpty {
-                Text("Dấu cách sẽ tự đổi thành `_` khi lưu.")
+                Text(languageService.text(.stickersEmojiNameHint))
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
 
-                Text("Tên sẽ được lưu là :\(normalizedAlias):")
+                Text(languageService.format(.stickersEmojiNamePreview, normalizedAlias))
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
             }
@@ -143,7 +143,7 @@ public struct CustomEmojiComposerSheet: View {
                 ProgressView()
                     .frame(maxWidth: .infinity)
             } else {
-                Text("Tải lên")
+                Text(languageService.text(.stickersUpload))
                     .frame(maxWidth: .infinity)
             }
         }
@@ -350,7 +350,7 @@ public struct CustomEmojiComposerSheet: View {
             onUploaded?(emoji)
             dismiss()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = languageService.localizedMessage(for: error)
         }
     }
 }

@@ -1,6 +1,7 @@
 import SwiftUI
 import Common
 import DesignSystem
+import Localization
 import SplickDomain
 
 enum EmojiPickerEntry: Identifiable {
@@ -19,6 +20,7 @@ enum EmojiPickerEntry: Identifiable {
 
 public struct EmojiPickerContentView: View {
     @EnvironmentObject private var emojiStore: CustomEmojiStore
+    @EnvironmentObject private var languageService: LanguageService
 
     let currentUserId: UUID?
     let searchQuery: String
@@ -60,7 +62,7 @@ public struct EmojiPickerContentView: View {
     public var body: some View {
         Group {
             if filteredEntries.isEmpty {
-                Text("Không tìm thấy emoji phù hợp.")
+                Text(languageService.text(.stickersEmojiNotFound))
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)

@@ -47,7 +47,7 @@ public struct CustomEmojiUploadSheet: View {
                 .padding(SplickTheme.Spacing.md)
             }
             .background(SplickTheme.Colors.background)
-            .navigationTitle("Emoji của bạn")
+            .navigationTitle(languageService.text(.stickersYourEmoji))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -74,10 +74,10 @@ public struct CustomEmojiUploadSheet: View {
 
     private var uploadSection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-            Text("Tải emoji của bạn")
+            Text(languageService.text(.stickersUploadYourEmoji))
                 .font(SplickTheme.Typography.headline)
 
-            Text("Emoji bạn tải lên là emoji cá nhân. Chỉ bạn mới nhìn thấy và sử dụng được chúng.")
+            Text(languageService.text(.stickersPersonalEmojiHint))
                 .font(SplickTheme.Typography.caption)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
 
@@ -136,12 +136,12 @@ public struct CustomEmojiUploadSheet: View {
 
     private var existingSection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-            Text("Emoji của bạn")
+            Text(languageService.text(.stickersYourEmoji))
                 .font(SplickTheme.Typography.headline)
 
             let emojis = currentUserId.map { emojiStore.emojis(ownedBy: $0) } ?? []
             if emojis.isEmpty {
-                Text("Bạn chưa có emoji cá nhân nào.")
+                Text(languageService.text(.stickersPersonalEmojiEmpty))
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
             } else {
@@ -213,7 +213,7 @@ public struct CustomEmojiUploadSheet: View {
             previewImage = nil
             selectedPhotoItem = nil
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = languageService.localizedMessage(for: error)
         }
     }
 
@@ -223,7 +223,7 @@ public struct CustomEmojiUploadSheet: View {
             try await deleteEmojiUseCase.execute(emojiId: emoji.id)
             emojiStore.remove(emojiId: emoji.id)
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = languageService.localizedMessage(for: error)
         }
     }
 }

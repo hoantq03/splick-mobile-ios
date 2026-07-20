@@ -150,7 +150,7 @@ public struct EmojiPickerSheet: View {
                 Text(uploadPreparationError ?? "")
             }
         }
-        .searchable(text: $searchQuery, placement: .navigationBarDrawer(displayMode: .always), prompt: "Tìm emoji")
+        .searchable(text: $searchQuery, placement: .navigationBarDrawer(displayMode: .always), prompt: languageService.text(.stickersEmojiSearch))
         .presentationDetents([.medium, .large])
         .sheet(isPresented: $showEmojiComposer, onDismiss: {
             uploadSourceImage = nil
@@ -169,9 +169,9 @@ public struct EmojiPickerSheet: View {
     }
 
     private var tabPicker: some View {
-        Picker("Emoji source", selection: $selectedTab) {
+        Picker(languageService.text(.stickersEmojiSourceA11y), selection: $selectedTab) {
             Text(languageService.text(.feedEmojiPickerAllTitle)).tag(EmojiPickerTab.unicode)
-                        Text("Emoji của bạn").tag(EmojiPickerTab.custom)
+            Text(languageService.text(.stickersYourEmoji)).tag(EmojiPickerTab.custom)
         }
         .pickerStyle(.segmented)
     }
@@ -294,7 +294,7 @@ public struct EmojiPickerSheet: View {
     }
 
     private var emptySearchState: some View {
-        Text("Không tìm thấy emoji phù hợp.")
+        Text(languageService.text(.stickersEmojiNotFound))
             .font(SplickTheme.Typography.caption)
             .foregroundStyle(SplickTheme.Colors.textSecondary)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -333,7 +333,7 @@ public struct EmojiPickerSheet: View {
                         ProgressView()
                             .controlSize(.small)
                     } else {
-                        Text("Thêm Emoji")
+                        Text(languageService.text(.feedCustomEmojiAddAction))
                             .font(SplickTheme.Typography.caption.weight(.semibold))
                     }
                 }
@@ -351,7 +351,7 @@ public struct EmojiPickerSheet: View {
     private func prepareUploadImage(from item: PhotosPickerItem?) async {
         guard let item else { return }
         guard customEmojiDependencies != nil else {
-            uploadPreparationError = "Tính năng tải emoji hiện chưa sẵn sàng."
+            uploadPreparationError = languageService.text(.stickersUploadUnavailable)
             selectedUploadPhotoItem = nil
             return
         }
@@ -363,7 +363,7 @@ public struct EmojiPickerSheet: View {
 
         guard let data = try? await item.loadTransferable(type: Data.self),
               let image = UIImage(data: data) else {
-            uploadPreparationError = "Không thể mở ảnh đã chọn."
+            uploadPreparationError = languageService.text(.stickersOpenImageFailed)
             return
         }
 

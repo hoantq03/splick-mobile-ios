@@ -338,16 +338,16 @@ public struct AttachmentPickerView: View {
         case .klipyPack(let category):
             return category.name
         case .customPack:
-            return "Splick Custom"
+            return languageService.text(.stickersSplickCustom)
         }
     }
 
     private var emptyStickerMessage: String {
         switch viewModel.selectedCategory {
         case .customPack:
-            return "Nhóm chưa có sticker tùy chỉnh."
+            return languageService.text(.stickersGroupCustomEmpty)
         default:
-            return "Thử từ khóa khác hoặc kiểm tra KLIPY_API_KEY."
+            return languageService.text(.stickersSearchFailedHint)
         }
     }
 }
