@@ -1,6 +1,8 @@
 import Foundation
 import SwiftUI
 import SplickDomain
+import Localization
+import Storage
 
 #if DEBUG
 
@@ -112,6 +114,9 @@ final class MockRegisterUseCase: RegisterUseCaseProtocol, Sendable {
 
 // MARK: - Previews
 
+@MainActor
+private let previewLanguageService = LanguageService(userDefaults: UserDefaultsService())
+
 #Preview("Login") {
     NavigationStack {
         LoginView(
@@ -123,17 +128,20 @@ final class MockRegisterUseCase: RegisterUseCaseProtocol, Sendable {
                 requestPhoneOtpUseCase: MockRequestPhoneOtpUseCase(),
                 verifyPhoneOtpUseCase: MockVerifyPhoneOtpUseCase(),
                 googleSignInUseCase: MockGoogleSignInUseCase(),
-                appleSignInUseCase: MockAppleSignInUseCase()
+                appleSignInUseCase: MockAppleSignInUseCase(),
+                languageService: previewLanguageService
             ),
             forgotPasswordViewModelFactory: {
                 ForgotPasswordViewModel(
                     forgotPasswordUseCase: MockForgotPasswordUseCase(),
                     verifyResetPasswordOtpUseCase: MockVerifyResetPasswordOtpUseCase(),
-                    resetPasswordUseCase: MockResetPasswordUseCase()
+                    resetPasswordUseCase: MockResetPasswordUseCase(),
+                    languageService: previewLanguageService
                 )
             }
         )
     }
+    .environmentObject(previewLanguageService)
 }
 
 #Preview("Register") {
@@ -142,10 +150,12 @@ final class MockRegisterUseCase: RegisterUseCaseProtocol, Sendable {
             viewModel: RegisterViewModel(
                 registerUseCase: MockRegisterUseCase(),
                 requestEmailOtpUseCase: MockRequestEmailOtpUseCase(),
-                requestPhoneOtpUseCase: MockRequestPhoneOtpUseCase()
+                requestPhoneOtpUseCase: MockRequestPhoneOtpUseCase(),
+                languageService: previewLanguageService
             )
         )
     }
+    .environmentObject(previewLanguageService)
 }
 
 #endif

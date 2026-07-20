@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import Common
 import DesignSystem
+import Localization
 import SplickDomain
 
 @MainActor
@@ -40,6 +41,7 @@ public final class RegisterViewModel: ObservableObject {
     private let registerUseCase: RegisterUseCaseProtocol
     private let requestEmailOtpUseCase: RequestEmailOtpUseCaseProtocol
     private let requestPhoneOtpUseCase: RequestPhoneOtpUseCaseProtocol
+    private let languageService: LanguageService
 
     private static let minUsernameLength = 3
 
@@ -55,11 +57,13 @@ public final class RegisterViewModel: ObservableObject {
     public init(
         registerUseCase: RegisterUseCaseProtocol,
         requestEmailOtpUseCase: RequestEmailOtpUseCaseProtocol,
-        requestPhoneOtpUseCase: RequestPhoneOtpUseCaseProtocol
+        requestPhoneOtpUseCase: RequestPhoneOtpUseCaseProtocol,
+        languageService: LanguageService
     ) {
         self.registerUseCase = registerUseCase
         self.requestEmailOtpUseCase = requestEmailOtpUseCase
         self.requestPhoneOtpUseCase = requestPhoneOtpUseCase
+        self.languageService = languageService
     }
 
     var canContinueAccountDetails: Bool {
@@ -92,7 +96,7 @@ public final class RegisterViewModel: ObservableObject {
             emailError = nil
             emailStatus = .valid
         } else {
-            emailError = "Please enter a valid email"
+            emailError = languageService.text(.authValidationInvalidEmail)
             emailStatus = .neutral
         }
     }
@@ -108,7 +112,7 @@ public final class RegisterViewModel: ObservableObject {
             phoneError = nil
             phoneStatus = .valid
         } else {
-            phoneError = "Use international format, e.g. +84901234567"
+            phoneError = languageService.text(.authValidationInvalidPhone)
             phoneStatus = .neutral
         }
     }
@@ -121,13 +125,13 @@ public final class RegisterViewModel: ObservableObject {
             return
         }
         if value.count < Self.minUsernameLength {
-            usernameError = "Username must be at least \(Self.minUsernameLength) characters"
+            usernameError = languageService.text(.profileUsernameTooShort)
             usernameStatus = .neutral
         } else if value.count > AppConstants.Validation.maxUsernameLength {
-            usernameError = "Username is too long"
+            usernameError = languageService.text(.profileUsernameTooLong)
             usernameStatus = .neutral
         } else if !value.isValidUsername {
-            usernameError = "Letters, numbers, _ and . only"
+            usernameError = languageService.text(.profileUsernameInvalid)
             usernameStatus = .neutral
         } else {
             usernameError = nil
@@ -165,7 +169,7 @@ public final class RegisterViewModel: ObservableObject {
             confirmPasswordError = nil
             confirmPasswordStatus = .neutral
         } else {
-            confirmPasswordError = "Passwords don't match"
+            confirmPasswordError = languageService.text(.authPasswordsMismatch)
             confirmPasswordStatus = .neutral
         }
     }
@@ -189,20 +193,20 @@ public final class RegisterViewModel: ObservableObject {
             switch channel {
             case .email:
                 try await requestEmailOtpUseCase.execute(email: email.trimmed)
-                otpInfoMessage = "Verification code sent. Check your email."
+                otpInfoMessage = languageService.text(.authOtpSentEmail)
             case .phone:
                 try await requestPhoneOtpUseCase.execute(phoneNumber: normalizedPhone)
                 #if DEBUG
-                otpInfoMessage = "Code sent via SMS. Check auth-service logs for [MockTwilio]."
+                otpInfoMessage = languageService.text(.authOtpPhoneHintDebug)
                 #else
-                otpInfoMessage = "Verification code sent to your phone."
+                otpInfoMessage = languageService.text(.authOtpSentPhone)
                 #endif
             }
             step = .otpVerification
             otpCode = ""
             state = .idle
         } catch {
-            applyRequestFailure(error, fallback: "Could not send verification code. Please try again.")
+            applyRequestFailure(error, fallback: languageService.text(.authSendCodeFailedRetry))
         }
     }
 
@@ -237,7 +241,7 @@ public final class RegisterViewModel: ObservableObject {
                 state = .idle
             }
         } catch {
-            state = .failed("An unexpected error occurred.")
+            state = .failed(languageService.text(.errorNetworkUnexpected))
             Log.error(error, category: .auth)
         }
     }
@@ -256,8 +260,8 @@ public final class RegisterViewModel: ObservableObject {
         otpError = nil
         if otpCode.count != 6 {
             otpError = channel == .email
-                ? "Enter the 6-digit code from your email"
-                : "Enter the 6-digit code from SMS"
+                ? languageService.text(.authOtpEmailCodeRequired)
+                : languageService.text(.authOtpSmsCodeRequired)
             return false
         }
         return true

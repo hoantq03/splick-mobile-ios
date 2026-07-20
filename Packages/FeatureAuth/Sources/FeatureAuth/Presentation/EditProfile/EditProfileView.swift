@@ -2,10 +2,12 @@ import SwiftUI
 import PhotosUI
 import DesignSystem
 import Common
+import Localization
 import SplickDomain
 
 public struct EditProfileView: View {
     @StateObject private var viewModel: EditProfileViewModel
+    @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
     private let onProfileUpdated: (User) -> Void
 
@@ -27,13 +29,13 @@ public struct EditProfileView: View {
                     Task { await viewModel.onPhotoItemChanged() }
                 }
 
-                Text("Tap the photo to choose a new avatar.")
+                Text(languageService.text(.profileAvatarChangeHint))
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
                     .multilineTextAlignment(.center)
 
                 SplickTextField(
-                    "Display name",
+                    languageService.text(.authDisplayName),
                     text: $viewModel.displayName,
                     icon: "person"
                 )
@@ -47,7 +49,7 @@ public struct EditProfileView: View {
                 }
 
                 SplickButton(
-                    "Save",
+                    languageService.text(.commonSave),
                     isLoading: viewModel.state.isLoading,
                     isDisabled: viewModel.state.isLoading
                 ) {
@@ -61,11 +63,11 @@ public struct EditProfileView: View {
             }
             .padding(SplickTheme.Spacing.md)
         }
-        .navigationTitle("Edit profile")
+        .navigationTitle(languageService.text(.profileEdit))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") { dismiss() }
+                Button(languageService.text(.commonCancel)) { dismiss() }
             }
         }
     }

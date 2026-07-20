@@ -1,5 +1,6 @@
 import Foundation
 import Common
+import Localization
 import SplickDomain
 
 @MainActor
@@ -11,6 +12,7 @@ public final class SessionsViewModel: ObservableObject {
     private let listSessionsUseCase: ListSessionsUseCaseProtocol
     private let revokeSessionUseCase: RevokeSessionUseCaseProtocol
     private let revokeAllSessionsUseCase: RevokeAllSessionsUseCaseProtocol
+    private let languageService: LanguageService
     private let onSignedOutEverywhere: () -> Void
     private var isRefreshing = false
 
@@ -18,11 +20,13 @@ public final class SessionsViewModel: ObservableObject {
         listSessionsUseCase: ListSessionsUseCaseProtocol,
         revokeSessionUseCase: RevokeSessionUseCaseProtocol,
         revokeAllSessionsUseCase: RevokeAllSessionsUseCaseProtocol,
+        languageService: LanguageService,
         onSignedOutEverywhere: @escaping () -> Void
     ) {
         self.listSessionsUseCase = listSessionsUseCase
         self.revokeSessionUseCase = revokeSessionUseCase
         self.revokeAllSessionsUseCase = revokeAllSessionsUseCase
+        self.languageService = languageService
         self.onSignedOutEverywhere = onSignedOutEverywhere
     }
 
@@ -50,8 +54,9 @@ public final class SessionsViewModel: ObservableObject {
             if isPullToRefresh, !sessions.isEmpty {
                 loadingState = .loaded(sessions)
             } else {
-                loadingState = .failed("Could not load devices.")
-                errorMessage = (error as? AuthError)?.userMessage ?? "Could not load devices."
+                let message = (error as? AuthError)?.userMessage ?? languageService.text(.sessionsLoadFailed)
+                loadingState = .failed(message)
+                errorMessage = message
             }
         }
     }
@@ -63,7 +68,7 @@ public final class SessionsViewModel: ObservableObject {
             try await revokeSessionUseCase.execute(sessionId: session.id)
             await load()
         } catch {
-            errorMessage = "Could not sign out that device."
+            errorMessage = languageService.text(.sessionsRevokeFailed)
         }
     }
 
@@ -73,7 +78,7 @@ public final class SessionsViewModel: ObservableObject {
             try await revokeAllSessionsUseCase.execute()
             onSignedOutEverywhere()
         } catch {
-            errorMessage = "Could not sign out all devices."
+            errorMessage = languageService.text(.sessionsRevokeAllFailed)
         }
     }
 }

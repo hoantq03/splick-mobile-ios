@@ -64,6 +64,7 @@ public final class LoginViewModel: ObservableObject {
     private let verifyPhoneOtpUseCase: VerifyPhoneOtpUseCaseProtocol
     private let googleSignInUseCase: GoogleSignInUseCaseProtocol
     private let appleSignInUseCase: AppleSignInUseCaseProtocol
+    private let languageService: LanguageService
     private weak var googleSignInPresenter: GoogleSignInPresenting?
     private weak var appleSignInPresenter: AppleSignInPresenting?
 
@@ -116,6 +117,7 @@ public final class LoginViewModel: ObservableObject {
         verifyPhoneOtpUseCase: VerifyPhoneOtpUseCaseProtocol,
         googleSignInUseCase: GoogleSignInUseCaseProtocol,
         appleSignInUseCase: AppleSignInUseCaseProtocol,
+        languageService: LanguageService,
         googleSignInPresenter: GoogleSignInPresenting? = nil,
         appleSignInPresenter: AppleSignInPresenting? = nil
     ) {
@@ -127,6 +129,7 @@ public final class LoginViewModel: ObservableObject {
         self.verifyPhoneOtpUseCase = verifyPhoneOtpUseCase
         self.googleSignInUseCase = googleSignInUseCase
         self.appleSignInUseCase = appleSignInUseCase
+        self.languageService = languageService
         self.googleSignInPresenter = googleSignInPresenter
         self.appleSignInPresenter = appleSignInPresenter
     }
@@ -152,9 +155,9 @@ public final class LoginViewModel: ObservableObject {
             identifierStatus = .valid
         case .unknown:
             if value.contains("@") {
-                identifierError = "Please enter a valid email"
+                identifierError = languageService.text(.authValidationInvalidEmail)
             } else {
-                identifierError = "Use international format, e.g. +84901234567"
+                identifierError = languageService.text(.authValidationInvalidPhone)
             }
             identifierStatus = .neutral
         }
@@ -168,13 +171,13 @@ public final class LoginViewModel: ObservableObject {
             return
         }
         if value.count < Self.minUsernameLength {
-            usernameError = "Username must be at least \(Self.minUsernameLength) characters"
+            usernameError = languageService.text(.profileUsernameTooShort)
             usernameStatus = .neutral
         } else if value.count > AppConstants.Validation.maxUsernameLength {
-            usernameError = "Username is too long"
+            usernameError = languageService.text(.profileUsernameTooLong)
             usernameStatus = .neutral
         } else if !value.isValidUsername {
-            usernameError = "Letters, numbers, _ and . only"
+            usernameError = languageService.text(.profileUsernameInvalid)
             usernameStatus = .neutral
         } else {
             usernameError = nil
@@ -185,11 +188,11 @@ public final class LoginViewModel: ObservableObject {
     func validateDisplayNameField() {
         let value = displayName.trimmed
         if value.isEmpty {
-            displayNameError = "Name is required"
+            displayNameError = languageService.text(.authDisplayNameRequired)
             return
         }
         if value.count > 150 {
-            displayNameError = "Name is too long"
+            displayNameError = languageService.text(.authDisplayNameTooLong)
             return
         }
         displayNameError = nil
@@ -202,7 +205,7 @@ public final class LoginViewModel: ObservableObject {
             to: Date()
         ) ?? Date()
         if dateOfBirth > minimumBirthDate {
-            dateOfBirthError = "You must be at least \(Self.minimumRegistrationAgeYears) years old"
+            dateOfBirthError = languageService.text(.profileBirthdayAgeError)
             return
         }
         dateOfBirthError = nil
@@ -239,7 +242,7 @@ public final class LoginViewModel: ObservableObject {
             confirmPasswordError = nil
             confirmPasswordStatus = .neutral
         } else {
-            confirmPasswordError = "Passwords don't match"
+            confirmPasswordError = languageService.text(.authPasswordsMismatch)
             confirmPasswordStatus = .neutral
         }
     }
@@ -290,7 +293,7 @@ public final class LoginViewModel: ObservableObject {
         } catch let error as NetworkError {
             setState(.failed(error.userMessage))
         } catch {
-            setState(.failed("Could not verify your email or phone number."))
+            setState(.failed(languageService.text(.authVerifyIdentifierFailed)))
         }
     }
 
@@ -336,7 +339,7 @@ public final class LoginViewModel: ObservableObject {
         } catch let error as NetworkError {
             setState(.failed(error.userMessage))
         } catch {
-            setState(.failed("Could not send verification code."))
+            setState(.failed(languageService.text(.authSendCodeFailedRetry)))
         }
     }
 
@@ -401,7 +404,7 @@ public final class LoginViewModel: ObservableObject {
         } catch let error as NetworkError {
             setState(.failed(error.userMessage))
         } catch {
-            setState(.failed("Could not send verification code."))
+            setState(.failed(languageService.text(.authSendCodeFailedRetry)))
         }
     }
 
@@ -446,7 +449,7 @@ public final class LoginViewModel: ObservableObject {
 
     func signInWithGoogle() async {
         guard let googleSignInPresenter, googleSignInPresenter.isAvailable else {
-            setState(.failed("Google Sign-In is not configured."))
+            setState(.failed(languageService.text(.authGoogleNotConfigured)))
             return
         }
 
@@ -474,7 +477,7 @@ public final class LoginViewModel: ObservableObject {
 
     func signInWithApple() async {
         guard let appleSignInPresenter, appleSignInPresenter.isAvailable else {
-            setState(.failed("Sign in with Apple is not available."))
+            setState(.failed(languageService.text(.authAppleUnavailable)))
             return
         }
 
@@ -646,15 +649,15 @@ public final class LoginViewModel: ObservableObject {
         passwordError = nil
 
         if identifier.trimmed.isEmpty {
-            identifierError = "Email or phone number is required"
+            identifierError = languageService.text(.authIdentifierRequired)
             isValid = false
         } else if detectedKind != .email {
-            identifierError = "Please enter a valid email"
+            identifierError = languageService.text(.authValidationInvalidEmail)
             isValid = false
         }
 
         if password.isEmpty {
-            passwordError = "Password is required"
+            passwordError = languageService.text(.authPasswordRequired)
             isValid = false
         }
 

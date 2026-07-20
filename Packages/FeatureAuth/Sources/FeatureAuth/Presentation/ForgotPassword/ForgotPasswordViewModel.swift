@@ -36,6 +36,7 @@ public final class ForgotPasswordViewModel: ObservableObject {
     private let forgotPasswordUseCase: ForgotPasswordUseCaseProtocol
     private let verifyResetPasswordOtpUseCase: VerifyResetPasswordOtpUseCaseProtocol
     private let resetPasswordUseCase: ResetPasswordUseCaseProtocol
+    private let languageService: LanguageService
     private var resendCooldownTask: Task<Void, Never>?
 
     var detectedKind: LoginIdentifierKind {
@@ -53,11 +54,13 @@ public final class ForgotPasswordViewModel: ObservableObject {
     public init(
         forgotPasswordUseCase: ForgotPasswordUseCaseProtocol,
         verifyResetPasswordOtpUseCase: VerifyResetPasswordOtpUseCaseProtocol,
-        resetPasswordUseCase: ResetPasswordUseCaseProtocol
+        resetPasswordUseCase: ResetPasswordUseCaseProtocol,
+        languageService: LanguageService
     ) {
         self.forgotPasswordUseCase = forgotPasswordUseCase
         self.verifyResetPasswordOtpUseCase = verifyResetPasswordOtpUseCase
         self.resetPasswordUseCase = resetPasswordUseCase
+        self.languageService = languageService
     }
 
     deinit {
@@ -150,7 +153,7 @@ public final class ForgotPasswordViewModel: ObservableObject {
         } catch let error as NetworkError {
             presentGenericError(error.userMessage)
         } catch {
-            presentGenericError("Could not send reset code")
+            presentGenericError(languageService.text(.authResetSendFailed))
         }
     }
 
@@ -173,7 +176,7 @@ public final class ForgotPasswordViewModel: ObservableObject {
         } catch let error as NetworkError {
             presentGenericError(error.userMessage)
         } catch {
-            presentGenericError("Could not verify code")
+            presentGenericError(languageService.text(.authResetVerifyFailed))
         }
     }
 
@@ -205,7 +208,7 @@ public final class ForgotPasswordViewModel: ObservableObject {
         } catch let error as NetworkError {
             presentGenericError(error.userMessage)
         } catch {
-            presentGenericError("Could not reset password")
+            presentGenericError(languageService.text(.authResetFailed))
         }
     }
 

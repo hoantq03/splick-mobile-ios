@@ -196,7 +196,7 @@ public struct LoginView: View {
             Text("Splick")
                 .font(SplickTheme.Typography.largeTitle)
                 .foregroundStyle(SplickTheme.Colors.primaryGradient)
-            Text("Click moments, Split bills, Keep relations.")
+            Text(languageService.text(.authLoginTagline))
                 .font(SplickTheme.Typography.callout)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
         }

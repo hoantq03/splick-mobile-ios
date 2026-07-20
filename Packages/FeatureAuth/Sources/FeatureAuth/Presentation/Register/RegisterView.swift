@@ -1,9 +1,11 @@
 import SwiftUI
 import DesignSystem
 import Common
+import Localization
 import SplickDomain
 
 public struct RegisterView: View {
+    @EnvironmentObject private var languageService: LanguageService
     @StateObject private var viewModel: RegisterViewModel
     private let onAuthenticated: ((User) -> Void)?
 
@@ -27,12 +29,14 @@ public struct RegisterView: View {
                 case .otpVerification:
                     OtpVerificationView(
                         otpCode: $viewModel.otpCode,
-                        title: "Verify your \(viewModel.channel.title.lowercased())",
+                        title: otpTitle,
                         subtitle: otpSubtitle,
-                        submitTitle: "Create Account",
+                        submitTitle: languageService.text(.authCreateAccountTitle),
                         otpError: viewModel.otpError,
                         otpInfoMessage: viewModel.otpInfoMessage,
                         isLoading: viewModel.state.isLoading,
+                        backTitle: languageService.text(.commonBack),
+                        resendTitle: languageService.text(.changePasswordResendCode),
                         onResend: { Task { await viewModel.resendOtp() } },
                         onSubmit: { Task { await viewModel.register() } },
                         onBack: { viewModel.goBackToAccountDetails() }
@@ -62,18 +66,24 @@ public struct RegisterView: View {
         }
     }
 
+    private var otpTitle: String {
+        viewModel.channel == .email
+            ? languageService.text(.authVerifyEmailTitle)
+            : languageService.text(.authVerifyPhoneTitle)
+    }
+
     private var otpSubtitle: String {
         switch viewModel.channel {
         case .email:
-            return "Enter the code sent to \(viewModel.email)"
+            return String(format: languageService.text(.authVerifyEmailSubtitle), viewModel.email)
         case .phone:
-            return "Enter the code sent to \(viewModel.phoneNumber)"
+            return String(format: languageService.text(.authVerifyPhoneSubtitle), viewModel.phoneNumber)
         }
     }
 
     private var headerSection: some View {
         VStack(spacing: SplickTheme.Spacing.xs) {
-            Text("Create Account")
+            Text(languageService.text(.authCreateAccountTitle))
                 .font(SplickTheme.Typography.largeTitle)
                 .foregroundStyle(SplickTheme.Colors.textPrimary)
 
@@ -87,11 +97,9 @@ public struct RegisterView: View {
     private var headerSubtitle: String {
         switch viewModel.step {
         case .accountDetails:
-            return "Join your friends on Splick"
+            return languageService.text(.authRegisterSubtitle)
         case .otpVerification:
-            return viewModel.channel == .email
-                ? "Almost there — verify your email"
-                : "Almost there — verify your phone"
+            return otpTitle
         }
     }
 
@@ -106,7 +114,7 @@ public struct RegisterView: View {
             switch viewModel.channel {
             case .email:
                 SplickTextField(
-                    "Email",
+                    languageService.text(.authEmail),
                     text: $viewModel.email,
                     errorMessage: viewModel.emailError,
                     icon: "envelope",
@@ -120,7 +128,7 @@ public struct RegisterView: View {
 
             case .phone:
                 SplickTextField(
-                    "Phone number",
+                    languageService.text(.connectedAccountsPhoneField),
                     text: $viewModel.phoneNumber,
                     errorMessage: viewModel.phoneError,
                     icon: "phone",
@@ -133,7 +141,7 @@ public struct RegisterView: View {
             }
 
             SplickTextField(
-                "Username",
+                languageService.text(.authUsername),
                 text: $viewModel.username,
                 errorMessage: viewModel.usernameError,
                 icon: "person",
@@ -145,14 +153,14 @@ public struct RegisterView: View {
             .onChange(of: viewModel.username) { _ in viewModel.validateUsernameField() }
 
             SplickTextField(
-                "Display name (optional)",
+                languageService.text(.authDisplayName),
                 text: $viewModel.displayName,
                 icon: "textformat"
             )
             .textContentType(.name)
 
             SplickTextField(
-                "Password",
+                languageService.text(.authPassword),
                 text: $viewModel.password,
                 isSecure: true,
                 errorMessage: viewModel.passwordError,
@@ -164,7 +172,7 @@ public struct RegisterView: View {
             .onChange(of: viewModel.password) { _ in viewModel.validatePasswordField() }
 
             SplickTextField(
-                "Confirm Password",
+                languageService.text(.authConfirmPassword),
                 text: $viewModel.confirmPassword,
                 isSecure: true,
                 errorMessage: viewModel.confirmPasswordError,
@@ -178,7 +186,7 @@ public struct RegisterView: View {
 
     private var accountDetailsActions: some View {
         SplickButton(
-            "Continue",
+            languageService.text(.authContinue),
             isLoading: viewModel.state.isLoading,
             isDisabled: !viewModel.canContinueAccountDetails
         ) {

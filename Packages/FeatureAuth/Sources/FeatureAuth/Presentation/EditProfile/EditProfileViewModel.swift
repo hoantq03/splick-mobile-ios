@@ -4,6 +4,7 @@ import PhotosUI
 import UIKit
 import Common
 import DesignSystem
+import Localization
 import SplickDomain
 
 public typealias UserAvatarUploader = @Sendable (UIImage) async throws -> URL
@@ -19,15 +20,18 @@ public final class EditProfileViewModel: ObservableObject {
 
     private let updateProfileUseCase: UpdateProfileUseCaseProtocol
     private let uploadAvatar: UserAvatarUploader?
+    private let languageService: LanguageService
 
     public init(
         user: User,
         updateProfileUseCase: UpdateProfileUseCaseProtocol,
+        languageService: LanguageService,
         uploadAvatar: UserAvatarUploader? = nil
     ) {
         self.displayName = user.displayName
         self.existingAvatarURL = user.avatarURL
         self.updateProfileUseCase = updateProfileUseCase
+        self.languageService = languageService
         self.uploadAvatar = uploadAvatar
     }
 
@@ -37,7 +41,7 @@ public final class EditProfileViewModel: ObservableObject {
             return
         }
         guard let data = try? await selectedPhotoItem.loadTransferable(type: Data.self) else {
-            errorMessage = "Could not load the selected photo."
+            errorMessage = languageService.text(.profileAvatarLoadFailed)
             return
         }
         previewImage = UIImage(data: data)
@@ -47,7 +51,7 @@ public final class EditProfileViewModel: ObservableObject {
         let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if trimmedName.isEmpty && previewImage == nil {
-            errorMessage = "Enter a display name or choose a photo."
+            errorMessage = languageService.text(.profileEditNothingEntered)
             return nil
         }
 
@@ -67,7 +71,7 @@ public final class EditProfileViewModel: ObservableObject {
 
             let nameToSend = trimmedName.isEmpty ? nil : trimmedName
             if nameToSend == nil && avatarToSend == nil {
-                errorMessage = "Nothing to update."
+                errorMessage = languageService.text(.profileEditNothingToUpdate)
                 state = .idle
                 return nil
             }
@@ -82,8 +86,9 @@ public final class EditProfileViewModel: ObservableObject {
             state = .loaded(user)
             return user
         } catch {
-            errorMessage = error.localizedDescription
-            state = .failed(error.localizedDescription)
+            let message = languageService.localizedMessage(for: error)
+            errorMessage = message
+            state = .failed(message)
             return nil
         }
     }
