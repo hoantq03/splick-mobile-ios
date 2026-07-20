@@ -69,6 +69,9 @@ public final class FriendsRootViewModel: ObservableObject {
     @Published private(set) var incomingRequestCount = 0
     @Published private(set) var outgoingRequestCount = 0
 
+    private(set) var cachedIncomingRequests: [IncomingFriendRequest] = []
+    private(set) var cachedOutgoingRequests: [OutgoingFriendRequest] = []
+
     private let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol
     private let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol
     private let searchUsersUseCase: SearchUsersUseCaseProtocol
@@ -144,10 +147,42 @@ public final class FriendsRootViewModel: ObservableObject {
 
     func load() async {
         Log.info("Loading friends tab", category: .friends)
-        await loadFriends(isPullToRefresh: false)
-        await loadGroups(isPullToRefresh: false)
-        await refreshIncomingRequestCount()
-        await refreshOutgoingRequestCount()
+        if friends.isEmpty { friendsState = .loading }
+        if groups.isEmpty { groupsState = .loading }
+
+        async let friendsResult = fetchFriendsForRefresh()
+        async let groupsResult = fetchGroupsForRefresh()
+        async let incomingResult = fetchIncomingRequestsForCache()
+        async let outgoingResult = fetchOutgoingRequestsForCache()
+
+        let (friends, groups, incoming, outgoing) = await (
+            friendsResult,
+            groupsResult,
+            incomingResult,
+            outgoingResult
+        )
+
+        applyFriendsRefreshResult(friends)
+        applyGroupsRefreshResult(groups)
+        cachedIncomingRequests = incoming
+        incomingRequestCount = incoming.count
+        cachedOutgoingRequests = outgoing
+        outgoingRequestCount = outgoing.count
+        await onFriendRequestsLoaded?(incoming)
+
+        if case .success(let loadedGroups) = groups {
+            await onDirectoryLoaded?(loadedGroups)
+        }
+    }
+
+    func peopleYouMayKnowSnapshot(blocked: [BlockedUser]) -> PeopleYouMayKnowDirectorySnapshot {
+        PeopleYouMayKnowDirectorySnapshot(
+            friends: friends,
+            groups: groups,
+            incoming: cachedIncomingRequests,
+            outgoing: cachedOutgoingRequests,
+            blocked: blocked
+        )
     }
 
     func refresh() async {
@@ -199,14 +234,14 @@ public final class FriendsRootViewModel: ObservableObject {
     private func performPullToRefresh() async {
         async let friendsResult = fetchFriendsForRefresh()
         async let groupsResult = fetchGroupsForRefresh()
-        async let incomingCount = fetchIncomingRequestCount()
-        async let outgoingCount = fetchOutgoingRequestCount()
+        async let incomingResult = fetchIncomingRequestsForCache()
+        async let outgoingResult = fetchOutgoingRequestsForCache()
 
         let (friends, groups, incoming, outgoing) = await (
             friendsResult,
             groupsResult,
-            incomingCount,
-            outgoingCount
+            incomingResult,
+            outgoingResult
         )
 
         var transaction = Transaction()
@@ -214,9 +249,12 @@ public final class FriendsRootViewModel: ObservableObject {
         withTransaction(transaction) {
             applyFriendsRefreshResult(friends)
             applyGroupsRefreshResult(groups)
-            incomingRequestCount = incoming
-            outgoingRequestCount = outgoing
+            cachedIncomingRequests = incoming
+            incomingRequestCount = incoming.count
+            cachedOutgoingRequests = outgoing
+            outgoingRequestCount = outgoing.count
         }
+        await onFriendRequestsLoaded?(incoming)
         if case .success(let loadedGroups) = groups {
             await onDirectoryLoaded?(loadedGroups)
         }
@@ -238,12 +276,12 @@ public final class FriendsRootViewModel: ObservableObject {
         }
     }
 
-    private func fetchIncomingRequestCount() async -> Int {
-        (try? await fetchIncomingFriendRequestsUseCase.executeAll())?.count ?? 0
+    private func fetchIncomingRequestsForCache() async -> [IncomingFriendRequest] {
+        (try? await fetchIncomingFriendRequestsUseCase.executeAll()) ?? cachedIncomingRequests
     }
 
-    private func fetchOutgoingRequestCount() async -> Int {
-        (try? await fetchOutgoingFriendRequestsUseCase.executeAll())?.count ?? 0
+    private func fetchOutgoingRequestsForCache() async -> [OutgoingFriendRequest] {
+        (try? await fetchOutgoingFriendRequestsUseCase.executeAll()) ?? cachedOutgoingRequests
     }
 
     private func applyFriendsRefreshResult(_ result: Result<[UserSummary], Error>) {
@@ -281,6 +319,7 @@ public final class FriendsRootViewModel: ObservableObject {
     func refreshIncomingRequestCount() async {
         do {
             let incoming = try await fetchIncomingFriendRequestsUseCase.executeAll()
+            cachedIncomingRequests = incoming
             incomingRequestCount = incoming.count
             await onFriendRequestsLoaded?(incoming)
         } catch {
@@ -291,6 +330,7 @@ public final class FriendsRootViewModel: ObservableObject {
     func refreshOutgoingRequestCount() async {
         do {
             let outgoing = try await fetchOutgoingFriendRequestsUseCase.executeAll()
+            cachedOutgoingRequests = outgoing
             outgoingRequestCount = outgoing.count
         } catch {
             outgoingRequestCount = 0
