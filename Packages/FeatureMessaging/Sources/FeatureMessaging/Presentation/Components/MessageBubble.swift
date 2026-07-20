@@ -35,7 +35,6 @@ struct MessageBubble: View {
     @State private var imageViewerRoute: AttachmentPreviewRoute?
     @State private var replyDragTranslation: CGFloat = 0
 
-    private static let longPressImpact = UIImpactFeedbackGenerator(style: .medium)
     private static let replySwipeImpact = UIImpactFeedbackGenerator(style: .light)
     private static let replySwipeThreshold: CGFloat = 56
     private static let replySwipeMaxOffset: CGFloat = 88
@@ -205,7 +204,7 @@ struct MessageBubble: View {
         LongPressGesture(minimumDuration: 0.28)
             .onEnded { _ in
                 guard presentation == .threadRow, onLongPress != nil else { return }
-                Self.longPressImpact.impactOccurred()
+                // Haptic is fired by the list when focus actually opens.
                 onLongPress?()
             }
     }
