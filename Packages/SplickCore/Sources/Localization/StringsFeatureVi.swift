@@ -38,6 +38,8 @@ enum StringsFeatureVi {
         .feedPostCommentsLoadMore: "Xem thêm bình luận",
         .feedPostViewAllComments: "Xem tất cả %d bình luận",
         .feedPostWriteComment: "Viết bình luận...",
+        .feedPostLoadFailed: "Không thể tải bài viết. Vui lòng thử lại.",
+        .feedPostUnavailableMessage: "Bài viết không còn khả dụng. Có thể đã bị xoá hoặc bạn không còn quyền xem.",
         .feedCompanionsEmpty: "Không tìm thấy người đi cùng",
         .feedCompanionsTitle: "Cùng với (%d)",
         .feedCompanionsSummary: "Cùng với %@",

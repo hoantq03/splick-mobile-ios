@@ -38,6 +38,8 @@ enum StringsFeatureEn {
         .feedPostCommentsLoadMore: "Load more comments",
         .feedPostViewAllComments: "View all %d comments",
         .feedPostWriteComment: "Write a comment...",
+        .feedPostLoadFailed: "Couldn't load this post. Please try again.",
+        .feedPostUnavailableMessage: "This post is no longer available. It may have been deleted or you no longer have access.",
         .feedCompanionsEmpty: "No companions found",
         .feedCompanionsTitle: "Out with (%d)",
         .feedCompanionsSummary: "Out with %@",
