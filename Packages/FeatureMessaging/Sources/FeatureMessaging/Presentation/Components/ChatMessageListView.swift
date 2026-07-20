@@ -18,12 +18,15 @@ struct ChatMessageListView: View {
     @State private var reactionFocusSession = UUID()
     /// Snapshot at open — opacity-0 source bubble can stop publishing a usable frame.
     @State private var reactionFocusFrozenFrame: CGRect?
+    /// Ignore drag / dim-tap dismiss until the long-press finger has lifted.
+    @State private var reactionFocusDismissArmed = false
     @State private var reactionAnchorFrames: [UUID: CGRect] = [:]
     @State private var timestampRevealTranslation: CGFloat = 0
     /// Once a drag is classified as bubble-reply vs whitespace-reveal, stick with it.
     @State private var timestampRevealSession: TimestampRevealSession = .undecided
 
     private static let longPressImpact = UIImpactFeedbackGenerator(style: .medium)
+    private static let reactionFocusDismissArmDelay: TimeInterval = 0.45
 
     private enum TimestampRevealSession {
         case undecided
@@ -61,6 +64,7 @@ struct ChatMessageListView: View {
                                 }
                             )
                             .opacity(reactionFocusMessageId == item.message.id ? 0 : 1)
+                            .allowsHitTesting(reactionFocusMessageId != item.message.id)
                             .id(item.message.clientMessageId)
                             .transition(ChatScrollAnimation.messageInsert)
                         }
@@ -100,13 +104,13 @@ struct ChatMessageListView: View {
                                 beginReply(to: item.message)
                             },
                             onOpenFullPicker: {
-                                dismissReactionFocus()
+                                dismissReactionFocus(force: true)
                                 reactionPicker.present { emoji in
                                     _ = viewModel.react(to: focusContext.messageId, emoji: emoji)
                                 }
                             },
-                            onDismiss: { dismissReactionFocus() },
-                            onForceDismiss: { dismissReactionFocus() }
+                            onDismiss: { dismissReactionFocus(force: false) },
+                            onForceDismiss: { dismissReactionFocus(force: true) }
                         )
                         .id(reactionFocusSession)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -130,7 +134,7 @@ struct ChatMessageListView: View {
             }
             .simultaneousGesture(
                 DragGesture(minimumDistance: 12).onChanged { _ in
-                    dismissReactionFocus()
+                    dismissReactionFocus(force: false)
                 }
             )
         }
@@ -203,32 +207,41 @@ struct ChatMessageListView: View {
     }
 
     private func openReactionFocus(for item: DisplayMessage) {
-        // Recover from a stuck focus id (overlay never mounted).
+        // Recover from a stuck focus id (overlay never mounted / never armed dismiss).
         if reactionFocusMessageId != nil {
-            dismissReactionFocus()
+            dismissReactionFocus(force: true)
         }
         guard let globalFrame = reactionAnchorFrames[item.message.id],
               globalFrame.width > 1,
               globalFrame.height > 1
         else { return }
 
-        reactionFocusSession = UUID()
+        let session = UUID()
+        reactionFocusSession = session
         reactionFocusFrozenFrame = globalFrame
+        reactionFocusDismissArmed = false
         Self.longPressImpact.impactOccurred()
         InteractionScrollLock.setLocked(true)
         reactionFocusMessageId = item.message.id
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.reactionFocusDismissArmDelay) {
+            guard reactionFocusSession == session, reactionFocusMessageId != nil else { return }
+            reactionFocusDismissArmed = true
+        }
     }
 
     private func beginReply(to message: ChatMessage) {
-        dismissReactionFocus()
+        dismissReactionFocus(force: true)
         viewModel.beginReply(to: message, senderDisplayName: senderDisplayName(message))
         onRequestComposerFocus()
     }
 
-    private func dismissReactionFocus() {
+    private func dismissReactionFocus(force: Bool) {
         guard reactionFocusMessageId != nil else { return }
+        guard force || reactionFocusDismissArmed else { return }
         reactionFocusMessageId = nil
         reactionFocusFrozenFrame = nil
+        reactionFocusDismissArmed = false
         InteractionScrollLock.forceUnlock()
     }
 
