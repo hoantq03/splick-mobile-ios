@@ -3,11 +3,25 @@ import PhotosUI
 import Common
 import SplickDomain
 
+private enum AttachmentComposerMotion {
+    static let sendReveal = Animation.spring(
+        response: 0.42,
+        dampingFraction: 0.68,
+        blendDuration: 0.05
+    )
+}
+
 public struct AttachmentComposerConfiguration {
     public var maxImages: Int
     public var maxGifs: Int
     public var photoIconSize: CGFloat
     public var composerHeight: CGFloat
+    /// Circular photo / GIF action targets.
+    public var actionButtonSize: CGFloat
+    /// Even gap between photo, GIF, field, and send.
+    public var actionSpacing: CGFloat
+    /// Hide send until there is something to submit — field expands full width.
+    public var collapsesSendWhenEmpty: Bool
     public var forbiddenSubmissionKinds: Set<CommentAttachmentKind>
     public var forbiddenKindMessage: (CommentAttachmentKind) -> String?
 
@@ -16,6 +30,9 @@ public struct AttachmentComposerConfiguration {
         maxGifs: Int = CommentAttachmentValidator.maxGifs,
         photoIconSize: CGFloat = 14,
         composerHeight: CGFloat = 36,
+        actionButtonSize: CGFloat = 36,
+        actionSpacing: CGFloat = 10,
+        collapsesSendWhenEmpty: Bool = true,
         forbiddenSubmissionKinds: Set<CommentAttachmentKind> = [],
         forbiddenKindMessage: ((CommentAttachmentKind) -> String?)? = nil
     ) {
@@ -23,6 +40,9 @@ public struct AttachmentComposerConfiguration {
         self.maxGifs = maxGifs
         self.photoIconSize = photoIconSize
         self.composerHeight = composerHeight
+        self.actionButtonSize = actionButtonSize
+        self.actionSpacing = actionSpacing
+        self.collapsesSendWhenEmpty = collapsesSendWhenEmpty
         self.forbiddenSubmissionKinds = forbiddenSubmissionKinds
         self.forbiddenKindMessage = forbiddenKindMessage ?? { _ in nil }
     }
@@ -90,17 +110,24 @@ public struct AttachmentComposerView<TextField: View, Accessory: View, SendButto
                 )
             }
 
-            HStack(alignment: .center, spacing: 8) {
-                HStack(spacing: 2) {
+            HStack(alignment: .bottom, spacing: configuration.actionSpacing) {
+                HStack(spacing: configuration.actionSpacing) {
                     PhotosPicker(
                         selection: $photoPickerItems,
                         maxSelectionCount: remainingImageSlots,
                         matching: .images
                     ) {
                         Image(systemName: "photo")
-                            .font(.system(size: configuration.photoIconSize))
+                            .font(.system(size: configuration.photoIconSize, weight: .medium))
                             .foregroundStyle(SplickTheme.Colors.textSecondary)
-                            .frame(width: 28, height: configuration.composerHeight)
+                            .frame(
+                                width: configuration.actionButtonSize,
+                                height: configuration.actionButtonSize
+                            )
+                            .background {
+                                Circle()
+                                    .fill(SplickTheme.Colors.secondaryBackground)
+                            }
                     }
                     .disabled(remainingImageSlots == 0 || isExternallyDisabled)
                     .onChange(of: photoPickerItems) { items in
@@ -112,17 +139,36 @@ public struct AttachmentComposerView<TextField: View, Accessory: View, SendButto
 
                 textField()
                     .frame(minHeight: configuration.composerHeight)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .layoutPriority(1)
 
-                Button(action: submit) {
-                    sendButton()
+                if showsSendButton {
+                    Button(action: submit) {
+                        sendButton()
+                    }
+                    .disabled(!canSubmit)
+                    .transition(
+                        .asymmetric(
+                            insertion: .scale(scale: 0.35, anchor: .center)
+                                .combined(with: .opacity),
+                            removal: .scale(scale: 0.35, anchor: .center)
+                                .combined(with: .opacity)
+                        )
+                    )
                 }
-                .disabled(!canSubmit)
             }
+            .animation(AttachmentComposerMotion.sendReveal, value: showsSendButton)
         }
         .fullScreenCover(item: $attachmentPreviewRoute) { route in
             attachmentFullscreenPreview(at: route.index)
         }
+    }
+
+    private var showsSendButton: Bool {
+        if configuration.collapsesSendWhenEmpty {
+            return canSubmit
+        }
+        return true
     }
 
     @ViewBuilder
