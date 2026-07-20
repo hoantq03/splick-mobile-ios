@@ -53,7 +53,8 @@ public struct LinkedPostDetailOverlay: View {
                 feedViewModel: feedViewModel,
                 fetchFriendsUseCase: fetchFriendsUseCase,
                 profileDependencies: profileDependencies,
-                makeGifPickerViewModel: makeGifPickerViewModel
+                makeGifPickerViewModel: makeGifPickerViewModel,
+                onClose: dismiss
             )
             .navigationBarBackButtonHidden(true)
             .toolbarBackground(SplickTheme.Colors.background, for: .navigationBar)
@@ -64,10 +65,11 @@ public struct LinkedPostDetailOverlay: View {
                         Image(systemName: "chevron.left")
                             .font(.body.weight(.semibold))
                             .foregroundStyle(SplickTheme.Colors.textPrimary)
-                            .frame(width: 36, height: 36)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Back")
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel(languageService.text(.commonClose))
                 }
             }
         }
@@ -76,17 +78,28 @@ public struct LinkedPostDetailOverlay: View {
         .background(SplickTheme.Colors.background.ignoresSafeArea())
         .shadow(color: .black.opacity(0.14), radius: 16, x: -6, y: 0)
         .offset(x: max(0, dragOffset))
-        .gesture(interactiveDismissGesture)
+        // Edge-only swipe so the toolbar back button and scroll stay tappable.
+        .overlay(alignment: .leading) {
+            Color.clear
+                .frame(width: 20)
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .gesture(interactiveDismissGesture)
+        }
         .onAppear {
-            tabBarScrollState?.hide(flushToBottom: true)
+            Task { @MainActor in
+                tabBarScrollState?.hide(flushToBottom: true)
+            }
         }
         .onDisappear {
-            tabBarScrollState?.show()
+            Task { @MainActor in
+                tabBarScrollState?.show()
+            }
         }
     }
 
     private var interactiveDismissGesture: some Gesture {
-        DragGesture(minimumDistance: 12, coordinateSpace: .local)
+        DragGesture(minimumDistance: 16, coordinateSpace: .local)
             .onChanged { value in
                 guard value.translation.width > 0 else {
                     dragOffset = 0
@@ -108,9 +121,7 @@ public struct LinkedPostDetailOverlay: View {
     }
 
     private func dismiss() {
-        withAnimation(LinkedPostMotion.spring) {
-            dragOffset = 0
-            onDismiss()
-        }
+        dragOffset = 0
+        onDismiss()
     }
 }
