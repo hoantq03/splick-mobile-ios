@@ -12,7 +12,7 @@ private struct ExpenseUserProfileRoute: Identifiable {
 }
 
 public struct ExpenseListView: View {
-    @StateObject private var viewModel: ExpenseListViewModel
+    @ObservedObject private var viewModel: ExpenseListViewModel
     @StateObject private var friendSearchViewModel: ExpenseUserSearchViewModel
     @State private var isOverviewExpanded = false
     @State private var showFilterPanel = false
@@ -27,22 +27,25 @@ public struct ExpenseListView: View {
     @Environment(\.openLinkedPost) private var openLinkedPost
     @Environment(\.openProfileSettings) private var openProfileSettings
     private let currentUserId: UUID?
+    private let isTabActive: Bool
     private let profileDependencies: FriendUserProfileDependencies?
 
     private let overviewToggleAnimation = Animation.spring(response: 0.48, dampingFraction: 0.86)
     private let listFilterAnimation = Animation.spring(response: 0.42, dampingFraction: 0.86)
 
     public init(
-        viewModel: @autoclosure @escaping () -> ExpenseListViewModel,
+        viewModel: ExpenseListViewModel,
         currentUserId: UUID? = nil,
+        isTabActive: Bool = true,
         userSearchUseCase: UserSearchUseCaseProtocol? = nil,
         profileDependencies: FriendUserProfileDependencies? = nil
     ) {
-        _viewModel = StateObject(wrappedValue: viewModel())
+        self.viewModel = viewModel
         _friendSearchViewModel = StateObject(
             wrappedValue: ExpenseUserSearchViewModel(useCase: userSearchUseCase)
         )
         self.currentUserId = currentUserId
+        self.isTabActive = isTabActive
         self.profileDependencies = profileDependencies
     }
 
@@ -76,9 +79,16 @@ public struct ExpenseListView: View {
         }
         .onFirstAppear {
             viewModel.updateCurrentUserId(currentUserId)
-            Task { await viewModel.load() }
+            guard isTabActive else { return }
+            Task { await viewModel.loadIfNeeded() }
+        }
+        .onChange(of: isTabActive) { active in
+            guard active else { return }
+            viewModel.updateCurrentUserId(currentUserId)
+            Task { await viewModel.loadIfNeeded() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .paymentEvidenceStatusDidChange)) { _ in
+            guard isTabActive else { return }
             Task { await viewModel.load(isPullToRefresh: true) }
         }
         .onChange(of: currentUserId) { userId in
