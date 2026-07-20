@@ -313,7 +313,12 @@ struct ChatMessageListView: View {
         reactionFocusDismissArmed = false
         Self.longPressImpact.impactOccurred()
         InteractionScrollLock.setLocked(true)
-        reactionFocusMessageId = item.message.id
+        // Instant handoff to the overlay clone at the same frame — no fade/slide.
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            reactionFocusMessageId = item.message.id
+        }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.reactionFocusDismissArmDelay) {
             guard reactionFocusSession == session, reactionFocusMessageId != nil else { return }
@@ -330,9 +335,9 @@ struct ChatMessageListView: View {
     private func dismissReactionFocus(force: Bool) {
         guard reactionFocusMessageId != nil else { return }
         guard force || reactionFocusDismissArmed else { return }
-        withAnimation(MessageReactionTrayMotion.dismiss) {
-            reactionFocusMessageId = nil
-        }
+        // Overlay already sprang back to the anchor — clear focus without a second
+        // layout animation that would slide the list bubble.
+        reactionFocusMessageId = nil
         reactionFocusFrozenFrame = nil
         reactionFocusDismissArmed = false
         InteractionScrollLock.forceUnlock()
