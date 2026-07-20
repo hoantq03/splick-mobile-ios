@@ -48,6 +48,7 @@ struct PostCaptureFlowView: View {
                 mediaType: payload.mediaType,
                 fetchFriendsUseCase: container.fetchFriendsUseCase,
                 fetchMyGroupsUseCase: container.fetchMyGroupsUseCase,
+                languageService: container.languageService,
                 currentUser: currentUser,
                 currentUserId: currentUser?.id
             ),

@@ -327,6 +327,7 @@ struct MainTabView: View {
             transferGroupOwnershipUseCase: container.transferGroupOwnershipUseCase,
             generateGroupQrUseCase: container.generateGroupQrUseCase,
             revokeGroupQrUseCase: container.revokeGroupQrUseCase,
+            languageService: container.languageService,
             onBadgeCountsChanged: { await container.badgeCountService.refresh(force: true) },
             onDirectoryLoaded: { groups in
                 container.widgetSyncBridge.syncGroups(groups)
@@ -582,6 +583,7 @@ struct ProfileSettingsView: View {
                         listSessionsUseCase: container.listSessionsUseCase,
                         revokeSessionUseCase: container.revokeSessionUseCase,
                         revokeAllSessionsUseCase: container.revokeAllSessionsUseCase,
+                        languageService: languageService,
                         onSignedOutEverywhere: {
                             appState.setUnauthenticated(container: container)
                             dismiss()

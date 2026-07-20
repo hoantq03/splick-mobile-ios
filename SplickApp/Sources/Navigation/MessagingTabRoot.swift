@@ -88,7 +88,8 @@ struct MessagingTabRoot: View {
                     createGroupUseCase: container.createGroupUseCase,
                     inviteFriendsUseCase: container.inviteFriendsToGroupUseCase,
                     uploadGroupAvatarUseCase: container.uploadGroupAvatarUseCase,
-                    updateGroupAvatarUseCase: container.updateGroupAvatarUseCase
+                    updateGroupAvatarUseCase: container.updateGroupAvatarUseCase,
+                    languageService: container.languageService
                 ) { group, invitedMemberIds in
                     showCreateGroup = false
                     Task {

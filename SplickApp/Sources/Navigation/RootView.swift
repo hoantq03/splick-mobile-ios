@@ -119,6 +119,7 @@ struct RootView: View {
                     verifyPhoneOtpUseCase: container.verifyPhoneOtpUseCase,
                     googleSignInUseCase: container.googleSignInUseCase,
                     appleSignInUseCase: container.appleSignInUseCase,
+                    languageService: container.languageService,
                     googleSignInPresenter: GoogleSignInClient.shared,
                     appleSignInPresenter: AppleSignInClient.shared
                 ),
@@ -126,7 +127,8 @@ struct RootView: View {
                     ForgotPasswordViewModel(
                         forgotPasswordUseCase: container.forgotPasswordUseCase,
                         verifyResetPasswordOtpUseCase: container.verifyResetPasswordOtpUseCase,
-                        resetPasswordUseCase: container.resetPasswordUseCase
+                        resetPasswordUseCase: container.resetPasswordUseCase,
+                        languageService: container.languageService
                     )
                 },
                 onAuthenticated: { user in

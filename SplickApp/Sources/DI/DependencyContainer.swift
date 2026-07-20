@@ -560,7 +560,8 @@ final class DependencyContainer: ObservableObject {
         WidgetSyncBridge(
             fetchIncomingFriendRequestsUseCase: fetchIncomingFriendRequestsUseCase,
             fetchExpensesUseCase: fetchExpensesUseCase,
-            fetchDebtSummaryUseCase: fetchDebtSummaryUseCase
+            fetchDebtSummaryUseCase: fetchDebtSummaryUseCase,
+            languageService: languageService
         )
     }()
 
@@ -627,7 +628,8 @@ final class DependencyContainer: ObservableObject {
                     url: upload.url,
                     thumbnailURL: upload.thumbnailURL
                 )
-            }
+            },
+            languageService: languageService
         )
     }
 
@@ -648,6 +650,7 @@ final class DependencyContainer: ObservableObject {
                 )
             },
             wsClient: messagingWebSocketClient,
+            languageService: languageService,
             onConversationRead: { [weak self] conversationId in
                 await self?.handleConversationRead(conversationId: conversationId)
             }
@@ -827,6 +830,7 @@ final class DependencyContainer: ObservableObject {
             approvePaymentEvidenceUseCase: approvePaymentEvidenceUseCase,
             rejectPaymentEvidenceUseCase: rejectPaymentEvidenceUseCase,
             createPostUseCase: createPostUseCase,
+            languageService: languageService,
             onFeedLoaded: { [weak self] posts, userId in
                 await self?.widgetSyncBridge.syncFeed(posts: posts, currentUserId: userId)
             }
