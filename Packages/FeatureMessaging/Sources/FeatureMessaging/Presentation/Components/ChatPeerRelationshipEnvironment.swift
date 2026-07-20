@@ -7,6 +7,7 @@ public struct ChatPeerRelationshipActions: Sendable {
     public var removeFriend: @Sendable (UUID) async throws -> Void
     public var addFriend: @Sendable (UUID) async throws -> Void
     public var acceptFriendRequest: @Sendable (UUID) async throws -> Void
+    public var cancelFriendRequest: @Sendable (UUID) async throws -> Void
 
     public init(
         fetchStatus: @escaping @Sendable (UUID) async -> ChatPeerRelationState,
@@ -14,7 +15,8 @@ public struct ChatPeerRelationshipActions: Sendable {
         unblockUser: @escaping @Sendable (UUID) async throws -> Void,
         removeFriend: @escaping @Sendable (UUID) async throws -> Void,
         addFriend: @escaping @Sendable (UUID) async throws -> Void,
-        acceptFriendRequest: @escaping @Sendable (UUID) async throws -> Void
+        acceptFriendRequest: @escaping @Sendable (UUID) async throws -> Void,
+        cancelFriendRequest: @escaping @Sendable (UUID) async throws -> Void
     ) {
         self.fetchStatus = fetchStatus
         self.blockUser = blockUser
@@ -22,6 +24,7 @@ public struct ChatPeerRelationshipActions: Sendable {
         self.removeFriend = removeFriend
         self.addFriend = addFriend
         self.acceptFriendRequest = acceptFriendRequest
+        self.cancelFriendRequest = cancelFriendRequest
     }
 
     public static let disabled = ChatPeerRelationshipActions(
@@ -30,7 +33,8 @@ public struct ChatPeerRelationshipActions: Sendable {
         unblockUser: { _ in },
         removeFriend: { _ in },
         addFriend: { _ in },
-        acceptFriendRequest: { _ in }
+        acceptFriendRequest: { _ in },
+        cancelFriendRequest: { _ in }
     )
 }
 
