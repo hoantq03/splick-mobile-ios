@@ -7,8 +7,22 @@ struct PostMediaView: View {
     @Binding var selectedIndex: Int
     /// Called with the index of the tapped item. Nil = not tappable.
     var onTap: ((Int) -> Void)?
+    /// When true, the parent should lift z-index and relax clipping so pinch zoom can escape the card.
+    @Binding var isPinchZooming: Bool
 
     @State private var containerWidth: CGFloat = FeedMediaLayout.estimatedCardContentWidth
+
+    init(
+        post: Post,
+        selectedIndex: Binding<Int>,
+        onTap: ((Int) -> Void)? = nil,
+        isPinchZooming: Binding<Bool> = .constant(false)
+    ) {
+        self.post = post
+        self._selectedIndex = selectedIndex
+        self.onTap = onTap
+        self._isPinchZooming = isPinchZooming
+    }
 
     private var items: [PostMediaItem] {
         post.displayMediaItems
@@ -40,17 +54,24 @@ struct PostMediaView: View {
                     .onChange(of: proxy.size.width) { scheduleWidthUpdate($0) }
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: FeedMediaLayout.cornerRadius, style: .continuous))
+        .modifier(PostMediaClipModifier(isPinchZooming: isPinchZooming))
         .onChange(of: post.id) { _ in
             selectedIndex = min(selectedIndex, max(items.count - 1, 0))
+            if isPinchZooming {
+                isPinchZooming = false
+                FeedScrollLock.setLocked(false)
+            }
         }
     }
 
     /// Defers `@State` writes off the layout pass to break AttributeGraph cycles.
     private func scheduleWidthUpdate(_ width: CGFloat) {
-        guard width > 0, abs(width - containerWidth) > 1 else { return }
+        // TabView/GeometryReader can report tiny transient widths before layout settles;
+        // accepting them squeezes media into a thin vertical strip.
+        let minimumCredibleWidth = min(FeedMediaLayout.estimatedCardContentWidth * 0.55, 180)
+        guard width >= minimumCredibleWidth, abs(width - containerWidth) > 1 else { return }
         DispatchQueue.main.async {
-            guard abs(width - containerWidth) > 1 else { return }
+            guard width >= minimumCredibleWidth, abs(width - containerWidth) > 1 else { return }
             containerWidth = width
         }
     }
@@ -77,6 +98,8 @@ struct PostMediaView: View {
                 .padding(.vertical, 4)
                 .background(.black.opacity(0.55), in: Capsule())
                 .padding(10)
+                .opacity(isPinchZooming ? 0 : 1)
+                .allowsHitTesting(false)
         }
     }
 
@@ -100,14 +123,20 @@ struct PostMediaView: View {
     private func imageContent(for item: PostMediaItem, fixedHeight: CGFloat?) -> some View {
         let width = resolvedWidth
         let height = fixedHeight ?? FeedMediaLayout.displayHeight(for: item, containerWidth: width)
-        let fillFrame = FeedMediaLayout.shouldFillFrame(for: item, containerWidth: width)
+        // Carousel pages share one height — always fill to avoid letterboxed thin strips
+        // when metadata aspect and decoded pixels disagree (EXIF / bad thumbnail).
+        let fillFrame = fixedHeight != nil
+            || FeedMediaLayout.shouldFillFrame(for: item, containerWidth: width)
+        // Prefer full media URL so pinch zoom stays sharp past the feed decode budget.
+        let imageURL = item.mediaURL
+        let decodeSide = max(
+            FeedMediaLayout.feedMediaMaxDecodePixelSize(containerWidth: width, displayHeight: height),
+            1280
+        )
 
         return RemoteImage(
-            url: item.thumbnailURL ?? item.mediaURL,
-            maxPixelSize: FeedMediaLayout.feedMediaMaxDecodePixelSize(
-                containerWidth: width,
-                displayHeight: height
-            )
+            url: imageURL,
+            maxPixelSize: decodeSide
         ) { phase in
             switch phase {
             case .success(let image):
@@ -123,6 +152,8 @@ struct PostMediaView: View {
             }
         }
         .frame(width: width, height: height)
+        .frame(maxWidth: .infinity)
+        .feedMediaPinchZoom(isActive: $isPinchZooming)
     }
 
     private func videoContent(for item: PostMediaItem, fixedHeight: CGFloat?) -> some View {
@@ -136,6 +167,7 @@ struct PostMediaView: View {
             displayHeight: height
         )
         .frame(width: width, height: height)
+        .frame(maxWidth: .infinity)
     }
 
     private func mediaPlaceholder(
@@ -156,5 +188,20 @@ struct PostMediaView: View {
                         .foregroundStyle(SplickTheme.Colors.textTertiary)
                 }
             }
+    }
+}
+
+/// Keeps rounded clip for idle media; removes it while pinch-zooming so the image can grow.
+private struct PostMediaClipModifier: ViewModifier {
+    let isPinchZooming: Bool
+
+    func body(content: Content) -> some View {
+        if isPinchZooming {
+            content
+        } else {
+            content.clipShape(
+                RoundedRectangle(cornerRadius: FeedMediaLayout.cornerRadius, style: .continuous)
+            )
+        }
     }
 }
