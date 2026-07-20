@@ -34,8 +34,11 @@ struct MessageComposerInputBar: View {
     private var composerConfiguration: AttachmentComposerConfiguration {
         AttachmentComposerConfiguration(
             maxImages: MessageImageLimits.maxImages,
-            photoIconSize: 22,
-            composerHeight: 36
+            photoIconSize: 18,
+            composerHeight: 36,
+            actionButtonSize: 36,
+            actionSpacing: 10,
+            collapsesSendWhenEmpty: true
         )
     }
 
@@ -43,10 +46,18 @@ struct MessageComposerInputBar: View {
         validationMessage ?? errorMessage
     }
 
+    private static let sendBounce = Animation.spring(
+        response: 0.42,
+        dampingFraction: 0.68,
+        blendDuration: 0.05
+    )
+
     var body: some View {
         VStack(spacing: 0) {
             if let replyDraft, let onCancelReply {
                 MessageReplyBanner(draft: replyDraft, onCancel: onCancelReply)
+                    .transition(.replyIsland)
+                    .zIndex(1)
             }
 
             VStack(spacing: SplickTheme.Spacing.xxs) {
@@ -69,19 +80,18 @@ struct MessageComposerInputBar: View {
                         .padding(.horizontal, SplickTheme.Spacing.sm)
                         .padding(.vertical, SplickTheme.Spacing.xs)
                         .background(SplickTheme.Colors.secondaryBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 20))
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .animation(Self.sendBounce, value: canSend)
                 },
                 accessoryAfterPhoto: {
                     emojiMenuButton
                 },
                 sendButton: {
                     Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 32))
-                        .foregroundStyle(
-                            canSend
-                                ? SplickTheme.Colors.primaryGradientStart
-                                : SplickTheme.Colors.textTertiary
-                        )
+                        .font(.system(size: 34))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                        .frame(width: 36, height: 36)
                 }
             )
             .padding(.horizontal, SplickTheme.Spacing.md)
@@ -89,6 +99,7 @@ struct MessageComposerInputBar: View {
             }
         }
         .background(SplickTheme.Colors.background)
+        .animation(MessageReplyIslandMotion.present, value: replyDraft?.messageId)
         .onAppear {
             if gifPickerViewModel == nil {
                 gifPickerViewModel = messagingGifPickerFactory?()
@@ -140,25 +151,23 @@ struct MessageComposerInputBar: View {
 
     @ViewBuilder
     private var emojiMenuButton: some View {
-        if gifPickerViewModel != nil {
-            Button {
+        Button {
+            if gifPickerViewModel != nil {
                 showAttachmentPicker = true
-            } label: {
-                Image(systemName: "face.smiling")
-                    .font(.system(size: 22))
-                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                    .frame(width: 32, height: 32)
-            }
-        } else {
-            Button {
+            } else {
                 showEmojiInsertPicker = true
-            } label: {
-                Image(systemName: "face.smiling")
-                    .font(.system(size: 22))
-                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                    .frame(width: 32, height: 32)
             }
+        } label: {
+            Image(systemName: "face.smiling")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                .frame(width: 36, height: 36)
+                .background {
+                    Circle()
+                        .fill(SplickTheme.Colors.secondaryBackground)
+                }
         }
+        .buttonStyle(.plain)
     }
 
     private var canSend: Bool {
