@@ -1,6 +1,7 @@
 import SwiftUI
 import DesignSystem
 import Common
+import Localization
 import SplickDomain
 
 struct TransferGroupOwnershipSheet: View {
@@ -10,6 +11,7 @@ struct TransferGroupOwnershipSheet: View {
     let transferOwnershipUseCase: TransferGroupOwnershipUseCaseProtocol
     let onTransferred: (SplickDomain.Group) -> Void
 
+    @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
     @State private var selectedMemberId: UUID?
     @State private var isTransferring = false
@@ -29,8 +31,8 @@ struct TransferGroupOwnershipSheet: View {
                 if eligibleMembers.isEmpty {
                     EmptyStateView(
                         icon: "person.3",
-                        title: "Không có thành viên",
-                        message: "Cần ít nhất một thành viên khác để chuyển quyền chủ nhóm."
+                        title: languageService.text(.friendsTransferNoMembersTitle),
+                        message: languageService.text(.friendsTransferNoMembersMessage)
                     )
                 } else {
                     List(eligibleMembers) { member in
@@ -62,14 +64,14 @@ struct TransferGroupOwnershipSheet: View {
                     .listStyle(.plain)
                 }
             }
-            .navigationTitle("Chuyển quyền chủ nhóm")
+            .navigationTitle(languageService.text(.friendsTransferTitle))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Huỷ") { dismiss() }
+                    Button(languageService.text(.commonCancel)) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Chuyển") {
+                    Button(languageService.text(.friendsTransferAction)) {
                         Task { await transfer() }
                     }
                     .disabled(selectedMemberId == nil || isTransferring)
@@ -100,7 +102,7 @@ struct TransferGroupOwnershipSheet: View {
             onTransferred(group)
             dismiss()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = languageService.localizedMessage(for: error)
         }
     }
 }

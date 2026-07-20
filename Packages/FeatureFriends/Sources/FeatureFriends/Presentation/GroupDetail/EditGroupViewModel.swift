@@ -4,6 +4,7 @@ import PhotosUI
 import UIKit
 import Common
 import FeatureMedia
+import Localization
 import SplickDomain
 
 @MainActor
@@ -19,12 +20,14 @@ final class EditGroupViewModel: ObservableObject {
     private let updateGroupUseCase: UpdateGroupUseCaseProtocol
     private let updateGroupAvatarUseCase: UpdateGroupAvatarUseCaseProtocol
     private let uploadGroupAvatarUseCase: UploadGroupAvatarUseCaseProtocol
+    private let languageService: LanguageService
 
     init(
         group: SplickDomain.Group,
         updateGroupUseCase: UpdateGroupUseCaseProtocol,
         updateGroupAvatarUseCase: UpdateGroupAvatarUseCaseProtocol,
-        uploadGroupAvatarUseCase: UploadGroupAvatarUseCaseProtocol
+        uploadGroupAvatarUseCase: UploadGroupAvatarUseCaseProtocol,
+        languageService: LanguageService
     ) {
         self.groupId = group.id
         self.name = group.name
@@ -32,6 +35,7 @@ final class EditGroupViewModel: ObservableObject {
         self.updateGroupUseCase = updateGroupUseCase
         self.updateGroupAvatarUseCase = updateGroupAvatarUseCase
         self.uploadGroupAvatarUseCase = uploadGroupAvatarUseCase
+        self.languageService = languageService
     }
 
     func onPhotoItemChanged() async {
@@ -40,7 +44,7 @@ final class EditGroupViewModel: ObservableObject {
             return
         }
         guard let data = try? await selectedPhotoItem.loadTransferable(type: Data.self) else {
-            errorMessage = "Không tải được ảnh."
+            errorMessage = languageService.text(.friendsImageLoadFailed)
             return
         }
         previewImage = UIImage(data: data)
@@ -49,7 +53,7 @@ final class EditGroupViewModel: ObservableObject {
     func save() async -> SplickDomain.Group? {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else {
-            errorMessage = FriendsError.invalidGroupName.localizedDescription
+            errorMessage = languageService.text(.friendsGroupNameRequired)
             return nil
         }
 
@@ -76,7 +80,7 @@ final class EditGroupViewModel: ObservableObject {
 
             return updated
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = languageService.localizedMessage(for: error)
             return nil
         }
     }

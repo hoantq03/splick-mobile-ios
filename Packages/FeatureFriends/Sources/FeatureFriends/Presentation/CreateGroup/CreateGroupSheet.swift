@@ -28,10 +28,10 @@ public struct CreateGroupSheet: View {
                     avatarSection
 
                     VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-                        Text("Tên nhóm")
+                        Text(languageService.text(.friendsGroupName))
                             .font(SplickTheme.Typography.headline)
 
-                        TextField("VD: Chuyến Đà Lạt", text: $viewModel.name)
+                        TextField(languageService.text(.friendsGroupNamePlaceholder), text: $viewModel.name)
                             .textInputAutocapitalization(.words)
                             .padding(SplickTheme.Spacing.sm)
                             .background(SplickTheme.Colors.tertiaryBackground)
@@ -45,10 +45,14 @@ public struct CreateGroupSheet: View {
                     .splickCard()
 
                     VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-                        Text("Mô tả (tuỳ chọn)")
+                        Text(languageService.text(.friendsGroupDescriptionOptional))
                             .font(SplickTheme.Typography.headline)
 
-                        TextField("Mô tả ngắn về nhóm", text: $viewModel.groupDescription, axis: .vertical)
+                        TextField(
+                            languageService.text(.friendsGroupDescriptionPlaceholder),
+                            text: $viewModel.groupDescription,
+                            axis: .vertical
+                        )
                             .lineLimit(3...6)
                             .padding(SplickTheme.Spacing.sm)
                             .frame(minHeight: 88, alignment: .topLeading)
@@ -107,7 +111,7 @@ public struct CreateGroupSheet: View {
                 Task { await viewModel.onPhotoItemChanged() }
             }
 
-            Text("Ảnh đại diện nhóm")
+            Text(languageService.text(.friendsGroupAvatar))
                 .font(SplickTheme.Typography.caption)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
         }
@@ -136,7 +140,7 @@ public struct CreateGroupSheet: View {
                 VStack(spacing: 4) {
                     Image(systemName: "camera.fill")
                         .font(.title3)
-                    Text("Chọn ảnh")
+                    Text(languageService.text(.friendsGroupPickPhoto))
                         .font(.system(size: 11, weight: .medium))
                 }
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
@@ -146,18 +150,18 @@ public struct CreateGroupSheet: View {
 
     private var membersSection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-            Text("Thành viên")
+            Text(languageService.text(.messagingGroupMembersTitle))
                 .font(SplickTheme.Typography.headline)
 
             if viewModel.friends.isEmpty {
-                Text("Chưa có bạn bè để mời. Bạn vẫn có thể tạo nhóm và mời sau.")
+                Text(languageService.text(.friendsGroupNoFriendsToInvite))
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textTertiary)
             } else {
                 HStack(spacing: SplickTheme.Spacing.xs) {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(SplickTheme.Colors.textTertiary)
-                    TextField("Tìm bạn bè...", text: $viewModel.memberSearchQuery)
+                    TextField(languageService.text(.expenseFilterSearchFriends), text: $viewModel.memberSearchQuery)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .focused($isMemberSearchFocused)
@@ -239,7 +243,7 @@ public struct CreateGroupSheet: View {
     @ViewBuilder
     private var memberSearchResultsList: some View {
         if viewModel.filteredFriends.isEmpty {
-            Text("Không tìm thấy bạn bè phù hợp.")
+            Text(languageService.text(.feedAudienceFriendsNotFound))
                 .font(SplickTheme.Typography.caption)
                 .foregroundStyle(SplickTheme.Colors.textTertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)

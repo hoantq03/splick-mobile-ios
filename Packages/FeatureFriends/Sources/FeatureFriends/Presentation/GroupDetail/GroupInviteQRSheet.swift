@@ -3,10 +3,12 @@ import Photos
 import UIKit
 import DesignSystem
 import Common
+import Localization
 
 struct GroupInviteQRSheet: View {
     let groupName: String
     @StateObject private var viewModel: GroupInviteQRViewModel
+    @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
 
     @State private var showShareSheet = false
@@ -17,14 +19,16 @@ struct GroupInviteQRSheet: View {
         groupName: String,
         groupId: UUID,
         generateGroupQrUseCase: GenerateGroupQrUseCaseProtocol,
-        revokeGroupQrUseCase: RevokeGroupQrUseCaseProtocol
+        revokeGroupQrUseCase: RevokeGroupQrUseCaseProtocol,
+        languageService: LanguageService
     ) {
         self.groupName = groupName
         _viewModel = StateObject(
             wrappedValue: GroupInviteQRViewModel(
                 groupId: groupId,
                 generateGroupQrUseCase: generateGroupQrUseCase,
-                revokeGroupQrUseCase: revokeGroupQrUseCase
+                revokeGroupQrUseCase: revokeGroupQrUseCase,
+                languageService: languageService
             )
         )
     }
@@ -35,7 +39,7 @@ struct GroupInviteQRSheet: View {
                 VStack(spacing: SplickTheme.Spacing.xxs) {
                     Text(groupName)
                         .font(SplickTheme.Typography.title)
-                    Text("Mã QR nhóm (bảo mật)")
+                    Text(languageService.text(.friendsGroupQRSecureTitle))
                         .font(SplickTheme.Typography.callout)
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
                 }
@@ -44,12 +48,15 @@ struct GroupInviteQRSheet: View {
                 qrContent
 
                 if let qr = viewModel.serverQR {
-                    Text("Hết hạn: \(qr.expiresAt.formatted(date: .abbreviated, time: .shortened))")
-                        .font(SplickTheme.Typography.caption)
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    Text(languageService.format(
+                        .friendsGroupQRExpires,
+                        qr.expiresAt.formatted(date: .abbreviated, time: .shortened)
+                    ))
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
                 }
 
-                Text("Bạn bè quét mã để tham gia nhóm. Mã do máy chủ cấp, có thể thu hồi và làm mới.")
+                Text(languageService.text(.friendsGroupQRHint))
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
                     .multilineTextAlignment(.center)
@@ -64,11 +71,11 @@ struct GroupInviteQRSheet: View {
             }
             .frame(maxWidth: .infinity)
             .background(SplickTheme.Colors.background)
-            .navigationTitle("Mã QR nhóm")
+            .navigationTitle(languageService.text(.friendsGroupQRTitle))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Xong") { dismiss() }
+                    Button(languageService.text(.commonDone)) { dismiss() }
                 }
             }
             .task { await viewModel.load() }
@@ -81,15 +88,15 @@ struct GroupInviteQRSheet: View {
                 get: { feedbackMessage != nil },
                 set: { if !$0 { feedbackMessage = nil } }
             )) {
-                Button("OK", role: .cancel) {}
+                Button(languageService.text(.commonOK), role: .cancel) {}
             } message: {
                 Text(feedbackMessage ?? "")
             }
-            .alert("Lỗi", isPresented: Binding(
+            .alert(languageService.text(.commonError), isPresented: Binding(
                 get: { viewModel.alertMessage != nil },
                 set: { if !$0 { viewModel.alertMessage = nil } }
             )) {
-                Button("OK", role: .cancel) {}
+                Button(languageService.text(.commonOK), role: .cancel) {}
             } message: {
                 Text(viewModel.alertMessage ?? "")
             }
@@ -100,7 +107,7 @@ struct GroupInviteQRSheet: View {
         HStack(spacing: SplickTheme.Spacing.sm) {
             qrActionButton(
                 icon: "square.and.arrow.down",
-                title: "Lưu ảnh",
+                title: languageService.text(.profilePaymentSaveImage),
                 isLoading: isSavingImage
             ) {
                 Task { await saveQRImage() }
@@ -109,14 +116,14 @@ struct GroupInviteQRSheet: View {
 
             qrActionButton(
                 icon: "arrow.clockwise",
-                title: "Làm mới",
+                title: languageService.text(.friendsMyQRRefresh),
                 isLoading: viewModel.isRefreshing
             ) {
                 Task { await viewModel.refresh() }
             }
             .disabled(viewModel.isRefreshing || isSavingImage)
 
-            qrActionButton(icon: "square.and.arrow.up", title: "Chia sẻ") {
+            qrActionButton(icon: "square.and.arrow.up", title: languageService.text(.friendsMyQRShare)) {
                 showShareSheet = true
             }
             .disabled(shareItems == nil || viewModel.isRefreshing || isSavingImage)
@@ -159,7 +166,7 @@ struct GroupInviteQRSheet: View {
     private var qrContent: some View {
         switch viewModel.state {
         case .idle, .loading:
-            LoadingView(message: "Đang tạo mã QR...")
+            LoadingView(message: languageService.text(.friendsGroupQRGenerating))
                 .frame(height: 260)
         case .failed(let message):
             ErrorView(message: message) {
@@ -185,7 +192,7 @@ struct GroupInviteQRSheet: View {
                 .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium))
                 .frame(height: 260)
             } else {
-                Text("Không thể tạo mã QR")
+                Text(languageService.text(.friendsGroupQRFailed))
                     .font(SplickTheme.Typography.callout)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
             }
@@ -213,7 +220,7 @@ struct GroupInviteQRSheet: View {
 
     private func saveQRImage() async {
         guard let qrExportImage else {
-            feedbackMessage = "Không thể lưu ảnh mã QR."
+            feedbackMessage = languageService.text(.friendsGroupQRSaveFailed)
             return
         }
 
@@ -222,7 +229,7 @@ struct GroupInviteQRSheet: View {
 
         let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
         guard status == .authorized || status == .limited else {
-            feedbackMessage = "Không có quyền lưu ảnh vào thư viện."
+            feedbackMessage = languageService.text(.friendsGroupQRSaveNoPermission)
             return
         }
 
@@ -234,7 +241,9 @@ struct GroupInviteQRSheet: View {
             }
         }
 
-        feedbackMessage = saved ? "Đã lưu mã QR vào thư viện ảnh." : "Không thể lưu ảnh mã QR."
+        feedbackMessage = saved
+            ? languageService.text(.friendsGroupQRSaved)
+            : languageService.text(.friendsGroupQRSaveFailed)
     }
 }
 

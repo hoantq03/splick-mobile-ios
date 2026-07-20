@@ -2,10 +2,12 @@ import SwiftUI
 import PhotosUI
 import DesignSystem
 import FeatureMedia
+import Localization
 import SplickDomain
 
 struct EditGroupSheet: View {
     @StateObject private var viewModel: EditGroupViewModel
+    @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
     let onSaved: (SplickDomain.Group) -> Void
 
@@ -14,6 +16,7 @@ struct EditGroupSheet: View {
         updateGroupUseCase: UpdateGroupUseCaseProtocol,
         updateGroupAvatarUseCase: UpdateGroupAvatarUseCaseProtocol,
         uploadGroupAvatarUseCase: UploadGroupAvatarUseCaseProtocol,
+        languageService: LanguageService,
         onSaved: @escaping (SplickDomain.Group) -> Void
     ) {
         _viewModel = StateObject(
@@ -21,7 +24,8 @@ struct EditGroupSheet: View {
                 group: group,
                 updateGroupUseCase: updateGroupUseCase,
                 updateGroupAvatarUseCase: updateGroupAvatarUseCase,
-                uploadGroupAvatarUseCase: uploadGroupAvatarUseCase
+                uploadGroupAvatarUseCase: uploadGroupAvatarUseCase,
+                languageService: languageService
             )
         )
         self.onSaved = onSaved
@@ -38,15 +42,19 @@ struct EditGroupSheet: View {
                         Task { await viewModel.onPhotoItemChanged() }
                     }
 
-                    SplickTextField("Tên nhóm", text: $viewModel.name, icon: "person.3")
+                    SplickTextField(languageService.text(.friendsGroupName), text: $viewModel.name, icon: "person.3")
 
                     VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
-                        Text("Mô tả")
+                        Text(languageService.text(.friendsGroupDescription))
                             .font(SplickTheme.Typography.caption)
                             .foregroundStyle(SplickTheme.Colors.textSecondary)
-                        TextField("Mô tả nhóm (tuỳ chọn)", text: $viewModel.description, axis: .vertical)
-                            .textFieldStyle(.roundedBorder)
-                            .lineLimit(3...6)
+                        TextField(
+                            languageService.text(.friendsGroupDescriptionPlaceholder),
+                            text: $viewModel.description,
+                            axis: .vertical
+                        )
+                        .textFieldStyle(.roundedBorder)
+                        .lineLimit(3...6)
                     }
 
                     if let error = viewModel.errorMessage {
@@ -55,7 +63,11 @@ struct EditGroupSheet: View {
                             .foregroundStyle(SplickTheme.Colors.error)
                     }
 
-                    SplickButton("Lưu", isLoading: viewModel.isSaving, isDisabled: viewModel.isSaving) {
+                    SplickButton(
+                        languageService.text(.commonSave),
+                        isLoading: viewModel.isSaving,
+                        isDisabled: viewModel.isSaving
+                    ) {
                         Task {
                             if let group = await viewModel.save() {
                                 onSaved(group)
@@ -66,11 +78,11 @@ struct EditGroupSheet: View {
                 }
                 .padding(SplickTheme.Spacing.md)
             }
-            .navigationTitle("Chỉnh sửa nhóm")
+            .navigationTitle(languageService.text(.friendsEditGroupTitle))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Huỷ") { dismiss() }
+                    Button(languageService.text(.commonCancel)) { dismiss() }
                 }
             }
         }

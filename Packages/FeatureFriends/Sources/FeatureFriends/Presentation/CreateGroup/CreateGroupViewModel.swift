@@ -4,6 +4,7 @@ import SwiftUI
 import PhotosUI
 import UIKit
 import FeatureMedia
+import Localization
 import SplickDomain
 
 @MainActor
@@ -25,6 +26,7 @@ public final class CreateGroupViewModel: ObservableObject {
     private let inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol
     private let uploadGroupAvatarUseCase: UploadGroupAvatarUseCaseProtocol
     private let updateGroupAvatarUseCase: UpdateGroupAvatarUseCaseProtocol
+    private let languageService: LanguageService
     private let onSuccess: (SplickDomain.Group, [UUID]) -> Void
 
     public init(
@@ -33,6 +35,7 @@ public final class CreateGroupViewModel: ObservableObject {
         inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol,
         uploadGroupAvatarUseCase: UploadGroupAvatarUseCaseProtocol,
         updateGroupAvatarUseCase: UpdateGroupAvatarUseCaseProtocol,
+        languageService: LanguageService,
         onSuccess: @escaping (SplickDomain.Group, [UUID]) -> Void
     ) {
         self.friends = friends
@@ -40,6 +43,7 @@ public final class CreateGroupViewModel: ObservableObject {
         self.inviteFriendsUseCase = inviteFriendsUseCase
         self.uploadGroupAvatarUseCase = uploadGroupAvatarUseCase
         self.updateGroupAvatarUseCase = updateGroupAvatarUseCase
+        self.languageService = languageService
         self.onSuccess = onSuccess
     }
 
@@ -84,7 +88,7 @@ public final class CreateGroupViewModel: ObservableObject {
             return
         }
         guard let data = try? await selectedPhotoItem.loadTransferable(type: Data.self) else {
-            errorMessage = "Không tải được ảnh."
+            errorMessage = languageService.text(.friendsImageLoadFailed)
             return
         }
         previewImage = UIImage(data: data)
@@ -93,7 +97,7 @@ public final class CreateGroupViewModel: ObservableObject {
     func create() async {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else {
-            errorMessage = "Nhập tên nhóm."
+            errorMessage = languageService.text(.friendsGroupNameRequired)
             return
         }
 
@@ -123,7 +127,7 @@ public final class CreateGroupViewModel: ObservableObject {
                         avatarURL: upload.url.absoluteString
                     )
                 } catch {
-                    warnings.append("Không tải được ảnh đại diện.")
+                    warnings.append(languageService.text(.friendsGroupAvatarUploadFailed))
                 }
             }
 
@@ -135,25 +139,26 @@ public final class CreateGroupViewModel: ObservableObject {
                         userIds: memberIds
                     )
                     if result.invited.isEmpty, !result.skipped.isEmpty {
-                        warnings.append("Không mời được thành viên đã chọn.")
+                        warnings.append(languageService.text(.friendsInviteSelectedFailed))
                     } else if !result.skipped.isEmpty {
-                        warnings.append("Một số thành viên đã được bỏ qua.")
+                        warnings.append(languageService.text(.friendsInvitePartialSkipped))
                     }
                 } catch {
-                    warnings.append("Không mời được thành viên.")
+                    warnings.append(languageService.text(.friendsInviteFailed))
                 }
             }
 
             let invitedMemberIds = Array(selectedMemberIds)
             resetForm()
+            let createdMessage = languageService.format(.friendsGroupCreated, group.name)
             if warnings.isEmpty {
-                successMessage = "Đã tạo nhóm \(group.name)."
+                successMessage = createdMessage
             } else {
-                successMessage = "Đã tạo nhóm \(group.name). \(warnings.joined(separator: " "))"
+                successMessage = "\(createdMessage) \(warnings.joined(separator: " "))"
             }
             onSuccess(group, invitedMemberIds)
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = languageService.localizedMessage(for: error)
         }
     }
 

@@ -1,5 +1,6 @@
 import Foundation
 import Common
+import Localization
 import SplickDomain
 
 @MainActor
@@ -21,6 +22,7 @@ final class GroupDetailViewModel: ObservableObject {
     private let removeMemberUseCase: RemoveGroupMemberUseCaseProtocol?
     private let leaveGroupUseCase: LeaveGroupUseCaseProtocol?
     private let deleteGroupUseCase: DeleteGroupUseCaseProtocol?
+    private let languageService: LanguageService
 
     var displayedMemberCount: Int {
         if case .loaded = membersState, !members.isEmpty {
@@ -44,7 +46,8 @@ final class GroupDetailViewModel: ObservableObject {
         rejectMemberUseCase: RejectGroupMemberUseCaseProtocol? = nil,
         removeMemberUseCase: RemoveGroupMemberUseCaseProtocol? = nil,
         leaveGroupUseCase: LeaveGroupUseCaseProtocol? = nil,
-        deleteGroupUseCase: DeleteGroupUseCaseProtocol? = nil
+        deleteGroupUseCase: DeleteGroupUseCaseProtocol? = nil,
+        languageService: LanguageService
     ) {
         self.group = group
         self.fetchGroupMembersUseCase = fetchGroupMembersUseCase
@@ -55,6 +58,7 @@ final class GroupDetailViewModel: ObservableObject {
         self.removeMemberUseCase = removeMemberUseCase
         self.leaveGroupUseCase = leaveGroupUseCase
         self.deleteGroupUseCase = deleteGroupUseCase
+        self.languageService = languageService
         self.displayedInviteCode = group.inviteCode
     }
 
@@ -89,7 +93,7 @@ final class GroupDetailViewModel: ObservableObject {
             members = loaded
             membersState = .loaded(loaded)
         } catch {
-            membersState = .failed(error.localizedDescription)
+            membersState = .failed(languageService.localizedMessage(for: error))
         }
     }
 
@@ -100,7 +104,7 @@ final class GroupDetailViewModel: ObservableObject {
             pendingMembers = loaded
             pendingState = .loaded(loaded)
         } catch {
-            pendingState = .failed(error.localizedDescription)
+            pendingState = .failed(languageService.localizedMessage(for: error))
             pendingMembers = []
         }
     }
@@ -129,11 +133,11 @@ final class GroupDetailViewModel: ObservableObject {
         guard isOwner(currentUserId: currentUserId), let approveMemberUseCase else { return }
         do {
             try await approveMemberUseCase.execute(groupId: group.id, memberRowId: member.id)
-            actionMessage = "Đã duyệt \(member.displayName)"
+            actionMessage = languageService.format(.friendsMemberApproved, member.displayName)
             await loadMembers()
             await loadPendingMembers()
         } catch {
-            actionError = error.localizedDescription
+            actionError = languageService.localizedMessage(for: error)
         }
     }
 
@@ -141,39 +145,39 @@ final class GroupDetailViewModel: ObservableObject {
         guard isOwner(currentUserId: currentUserId), let rejectMemberUseCase else { return }
         do {
             try await rejectMemberUseCase.execute(groupId: group.id, memberRowId: member.id)
-            actionMessage = "Đã từ chối \(member.displayName)"
+            actionMessage = languageService.format(.friendsMemberRejected, member.displayName)
             await loadPendingMembers()
         } catch {
-            actionError = error.localizedDescription
+            actionError = languageService.localizedMessage(for: error)
         }
     }
 
     func remove(_ member: GroupMemberItem, currentUserId: UUID?) async {
         guard isOwner(currentUserId: currentUserId), let removeMemberUseCase else { return }
         guard !member.isOwner else {
-            actionError = "Không thể xóa chủ nhóm"
+            actionError = languageService.text(.friendsCannotRemoveOwner)
             return
         }
         do {
             try await removeMemberUseCase.execute(groupId: group.id, memberRowId: member.id)
-            actionMessage = "Đã xóa \(member.displayName) khỏi nhóm"
+            actionMessage = languageService.format(.friendsMemberRemoved, member.displayName)
             await loadMembers()
         } catch {
-            actionError = error.localizedDescription
+            actionError = languageService.localizedMessage(for: error)
         }
     }
 
     func leave(currentUserId: UUID?) async -> Bool {
         guard let leaveGroupUseCase, let currentUserId else { return false }
         if isOwner(currentUserId: currentUserId) {
-            actionError = "Chuyển quyền chủ nhóm trước khi rời nhóm"
+            actionError = languageService.text(.friendsTransferBeforeLeave)
             return false
         }
         do {
             try await leaveGroupUseCase.execute(groupId: group.id)
             return true
         } catch {
-            actionError = error.localizedDescription
+            actionError = languageService.localizedMessage(for: error)
             return false
         }
     }
@@ -184,7 +188,7 @@ final class GroupDetailViewModel: ObservableObject {
             try await deleteGroupUseCase.execute(groupId: group.id)
             return true
         } catch {
-            actionError = error.localizedDescription
+            actionError = languageService.localizedMessage(for: error)
             return false
         }
     }

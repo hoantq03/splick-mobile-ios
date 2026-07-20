@@ -1,10 +1,12 @@
 import SwiftUI
 import DesignSystem
 import Common
+import Localization
 import SplickDomain
 
 struct InviteFriendsToGroupSheet: View {
     @StateObject private var viewModel: InviteFriendsToGroupViewModel
+    @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
 
     init(
@@ -14,6 +16,7 @@ struct InviteFriendsToGroupSheet: View {
         searchUsersUseCase: SearchUsersUseCaseProtocol,
         addFriendUseCase: AddFriendUseCaseProtocol,
         inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol,
+        languageService: LanguageService,
         onInvited: @escaping () -> Void
     ) {
         _viewModel = StateObject(
@@ -24,6 +27,7 @@ struct InviteFriendsToGroupSheet: View {
                 searchUsersUseCase: searchUsersUseCase,
                 addFriendUseCase: addFriendUseCase,
                 inviteFriendsUseCase: inviteFriendsUseCase,
+                languageService: languageService,
                 onInvited: onInvited
             )
         )
@@ -42,22 +46,22 @@ struct InviteFriendsToGroupSheet: View {
                     } else {
                         EmptyStateView(
                             icon: "magnifyingglass",
-                            title: "Tìm người dùng",
-                            message: "Nhập username để mời vào nhóm. Chỉ bạn bè mới được thêm thành công."
+                            title: languageService.text(.friendsInviteSearchUsers),
+                            message: languageService.text(.friendsInviteHint)
                         )
                     }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(SplickTheme.Colors.background)
-            .navigationTitle("Thêm thành viên")
+            .navigationTitle(languageService.text(.friendsAddMembersTitle))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Đóng") { dismiss() }
+                    Button(languageService.text(.commonClose)) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Mời") {
+                    Button(languageService.text(.friendsInviteAction)) {
                         Task { await viewModel.submit() }
                     }
                     .disabled(viewModel.selectedIds.isEmpty || viewModel.state == .submitting)
@@ -66,19 +70,19 @@ struct InviteFriendsToGroupSheet: View {
             .onChange(of: viewModel.searchQuery) { newValue in
                 viewModel.onSearchQueryChanged(newValue)
             }
-            .alert("Lỗi", isPresented: Binding(
+            .alert(languageService.text(.commonError), isPresented: Binding(
                 get: { viewModel.alertMessage != nil },
                 set: { if !$0 { viewModel.alertMessage = nil } }
             )) {
-                Button("OK", role: .cancel) {}
+                Button(languageService.text(.commonOK), role: .cancel) {}
             } message: {
                 Text(viewModel.alertMessage ?? "")
             }
-            .alert("Thành công", isPresented: Binding(
+            .alert(languageService.text(.commonSuccess), isPresented: Binding(
                 get: { viewModel.successMessage != nil },
                 set: { if !$0 { viewModel.successMessage = nil; dismiss() } }
             )) {
-                Button("OK", role: .cancel) { dismiss() }
+                Button(languageService.text(.commonOK), role: .cancel) { dismiss() }
             } message: {
                 Text(viewModel.successMessage ?? "")
             }
@@ -91,7 +95,7 @@ struct InviteFriendsToGroupSheet: View {
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
 
-            TextField("Tìm theo username", text: $viewModel.searchQuery)
+            TextField(languageService.text(.friendsInviteUsernamePlaceholder), text: $viewModel.searchQuery)
                 .font(SplickTheme.Typography.callout)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
@@ -106,7 +110,7 @@ struct InviteFriendsToGroupSheet: View {
     private var searchResultsContent: some View {
         switch viewModel.searchState {
         case .idle, .loading:
-            LoadingView(message: "Đang tìm...")
+            LoadingView(message: languageService.text(.messagingSearchLoading))
         case .failed(let message):
             ErrorView(message: message) {
                 viewModel.onSearchQueryChanged(viewModel.searchQuery)
@@ -114,8 +118,8 @@ struct InviteFriendsToGroupSheet: View {
         case .loaded(let results) where results.isEmpty:
             EmptyStateView(
                 icon: "magnifyingglass",
-                title: "Không tìm thấy",
-                message: "Thử username khác hoặc người này đã trong nhóm."
+                title: languageService.text(.friendsInviteNotFoundTitle),
+                message: languageService.text(.friendsInviteNotFoundMessage)
             )
         case .loaded:
             ScrollView {

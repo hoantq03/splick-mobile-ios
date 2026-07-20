@@ -1,5 +1,6 @@
 import Foundation
 import Common
+import Localization
 
 @MainActor
 final class GroupInviteQRViewModel: ObservableObject {
@@ -17,15 +18,18 @@ final class GroupInviteQRViewModel: ObservableObject {
     private let groupId: UUID
     private let generateGroupQrUseCase: GenerateGroupQrUseCaseProtocol
     private let revokeGroupQrUseCase: RevokeGroupQrUseCaseProtocol
+    private let languageService: LanguageService
 
     init(
         groupId: UUID,
         generateGroupQrUseCase: GenerateGroupQrUseCaseProtocol,
-        revokeGroupQrUseCase: RevokeGroupQrUseCaseProtocol
+        revokeGroupQrUseCase: RevokeGroupQrUseCaseProtocol,
+        languageService: LanguageService
     ) {
         self.groupId = groupId
         self.generateGroupQrUseCase = generateGroupQrUseCase
         self.revokeGroupQrUseCase = revokeGroupQrUseCase
+        self.languageService = languageService
     }
 
     var serverQR: GroupServerQR? {
@@ -51,7 +55,7 @@ final class GroupInviteQRViewModel: ObservableObject {
         do {
             try await regenerate()
         } catch {
-            state = .failed(error.localizedDescription)
+            state = .failed(languageService.localizedMessage(for: error))
         }
     }
 
@@ -69,7 +73,7 @@ final class GroupInviteQRViewModel: ObservableObject {
             do {
                 try await revokeGroupQrUseCase.execute(groupId: groupId, qrId: existing.id)
             } catch {
-                alertMessage = error.localizedDescription
+                alertMessage = languageService.localizedMessage(for: error)
                 return
             }
         }
@@ -77,7 +81,7 @@ final class GroupInviteQRViewModel: ObservableObject {
             let qr = try await generateGroupQrUseCase.execute(groupId: groupId, ttlSeconds: 86_400)
             state = .loaded(qr)
         } catch {
-            alertMessage = error.localizedDescription
+            alertMessage = languageService.localizedMessage(for: error)
         }
     }
 }

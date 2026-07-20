@@ -1,5 +1,6 @@
 import Foundation
 import Common
+import Localization
 import SplickDomain
 
 @MainActor
@@ -23,6 +24,7 @@ final class InviteFriendsToGroupViewModel: ObservableObject {
     private let searchUsersUseCase: SearchUsersUseCaseProtocol
     private let addFriendUseCase: AddFriendUseCaseProtocol
     private let inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol
+    private let languageService: LanguageService
     private let onInvited: () -> Void
     private var searchTask: Task<Void, Never>?
     private var inFlightRelationActionUserIds: Set<UUID> = []
@@ -38,6 +40,7 @@ final class InviteFriendsToGroupViewModel: ObservableObject {
         searchUsersUseCase: SearchUsersUseCaseProtocol,
         addFriendUseCase: AddFriendUseCaseProtocol,
         inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol,
+        languageService: LanguageService,
         onInvited: @escaping () -> Void
     ) {
         self.groupId = groupId
@@ -46,6 +49,7 @@ final class InviteFriendsToGroupViewModel: ObservableObject {
         self.searchUsersUseCase = searchUsersUseCase
         self.addFriendUseCase = addFriendUseCase
         self.inviteFriendsUseCase = inviteFriendsUseCase
+        self.languageService = languageService
         self.onInvited = onInvited
     }
 
@@ -75,7 +79,7 @@ final class InviteFriendsToGroupViewModel: ObservableObject {
             } catch {
                 guard !Task.isCancelled else { return }
                 searchResults = []
-                searchState = .failed(error.localizedDescription)
+                searchState = .failed(languageService.localizedMessage(for: error))
             }
         }
     }
@@ -102,14 +106,14 @@ final class InviteFriendsToGroupViewModel: ObservableObject {
                 _ = try await addFriendUseCase.execute(username: result.user.username, message: nil)
             } catch {
                 updateSearchResult(userId: userId, status: .none)
-                alertMessage = error.localizedDescription
+                alertMessage = languageService.localizedMessage(for: error)
             }
         }
     }
 
     func submit() async {
         guard !selectedIds.isEmpty else {
-            alertMessage = "Chọn ít nhất một người."
+            alertMessage = languageService.text(.friendsInviteNeedSelection)
             return
         }
         state = .submitting
@@ -121,17 +125,17 @@ final class InviteFriendsToGroupViewModel: ObservableObject {
             let invitedCount = result.invited.count
             let skippedCount = result.skipped.count
             if invitedCount > 0 {
-                successMessage = "Đã mời \(invitedCount) người vào nhóm."
+                successMessage = languageService.format(.friendsInviteSuccessCount, invitedCount)
                 onInvited()
             } else if skippedCount > 0 {
-                alertMessage = "Không thể mời (có thể chưa kết bạn, đã trong nhóm hoặc bị chặn)."
+                alertMessage = languageService.text(.friendsInviteFailedReason)
             } else {
-                alertMessage = "Không có ai được mời."
+                alertMessage = languageService.text(.friendsInviteNone)
             }
             selectedIds.removeAll()
             state = .idle
         } catch {
-            alertMessage = error.localizedDescription
+            alertMessage = languageService.localizedMessage(for: error)
             state = .idle
         }
     }

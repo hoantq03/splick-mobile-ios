@@ -1,7 +1,9 @@
 import SwiftUI
 import DesignSystem
+import Localization
 
 struct GroupMemberRowView: View {
+    @EnvironmentObject private var languageService: LanguageService
     let displayName: String
     let username: String
     let avatarURL: URL?
@@ -63,7 +65,7 @@ struct GroupMemberRowView: View {
     private func memberActionMenu(onRemove: @escaping () -> Void) -> some View {
         Menu {
             Button(role: .destructive, action: onRemove) {
-                Label("Xóa khỏi nhóm", systemImage: "person.fill.xmark")
+                Label(languageService.text(.friendsGroupRemoveMemberAction), systemImage: "person.fill.xmark")
             }
         } label: {
             Image(systemName: "ellipsis")
@@ -73,6 +75,6 @@ struct GroupMemberRowView: View {
                 .background(SplickTheme.Colors.secondaryBackground)
                 .clipShape(Circle())
         }
-        .accessibilityLabel("Thao tác thành viên")
+        .accessibilityLabel(languageService.text(.friendsGroupMemberActionsA11y))
     }
 }

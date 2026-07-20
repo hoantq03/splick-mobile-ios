@@ -53,7 +53,8 @@ struct GroupDetailView: View {
         rejectMemberUseCase: RejectGroupMemberUseCaseProtocol? = nil,
         removeMemberUseCase: RemoveGroupMemberUseCaseProtocol? = nil,
         leaveGroupUseCase: LeaveGroupUseCaseProtocol? = nil,
-        deleteGroupUseCase: DeleteGroupUseCaseProtocol? = nil
+        deleteGroupUseCase: DeleteGroupUseCaseProtocol? = nil,
+        languageService: LanguageService
     ) {
         self.onUserTap = onUserTap
         self.onGroupLeft = onGroupLeft
@@ -77,7 +78,8 @@ struct GroupDetailView: View {
                 rejectMemberUseCase: rejectMemberUseCase,
                 removeMemberUseCase: removeMemberUseCase,
                 leaveGroupUseCase: leaveGroupUseCase,
-                deleteGroupUseCase: deleteGroupUseCase
+                deleteGroupUseCase: deleteGroupUseCase,
+                languageService: languageService
             )
         )
     }
@@ -95,7 +97,8 @@ struct GroupDetailView: View {
                 groupName: viewModel.group.name,
                 groupId: viewModel.group.id,
                 generateGroupQrUseCase: generateGroupQrUseCase,
-                revokeGroupQrUseCase: revokeGroupQrUseCase
+                revokeGroupQrUseCase: revokeGroupQrUseCase,
+                languageService: languageService
             )
         }
         .sheet(isPresented: $showEditGroup) {
@@ -104,6 +107,7 @@ struct GroupDetailView: View {
                 updateGroupUseCase: updateGroupUseCase,
                 updateGroupAvatarUseCase: updateGroupAvatarUseCase,
                 uploadGroupAvatarUseCase: uploadGroupAvatarUseCase,
+                languageService: languageService,
                 onSaved: { updated in
                     viewModel.applyUpdatedGroup(updated)
                 }
@@ -129,6 +133,7 @@ struct GroupDetailView: View {
                 searchUsersUseCase: searchUsersUseCase,
                 addFriendUseCase: addFriendUseCase,
                 inviteFriendsUseCase: inviteFriendsUseCase,
+                languageService: languageService,
                 onInvited: {
                     Task {
                         await viewModel.loadMembers()
@@ -143,7 +148,7 @@ struct GroupDetailView: View {
         .refreshable {
             await viewModel.load(currentUserId: currentUserSummary?.id)
         }
-        .alert("Thông báo", isPresented: Binding(
+        .alert(languageService.text(.commonNotice), isPresented: Binding(
             get: { viewModel.actionMessage != nil },
             set: { if !$0 { viewModel.actionMessage = nil } }
         )) {
@@ -159,8 +164,12 @@ struct GroupDetailView: View {
         } message: {
             Text(viewModel.actionError ?? "")
         }
-        .confirmationDialog("Rời nhóm?", isPresented: $confirmLeave, titleVisibility: .visible) {
-            Button("Rời nhóm", role: .destructive) {
+        .confirmationDialog(
+            languageService.text(.messagingLeaveGroupConfirmTitle),
+            isPresented: $confirmLeave,
+            titleVisibility: .visible
+        ) {
+            Button(languageService.text(.messagingLeaveGroup), role: .destructive) {
                 Task {
                     if await viewModel.leave(currentUserId: currentUserSummary?.id) {
                         onGroupLeft()
@@ -168,11 +177,11 @@ struct GroupDetailView: View {
                     }
                 }
             }
-            Button("Huỷ", role: .cancel) {}
+            Button(languageService.text(.friendsCancel), role: .cancel) {}
         }
-        .alert("Xóa nhóm?", isPresented: $confirmDelete) {
-            Button("Huỷ", role: .cancel) {}
-            Button("Xóa nhóm", role: .destructive) {
+        .alert(languageService.text(.friendsDeleteGroupConfirmTitle), isPresented: $confirmDelete) {
+            Button(languageService.text(.friendsCancel), role: .cancel) {}
+            Button(languageService.text(.friendsDeleteGroup), role: .destructive) {
                 Task {
                     if await viewModel.deleteGroup(currentUserId: currentUserSummary?.id) {
                         onGroupDeleted()
@@ -181,7 +190,7 @@ struct GroupDetailView: View {
                 }
             }
         } message: {
-            Text("Hành động này không thể hoàn tác. Bạn có chắc muốn xóa nhóm này?")
+            Text(languageService.text(.friendsDeleteGroupMessage))
         }
     }
 
@@ -204,11 +213,11 @@ struct GroupDetailView: View {
                     }
                     Spacer()
                     if viewModel.isOwner(currentUserId: currentUserSummary?.id) {
-                        Button("Duyệt") {
+                        Button(languageService.text(.friendsApproveMember)) {
                             Task { await viewModel.approve(member, currentUserId: currentUserSummary?.id) }
                         }
                         .buttonStyle(.borderedProminent)
-                        Button("Từ chối") {
+                        Button(languageService.text(.friendsReject)) {
                             Task { await viewModel.reject(member, currentUserId: currentUserSummary?.id) }
                         }
                         .buttonStyle(.bordered)
@@ -243,7 +252,7 @@ struct GroupDetailView: View {
         ScrollView {
             switch viewModel.membersState {
             case .idle, .loading where viewModel.members.isEmpty:
-                LoadingView(message: "Đang tải thành viên...")
+                LoadingView(message: languageService.text(.messagingGroupMembersLoading))
                     .frame(minHeight: 120)
                     .frame(maxWidth: .infinity)
             case .failed(let message) where viewModel.members.isEmpty:
@@ -322,24 +331,31 @@ struct GroupDetailView: View {
             ],
             spacing: SplickTheme.Spacing.xs
         ) {
-            headerQuickActionButton(icon: "qrcode", title: "Mã QR") {
+            headerQuickActionButton(icon: "qrcode", title: languageService.text(.friendsGroupQR)) {
                 showGroupQR = true
             }
 
             headerQuickActionButton(
                 icon: "doc.on.doc",
-                title: "Mã nhóm",
+                title: languageService.text(.friendsGroupCode),
                 isDisabled: !hasInviteCode
             ) {
                 copyInviteCode()
             }
 
             if isOwner {
-                headerQuickActionButton(icon: "person.crop.circle.badge.checkmark", title: "Chuyển quyền") {
+                headerQuickActionButton(
+                    icon: "person.crop.circle.badge.checkmark",
+                    title: languageService.text(.friendsTransferOwnership)
+                ) {
                     showTransferOwnership = true
                 }
 
-                headerQuickActionButton(icon: "trash", title: "Xóa nhóm", isDestructive: true) {
+                headerQuickActionButton(
+                    icon: "trash",
+                    title: languageService.text(.friendsDeleteGroup),
+                    isDestructive: true
+                ) {
                     confirmDelete = true
                 }
             }
@@ -388,18 +404,18 @@ struct GroupDetailView: View {
         let code = viewModel.displayedInviteCode.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !code.isEmpty else { return }
         UIPasteboard.general.string = code
-        viewModel.actionMessage = "Đã sao chép mã nhóm."
+        viewModel.actionMessage = languageService.text(.friendsGroupCodeCopied)
     }
 
     private func memberDisplayName(_ member: GroupMemberItem, isMe: Bool) -> String {
         if member.isOwner && isMe {
-            return "\(member.displayName) (Trưởng Nhóm, tôi)"
+            return "\(member.displayName) \(languageService.text(.friendsMemberOwnerMe))"
         }
         if member.isOwner {
-            return "\(member.displayName) (Trưởng Nhóm)"
+            return "\(member.displayName) \(languageService.text(.friendsMemberOwner))"
         }
         if isMe {
-            return "\(member.displayName) (tôi)"
+            return "\(member.displayName) \(languageService.text(.friendsMemberMe))"
         }
         return member.displayName
     }
