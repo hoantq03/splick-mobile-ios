@@ -92,7 +92,11 @@ public enum AppConstants {
     }
 
     public enum Links {
+        /// Invite / deep-link host (custom domain).
         public static let webHost = "splick.app"
+
+        /// Live marketing + legal site (Cloudflare Pages). Prefer custom domain once DNS is attached.
+        public static let contentWebHost = "splick-web.pages.dev"
 
         public static func profileInvitePath(username: String) -> String {
             "\(webHost)/\(username)"
@@ -119,9 +123,9 @@ public enum AppConstants {
             return components.url!
         }
 
-        public static let marketingURL = URL(string: "https://\(webHost)/")!
-        public static let termsOfServiceURL = URL(string: "https://\(webHost)/terms/")!
-        public static let privacyPolicyURL = URL(string: "https://\(webHost)/privacy/")!
-        public static let supportURL = URL(string: "https://\(webHost)/support/")!
+        public static let marketingURL = URL(string: "https://\(contentWebHost)/")!
+        public static let termsOfServiceURL = URL(string: "https://\(contentWebHost)/terms/")!
+        public static let privacyPolicyURL = URL(string: "https://\(contentWebHost)/privacy/")!
+        public static let supportURL = URL(string: "https://\(contentWebHost)/support/")!
     }
 }

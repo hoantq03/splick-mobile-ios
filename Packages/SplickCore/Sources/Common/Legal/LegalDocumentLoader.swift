@@ -12,7 +12,7 @@ public enum LegalDocumentType: String, Sendable, CaseIterable, Identifiable, Has
 
     public func webURL(languageCode: String) -> URL {
         let isVietnamese = languageCode.lowercased().hasPrefix("vi")
-        let host = AppConstants.Links.webHost
+        let host = AppConstants.Links.contentWebHost
         switch self {
         case .terms:
             let path = isVietnamese ? "/vi/terms/" : "/terms/"
@@ -40,7 +40,8 @@ public struct LegalBundledDocument: Sendable {
 public enum LegalDocumentLoader {
     private static let subdirectory = "Legal"
 
-    /// Loads bundled HTML fragment + stylesheet from the app package (offline).
+    /// Loads bundled HTML fragment + stylesheet from the app package (offline fallback).
+    /// Keep in sync with `splick-web/content/legal/html/*.html` when legal copy changes.
     public static func loadBundled(
         _ type: LegalDocumentType,
         languageCode: String
