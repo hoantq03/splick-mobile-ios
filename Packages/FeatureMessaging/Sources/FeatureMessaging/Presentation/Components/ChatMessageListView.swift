@@ -15,8 +15,17 @@ struct ChatMessageListView: View {
 
     @State private var reactionFocusMessageId: UUID?
     @State private var reactionAnchorFrames: [UUID: CGRect] = [:]
+    @State private var timestampRevealTranslation: CGFloat = 0
+    /// Once a drag is classified as bubble-reply vs whitespace-reveal, stick with it.
+    @State private var timestampRevealSession: TimestampRevealSession = .undecided
 
     private static let longPressImpact = UIImpactFeedbackGenerator(style: .medium)
+
+    private enum TimestampRevealSession {
+        case undecided
+        case revealing
+        case ignored
+    }
 
     var body: some View {
         let displayMessages = MessageTimelineGrouping.buildDisplayMessages(from: messages)
@@ -33,6 +42,7 @@ struct ChatMessageListView: View {
                                 isHighlighted: viewModel.highlightedMessageId == item.message.id,
                                 isFloatingSend: viewModel.newlySentMessageIds.contains(item.message.clientMessageId),
                                 floatSway: viewModel.floatSway(for: item.message.clientMessageId),
+                                timestampRevealTranslation: timestampRevealTranslation,
                                 onReact: { emoji in
                                     _ = viewModel.react(to: item.message.id, emoji: emoji)
                                 },
@@ -46,6 +56,7 @@ struct ChatMessageListView: View {
                                     beginReply(to: item.message)
                                 }
                             )
+                            .opacity(reactionFocusMessageId == item.message.id ? 0 : 1)
                             .id(item.message.clientMessageId)
                             .transition(ChatScrollAnimation.messageInsert)
                         }
@@ -56,12 +67,14 @@ struct ChatMessageListView: View {
                     }
                     .padding(.horizontal, SplickTheme.Spacing.md)
                     .padding(.vertical, SplickTheme.Spacing.sm)
+                    .frame(maxWidth: .infinity)
                 }
                 .modifier(ChatBottomScrollAnchorModifier())
                 .animation(ChatScrollAnimation.spring, value: messages.map(\.clientMessageId))
                 .onPreferenceChange(MessageReactionAnchorFrameKey.self) { frames in
                     reactionAnchorFrames.merge(frames) { _, new in new }
                 }
+                .simultaneousGesture(timestampRevealGesture)
 
                 GeometryReader { overlayGeometry in
                     if reactionFocusMessageId != nil,
@@ -116,6 +129,50 @@ struct ChatMessageListView: View {
         }
     }
 
+    private var timestampRevealGesture: some Gesture {
+        DragGesture(minimumDistance: 8, coordinateSpace: .global)
+            .onChanged { value in
+                let horizontal = value.translation.width
+                let vertical = abs(value.translation.height)
+
+                switch timestampRevealSession {
+                case .ignored:
+                    return
+                case .undecided:
+                    guard abs(horizontal) > vertical * 1.15 else { return }
+                    if isTouchOnMessageBubble(value.startLocation) {
+                        timestampRevealSession = .ignored
+                        return
+                    }
+                    timestampRevealSession = .revealing
+                case .revealing:
+                    break
+                }
+
+                let signed = horizontal < 0 ? -abs(horizontal) : abs(horizontal)
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    // Keep 1:1 with the finger; bubbles clip to the label width.
+                    timestampRevealTranslation = signed
+                }
+            }
+            .onEnded { _ in
+                let shouldReset = timestampRevealSession == .revealing
+                timestampRevealSession = .undecided
+                guard shouldReset else { return }
+                withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.86)) {
+                    timestampRevealTranslation = 0
+                }
+            }
+    }
+
+    private func isTouchOnMessageBubble(_ globalPoint: CGPoint) -> Bool {
+        reactionAnchorFrames.values.contains { frame in
+            frame.insetBy(dx: -6, dy: -4).contains(globalPoint)
+        }
+    }
+
     private func reactionFocusContext(
         in displayMessages: [DisplayMessage],
         overlayOrigin: CGPoint
@@ -132,7 +189,9 @@ struct ChatMessageListView: View {
         return MessageReactionFocusContext(
             messageId: messageId,
             isOutgoing: item.message.senderId == currentUserId,
-            frame: localFrame
+            frame: localFrame,
+            displayMessage: item,
+            currentUserId: currentUserId
         )
     }
 
