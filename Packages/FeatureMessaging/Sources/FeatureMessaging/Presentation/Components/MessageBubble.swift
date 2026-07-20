@@ -8,12 +8,25 @@ import SplickDomain
 struct MessageBubble: View {
     @EnvironmentObject private var languageService: LanguageService
 
+    enum Presentation {
+        /// Full chat row with spacers, timestamps, and gestures.
+        case threadRow
+        /// Bubble-only clone shown above the reaction dim overlay.
+        case reactionFocusLift
+    }
+
     let displayMessage: DisplayMessage
     let isOutgoing: Bool
     let currentUserId: UUID
     var isHighlighted: Bool = false
     var isFloatingSend: Bool = false
     var floatSway: CGFloat = 0
+    var presentation: Presentation = .threadRow
+    /// When lifting into reaction focus, cap bubble width so text reflows instead of overflowing.
+    var focusMaxContentWidth: CGFloat? = nil
+    /// Shared list drag: negative (swipe left) reveals right/outgoing times;
+    /// positive (swipe right) reveals left/incoming times.
+    var timestampRevealTranslation: CGFloat = 0
     let onReact: (String) -> Void
     let onRetry: (() -> Void)?
     let onLongPress: (() -> Void)?
@@ -26,34 +39,113 @@ struct MessageBubble: View {
     private static let replySwipeImpact = UIImpactFeedbackGenerator(style: .light)
     private static let replySwipeThreshold: CGFloat = 56
     private static let replySwipeMaxOffset: CGFloat = 88
+    /// Fits `HH:mm` with caption + monospaced digits.
+    private static let timestampLabelWidth: CGFloat = 46
+    private static let mediaMaxWidth: CGFloat = 220
+    private static let mediaCornerRadius: CGFloat = SplickTheme.CornerRadius.medium
+
+    private static let timestampFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_GB")
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
 
     private var message: ChatMessage { displayMessage.message }
     private var imageAttachments: [MessageImageAttachment] { displayMessage.imageAttachments }
 
+    private var resolvedContentMaxWidth: CGFloat {
+        if presentation == .reactionFocusLift, let focusMaxContentWidth {
+            return focusMaxContentWidth
+        }
+        return Self.mediaMaxWidth
+    }
+
+    /// 1:1 with finger travel; capped once the full time label is visible.
+    /// Swipe left → outgoing (right); swipe right → incoming (left).
+    private var revealedTimestampWidth: CGFloat {
+        let dragged = isOutgoing
+            ? max(-timestampRevealTranslation, 0)
+            : max(timestampRevealTranslation, 0)
+        return min(dragged, Self.timestampLabelWidth)
+    }
+
+    private var formattedTimestamp: String {
+        Self.timestampFormatter.string(from: message.createdAt)
+    }
+
     var body: some View {
+        switch presentation {
+        case .reactionFocusLift:
+            focusLiftedBubble
+        case .threadRow:
+            threadRow
+        }
+    }
+
+    private var focusLiftedBubble: some View {
+        bubbleCluster
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: resolvedContentMaxWidth, alignment: isOutgoing ? .trailing : .leading)
+    }
+
+    private var threadRow: some View {
         HStack(alignment: .messageDeliveryStatus, spacing: SplickTheme.Spacing.xxs) {
             if isOutgoing {
-                timestampRevealArea(alignment: .leading, dragDirection: -1)
                 Spacer(minLength: 48)
+                    .allowsHitTesting(false)
+            } else {
+                timestampRevealLabel
             }
 
             bubbleCluster
 
             if isOutgoing {
-                if message.deliveryStatus != .failed {
-                    MessageStatusIndicator(status: message.deliveryStatus)
-                        .alignmentGuide(.messageDeliveryStatus) { dimensions in
-                            dimensions[VerticalAlignment.center]
-                        }
-                }
-            }
-
-            if !isOutgoing {
+                outgoingTrailingMeta
+            } else {
                 Spacer(minLength: 48)
-                timestampRevealArea(alignment: .trailing, dragDirection: 1)
+                    .allowsHitTesting(false)
             }
         }
         .padding(.top, topSpacing)
+    }
+
+    @ViewBuilder
+    private var outgoingTrailingMeta: some View {
+        HStack(alignment: .center, spacing: SplickTheme.Spacing.xxs) {
+            if message.deliveryStatus != .failed {
+                MessageStatusIndicator(status: message.deliveryStatus)
+            }
+            timestampRevealLabel
+        }
+        .fixedSize(horizontal: true, vertical: true)
+        .alignmentGuide(.messageDeliveryStatus) { dimensions in
+            dimensions[VerticalAlignment.center]
+        }
+        .allowsHitTesting(false)
+    }
+
+    /// Time stays tucked under the outer edge; width opens 1:1 with the finger.
+    private var timestampRevealLabel: some View {
+        Text(formattedTimestamp)
+            .font(SplickTheme.Typography.caption)
+            .foregroundStyle(SplickTheme.Colors.textSecondary)
+            .monospacedDigit()
+            .lineLimit(1)
+            .frame(
+                width: Self.timestampLabelWidth,
+                alignment: isOutgoing ? .leading : .trailing
+            )
+            .frame(
+                width: revealedTimestampWidth,
+                alignment: isOutgoing ? .leading : .trailing
+            )
+            .clipped()
+            .alignmentGuide(.messageDeliveryStatus) { dimensions in
+                dimensions[VerticalAlignment.center]
+            }
+            .accessibilityHidden(revealedTimestampWidth < 8)
+            .allowsHitTesting(false)
     }
 
     private static let reactionAccessoryHeight: CGFloat = 26
@@ -91,11 +183,11 @@ struct MessageBubble: View {
             GeometryReader { geo in
                 Color.clear.preference(
                     key: MessageReactionAnchorFrameKey.self,
-                    value: [message.id: geo.frame(in: .global)]
+                    value: presentation == .threadRow ? [message.id: geo.frame(in: .global)] : [:]
                 )
             }
         }
-        .messageSendFloat(isActive: isFloatingSend, lateralSway: floatSway)
+        .messageSendFloat(isActive: isFloatingSend && presentation == .threadRow, lateralSway: floatSway)
     }
 
     private var replyIconOffset: CGFloat {
@@ -112,7 +204,7 @@ struct MessageBubble: View {
     private var longPressGesture: some Gesture {
         LongPressGesture(minimumDuration: 0.28)
             .onEnded { _ in
-                guard onLongPress != nil else { return }
+                guard presentation == .threadRow, onLongPress != nil else { return }
                 Self.longPressImpact.impactOccurred()
                 onLongPress?()
             }
@@ -121,7 +213,7 @@ struct MessageBubble: View {
     private var replySwipeGesture: some Gesture {
         DragGesture(minimumDistance: 8)
             .onChanged { value in
-                guard onReply != nil else { return }
+                guard presentation == .threadRow, onReply != nil else { return }
                 let horizontal = value.translation.width
                 let vertical = abs(value.translation.height)
                 guard abs(horizontal) > vertical else { return }
@@ -141,7 +233,7 @@ struct MessageBubble: View {
                 }
             }
             .onEnded { value in
-                guard onReply != nil else { return }
+                guard presentation == .threadRow, onReply != nil else { return }
                 let horizontal = value.translation.width
                 let vertical = abs(value.translation.height)
                 let triggered: Bool
@@ -163,9 +255,6 @@ struct MessageBubble: View {
                 }
             }
     }
-
-    private static let mediaMaxWidth: CGFloat = 220
-    private static let mediaCornerRadius: CGFloat = SplickTheme.CornerRadius.medium
 
     private var hasTextBody: Bool {
         !message.body.isEmpty
@@ -235,32 +324,58 @@ struct MessageBubble: View {
     }
 
     private var textBubbleBody: some View {
+        ViewThatFits(in: .horizontal) {
+            // Prefer hugging the text width when it fits on one line.
+            messageTextLabel(lineLimit: 1)
+                .fixedSize(horizontal: true, vertical: true)
+                .padding(.horizontal, SplickTheme.Spacing.sm + 2)
+                .padding(.vertical, SplickTheme.Spacing.xs + 2)
+                .background(bubbleBackground)
+                .clipShape(bubbleShape)
+
+            // Otherwise wrap within the max content width and grow vertically.
+            messageTextLabel(lineLimit: nil)
+                .frame(maxWidth: textWrapMaxWidth, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, SplickTheme.Spacing.sm + 2)
+                .padding(.vertical, SplickTheme.Spacing.xs + 2)
+                .background(bubbleBackground)
+                .clipShape(bubbleShape)
+        }
+    }
+
+    /// Max width available for wrapped text (excluding horizontal bubble padding).
+    private var textWrapMaxWidth: CGFloat {
+        max(resolvedContentMaxWidth - (SplickTheme.Spacing.sm + 2) * 2, 80)
+    }
+
+    private func messageTextLabel(lineLimit: Int?) -> some View {
         Text(message.body)
             .font(SplickTheme.Typography.body)
             .foregroundStyle(isOutgoing ? .white : SplickTheme.Colors.textPrimary)
-            .padding(.horizontal, SplickTheme.Spacing.sm + 2)
-            .padding(.vertical, SplickTheme.Spacing.xs + 2)
-            .background(bubbleBackground)
-            .clipShape(bubbleShape)
+            .multilineTextAlignment(.leading)
+            .lineLimit(lineLimit)
     }
 
     @ViewBuilder
     private var messageMediaAttachments: some View {
+        let mediaWidth = min(resolvedContentMaxWidth, Self.mediaMaxWidth)
         if imageAttachments.count == 1,
            let attachment = imageAttachments.first,
            attachment.url.isLikelyAnimatedImage {
             InlineGifAttachmentView(
                 url: attachment.url,
-                widthFraction: Self.mediaMaxWidth / max(UIScreen.main.bounds.width, 1),
+                widthFraction: mediaWidth / max(UIScreen.main.bounds.width, 1),
                 cornerRadius: Self.mediaCornerRadius
             )
+            .frame(maxWidth: mediaWidth)
             .onTapGesture {
                 imageViewerRoute = AttachmentPreviewRoute(index: 0)
             }
         } else {
             InlineAttachmentImageGrid(
                 images: imageAttachments.map(\.inlinePreviewImage),
-                maxWidth: Self.mediaMaxWidth,
+                maxWidth: mediaWidth,
                 cornerRadius: Self.mediaCornerRadius,
                 onTapImage: { index in
                     imageViewerRoute = AttachmentPreviewRoute(index: index)
@@ -328,15 +443,6 @@ struct MessageBubble: View {
         }
     }
 
-    private func timestampRevealArea(alignment: HorizontalAlignment, dragDirection: CGFloat) -> some View {
-        TimestampRevealSpacer(
-            timestamp: message.createdAt,
-            dragDirection: dragDirection,
-            alignment: alignment
-        )
-        .frame(minWidth: 52, maxWidth: 72)
-    }
-
     private static let bubbleCornerRadius: CGFloat = 24
 
     private var bubbleShape: RoundedRectangle {
@@ -374,43 +480,6 @@ private struct MessageDeliveryStatusAnchor: ViewModifier {
         } else {
             content
         }
-    }
-}
-
-private struct TimestampRevealSpacer: View {
-    let timestamp: Date
-    let dragDirection: CGFloat
-    let alignment: HorizontalAlignment
-
-    @GestureState private var dragOffset: CGFloat = 0
-
-    private var revealProgress: CGFloat {
-        min(abs(dragOffset) / 60, 1)
-    }
-
-    var body: some View {
-        ZStack(alignment: alignment == .leading ? .leading : .trailing) {
-            Text(timestamp.formatted(.dateTime.hour().minute()))
-                .font(SplickTheme.Typography.caption)
-                .foregroundStyle(SplickTheme.Colors.textSecondary)
-                .opacity(revealProgress)
-                .offset(x: dragDirection > 0 ? (24 - dragOffset) : (-24 - dragOffset))
-        }
-        .frame(maxHeight: .infinity)
-        .contentShape(Rectangle())
-        .gesture(
-            DragGesture(minimumDistance: 8)
-                .updating($dragOffset) { value, state, _ in
-                    let horizontal = value.translation.width
-                    let vertical = abs(value.translation.height)
-                    guard abs(horizontal) > vertical else { return }
-                    if dragDirection < 0 {
-                        state = min(0, horizontal)
-                    } else {
-                        state = max(0, horizontal)
-                    }
-                }
-        )
     }
 }
 
