@@ -10,7 +10,10 @@ struct MessageReactionFocusOverlay: View {
     let onReact: (String) -> Void
     let onReply: () -> Void
     let onOpenFullPicker: () -> Void
+    /// Dim / background tap — may be ignored briefly after long-press opens.
     let onDismiss: () -> Void
+    /// Reply / emoji / picker — always tears down focus.
+    let onForceDismiss: () -> Void
 
     @State private var isRevealed = false
     @State private var optionsSize: CGSize = CGSize(width: 200, height: 88)
@@ -146,7 +149,7 @@ struct MessageReactionFocusOverlay: View {
         MessageReactionTray(
             onReact: onReact,
             onOpenFullPicker: onOpenFullPicker,
-            onDismiss: dismissAnimated
+            onDismiss: dismissCommitted
         )
     }
 
@@ -194,7 +197,7 @@ struct MessageReactionFocusOverlay: View {
         Button {
             Self.replyImpact.impactOccurred()
             onReply()
-            dismissAnimated()
+            dismissCommitted()
         } label: {
             HStack(spacing: SplickTheme.Spacing.xs) {
                 Image(systemName: "arrowshape.turn.up.left.fill")
@@ -285,6 +288,13 @@ struct MessageReactionFocusOverlay: View {
 
     private func dismissAnimated() {
         onDismiss()
+        withAnimation(MessageReactionTrayMotion.dismiss) {
+            isRevealed = false
+        }
+    }
+
+    private func dismissCommitted() {
+        onForceDismiss()
         withAnimation(MessageReactionTrayMotion.dismiss) {
             isRevealed = false
         }

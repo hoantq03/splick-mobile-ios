@@ -99,7 +99,8 @@ struct ChatMessageListView: View {
                                     _ = viewModel.react(to: focusContext.messageId, emoji: emoji)
                                 }
                             },
-                            onDismiss: { dismissReactionFocus() }
+                            onDismiss: { dismissReactionFocus() },
+                            onForceDismiss: { dismissReactionFocus() }
                         )
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .zIndex(100)
