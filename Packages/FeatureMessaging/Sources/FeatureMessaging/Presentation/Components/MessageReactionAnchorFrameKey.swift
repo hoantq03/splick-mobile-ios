@@ -12,4 +12,6 @@ struct MessageReactionFocusContext: Equatable {
     let messageId: UUID
     let isOutgoing: Bool
     let frame: CGRect
+    let displayMessage: DisplayMessage
+    let currentUserId: UUID
 }
