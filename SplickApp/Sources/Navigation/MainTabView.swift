@@ -65,14 +65,14 @@ struct MainTabView: View {
     }
 
     private var tabBarSlideOffset: CGFloat {
-        // Scroll hide uses opacity only — sliding glassEffect every scroll tick floods console warnings.
         guard isTabBarChromePresented else { return TabBarLayout.tabBarSlideDistance }
-        return 0
+        return tabBarScrollState.isVisible ? 0 : TabBarLayout.tabBarSlideDistance
     }
 
     private var tabBarOpacity: Double {
-        guard isTabBarChromePresented else { return 0 }
-        return tabBarScrollState.isVisible ? 1 : 0
+        // Fade only when chrome leaves entirely (camera / overlays).
+        // Scroll hide uses slide-down only so it doesn't look like a dissolve.
+        isTabBarChromePresented ? 1 : 0
     }
 
     var body: some View {
@@ -108,7 +108,11 @@ struct MainTabView: View {
                             sizeBytes: upload.sizeBytes
                         )
                     },
-                    onDismiss: { appState.dismissLinkedPostPresentation() }
+                    onDismiss: {
+                        withAnimation(LinkedPostMotion.spring) {
+                            appState.dismissLinkedPostPresentation()
+                        }
+                    }
                 )
                 .environmentObject(container.languageService)
                 .environmentObject(container.customEmojiStore)
@@ -279,6 +283,7 @@ struct MainTabView: View {
         ExpenseListView(
             viewModel: container.expenseListViewModel,
             currentUserId: appState.currentUser?.id,
+            isTabActive: appState.selectedTab == .expenses,
             userSearchUseCase: container.expenseFriendSearchUseCase,
             profileDependencies: container.friendUserProfileDependencies
         )
