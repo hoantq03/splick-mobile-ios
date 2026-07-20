@@ -300,7 +300,7 @@ public struct ChatThreadView: View {
         case .requestReceived:
             return languageService.text(.friendsAccept)
         case .requestSent:
-            return nil
+            return languageService.text(.messagingChatUndoRequest)
         default:
             return nil
         }
@@ -312,6 +312,8 @@ public struct ChatThreadView: View {
             return "person.badge.plus"
         case .requestReceived:
             return "checkmark"
+        case .requestSent:
+            return "arrow.uturn.backward"
         default:
             return nil
         }
@@ -323,6 +325,8 @@ public struct ChatThreadView: View {
             await relationshipViewModel.addFriend()
         case .requestReceived:
             await relationshipViewModel.acceptFriendRequest()
+        case .requestSent:
+            await relationshipViewModel.cancelFriendRequest()
         default:
             break
         }
