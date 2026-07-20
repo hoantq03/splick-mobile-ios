@@ -6,6 +6,8 @@ public enum SplickTabBarMetrics {
     public static let floatingClearance: CGFloat = 88
     /// Bottom inset when the tab bar is hidden (e.g. post detail).
     public static let hiddenClearance: CGFloat = 16
+    /// Scroll offset (pt) at or below which the tab bar is always shown.
+    public static let showNearTopThreshold: CGFloat = 64
 }
 
 public enum TabBarChromeMotion {
@@ -27,7 +29,7 @@ public final class TabBarScrollState: ObservableObject {
     private var offsetNormalizer = ScrollChromeOffsetNormalizer()
     private var suppressUpdatesUntil: Date = .distantPast
     private let hideThreshold: CGFloat = 8
-    private let showAtTopThreshold: CGFloat = 24
+    private let showAtTopThreshold: CGFloat = SplickTabBarMetrics.showNearTopThreshold
     private let visibilityChangeCooldown: TimeInterval = 0.35
 
     /// True when the tracked scroll position is at (or near) the top.
@@ -41,22 +43,24 @@ public final class TabBarScrollState: ObservableObject {
     }
 
     public func updateScrollOffset(_ rawOffset: CGFloat) {
-        guard Date() >= suppressUpdatesUntil else { return }
+        // Use raw geometry for "at top" so a drifted baseline / hide-cooldown
+        // can never leave the tab bar stuck hidden after returning near the top.
+        if rawOffset <= showAtTopThreshold {
+            revealAtTop(rawOffset: rawOffset)
+            return
+        }
 
         let offset = offsetNormalizer.normalize(rawOffset)
 
-        if offset <= showAtTopThreshold {
-            if isVisible, abs(offset - lastOffset) < 1 {
-                lastOffset = offset
-                return
-            }
-            setVisible(true)
+        guard Date() >= suppressUpdatesUntil else {
+            // Keep tracking while suppressed so the next delta is not a jump.
             lastOffset = offset
             return
         }
 
         let delta = offset - lastOffset
         guard abs(delta) > hideThreshold else { return }
+
         if delta > hideThreshold {
             setVisible(false)
         } else if delta < -hideThreshold {
@@ -70,14 +74,14 @@ public final class TabBarScrollState: ObservableObject {
             lastOffset = 0
             offsetNormalizer.reset()
             suppressesBottomInset = false
-            setVisibleImmediate(true)
+            setVisibleImmediate(true, applyCooldown: false)
         }
     }
 
     public func show() {
         Task { @MainActor in
             suppressesBottomInset = false
-            setVisibleImmediate(true)
+            setVisibleImmediate(true, applyCooldown: false)
         }
     }
 
@@ -85,21 +89,30 @@ public final class TabBarScrollState: ObservableObject {
     public func hide(flushToBottom: Bool = false) {
         Task { @MainActor in
             suppressesBottomInset = flushToBottom
-            setVisibleImmediate(false)
+            setVisibleImmediate(false, applyCooldown: true)
         }
     }
 
-    private func setVisibleImmediate(_ visible: Bool) {
+    private func revealAtTop(rawOffset: CGFloat) {
+        offsetNormalizer.reset()
+        lastOffset = offsetNormalizer.normalize(rawOffset)
+        // Never leave the bar hidden near the top — bypass hide cooldown.
+        setVisibleImmediate(true, applyCooldown: false)
+    }
+
+    private func setVisibleImmediate(_ visible: Bool, applyCooldown: Bool = true) {
         guard isVisible != visible else { return }
         isVisible = visible
-        suppressUpdatesUntil = Date().addingTimeInterval(visibilityChangeCooldown)
+        if applyCooldown {
+            suppressUpdatesUntil = Date().addingTimeInterval(visibilityChangeCooldown)
+        } else if visible {
+            suppressUpdatesUntil = .distantPast
+        }
     }
 
     private func setVisible(_ visible: Bool) {
         guard isVisible != visible else { return }
-        Task { @MainActor in
-            setVisibleImmediate(visible)
-        }
+        setVisibleImmediate(visible, applyCooldown: !visible)
     }
 }
 
@@ -131,7 +144,9 @@ public struct TabBarHideOnScrollModifier: ViewModifier {
                     guard scrollChromeTrackingEnabled,
                           !pullToRefreshActive,
                           !notificationsPresented else { return }
-                    guard abs(previous - offset) > 1 else { return }
+                    // Always deliver near-top samples so the bar can reappear even on tiny settle deltas.
+                    let nearTop = offset <= SplickTabBarMetrics.showNearTopThreshold
+                    guard nearTop || abs(previous - offset) > 1 else { return }
                     tabBarScrollState.updateScrollOffset(offset)
                 }
             } else {

@@ -132,7 +132,8 @@ public struct ScrollChromeTrackingModifier: ViewModifier {
                     geometry.contentOffset.y + geometry.contentInsets.top
                 } action: { previous, offsetY in
                     guard scrollChromeTrackingEnabled, !pullToRefreshActive else { return }
-                    guard abs(previous - offsetY) > 0.25 else { return }
+                    let nearTop = offsetY <= SplickTabBarMetrics.showNearTopThreshold
+                    guard nearTop || abs(previous - offsetY) > 0.25 else { return }
                     feedSegmentScrollState?.updateScrollOffset(offsetY)
                     tabBarScrollState?.updateScrollOffset(offsetY)
                 }
