@@ -67,9 +67,9 @@ struct BillSplitSectionView: View {
 
     private var settlementBadgeTitle: String {
         if isFullySettled {
-            return "Đã thanh tất toán"
+            return languageService.text(.feedBillSettled)
         }
-        return "\(paidCount)/\(totalCount) đã trả"
+        return languageService.format(.feedBillPaidCount, paidCount, totalCount)
     }
 
     init(
@@ -149,7 +149,7 @@ struct BillSplitSectionView: View {
                         )
                         .accessibilityLabel(languageService.text(.feedBillSplitTitle))
                     HStack(spacing: 4) {
-                        Text("Tổng")
+                        Text(languageService.text(.feedBillTotalLabel))
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(SplickTheme.Colors.textSecondary)
                         Text(formatMoney(bill.totalAmount, currency: bill.currency))
@@ -202,7 +202,7 @@ struct BillSplitSectionView: View {
 
             if canSendReminders, !unpaidSplits.isEmpty {
                 Button {
-                    reminderMessage = BillReminderMessages.random()
+                    reminderMessage = BillReminderMessages.random(using: languageService)
                     showSendAllReminder = true
                 } label: {
                     HStack(spacing: 6) {
@@ -293,7 +293,7 @@ struct BillSplitSectionView: View {
                 .accessibilityLabel(languageService.text(.feedBillPaidAccessibility))
         } else if canSendReminders {
             Button {
-                reminderMessage = BillReminderMessages.random()
+                reminderMessage = BillReminderMessages.random(using: languageService)
                 reminderTarget = line.user
             } label: {
                 Image(systemName: "bell.badge")
@@ -308,7 +308,7 @@ struct BillSplitSectionView: View {
                 .strokeBorder(SplickTheme.Colors.textTertiary.opacity(0.35), lineWidth: 2)
                 .frame(width: Layout.statusIconSize, height: Layout.statusIconSize)
                 .frame(width: Layout.statusFrame, height: Layout.statusFrame)
-                .accessibilityLabel("Chưa thanh toán")
+                .accessibilityLabel(languageService.text(.feedBillUnpaidAccessibility))
         }
     }
 
@@ -369,26 +369,26 @@ struct BillSplitSectionView: View {
     private func paymentEvidenceTitle(for state: PaymentEvidenceDisplayState) -> String {
         switch state {
         case .upload:
-            return "Upload ảnh chuyển khoản"
+            return languageService.text(.feedPaymentStatusSubmitEvidence)
         case .rejected:
-            return "Upload lại ảnh chuyển khoản"
+            return languageService.text(.feedPaymentStatusResubmitEvidence)
         case .pendingApproval:
-            return "Đang chờ duyệt"
+            return languageService.text(.feedPaymentStatusPendingApproval)
         case .paid:
-            return "Đã thanh toán"
+            return languageService.text(.feedPaymentStatusPaid)
         }
     }
 
     private func paymentEvidenceSubtitle(for state: PaymentEvidenceDisplayState) -> String {
         switch state {
         case .upload:
-            return "Chọn ảnh và nộp để chủ xị duyệt ảnh chuyển khoản."
+            return languageService.text(.feedPaymentStatusHintUnpaid)
         case .rejected:
-            return "Ồ nooo, ảnh của bạn bị chủ xị từ chối rồi, hãy upload lại."
+            return languageService.text(.feedPaymentStatusHintResubmit)
         case .pendingApproval:
-            return "Ảnh chuyển khoản của bạn đang chờ chủ xị xác nhận."
+            return languageService.text(.feedPaymentStatusHintPending)
         case .paid:
-            return "Tuyệt vời, khoản thanh toán của bạn đã được chủ xị xác nhận thành công."
+            return languageService.text(.feedPaymentStatusHintPaid)
         }
     }
 
@@ -457,7 +457,7 @@ struct BillSplitSectionView: View {
 
     private func compactDisplayName(for user: UserSummary, isCurrentUser: Bool) -> String {
         if isCurrentUser {
-            return "Tôi"
+            return languageService.text(.commonMe)
         }
 
         let trimmedName = user.displayName.trimmingCharacters(in: .whitespacesAndNewlines)

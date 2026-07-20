@@ -30,7 +30,7 @@ struct PaymentEvidenceSheet: View {
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
-                Text("Gửi tối đa 3 ảnh chuyển khoản cho \(postAuthorName). Bạn có thể thêm lời nhắn nếu cần.")
+                Text(languageService.format(.feedPaymentEvidenceHint, postAuthorName))
                     .font(.system(size: 13))
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
 
@@ -42,7 +42,7 @@ struct PaymentEvidenceSheet: View {
 
                 if !pendingAttachments.isEmpty {
                     VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-                        Text("Ảnh chuyển khoản")
+                        Text(languageService.text(.feedPaymentEvidencePhotosLabel))
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(SplickTheme.Colors.textPrimary)
 
@@ -71,7 +71,7 @@ struct PaymentEvidenceSheet: View {
                 Spacer(minLength: 0)
             }
             .padding()
-            .navigationTitle("Upload ảnh chuyển khoản")
+            .navigationTitle(languageService.text(.feedPaymentEvidenceTitle))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -108,7 +108,7 @@ struct PaymentEvidenceSheet: View {
     @MainActor
     private func submit() async {
         guard !pendingAttachments.isEmpty else {
-            validationMessage = "Vui lòng chọn ít nhất 1 ảnh chuyển khoản."
+            validationMessage = languageService.text(.feedPaymentEvidenceAttachmentRequired)
             return
         }
         isSubmitting = true
@@ -119,7 +119,7 @@ struct PaymentEvidenceSheet: View {
             try await onSubmit(trimmedMessage.isEmpty ? nil : trimmedMessage, pendingAttachments)
             dismiss()
         } catch {
-            validationMessage = error.localizedDescription
+            validationMessage = languageService.localizedMessage(for: error)
         }
     }
 }

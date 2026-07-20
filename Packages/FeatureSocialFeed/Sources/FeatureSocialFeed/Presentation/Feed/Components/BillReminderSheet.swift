@@ -4,16 +4,18 @@ import Localization
 import SplickDomain
 
 enum BillReminderMessages {
-    static let defaults = [
-        "Bạn ơi, nhớ chuyển phần bill của bạn nhé! 🙏",
-        "Nhắc nhẹ: bill hôm nay chưa thấy bạn thanh toán đâu 😅",
-        "Hello! Giúp mình settle bill nha, cảm ơn bạn!",
-        "Bill đang chờ bạn — chuyển khi rảnh giúp mình nhé!",
-        "Team ơi, ai chưa chuyển bill nhớ làm giúp mình nha!",
+    static let keys: [L10nKey] = [
+        .feedBillReminderSuggest1,
+        .feedBillReminderSuggest2,
+        .feedBillReminderSuggest3,
+        .feedBillReminderSuggest4,
+        .feedBillReminderSuggest5,
     ]
 
-    static func random() -> String {
-        defaults.randomElement() ?? defaults[0]
+    @MainActor
+    static func random(using languageService: LanguageService) -> String {
+        let key = keys.randomElement() ?? .feedBillReminderSuggest1
+        return languageService.text(key)
     }
 }
 
@@ -52,7 +54,7 @@ struct BillReminderSheet: View {
                 .buttonStyle(.plain)
 
                 MentionTextField(
-                    "Lời nhắn",
+                    languageService.text(.feedBillReminderMessageLabel),
                     text: $message,
                     fontSize: 15,
                     minHeight: 88
@@ -64,9 +66,9 @@ struct BillReminderSheet: View {
                 )
 
                 Button {
-                    message = BillReminderMessages.random()
+                    message = BillReminderMessages.random(using: languageService)
                 } label: {
-                    Label("Gợi ý lời nhắn khác", systemImage: "dice")
+                    Label(languageService.text(.feedBillReminderSuggestAnother), systemImage: "dice")
                         .font(SplickTheme.Typography.callout)
                 }
 
@@ -80,7 +82,7 @@ struct BillReminderSheet: View {
                     Button(languageService.text(.commonCancel)) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Gửi") {
+                    Button(languageService.text(.feedPaymentEvidenceSubmit)) {
                         onSend()
                         dismiss()
                     }
@@ -134,7 +136,7 @@ struct BillReminderAllSheet: View {
                 }
 
                 MentionTextField(
-                    "Lời nhắn",
+                    languageService.text(.feedBillReminderMessageLabel),
                     text: $message,
                     fontSize: 15,
                     minHeight: 88
@@ -146,9 +148,9 @@ struct BillReminderAllSheet: View {
                 )
 
                 Button {
-                    message = BillReminderMessages.random()
+                    message = BillReminderMessages.random(using: languageService)
                 } label: {
-                    Label("Gợi ý lời nhắn khác", systemImage: "dice")
+                    Label(languageService.text(.feedBillReminderSuggestAnother), systemImage: "dice")
                         .font(SplickTheme.Typography.callout)
                 }
 
@@ -162,7 +164,7 @@ struct BillReminderAllSheet: View {
                     Button(languageService.text(.commonCancel)) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Gửi") {
+                    Button(languageService.text(.feedPaymentEvidenceSubmit)) {
                         onSend()
                         dismiss()
                     }
