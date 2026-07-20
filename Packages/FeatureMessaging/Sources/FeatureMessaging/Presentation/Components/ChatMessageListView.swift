@@ -34,7 +34,8 @@ struct ChatMessageListView: View {
     private static let replySwipeImpact = UIImpactFeedbackGenerator(style: .light)
     private static let reactionFocusDismissArmDelay: TimeInterval = 0.45
     private static let replySwipeThreshold: CGFloat = 56
-    private static let replySwipeMaxOffset: CGFloat = 88
+    /// Past the icon slot (46) so threshold is reachable while reveal stays 1:1.
+    private static let replySwipeMaxOffset: CGFloat = 72
 
     private enum ListPanSession {
         case undecided
@@ -208,10 +209,18 @@ struct ChatMessageListView: View {
                         timestampRevealTranslation = signed
                     }
                 case .replySwiping(_, let isOutgoing):
+                    // 1:1 with the finger; soft-stop after max so the icon slot never rubber-bands wildly.
                     let raw: CGFloat = isOutgoing ? min(0, horizontal) : max(0, horizontal)
-                    let clamped = min(abs(raw), Self.replySwipeMaxOffset) * (raw < 0 ? -1 : 1)
+                    let distance = abs(raw)
+                    let eased: CGFloat
+                    if distance <= Self.replySwipeMaxOffset {
+                        eased = distance
+                    } else {
+                        eased = Self.replySwipeMaxOffset + (distance - Self.replySwipeMaxOffset) * 0.2
+                    }
+                    let signed = eased * (raw < 0 ? -1 : 1)
                     withTransaction(transaction) {
-                        replySwipeTranslation = clamped
+                        replySwipeTranslation = signed
                     }
                 case .undecided, .scrolling:
                     break
