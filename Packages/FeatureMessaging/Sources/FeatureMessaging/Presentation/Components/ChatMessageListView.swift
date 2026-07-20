@@ -14,6 +14,10 @@ struct ChatMessageListView: View {
     let onRequestComposerFocus: () -> Void
 
     @State private var reactionFocusMessageId: UUID?
+    /// Fresh identity each open so `@State isRevealed` cannot stick across odd/even mounts.
+    @State private var reactionFocusSession = UUID()
+    /// Snapshot at open — opacity-0 source bubble can stop publishing a usable frame.
+    @State private var reactionFocusFrozenFrame: CGRect?
     @State private var reactionAnchorFrames: [UUID: CGRect] = [:]
     @State private var timestampRevealTranslation: CGFloat = 0
     /// Once a drag is classified as bubble-reply vs whitespace-reveal, stick with it.
@@ -72,7 +76,9 @@ struct ChatMessageListView: View {
                 .modifier(ChatBottomScrollAnchorModifier())
                 .animation(ChatScrollAnimation.spring, value: messages.map(\.clientMessageId))
                 .onPreferenceChange(MessageReactionAnchorFrameKey.self) { frames in
-                    reactionAnchorFrames.merge(frames) { _, new in new }
+                    for (id, frame) in frames where frame.width > 1 && frame.height > 1 {
+                        reactionAnchorFrames[id] = frame
+                    }
                 }
                 .simultaneousGesture(timestampRevealGesture)
 
@@ -102,13 +108,13 @@ struct ChatMessageListView: View {
                             onDismiss: { dismissReactionFocus() },
                             onForceDismiss: { dismissReactionFocus() }
                         )
+                        .id(reactionFocusSession)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .zIndex(100)
                     }
                 }
                 .allowsHitTesting(reactionFocusMessageId != nil)
             }
-            .animation(MessageReactionTrayMotion.present, value: reactionFocusMessageId)
             .onAppear {
                 if viewModel.scrollToMessageToken == 0 {
                     scrollToBottom(proxy: proxy, animated: false)
@@ -179,7 +185,7 @@ struct ChatMessageListView: View {
         overlayOrigin: CGPoint
     ) -> MessageReactionFocusContext? {
         guard let messageId = reactionFocusMessageId,
-              let globalFrame = reactionAnchorFrames[messageId],
+              let globalFrame = reactionFocusFrozenFrame ?? reactionAnchorFrames[messageId],
               globalFrame.width > 1,
               globalFrame.height > 1,
               let item = displayMessages.first(where: { $0.message.id == messageId })
@@ -197,12 +203,20 @@ struct ChatMessageListView: View {
     }
 
     private func openReactionFocus(for item: DisplayMessage) {
-        guard reactionFocusMessageId == nil else { return }
+        // Recover from a stuck focus id (overlay never mounted).
+        if reactionFocusMessageId != nil {
+            dismissReactionFocus()
+        }
+        guard let globalFrame = reactionAnchorFrames[item.message.id],
+              globalFrame.width > 1,
+              globalFrame.height > 1
+        else { return }
+
+        reactionFocusSession = UUID()
+        reactionFocusFrozenFrame = globalFrame
         Self.longPressImpact.impactOccurred()
         InteractionScrollLock.setLocked(true)
-        withAnimation(MessageReactionTrayMotion.present) {
-            reactionFocusMessageId = item.message.id
-        }
+        reactionFocusMessageId = item.message.id
     }
 
     private func beginReply(to message: ChatMessage) {
@@ -213,9 +227,8 @@ struct ChatMessageListView: View {
 
     private func dismissReactionFocus() {
         guard reactionFocusMessageId != nil else { return }
-        withAnimation(MessageReactionTrayMotion.dismiss) {
-            reactionFocusMessageId = nil
-        }
+        reactionFocusMessageId = nil
+        reactionFocusFrozenFrame = nil
         InteractionScrollLock.forceUnlock()
     }
 
