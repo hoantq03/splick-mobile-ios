@@ -6,10 +6,7 @@ import SplickDomain
 @MainActor
 public final class ExpenseListViewModel: ObservableObject {
     @Published var expenses: [Expense] = [] {
-        didSet {
-            reconcileDisplayedExpenses()
-            objectWillChange.send()
-        }
+        didSet { reconcileDisplayedExpenses() }
     }
     @Published var debts: [DebtSummary] = []
     @Published var state: LoadingState<[Expense]> = .idle
@@ -19,6 +16,8 @@ public final class ExpenseListViewModel: ObservableObject {
     @Published private(set) var displayedExpenses: [Expense] = []
 
     private static let listFilterAnimation = Animation.spring(response: 0.42, dampingFraction: 0.86)
+    /// Skip silent reloads that happen within this window (tab remount / duplicate triggers).
+    private static let freshLoadInterval: TimeInterval = 30
 
     private let fetchExpensesUseCase: FetchExpensesUseCaseProtocol
     private let fetchDebtSummaryUseCase: FetchDebtSummaryUseCaseProtocol
@@ -27,8 +26,9 @@ public final class ExpenseListViewModel: ObservableObject {
     private let groupId: UUID?
     private(set) var currentUserId: UUID?
     private var currentPage = 0
-    private var pullToRefreshTask: Task<Void, Never>?
-    private var loadTask: Task<Void, Never>?
+    /// Single in-flight load for both cold load and pull-to-refresh.
+    private var inFlightLoadTask: Task<Void, Never>?
+    private var lastSuccessfulLoadAt: Date?
 
     public init(
         fetchExpensesUseCase: FetchExpensesUseCaseProtocol,
@@ -67,7 +67,6 @@ public final class ExpenseListViewModel: ObservableObject {
         guard currentUserId != id else { return }
         currentUserId = id
         reconcileDisplayedExpenses()
-        objectWillChange.send()
     }
 
     var totalOwed: Decimal {
@@ -136,36 +135,47 @@ public final class ExpenseListViewModel: ObservableObject {
         expenses.filter { $0.userDebtState(userId: currentUserId) == state }.count
     }
 
-    public func load(isPullToRefresh: Bool = false) async {
-        if isPullToRefresh {
-            if let existing = pullToRefreshTask {
-                await existing.value
-                return
-            }
-
-            let task = Task { @MainActor in
-                isRefreshing = true
-                defer { isRefreshing = false }
-                await performLoad(isPullToRefresh: true)
-            }
-            pullToRefreshTask = task
-            await task.value
-            pullToRefreshTask = nil
+    /// Loads expenses when idle/failed, or when data is older than the freshness window.
+    public func loadIfNeeded() async {
+        if case .loaded = state,
+           let lastSuccessfulLoadAt,
+           Date().timeIntervalSince(lastSuccessfulLoadAt) < Self.freshLoadInterval {
             return
         }
+        await load(isPullToRefresh: false)
+    }
 
-        if let existing = loadTask {
+    public func load(isPullToRefresh: Bool = false) async {
+        if let existing = inFlightLoadTask {
             await existing.value
             return
         }
 
-        state = .loading
-        let task = Task { @MainActor in
-            await performLoad(isPullToRefresh: false)
+        if !isPullToRefresh,
+           case .loaded = state,
+           let lastSuccessfulLoadAt,
+           Date().timeIntervalSince(lastSuccessfulLoadAt) < Self.freshLoadInterval {
+            return
         }
-        loadTask = task
+
+        let task = Task { @MainActor in
+            if isPullToRefresh {
+                isRefreshing = true
+            } else if case .loaded = state, !expenses.isEmpty {
+                // Keep showing existing rows while refreshing in the background.
+            } else {
+                state = .loading
+            }
+            defer {
+                if isPullToRefresh {
+                    isRefreshing = false
+                }
+            }
+            await performLoad(isPullToRefresh: isPullToRefresh)
+        }
+        inFlightLoadTask = task
         await task.value
-        loadTask = nil
+        inFlightLoadTask = nil
     }
 
     private func performLoad(isPullToRefresh: Bool) async {
@@ -180,7 +190,7 @@ public final class ExpenseListViewModel: ObservableObject {
             expenses = fetchedExpenses
             debts = fetchedDebts
             state = .loaded(fetchedExpenses)
-            objectWillChange.send()
+            lastSuccessfulLoadAt = Date()
             Log.info(
                 "Loaded expenses",
                 category: .expense,
@@ -191,7 +201,7 @@ public final class ExpenseListViewModel: ObservableObject {
             }
             await onDataLoaded?(fetchedDebts, fetchedExpenses, currentUserId)
         } catch {
-            if isPullToRefresh, !expenses.isEmpty {
+            if !expenses.isEmpty {
                 state = .loaded(expenses)
             } else {
                 state = .failed(Self.userFacingMessage(for: error))
@@ -219,7 +229,6 @@ public final class ExpenseListViewModel: ObservableObject {
             let newExpenses = try await fetchExpensesUseCase.execute(groupId: groupId, page: currentPage)
             expenses.append(contentsOf: newExpenses)
             state = .loaded(expenses)
-            objectWillChange.send()
         } catch {
             currentPage -= 1
             Log.error(error, category: .expense)
@@ -322,7 +331,6 @@ public final class ExpenseListViewModel: ObservableObject {
         mutation(&next)
         filters = next
         reconcileDisplayedExpenses()
-        objectWillChange.send()
     }
 
     private func reconcileDisplayedExpenses() {
