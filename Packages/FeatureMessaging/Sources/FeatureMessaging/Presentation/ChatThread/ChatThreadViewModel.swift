@@ -171,7 +171,9 @@ public final class ChatThreadViewModel: ObservableObject {
             pendingReplyByClientId.removeValue(forKey: clientMessageId)
 
             attachmentDrafts = []
-            replyDraft = nil
+            withAnimation(MessageReplyIslandMotion.dismiss) {
+                replyDraft = nil
+            }
         } catch {
             Log.error(error, category: .network, metadata: ["action": "sendMessage"])
             if case .loaded(let messages) = state,
@@ -187,17 +189,21 @@ public final class ChatThreadViewModel: ObservableObject {
 
     public func beginReply(to message: ChatMessage, senderDisplayName: String) {
         let snippet = replySnippet(from: message)
-        replyDraft = MessageReplyDraft(
-            messageId: message.id,
-            senderId: message.senderId,
-            senderDisplayName: senderDisplayName,
-            bodySnippet: snippet,
-            hasImageAttachment: message.hasImageAttachments
-        )
+        withAnimation(MessageReplyIslandMotion.present) {
+            replyDraft = MessageReplyDraft(
+                messageId: message.id,
+                senderId: message.senderId,
+                senderDisplayName: senderDisplayName,
+                bodySnippet: snippet,
+                hasImageAttachment: message.hasImageAttachments
+            )
+        }
     }
 
     public func cancelReply() {
-        replyDraft = nil
+        withAnimation(MessageReplyIslandMotion.dismiss) {
+            replyDraft = nil
+        }
     }
 
     public func retrySend(messageId: UUID) async {
