@@ -13,6 +13,12 @@ final class WidgetSyncBridge {
     private let fetchExpensesUseCase: FetchExpensesUseCaseProtocol
     private let fetchDebtSummaryUseCase: FetchDebtSummaryUseCaseProtocol
 
+    /// Opening Friends reloads the group directory often — don't refetch widget expenses every time.
+    private static let groupExpenseSyncInterval: TimeInterval = 10 * 60
+    private var lastGroupExpenseSyncAt: Date?
+    private var lastSyncedGroupIds: Set<UUID> = []
+    private var groupExpenseSyncTask: Task<Void, Never>?
+
     init(
         syncService: WidgetDataSyncService = .shared,
         fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol,
@@ -37,14 +43,47 @@ final class WidgetSyncBridge {
     }
 
     func syncGroups(_ groups: [Group]) {
+        // Only persist the group directory for widgets. Do NOT fetch /expenses here —
+        // Friends tab load calls this on every open and was spamming debts/expenses APIs.
         syncService.syncGroups(groups)
+    }
+
+    /// Refresh per-group expense snapshots for widgets (call from expenses tab, not Friends).
+    func syncGroupExpensesIfStale(groups: [Group]) {
         Task {
-            await syncGroupExpenses(for: groups)
+            await syncGroupExpensesIfNeeded(for: groups)
         }
     }
 
+    private func syncGroupExpensesIfNeeded(for groups: [Group]) async {
+        let targets = Array(groups.prefix(5))
+        guard !targets.isEmpty else { return }
+
+        let groupIds = Set(targets.map(\.id))
+        let groupsUnchanged = groupIds == lastSyncedGroupIds
+        if groupsUnchanged,
+           let lastGroupExpenseSyncAt,
+           Date().timeIntervalSince(lastGroupExpenseSyncAt) < Self.groupExpenseSyncInterval {
+            return
+        }
+
+        if let existing = groupExpenseSyncTask {
+            await existing.value
+            return
+        }
+
+        let task = Task { @MainActor in
+            await syncGroupExpenses(for: targets)
+            lastGroupExpenseSyncAt = Date()
+            lastSyncedGroupIds = groupIds
+        }
+        groupExpenseSyncTask = task
+        await task.value
+        groupExpenseSyncTask = nil
+    }
+
     private func syncGroupExpenses(for groups: [Group]) async {
-        for group in groups.prefix(5) {
+        for group in groups {
             do {
                 async let expensesTask = fetchExpensesUseCase.execute(groupId: group.id, page: 0)
                 async let debtsTask = fetchDebtSummaryUseCase.execute(groupId: group.id)
