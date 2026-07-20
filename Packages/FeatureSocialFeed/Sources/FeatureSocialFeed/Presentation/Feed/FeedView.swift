@@ -140,8 +140,8 @@ public struct FeedView: View {
         }
         .task(id: pendingFeedPostNavigation) {
             guard let navigation = pendingFeedPostNavigation else { return }
-            let loaded = await viewModel.ensurePostLoaded(id: navigation.postId)
-            if loaded {
+            let result = await viewModel.ensurePostLoaded(id: navigation.postId)
+            if result == .loaded {
                 navigationPath.append(
                     FeedPostDestination(
                         postId: navigation.postId,

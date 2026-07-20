@@ -13,8 +13,11 @@ struct PostDetailContainerView: View {
     let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
     let profileDependencies: FriendUserProfileDependencies?
     let makeGifPickerViewModel: GifPickerViewModelFactory?
+    /// Called when the post is unavailable (403/404) and the user dismisses the error.
+    var onClose: (() -> Void)? = nil
 
     @State private var loadAttemptFinished = false
+    @State private var loadFailedAsUnavailable = false
 
     private var post: Post? {
         feedViewModel.posts.first(where: { $0.id == destination.postId })
@@ -35,8 +38,10 @@ struct PostDetailContainerView: View {
                 )
             } else if !loadAttemptFinished {
                 LoadingView(message: languageService.text(.feedLoading))
+            } else if loadFailedAsUnavailable {
+                unavailableView
             } else {
-                ErrorView(message: languageService.text(.commonError)) {
+                ErrorView(message: languageService.text(.feedPostLoadFailed)) {
                     Task { await loadPost() }
                 }
             }
@@ -45,12 +50,28 @@ struct PostDetailContainerView: View {
         .task { await loadPost() }
     }
 
+    private var unavailableView: some View {
+        VStack(spacing: SplickTheme.Spacing.md) {
+            ErrorView(message: languageService.text(.feedPostUnavailableMessage))
+            if let onClose {
+                SplickButton(languageService.text(.commonClose), style: .secondary) {
+                    onClose()
+                }
+                .padding(.horizontal, SplickTheme.Spacing.xxl)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     private func loadPost() async {
         if post != nil {
             loadAttemptFinished = true
+            loadFailedAsUnavailable = false
             return
         }
-        _ = await feedViewModel.ensurePostLoaded(id: destination.postId)
+        loadFailedAsUnavailable = false
+        let result = await feedViewModel.ensurePostLoaded(id: destination.postId)
+        loadFailedAsUnavailable = (result == .unavailable)
         loadAttemptFinished = true
     }
 }
