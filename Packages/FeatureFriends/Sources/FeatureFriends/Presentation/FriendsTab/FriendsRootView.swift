@@ -334,16 +334,20 @@ public struct FriendsRootView: View {
                     onProfileTap: openUserProfile
                 )
             }
-            .sheet(isPresented: $showPeopleYouMayKnow, onDismiss: {
-                Task {
-                    await peopleYouMayKnowViewModel.load(currentUserId: currentUserSummary?.id)
-                }
-            }) {
+            .sheet(isPresented: $showPeopleYouMayKnow) {
                 PeopleYouMayKnowSheet(
                     viewModel: peopleYouMayKnowViewModel,
                     currentUserId: currentUserSummary?.id,
                     onProfileTap: openUserProfile
                 )
+                .task {
+                    await peopleYouMayKnowViewModel.load(
+                        currentUserId: currentUserSummary?.id,
+                        snapshot: viewModel.peopleYouMayKnowSnapshot(
+                            blocked: blockedUsersViewModel.blockedUsers
+                        )
+                    )
+                }
             }
             .sheet(isPresented: $showQRScanner) {
                 if let user = currentUserSummary {
@@ -372,9 +376,10 @@ public struct FriendsRootView: View {
         }
         .onFirstAppear {
             Task {
-                await viewModel.load()
-                await blockedUsersViewModel.load()
-                await peopleYouMayKnowViewModel.load(currentUserId: currentUserSummary?.id)
+                async let directory: Void = viewModel.load()
+                async let blocked: Void = blockedUsersViewModel.load()
+                _ = await (directory, blocked)
+                // PYMK scans group members (N API calls) — only when user opens that sheet.
             }
         }
         .onReceive(sameTabTapPublisher) { _ in
@@ -839,7 +844,6 @@ public struct FriendsRootView: View {
                 .splickNativeRefreshable(controller: directoryRefreshController) {
                     await viewModel.refresh()
                     await blockedUsersViewModel.load()
-                    await peopleYouMayKnowViewModel.load(currentUserId: currentUserSummary?.id)
                 }
                 .onChange(of: scrollTopSignal) { _ in
                     withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
