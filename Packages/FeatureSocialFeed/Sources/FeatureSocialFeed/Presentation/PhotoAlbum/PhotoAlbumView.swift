@@ -133,7 +133,7 @@ public struct PhotoAlbumView: View {
     private func openPost(for photo: AlbumPhoto) {
         Task {
             let loaded = await feedViewModel.ensurePostLoaded(id: photo.postId)
-            guard loaded else { return }
+            guard loaded == .loaded else { return }
             let post = feedViewModel.posts.first(where: { $0.id == photo.postId })
             let mediaIndex = post?.displayMediaItems.firstIndex(where: { $0.id == photo.id }) ?? 0
             navigationPath.append(

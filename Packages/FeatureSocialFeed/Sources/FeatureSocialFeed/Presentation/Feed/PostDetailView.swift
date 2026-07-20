@@ -31,6 +31,7 @@ struct PostDetailView: View {
     @State private var rejectEvidenceTarget: PostComment?
     @State private var rejectReason = ""
     @State private var gifPickerViewModel: GifPickerViewModel?
+    @State private var detailScrollLocked = false
 
     init(
         post: Post,
@@ -111,6 +112,10 @@ struct PostDetailView: View {
                 }
                 .padding(.horizontal, SplickTheme.Spacing.md)
             }
+            .scrollDisabled(detailScrollLocked)
+            .onReceive(NotificationCenter.default.publisher(for: FeedScrollLock.notification)) { notification in
+                detailScrollLocked = notification.userInfo?["locked"] as? Bool ?? false
+            }
             .refreshable {
                 await feedViewModel.refreshPost(id: post.id, allowingConcurrentFeedRefresh: true)
             }
@@ -137,14 +142,19 @@ struct PostDetailView: View {
         }
         .task { await feedViewModel.refreshPost(id: post.id, allowingConcurrentFeedRefresh: true) }
         .onAppear {
-            feedViewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
-            tabBarScrollState?.hide(flushToBottom: true)
-            commentPager.refresh(with: livePost.comments)
-            commentPager.loadInitial()
-            enableComposerInteraction()
+            // Defer @Published updates so we don't publish during view updates.
+            Task { @MainActor in
+                feedViewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
+                tabBarScrollState?.hide(flushToBottom: true)
+                commentPager.refresh(with: livePost.comments)
+                commentPager.loadInitial()
+                enableComposerInteraction()
+            }
         }
         .onDisappear {
-            tabBarScrollState?.show()
+            Task { @MainActor in
+                tabBarScrollState?.show()
+            }
         }
         .onChange(of: livePost.comments) { comments in
             commentPager.refresh(with: comments)

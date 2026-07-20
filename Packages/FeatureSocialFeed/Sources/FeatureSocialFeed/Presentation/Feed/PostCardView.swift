@@ -50,6 +50,7 @@ struct PostCardView: View {
 
     @State private var mediaPageIndex = 0
     @State private var appliedInitialMediaIndex = false
+    @State private var isMediaPinchZooming = false
     @State private var activeSheet: PostCardSheet?
     @State private var showCustomEmojiUpload = false
     @State private var reminderSentMessage: String?
@@ -96,7 +97,12 @@ struct PostCardView: View {
             }
 
             companionsSection
-            PostMediaView(post: post, selectedIndex: $mediaPageIndex, onTap: resolvedMediaTap)
+            PostMediaView(
+                post: post,
+                selectedIndex: $mediaPageIndex,
+                onTap: resolvedMediaTap,
+                isPinchZooming: $isMediaPinchZooming
+            )
             contextSection
 
             reactionBarRow
@@ -107,6 +113,7 @@ struct PostCardView: View {
             }
         }
         .splickCard()
+        .zIndex(isMediaPinchZooming ? 100 : 0)
         .blur(radius: uploadState == .uploading ? 2.5 : 0)
         .opacity(isUploadPending ? 0.55 : 1)
         .allowsHitTesting(uploadState != .uploading)
