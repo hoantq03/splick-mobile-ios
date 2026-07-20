@@ -12,6 +12,7 @@ public final class BlockedUsersViewModel: ObservableObject {
     private let fetchBlockedUsersUseCase: FetchBlockedUsersUseCaseProtocol
     private let unblockUserUseCase: UnblockUserUseCaseProtocol
     private let onRelationshipChanged: (UUID, FriendRelationStatus) -> Void
+    private var loadTask: Task<Void, Never>?
 
     public init(
         fetchBlockedUsersUseCase: FetchBlockedUsersUseCaseProtocol,
@@ -24,6 +25,20 @@ public final class BlockedUsersViewModel: ObservableObject {
     }
 
     func load() async {
+        if let existing = loadTask {
+            await existing.value
+            return
+        }
+
+        let task = Task { @MainActor in
+            await performLoad()
+        }
+        loadTask = task
+        await task.value
+        loadTask = nil
+    }
+
+    private func performLoad() async {
         if blockedUsers.isEmpty {
             state = .loading
         }

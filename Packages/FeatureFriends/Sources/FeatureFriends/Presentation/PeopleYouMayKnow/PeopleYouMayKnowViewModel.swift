@@ -13,6 +13,7 @@ public final class PeopleYouMayKnowViewModel: ObservableObject {
     private let fetchPeopleYouMayKnowUseCase: FetchPeopleYouMayKnowUseCaseProtocol
     private let addFriendUseCase: AddFriendUseCaseProtocol
     private let onRelationshipChanged: (UUID, FriendRelationStatus) -> Void
+    private var loadTask: Task<Void, Never>?
 
     public init(
         fetchPeopleYouMayKnowUseCase: FetchPeopleYouMayKnowUseCaseProtocol,
@@ -24,13 +25,34 @@ public final class PeopleYouMayKnowViewModel: ObservableObject {
         self.onRelationshipChanged = onRelationshipChanged
     }
 
-    func load(currentUserId: UUID? = nil) async {
+    func load(
+        currentUserId: UUID? = nil,
+        snapshot: PeopleYouMayKnowDirectorySnapshot? = nil
+    ) async {
+        if let existing = loadTask {
+            await existing.value
+            return
+        }
+
+        let task = Task { @MainActor in
+            await performLoad(currentUserId: currentUserId, snapshot: snapshot)
+        }
+        loadTask = task
+        await task.value
+        loadTask = nil
+    }
+
+    private func performLoad(
+        currentUserId: UUID?,
+        snapshot: PeopleYouMayKnowDirectorySnapshot?
+    ) async {
         if suggestions.isEmpty {
             state = .loading
         }
         do {
             let items = try await fetchPeopleYouMayKnowUseCase.execute(
-                currentUserId: currentUserId
+                currentUserId: currentUserId,
+                snapshot: snapshot
             )
             suggestions = items
             suggestionCount = items.count
