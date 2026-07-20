@@ -668,7 +668,9 @@ final class DependencyContainer: ObservableObject {
         let remove = removeFriendUseCase
         let add = addFriendUseCase
         let fetchIncoming = fetchIncomingFriendRequestsUseCase
+        let fetchOutgoing = fetchOutgoingFriendRequestsUseCase
         let accept = acceptFriendRequestUseCase
+        let cancel = cancelFriendRequestUseCase
 
         return ChatPeerRelationshipActions(
             fetchStatus: { userId in
@@ -694,6 +696,11 @@ final class DependencyContainer: ObservableObject {
                 let incoming = try await fetchIncoming.executeAll()
                 guard let request = incoming.first(where: { $0.requester.id == userId }) else { return }
                 try await accept.execute(requestId: request.id)
+            },
+            cancelFriendRequest: { userId in
+                let outgoing = try await fetchOutgoing.executeAll()
+                guard let request = outgoing.first(where: { $0.addressee.id == userId }) else { return }
+                try await cancel.execute(requestId: request.id)
             }
         )
     }
