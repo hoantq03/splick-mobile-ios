@@ -87,7 +87,7 @@ public struct FriendUserProfileView: View {
             .task {
                 await viewModel.loadProfile()
             }
-            .alert("Profile", isPresented: Binding(
+            .alert(languageService.text(.profileTitle), isPresented: Binding(
                 get: { viewModel.alertMessage != nil },
                 set: { if !$0 { viewModel.alertMessage = nil } }
             )) {

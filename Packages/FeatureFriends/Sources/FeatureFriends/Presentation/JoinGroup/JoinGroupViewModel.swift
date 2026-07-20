@@ -1,4 +1,5 @@
 import Foundation
+import Localization
 import SplickDomain
 
 @MainActor
@@ -9,13 +10,16 @@ public final class JoinGroupViewModel: ObservableObject {
     @Published var errorMessage: String?
 
     private let joinGroupUseCase: JoinGroupUseCaseProtocol
+    private let languageService: LanguageService
     private let onSuccess: () -> Void
 
     public init(
         joinGroupUseCase: JoinGroupUseCaseProtocol,
+        languageService: LanguageService,
         onSuccess: @escaping () -> Void
     ) {
         self.joinGroupUseCase = joinGroupUseCase
+        self.languageService = languageService
         self.onSuccess = onSuccess
     }
 
@@ -23,7 +27,7 @@ public final class JoinGroupViewModel: ObservableObject {
         let normalized = inviteCode.trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
         guard !normalized.isEmpty else {
-            errorMessage = "Enter a group invite code."
+            errorMessage = languageService.text(.friendsJoinCodeRequired)
             return
         }
 
@@ -34,11 +38,11 @@ public final class JoinGroupViewModel: ObservableObject {
 
         do {
             let group = try await joinGroupUseCase.execute(inviteCode: normalized)
-            successMessage = "Joined \(group.name)."
+            successMessage = languageService.format(.friendsJoinSuccess, group.name)
             inviteCode = ""
             onSuccess()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = languageService.localizedMessage(for: error)
         }
     }
 
@@ -50,10 +54,10 @@ public final class JoinGroupViewModel: ObservableObject {
 
         do {
             let group = try await joinGroupUseCase.executeFromQRCode(payload)
-            successMessage = "Joined \(group.name)."
+            successMessage = languageService.format(.friendsJoinSuccess, group.name)
             onSuccess()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = languageService.localizedMessage(for: error)
         }
     }
 }

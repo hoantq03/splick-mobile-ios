@@ -17,7 +17,7 @@ struct JoinGroupSheet: View {
                         .font(SplickTheme.Typography.caption)
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
 
-                    TextField("e.g. roommates-q7", text: $viewModel.inviteCode)
+                    TextField(languageService.text(.friendsJoinCodePlaceholder), text: $viewModel.inviteCode)
                         .textFieldStyle(.roundedBorder)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)

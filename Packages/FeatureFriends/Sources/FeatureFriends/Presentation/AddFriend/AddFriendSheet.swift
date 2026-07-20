@@ -17,7 +17,7 @@ struct AddFriendSheet: View {
                         .font(SplickTheme.Typography.caption)
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
 
-                    TextField("e.g. namtran", text: $viewModel.username)
+                    TextField(languageService.text(.friendsAddUsernamePlaceholder), text: $viewModel.username)
                         .textFieldStyle(.roundedBorder)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
@@ -28,7 +28,7 @@ struct AddFriendSheet: View {
                         .font(SplickTheme.Typography.caption)
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
 
-                    TextField("Say hi...", text: $viewModel.message, axis: .vertical)
+                    TextField(languageService.text(.friendsAddMessagePlaceholder), text: $viewModel.message, axis: .vertical)
                         .textFieldStyle(.roundedBorder)
                         .lineLimit(3...5)
                 }

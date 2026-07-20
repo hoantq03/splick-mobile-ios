@@ -120,6 +120,7 @@ public struct FriendsRootView: View {
         transferGroupOwnershipUseCase: TransferGroupOwnershipUseCaseProtocol,
         generateGroupQrUseCase: GenerateGroupQrUseCaseProtocol,
         revokeGroupQrUseCase: RevokeGroupQrUseCaseProtocol,
+        languageService: LanguageService,
         onBadgeCountsChanged: (() async -> Void)? = nil,
         onDirectoryLoaded: (([SplickDomain.Group]) async -> Void)? = nil,
         onFriendRequestsLoaded: (([IncomingFriendRequest]) async -> Void)? = nil
@@ -136,6 +137,7 @@ public struct FriendsRootView: View {
             fetchIncomingFriendRequestsUseCase: fetchIncomingFriendRequestsUseCase,
             fetchOutgoingFriendRequestsUseCase: fetchOutgoingFriendRequestsUseCase,
             cancelFriendRequestUseCase: cancelFriendRequestUseCase,
+            languageService: languageService,
             onDirectoryLoaded: onDirectoryLoaded,
             onFriendRequestsLoaded: onFriendRequestsLoaded
         )
@@ -184,12 +186,18 @@ public struct FriendsRootView: View {
         }
         _viewModel = StateObject(wrappedValue: rootVM)
         _addFriendViewModel = StateObject(
-            wrappedValue: AddFriendViewModel(addFriendUseCase: addFriendUseCase) {
+            wrappedValue: AddFriendViewModel(
+                addFriendUseCase: addFriendUseCase,
+                languageService: languageService
+            ) {
                 rootVM.onFriendAdded()
             }
         )
         _joinGroupViewModel = StateObject(
-            wrappedValue: JoinGroupViewModel(joinGroupUseCase: joinGroupUseCase) {
+            wrappedValue: JoinGroupViewModel(
+                joinGroupUseCase: joinGroupUseCase,
+                languageService: languageService
+            ) {
                 rootVM.onGroupJoined()
             }
         )
@@ -280,7 +288,8 @@ public struct FriendsRootView: View {
                         rejectMemberUseCase: rejectGroupMemberUseCase,
                         removeMemberUseCase: removeGroupMemberUseCase,
                         leaveGroupUseCase: leaveGroupUseCase,
-                        deleteGroupUseCase: deleteGroupUseCase
+                        deleteGroupUseCase: deleteGroupUseCase,
+                        languageService: languageService
                     )
                 }
             }
@@ -302,7 +311,8 @@ public struct FriendsRootView: View {
                         createGroupUseCase: createGroupUseCase,
                         inviteFriendsUseCase: inviteFriendsToGroupUseCase,
                         uploadGroupAvatarUseCase: uploadGroupAvatarUseCase,
-                        updateGroupAvatarUseCase: updateGroupAvatarUseCase
+                        updateGroupAvatarUseCase: updateGroupAvatarUseCase,
+                        languageService: languageService
                     ) { group, _ in
                         viewModel.onGroupCreated(group)
                         showCreateGroup = false
@@ -730,8 +740,8 @@ public struct FriendsRootView: View {
     private var searchEmptyState: some View {
         EmptyStateView(
             icon: "magnifyingglass",
-            title: "No results found",
-            message: "Try another name or username."
+            title: languageService.text(.messagingSearchEmptyTitle),
+            message: languageService.text(.friendsSearchEmptyMessage)
         )
     }
 
@@ -807,7 +817,7 @@ public struct FriendsRootView: View {
 
         switch true {
         case isInitialLoading:
-            LoadingView(message: "Loading...")
+            LoadingView(message: languageService.text(.commonLoading))
         case items.isEmpty && directoryLoadFailed:
             ErrorView(message: directoryErrorMessage) {
                 Task {
@@ -860,12 +870,12 @@ public struct FriendsRootView: View {
                 .font(.system(size: 40))
                 .foregroundStyle(SplickTheme.Colors.textTertiary)
 
-            Text("No friends or groups yet")
+            Text(languageService.text(.friendsDirectoryEmptyTitle))
                 .font(SplickTheme.Typography.title)
                 .foregroundStyle(SplickTheme.Colors.textPrimary)
                 .multilineTextAlignment(.center)
 
-            Text("Search by name or username, scan QR, or create a group.")
+            Text(languageService.text(.friendsDirectoryEmptyMessage))
                 .font(SplickTheme.Typography.body)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
@@ -889,7 +899,7 @@ public struct FriendsRootView: View {
     private var directoryErrorMessage: String {
         if case .failed(let message) = viewModel.friendsState { return message }
         if case .failed(let message) = viewModel.groupsState { return message }
-        return "Something went wrong."
+        return languageService.text(.friendsGenericError)
     }
 
     @ViewBuilder

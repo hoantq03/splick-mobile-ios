@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Common
+import Localization
 import SplickDomain
 
 enum FriendsDirectoryItem: Identifiable {
@@ -80,6 +81,7 @@ public final class FriendsRootViewModel: ObservableObject {
     private let fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol
     private let fetchOutgoingFriendRequestsUseCase: FetchOutgoingFriendRequestsUseCaseProtocol
     private let cancelFriendRequestUseCase: CancelFriendRequestUseCaseProtocol
+    private let languageService: LanguageService
     private let onDirectoryLoaded: (([SplickDomain.Group]) async -> Void)?
     private let onFriendRequestsLoaded: (([IncomingFriendRequest]) async -> Void)?
     private var searchTask: Task<Void, Never>?
@@ -130,6 +132,7 @@ public final class FriendsRootViewModel: ObservableObject {
         fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol,
         fetchOutgoingFriendRequestsUseCase: FetchOutgoingFriendRequestsUseCaseProtocol,
         cancelFriendRequestUseCase: CancelFriendRequestUseCaseProtocol,
+        languageService: LanguageService,
         onDirectoryLoaded: (([SplickDomain.Group]) async -> Void)? = nil,
         onFriendRequestsLoaded: (([IncomingFriendRequest]) async -> Void)? = nil
     ) {
@@ -141,6 +144,7 @@ public final class FriendsRootViewModel: ObservableObject {
         self.fetchIncomingFriendRequestsUseCase = fetchIncomingFriendRequestsUseCase
         self.fetchOutgoingFriendRequestsUseCase = fetchOutgoingFriendRequestsUseCase
         self.cancelFriendRequestUseCase = cancelFriendRequestUseCase
+        self.languageService = languageService
         self.onDirectoryLoaded = onDirectoryLoaded
         self.onFriendRequestsLoaded = onFriendRequestsLoaded
     }
@@ -220,7 +224,7 @@ public final class FriendsRootViewModel: ObservableObject {
             } catch {
                 guard !Task.isCancelled else { return }
                 if searchResults.isEmpty {
-                    searchState = .failed(error.localizedDescription)
+                    searchState = .failed(languageService.localizedMessage(for: error))
                 } else {
                     searchState = .loaded(searchResults)
                 }
@@ -292,7 +296,7 @@ public final class FriendsRootViewModel: ObservableObject {
             Log.info("Loaded friends", category: .friends, metadata: ["count": String(items.count)])
         case .failure(let error):
             if friends.isEmpty {
-                friendsState = .failed(error.localizedDescription)
+                friendsState = .failed(languageService.localizedMessage(for: error))
             } else {
                 friendsState = .loaded(friends)
             }
@@ -308,7 +312,7 @@ public final class FriendsRootViewModel: ObservableObject {
             Log.info("Loaded groups", category: .friends, metadata: ["count": String(items.count)])
         case .failure(let error):
             if groups.isEmpty {
-                groupsState = .failed(error.localizedDescription)
+                groupsState = .failed(languageService.localizedMessage(for: error))
             } else {
                 groupsState = .loaded(groups)
             }
@@ -354,7 +358,7 @@ public final class FriendsRootViewModel: ObservableObject {
             if isPullToRefresh, !friends.isEmpty {
                 friendsState = .loaded(friends)
             } else {
-                friendsState = .failed(error.localizedDescription)
+                friendsState = .failed(languageService.localizedMessage(for: error))
             }
             Log.error(error, category: .friends)
         }
@@ -374,7 +378,7 @@ public final class FriendsRootViewModel: ObservableObject {
             if isPullToRefresh, !groups.isEmpty {
                 groupsState = .loaded(groups)
             } else {
-                groupsState = .failed(error.localizedDescription)
+                groupsState = .failed(languageService.localizedMessage(for: error))
             }
             Log.error(error, category: .friends)
         }
@@ -434,7 +438,7 @@ public final class FriendsRootViewModel: ObservableObject {
                 isSearchFetching = false
                 searchResults = []
                 if combinedSearchItems.isEmpty {
-                    searchState = .failed(error.localizedDescription)
+                    searchState = .failed(languageService.localizedMessage(for: error))
                 } else {
                     searchState = .loaded([])
                 }
@@ -495,7 +499,7 @@ public final class FriendsRootViewModel: ObservableObject {
                 onFriendAdded()
             } catch {
                 updateUserRelationStatus(userId: userId, status: .none)
-                alertMessage = error.localizedDescription
+                alertMessage = languageService.localizedMessage(for: error)
                 Log.error(error, category: .friends, metadata: ["action": "sendFriendRequest"])
             }
         }
@@ -515,14 +519,14 @@ public final class FriendsRootViewModel: ObservableObject {
                 let incoming = try await fetchIncomingFriendRequestsUseCase.executeAll()
                 guard let request = incoming.first(where: { $0.requester.id == userId }) else {
                     updateUserRelationStatus(userId: userId, status: .requestReceived)
-                    alertMessage = "Friend request not found. Open incoming requests to refresh."
+                    alertMessage = languageService.text(.friendsRequestNotFoundIncoming)
                     return
                 }
                 try await acceptFriendRequestUseCase.execute(requestId: request.id)
                 onFriendAdded()
             } catch {
                 updateUserRelationStatus(userId: userId, status: .requestReceived)
-                alertMessage = error.localizedDescription
+                alertMessage = languageService.localizedMessage(for: error)
                 Log.error(error, category: .friends, metadata: ["action": "acceptFriendRequest"])
             }
         }
@@ -542,14 +546,14 @@ public final class FriendsRootViewModel: ObservableObject {
                 let outgoing = try await fetchOutgoingFriendRequestsUseCase.executeAll()
                 guard let request = outgoing.first(where: { $0.addressee.id == userId }) else {
                     updateUserRelationStatus(userId: userId, status: .requestSent)
-                    alertMessage = "Friend request not found. Open sent requests to refresh."
+                    alertMessage = languageService.text(.friendsRequestNotFoundOutgoing)
                     return
                 }
                 try await cancelFriendRequestUseCase.execute(requestId: request.id)
                 onFriendAdded()
             } catch {
                 updateUserRelationStatus(userId: userId, status: .requestSent)
-                alertMessage = error.localizedDescription
+                alertMessage = languageService.localizedMessage(for: error)
                 Log.error(error, category: .friends, metadata: ["action": "cancelFriendRequest"])
             }
         }

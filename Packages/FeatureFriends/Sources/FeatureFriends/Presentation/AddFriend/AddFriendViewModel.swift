@@ -1,4 +1,5 @@
 import Foundation
+import Localization
 import SplickDomain
 
 @MainActor
@@ -10,13 +11,16 @@ public final class AddFriendViewModel: ObservableObject {
     @Published var errorMessage: String?
 
     private let addFriendUseCase: AddFriendUseCaseProtocol
+    private let languageService: LanguageService
     private let onSuccess: () -> Void
 
     public init(
         addFriendUseCase: AddFriendUseCaseProtocol,
+        languageService: LanguageService,
         onSuccess: @escaping () -> Void
     ) {
         self.addFriendUseCase = addFriendUseCase
+        self.languageService = languageService
         self.onSuccess = onSuccess
     }
 
@@ -24,7 +28,7 @@ public final class AddFriendViewModel: ObservableObject {
         let normalized = username.trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "@", with: "")
         guard !normalized.isEmpty else {
-            errorMessage = "Enter a username."
+            errorMessage = languageService.text(.friendsAddUsernameRequired)
             return
         }
 
@@ -39,11 +43,11 @@ public final class AddFriendViewModel: ObservableObject {
                 username: normalized,
                 message: trimmedMessage.isEmpty ? nil : trimmedMessage
             )
-            successMessage = "Added \(user.displayName)."
+            successMessage = languageService.format(.friendsAddSuccess, user.displayName)
             username = ""
             onSuccess()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = languageService.localizedMessage(for: error)
         }
     }
 
@@ -55,10 +59,10 @@ public final class AddFriendViewModel: ObservableObject {
 
         do {
             let user = try await addFriendUseCase.executeFromQRCode(payload, message: nil)
-            successMessage = "Added \(user.displayName)."
+            successMessage = languageService.format(.friendsAddSuccess, user.displayName)
             onSuccess()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = languageService.localizedMessage(for: error)
         }
     }
 }
