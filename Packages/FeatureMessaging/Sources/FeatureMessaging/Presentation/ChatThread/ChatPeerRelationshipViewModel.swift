@@ -106,4 +106,16 @@ public final class ChatPeerRelationshipViewModel: ObservableObject {
             await refresh()
         }
     }
+
+    public func cancelFriendRequest() async {
+        guard isActive else { return }
+        isProcessing = true
+        defer { isProcessing = false }
+        do {
+            try await actions.cancelFriendRequest(peerUserId)
+            status = .stranger
+        } catch {
+            await refresh()
+        }
+    }
 }
