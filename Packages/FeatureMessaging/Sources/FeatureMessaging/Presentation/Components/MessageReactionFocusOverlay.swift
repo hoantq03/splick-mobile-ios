@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 import DesignSystem
 import Localization
+import SplickDomain
 
 struct MessageReactionFocusOverlay: View {
     @EnvironmentObject private var languageService: LanguageService
@@ -9,6 +10,8 @@ struct MessageReactionFocusOverlay: View {
     let context: MessageReactionFocusContext
     let onReact: (String) -> Void
     let onReply: () -> Void
+    let onCopy: () -> Void
+    let onDetails: () -> Void
     let onOpenFullPicker: () -> Void
     /// Dim / background tap — may be ignored briefly after long-press opens.
     let onDismiss: () -> Void
@@ -16,8 +19,11 @@ struct MessageReactionFocusOverlay: View {
     let onForceDismiss: () -> Void
 
     @State private var isRevealed = false
+    @State private var isDismissing = false
     @State private var optionsSize: CGSize = CGSize(width: 200, height: 88)
     @State private var messageSize: CGSize = CGSize(width: 160, height: 44)
+    /// Freeze side + capped choice on first layout so measuring options cannot slide the bubble.
+    @State private var frozenPlacement: FrozenPlacement?
 
     /// Same gap between reply ↔ emoji ↔ message.
     private let stackSpacing: CGFloat = 10
@@ -26,9 +32,9 @@ struct MessageReactionFocusOverlay: View {
     private let verticalMargin: CGFloat = SplickTheme.Spacing.md
     /// In-place pop — message stays put and grows toward the viewer.
     private let messageFocusScale: CGFloat = 1.12
-    private static let replyImpact = UIImpactFeedbackGenerator(style: .light)
-    /// Fallback until the options stack has been measured.
-    private let estimatedOptionsHeight: CGFloat = 96
+    private static let actionImpact = UIImpactFeedbackGenerator(style: .light)
+    /// Fallback until the options stack has been measured (tray + 3 action pills).
+    private let estimatedOptionsHeight: CGFloat = 200
 
     private var contentAlignment: Alignment {
         context.isOutgoing ? .trailing : .leading
@@ -43,28 +49,33 @@ struct MessageReactionFocusOverlay: View {
         context.isOutgoing ? 1 : 0
     }
 
+    private var message: ChatMessage {
+        context.displayMessage.message
+    }
+
+    private var copyPayload: String? {
+        let trimmed = message.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
     var body: some View {
         GeometryReader { geo in
             let columnWidth = max(geo.size.width - horizontalMargin * 2, 120)
-            // Layout narrower so after scale the bubble still fits inside equal side margins.
-            let messageLayoutWidth = floor(columnWidth / messageFocusScale)
             let resolvedOptionsHeight = max(optionsSize.height, estimatedOptionsHeight)
-            let placeOptionsAbove = shouldPlaceOptionsAbove(
+            let placement = frozenPlacement ?? resolvePlacement(
                 containerHeight: geo.size.height,
                 optionsHeight: resolvedOptionsHeight
             )
-            // Always leave room for options + gap + safe margins.
-            let maxMessageVisualHeight = max(
-                geo.size.height - resolvedOptionsHeight - stackSpacing - verticalMargin * 2,
-                120
+            let layout = anchoredLayout(
+                placeAbove: placement.placeOptionsAbove,
+                containerSize: geo.size,
+                optionsHeight: resolvedOptionsHeight
             )
-            let maxMessageLayoutHeight = floor(maxMessageVisualHeight / messageFocusScale)
-            let layout = verticalLayout(
-                placeAbove: placeOptionsAbove,
-                containerHeight: geo.size.height,
-                optionsHeight: resolvedOptionsHeight,
-                messageLayoutHeight: min(max(messageSize.height, 1), maxMessageLayoutHeight)
-            )
+            // Wider only when capped (no pop scale). Short bubbles layout narrower so
+            // scaleEffect grows back to the column without horizontal jump.
+            let messageLayoutWidth = placement.isMessageCapped
+                ? columnWidth
+                : floor(columnWidth / messageFocusScale)
 
             ZStack {
                 Color.black
@@ -73,52 +84,81 @@ struct MessageReactionFocusOverlay: View {
                     .contentShape(Rectangle())
                     .onTapGesture { dismissAnimated() }
 
-                // Message under options so a tall bubble never covers emoji/reply.
+                // Message — always centered on the long-press frame; only scale pops.
                 focusColumn(width: columnWidth) {
                     liftedMessage(
                         maxContentWidth: messageLayoutWidth,
-                        maxLayoutHeight: maxMessageLayoutHeight,
-                        pinToBottom: placeOptionsAbove
+                        maxLayoutHeight: layout.messageHeight,
+                        isCapped: placement.isMessageCapped
                     )
                 }
+                .frame(width: columnWidth, height: layout.messageHeight, alignment: .top)
                 .scaleEffect(
-                    isRevealed ? messageFocusScale : 0.92,
-                    anchor: UnitPoint(
-                        x: horizontalScaleAnchorX,
-                        y: placeOptionsAbove ? 1 : 0
-                    )
+                    messageScale,
+                    anchor: UnitPoint(x: horizontalScaleAnchorX, y: 0.5)
                 )
                 .position(x: geo.size.width / 2, y: layout.messageCenterY)
+                .allowsHitTesting(placement.isMessageCapped)
+                .zIndex(1)
 
+                // Options — float above/below (or screen edge); never drag the bubble.
                 focusColumn(width: columnWidth) {
-                    optionsStack(placeAbove: placeOptionsAbove)
+                    optionsStack(placeAbove: placement.placeOptionsAbove)
                 }
-                .background {
-                    GeometryReader { proxy in
-                        Color.clear.preference(key: OptionsMeasuredSizeKey.self, value: proxy.size)
-                    }
+                .fixedSize(horizontal: false, vertical: true)
+                .background(optionsSizeReader)
+                .onPreferenceChange(OptionsMeasuredSizeKey.self) { size in
+                    guard size.width > 1, size.height > 1, size.height < 500 else { return }
+                    optionsSize = size
                 }
-                .onPreferenceChange(OptionsMeasuredSizeKey.self) { optionsSize = $0 }
                 .scaleEffect(
                     isRevealed ? 1 : 0.42,
                     anchor: UnitPoint(
                         x: horizontalScaleAnchorX,
-                        y: placeOptionsAbove ? 1 : 0
+                        y: placement.placeOptionsAbove ? 1 : 0
                     )
                 )
                 .opacity(isRevealed ? 1 : 0)
-                .offset(y: isRevealed ? 0 : (placeOptionsAbove ? 14 : -14))
+                .offset(y: isRevealed ? 0 : (placement.placeOptionsAbove ? 14 : -14))
                 .position(x: geo.size.width / 2, y: layout.optionsCenterY)
+                .zIndex(2)
+            }
+            .onAppear {
+                if frozenPlacement == nil {
+                    frozenPlacement = resolvePlacement(
+                        containerHeight: geo.size.height,
+                        optionsHeight: resolvedOptionsHeight
+                    )
+                }
             }
         }
         .onAppear {
-            // Defer so the first frame paints collapsed; same-runloop false→true can no-op.
+            // Defer so the first frame paints at rest scale; same-runloop false→true can no-op.
             isRevealed = false
             DispatchQueue.main.async {
                 withAnimation(MessageReactionTrayMotion.present) {
                     isRevealed = true
                 }
             }
+        }
+    }
+
+    /// Match the list bubble at rest (1), then pop in place. Never start smaller —
+    /// that reads as a slide when combined with layout changes.
+    private var messageScale: CGFloat {
+        if isMessageCappedCurrent {
+            return 1
+        }
+        return isRevealed ? messageFocusScale : 1
+    }
+
+    private var isMessageCappedCurrent: Bool {
+        frozenPlacement?.isMessageCapped ?? false
+    }
+
+    private var optionsSizeReader: some View {
+        GeometryReader { proxy in
+            Color.clear.preference(key: OptionsMeasuredSizeKey.self, value: proxy.size)
         }
     }
 
@@ -135,28 +175,84 @@ struct MessageReactionFocusOverlay: View {
     private func optionsStack(placeAbove: Bool) -> some View {
         VStack(alignment: horizontalAlignment, spacing: stackSpacing) {
             if placeAbove {
-                replyButton
+                actionButtons
                 reactionTray
             } else {
                 reactionTray
-                replyButton
+                actionButtons
             }
         }
         .frame(maxWidth: .infinity, alignment: contentAlignment)
     }
 
+    private var actionButtons: some View {
+        VStack(alignment: horizontalAlignment, spacing: SplickTheme.Spacing.xs) {
+            actionButton(
+                titleKey: .messagingReplyAction,
+                systemImage: "arrowshape.turn.up.left.fill"
+            ) {
+                dismissCommitted(then: onReply)
+            }
+            if copyPayload != nil {
+                actionButton(
+                    titleKey: .messagingCopyAction,
+                    systemImage: "doc.on.doc"
+                ) {
+                    onCopy()
+                    dismissCommitted()
+                }
+            }
+            actionButton(
+                titleKey: .messagingDetailsAction,
+                systemImage: "info.circle"
+            ) {
+                dismissCommitted(then: onDetails)
+            }
+        }
+    }
+
     private var reactionTray: some View {
         MessageReactionTray(
             onReact: onReact,
-            onOpenFullPicker: onOpenFullPicker,
-            onDismiss: dismissCommitted
+            onOpenFullPicker: {
+                dismissCommitted(then: onOpenFullPicker)
+            },
+            onDismiss: { dismissCommitted() }
         )
     }
 
+    private func actionButton(
+        titleKey: L10nKey,
+        systemImage: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button {
+            Self.actionImpact.impactOccurred()
+            action()
+        } label: {
+            HStack(spacing: SplickTheme.Spacing.xs) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 14, weight: .semibold))
+                Text(languageService.text(titleKey))
+                    .font(SplickTheme.Typography.callout.weight(.semibold))
+            }
+            .foregroundStyle(SplickTheme.Colors.textPrimary)
+            .padding(.horizontal, SplickTheme.Spacing.md)
+            .padding(.vertical, SplickTheme.Spacing.sm)
+            .background {
+                Capsule(style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .shadow(color: .black.opacity(0.14), radius: 12, y: 6)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
     private func liftedMessage(
         maxContentWidth: CGFloat,
         maxLayoutHeight: CGFloat,
-        pinToBottom: Bool
+        isCapped: Bool
     ) -> some View {
         let bubble = MessageBubble(
             displayMessage: context.displayMessage,
@@ -177,126 +273,166 @@ struct MessageReactionFocusOverlay: View {
                 Color.clear.preference(key: MessageMeasuredSizeKey.self, value: proxy.size)
             }
         }
-        .onPreferenceChange(MessageMeasuredSizeKey.self) { messageSize = $0 }
-
-        return ScrollView(showsIndicators: false) {
-            bubble
+        .onPreferenceChange(MessageMeasuredSizeKey.self) { size in
+            guard size.width > 1, size.height > 1, size.height < 2_000 else { return }
+            messageSize = size
         }
-        .frame(maxHeight: maxLayoutHeight, alignment: pinToBottom ? .bottom : .top)
-        .frame(maxWidth: .infinity, alignment: contentAlignment)
+
+        Group {
+            if isCapped {
+                ScrollView(showsIndicators: false) {
+                    bubble
+                        .frame(maxWidth: maxContentWidth, alignment: contentAlignment)
+                }
+                .frame(maxWidth: .infinity, maxHeight: maxLayoutHeight, alignment: .top)
+                .clipped()
+                .contentShape(Rectangle())
+            } else {
+                bubble
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: maxLayoutHeight, alignment: .top)
         .shadow(
             color: .black.opacity(isRevealed ? 0.22 : 0.08),
             radius: isRevealed ? 18 : 6,
             y: isRevealed ? 8 : 2
         )
-        // Only intercept scrolls when content actually overflows.
-        .allowsHitTesting(messageSize.height > maxLayoutHeight + 1)
     }
 
-    private var replyButton: some View {
-        Button {
-            Self.replyImpact.impactOccurred()
-            onReply()
-            dismissCommitted()
-        } label: {
-            HStack(spacing: SplickTheme.Spacing.xs) {
-                Image(systemName: "arrowshape.turn.up.left.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                Text(languageService.text(.messagingReplyAction))
-                    .font(SplickTheme.Typography.callout.weight(.semibold))
-            }
-            .foregroundStyle(SplickTheme.Colors.textPrimary)
-            .padding(.horizontal, SplickTheme.Spacing.md)
-            .padding(.vertical, SplickTheme.Spacing.sm)
-            .background {
-                Capsule(style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .shadow(color: .black.opacity(0.14), radius: 12, y: 6)
-            }
-        }
-        .buttonStyle(.plain)
+    private struct FrozenPlacement {
+        let placeOptionsAbove: Bool
+        let isMessageCapped: Bool
     }
 
-    private struct VerticalLayout {
+    private struct AnchoredLayout {
         let messageCenterY: CGFloat
+        let messageHeight: CGFloat
         let optionsCenterY: CGFloat
     }
 
-    private func shouldPlaceOptionsAbove(
+    /// Decide options side once. Message never leaves `context.frame`.
+    private func resolvePlacement(
         containerHeight: CGFloat,
         optionsHeight: CGFloat
-    ) -> Bool {
+    ) -> FrozenPlacement {
         let needed = optionsHeight + stackSpacing
         let spaceAbove = context.frame.minY - verticalMargin
         let spaceBelow = containerHeight - context.frame.maxY - verticalMargin
+        let canFitAbove = spaceAbove >= needed
+        let canFitBelow = spaceBelow >= needed
 
-        if spaceAbove >= needed, spaceBelow >= needed {
-            return spaceAbove >= spaceBelow
+        let maxViewport = max(
+            containerHeight - verticalMargin * 2,
+            120
+        )
+        let intrinsicHeight = max(messageSize.height, context.frame.height, 1)
+        let isMessageCapped = intrinsicHeight > maxViewport + 1
+            || (!canFitAbove && !canFitBelow && intrinsicHeight > containerHeight * 0.45)
+
+        let placeOptionsAbove: Bool
+        if canFitAbove, canFitBelow {
+            placeOptionsAbove = spaceAbove >= spaceBelow
+        } else if canFitAbove {
+            placeOptionsAbove = true
+        } else if canFitBelow {
+            placeOptionsAbove = false
+        } else {
+            // Neither side fits beside the bubble — park options on the roomier screen edge.
+            placeOptionsAbove = spaceAbove >= spaceBelow
         }
-        if spaceAbove >= needed { return true }
-        if spaceBelow >= needed { return false }
-        return spaceAbove >= spaceBelow
+
+        return FrozenPlacement(
+            placeOptionsAbove: placeOptionsAbove,
+            isMessageCapped: isMessageCapped
+        )
     }
 
-    /// Options stay visible; short messages keep near the original bubble, long ones fill the rest.
-    private func verticalLayout(
+    /// Message center tracks the long-press frame; options float around it (or to a screen edge).
+    private func anchoredLayout(
         placeAbove: Bool,
-        containerHeight: CGFloat,
-        optionsHeight: CGFloat,
-        messageLayoutHeight: CGFloat
-    ) -> VerticalLayout {
-        let visualMessageHeight = messageLayoutHeight * messageFocusScale
+        containerSize: CGSize,
+        optionsHeight: CGFloat
+    ) -> AnchoredLayout {
         let minY = verticalMargin
-        let maxY = containerHeight - verticalMargin
+        let maxY = containerSize.height - verticalMargin
+        let maxViewport = max(maxY - minY, 120)
 
-        if placeAbove {
-            var messageBottom = min(context.frame.maxY, maxY)
-            var messageTop = messageBottom - visualMessageHeight
-            var optionsBottom = messageTop - stackSpacing
-            var optionsTop = optionsBottom - optionsHeight
-
-            if optionsTop < minY {
-                optionsTop = minY
-                optionsBottom = optionsTop + optionsHeight
-                messageTop = optionsBottom + stackSpacing
-                messageBottom = min(messageTop + visualMessageHeight, maxY)
-            }
-
-            return VerticalLayout(
-                messageCenterY: (messageTop + messageBottom) / 2,
-                optionsCenterY: (optionsTop + optionsBottom) / 2
-            )
+        // Anchor to the on-screen portion of the long-press frame so the bubble never
+        // slides to make room for options — present/dismiss are pure scale at this spot.
+        let safeBounds = CGRect(
+            x: 0,
+            y: minY,
+            width: containerSize.width,
+            height: maxY - minY
+        )
+        let visible = context.frame.intersection(safeBounds)
+        let messageHeight: CGFloat
+        let messageCenterY: CGFloat
+        if visible.height > 1 {
+            messageHeight = min(visible.height, maxViewport)
+            messageCenterY = visible.midY
         } else {
-            var messageTop = max(context.frame.minY, minY)
-            var messageBottom = messageTop + visualMessageHeight
-            var optionsTop = messageBottom + stackSpacing
-            var optionsBottom = optionsTop + optionsHeight
-
-            if optionsBottom > maxY {
-                optionsBottom = maxY
-                optionsTop = optionsBottom - optionsHeight
-                messageBottom = optionsTop - stackSpacing
-                messageTop = max(messageBottom - visualMessageHeight, minY)
-            }
-
-            return VerticalLayout(
-                messageCenterY: (messageTop + messageBottom) / 2,
-                optionsCenterY: (optionsTop + optionsBottom) / 2
+            messageHeight = min(max(context.frame.height, 1), maxViewport)
+            messageCenterY = min(
+                max(context.frame.midY, minY + messageHeight / 2),
+                maxY - messageHeight / 2
             )
         }
+
+        let messageTop = messageCenterY - messageHeight / 2
+        let messageBottom = messageCenterY + messageHeight / 2
+        let optionsHalf = optionsHeight / 2
+
+        let optionsCenterY: CGFloat
+        if placeAbove {
+            let idealBottom = messageTop - stackSpacing
+            let idealCenter = idealBottom - optionsHalf
+            if idealCenter - optionsHalf >= minY {
+                optionsCenterY = idealCenter
+            } else {
+                // Screen-top band — do not move the message to make room.
+                optionsCenterY = minY + optionsHalf
+            }
+        } else {
+            let idealTop = messageBottom + stackSpacing
+            let idealCenter = idealTop + optionsHalf
+            if idealCenter + optionsHalf <= maxY {
+                optionsCenterY = idealCenter
+            } else {
+                optionsCenterY = maxY - optionsHalf
+            }
+        }
+
+        return AnchoredLayout(
+            messageCenterY: messageCenterY,
+            messageHeight: messageHeight,
+            optionsCenterY: optionsCenterY
+        )
     }
 
     private func dismissAnimated() {
-        onDismiss()
+        // Dim tap is intentional — always tear down after the collapse spring.
+        collapseThenTeardown(force: true)
+    }
+
+    private func dismissCommitted(then completion: (() -> Void)? = nil) {
+        collapseThenTeardown(force: true, then: completion)
+    }
+
+    /// Mirror the present spring in reverse, then tear down so the list bubble can return.
+    private func collapseThenTeardown(force: Bool, then completion: (() -> Void)? = nil) {
+        guard !isDismissing else { return }
+        isDismissing = true
         withAnimation(MessageReactionTrayMotion.dismiss) {
             isRevealed = false
         }
-    }
-
-    private func dismissCommitted() {
-        onForceDismiss()
-        withAnimation(MessageReactionTrayMotion.dismiss) {
-            isRevealed = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + MessageReactionTrayMotion.dismissSettlingDelay) {
+            if force {
+                onForceDismiss()
+            } else {
+                onDismiss()
+            }
+            completion?()
         }
     }
 }
@@ -306,7 +442,7 @@ private struct OptionsMeasuredSizeKey: PreferenceKey {
 
     static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
         let next = nextValue()
-        if next.width > 1, next.height > 1 {
+        if next.width > 1, next.height > 1, next.height < 500 {
             value = next
         }
     }
