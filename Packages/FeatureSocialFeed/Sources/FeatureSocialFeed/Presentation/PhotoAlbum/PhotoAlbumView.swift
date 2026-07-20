@@ -91,7 +91,7 @@ public struct PhotoAlbumView: View {
     private var photoScrollView: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
-                ForEach(viewModel.daySections) { section in
+                ForEach(viewModel.daySections(languageService: languageService)) { section in
                     VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
                         Text(section.title)
                             .font(.system(size: 17, weight: .semibold))

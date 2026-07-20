@@ -79,7 +79,7 @@ struct PhotoAlbumFilterBarView: View {
         HStack(spacing: SplickTheme.Spacing.xs) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(SplickTheme.Colors.textTertiary)
-            TextField("Tìm theo caption", text: $captionQuery)
+            TextField(languageService.text(.feedAlbumSearchCaption), text: $captionQuery)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .onChange(of: captionQuery) { newValue in
@@ -124,7 +124,7 @@ struct PhotoAlbumFilterBarView: View {
     private var advancedFilters: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
             filterChip(
-                title: filters.author?.displayName ?? "Chọn bạn bè",
+                title: filters.author?.displayName ?? languageService.text(.feedAlbumPickFriend),
                 systemImage: "person",
                 isActive: filters.author != nil,
                 isEnabled: fetchMyFriendsUseCase != nil
@@ -133,7 +133,7 @@ struct PhotoAlbumFilterBarView: View {
             }
 
             filterChip(
-                title: filters.group?.name ?? "Chọn nhóm",
+                title: filters.group?.name ?? languageService.text(.feedAlbumPickGroup),
                 systemImage: "person.3",
                 isActive: filters.group != nil,
                 isEnabled: fetchMyGroupsUseCase != nil
@@ -144,7 +144,7 @@ struct PhotoAlbumFilterBarView: View {
     }
 
     private var clearButton: some View {
-        Button("Xóa bộ lọc") {
+        Button(languageService.text(.feedAlbumClearFilters)) {
             captionQuery = ""
             Task { await viewModel.clearFilters() }
         }
@@ -227,7 +227,7 @@ private struct PhotoAlbumFriendPickerSheet: View {
                 } else {
                     List {
                         if selectedAuthor != nil {
-                            Button("Tất cả bạn bè") {
+                            Button(languageService.text(.feedAlbumAllFriends)) {
                                 onSelect(nil)
                                 dismiss()
                             }
@@ -252,7 +252,7 @@ private struct PhotoAlbumFriendPickerSheet: View {
             }
             .navigationTitle(languageService.text(.feedFilterByFriends))
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $searchQuery, prompt: "Tìm bạn bè")
+            .searchable(text: $searchQuery, prompt: languageService.text(.feedCreateSearchFriends))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(languageService.text(.commonClose)) { dismiss() }
@@ -289,7 +289,7 @@ private struct PhotoAlbumGroupPickerSheet: View {
                 } else {
                     List {
                         if selectedGroup != nil {
-                            Button("Tất cả nhóm") {
+                            Button(languageService.text(.feedAlbumAllGroups)) {
                                 onSelect(nil)
                                 dismiss()
                             }

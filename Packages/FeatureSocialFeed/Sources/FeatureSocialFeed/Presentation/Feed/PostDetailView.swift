@@ -282,7 +282,7 @@ struct PostDetailView: View {
 
     private var composerPlaceholder: String {
         if let replyTarget {
-            return "Trả lời \(replyTarget.author.displayName)..."
+            return languageService.format(.feedCommentReplyPlaceholder, replyTarget.author.displayName)
         }
         return languageService.text(.feedPostWriteComment)
     }

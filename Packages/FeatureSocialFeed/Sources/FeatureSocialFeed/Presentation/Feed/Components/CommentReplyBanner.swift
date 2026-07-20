@@ -1,16 +1,18 @@
 import SwiftUI
 import DesignSystem
+import Localization
 import SplickDomain
 
 /// Shown above the composer while replying (Facebook-style "Replying to …").
 struct CommentReplyBanner: View {
+    @EnvironmentObject private var languageService: LanguageService
     let replyingTo: UserSummary
     let onCancel: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
             HStack(spacing: 0) {
-                Text("Đang trả lời ")
+                Text(languageService.text(.feedCommentReplyingTo))
                     .font(.system(size: 12))
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
                 Text(replyingTo.displayName)
@@ -29,7 +31,7 @@ struct CommentReplyBanner: View {
                     .foregroundStyle(SplickTheme.Colors.textTertiary)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Hủy trả lời")
+            .accessibilityLabel(languageService.text(.messagingReplyCancelAccessibility))
         }
         .padding(.horizontal, SplickTheme.Spacing.sm)
         .padding(.vertical, 8)

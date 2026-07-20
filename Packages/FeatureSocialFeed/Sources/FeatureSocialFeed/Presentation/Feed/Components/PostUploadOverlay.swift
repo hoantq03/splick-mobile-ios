@@ -25,7 +25,7 @@ struct PostUploadOverlay: View {
                     Image(systemName: "exclamationmark.circle.fill")
                         .font(.system(size: 36))
                         .foregroundStyle(.white)
-                    Text("Đăng thất bại")
+                    Text(languageService.text(.feedUploadFailed))
                         .font(SplickTheme.Typography.callout)
                         .fontWeight(.semibold)
                         .foregroundStyle(.white)

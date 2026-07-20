@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Common
+import Localization
 import SplickDomain
 import DesignSystem
 
@@ -12,8 +13,12 @@ public final class PhotoAlbumViewModel: ObservableObject {
     @Published private(set) var isLoadingMore = false
     @Published private(set) var isRefreshing = false
 
-    var daySections: [AlbumPhotoDaySection] {
-        AlbumPhotoSectionBuilder.daySections(from: photos)
+    func daySections(languageService: LanguageService) -> [AlbumPhotoDaySection] {
+        AlbumPhotoSectionBuilder.daySections(
+            from: photos,
+            todayTitle: languageService.text(.notificationSectionToday),
+            yesterdayTitle: languageService.text(.notificationSectionYesterday)
+        )
     }
 
     var hasActiveFilters: Bool {

@@ -1,5 +1,6 @@
 import SwiftUI
 import DesignSystem
+import Localization
 import SplickDomain
 
 /// Avatar on the left; emoji samples tucked at the top-right corner, smaller than the avatar.
@@ -81,10 +82,11 @@ private struct OverlappingEmojiStack: View {
 
 /// "+N người bày tỏ cảm xúc khác" chip — fly target when user is outside top 3.
 struct MoreReactorsChip: View {
+    @EnvironmentObject private var languageService: LanguageService
     let count: Int
 
     var body: some View {
-        Text("+\(count) người bày tỏ cảm xúc khác")
+        Text(languageService.format(.feedReactionsMore, count))
             .font(.system(size: 10, weight: .medium))
             .foregroundStyle(SplickTheme.Colors.textSecondary)
             .lineLimit(2)

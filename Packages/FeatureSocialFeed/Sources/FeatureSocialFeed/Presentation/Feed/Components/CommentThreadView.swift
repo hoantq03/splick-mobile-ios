@@ -132,6 +132,7 @@ struct CommentThreadView: View {
 // MARK: - Branch
 
 private struct CommentBranchView: View {
+    @EnvironmentObject private var languageService: LanguageService
 
     let comment: PostComment
     let comments: [PostComment]
@@ -236,7 +237,7 @@ private struct CommentBranchView: View {
                         Button {
                             onViewMoreReplies(comment.id)
                         } label: {
-                            Text("Xem thêm \(hiddenReplyCount) phản hồi")
+                            Text(languageService.format(.feedCommentShowMoreReplies, hiddenReplyCount))
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(SplickTheme.Colors.textSecondary)
                         }
@@ -373,7 +374,7 @@ struct CommentRowView: View {
                     }
 
                     if comment.isEdited {
-                        Text("· Đã chỉnh sửa")
+                        Text(languageService.text(.feedCommentEdited))
                             .font(.system(size: style.metaFontSize))
                             .foregroundStyle(SplickTheme.Colors.textTertiary)
                     }
@@ -394,7 +395,7 @@ struct CommentRowView: View {
                     )
 
                     if showsReplyAction {
-                        Button("Trả lời", action: onReply)
+                        Button(languageService.text(.messagingReplyAction), action: onReply)
                             .font(.system(size: style.replyActionFontSize, weight: .medium))
                             .foregroundStyle(SplickTheme.Colors.textTertiary)
                     }
@@ -499,7 +500,7 @@ struct CommentRowView: View {
     @ViewBuilder
     private var commentBody: some View {
         if comment.isDeleted {
-            Text("Bình luận đã bị xóa")
+            Text(languageService.text(.feedCommentDeleted))
                 .font(.system(size: style.bodyFontSize))
                 .italic()
                 .foregroundStyle(SplickTheme.Colors.textTertiary)

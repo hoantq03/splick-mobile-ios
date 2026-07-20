@@ -1,8 +1,13 @@
 import Foundation
 import SwiftUI
 import SplickDomain
+import Localization
+import Storage
 
 #if DEBUG
+
+@MainActor
+private let previewLanguageService = LanguageService(userDefaults: UserDefaultsService())
 
 final class MockFetchFeedUseCase: FetchFeedUseCaseProtocol, Sendable {
     func execute(page: Int) async throws -> [Post] {
@@ -165,6 +170,7 @@ final class MockFetchPhotoAlbumUseCase: FetchPhotoAlbumUseCaseProtocol, Sendable
                 approvePaymentEvidenceUseCase: MockApprovePaymentEvidenceUseCase(),
                 rejectPaymentEvidenceUseCase: MockRejectPaymentEvidenceUseCase(),
                 createPostUseCase: MockCreatePostUseCase(),
+                languageService: previewLanguageService,
                 currentUserId: PreviewData.currentUser.id,
                 currentUser: UserSummary(
                     id: PreviewData.currentUser.id,
@@ -181,6 +187,7 @@ final class MockFetchPhotoAlbumUseCase: FetchPhotoAlbumUseCaseProtocol, Sendable
             )
         )
     }
+    .environmentObject(previewLanguageService)
 }
 
 #Preview("Post Card") {
@@ -199,6 +206,7 @@ final class MockFetchPhotoAlbumUseCase: FetchPhotoAlbumUseCaseProtocol, Sendable
         onShowCompanions: {}
     )
     .padding()
+    .environmentObject(previewLanguageService)
 }
 
 #endif

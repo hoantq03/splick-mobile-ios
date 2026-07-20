@@ -33,7 +33,12 @@ enum AlbumPhotoSectionBuilder {
         return formatter
     }()
 
-    static func daySections(from photos: [AlbumPhoto], calendar: Calendar = .current) -> [AlbumPhotoDaySection] {
+    static func daySections(
+        from photos: [AlbumPhoto],
+        calendar: Calendar = .current,
+        todayTitle: String,
+        yesterdayTitle: String
+    ) -> [AlbumPhotoDaySection] {
         guard !photos.isEmpty else { return [] }
 
         var grouped: [Date: [AlbumPhoto]] = [:]
@@ -51,18 +56,28 @@ enum AlbumPhotoSectionBuilder {
                 return AlbumPhotoDaySection(
                     id: dayKeyFormatter.string(from: day),
                     day: day,
-                    title: sectionTitle(for: day, calendar: calendar),
+                    title: sectionTitle(
+                        for: day,
+                        calendar: calendar,
+                        todayTitle: todayTitle,
+                        yesterdayTitle: yesterdayTitle
+                    ),
                     photos: dayPhotos
                 )
             }
     }
 
-    private static func sectionTitle(for day: Date, calendar: Calendar) -> String {
+    private static func sectionTitle(
+        for day: Date,
+        calendar: Calendar,
+        todayTitle: String,
+        yesterdayTitle: String
+    ) -> String {
         if calendar.isDateInToday(day) {
-            return "Hôm nay"
+            return todayTitle
         }
         if calendar.isDateInYesterday(day) {
-            return "Hôm qua"
+            return yesterdayTitle
         }
         if calendar.isDate(day, equalTo: .now, toGranularity: .year) {
             return sameYearTitleFormatter.string(from: day)

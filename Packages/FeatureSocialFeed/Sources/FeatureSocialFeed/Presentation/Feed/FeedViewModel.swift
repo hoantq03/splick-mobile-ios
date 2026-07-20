@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Common
+import Localization
 import SplickDomain
 
 @MainActor
@@ -24,6 +25,7 @@ public final class FeedViewModel: ObservableObject {
     private let approvePaymentEvidenceUseCase: ApprovePaymentEvidenceUseCaseProtocol
     private let rejectPaymentEvidenceUseCase: RejectPaymentEvidenceUseCaseProtocol
     private let createPostUseCase: CreatePostUseCaseProtocol
+    private let languageService: LanguageService
     private let onFeedLoaded: (([Post], UUID?) async -> Void)?
     private var currentPage = 0
     private var canLoadMore = true
@@ -68,6 +70,7 @@ public final class FeedViewModel: ObservableObject {
         approvePaymentEvidenceUseCase: ApprovePaymentEvidenceUseCaseProtocol,
         rejectPaymentEvidenceUseCase: RejectPaymentEvidenceUseCaseProtocol,
         createPostUseCase: CreatePostUseCaseProtocol,
+        languageService: LanguageService,
         currentUserId: UUID? = nil,
         currentUser: UserSummary? = nil,
         onFeedLoaded: (([Post], UUID?) async -> Void)? = nil
@@ -82,6 +85,7 @@ public final class FeedViewModel: ObservableObject {
         self.approvePaymentEvidenceUseCase = approvePaymentEvidenceUseCase
         self.rejectPaymentEvidenceUseCase = rejectPaymentEvidenceUseCase
         self.createPostUseCase = createPostUseCase
+        self.languageService = languageService
         self.onFeedLoaded = onFeedLoaded
         self.currentUserId = currentUserId
         self.currentUserSummary = currentUser
@@ -183,13 +187,13 @@ public final class FeedViewModel: ObservableObject {
             Log.error(error, category: .feed)
             if isPullToRefresh {
                 if posts.isEmpty {
-                    state = .failed(error.localizedDescription)
+                    state = .failed(languageService.localizedMessage(for: error))
                 } else {
                     state = .loaded(posts)
                 }
-                alertMessage = "Không thể làm mới feed. Thử lại sau."
+                alertMessage = languageService.text(.feedRefreshFailed)
             } else if posts.isEmpty {
-                state = .failed(error.localizedDescription)
+                state = .failed(languageService.localizedMessage(for: error))
             } else {
                 state = .loaded(posts)
             }
@@ -328,7 +332,7 @@ public final class FeedViewModel: ObservableObject {
     @discardableResult
     func react(to postId: UUID, emoji: String) -> String? {
         guard postUploadStates[postId] == nil else {
-            return "Bài viết đang được đăng."
+            return languageService.text(.feedPostStillUploading)
         }
         guard let userId = currentUserId else { return nil }
         guard let index = posts.firstIndex(where: { $0.id == postId }) else { return nil }
@@ -338,7 +342,7 @@ public final class FeedViewModel: ObservableObject {
             post.reactions.filter { $0.userId == userId }.map(\.emoji)
         )
         if !distinctEmojis.contains(emoji), distinctEmojis.count >= ReactionConstants.maxDistinctEmojiPerUser {
-            return "Mỗi bài bạn chỉ được dùng tối đa 5 loại emoji."
+            return languageService.text(.feedReactionEmojiLimit)
         }
 
         let optimisticId = UUID()
@@ -383,7 +387,7 @@ public final class FeedViewModel: ObservableObject {
             } catch {
                 removeReaction(postId: postId, reactionId: pending.optimisticId)
                 Log.error(error, category: .feed)
-                alertMessage = error.localizedDescription
+                alertMessage = languageService.localizedMessage(for: error)
             }
         }
     }
@@ -419,7 +423,7 @@ public final class FeedViewModel: ObservableObject {
     ) async -> AddCommentResult {
         guard let author = currentUserSummary else {
             return AddCommentResult(
-                error: "Không xác định được tài khoản. Hãy thử kéo refresh tab Feed.",
+                error: languageService.text(.feedErrorAccountRefresh),
                 createdCommentId: nil
             )
         }
@@ -427,7 +431,7 @@ public final class FeedViewModel: ObservableObject {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty && submissionAttachments.isEmpty {
             return AddCommentResult(
-                error: "Nội dung bình luận hoặc ảnh đính kèm không được để trống.",
+                error: languageService.text(.feedCommentEmpty),
                 createdCommentId: nil
             )
         }
@@ -441,11 +445,11 @@ public final class FeedViewModel: ObservableObject {
         let optimisticId = comment.id
 
         guard let index = posts.firstIndex(where: { $0.id == postId }) else {
-            return AddCommentResult(error: "Không tìm thấy bài viết.", createdCommentId: nil)
+            return AddCommentResult(error: languageService.text(.feedPostNotFound), createdCommentId: nil)
         }
 
         if postUploadStates[postId] != nil {
-            return AddCommentResult(error: "Bài viết đang được đăng.", createdCommentId: nil)
+            return AddCommentResult(error: languageService.text(.feedPostStillUploading), createdCommentId: nil)
         }
 
         let post = posts[index]
@@ -477,7 +481,7 @@ public final class FeedViewModel: ObservableObject {
             state = .loaded(posts)
             Log.error(error, category: .feed)
             return AddCommentResult(
-                error: error.localizedDescription,
+                error: languageService.localizedMessage(for: error),
                 createdCommentId: nil
             )
         }
@@ -504,7 +508,7 @@ public final class FeedViewModel: ObservableObject {
         }
 
         guard post.canDelete else {
-            alertMessage = "Không thể xóa vì đã có người xem bài viết."
+            alertMessage = languageService.text(.feedPostDeleteHasViewers)
             return
         }
 
@@ -513,7 +517,7 @@ public final class FeedViewModel: ObservableObject {
             posts.removeAll { $0.id == id }
             state = .loaded(posts)
         } catch {
-            alertMessage = error.localizedDescription
+            alertMessage = languageService.localizedMessage(for: error)
             Log.error(error, category: .feed)
         }
     }
@@ -535,9 +539,9 @@ public final class FeedViewModel: ObservableObject {
             OptimisticPostBuilder.cleanupPendingMedia(postId: localPostId)
         } catch {
             if error.isRequestCancellation { return }
-            postUploadStates[localPostId] = .failed(message: error.localizedDescription)
+            postUploadStates[localPostId] = .failed(message: languageService.localizedMessage(for: error))
             Log.error(error, category: .feed)
-            alertMessage = "Không thể đăng bài. Thử lại sau."
+            alertMessage = languageService.text(.feedCreateRetryFailed)
         }
     }
 
@@ -617,8 +621,8 @@ public final class FeedViewModel: ObservableObject {
         } catch {
             let unavailable = Self.isPostUnavailable(error)
             alertMessage = unavailable
-                ? "Bài viết không còn khả dụng. Có thể đã bị xoá hoặc bạn không còn quyền xem."
-                : "Không thể tải bài viết."
+                ? languageService.text(.feedPostUnavailableMessage)
+                : languageService.text(.feedPostLoadFailed)
             Log.error(error, category: .feed)
             return unavailable ? .unavailable : .failed
         }
@@ -692,7 +696,7 @@ public final class FeedViewModel: ObservableObject {
             await refreshPost(id: postId, allowingConcurrentFeedRefresh: true)
             NotificationCenter.default.post(name: .paymentEvidenceStatusDidChange, object: nil)
         } catch {
-            alertMessage = error.localizedDescription
+            alertMessage = languageService.localizedMessage(for: error)
             Log.error(error, category: .feed)
         }
     }
@@ -707,7 +711,7 @@ public final class FeedViewModel: ObservableObject {
             await refreshPost(id: postId, allowingConcurrentFeedRefresh: true)
             NotificationCenter.default.post(name: .paymentEvidenceStatusDidChange, object: nil)
         } catch {
-            alertMessage = error.localizedDescription
+            alertMessage = languageService.localizedMessage(for: error)
             Log.error(error, category: .feed)
         }
     }

@@ -164,7 +164,10 @@ struct PostCardView: View {
             case .viewers:
                 ViewersListSheet(viewers: post.viewers, onUserTap: openProfileFromSheet)
             case .share:
-                SharePostSheet(post: post)
+                SharePostSheet(
+                    post: post,
+                    fallbackCaption: languageService.text(.feedShareFallbackCaption)
+                )
             }
         }
         .sheet(isPresented: $showCustomEmojiUpload) {
@@ -193,7 +196,7 @@ struct PostCardView: View {
             }
         }
         .alert(
-            "Đã gửi",
+            languageService.text(.friendsRelationSent),
             isPresented: Binding(
                 get: { reminderSentMessage != nil },
                 set: { if !$0 { reminderSentMessage = nil } }
@@ -244,26 +247,26 @@ struct PostCardView: View {
             Button {
                 activeSheet = .share
             } label: {
-                Label("Chia sẻ", systemImage: "square.and.arrow.up")
+                Label(languageService.text(.commonShare), systemImage: "square.and.arrow.up")
             }
 
             if isAuthor {
                 if post.canDelete {
-                    Button("Xóa bài", systemImage: "trash", role: .destructive) {
+                    Button(languageService.text(.feedPostDelete), systemImage: "trash", role: .destructive) {
                         onDelete()
                     }
                 } else {
                     Button {} label: {
                         Label(
-                            "Không thể xóa (đã có \(displayViewCount) lượt xem)",
+                            languageService.format(.feedPostDeleteBlockedViews, displayViewCount),
                             systemImage: "trash"
                         )
                     }
                     .disabled(true)
                 }
             }
-            Button("Báo cáo", systemImage: "flag") {}
-            Button("Ẩn", systemImage: "eye.slash") {}
+            Button(languageService.text(.feedPostReport), systemImage: "flag") {}
+            Button(languageService.text(.feedPostHide), systemImage: "eye.slash") {}
         } label: {
             Image(systemName: "ellipsis")
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
