@@ -125,10 +125,10 @@ public struct ExpenseListView: View {
             .splickSameTabTapBehavior(
                 scrollTopID: "expenseScrollTop",
                 scrollProxy: proxy,
-                refreshController: refreshController
-            ) {
-                tabBarScrollState?.isAtTop == true
-            }
+                refreshController: refreshController,
+                isAtTop: { tabBarScrollState?.isAtTop == true },
+                isEnabled: { isTabActive }
+            )
             .onAppear {
                 if captionQueryDraft.isEmpty {
                     captionQueryDraft = viewModel.filters.captionQuery
