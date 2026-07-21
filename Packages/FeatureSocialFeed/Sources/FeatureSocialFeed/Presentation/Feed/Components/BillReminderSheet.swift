@@ -256,6 +256,7 @@ private struct ReminderMessageEditor: View {
                 .environmentObject(emojiStore)
                 .environment(\.currentUserSummary, currentUserSummary)
                 .environment(\.customEmojiDependencies, customEmojiDependencies)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
             } else {
