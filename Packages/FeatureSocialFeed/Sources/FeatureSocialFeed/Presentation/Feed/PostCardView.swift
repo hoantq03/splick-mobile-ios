@@ -40,8 +40,12 @@ struct PostCardView: View {
     var onOpenDetail: ((Int) -> Void)? = nil
     /// Tap on a media item in detail opens fullscreen viewer at that index.
     var onMediaTap: ((Int) -> Void)? = nil
-    var onSendBillReminder: ((UUID, [UUID]?, String) async throws -> SendBillReminderResult)? = nil
+    var onSendBillReminder: (
+        (UUID, [UUID]?, String, [CommentSubmissionAttachment]) async throws
+            -> SendBillReminderResult
+    )? = nil
     var onSubmitPaymentEvidence: ((UUID, UUID, String?, [CommentSubmissionAttachment]) async throws -> Void)? = nil
+    var makeGifPickerViewModel: GifPickerViewModelFactory? = nil
     /// When true, the bill split section below media starts expanded (e.g. opened from Expenses tab).
     var initiallyExpandedBillSplit: Bool = false
     /// Restores carousel position when opening detail after swiping media in the feed.
@@ -374,23 +378,31 @@ struct PostCardView: View {
             if let bill = post.billSplit {
                 BillSplitSectionView(
                     bill: bill,
+                    groupId: post.groupId,
                     onUserTap: onUserTap,
                     initiallyExpanded: initiallyExpandedBillSplit,
                     onSendReminder: isAuthor
-                        ? { user, message in
-                            sendReminder(to: [user], message: message, singleName: user.displayName)
+                        ? { user, message, attachments in
+                            sendReminder(
+                                to: [user],
+                                message: message,
+                                attachments: attachments,
+                                singleName: user.displayName
+                            )
                         }
                         : nil,
                     onSendAllReminders: isAuthor
-                        ? { users, message in
+                        ? { users, message, attachments in
                             sendReminder(
                                 to: users,
                                 message: message,
+                                attachments: attachments,
                                 singleName: nil,
                                 count: users.count
                             )
                         }
                         : nil,
+                    makeGifPickerViewModel: makeGifPickerViewModel,
                     paymentStatus: currentUserSplitLine?.paymentStatus,
                     evidenceWasRejected: currentUserSplitLine?.paymentStatus == .unpaid
                         && currentUserSplitLine?.lastRejectedAt != nil,
@@ -575,6 +587,7 @@ struct PostCardView: View {
     private func sendReminder(
         to users: [UserSummary],
         message: String,
+        attachments: [CommentSubmissionAttachment],
         singleName: String?,
         count: Int? = nil
     ) {
@@ -584,7 +597,8 @@ struct PostCardView: View {
                 let result = try await onSendBillReminder(
                     post.id,
                     users.map(\.id),
-                    message
+                    message,
+                    attachments
                 )
                 if let singleName {
                     reminderSentMessage = languageService.format(.feedBillReminderSentSingle, singleName)
