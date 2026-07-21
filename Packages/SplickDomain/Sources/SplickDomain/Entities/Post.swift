@@ -24,6 +24,8 @@ public struct PostBillSplitLine: Identifiable, Codable, Equatable, Sendable {
     public let paymentStatus: PaymentSplitStatus
     public let latestEvidenceCommentId: UUID?
     public let lastRejectedAt: Date?
+    /// Total payment reminders (manual + auto) for this split.
+    public let reminderCount: Int
 
     public init(
         id: UUID = UUID(),
@@ -32,7 +34,8 @@ public struct PostBillSplitLine: Identifiable, Codable, Equatable, Sendable {
         isPaid: Bool = false,
         paymentStatus: PaymentSplitStatus? = nil,
         latestEvidenceCommentId: UUID? = nil,
-        lastRejectedAt: Date? = nil
+        lastRejectedAt: Date? = nil,
+        reminderCount: Int = 0
     ) {
         self.id = id
         self.user = user
@@ -45,6 +48,7 @@ public struct PostBillSplitLine: Identifiable, Codable, Equatable, Sendable {
         }
         self.latestEvidenceCommentId = latestEvidenceCommentId
         self.lastRejectedAt = lastRejectedAt
+        self.reminderCount = max(reminderCount, 0)
     }
 }
 
@@ -143,7 +147,8 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         comments: [PostComment]? = nil,
         viewCount: Int? = nil,
         viewers: [UserSummary]? = nil,
-        mediaItems: [PostMediaItem]? = nil
+        mediaItems: [PostMediaItem]? = nil,
+        billSplit: PostBillSplit? = nil
     ) -> Post {
         Post(
             id: id,
@@ -163,10 +168,64 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
             companions: companions,
             feedKind: feedKind,
             checkInPlace: checkInPlace,
-            billSplit: billSplit,
+            billSplit: billSplit ?? self.billSplit,
             viewCount: viewCount ?? self.viewCount,
             viewers: viewers ?? self.viewers,
             audience: audience
+        )
+    }
+
+    /// Bumps reminder counts for unpaid targets after a successful remind action.
+    public func incrementingBillReminders(for userIds: Set<UUID>) -> Post {
+        guard let bill = billSplit, !userIds.isEmpty else { return self }
+        let updatedSplits = bill.splits.map { line -> PostBillSplitLine in
+            guard !line.isPaid, userIds.contains(line.user.id) else { return line }
+            return PostBillSplitLine(
+                id: line.id,
+                user: line.user,
+                amount: line.amount,
+                isPaid: line.isPaid,
+                paymentStatus: line.paymentStatus,
+                latestEvidenceCommentId: line.latestEvidenceCommentId,
+                lastRejectedAt: line.lastRejectedAt,
+                reminderCount: line.reminderCount + 1
+            )
+        }
+        return updating(
+            billSplit: PostBillSplit(
+                totalAmount: bill.totalAmount,
+                currency: bill.currency,
+                splits: updatedSplits
+            )
+        )
+    }
+
+    /// Keeps the higher reminder count per split when merging a local optimistic update.
+    public func mergingBillReminderCounts(from other: Post) -> Post {
+        guard let bill = billSplit, let otherBill = other.billSplit else { return self }
+        let otherCounts = Dictionary(
+            uniqueKeysWithValues: otherBill.splits.map { ($0.id, $0.reminderCount) }
+        )
+        let mergedSplits = bill.splits.map { line -> PostBillSplitLine in
+            let mergedCount = max(line.reminderCount, otherCounts[line.id] ?? 0)
+            guard mergedCount != line.reminderCount else { return line }
+            return PostBillSplitLine(
+                id: line.id,
+                user: line.user,
+                amount: line.amount,
+                isPaid: line.isPaid,
+                paymentStatus: line.paymentStatus,
+                latestEvidenceCommentId: line.latestEvidenceCommentId,
+                lastRejectedAt: line.lastRejectedAt,
+                reminderCount: mergedCount
+            )
+        }
+        return updating(
+            billSplit: PostBillSplit(
+                totalAmount: bill.totalAmount,
+                currency: bill.currency,
+                splits: mergedSplits
+            )
         )
     }
 

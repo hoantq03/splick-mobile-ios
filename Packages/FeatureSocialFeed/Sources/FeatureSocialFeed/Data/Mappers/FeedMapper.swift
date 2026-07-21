@@ -176,7 +176,8 @@ enum FeedMapper {
             isPaid: line.isPaid ?? false,
             paymentStatus: paymentStatus,
             latestEvidenceCommentId: line.latestEvidenceCommentId,
-            lastRejectedAt: line.lastRejectedAt
+            lastRejectedAt: line.lastRejectedAt,
+            reminderCount: line.reminderCount ?? 0
         )
     }
 }

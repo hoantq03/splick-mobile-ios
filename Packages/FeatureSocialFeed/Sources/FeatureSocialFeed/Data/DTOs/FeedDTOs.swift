@@ -88,6 +88,7 @@ struct PostBillSplitLineDTO: Decodable {
     let paymentStatus: String?
     let latestEvidenceCommentId: UUID?
     let lastRejectedAt: Date?
+    let reminderCount: Int?
 }
 
 struct AuthorDTO: Decodable {
