@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import DesignSystem
+import Localization
 
 // Segment order: Streak | Feed | Album  (left → right)
 private let feedSegmentOrder: [FeedContentSegment] = [.streak, .feed, .album]
@@ -34,9 +35,17 @@ private final class _PagerActivityState: ObservableObject {
 
 struct FeedContentPager<Feed: View, Album: View, Streak: View>: View {
     @Binding var selection: FeedContentSegment
+    var sameTabTapHandlingEnabled: Bool = true
     @ViewBuilder var feed: () -> Feed
     @ViewBuilder var album: () -> Album
     @ViewBuilder var streak: () -> Streak
+
+    /// UIHostingController pages don't inherit the outer SwiftUI environment — forward keys explicitly.
+    @EnvironmentObject private var languageService: LanguageService
+    @Environment(\.tabBarScrollState) private var tabBarScrollState
+    @Environment(\.feedSegmentScrollState) private var feedSegmentScrollState
+    @Environment(\.pullToRefreshActive) private var pullToRefreshActive
+    @Environment(\.feedTabIsActive) private var feedTabIsActive
 
     var body: some View {
         GeometryReader { proxy in
@@ -48,14 +57,57 @@ struct FeedContentPager<Feed: View, Album: View, Streak: View>: View {
                 width: w,
                 height: h,
                 activeSelection: selection,
-                feed: feed,
-                album: album,
-                streak: streak
+                feed: {
+                    feed().modifier(
+                        pagerEnvironment(sameTabTapHandlingEnabled: sameTabTapHandlingEnabled && selection == .feed)
+                    )
+                },
+                album: {
+                    album().modifier(
+                        pagerEnvironment(sameTabTapHandlingEnabled: false)
+                    )
+                },
+                streak: {
+                    streak().modifier(
+                        pagerEnvironment(sameTabTapHandlingEnabled: false)
+                    )
+                }
             )
             .frame(width: w, height: h)
         }
         .ignoresSafeArea(edges: [.top, .bottom])
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func pagerEnvironment(sameTabTapHandlingEnabled: Bool) -> _PagerEnvironmentForwarding {
+        _PagerEnvironmentForwarding(
+            languageService: languageService,
+            tabBarScrollState: tabBarScrollState,
+            feedSegmentScrollState: feedSegmentScrollState,
+            sameTabTapHandlingEnabled: sameTabTapHandlingEnabled,
+            pullToRefreshActive: pullToRefreshActive,
+            feedTabIsActive: feedTabIsActive
+        )
+    }
+}
+
+/// Re-applies environment values lost when embedding pages in `UIHostingController`.
+private struct _PagerEnvironmentForwarding: ViewModifier {
+    let languageService: LanguageService
+    let tabBarScrollState: TabBarScrollState?
+    let feedSegmentScrollState: FeedSegmentScrollState?
+    let sameTabTapHandlingEnabled: Bool
+    let pullToRefreshActive: Bool
+    let feedTabIsActive: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .environmentObject(languageService)
+            .environment(\.tabBarScrollState, tabBarScrollState)
+            .environment(\.feedSegmentScrollState, feedSegmentScrollState)
+            .environment(\.sameTabTapHandlingEnabled, sameTabTapHandlingEnabled)
+            .environment(\.pullToRefreshActive, pullToRefreshActive)
+            .environment(\.feedTabIsActive, feedTabIsActive)
     }
 }
 

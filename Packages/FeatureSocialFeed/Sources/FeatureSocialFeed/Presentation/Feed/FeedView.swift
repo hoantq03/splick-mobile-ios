@@ -1,4 +1,6 @@
 import SwiftUI
+import Combine
+import UIKit
 import DesignSystem
 import Common
 import Localization
@@ -21,6 +23,7 @@ public struct FeedView: View {
     @Environment(\.currentUserSummary) private var currentUserSummary
     @Environment(\.notificationsPresented) private var notificationsPresented
     @Environment(\.tabBarScrollState) private var tabBarScrollState
+    @Environment(\.sameTabTapHandlingEnabled) private var sameTabTapHandlingEnabled
     private let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
     private let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol?
     private let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
@@ -65,7 +68,10 @@ public struct FeedView: View {
 
     public var body: some View {
         NavigationStack(path: $navigationPath) {
-            FeedContentPager(selection: $selectedSegment) {
+            FeedContentPager(
+                selection: $selectedSegment,
+                sameTabTapHandlingEnabled: sameTabTapHandlingEnabled && navigationPath.isEmpty
+            ) {
                 FeedPrimaryPage(
                     viewModel: viewModel,
                     navigationPath: $navigationPath,
@@ -177,6 +183,9 @@ public struct FeedView: View {
             }
         }
         .environment(\.feedTabIsActive, isTabActive && selectedSegment == .feed)
+        .onReceive(sameTabTapPublisher) { _ in
+            handleSameTabTap()
+        }
         .sheet(item: $profileRoute) { route in
             if let profileDependencies {
                 FriendUserProfileView(
@@ -195,6 +204,34 @@ public struct FeedView: View {
     private func openProfile(for user: UserSummary) {
         guard user.id != currentUserSummary?.id else { return }
         profileRoute = ProfileRoute(user: user)
+    }
+
+    private func handleSameTabTap() {
+        guard sameTabTapHandlingEnabled, isTabActive else { return }
+
+        // Detail → root first (Instagram-style).
+        if !navigationPath.isEmpty {
+            navigationPath = NavigationPath()
+            tabBarScrollState?.show()
+            return
+        }
+
+        guard selectedSegment == .feed else { return }
+
+        // NotificationCenter crosses UIHostingController boundaries reliably.
+        if tabBarScrollState?.isAtTop ?? true {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            // Single path: hosted scroll view shows spinner and calls loadFeed.
+            NotificationCenter.default.post(name: FeedSameTabNotification.refresh, object: nil)
+        } else {
+            NotificationCenter.default.post(name: FeedSameTabNotification.scrollToTop, object: nil)
+            tabBarScrollState?.reset()
+        }
+    }
+
+    private var sameTabTapPublisher: AnyPublisher<Void, Never> {
+        tabBarScrollState?.sameTabTapSubject.eraseToAnyPublisher()
+            ?? Empty().eraseToAnyPublisher()
     }
 }
 
