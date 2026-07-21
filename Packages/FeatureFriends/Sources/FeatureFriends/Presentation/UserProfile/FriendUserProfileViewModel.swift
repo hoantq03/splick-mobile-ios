@@ -20,11 +20,20 @@ public final class FriendUserProfileViewModel: ObservableObject {
     @Published var showPaymentSheet = false
     @Published var showRemoveConfirm = false
     @Published var showBlockConfirm = false
+    @Published private(set) var posts: [Post] = []
+    @Published private(set) var isLoadingPosts = false
+    @Published private(set) var isLoadingMorePosts = false
+    @Published private(set) var postsError: String?
 
     public var mode: FriendProfileMode { friendStatus.profileMode }
     public var isBotProfile: Bool { SplickBot.isBot(user.id) }
+    public var isOwnProfile: Bool { user.id == currentUserId }
+    public var canLoadMorePosts: Bool { hasMorePosts && !isLoadingMorePosts }
 
+    private static let postsPageSize = 20
+    private let currentUserId: UUID?
     private let fetchUserProfileUseCase: FetchUserProfileUseCaseProtocol?
+    private let fetchUserPostsUseCase: FetchUserPostsUseCaseProtocol?
     private let fetchFriendPaymentProfileUseCase: FetchFriendPaymentProfileUseCaseProtocol?
     private let addFriendUseCase: AddFriendUseCaseProtocol?
     private let fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol?
@@ -36,11 +45,15 @@ public final class FriendUserProfileViewModel: ObservableObject {
     private let blockUserUseCase: BlockUserUseCaseProtocol?
     private let unblockUserUseCase: UnblockUserUseCaseProtocol?
     private let onRelationshipChanged: (UUID, FriendRelationStatus) -> Void
+    private var postsPage = 0
+    private var hasMorePosts = true
 
     public init(
         user: UserSummary,
+        currentUserId: UUID? = nil,
         initialFriendStatus: FriendRelationStatus = .none,
         fetchUserProfileUseCase: FetchUserProfileUseCaseProtocol?,
+        fetchUserPostsUseCase: FetchUserPostsUseCaseProtocol? = nil,
         fetchFriendPaymentProfileUseCase: FetchFriendPaymentProfileUseCaseProtocol? = nil,
         addFriendUseCase: AddFriendUseCaseProtocol? = nil,
         fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol? = nil,
@@ -54,8 +67,10 @@ public final class FriendUserProfileViewModel: ObservableObject {
         onRelationshipChanged: @escaping (UUID, FriendRelationStatus) -> Void = { _, _ in }
     ) {
         self.user = user
+        self.currentUserId = currentUserId
         self.friendStatus = initialFriendStatus
         self.fetchUserProfileUseCase = fetchUserProfileUseCase
+        self.fetchUserPostsUseCase = fetchUserPostsUseCase
         self.fetchFriendPaymentProfileUseCase = fetchFriendPaymentProfileUseCase
         self.addFriendUseCase = addFriendUseCase
         self.fetchIncomingFriendRequestsUseCase = fetchIncomingFriendRequestsUseCase
@@ -68,6 +83,57 @@ public final class FriendUserProfileViewModel: ObservableObject {
         self.unblockUserUseCase = unblockUserUseCase
         self.onRelationshipChanged = onRelationshipChanged
         self.nicknameDraft = user.displayName
+    }
+
+    func loadPostsIfNeeded() async {
+        guard posts.isEmpty, postsError == nil else { return }
+        await refreshPosts()
+    }
+
+    func refreshPosts() async {
+        guard !isBotProfile, let fetchUserPostsUseCase, !isLoadingPosts else { return }
+        isLoadingPosts = true
+        postsError = nil
+        defer { isLoadingPosts = false }
+
+        do {
+            let firstPage = try await fetchUserPostsUseCase.execute(authorId: user.id, page: 0)
+            guard !Task.isCancelled else { return }
+            posts = firstPage
+            postsPage = 0
+            hasMorePosts = firstPage.count == Self.postsPageSize
+        } catch is CancellationError {
+            return
+        } catch {
+            postsError = error.localizedDescription
+        }
+    }
+
+    func loadMorePostsIfNeeded(currentPostId: UUID) async {
+        guard currentPostId == posts.last?.id,
+              canLoadMorePosts,
+              let fetchUserPostsUseCase else { return }
+
+        isLoadingMorePosts = true
+        postsError = nil
+        defer { isLoadingMorePosts = false }
+
+        do {
+            let nextPageIndex = postsPage + 1
+            let nextPage = try await fetchUserPostsUseCase.execute(
+                authorId: user.id,
+                page: nextPageIndex
+            )
+            guard !Task.isCancelled else { return }
+            let existingIds = Set(posts.map(\.id))
+            posts.append(contentsOf: nextPage.filter { !existingIds.contains($0.id) })
+            postsPage = nextPageIndex
+            hasMorePosts = nextPage.count == Self.postsPageSize
+        } catch is CancellationError {
+            return
+        } catch {
+            postsError = error.localizedDescription
+        }
     }
 
     func loadProfile() async {

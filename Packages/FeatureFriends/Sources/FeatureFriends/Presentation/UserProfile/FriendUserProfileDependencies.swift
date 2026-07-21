@@ -3,6 +3,7 @@ import SplickDomain
 
 public struct FriendUserProfileDependencies {
     public let fetchUserProfileUseCase: FetchUserProfileUseCaseProtocol
+    public let fetchUserPostsUseCase: FetchUserPostsUseCaseProtocol?
     public let fetchFriendPaymentProfileUseCase: FetchFriendPaymentProfileUseCaseProtocol
     public let addFriendUseCase: AddFriendUseCaseProtocol
     public let fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol
@@ -16,6 +17,7 @@ public struct FriendUserProfileDependencies {
 
     public init(
         fetchUserProfileUseCase: FetchUserProfileUseCaseProtocol,
+        fetchUserPostsUseCase: FetchUserPostsUseCaseProtocol? = nil,
         fetchFriendPaymentProfileUseCase: FetchFriendPaymentProfileUseCaseProtocol,
         addFriendUseCase: AddFriendUseCaseProtocol,
         fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol,
@@ -28,6 +30,7 @@ public struct FriendUserProfileDependencies {
         unblockUserUseCase: UnblockUserUseCaseProtocol
     ) {
         self.fetchUserProfileUseCase = fetchUserProfileUseCase
+        self.fetchUserPostsUseCase = fetchUserPostsUseCase
         self.fetchFriendPaymentProfileUseCase = fetchFriendPaymentProfileUseCase
         self.addFriendUseCase = addFriendUseCase
         self.fetchIncomingFriendRequestsUseCase = fetchIncomingFriendRequestsUseCase
@@ -43,13 +46,16 @@ public struct FriendUserProfileDependencies {
     @MainActor
     public func makeViewModel(
         user: UserSummary,
+        currentUserId: UUID? = nil,
         initialFriendStatus: FriendRelationStatus = .none,
         onRelationshipChanged: @escaping (UUID, FriendRelationStatus) -> Void = { _, _ in }
     ) -> FriendUserProfileViewModel {
         FriendUserProfileViewModel(
             user: user,
+            currentUserId: currentUserId,
             initialFriendStatus: initialFriendStatus,
             fetchUserProfileUseCase: fetchUserProfileUseCase,
+            fetchUserPostsUseCase: fetchUserPostsUseCase,
             fetchFriendPaymentProfileUseCase: fetchFriendPaymentProfileUseCase,
             addFriendUseCase: addFriendUseCase,
             fetchIncomingFriendRequestsUseCase: fetchIncomingFriendRequestsUseCase,
