@@ -301,7 +301,14 @@ struct MainTabView: View {
             currentUserId: appState.currentUser?.id,
             isTabActive: appState.selectedTab == .expenses,
             userSearchUseCase: container.expenseFriendSearchUseCase,
-            profileDependencies: container.friendUserProfileDependencies
+            profileDependencies: container.friendUserProfileDependencies,
+            friendListViewModel: container.expenseFriendListViewModel,
+            makeFriendDetailViewModel: { debt in
+                container.makeExpenseFriendDetailViewModel(
+                    debt: debt,
+                    currentUserId: appState.currentUser?.id
+                )
+            }
         )
         .environment(\.sameTabTapHandlingEnabled, appState.selectedTab == .expenses)
     }

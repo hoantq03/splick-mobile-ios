@@ -520,6 +520,51 @@ final class DependencyContainer: ObservableObject {
         FetchDebtSummaryUseCase(repository: expenseRepository)
     }()
 
+    lazy var fetchCounterpartyExpensesUseCase: FetchCounterpartyExpensesUseCaseProtocol = {
+        FetchCounterpartyExpensesUseCase(repository: expenseRepository)
+    }()
+
+    lazy var fetchNettingSummaryUseCase: FetchNettingSummaryUseCaseProtocol = {
+        FetchNettingSummaryUseCase(repository: expenseRepository)
+    }()
+
+    lazy var submitBulkSettlementUseCase: SubmitBulkSettlementUseCaseProtocol = {
+        SubmitBulkSettlementUseCase(repository: expenseRepository)
+    }()
+
+    lazy var approveBulkSettlementUseCase: ApproveBulkSettlementUseCaseProtocol = {
+        ApproveBulkSettlementUseCase(repository: expenseRepository)
+    }()
+
+    lazy var rejectBulkSettlementUseCase: RejectBulkSettlementUseCaseProtocol = {
+        RejectBulkSettlementUseCase(repository: expenseRepository)
+    }()
+
+    lazy var expenseFriendListViewModel = ExpenseFriendListViewModel(
+        fetchDebtSummaryUseCase: fetchDebtSummaryUseCase,
+        languageService: languageService
+    )
+
+    func makeExpenseFriendDetailViewModel(
+        debt: DebtSummary,
+        currentUserId: UUID?
+    ) -> ExpenseFriendDetailViewModel {
+        ExpenseFriendDetailViewModel(
+            counterparty: debt.user,
+            currentUserId: currentUserId,
+            fetchExpensesUseCase: fetchCounterpartyExpensesUseCase,
+            fetchNettingUseCase: fetchNettingSummaryUseCase,
+            submitUseCase: submitBulkSettlementUseCase,
+            approveUseCase: approveBulkSettlementUseCase,
+            rejectUseCase: rejectBulkSettlementUseCase,
+            uploadEvidence: { [weak self] data, mimeType in
+                guard let self else { throw URLError(.cancelled) }
+                return try await self.uploadCommentAttachment(data: data, mimeType: mimeType).url
+            },
+            languageService: languageService
+        )
+    }
+
     // MARK: - Notification
 
     private lazy var notificationRepository: NotificationRepositoryProtocol = {
@@ -801,6 +846,10 @@ final class DependencyContainer: ObservableObject {
         streakViewModel = makeStreakViewModel()
         notificationListViewModel = makeNotificationListViewModel()
         expenseListViewModel = makeExpenseListViewModel()
+        expenseFriendListViewModel = ExpenseFriendListViewModel(
+            fetchDebtSummaryUseCase: fetchDebtSummaryUseCase,
+            languageService: languageService
+        )
         conversationListViewModel = makeConversationListViewModel()
     }
 

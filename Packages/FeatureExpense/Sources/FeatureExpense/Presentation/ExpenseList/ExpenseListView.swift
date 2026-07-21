@@ -11,6 +11,13 @@ private struct ExpenseUserProfileRoute: Identifiable {
     var id: UUID { user.id }
 }
 
+private enum ExpenseListMode: String, CaseIterable, Identifiable {
+    case all
+    case friends
+
+    var id: String { rawValue }
+}
+
 public struct ExpenseListView: View {
     @ObservedObject private var viewModel: ExpenseListViewModel
     @StateObject private var friendSearchViewModel: ExpenseUserSearchViewModel
@@ -19,6 +26,7 @@ public struct ExpenseListView: View {
     @State private var captionQueryDraft = ""
     @State private var friendQueryDraft = ""
     @State private var profileRoute: ExpenseUserProfileRoute?
+    @State private var listMode: ExpenseListMode = .all
     @State private var refreshController = SplickRefreshController()
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.tabBarScrollState) private var tabBarScrollState
@@ -28,6 +36,8 @@ public struct ExpenseListView: View {
     private let currentUserId: UUID?
     private let isTabActive: Bool
     private let profileDependencies: FriendUserProfileDependencies?
+    private let friendListViewModel: ExpenseFriendListViewModel?
+    private let makeFriendDetailViewModel: ((DebtSummary) -> ExpenseFriendDetailViewModel)?
 
     private let overviewToggleAnimation = Animation.spring(response: 0.48, dampingFraction: 0.86)
     private let listFilterAnimation = Animation.spring(response: 0.42, dampingFraction: 0.86)
@@ -37,7 +47,9 @@ public struct ExpenseListView: View {
         currentUserId: UUID? = nil,
         isTabActive: Bool = true,
         userSearchUseCase: UserSearchUseCaseProtocol? = nil,
-        profileDependencies: FriendUserProfileDependencies? = nil
+        profileDependencies: FriendUserProfileDependencies? = nil,
+        friendListViewModel: ExpenseFriendListViewModel? = nil,
+        makeFriendDetailViewModel: ((DebtSummary) -> ExpenseFriendDetailViewModel)? = nil
     ) {
         self.viewModel = viewModel
         _friendSearchViewModel = StateObject(
@@ -46,33 +58,25 @@ public struct ExpenseListView: View {
         self.currentUserId = currentUserId
         self.isTabActive = isTabActive
         self.profileDependencies = profileDependencies
+        self.friendListViewModel = friendListViewModel
+        self.makeFriendDetailViewModel = makeFriendDetailViewModel
     }
 
     public var body: some View {
         NavigationStack {
-            Group {
-                switch viewModel.state {
-                case .idle, .loading:
-                    LoadingView(message: languageService.text(.expenseLoading))
-
-                case .loaded where viewModel.expenses.isEmpty:
-                    EmptyStateView(
-                        icon: "dollarsign.circle",
-                        title: languageService.text(.expenseEmptyTitle),
-                        message: languageService.text(.expenseEmptyMessage),
-                        actionTitle: languageService.text(.expenseEmptyAction)
-                    ) {
-                        openPostCapture()
+            VStack(spacing: 0) {
+                if friendListViewModel != nil, makeFriendDetailViewModel != nil {
+                    Picker("", selection: $listMode) {
+                        Text(languageService.text(.expenseModeAll)).tag(ExpenseListMode.all)
+                        Text(languageService.text(.expenseModeFriends)).tag(ExpenseListMode.friends)
                     }
-
-                case .loaded:
-                    expenseContent
-
-                case .failed(let message):
-                    ErrorView(message: message) {
-                        Task { await viewModel.load() }
-                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal, SplickTheme.Spacing.md)
+                    .padding(.vertical, SplickTheme.Spacing.xs)
+                    .accessibilityLabel(languageService.text(.expenseFriendsTitle))
                 }
+
+                selectedContent
             }
             .splickTabScreenHeader(languageService.text(.expenseTitle))
         }
@@ -101,6 +105,43 @@ public struct ExpenseListView: View {
                         currentUserId: currentUserId
                     )
                 )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var selectedContent: some View {
+        if listMode == .friends,
+           let friendListViewModel,
+           let makeFriendDetailViewModel {
+            ExpenseFriendListView(
+                viewModel: friendListViewModel,
+                makeDetailViewModel: makeFriendDetailViewModel
+            )
+        } else {
+            Group {
+                switch viewModel.state {
+                case .idle, .loading:
+                    LoadingView(message: languageService.text(.expenseLoading))
+
+                case .loaded where viewModel.expenses.isEmpty:
+                    EmptyStateView(
+                        icon: "dollarsign.circle",
+                        title: languageService.text(.expenseEmptyTitle),
+                        message: languageService.text(.expenseEmptyMessage),
+                        actionTitle: languageService.text(.expenseEmptyAction)
+                    ) {
+                        openPostCapture()
+                    }
+
+                case .loaded:
+                    expenseContent
+
+                case .failed(let message):
+                    ErrorView(message: message) {
+                        Task { await viewModel.load() }
+                    }
+                }
             }
         }
     }
