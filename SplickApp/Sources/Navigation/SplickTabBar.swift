@@ -44,9 +44,9 @@ private struct SidePanelMaskShape: Shape {
 private struct ModernSplickTabBar: View {
     @Binding var selectedTab: Tab
     let badgeCounts: TabBadgeCounts
+    let tabBarScrollState: TabBarScrollState
 
     @EnvironmentObject private var languageService: LanguageService
-    @Environment(\.tabBarScrollState) private var tabBarScrollState
     @State private var tappedTab: Tab?
 
     private let cameraSize: CGFloat = 63
@@ -111,7 +111,7 @@ private struct ModernSplickTabBar: View {
         let isSelected = selectedTab == .camera
         return Button {
             selectedTab = .camera
-            tabBarScrollState?.show()
+            tabBarScrollState.show()
         } label: {
             Circle()
                 .fill(SplickTheme.Colors.tabCameraRing)
@@ -133,11 +133,11 @@ private struct ModernSplickTabBar: View {
         return Button {
             tappedTab = tab
             if selectedTab == tab {
-                tabBarScrollState?.handleSameTabTap()
+                tabBarScrollState.handleSameTabTap()
             } else {
                 selectedTab = tab
             }
-            tabBarScrollState?.show()
+            tabBarScrollState.show()
         } label: {
             tabLabel(tab: tab, isSelected: isSelected, badge: badge)
         }
@@ -184,9 +184,9 @@ private struct ModernSplickTabBar: View {
 private struct LegacySplickTabBar: View {
     @Binding var selectedTab: Tab
     let badgeCounts: TabBadgeCounts
+    let tabBarScrollState: TabBarScrollState
 
     @EnvironmentObject private var languageService: LanguageService
-    @Environment(\.tabBarScrollState) private var tabBarScrollState
     @State private var tappedTab: Tab?
 
     private let barHeight: CGFloat = 56
@@ -213,7 +213,7 @@ private struct LegacySplickTabBar: View {
     private var cameraButton: some View {
         Button {
             selectedTab = .camera
-            tabBarScrollState?.show()
+            tabBarScrollState.show()
         } label: {
             Image(systemName: "camera.fill")
                 .font(.system(size: 22, weight: .semibold))
@@ -231,11 +231,11 @@ private struct LegacySplickTabBar: View {
         return Button {
             tappedTab = tab
             if selectedTab == tab {
-                tabBarScrollState?.handleSameTabTap()
+                tabBarScrollState.handleSameTabTap()
             } else {
                 selectedTab = tab
             }
-            tabBarScrollState?.show()
+            tabBarScrollState.show()
         } label: {
             VStack(spacing: 2) {
                 ZStack(alignment: .topTrailing) {
@@ -275,6 +275,7 @@ private struct LegacySplickTabBar: View {
 struct SplickTabBar: View, Equatable {
     @Binding var selectedTab: Tab
     let badgeCounts: TabBadgeCounts
+    let tabBarScrollState: TabBarScrollState
 
     static func == (lhs: SplickTabBar, rhs: SplickTabBar) -> Bool {
         lhs.selectedTab == rhs.selectedTab
@@ -284,9 +285,17 @@ struct SplickTabBar: View, Equatable {
     var body: some View {
         Group {
             if #available(iOS 26.0, *) {
-                ModernSplickTabBar(selectedTab: $selectedTab, badgeCounts: badgeCounts)
+                ModernSplickTabBar(
+                    selectedTab: $selectedTab,
+                    badgeCounts: badgeCounts,
+                    tabBarScrollState: tabBarScrollState
+                )
             } else {
-                LegacySplickTabBar(selectedTab: $selectedTab, badgeCounts: badgeCounts)
+                LegacySplickTabBar(
+                    selectedTab: $selectedTab,
+                    badgeCounts: badgeCounts,
+                    tabBarScrollState: tabBarScrollState
+                )
             }
         }
     }

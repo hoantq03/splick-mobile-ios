@@ -180,7 +180,8 @@ struct MainTabView: View {
             .overlay(alignment: .bottom) {
                 SplickTabBar(
                     selectedTab: $appState.selectedTab,
-                    badgeCounts: badgeCounts
+                    badgeCounts: badgeCounts,
+                    tabBarScrollState: tabBarScrollState
                 )
                 .equatable()
                 .opacity(tabBarOpacity)
@@ -276,6 +277,7 @@ struct MainTabView: View {
                 )
             }
         )
+        .environment(\.sameTabTapHandlingEnabled, appState.selectedTab == .feed)
     }
 
     @ViewBuilder
@@ -287,6 +289,7 @@ struct MainTabView: View {
             userSearchUseCase: container.expenseFriendSearchUseCase,
             profileDependencies: container.friendUserProfileDependencies
         )
+        .environment(\.sameTabTapHandlingEnabled, appState.selectedTab == .expenses)
     }
 
     @ViewBuilder
@@ -338,11 +341,13 @@ struct MainTabView: View {
         )
         .environmentObject(container.customEmojiStore)
         .environment(\.customEmojiDependencies, container.customEmojiDependencies)
+        .environment(\.sameTabTapHandlingEnabled, appState.selectedTab == .friends)
     }
 
     @ViewBuilder
     private var messagesTabContent: some View {
         MessagingTabRoot()
+            .environment(\.sameTabTapHandlingEnabled, appState.selectedTab == .messages)
     }
 
     @ViewBuilder
