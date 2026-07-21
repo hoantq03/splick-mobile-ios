@@ -42,14 +42,17 @@ final class MockUserSearchUseCase: UserSearchUseCaseProtocol, Sendable {
 }
 
 #Preview("Expense List") {
-    ExpenseListView(
+    let previewLanguageService = LanguageService(userDefaults: UserDefaultsService())
+    return ExpenseListView(
         viewModel: ExpenseListViewModel(
             fetchExpensesUseCase: MockFetchExpensesUseCase(),
             fetchDebtSummaryUseCase: MockFetchDebtSummaryUseCase(),
+            languageService: previewLanguageService,
             currentUserId: PreviewData.currentUser.id
         ),
         currentUserId: PreviewData.currentUser.id
     )
+    .environmentObject(previewLanguageService)
 }
 
 #Preview("Create Expense") {

@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Common
+import Localization
 import SplickDomain
 
 @MainActor
@@ -21,6 +22,7 @@ public final class ExpenseListViewModel: ObservableObject {
 
     private let fetchExpensesUseCase: FetchExpensesUseCaseProtocol
     private let fetchDebtSummaryUseCase: FetchDebtSummaryUseCaseProtocol
+    private let languageService: LanguageService
     private let onBadgeCountsChanged: (() async -> Void)?
     private let onDataLoaded: (([DebtSummary], [Expense], UUID?) async -> Void)?
     private let groupId: UUID?
@@ -33,6 +35,7 @@ public final class ExpenseListViewModel: ObservableObject {
     public init(
         fetchExpensesUseCase: FetchExpensesUseCaseProtocol,
         fetchDebtSummaryUseCase: FetchDebtSummaryUseCaseProtocol,
+        languageService: LanguageService,
         groupId: UUID? = nil,
         currentUserId: UUID? = nil,
         onBadgeCountsChanged: (() async -> Void)? = nil,
@@ -40,6 +43,7 @@ public final class ExpenseListViewModel: ObservableObject {
     ) {
         self.fetchExpensesUseCase = fetchExpensesUseCase
         self.fetchDebtSummaryUseCase = fetchDebtSummaryUseCase
+        self.languageService = languageService
         self.onBadgeCountsChanged = onBadgeCountsChanged
         self.onDataLoaded = onDataLoaded
         self.groupId = groupId
@@ -214,23 +218,10 @@ public final class ExpenseListViewModel: ObservableObject {
             if !expenses.isEmpty {
                 state = .loaded(expenses)
             } else {
-                state = .failed(Self.userFacingMessage(for: error))
+                state = .failed(languageService.localizedMessage(for: error))
             }
             Log.error(error, category: .expense)
         }
-    }
-
-    private static func userFacingMessage(for error: Error) -> String {
-        if let storage = error as? StorageError {
-            return storage.userMessage
-        }
-        if let appError = error as? AppError, case .storage(let storage) = appError {
-            return storage.userMessage
-        }
-        if let auth = error as? AuthError {
-            return auth.userMessage
-        }
-        return error.localizedDescription
     }
 
     func loadMore() async {
@@ -286,7 +277,7 @@ public final class ExpenseListViewModel: ObservableObject {
         mutateFilters {
             $0.debtStatus = .all
             $0.selectedUser = nil
-            $0.dateFrom = ExpenseListFilters.defaultWeekStart
+            $0.dateFrom = ExpenseListFilters.defaultMonthStart
             $0.dateTo = nil
         }
     }
@@ -298,11 +289,7 @@ public final class ExpenseListViewModel: ObservableObject {
                 $0.dateFrom = ExpenseListFilters.defaultWeekStart
                 $0.dateTo = nil
             case .month:
-                $0.dateFrom = Calendar.current.date(
-                    byAdding: .day,
-                    value: -30,
-                    to: Calendar.current.startOfDay(for: .now)
-                )
+                $0.dateFrom = ExpenseListFilters.defaultMonthStart
                 $0.dateTo = nil
             case .all:
                 $0.dateFrom = nil
@@ -315,7 +302,7 @@ public final class ExpenseListViewModel: ObservableObject {
         mutateFilters {
             $0.captionQuery = ""
             $0.selectedUser = nil
-            $0.dateFrom = ExpenseListFilters.defaultWeekStart
+            $0.dateFrom = ExpenseListFilters.defaultMonthStart
             $0.dateTo = nil
         }
     }

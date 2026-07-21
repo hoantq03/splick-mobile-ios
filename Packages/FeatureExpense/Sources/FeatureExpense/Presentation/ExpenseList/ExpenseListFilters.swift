@@ -45,11 +45,19 @@ public struct ExpenseListFilters: Equatable {
         )
     }
 
+    /// Start of the current calendar month (local timezone).
+    public static var defaultMonthStart: Date? {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: .now)
+        let components = calendar.dateComponents([.year, .month], from: today)
+        return calendar.date(from: components)
+    }
+
     public init(
         captionQuery: String = "",
         debtStatus: ExpenseDebtFilter = .all,
         selectedUser: UserSummary? = nil,
-        dateFrom: Date? = ExpenseListFilters.defaultWeekStart,
+        dateFrom: Date? = ExpenseListFilters.defaultMonthStart,
         dateTo: Date? = nil,
         isAdvancedExpanded: Bool = false
     ) {
@@ -74,7 +82,15 @@ public struct ExpenseListFilters: Equatable {
     }
 
     public var hasNonDefaultListFilters: Bool {
-        hasCaptionSearch || selectedUser != nil || activeDatePreset != .week
+        hasCaptionSearch || selectedUser != nil || !isDefaultDateFilter
+    }
+
+    /// Default list scope: current calendar month through now (no end bound).
+    public var isDefaultDateFilter: Bool {
+        guard dateTo == nil, let from = dateFrom, let monthStart = Self.defaultMonthStart else {
+            return false
+        }
+        return Calendar.current.isDate(from, inSameDayAs: monthStart)
     }
 
     public var activeDatePreset: ExpenseDatePreset {
@@ -89,12 +105,8 @@ public struct ExpenseListFilters: Equatable {
             return .week
         }
 
-        if let monthStart = Calendar.current.date(
-            byAdding: .day,
-            value: -30,
-            to: Calendar.current.startOfDay(for: .now)
-        ),
-        Calendar.current.isDate(from, inSameDayAs: monthStart) {
+        if let monthStart = Self.defaultMonthStart,
+           Calendar.current.isDate(from, inSameDayAs: monthStart) {
             return .month
         }
 

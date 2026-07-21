@@ -841,6 +841,7 @@ final class DependencyContainer: ObservableObject {
         ExpenseListViewModel(
             fetchExpensesUseCase: fetchExpensesUseCase,
             fetchDebtSummaryUseCase: fetchDebtSummaryUseCase,
+            languageService: languageService,
             onBadgeCountsChanged: { [weak self] in
                 await self?.badgeCountService.refresh(force: true)
             },
