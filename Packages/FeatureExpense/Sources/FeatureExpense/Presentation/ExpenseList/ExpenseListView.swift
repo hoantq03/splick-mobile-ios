@@ -25,7 +25,6 @@ public struct ExpenseListView: View {
     @Environment(\.pullToRefreshActive) private var pullToRefreshActive
     @Environment(\.openPostCaptureFlow) private var openPostCaptureFlow
     @Environment(\.openLinkedPost) private var openLinkedPost
-    @Environment(\.openProfileSettings) private var openProfileSettings
     private let currentUserId: UUID?
     private let isTabActive: Bool
     private let profileDependencies: FriendUserProfileDependencies?
@@ -97,7 +96,10 @@ public struct ExpenseListView: View {
         .sheet(item: $profileRoute) { route in
             if let profileDependencies {
                 FriendUserProfileView(
-                    viewModel: profileDependencies.makeViewModel(user: route.user)
+                    viewModel: profileDependencies.makeViewModel(
+                        user: route.user,
+                        currentUserId: currentUserId
+                    )
                 )
             }
         }
@@ -421,10 +423,6 @@ public struct ExpenseListView: View {
     }
 
     private func openCreatorProfile(_ user: UserSummary) {
-        if user.id == currentUserId {
-            openProfileSettings?()
-            return
-        }
         guard profileDependencies != nil else { return }
         profileRoute = ExpenseUserProfileRoute(user: user)
     }

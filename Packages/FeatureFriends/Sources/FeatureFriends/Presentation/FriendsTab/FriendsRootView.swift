@@ -300,6 +300,7 @@ public struct FriendsRootView: View {
                 FriendUserProfileView(
                     viewModel: profileDependencies.makeViewModel(
                         user: route.user,
+                        currentUserId: currentUserSummary?.id,
                         initialFriendStatus: route.initialFriendStatus,
                         onRelationshipChanged: { userId, status in
                             viewModel.handleRelationshipChanged(userId: userId, status: status)

@@ -73,7 +73,10 @@ struct MessagingTabRoot: View {
         }
         .sheet(item: $profileRoute) { route in
             FriendUserProfileView(
-                viewModel: container.friendUserProfileDependencies.makeViewModel(user: route.user)
+                viewModel: container.friendUserProfileDependencies.makeViewModel(
+                    user: route.user,
+                    currentUserId: appState.currentUser?.id
+                )
             )
             .environmentObject(container.languageService)
         }

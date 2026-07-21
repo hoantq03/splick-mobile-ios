@@ -169,7 +169,10 @@ struct PostDetailView: View {
         .sheet(item: $profileRoute) { route in
             if let profileDependencies {
                 FriendUserProfileView(
-                    viewModel: profileDependencies.makeViewModel(user: route.user)
+                    viewModel: profileDependencies.makeViewModel(
+                        user: route.user,
+                        currentUserId: currentUserSummary?.id
+                    )
                 )
             }
         }
@@ -376,7 +379,6 @@ struct PostDetailView: View {
     }
 
     private func openProfile(for user: UserSummary) {
-        guard user.id != currentUserSummary?.id else { return }
         profileRoute = ProfileRoute(user: user)
     }
 
