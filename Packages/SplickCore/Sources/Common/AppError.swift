@@ -79,7 +79,7 @@ public enum NetworkError: Error, Equatable {
 
 extension NetworkError: LocalizedError {
     public var errorDescription: String? {
-        SplickErrorFormatting.appendSupportReference(to: userMessage, traceId: supportTraceId)
+        userMessage
     }
 }
 
