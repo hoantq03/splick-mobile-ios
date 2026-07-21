@@ -53,26 +53,26 @@ public enum NetworkError: Error, Equatable {
 
     public var userMessage: String {
         switch self {
-        case .noConnection: return "No internet connection. Please check your network."
+        case .noConnection: return "Looks like you're offline. Check your wifi or data and try again."
         case .serverUnreachable:
             #if DEBUG
             return "Cannot reach the API server. In Terminal, run: make -C splick-mobile-ios stubs"
             #else
-            return "Cannot reach the server. Please try again later."
+            return "Can't reach the server right now. Hang tight and try again."
             #endif
-        case .timeout: return "Request timed out. Please try again."
+        case .timeout: return "That took too long. Mind giving it another go?"
         case .serverError:
-            return "Something went wrong. Please try again later."
-        case .decodingFailed: return "Failed to process server response."
-        case .invalidURL: return "Invalid request."
-        case .unauthorized: return "Session expired. Please log in again."
-        case .forbidden: return "You don't have permission to perform this action."
-        case .notFound: return "The requested resource was not found."
-        case .rateLimited: return "Too many requests. Please wait a moment."
+            return "Something's a little off. Give it another try!"
+        case .decodingFailed: return "Got a weird response. Let's try that again."
+        case .invalidURL: return "That request didn't look right. Try again?"
+        case .unauthorized: return "Your session expired. Log in again to keep going."
+        case .forbidden: return "You don't have access to do that."
+        case .notFound: return "We couldn't find what you're looking for."
+        case .rateLimited: return "Whoa, slow down a sec — then try again."
         case .apiError(_, let message, _):
-            return message.isEmpty ? "An unexpected error occurred." : message
+            return message.isEmpty ? "Something unexpected happened. Try again?" : message
         case .unknown(let message, _):
-            return message.isEmpty ? "An unexpected error occurred." : message
+            return message.isEmpty ? "Something unexpected happened. Try again?" : message
         }
     }
 }

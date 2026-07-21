@@ -4,6 +4,7 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case commonCancel = "common.cancel"
     case commonClear = "common.clear"
     case commonTryAgain = "common.try_again"
+    case commonErrorTitle = "common.error_title"
     case commonReferenceId = "common.reference_id"
     case commonBack = "common.back"
 
