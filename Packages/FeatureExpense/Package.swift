@@ -27,5 +27,15 @@ let package = Package(
             ],
             path: "Sources/FeatureExpense"
         ),
+        .testTarget(
+            name: "FeatureExpenseTests",
+            dependencies: [
+                "FeatureExpense",
+                .product(name: "SplickDomain", package: "SplickDomain"),
+                .product(name: "Localization", package: "SplickCore"),
+                .product(name: "Storage", package: "SplickCore"),
+            ],
+            path: "Tests/FeatureExpenseTests"
+        ),
     ]
 )
