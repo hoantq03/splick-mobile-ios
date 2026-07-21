@@ -2,7 +2,7 @@ import Foundation
 import Networking
 
 enum FeedEndpoint: APIEndpoint {
-    case feed(page: Int, limit: Int)
+    case feed(page: Int, limit: Int, authorId: UUID?)
     case photoAlbumFirstPage(limit: Int, filters: PhotoAlbumFilters)
     case photoAlbumCursor(cursor: String, limit: Int, filters: PhotoAlbumFilters)
     case post(id: UUID)
@@ -54,11 +54,15 @@ enum FeedEndpoint: APIEndpoint {
 
     var queryItems: [URLQueryItem]? {
         switch self {
-        case .feed(let page, let limit):
-            return [
+        case .feed(let page, let limit, let authorId):
+            var items = [
                 URLQueryItem(name: "page", value: "\(page)"),
                 URLQueryItem(name: "limit", value: "\(limit)"),
             ]
+            if let authorId {
+                items.append(URLQueryItem(name: "authorId", value: authorId.uuidString))
+            }
+            return items
         case .photoAlbumFirstPage(let limit, let filters):
             return Self.photoAlbumQueryItems(page: 0, limit: limit, filters: filters)
         case .photoAlbumCursor(let cursor, let limit, let filters):

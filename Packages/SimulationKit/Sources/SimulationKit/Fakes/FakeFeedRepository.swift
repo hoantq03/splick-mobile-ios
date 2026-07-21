@@ -192,18 +192,27 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
         logger.log("Seeded \(posts.count) rich feed posts")
     }
 
-    public func fetchFeed(page: Int, limit: Int) async throws -> [Post] {
-        logger.log("Fetch feed: page=\(page), limit=\(limit)")
+    public func fetchFeed(
+        page: Int,
+        limit: Int,
+        authorId: UUID? = nil
+    ) async throws -> [Post] {
+        logger.log("Fetch feed: page=\(page), limit=\(limit), authorId=\(authorId?.uuidString ?? "all")")
         try await Task.sleep(for: .milliseconds(400))
 
+        let filteredPosts = if let authorId {
+            posts.filter { $0.author.id == authorId }
+        } else {
+            posts
+        }
         let start = page * limit
-        guard start < posts.count else {
+        guard start < filteredPosts.count else {
             logger.log("Feed: no more pages")
             return []
         }
 
-        let end = min(start + limit, posts.count)
-        let result = Array(posts[start..<end])
+        let end = min(start + limit, filteredPosts.count)
+        let result = Array(filteredPosts[start..<end])
         logger.success("Feed loaded: \(result.count) posts (page \(page))")
         return result
     }

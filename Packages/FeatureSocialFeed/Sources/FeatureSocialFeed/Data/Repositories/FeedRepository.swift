@@ -16,8 +16,14 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
         self.mediaRepository = mediaRepository
     }
 
-    public func fetchFeed(page: Int, limit: Int) async throws -> [Post] {
-        let dtos: [PostDTO] = try await apiClient.request(FeedEndpoint.feed(page: page, limit: limit))
+    public func fetchFeed(
+        page: Int,
+        limit: Int,
+        authorId: UUID? = nil
+    ) async throws -> [Post] {
+        let dtos: [PostDTO] = try await apiClient.request(
+            FeedEndpoint.feed(page: page, limit: limit, authorId: authorId)
+        )
         return dtos.map(FeedMapper.toPost)
     }
 
