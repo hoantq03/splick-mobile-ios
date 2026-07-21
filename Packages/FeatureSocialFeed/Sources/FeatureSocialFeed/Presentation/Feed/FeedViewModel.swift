@@ -173,7 +173,7 @@ public final class FeedViewModel: ObservableObject {
         do {
             let posts = try await fetchFeedUseCase.execute(page: 0)
             let hydratedPosts = posts.map { preserveClientMetadata(on: $0) }
-            self.posts = mergeFeedPreservingPendingUploads(with: hydratedPosts)
+            self.posts = mergeFeedPreservingClientState(with: hydratedPosts)
             state = .loaded(self.posts)
             canLoadMore = !posts.isEmpty
             updateHasReachedFeedEnd()
@@ -250,9 +250,11 @@ public final class FeedViewModel: ObservableObject {
         }
 
         do {
+            let previous = posts.first(where: { $0.id == id })
             let updated = preserveClientMetadata(on: try await fetchPostUseCase.execute(postId: id))
+            let merged = previous.map { updated.mergingBillReminderCounts(from: $0) } ?? updated
             if let index = posts.firstIndex(where: { $0.id == id }) {
-                posts[index] = updated
+                posts[index] = merged
                 state = .loaded(posts)
             }
         } catch {
@@ -553,6 +555,15 @@ public final class FeedViewModel: ObservableObject {
             prependCreatedPost(resolvedServerPost)
         }
         state = .loaded(posts)
+    }
+
+    private func mergeFeedPreservingClientState(with fetched: [Post]) -> [Post] {
+        let previousById = Dictionary(uniqueKeysWithValues: posts.map { ($0.id, $0) })
+        let withReminderCounts = fetched.map { remote -> Post in
+            guard let local = previousById[remote.id] else { return remote }
+            return remote.mergingBillReminderCounts(from: local)
+        }
+        return mergeFeedPreservingPendingUploads(with: withReminderCounts)
     }
 
     private func mergeFeedPreservingPendingUploads(with fetched: [Post]) -> [Post] {
