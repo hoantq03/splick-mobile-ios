@@ -1,5 +1,7 @@
 import Foundation
 import SwiftUI
+import Localization
+import Storage
 import SplickDomain
 
 #if DEBUG
@@ -21,13 +23,16 @@ final class MockMarkNotificationClickedUseCase: MarkNotificationClickedUseCasePr
 }
 
 #Preview("Notifications") {
-    NotificationListView(
+    let previewLanguageService = LanguageService(userDefaults: UserDefaultsService())
+    return NotificationListView(
         viewModel: NotificationListViewModel(
             fetchNotificationsUseCase: MockFetchNotificationsUseCase(),
             markReadUseCase: MockMarkNotificationReadUseCase(),
-            markClickedUseCase: MockMarkNotificationClickedUseCase()
+            markClickedUseCase: MockMarkNotificationClickedUseCase(),
+            languageService: previewLanguageService
         )
     )
+    .environmentObject(previewLanguageService)
 }
 
 #endif

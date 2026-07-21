@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Common
+import Localization
 import SplickDomain
 
 @MainActor
@@ -16,6 +17,7 @@ public final class NotificationListViewModel: ObservableObject {
     private let fetchNotificationsUseCase: FetchNotificationsUseCaseProtocol
     private let markReadUseCase: MarkNotificationReadUseCaseProtocol
     private let markClickedUseCase: MarkNotificationClickedUseCaseProtocol
+    private let languageService: LanguageService
     private let onBadgeCountsChanged: (() async -> Void)?
     private var currentPage = 0
     private var pullToRefreshTask: Task<Void, Never>?
@@ -24,11 +26,13 @@ public final class NotificationListViewModel: ObservableObject {
         fetchNotificationsUseCase: FetchNotificationsUseCaseProtocol,
         markReadUseCase: MarkNotificationReadUseCaseProtocol,
         markClickedUseCase: MarkNotificationClickedUseCaseProtocol,
+        languageService: LanguageService,
         onBadgeCountsChanged: (() async -> Void)? = nil
     ) {
         self.fetchNotificationsUseCase = fetchNotificationsUseCase
         self.markReadUseCase = markReadUseCase
         self.markClickedUseCase = markClickedUseCase
+        self.languageService = languageService
         self.onBadgeCountsChanged = onBadgeCountsChanged
     }
 
@@ -121,7 +125,7 @@ public final class NotificationListViewModel: ObservableObject {
                 Log.error(error, category: .notification)
                 state = .loaded(notifications)
             } else {
-                state = .failed(error.localizedDescription)
+                state = .failed(languageService.localizedMessage(for: error))
                 Log.error(error, category: .notification)
             }
         }

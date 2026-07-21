@@ -876,6 +876,7 @@ final class DependencyContainer: ObservableObject {
             fetchNotificationsUseCase: fetchNotificationsUseCase,
             markReadUseCase: markNotificationReadUseCase,
             markClickedUseCase: markNotificationClickedUseCase,
+            languageService: languageService,
             onBadgeCountsChanged: { [weak self] in
                 await self?.badgeCountService.refresh(force: true)
             }
