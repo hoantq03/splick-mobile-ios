@@ -8,6 +8,8 @@ public enum SplickTabBarMetrics {
     public static let hiddenClearance: CGFloat = 16
     /// Scroll offset (pt) at or below which the tab bar is always shown.
     public static let showNearTopThreshold: CGFloat = 64
+    /// Tighter threshold for same-tab tap: scroll-to-top vs pull-to-refresh.
+    public static let sameTabAtTopThreshold: CGFloat = 16
 }
 
 public enum TabBarChromeMotion {
@@ -26,14 +28,17 @@ public final class TabBarScrollState: ObservableObject {
     public let sameTabTapSubject = PassthroughSubject<Void, Never>()
 
     private var lastOffset: CGFloat = 0
+    /// Distance scrolled from the list's resting top (baseline-normalized).
+    private var lastDistanceFromTop: CGFloat = 0
     private var offsetNormalizer = ScrollChromeOffsetNormalizer()
+    private var distanceNormalizer = ScrollChromeOffsetNormalizer()
     private var suppressUpdatesUntil: Date = .distantPast
     private let hideThreshold: CGFloat = 8
     private let showAtTopThreshold: CGFloat = SplickTabBarMetrics.showNearTopThreshold
     private let visibilityChangeCooldown: TimeInterval = 0.35
 
-    /// True when the tracked scroll position is at (or near) the top.
-    public var isAtTop: Bool { lastOffset <= showAtTopThreshold }
+    /// True when the list is at (or very near) the top — used for same-tab tap refresh vs scroll-to-top.
+    public var isAtTop: Bool { lastDistanceFromTop <= SplickTabBarMetrics.sameTabAtTopThreshold }
 
     public init() {}
 
@@ -43,9 +48,12 @@ public final class TabBarScrollState: ObservableObject {
     }
 
     public func updateScrollOffset(_ rawOffset: CGFloat) {
+        // Normalize against resting baseline so contentMargins / inset don't look like "scrolled".
+        lastDistanceFromTop = distanceNormalizer.normalize(rawOffset)
+
         // Use raw geometry for "at top" so a drifted baseline / hide-cooldown
         // can never leave the tab bar stuck hidden after returning near the top.
-        if rawOffset <= showAtTopThreshold {
+        if lastDistanceFromTop <= showAtTopThreshold || rawOffset <= showAtTopThreshold {
             revealAtTop(rawOffset: rawOffset)
             return
         }
@@ -70,30 +78,28 @@ public final class TabBarScrollState: ObservableObject {
     }
 
     public func reset() {
-        Task { @MainActor in
-            lastOffset = 0
-            offsetNormalizer.reset()
-            suppressesBottomInset = false
-            setVisibleImmediate(true, applyCooldown: false)
-        }
+        lastOffset = 0
+        lastDistanceFromTop = 0
+        offsetNormalizer.reset()
+        distanceNormalizer.reset()
+        suppressesBottomInset = false
+        setVisibleImmediate(true, applyCooldown: false)
     }
 
     public func show() {
-        Task { @MainActor in
-            suppressesBottomInset = false
-            setVisibleImmediate(true, applyCooldown: false)
-        }
+        suppressesBottomInset = false
+        setVisibleImmediate(true, applyCooldown: false)
     }
 
     /// Hides the tab bar. Set `flushToBottom` on detail screens so bottom inset becomes zero.
     public func hide(flushToBottom: Bool = false) {
-        Task { @MainActor in
-            suppressesBottomInset = flushToBottom
-            setVisibleImmediate(false, applyCooldown: true)
-        }
+        suppressesBottomInset = flushToBottom
+        setVisibleImmediate(false, applyCooldown: true)
     }
 
     private func revealAtTop(rawOffset: CGFloat) {
+        distanceNormalizer.reset()
+        lastDistanceFromTop = distanceNormalizer.normalize(rawOffset)
         offsetNormalizer.reset()
         lastOffset = offsetNormalizer.normalize(rawOffset)
         // Never leave the bar hidden near the top — bypass hide cooldown.

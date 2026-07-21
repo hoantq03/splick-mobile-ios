@@ -4,18 +4,16 @@ import UIKit
 
 // MARK: - Programmatic refresh
 
+@MainActor
 public final class SplickRefreshController: ObservableObject {
     public init() {}
 
-    private var triggerHandler: (() -> Void)?
+    /// Bumped by `refresh()` so SwiftUI `.onChange` can start a programmatic pull-to-refresh.
+    @Published public private(set) var requestID: Int = 0
 
-    func bindRefreshTrigger(_ handler: @escaping () -> Void) {
-        triggerHandler = handler
-    }
-
-    /// Shows the native refresh spinner and runs the bound refresh action.
+    /// Shows the refresh UI and runs the bound refresh action.
     public func refresh() {
-        triggerHandler?()
+        requestID += 1
     }
 }
 
@@ -50,6 +48,7 @@ private struct SplickSameTabTapBehaviorModifier: ViewModifier {
     let isEnabled: () -> Bool
 
     @Environment(\.tabBarScrollState) private var tabBarScrollState
+    @Environment(\.sameTabTapHandlingEnabled) private var sameTabTapHandlingEnabled
 
     private var sameTabTapPublisher: AnyPublisher<Void, Never> {
         tabBarScrollState?.sameTabTapSubject.eraseToAnyPublisher()
@@ -58,7 +57,7 @@ private struct SplickSameTabTapBehaviorModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content.onReceive(sameTabTapPublisher) { _ in
-            guard isEnabled() else { return }
+            guard sameTabTapHandlingEnabled, isEnabled() else { return }
             if isAtTop() {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 refreshController.refresh()
@@ -66,6 +65,8 @@ private struct SplickSameTabTapBehaviorModifier: ViewModifier {
                 withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
                     scrollProxy.scrollTo(scrollTopID, anchor: .top)
                 }
+                // Next same-tab tap should refresh once we've returned to top.
+                tabBarScrollState?.reset()
             }
         }
     }
