@@ -35,6 +35,7 @@ struct MainTabView: View {
     /// bar chrome can start sliding in immediately, in parallel with the overlay collapsing.
     /// Reset to `false` once `showNotifications` fully clears.
     @State private var notificationIsDismissing = false
+    @State private var showCurrentUserProfile = false
 
     private var currentUserSummary: UserSummary? {
         appState.currentUser.map {
@@ -155,6 +156,9 @@ struct MainTabView: View {
             .environment(\.openProfileSettings) {
                 appState.showProfileSettings = true
             }
+            .environment(\.openCurrentUserProfile) {
+                showCurrentUserProfile = true
+            }
             .environment(\.openNotifications) { bellFrame in
                 Task { @MainActor in
                     if appState.showNotifications {
@@ -214,6 +218,16 @@ struct MainTabView: View {
         }
         .sheet(isPresented: $appState.showProfileSettings) {
             ProfileSettingsView()
+        }
+        .sheet(isPresented: $showCurrentUserProfile) {
+            if let user = currentUserSummary {
+                FriendUserProfileView(
+                    viewModel: container.friendUserProfileDependencies.makeViewModel(
+                        user: user,
+                        currentUserId: user.id
+                    )
+                )
+            }
         }
         .overlay {
             if appState.showNotifications {

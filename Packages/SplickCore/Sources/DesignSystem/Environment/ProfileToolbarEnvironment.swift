@@ -6,6 +6,10 @@ private struct OpenProfileActionKey: EnvironmentKey {
     static let defaultValue: (() -> Void)? = nil
 }
 
+private struct OpenCurrentUserProfileActionKey: EnvironmentKey {
+    static let defaultValue: (() -> Void)? = nil
+}
+
 private struct CurrentUserSummaryKey: EnvironmentKey {
     static let defaultValue: UserSummary? = nil
 }
@@ -30,6 +34,11 @@ extension EnvironmentValues {
     public var openProfileSettings: (() -> Void)? {
         get { self[OpenProfileActionKey.self] }
         set { self[OpenProfileActionKey.self] = newValue }
+    }
+
+    public var openCurrentUserProfile: (() -> Void)? {
+        get { self[OpenCurrentUserProfileActionKey.self] }
+        set { self[OpenCurrentUserProfileActionKey.self] = newValue }
     }
 
     public var currentUserSummary: UserSummary? {
@@ -81,7 +90,7 @@ private struct SplickProfileToolbarModifier: ViewModifier {
     var isSuppressed: Bool = false
     var showsBell: Bool = true
 
-    @Environment(\.openProfileSettings) private var openProfileSettings
+    @Environment(\.openCurrentUserProfile) private var openCurrentUserProfile
     @Environment(\.currentUserSummary) private var currentUserSummary
     @Environment(\.openNotifications) private var openNotifications
     @Environment(\.notificationUnreadCount) private var notificationUnreadCount
@@ -93,8 +102,8 @@ private struct SplickProfileToolbarModifier: ViewModifier {
             .navigationBarTitleDisplayMode(titleDisplayMode)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    if !isSuppressed, let openProfileSettings, let user = currentUserSummary {
-                        Button(action: openProfileSettings) {
+                    if !isSuppressed, let openCurrentUserProfile, let user = currentUserSummary {
+                        Button(action: openCurrentUserProfile) {
                             AvatarView(
                                 imageURL: user.avatarURL,
                                 name: user.displayName,
@@ -104,8 +113,8 @@ private struct SplickProfileToolbarModifier: ViewModifier {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(
-                            languageService?.text(.profileSettingsAccessibility)
-                                ?? L10n.string(.profileSettingsAccessibility, locale: .default)
+                            languageService?.text(.profileTitle)
+                                ?? L10n.string(.profileTitle, locale: .default)
                         )
                     }
                 }
