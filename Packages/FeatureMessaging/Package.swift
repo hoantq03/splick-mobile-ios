@@ -29,7 +29,12 @@ let package = Package(
         ),
         .testTarget(
             name: "FeatureMessagingTests",
-            dependencies: ["FeatureMessaging"],
+            dependencies: [
+                "FeatureMessaging",
+                .product(name: "Common", package: "SplickCore"),
+                .product(name: "Localization", package: "SplickCore"),
+                .product(name: "Storage", package: "SplickCore"),
+            ],
             path: "Tests/FeatureMessagingTests"
         ),
     ]

@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import Common
+import Localization
 import SplickDomain
 
 @MainActor
@@ -20,6 +21,13 @@ public final class ConversationListViewModel: ObservableObject {
         case failed(String)
     }
 
+    public enum PeekLoadState: Equatable {
+        case idle
+        case loading
+        case loaded
+        case failed
+    }
+
     @Published public private(set) var state: State = .idle
     @Published public private(set) var searchResults: [MessagingSearchResult] = []
     @Published public private(set) var searchState: LoadingState<[MessagingSearchResult]> = .idle
@@ -32,31 +40,42 @@ public final class ConversationListViewModel: ObservableObject {
     @Published public private(set) var hasMorePages = false
     @Published public private(set) var isLoadingMore = false
     @Published public private(set) var unreadConversationCount = 0
+    @Published public private(set) var peekConversation: Conversation?
+    @Published public private(set) var peekMessages: [ChatMessage] = []
+    @Published public private(set) var peekLoadState: PeekLoadState = .idle
 
     private static let pageSize = 20
+    private static let peekMessageLimit = 8
 
     private let fetchConversationsUseCase: FetchConversationsUseCase
+    private let fetchMessagesUseCase: FetchMessagesUseCase
     private let searchProvider: MessagingSearchProviding
     private let repository: MessagingRepositoryProtocol
     private let wsClient: MessagingWebSocketClient
+    private let languageService: LanguageService
     private let onInboxLoaded: (([Conversation], Int) async -> Void)?
     private var cancellables = Set<AnyCancellable>()
     private var searchTask: Task<Void, Never>?
     private var refreshTask: Task<Void, Never>?
     private var loadMoreTask: Task<Void, Never>?
+    private var peekTask: Task<[ChatMessage], Error>?
     private var currentPage = 0
 
     public init(
         fetchConversationsUseCase: FetchConversationsUseCase,
+        fetchMessagesUseCase: FetchMessagesUseCase,
         searchProvider: MessagingSearchProviding,
         repository: MessagingRepositoryProtocol,
         wsClient: MessagingWebSocketClient,
+        languageService: LanguageService,
         onInboxLoaded: (([Conversation], Int) async -> Void)? = nil
     ) {
         self.fetchConversationsUseCase = fetchConversationsUseCase
+        self.fetchMessagesUseCase = fetchMessagesUseCase
         self.searchProvider = searchProvider
         self.repository = repository
         self.wsClient = wsClient
+        self.languageService = languageService
         self.onInboxLoaded = onInboxLoaded
         bindWsEvents()
     }
@@ -64,6 +83,48 @@ public final class ConversationListViewModel: ObservableObject {
     public var conversations: [Conversation] {
         if case .loaded(let items) = state { return items }
         return []
+    }
+
+    public func beginPeek(conversation: Conversation) async {
+        peekTask?.cancel()
+        peekConversation = conversation
+        peekMessages = []
+        peekLoadState = .loading
+
+        let conversationId = conversation.id
+        let task = Task {
+            try await fetchMessagesUseCase.execute(
+                conversationId: conversationId,
+                page: 0,
+                limit: Self.peekMessageLimit
+            )
+        }
+        peekTask = task
+
+        do {
+            let messages = try await task.value
+            guard !Task.isCancelled, peekConversation?.id == conversationId else { return }
+            peekMessages = Array(messages.reversed())
+            peekLoadState = .loaded
+        } catch is CancellationError {
+            return
+        } catch {
+            guard peekConversation?.id == conversationId else { return }
+            peekLoadState = .failed
+            Log.error(
+                error,
+                category: .network,
+                metadata: ["action": "previewConversation", "conversationId": conversationId.uuidString]
+            )
+        }
+    }
+
+    public func dismissPeek() {
+        peekTask?.cancel()
+        peekTask = nil
+        peekConversation = nil
+        peekMessages = []
+        peekLoadState = .idle
     }
 
     public func toggleFilter(_ filter: InboxFilter) {
@@ -143,7 +204,7 @@ public final class ConversationListViewModel: ObservableObject {
                 transaction.disablesAnimations = true
                 withTransaction(transaction) {
                     searchResults = []
-                    searchState = .failed(error.localizedDescription)
+                    searchState = .failed(languageService.localizedMessage(for: error))
                     activeSearchQuery = ""
                     isRefreshingSearch = false
                 }
@@ -185,7 +246,7 @@ public final class ConversationListViewModel: ObservableObject {
             } catch {
                 guard !Task.isCancelled else { return }
                 searchResults = []
-                searchState = .failed(error.localizedDescription)
+                searchState = .failed(languageService.localizedMessage(for: error))
                 activeSearchQuery = ""
                 isRefreshingSearch = false
                 Log.error(error, category: .network, metadata: ["action": "searchMessaging", "query": trimmed])
@@ -222,7 +283,7 @@ public final class ConversationListViewModel: ObservableObject {
             return ChatThreadRoute(conversation: conversation)
         } catch {
             Log.error(error, category: .network, metadata: ["action": "getOrCreateConversation"])
-            startConversationError = error.localizedDescription
+            startConversationError = languageService.localizedMessage(for: error)
             return nil
         }
     }
@@ -267,7 +328,7 @@ public final class ConversationListViewModel: ObservableObject {
         } catch {
             Log.error(error, category: .network, metadata: ["action": "reloadInbox"])
             if showLoadingState || conversations.isEmpty {
-                state = .failed(error.localizedDescription)
+                state = .failed(languageService.localizedMessage(for: error))
             }
         }
     }

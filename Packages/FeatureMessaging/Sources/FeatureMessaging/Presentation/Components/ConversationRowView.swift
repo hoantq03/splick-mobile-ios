@@ -9,6 +9,7 @@ struct ConversationRowView: View {
     @Environment(\.currentUserSummary) private var currentUserSummary
 
     let conversation: Conversation
+    var reportsAnchorFrame = true
 
     var body: some View {
         HStack(spacing: SplickTheme.Spacing.sm) {
@@ -64,6 +65,16 @@ struct ConversationRowView: View {
             }
         }
         .padding(.vertical, SplickTheme.Spacing.xs)
+        .background {
+            if reportsAnchorFrame {
+                GeometryReader { geometry in
+                    Color.clear.preference(
+                        key: ConversationRowAnchorFrameKey.self,
+                        value: [conversation.id: geometry.frame(in: .global)]
+                    )
+                }
+            }
+        }
     }
 
     private var lastMessagePreview: String {

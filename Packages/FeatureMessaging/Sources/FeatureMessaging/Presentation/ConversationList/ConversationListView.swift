@@ -5,8 +5,6 @@ import DesignSystem
 import Localization
 import SplickDomain
 
-import SplickDomain
-
 private struct NewMessageComposePresentation: Identifiable {
     let id = UUID()
     let viewModel: NewMessageComposeViewModel
@@ -18,6 +16,7 @@ public struct ConversationListView: View {
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.pullToRefreshActive) private var pullToRefreshActive
     @Environment(\.sameTabTapHandlingEnabled) private var sameTabTapHandlingEnabled
+    @Environment(\.currentUserSummary) private var currentUserSummary
     @State private var isPullRefreshing = false
     @State private var composePresentation: NewMessageComposePresentation?
     private let onCreateGroup: () -> Void
@@ -35,6 +34,11 @@ public struct ConversationListView: View {
     @State private var searchRefreshController = SplickRefreshController()
     @FocusState private var isSearchFocused: Bool
     @State private var showCloseFriendsComingSoon = false
+    @State private var conversationRowFrames: [UUID: CGRect] = [:]
+    @State private var peekFrozenFrame: CGRect?
+    @State private var peekSession = UUID()
+
+    private static let peekImpact = UIImpactFeedbackGenerator(style: .medium)
 
     private var sameTabTapPublisher: AnyPublisher<Void, Never> {
         tabBarScrollState?.sameTabTapSubject.eraseToAnyPublisher()
@@ -58,49 +62,53 @@ public struct ConversationListView: View {
     }
 
     public var body: some View {
-        NavigationStack(path: $path) {
-            VStack(spacing: 0) {
-                messagingSearchBar
+        ZStack {
+            NavigationStack(path: $path) {
+                VStack(spacing: 0) {
+                    messagingSearchBar
 
-                if !isSearching {
-                    inboxFilterShortcuts
-                }
+                    if !isSearching {
+                        inboxFilterShortcuts
+                    }
 
-                ZStack {
-                    conversationListContent
+                    ZStack {
+                        conversationListContent
 
-                    if isSearching {
-                        searchResultsContent
-                            .background(SplickTheme.Colors.background)
-                            .transition(.opacity)
+                        if isSearching {
+                            searchResultsContent
+                                .background(SplickTheme.Colors.background)
+                                .transition(.opacity)
+                        }
                     }
                 }
-            }
-            .animation(
-                suppressRefreshAnimations ? nil : MessagingSearchChromeAnimation.resultsSpring,
-                value: isSearching
-            )
-            .onPreferenceChange(PullToRefreshActivePreferenceKey.self) { isPullRefreshing = $0 }
-            .splickTabScreenHeader(languageService.text(.messagingTitle), showsBell: false)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    composeMenu
-                }
-            }
-            .navigationDestination(for: ChatThreadRoute.self) { route in
-                ChatThreadNavigationWrapper(
-                    conversation: route.conversation,
-                    highlightMessageId: route.highlightMessageId
+                .animation(
+                    suppressRefreshAnimations ? nil : MessagingSearchChromeAnimation.resultsSpring,
+                    value: isSearching
                 )
-            }
-            .sheet(item: $composePresentation) { presentation in
-                NewMessageComposeView(viewModel: presentation.viewModel) { conversation in
-                    composePresentation = nil
-                    path.append(ChatThreadRoute(conversation: conversation))
-                    Task { await viewModel.refresh() }
+                .onPreferenceChange(PullToRefreshActivePreferenceKey.self) { isPullRefreshing = $0 }
+                .splickTabScreenHeader(languageService.text(.messagingTitle), showsBell: false)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        composeMenu
+                    }
                 }
-                .environmentObject(languageService)
+                .navigationDestination(for: ChatThreadRoute.self) { route in
+                    ChatThreadNavigationWrapper(
+                        conversation: route.conversation,
+                        highlightMessageId: route.highlightMessageId
+                    )
+                }
+                .sheet(item: $composePresentation) { presentation in
+                    NewMessageComposeView(viewModel: presentation.viewModel) { conversation in
+                        composePresentation = nil
+                        path.append(ChatThreadRoute(conversation: conversation))
+                        Task { await viewModel.refresh() }
+                    }
+                    .environmentObject(languageService)
+                }
             }
+
+            conversationPeekLayer
         }
         .onChange(of: searchDraft) { newValue in
             viewModel.onSearchQueryChanged(newValue)
@@ -155,6 +163,10 @@ public struct ConversationListView: View {
             } else {
                 scrollTopSignal += 1
             }
+        }
+        .onDisappear {
+            guard viewModel.peekConversation != nil else { return }
+            dismissConversationPeek()
         }
     }
 
@@ -337,6 +349,64 @@ public struct ConversationListView: View {
     }
 
     @ViewBuilder
+    private var conversationPeekLayer: some View {
+        GeometryReader { geometry in
+            if let conversation = viewModel.peekConversation,
+               let globalFrame = peekFrozenFrame,
+               let currentUserId = currentUserSummary?.id {
+                let overlayOrigin = geometry.frame(in: .global).origin
+                let localFrame = globalFrame.offsetBy(
+                    dx: -overlayOrigin.x,
+                    dy: -overlayOrigin.y
+                )
+
+                ConversationPeekOverlay(
+                    context: ConversationPeekContext(
+                        conversation: conversation,
+                        anchorFrame: localFrame,
+                        currentUserId: currentUserId
+                    ),
+                    messages: viewModel.peekMessages,
+                    loadState: viewModel.peekLoadState,
+                    onDismiss: dismissConversationPeek,
+                    onOpen: {
+                        openConversationFromPeek(conversation)
+                    }
+                )
+                .id(peekSession)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .allowsHitTesting(viewModel.peekConversation != nil)
+        .zIndex(100)
+    }
+
+    private func openConversationPeek(_ conversation: Conversation) {
+        guard viewModel.peekConversation == nil,
+              currentUserSummary?.id != nil,
+              let frame = conversationRowFrames[conversation.id],
+              frame.width > 1,
+              frame.height > 1 else { return }
+
+        peekFrozenFrame = frame
+        peekSession = UUID()
+        Self.peekImpact.impactOccurred()
+        InteractionScrollLock.setLocked(true)
+        Task { await viewModel.beginPeek(conversation: conversation) }
+    }
+
+    private func dismissConversationPeek() {
+        viewModel.dismissPeek()
+        peekFrozenFrame = nil
+        InteractionScrollLock.forceUnlock()
+    }
+
+    private func openConversationFromPeek(_ conversation: Conversation) {
+        dismissConversationPeek()
+        path.append(ChatThreadRoute(conversation: conversation))
+    }
+
+    @ViewBuilder
     private func conversationList(_ items: [Conversation]) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -347,8 +417,18 @@ public struct ConversationListView: View {
                             path.append(ChatThreadRoute(conversation: conversation))
                         } label: {
                             ConversationRowView(conversation: conversation)
+                                .opacity(
+                                    viewModel.peekConversation?.id == conversation.id ? 0 : 1
+                                )
                         }
                         .buttonStyle(.plain)
+                        .allowsHitTesting(viewModel.peekConversation?.id != conversation.id)
+                        .highPriorityGesture(
+                            LongPressGesture(minimumDuration: 0.28)
+                                .onEnded { _ in
+                                    openConversationPeek(conversation)
+                                }
+                        )
                         .onAppear {
                             Task { await viewModel.loadMoreIfNeeded(current: conversation) }
                         }
@@ -366,6 +446,11 @@ public struct ConversationListView: View {
                     }
                 }
                 .padding(.horizontal, SplickTheme.Spacing.md)
+                .onPreferenceChange(ConversationRowAnchorFrameKey.self) { frames in
+                    for (id, frame) in frames where frame.width > 1 && frame.height > 1 {
+                        conversationRowFrames[id] = frame
+                    }
+                }
                 .transaction { transaction in
                     if suppressRefreshAnimations {
                         transaction.animation = nil
