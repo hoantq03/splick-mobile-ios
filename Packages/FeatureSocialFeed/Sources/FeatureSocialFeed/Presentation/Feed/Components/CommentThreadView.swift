@@ -479,14 +479,41 @@ struct CommentRowView: View {
 
     private var evidenceModerationActions: some View {
         HStack(spacing: 8) {
-            Button(languageService.text(.feedPaymentEvidenceApprove), action: onApproveEvidence)
-                .font(.system(size: style.replyActionFontSize, weight: .semibold))
-                .foregroundStyle(SplickTheme.Colors.success)
-            Button(languageService.text(.feedPaymentEvidenceReject), action: onRejectEvidence)
-                .font(.system(size: style.replyActionFontSize, weight: .semibold))
-                .foregroundStyle(SplickTheme.Colors.error)
+            evidenceModerationButton(
+                title: languageService.text(.feedPaymentEvidenceApprove),
+                tint: SplickTheme.Colors.success,
+                action: onApproveEvidence
+            )
+            evidenceModerationButton(
+                title: languageService.text(.feedPaymentEvidenceReject),
+                tint: SplickTheme.Colors.error,
+                action: onRejectEvidence
+            )
         }
         .padding(.top, 2)
+    }
+
+    private func evidenceModerationButton(
+        title: String,
+        tint: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: style.replyActionFontSize, weight: .semibold))
+                .foregroundStyle(tint)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background {
+                    Capsule(style: .continuous)
+                        .fill(tint.opacity(0.12))
+                }
+                .overlay {
+                    Capsule(style: .continuous)
+                        .strokeBorder(tint.opacity(0.2), lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
     }
 
     private func evidenceStatusLabel(_ status: EvidenceStatus) -> String {
