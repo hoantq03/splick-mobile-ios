@@ -8,56 +8,60 @@ public struct ErrorView: View {
 
     private let error: Error?
     private let staticMessage: String?
-    private let supportReference: String?
     private let retryAction: (() -> Void)?
 
-    public init(message: String, supportReference: String? = nil, retryAction: (() -> Void)? = nil) {
+    public init(message: String, retryAction: (() -> Void)? = nil) {
         self.error = nil
         self.staticMessage = message
-        self.supportReference = supportReference
         self.retryAction = retryAction
     }
 
     public init(error: Error, retryAction: (() -> Void)? = nil) {
         self.error = error
         self.staticMessage = nil
-        self.supportReference = SplickErrorFormatting.supportTraceId(for: error)
         self.retryAction = retryAction
     }
 
     public var body: some View {
         VStack(spacing: SplickTheme.Spacing.md) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 40))
-                .foregroundStyle(SplickTheme.Colors.warning)
+            ZStack {
+                Circle()
+                    .fill(SplickTheme.Colors.warning.opacity(0.08))
+                    .frame(width: 120, height: 120)
+
+                Circle()
+                    .fill(SplickTheme.Colors.warning.opacity(0.14))
+                    .frame(width: 96, height: 96)
+
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 36, weight: .semibold))
+                    .foregroundStyle(SplickTheme.Colors.warning)
+                    .symbolRenderingMode(.hierarchical)
+            }
+            .padding(.bottom, SplickTheme.Spacing.xs)
+
+            Text(titleLabel)
+                .font(SplickTheme.Typography.title)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
+                .multilineTextAlignment(.center)
 
             Text(resolvedMessage)
                 .font(SplickTheme.Typography.body)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
+                .lineSpacing(3)
                 .padding(.horizontal, SplickTheme.Spacing.xl)
-
-            if let supportReference, !supportReference.isEmpty {
-                VStack(spacing: SplickTheme.Spacing.xs) {
-                    Text(referenceLabel)
-                        .font(SplickTheme.Typography.caption)
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
-                    Text(supportReference)
-                        .font(SplickTheme.Typography.caption.monospaced())
-                        .foregroundStyle(SplickTheme.Colors.textPrimary)
-                        .textSelection(.enabled)
-                }
-                .padding(.horizontal, SplickTheme.Spacing.xl)
-            }
 
             if let retryAction {
-                SplickButton(retryLabel, style: .secondary) {
+                SplickButton(retryLabel, style: .primary) {
                     retryAction()
                 }
                 .padding(.horizontal, SplickTheme.Spacing.xxl)
+                .padding(.top, SplickTheme.Spacing.xs)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, SplickTheme.Spacing.md)
     }
 
     private var resolvedMessage: String {
@@ -70,8 +74,8 @@ public struct ErrorView: View {
         return staticMessage ?? ""
     }
 
-    private var referenceLabel: String {
-        languageService?.text(.commonReferenceId) ?? L10n.string(.commonReferenceId, locale: .default)
+    private var titleLabel: String {
+        languageService?.text(.commonErrorTitle) ?? L10n.string(.commonErrorTitle, locale: .default)
     }
 
     private var retryLabel: String {

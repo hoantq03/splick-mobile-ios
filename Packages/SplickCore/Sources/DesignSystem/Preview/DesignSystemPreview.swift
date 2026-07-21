@@ -42,7 +42,7 @@ import SwiftUI
 }
 
 #Preview("Error State") {
-    ErrorView(message: "Something went wrong. Please try again.") {}
+    ErrorView(message: "Something's a little off. Give it another try!") {}
 }
 
 #Preview("Loading") {
