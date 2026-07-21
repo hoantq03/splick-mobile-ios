@@ -262,11 +262,20 @@ public struct ExpenseListView: View {
                             .fill(SplickTheme.Colors.info.opacity(0.14))
                     }
 
-                Text(languageService.text(.expenseOverviewSectionTitle))
-                    .font(SplickTheme.Typography.captionBold)
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
-                    .textCase(.uppercase)
-                    .lineLimit(1)
+                HStack(spacing: SplickTheme.Spacing.xxxs) {
+                    Text(languageService.text(.expenseOverviewSectionTitle))
+                        .font(SplickTheme.Typography.captionBold)
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+                        .textCase(.uppercase)
+                        .lineLimit(1)
+
+                    if let periodLabel = datePeriodSubtitle {
+                        Text(periodLabel)
+                            .font(SplickTheme.Typography.caption)
+                            .foregroundStyle(SplickTheme.Colors.textTertiary)
+                            .lineLimit(1)
+                    }
+                }
 
                 Spacer(minLength: 0)
 
@@ -281,9 +290,14 @@ public struct ExpenseListView: View {
         .buttonStyle(.plain)
         .accessibilityLabel(languageService.text(.expenseOverviewSectionTitle))
         .accessibilityValue(
-            isOverviewExpanded
-                ? languageService.text(.expenseOverviewExpandedAccessibility)
-                : languageService.text(.expenseOverviewCollapsedAccessibility)
+            [
+                isOverviewExpanded
+                    ? languageService.text(.expenseOverviewExpandedAccessibility)
+                    : languageService.text(.expenseOverviewCollapsedAccessibility),
+                datePeriodSubtitle
+            ]
+            .compactMap { $0 }
+            .joined(separator: ", ")
         )
         .accessibilityHint(
             isOverviewExpanded
@@ -296,7 +310,7 @@ public struct ExpenseListView: View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
             ExpenseListSectionHeader(
                 title: languageService.text(.expenseRecordsSectionTitle),
-                subtitle: recordsSectionSubtitle,
+                subtitle: datePeriodSubtitle,
                 filterPanelTitle: languageService.text(.expenseFilterPanelTitle),
                 filterClearTitle: languageService.text(.expenseFilterClear),
                 showsFilterClear: viewModel.filters.hasNonDefaultListFilters,
@@ -332,7 +346,8 @@ public struct ExpenseListView: View {
         .zIndex(showFilterPanel ? 1 : 0)
     }
 
-    private var recordsSectionSubtitle: String? {
+    /// Shared period label shown beside overview and history section titles.
+    private var datePeriodSubtitle: String? {
         switch viewModel.filters.activeDatePreset {
         case .week:
             return languageService.text(.expenseRecordsSectionThisWeek)
