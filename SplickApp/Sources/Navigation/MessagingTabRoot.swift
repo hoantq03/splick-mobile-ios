@@ -20,17 +20,13 @@ struct MessagingTabRoot: View {
     @State private var reactionPickHandler: ((String) -> Void)?
     @State private var profileRoute: MessagingUserProfileRoute?
     @State private var showCreateGroup = false
-    @State private var createGroupFriends: [UserSummary] = []
     @State private var conversationRouteToOpen: ChatThreadRoute?
 
     var body: some View {
         ConversationListView(
             viewModel: container.conversationListViewModel,
             onCreateGroup: {
-                Task {
-                    createGroupFriends = (try? await container.fetchMyFriendsUseCase.execute()) ?? []
-                    showCreateGroup = true
-                }
+                showCreateGroup = true
             },
             makeComposeViewModel: {
                 container.makeNewMessageComposeViewModel(
@@ -83,25 +79,23 @@ struct MessagingTabRoot: View {
         }
         .sheet(isPresented: $showCreateGroup) {
             CreateGroupSheet(
-                viewModel: CreateGroupViewModel(
-                    friends: createGroupFriends,
-                    createGroupUseCase: container.createGroupUseCase,
-                    inviteFriendsUseCase: container.inviteFriendsToGroupUseCase,
-                    uploadGroupAvatarUseCase: container.uploadGroupAvatarUseCase,
-                    updateGroupAvatarUseCase: container.updateGroupAvatarUseCase,
-                    languageService: container.languageService
-                ) { group, invitedMemberIds in
-                    showCreateGroup = false
-                    Task {
-                        await container.openMessagingGroupChat(
-                            group: group,
-                            invitedMemberIds: invitedMemberIds,
-                            conversationListViewModel: container.conversationListViewModel,
-                            onOpen: { conversationRouteToOpen = ChatThreadRoute(conversation: $0) }
-                        )
-                    }
+                fetchMyFriendsUseCase: container.fetchMyFriendsUseCase,
+                createGroupUseCase: container.createGroupUseCase,
+                inviteFriendsUseCase: container.inviteFriendsToGroupUseCase,
+                uploadGroupAvatarUseCase: container.uploadGroupAvatarUseCase,
+                updateGroupAvatarUseCase: container.updateGroupAvatarUseCase,
+                languageService: container.languageService
+            ) { group, invitedMemberIds in
+                showCreateGroup = false
+                Task {
+                    await container.openMessagingGroupChat(
+                        group: group,
+                        invitedMemberIds: invitedMemberIds,
+                        conversationListViewModel: container.conversationListViewModel,
+                        onOpen: { conversationRouteToOpen = ChatThreadRoute(conversation: $0) }
+                    )
                 }
-            )
+            }
             .environmentObject(container.languageService)
         }
         .sheet(isPresented: $showsReactionPicker, onDismiss: {

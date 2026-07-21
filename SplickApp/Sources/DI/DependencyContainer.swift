@@ -760,12 +760,6 @@ final class DependencyContainer: ObservableObject {
 
     lazy var conversationListViewModel: ConversationListViewModel = makeConversationListViewModel()
 
-    lazy var createGroupConversationViewModel: CreateGroupConversationViewModel = {
-        CreateGroupConversationViewModel(
-            createGroupUseCase: CreateGroupConversationUseCase(repository: messagingRepository)
-        )
-    }()
-
     func openMessagingGroupChat(
         group: Group,
         invitedMemberIds: [UUID],

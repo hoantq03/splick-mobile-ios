@@ -25,6 +25,7 @@ public struct FriendsRootView: View {
     @Environment(\.currentUserSummary) private var currentUserSummary
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.pullToRefreshActive) private var pullToRefreshActive
+    @Environment(\.sameTabTapHandlingEnabled) private var sameTabTapHandlingEnabled
     @State private var isPullRefreshing = false
     @FocusState private var isSearchFieldFocused: Bool
 
@@ -40,6 +41,7 @@ public struct FriendsRootView: View {
 
     private let fetchOutgoingFriendRequestsUseCase: FetchOutgoingFriendRequestsUseCaseProtocol
     private let fetchBlockedUsersUseCase: FetchBlockedUsersUseCaseProtocol
+    private let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol
     private let cancelFriendRequestUseCase: CancelFriendRequestUseCaseProtocol
     private let removeFriendUseCase: RemoveFriendUseCaseProtocol
     private let setFriendNicknameUseCase: SetFriendNicknameUseCaseProtocol
@@ -128,6 +130,7 @@ public struct FriendsRootView: View {
         self.onBadgeCountsChanged = onBadgeCountsChanged
         self.onDirectoryLoaded = onDirectoryLoaded
         self.onFriendRequestsLoaded = onFriendRequestsLoaded
+        self.fetchMyFriendsUseCase = fetchMyFriendsUseCase
         let rootVM = FriendsRootViewModel(
             fetchMyFriendsUseCase: fetchMyFriendsUseCase,
             fetchMyGroupsUseCase: fetchMyGroupsUseCase,
@@ -306,18 +309,17 @@ public struct FriendsRootView: View {
             }
             .sheet(isPresented: $showCreateGroup) {
                 CreateGroupSheet(
-                    viewModel: CreateGroupViewModel(
-                        friends: viewModel.friends,
-                        createGroupUseCase: createGroupUseCase,
-                        inviteFriendsUseCase: inviteFriendsToGroupUseCase,
-                        uploadGroupAvatarUseCase: uploadGroupAvatarUseCase,
-                        updateGroupAvatarUseCase: updateGroupAvatarUseCase,
-                        languageService: languageService
-                    ) { group, _ in
-                        viewModel.onGroupCreated(group)
-                        showCreateGroup = false
-                    }
-                )
+                    friends: viewModel.friends,
+                    fetchMyFriendsUseCase: fetchMyFriendsUseCase,
+                    createGroupUseCase: createGroupUseCase,
+                    inviteFriendsUseCase: inviteFriendsToGroupUseCase,
+                    uploadGroupAvatarUseCase: uploadGroupAvatarUseCase,
+                    updateGroupAvatarUseCase: updateGroupAvatarUseCase,
+                    languageService: languageService
+                ) { group, _ in
+                    viewModel.onGroupCreated(group)
+                    showCreateGroup = false
+                }
                 .environmentObject(languageService)
             }
             .sheet(isPresented: $showIncomingRequests, onDismiss: {
@@ -393,6 +395,7 @@ public struct FriendsRootView: View {
             }
         }
         .onReceive(sameTabTapPublisher) { _ in
+            guard sameTabTapHandlingEnabled else { return }
             if tabBarScrollState?.isAtTop == true {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 if viewModel.isSearching {
@@ -727,6 +730,7 @@ public struct FriendsRootView: View {
                 withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
                     proxy.scrollTo("friendsSearchScrollTop", anchor: .top)
                 }
+                tabBarScrollState?.reset()
             }
         }
     }
@@ -859,6 +863,7 @@ public struct FriendsRootView: View {
                     withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
                         proxy.scrollTo("directoryScrollTop", anchor: .top)
                     }
+                    tabBarScrollState?.reset()
                 }
             }
         }

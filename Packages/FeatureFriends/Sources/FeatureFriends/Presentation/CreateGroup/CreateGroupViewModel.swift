@@ -16,12 +16,14 @@ public final class CreateGroupViewModel: ObservableObject {
     @Published var selectedMemberIds: Set<UUID> = []
     @Published var memberSearchQuery = ""
     @Published var isMemberSearchFocused = false
+    @Published private(set) var friends: [UserSummary]
+    @Published private(set) var isLoadingFriends = false
+    @Published private(set) var friendsLoadErrorMessage: String?
     @Published var isLoading = false
     @Published var successMessage: String?
     @Published var errorMessage: String?
 
-    let friends: [UserSummary]
-
+    private let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol
     private let createGroupUseCase: CreateGroupUseCaseProtocol
     private let inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol
     private let uploadGroupAvatarUseCase: UploadGroupAvatarUseCaseProtocol
@@ -31,6 +33,7 @@ public final class CreateGroupViewModel: ObservableObject {
 
     public init(
         friends: [UserSummary],
+        fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol,
         createGroupUseCase: CreateGroupUseCaseProtocol,
         inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol,
         uploadGroupAvatarUseCase: UploadGroupAvatarUseCaseProtocol,
@@ -39,6 +42,7 @@ public final class CreateGroupViewModel: ObservableObject {
         onSuccess: @escaping (SplickDomain.Group, [UUID]) -> Void
     ) {
         self.friends = friends
+        self.fetchMyFriendsUseCase = fetchMyFriendsUseCase
         self.createGroupUseCase = createGroupUseCase
         self.inviteFriendsUseCase = inviteFriendsUseCase
         self.uploadGroupAvatarUseCase = uploadGroupAvatarUseCase
@@ -80,6 +84,26 @@ public final class CreateGroupViewModel: ObservableObject {
 
     func setMemberSearchFocused(_ focused: Bool) {
         isMemberSearchFocused = focused
+    }
+
+    func loadFriendsIfNeeded() async {
+        guard friends.isEmpty else { return }
+        await loadFriends()
+    }
+
+    func loadFriends() async {
+        guard !isLoadingFriends else { return }
+
+        isLoadingFriends = true
+        friendsLoadErrorMessage = nil
+        defer { isLoadingFriends = false }
+
+        do {
+            friends = try await fetchMyFriendsUseCase.execute()
+            selectedMemberIds.formIntersection(Set(friends.map(\.id)))
+        } catch {
+            friendsLoadErrorMessage = languageService.localizedMessage(for: error)
+        }
     }
 
     func onPhotoItemChanged() async {

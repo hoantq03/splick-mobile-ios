@@ -1,6 +1,7 @@
 import SwiftUI
 import PhotosUI
 import DesignSystem
+import FeatureMedia
 import Localization
 import SplickDomain
 
@@ -12,13 +13,37 @@ private enum CreateGroupMetrics {
 }
 
 public struct CreateGroupSheet: View {
-    @ObservedObject var viewModel: CreateGroupViewModel
+    @StateObject private var viewModel: CreateGroupViewModel
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
     @FocusState private var isMemberSearchFocused: Bool
 
     public init(viewModel: CreateGroupViewModel) {
-        self._viewModel = ObservedObject(wrappedValue: viewModel)
+        self._viewModel = StateObject(wrappedValue: viewModel)
+    }
+
+    public init(
+        friends: [UserSummary] = [],
+        fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol,
+        createGroupUseCase: CreateGroupUseCaseProtocol,
+        inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol,
+        uploadGroupAvatarUseCase: UploadGroupAvatarUseCaseProtocol,
+        updateGroupAvatarUseCase: UpdateGroupAvatarUseCaseProtocol,
+        languageService: LanguageService,
+        onSuccess: @escaping (SplickDomain.Group, [UUID]) -> Void
+    ) {
+        self._viewModel = StateObject(
+            wrappedValue: CreateGroupViewModel(
+                friends: friends,
+                fetchMyFriendsUseCase: fetchMyFriendsUseCase,
+                createGroupUseCase: createGroupUseCase,
+                inviteFriendsUseCase: inviteFriendsUseCase,
+                uploadGroupAvatarUseCase: uploadGroupAvatarUseCase,
+                updateGroupAvatarUseCase: updateGroupAvatarUseCase,
+                languageService: languageService,
+                onSuccess: onSuccess
+            )
+        )
     }
 
     public var body: some View {
@@ -99,6 +124,9 @@ public struct CreateGroupSheet: View {
                     Button(languageService.text(.commonCancel)) { dismiss() }
                 }
             }
+            .task {
+                await viewModel.loadFriendsIfNeeded()
+            }
         }
     }
 
@@ -153,7 +181,28 @@ public struct CreateGroupSheet: View {
             Text(languageService.text(.messagingGroupMembersTitle))
                 .font(SplickTheme.Typography.headline)
 
-            if viewModel.friends.isEmpty {
+            if viewModel.isLoadingFriends {
+                HStack(spacing: SplickTheme.Spacing.sm) {
+                    ProgressView()
+                    Text(languageService.text(.commonLoading))
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, SplickTheme.Spacing.xs)
+            } else if let friendsLoadErrorMessage = viewModel.friendsLoadErrorMessage {
+                VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+                    Text(friendsLoadErrorMessage)
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.error)
+
+                    Button(languageService.text(.commonTryAgain)) {
+                        Task { await viewModel.loadFriends() }
+                    }
+                    .font(SplickTheme.Typography.caption.weight(.semibold))
+                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                }
+            } else if viewModel.friends.isEmpty {
                 Text(languageService.text(.friendsGroupNoFriendsToInvite))
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textTertiary)
@@ -180,13 +229,17 @@ public struct CreateGroupSheet: View {
 
                 if !viewModel.selectedMembers.isEmpty {
                     selectedMembersStrip
+                        .transition(.move(edge: .top).combined(with: .opacity))
                 }
 
                 if viewModel.shouldShowMemberSuggestions {
                     memberSearchResultsList
+                        .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
         }
+        .animation(.easeInOut(duration: 0.24), value: viewModel.shouldShowMemberSuggestions)
+        .animation(.easeInOut(duration: 0.24), value: viewModel.selectedMemberIds)
         .splickCard()
     }
 
