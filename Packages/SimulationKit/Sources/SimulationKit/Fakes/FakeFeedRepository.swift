@@ -407,9 +407,9 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
         submissionAttachments: [CommentSubmissionAttachment]
     ) async throws -> SendBillReminderResult {
         logger.log("Send bill reminder postId=\(postId) targets=\(targetUserIds?.count ?? 0)")
-        _ = submissionAttachments
         try await Task.sleep(for: .milliseconds(200))
 
+        var sentCount = 0
         if let index = posts.firstIndex(where: { $0.id == postId }) {
             let post = posts[index]
             let targets: Set<UUID>
@@ -420,12 +420,44 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
                     post.billSplit?.splits.filter { !$0.isPaid }.map(\.user.id) ?? []
                 )
             }
-            posts[index] = post.incrementingBillReminders(for: targets)
+            sentCount = targets.count
+            let targetUsers = post.billSplit?.splits
+                .filter { targets.contains($0.user.id) }
+                .map(\.user) ?? []
+            let mentions = targetUsers.map { "@\($0.username)" }.joined(separator: " ")
+            let commentBody = [mentions, message]
+                .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                .joined(separator: " ")
+            let attachments = submissionAttachments.compactMap { submission in
+                submission.remoteURL.map {
+                    CommentAttachment(
+                        kind: submission.kind,
+                        url: $0,
+                        fileName: submission.fileName,
+                        thumbnailURL: submission.uploadedThumbnailURL ?? $0,
+                        sizeBytes: submission.uploadedSizeBytes ?? 0
+                    )
+                }
+            }
+            let bot = UserSummary(
+                id: SplickBot.userId,
+                username: SplickBot.username,
+                displayName: SplickBot.displayName,
+                avatarURL: nil
+            )
+            let reminderComment = PostComment(
+                author: bot,
+                text: commentBody,
+                attachments: attachments
+            )
+            posts[index] = post
+                .incrementingBillReminders(for: targets)
+                .updating(comments: post.comments + [reminderComment])
         }
 
         logger.success("Bill reminder sent")
         return SendBillReminderResult(
-            sentCount: targetUserIds?.count ?? 1,
+            sentCount: sentCount,
             skippedCount: 0
         )
     }
