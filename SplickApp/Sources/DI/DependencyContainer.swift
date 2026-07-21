@@ -281,6 +281,10 @@ final class DependencyContainer: ObservableObject {
         FetchFeedUseCase(repository: feedRepository)
     }()
 
+    lazy var fetchUserPostsUseCase: FetchUserPostsUseCaseProtocol = {
+        FetchUserPostsUseCase(repository: feedRepository)
+    }()
+
     lazy var fetchPhotoAlbumUseCase: FetchPhotoAlbumUseCaseProtocol = {
         FetchPhotoAlbumUseCase(repository: feedRepository)
     }()
@@ -356,6 +360,7 @@ final class DependencyContainer: ObservableObject {
     lazy var friendUserProfileDependencies: FriendUserProfileDependencies = {
         FriendUserProfileDependencies(
             fetchUserProfileUseCase: fetchUserProfileUseCase,
+            fetchUserPostsUseCase: fetchUserPostsUseCase,
             fetchFriendPaymentProfileUseCase: fetchFriendPaymentProfileUseCase,
             addFriendUseCase: addFriendUseCase,
             fetchIncomingFriendRequestsUseCase: fetchIncomingFriendRequestsUseCase,
@@ -785,7 +790,7 @@ final class DependencyContainer: ObservableObject {
             onOpen(conversation)
         } catch {
             Log.error(error, category: .network, metadata: ["action": "openMessagingGroupChat"])
-            conversationListViewModel.startConversationError = error.localizedDescription
+            conversationListViewModel.startConversationError = languageService.localizedMessage(for: error)
         }
     }
 
@@ -853,12 +858,14 @@ final class DependencyContainer: ObservableObject {
     private func makeConversationListViewModel() -> ConversationListViewModel {
         ConversationListViewModel(
             fetchConversationsUseCase: fetchConversationsUseCase,
+            fetchMessagesUseCase: fetchMessagesUseCase,
             searchProvider: MessagingSearchAdapter(
                 searchUsersUseCase: searchUsersUseCase,
                 messagingRepository: messagingRepository
             ),
             repository: messagingRepository,
             wsClient: messagingWebSocketClient,
+            languageService: languageService,
             onInboxLoaded: { [weak self] conversations, unreadCount in
                 self?.widgetSyncBridge.syncConversations(conversations, totalUnreadCount: unreadCount)
             }
