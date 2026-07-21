@@ -26,5 +26,13 @@ let package = Package(
             ],
             path: "Sources/FeatureFriends"
         ),
+        .testTarget(
+            name: "FeatureFriendsTests",
+            dependencies: [
+                "FeatureFriends",
+                .product(name: "SplickDomain", package: "SplickDomain"),
+            ],
+            path: "Tests/FeatureFriendsTests"
+        ),
     ]
 )
