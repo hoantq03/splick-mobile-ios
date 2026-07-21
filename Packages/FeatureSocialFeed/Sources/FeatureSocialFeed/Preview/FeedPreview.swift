@@ -42,8 +42,14 @@ final class MockAddCommentUseCase: AddCommentUseCaseProtocol, Sendable {
 }
 
 final class MockSendBillReminderUseCase: SendBillReminderUseCaseProtocol, Sendable {
-    func execute(postId: UUID, targetUserIds: [UUID]?, message: String) async throws -> SendBillReminderResult {
-        SendBillReminderResult(sentCount: targetUserIds?.count ?? 1, skippedCount: 0)
+    func execute(
+        postId: UUID,
+        targetUserIds: [UUID]?,
+        message: String,
+        submissionAttachments: [CommentSubmissionAttachment]
+    ) async throws -> SendBillReminderResult {
+        _ = submissionAttachments
+        return SendBillReminderResult(sentCount: targetUserIds?.count ?? 1, skippedCount: 0)
     }
 }
 

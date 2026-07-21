@@ -23,7 +23,8 @@ public protocol FeedRepositoryProtocol: Sendable {
     func sendBillReminder(
         postId: UUID,
         targetUserIds: [UUID]?,
-        message: String
+        message: String,
+        submissionAttachments: [CommentSubmissionAttachment]
     ) async throws -> SendBillReminderResult
 
     func submitPaymentEvidence(

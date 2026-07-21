@@ -169,11 +169,14 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
     public func sendBillReminder(
         postId: UUID,
         targetUserIds: [UUID]?,
-        message: String
+        message: String,
+        submissionAttachments: [CommentSubmissionAttachment]
     ) async throws -> SendBillReminderResult {
+        let attachmentDTOs = try await buildCommentAttachmentDTOs(from: submissionAttachments)
         let request = SendPostBillReminderRequestDTO(
             targetUserIds: targetUserIds,
-            message: message
+            message: message,
+            attachments: attachmentDTOs
         )
         let response: SendPostBillReminderResponseDTO = try await apiClient.request(
             FeedEndpoint.sendBillReminder(postId: postId, request)

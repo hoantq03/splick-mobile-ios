@@ -113,8 +113,8 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
                     currency: "VND",
                     splits: [
                         PostBillSplitLine(user: linh, amount: 150_000, isPaid: true),
-                        PostBillSplitLine(user: nam, amount: 150_000, isPaid: false),
-                        PostBillSplitLine(user: duc, amount: 150_000, isPaid: false),
+                        PostBillSplitLine(user: nam, amount: 150_000, isPaid: false, reminderCount: 2),
+                        PostBillSplitLine(user: duc, amount: 150_000, isPaid: false, reminderCount: 4),
                     ]
                 ),
                 viewCount: 12,
@@ -181,7 +181,7 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
                     splits: [
                         PostBillSplitLine(user: minh, amount: 80_000, isPaid: true),
                         PostBillSplitLine(user: linh, amount: 80_000, isPaid: true),
-                        PostBillSplitLine(user: duc, amount: 80_000, isPaid: false),
+                        PostBillSplitLine(user: duc, amount: 80_000, isPaid: false, reminderCount: 1),
                         PostBillSplitLine(user: nam, amount: 80_000, isPaid: false),
                     ]
                 ),
@@ -403,10 +403,26 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
     public func sendBillReminder(
         postId: UUID,
         targetUserIds: [UUID]?,
-        message: String
+        message: String,
+        submissionAttachments: [CommentSubmissionAttachment]
     ) async throws -> SendBillReminderResult {
         logger.log("Send bill reminder postId=\(postId) targets=\(targetUserIds?.count ?? 0)")
+        _ = submissionAttachments
         try await Task.sleep(for: .milliseconds(200))
+
+        if let index = posts.firstIndex(where: { $0.id == postId }) {
+            let post = posts[index]
+            let targets: Set<UUID>
+            if let targetUserIds, !targetUserIds.isEmpty {
+                targets = Set(targetUserIds)
+            } else {
+                targets = Set(
+                    post.billSplit?.splits.filter { !$0.isPaid }.map(\.user.id) ?? []
+                )
+            }
+            posts[index] = post.incrementingBillReminders(for: targets)
+        }
+
         logger.success("Bill reminder sent")
         return SendBillReminderResult(
             sentCount: targetUserIds?.count ?? 1,

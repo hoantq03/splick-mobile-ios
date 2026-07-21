@@ -669,13 +669,41 @@ public final class FeedViewModel: ObservableObject {
     func sendBillReminder(
         postId: UUID,
         targetUserIds: [UUID]?,
-        message: String
+        message: String,
+        submissionAttachments: [CommentSubmissionAttachment]
     ) async throws -> SendBillReminderResult {
-        try await sendBillReminderUseCase.execute(
+        let result = try await sendBillReminderUseCase.execute(
             postId: postId,
             targetUserIds: targetUserIds,
-            message: message
+            message: message,
+            submissionAttachments: submissionAttachments
         )
+
+        guard let index = posts.firstIndex(where: { $0.id == postId }) else {
+            return result
+        }
+
+        let post = posts[index]
+        let targets: Set<UUID>
+        if let targetUserIds, !targetUserIds.isEmpty {
+            targets = Set(targetUserIds)
+        } else {
+            targets = Set(post.billSplit?.splits.filter { !$0.isPaid }.map(\.user.id) ?? [])
+        }
+
+        let optimistic = post.incrementingBillReminders(for: targets)
+        posts[index] = optimistic
+        state = .loaded(posts)
+
+        await refreshPost(id: postId, allowingConcurrentFeedRefresh: true)
+
+        // Keep optimistic counts if the server payload is still missing reminderCount.
+        if let refreshedIndex = posts.firstIndex(where: { $0.id == postId }) {
+            posts[refreshedIndex] = posts[refreshedIndex].mergingBillReminderCounts(from: optimistic)
+            state = .loaded(posts)
+        }
+
+        return result
     }
 
     func submitPaymentEvidence(

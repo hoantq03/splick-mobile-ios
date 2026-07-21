@@ -1,4 +1,5 @@
 import Foundation
+import SplickDomain
 
 public struct SendBillReminderResult: Sendable {
     public let sentCount: Int
@@ -11,7 +12,12 @@ public struct SendBillReminderResult: Sendable {
 }
 
 public protocol SendBillReminderUseCaseProtocol: Sendable {
-    func execute(postId: UUID, targetUserIds: [UUID]?, message: String) async throws -> SendBillReminderResult
+    func execute(
+        postId: UUID,
+        targetUserIds: [UUID]?,
+        message: String,
+        submissionAttachments: [CommentSubmissionAttachment]
+    ) async throws -> SendBillReminderResult
 }
 
 public final class SendBillReminderUseCase: SendBillReminderUseCaseProtocol, Sendable {
@@ -24,12 +30,14 @@ public final class SendBillReminderUseCase: SendBillReminderUseCaseProtocol, Sen
     public func execute(
         postId: UUID,
         targetUserIds: [UUID]?,
-        message: String
+        message: String,
+        submissionAttachments: [CommentSubmissionAttachment]
     ) async throws -> SendBillReminderResult {
         try await repository.sendBillReminder(
             postId: postId,
             targetUserIds: targetUserIds,
-            message: message
+            message: message,
+            submissionAttachments: submissionAttachments
         )
     }
 }

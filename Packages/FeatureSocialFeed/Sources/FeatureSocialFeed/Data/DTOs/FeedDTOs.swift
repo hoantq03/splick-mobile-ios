@@ -189,6 +189,7 @@ struct CreatePostBillSplitRequestDTO: Encodable {
 struct SendPostBillReminderRequestDTO: Encodable {
     let targetUserIds: [UUID]?
     let message: String
+    let attachments: [CreateCommentAttachmentRequestDTO]
 }
 
 struct SendPostBillReminderResponseDTO: Decodable {
