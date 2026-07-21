@@ -6,9 +6,18 @@ import SplickDomain
 
 public struct FriendUserProfileView: View {
     @StateObject private var viewModel: FriendUserProfileViewModel
+    @State private var previewPost: Post?
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openDirectMessage) private var openDirectMessage
+    @Environment(\.openLinkedPost) private var openLinkedPost
+    @Environment(\.openProfileSettings) private var openProfileSettings
+
+    private static let postGridSpacing = SplickTheme.Spacing.xs
+    private let postGridColumns = Array(
+        repeating: GridItem(.flexible(), spacing: Self.postGridSpacing),
+        count: 4
+    )
 
     public init(viewModel: FriendUserProfileViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -63,9 +72,13 @@ public struct FriendUserProfileView: View {
                             Task { await viewModel.loadProfile() }
                         }
                         .padding(.horizontal, SplickTheme.Spacing.xl)
-                    } else if !viewModel.isBotProfile {
+                    } else if !viewModel.isBotProfile, !viewModel.isOwnProfile {
                         relationshipActions
                             .padding(.horizontal, SplickTheme.Spacing.md)
+                    }
+
+                    if !viewModel.isBotProfile {
+                        postsContent
                     }
                 }
                 .padding(.bottom, SplickTheme.Spacing.xxl)
@@ -74,6 +87,19 @@ public struct FriendUserProfileView: View {
             .background(SplickTheme.Colors.background)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                if viewModel.isOwnProfile, let openProfileSettings {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            dismiss()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                openProfileSettings()
+                            }
+                        } label: {
+                            Image(systemName: "gearshape")
+                        }
+                        .accessibilityLabel(languageService.text(.profileSettingsAccessibility))
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(languageService.text(.commonDone)) { dismiss() }
                 }
@@ -85,7 +111,19 @@ public struct FriendUserProfileView: View {
                 }
             }
             .task {
-                await viewModel.loadProfile()
+                async let profile: Void = viewModel.loadProfile()
+                async let posts: Void = viewModel.loadPostsIfNeeded()
+                _ = await (profile, posts)
+            }
+            .refreshable {
+                async let profile: Void = viewModel.loadProfile()
+                async let posts: Void = viewModel.refreshPosts()
+                _ = await (profile, posts)
+            }
+            .onChange(of: viewModel.posts.map(\.id)) { _ in
+                ImagePrefetching.prefetch(
+                    urls: viewModel.posts.map { $0.thumbnailURL ?? $0.imageURL }
+                )
             }
             .alert(languageService.text(.profileTitle), isPresented: Binding(
                 get: { viewModel.alertMessage != nil },
@@ -131,6 +169,139 @@ public struct FriendUserProfileView: View {
                     errorMessage: viewModel.paymentProfileError
                 )
             }
+            .overlay {
+                if let previewPost {
+                    PostPeekOverlay(
+                        post: previewPost,
+                        onDismiss: { self.previewPost = nil },
+                        onOpen: {
+                            let postId = previewPost.id
+                            self.previewPost = nil
+                            openPost(postId)
+                        }
+                    )
+                    .zIndex(10)
+                }
+            }
+        }
+    }
+
+    private var postsContent: some View {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
+            Text(languageService.text(.profilePostsTitle))
+                .font(SplickTheme.Typography.title)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
+                .padding(.horizontal, SplickTheme.Spacing.md)
+
+            postsGridState
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var postsGridState: some View {
+        if viewModel.isLoadingPosts && viewModel.posts.isEmpty {
+            LoadingView(message: languageService.text(.profilePostsLoading))
+                .frame(minHeight: 160)
+                .padding(.horizontal, SplickTheme.Spacing.md)
+        } else if let postsError = viewModel.postsError, viewModel.posts.isEmpty {
+            ErrorView(message: postsError) {
+                Task { await viewModel.refreshPosts() }
+            }
+            .frame(minHeight: 160)
+            .padding(.horizontal, SplickTheme.Spacing.md)
+        } else if viewModel.posts.isEmpty {
+            EmptyStateView(
+                icon: "square.grid.2x2",
+                title: languageService.text(.profilePostsEmptyTitle),
+                message: languageService.text(.profilePostsEmptyMessage)
+            )
+            .frame(minHeight: 180)
+            .padding(.horizontal, SplickTheme.Spacing.md)
+        } else {
+            LazyVGrid(columns: postGridColumns, spacing: Self.postGridSpacing) {
+                ForEach(viewModel.posts) { post in
+                    profilePostCell(post)
+                        .simultaneousGesture(
+                            LongPressGesture(minimumDuration: 0.45)
+                                .onEnded { _ in
+                                    previewPost = post
+                                }
+                        )
+                        .onAppear {
+                            Task {
+                                await viewModel.loadMorePostsIfNeeded(currentPostId: post.id)
+                            }
+                        }
+                }
+            }
+            .padding(.horizontal, SplickTheme.Spacing.md)
+
+            if viewModel.isLoadingMorePosts {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, SplickTheme.Spacing.md)
+            } else if let postsError = viewModel.postsError {
+                VStack(spacing: SplickTheme.Spacing.xs) {
+                    Text(postsError)
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.error)
+                        .multilineTextAlignment(.center)
+                    Button(languageService.text(.profileRetry)) {
+                        guard let lastPostId = viewModel.posts.last?.id else { return }
+                        Task {
+                            await viewModel.loadMorePostsIfNeeded(currentPostId: lastPostId)
+                        }
+                    }
+                }
+                .padding(.horizontal, SplickTheme.Spacing.md)
+            }
+        }
+    }
+
+    private func profilePostCell(_ post: Post) -> some View {
+        Button {
+            guard previewPost == nil else { return }
+            openPost(post.id)
+        } label: {
+            Color.clear
+                .aspectRatio(1, contentMode: .fit)
+                .overlay {
+                    GridThumbnailImage(url: post.thumbnailURL ?? post.imageURL) {
+                        SplickTheme.Colors.cardBackground
+                    }
+                }
+                .overlay(alignment: .topTrailing) {
+                    if post.mediaItems.count > 1 {
+                        Image(systemName: "square.fill.on.square.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .shadow(radius: 1)
+                            .padding(6)
+                    } else if post.mediaType == .video {
+                        Image(systemName: "play.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .shadow(radius: 1)
+                            .padding(6)
+                    }
+                }
+                .clipShape(
+                    RoundedRectangle(
+                        cornerRadius: SplickTheme.CornerRadius.small,
+                        style: .continuous
+                    )
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(languageService.text(.profileStatPosts))
+    }
+
+    private func openPost(_ postId: UUID) {
+        guard let openLinkedPost else { return }
+        dismiss()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            openLinkedPost(postId, false)
         }
     }
 

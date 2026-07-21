@@ -7,11 +7,18 @@ import FeatureFriends
 
 struct PhotoAlbumRoute: Hashable {}
 
+private struct AlbumPostPreview {
+    let post: Post
+    let mediaIndex: Int
+}
+
 public struct PhotoAlbumView: View {
     @EnvironmentObject private var languageService: LanguageService
     @ObservedObject private var viewModel: PhotoAlbumViewModel
     @ObservedObject private var feedViewModel: FeedViewModel
     @Binding private var navigationPath: NavigationPath
+    @State private var postPreview: AlbumPostPreview?
+    @State private var previewLoadingPostId: UUID?
     private let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol?
     private let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
     private let isEmbedded: Bool
@@ -63,6 +70,23 @@ public struct PhotoAlbumView: View {
         .refreshable {
             await viewModel.refresh()
         }
+        .overlay {
+            if let postPreview {
+                PostPeekOverlay(
+                    post: postPreview.post,
+                    onDismiss: { self.postPreview = nil },
+                    onOpen: {
+                        let destination = FeedPostDestination(
+                            postId: postPreview.post.id,
+                            mediaIndex: postPreview.mediaIndex
+                        )
+                        self.postPreview = nil
+                        navigationPath.append(destination)
+                    }
+                )
+                .zIndex(10)
+            }
+        }
     }
 
     @ViewBuilder
@@ -100,9 +124,13 @@ public struct PhotoAlbumView: View {
 
                         LazyVGrid(columns: columns, spacing: Self.gridSpacing) {
                             ForEach(section.photos) { photo in
-                                AlbumPhotoCell(photo: photo, cornerRadius: Self.cellCornerRadius) {
-                                    openPost(for: photo)
-                                }
+                                AlbumPhotoCell(
+                                    photo: photo,
+                                    cornerRadius: Self.cellCornerRadius,
+                                    isLoadingPreview: previewLoadingPostId == photo.postId,
+                                    onTap: { openPost(for: photo) },
+                                    onLongPress: { previewPost(for: photo) }
+                                )
                                 .onAppear {
                                     if photo.id == viewModel.photos.last?.id {
                                         Task { await viewModel.loadMore() }
@@ -141,6 +169,23 @@ public struct PhotoAlbumView: View {
             )
         }
     }
+
+    private func previewPost(for photo: AlbumPhoto) {
+        guard previewLoadingPostId == nil, postPreview == nil else { return }
+        previewLoadingPostId = photo.postId
+
+        Task {
+            let loaded = await feedViewModel.ensurePostLoaded(id: photo.postId)
+            guard !Task.isCancelled, previewLoadingPostId == photo.postId else { return }
+            defer { previewLoadingPostId = nil }
+            guard loaded == .loaded,
+                  let post = feedViewModel.posts.first(where: { $0.id == photo.postId }) else {
+                return
+            }
+            let mediaIndex = post.displayMediaItems.firstIndex(where: { $0.id == photo.id }) ?? 0
+            postPreview = AlbumPostPreview(post: post, mediaIndex: mediaIndex)
+        }
+    }
 }
 
 private struct PhotoAlbumNavigationModifier: ViewModifier {
@@ -161,21 +206,45 @@ private struct PhotoAlbumNavigationModifier: ViewModifier {
 private struct AlbumPhotoCell: View {
     let photo: AlbumPhoto
     let cornerRadius: CGFloat
+    let isLoadingPreview: Bool
     let onTap: () -> Void
+    let onLongPress: () -> Void
+
+    @State private var didLongPress = false
 
     private var cellShape: RoundedRectangle {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
     }
 
     var body: some View {
-        Button(action: onTap) {
+        Button {
+            guard !didLongPress else {
+                didLongPress = false
+                return
+            }
+            onTap()
+        } label: {
             Color.clear
                 .aspectRatio(1, contentMode: .fit)
                 .overlay { photoContent }
+                .overlay {
+                    if isLoadingPreview {
+                        Color.black.opacity(0.28)
+                        ProgressView()
+                            .tint(.white)
+                    }
+                }
                 .clipShape(cellShape)
                 .contentShape(cellShape)
         }
         .buttonStyle(.plain)
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.45)
+                .onEnded { _ in
+                    didLongPress = true
+                    onLongPress()
+                }
+        )
     }
 
     @ViewBuilder
