@@ -28,6 +28,15 @@ final class ConversationPreviewFormatterTests: XCTestCase {
         XCTAssertEqual(ConversationPreviewFormatter.content(for: message), .images(3))
     }
 
+    func test_content_returnsGif_whenMessageHasExternalGifAttachment() {
+        let message = makeMessage(
+            body: "",
+            imageAttachments: [makeAttachment(mediaId: nil, fileExtension: "gif")]
+        )
+
+        XCTAssertEqual(ConversationPreviewFormatter.content(for: message), .gif)
+    }
+
     func test_senderLabel_returnsMe_whenCurrentUserSentMessage() {
         let message = makeMessage(senderId: Self.currentUserId, senderDisplayName: "Nguyễn Văn An")
 
@@ -74,10 +83,13 @@ final class ConversationPreviewFormatterTests: XCTestCase {
         )
     }
 
-    private func makeAttachment() -> MessageImageAttachment {
+    private func makeAttachment(
+        mediaId: UUID? = UUID(),
+        fileExtension: String = "jpg"
+    ) -> MessageImageAttachment {
         MessageImageAttachment(
-            mediaId: UUID(),
-            url: URL(string: "https://example.com/image.jpg")!,
+            mediaId: mediaId,
+            url: URL(string: "https://example.com/image.\(fileExtension)")!,
             thumbnailURL: nil
         )
     }

@@ -83,6 +83,8 @@ struct ConversationRowView: View {
             content = body.isEmpty ? languageService.text(.messagingReplyEmpty) : body
         case .emoji:
             content = languageService.text(.messagingConversationSentEmoji)
+        case .gif:
+            content = "GIF"
         case .images(let count):
             content = count == 1
                 ? languageService.text(.messagingConversationSentImage)

@@ -4,11 +4,17 @@ import SplickDomain
 enum ConversationPreviewContent: Equatable {
     case text(String)
     case emoji
+    case gif
     case images(Int)
 }
 
 enum ConversationPreviewFormatter {
     static func content(for message: ChatMessage) -> ConversationPreviewContent {
+        if message.imageAttachments.count == 1,
+           message.imageAttachments[0].mediaId == nil {
+            return .gif
+        }
+
         if !message.imageAttachments.isEmpty {
             return .images(message.imageAttachments.count)
         }
