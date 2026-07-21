@@ -1,9 +1,13 @@
 import SwiftUI
 import Common
 import DesignSystem
+import Localization
 import SplickDomain
 
 struct ConversationRowView: View {
+    @EnvironmentObject private var languageService: LanguageService
+    @Environment(\.currentUserSummary) private var currentUserSummary
+
     let conversation: Conversation
 
     var body: some View {
@@ -42,7 +46,7 @@ struct ConversationRowView: View {
                 }
 
                 HStack {
-                    Text(conversation.lastMessage?.body ?? "")
+                    Text(lastMessagePreview)
                         .font(SplickTheme.Typography.callout)
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
                         .lineLimit(1)
@@ -60,5 +64,31 @@ struct ConversationRowView: View {
             }
         }
         .padding(.vertical, SplickTheme.Spacing.xs)
+    }
+
+    private var lastMessagePreview: String {
+        guard let lastMessage = conversation.lastMessage else { return "" }
+
+        let sender = ConversationPreviewFormatter.senderLabel(
+            for: lastMessage,
+            currentUserId: currentUserSummary?.id,
+            meLabel: languageService.text(.commonMe),
+            fallbackDisplayName: conversation.peer?.displayTitle,
+            unknownLabel: languageService.text(.messagingReplyUnknownSender)
+        )
+
+        let content: String
+        switch ConversationPreviewFormatter.content(for: lastMessage) {
+        case .text(let body):
+            content = body.isEmpty ? languageService.text(.messagingReplyEmpty) : body
+        case .emoji:
+            content = languageService.text(.messagingConversationSentEmoji)
+        case .images(let count):
+            content = count == 1
+                ? languageService.text(.messagingConversationSentImage)
+                : languageService.format(.messagingConversationSentImages, count)
+        }
+
+        return "\(sender): \(content)"
     }
 }
