@@ -163,4 +163,92 @@ public actor FakeExpenseRepository: ExpenseRepositoryProtocol {
         logger.success("Debts: owed=150,000₫, owing=100,000₫")
         return debts
     }
+
+    public func fetchExpenses(
+        counterpartyId: UUID,
+        page: Int,
+        limit: Int,
+        status: CounterpartyExpenseStatus
+    ) async throws -> ExpensePage {
+        let matching = expenses.filter { expense in
+            expense.paidBy.id == counterpartyId
+                || expense.splits.contains { $0.user.id == counterpartyId }
+        }
+        let start = page * limit
+        let pageExpenses = start < matching.count
+            ? Array(matching[start..<min(start + limit, matching.count)])
+            : []
+        return ExpensePage(
+            expenses: pageExpenses,
+            page: page,
+            totalPages: max(1, Int(ceil(Double(matching.count) / Double(limit)))),
+            totalItems: matching.count,
+            hasNext: start + limit < matching.count
+        )
+    }
+
+    public func fetchNetting(counterpartyId: UUID) async throws -> NettingSummary {
+        let counterparty = counterpartyId == friend1.id ? friend1 : friend2
+        return NettingSummary(
+            counterparty: counterparty,
+            actorOwesTotal: counterpartyId == friend2.id ? 100000 : 0,
+            counterpartyOwesTotal: counterpartyId == friend1.id ? 150000 : 0,
+            netAmount: counterpartyId == friend1.id ? 150000 : 100000,
+            netDirection: counterpartyId == friend1.id ? .counterpartyOwes : .actorOwes,
+            currency: "VND",
+            unpaidSplitCount: 1,
+            expensesInvolved: 1
+        )
+    }
+
+    public func submitBulkSettlement(
+        counterpartyId: UUID,
+        evidenceURL: URL,
+        note: String?
+    ) async throws -> BulkSettlement {
+        BulkSettlement(
+            id: UUID(),
+            debtorUserId: currentUser.id,
+            creditorUserId: counterpartyId,
+            amount: 100000,
+            currency: "VND",
+            evidenceURL: evidenceURL,
+            note: note,
+            status: .pending,
+            splitCount: 1,
+            createdAt: .now
+        )
+    }
+
+    public func approveBulkSettlement(id: UUID) async throws -> BulkSettlement {
+        BulkSettlement(
+            id: id,
+            debtorUserId: currentUser.id,
+            creditorUserId: friend1.id,
+            amount: 100000,
+            currency: "VND",
+            evidenceURL: URL(string: "https://example.com/evidence.jpg")!,
+            status: .approved,
+            splitCount: 1,
+            createdAt: .now,
+            reviewedAt: .now
+        )
+    }
+
+    public func rejectBulkSettlement(id: UUID, reason: String?) async throws -> BulkSettlement {
+        BulkSettlement(
+            id: id,
+            debtorUserId: currentUser.id,
+            creditorUserId: friend1.id,
+            amount: 100000,
+            currency: "VND",
+            evidenceURL: URL(string: "https://example.com/evidence.jpg")!,
+            note: reason,
+            status: .rejected,
+            splitCount: 1,
+            createdAt: .now,
+            reviewedAt: .now,
+            rejectReason: reason
+        )
+    }
 }
