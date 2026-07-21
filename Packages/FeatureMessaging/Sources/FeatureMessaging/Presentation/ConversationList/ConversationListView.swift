@@ -17,6 +17,7 @@ public struct ConversationListView: View {
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.pullToRefreshActive) private var pullToRefreshActive
+    @Environment(\.sameTabTapHandlingEnabled) private var sameTabTapHandlingEnabled
     @State private var isPullRefreshing = false
     @State private var composePresentation: NewMessageComposePresentation?
     private let onCreateGroup: () -> Void
@@ -136,6 +137,12 @@ public struct ConversationListView: View {
             conversationToOpen = nil
         }
         .onReceive(sameTabTapPublisher) { _ in
+            guard sameTabTapHandlingEnabled else { return }
+            // Pop into a thread first — same as Instagram home tab.
+            if !path.isEmpty {
+                path = NavigationPath()
+                return
+            }
             if tabBarScrollState?.isAtTop == true {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 if isSearching {
@@ -297,6 +304,7 @@ public struct ConversationListView: View {
                 withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
                     proxy.scrollTo("messagingSearchScrollTop", anchor: .top)
                 }
+                tabBarScrollState?.reset()
             }
         }
     }
@@ -374,6 +382,7 @@ public struct ConversationListView: View {
                 withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
                     proxy.scrollTo("messagingScrollTop", anchor: .top)
                 }
+                tabBarScrollState?.reset()
             }
         }
     }
