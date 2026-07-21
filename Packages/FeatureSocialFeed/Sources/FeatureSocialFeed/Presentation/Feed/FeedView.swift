@@ -71,6 +71,7 @@ public struct FeedView: View {
                     navigationPath: $navigationPath,
                     companionsRoute: $companionsRoute,
                     videoCoordinator: videoCoordinator,
+                    makeGifPickerViewModel: makeGifPickerViewModel,
                     onOpenProfile: openProfile
                 )
             } album: {
@@ -206,6 +207,7 @@ private struct FeedPrimaryPage: View {
     @Binding var navigationPath: NavigationPath
     @Binding var companionsRoute: CompanionsSheetRoute?
     let videoCoordinator: FeedVideoPlaybackCoordinator
+    let makeGifPickerViewModel: GifPickerViewModelFactory?
     let onOpenProfile: (UserSummary) -> Void
 
     @State private var feedScrollLocked = false
@@ -297,11 +299,12 @@ private struct FeedPrimaryPage: View {
                                 FeedPostDestination(postId: post.id, mediaIndex: mediaIndex)
                             )
                         },
-                        onSendBillReminder: { postId, targetUserIds, message in
+                        onSendBillReminder: { postId, targetUserIds, message, attachments in
                             try await viewModel.sendBillReminder(
                                 postId: postId,
                                 targetUserIds: targetUserIds,
-                                message: message
+                                message: message,
+                                submissionAttachments: attachments
                             )
                         },
                         onSubmitPaymentEvidence: { postId, splitId, message, attachments in
@@ -312,6 +315,7 @@ private struct FeedPrimaryPage: View {
                                 submissionAttachments: attachments
                             )
                         },
+                        makeGifPickerViewModel: makeGifPickerViewModel,
                         uploadState: viewModel.postUploadState(for: post.id)
                     )
                     .onAppear {

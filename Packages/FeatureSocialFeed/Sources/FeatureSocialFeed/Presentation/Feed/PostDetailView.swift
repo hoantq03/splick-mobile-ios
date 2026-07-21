@@ -89,11 +89,12 @@ struct PostDetailView: View {
                         onMediaTap: { index in
                             mediaViewerRoute = MediaViewerRoute(index: index)
                         },
-                        onSendBillReminder: { postId, targetUserIds, message in
+                        onSendBillReminder: { postId, targetUserIds, message, attachments in
                             try await feedViewModel.sendBillReminder(
                                 postId: postId,
                                 targetUserIds: targetUserIds,
-                                message: message
+                                message: message,
+                                submissionAttachments: attachments
                             )
                         },
                         onSubmitPaymentEvidence: { postId, splitId, message, attachments in
@@ -104,6 +105,7 @@ struct PostDetailView: View {
                                 submissionAttachments: attachments
                             )
                         },
+                        makeGifPickerViewModel: makeGifPickerViewModel,
                         initiallyExpandedBillSplit: expandBillSplitInitially,
                         initialMediaIndex: initialMediaIndex
                     )
