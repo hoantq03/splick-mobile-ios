@@ -10,6 +10,51 @@ import XCTest
 final class ExpenseFriendViewModelTests: XCTestCase {
   private let currentUserId = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
 
+  func test_friendListPullToRefresh_keepsLoadedStateWhileFetching() async {
+    let friend = UserSummary(
+      id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
+      username: "friend",
+      displayName: "Friend",
+      avatarURL: nil
+    )
+    let first = [
+      DebtSummary(user: friend, amount: 100, currency: "VND")
+    ]
+    let second = [
+      DebtSummary(user: friend, amount: 250, currency: "VND")
+    ]
+    let useCase = StubDebtSummaryUseCase(results: [
+      .success(first),
+      .success(second),
+    ])
+    let viewModel = ExpenseFriendListViewModel(
+      fetchDebtSummaryUseCase: useCase,
+      languageService: makeLanguageService()
+    )
+
+    await viewModel.load()
+    guard case .loaded = viewModel.state else {
+      return XCTFail("Expected loaded state after initial load")
+    }
+
+    await useCase.armGateForNextCall()
+    let refreshTask = Task { await viewModel.load(isPullToRefresh: true) }
+    await useCase.waitUntilGatedCallStarts()
+
+    guard case .loaded = viewModel.state else {
+      await useCase.releaseGate()
+      await refreshTask.value
+      return XCTFail("Pull-to-refresh must not switch to full-screen loading")
+    }
+
+    await useCase.releaseGate()
+    await refreshTask.value
+
+    XCTAssertEqual(viewModel.debts.first?.amount, 250)
+    let callCount = await useCase.callCount
+    XCTAssertEqual(callCount, 2)
+  }
+
   func test_netDirection_onlyActorOwesEnablesQuickSettlement() async {
     let actorOwes = makeSummary(direction: .actorOwes, amount: 100)
     let viewModel = makeDetailViewModel(summary: actorOwes)
@@ -291,6 +336,49 @@ final class ExpenseFriendViewModelTests: XCTestCase {
       splitCount: 1,
       createdAt: .now
     )
+  }
+}
+
+private actor StubDebtSummaryUseCase: FetchDebtSummaryUseCaseProtocol {
+  private let results: [Result<[DebtSummary], Error>]
+  private(set) var callCount = 0
+  private var gateArmed = false
+  private var hasEnteredGate = false
+  private var gateContinuation: CheckedContinuation<Void, Never>?
+  private var startedWaiters: [CheckedContinuation<Void, Never>] = []
+
+  init(results: [Result<[DebtSummary], Error>]) {
+    self.results = results
+  }
+
+  func armGateForNextCall() {
+    gateArmed = true
+    hasEnteredGate = false
+  }
+
+  func waitUntilGatedCallStarts() async {
+    if hasEnteredGate { return }
+    await withCheckedContinuation { startedWaiters.append($0) }
+  }
+
+  func releaseGate() {
+    gateContinuation?.resume()
+    gateContinuation = nil
+  }
+
+  func execute(groupId: UUID?) async throws -> [DebtSummary] {
+    let index = callCount
+    callCount += 1
+    if gateArmed {
+      gateArmed = false
+      hasEnteredGate = true
+      for waiter in startedWaiters {
+        waiter.resume()
+      }
+      startedWaiters.removeAll()
+      await withCheckedContinuation { gateContinuation = $0 }
+    }
+    return try results[min(index, results.count - 1)].get()
   }
 }
 
