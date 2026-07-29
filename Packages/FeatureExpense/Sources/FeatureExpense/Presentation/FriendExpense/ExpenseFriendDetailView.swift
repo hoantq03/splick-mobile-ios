@@ -186,6 +186,7 @@ public final class ExpenseFriendDetailViewModel: ObservableObject {
 public struct ExpenseFriendDetailView: View {
   @StateObject private var viewModel: ExpenseFriendDetailViewModel
   @EnvironmentObject private var languageService: LanguageService
+  @Environment(\.openLinkedPost) private var openLinkedPost
   @State private var showBulkSettlement = false
   @State private var showRejectPrompt = false
   @State private var rejectionReason = ""
@@ -365,15 +366,34 @@ public struct ExpenseFriendDetailView: View {
       VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
         Text(title)
           .font(SplickTheme.Typography.headline)
-        ForEach(expenses) { expense in
-          ExpenseRowView(
-            expense: expense,
-            currentUserId: viewModel.currentUserId,
-            onCreatorTap: {},
-            onTap: {}
-          )
+
+        VStack(spacing: 0) {
+          ForEach(Array(expenses.enumerated()), id: \.element.id) { index, expense in
+            ExpenseRowView(
+              expense: expense,
+              currentUserId: viewModel.currentUserId,
+              layout: .grouped,
+              onCreatorTap: {},
+              onTap: { openLinkedPost(for: expense) }
+            )
+
+            if index < expenses.count - 1 {
+              Divider()
+                .padding(.leading, 84)
+            }
+          }
         }
+        .background {
+          RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous)
+            .fill(SplickTheme.Colors.cardBackground)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous))
       }
     }
+  }
+
+  private func openLinkedPost(for expense: Expense) {
+    guard let postId = expense.postId else { return }
+    openLinkedPost?(postId, true)
   }
 }
