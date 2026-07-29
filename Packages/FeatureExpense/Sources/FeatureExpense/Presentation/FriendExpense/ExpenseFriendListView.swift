@@ -21,14 +21,21 @@ public final class ExpenseFriendListViewModel: ObservableObject {
     self.languageService = languageService
   }
 
-  public func load() async {
-    state = .loading
+  public func load(isPullToRefresh: Bool = false) async {
+    // Keep the list mounted during pull-to-refresh so UIRefreshControl is not torn down mid-gesture.
+    if !isPullToRefresh {
+      state = .loading
+    }
     do {
       debts = try await fetchDebtSummaryUseCase.execute(groupId: nil)
         .sorted { abs($0.amount) > abs($1.amount) }
       state = .loaded(debts)
     } catch {
-      state = .failed(languageService.localizedMessage(for: error))
+      if isPullToRefresh, !debts.isEmpty {
+        state = .loaded(debts)
+      } else {
+        state = .failed(languageService.localizedMessage(for: error))
+      }
     }
   }
 }
@@ -66,7 +73,7 @@ public struct ExpenseFriendListView: View {
           }
         }
         .listStyle(.plain)
-        .refreshable { await viewModel.load() }
+        .refreshable { await viewModel.load(isPullToRefresh: true) }
       case .failed(let message):
         ErrorView(message: message) {
           Task { await viewModel.load() }
