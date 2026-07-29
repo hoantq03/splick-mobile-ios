@@ -94,8 +94,11 @@ public final class ExpenseFriendDetailViewModel: ObservableObject {
     }
   }
 
-  public func load() async {
-    state = .loading
+  public func load(isPullToRefresh: Bool = false) async {
+    // Keep content mounted during pull-to-refresh so the refresh control stays attached.
+    if !isPullToRefresh {
+      state = .loading
+    }
     loadMoreError = nil
     currentPage = 0
     do {
@@ -112,12 +115,16 @@ public final class ExpenseFriendDetailViewModel: ObservableObject {
       hasNextPage = page.hasNext
       state = .loaded(expenses)
     } catch {
-      state = .failed(languageService.localizedMessage(for: error))
+      if isPullToRefresh, !expenses.isEmpty {
+        state = .loaded(expenses)
+      } else {
+        state = .failed(languageService.localizedMessage(for: error))
+      }
     }
   }
 
   public func refresh() async {
-    await load()
+    await load(isPullToRefresh: true)
   }
 
   public func loadMore() async {
