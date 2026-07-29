@@ -5,6 +5,41 @@ import Localization
 import SplickDomain
 import SwiftUI
 
+/// Stable navigation value so detail push survives list reload / pull-to-refresh.
+public struct ExpenseFriendDetailRoute: Hashable, Sendable {
+  public let userId: UUID
+  public let username: String
+  public let displayName: String
+  public let subtitle: String?
+  public let avatarURL: URL?
+  public let amount: Decimal
+  public let currency: String
+
+  public init(debt: DebtSummary) {
+    self.userId = debt.user.id
+    self.username = debt.user.username
+    self.displayName = debt.user.displayName
+    self.subtitle = debt.user.subtitle
+    self.avatarURL = debt.user.avatarURL
+    self.amount = debt.amount
+    self.currency = debt.currency
+  }
+
+  public var debtSummary: DebtSummary {
+    DebtSummary(
+      user: UserSummary(
+        id: userId,
+        username: username,
+        displayName: displayName,
+        subtitle: subtitle,
+        avatarURL: avatarURL
+      ),
+      amount: amount,
+      currency: currency
+    )
+  }
+}
+
 @MainActor
 public final class ExpenseFriendListViewModel: ObservableObject {
   @Published private(set) var debts: [DebtSummary] = []
@@ -43,14 +78,14 @@ public final class ExpenseFriendListViewModel: ObservableObject {
 public struct ExpenseFriendListView: View {
   @ObservedObject private var viewModel: ExpenseFriendListViewModel
   @EnvironmentObject private var languageService: LanguageService
-  private let makeDetailViewModel: (DebtSummary) -> ExpenseFriendDetailViewModel
+  private let onSelectFriend: (DebtSummary) -> Void
 
   public init(
     viewModel: ExpenseFriendListViewModel,
-    makeDetailViewModel: @escaping (DebtSummary) -> ExpenseFriendDetailViewModel
+    onSelectFriend: @escaping (DebtSummary) -> Void
   ) {
     self.viewModel = viewModel
-    self.makeDetailViewModel = makeDetailViewModel
+    self.onSelectFriend = onSelectFriend
   }
 
   public var body: some View {
@@ -65,26 +100,42 @@ public struct ExpenseFriendListView: View {
           message: languageService.text(.expenseFriendsEmptyMessage)
         )
       case .loaded:
-        List(viewModel.debts, id: \.user.id) { debt in
-          NavigationLink {
-            ExpenseFriendDetailView(viewModel: makeDetailViewModel(debt))
-          } label: {
-            friendRow(debt)
-          }
-        }
-        .listStyle(.plain)
-        .refreshable { await viewModel.load(isPullToRefresh: true) }
+        friendRecords
       case .failed(let message):
         ErrorView(message: message) {
           Task { await viewModel.load() }
         }
       }
     }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
     .task {
       if case .idle = viewModel.state {
         await viewModel.load()
       }
     }
+  }
+
+  private var friendRecords: some View {
+    ScrollView {
+      LazyVStack(spacing: 0) {
+        ForEach(viewModel.debts, id: \.user.id) { debt in
+          Button {
+            onSelectFriend(debt)
+          } label: {
+            friendRow(debt)
+          }
+          .buttonStyle(ExpenseFriendRowButtonStyle())
+
+          if debt.user.id != viewModel.debts.last?.user.id {
+            Divider()
+              .padding(.leading, 64)
+          }
+        }
+      }
+      .padding(.horizontal, SplickTheme.Spacing.md)
+    }
+    .splickInstantScrollTaps()
+    .refreshable { await viewModel.load(isPullToRefresh: true) }
   }
 
   private func friendRow(_ debt: DebtSummary) -> some View {
@@ -95,6 +146,8 @@ public struct ExpenseFriendListView: View {
         size: .medium,
         userId: debt.user.id
       )
+      .allowsHitTesting(false)
+
       VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
         Text(debt.user.displayName)
           .font(SplickTheme.Typography.headline)
@@ -103,13 +156,22 @@ public struct ExpenseFriendListView: View {
           .font(SplickTheme.Typography.caption)
           .foregroundStyle(balanceColor(debt))
       }
-      Spacer()
+
+      Spacer(minLength: 0)
+
       Text(signedAmount(debt))
         .font(SplickTheme.Typography.headline.monospacedDigit())
         .foregroundStyle(balanceColor(debt))
+
+      Image(systemName: "chevron.right")
+        .font(.system(size: 13, weight: .semibold))
+        .foregroundStyle(SplickTheme.Colors.textTertiary)
     }
-    .padding(.vertical, SplickTheme.Spacing.xxs)
+    .padding(.vertical, SplickTheme.Spacing.sm)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .contentShape(Rectangle())
     .accessibilityElement(children: .combine)
+    .accessibilityAddTraits(.isButton)
     .accessibilityLabel("\(debt.user.displayName), \(balanceLabel(debt)), \(signedAmount(debt))")
   }
 
@@ -128,5 +190,13 @@ public struct ExpenseFriendListView: View {
   private func signedAmount(_ debt: DebtSummary) -> String {
     let prefix = debt.amount > 0 ? "+" : debt.amount < 0 ? "−" : ""
     return prefix + abs(debt.amount).chartAmountString(currencyCode: debt.currency)
+  }
+}
+
+private struct ExpenseFriendRowButtonStyle: ButtonStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .opacity(configuration.isPressed ? 0.72 : 1)
+      .contentShape(Rectangle())
   }
 }

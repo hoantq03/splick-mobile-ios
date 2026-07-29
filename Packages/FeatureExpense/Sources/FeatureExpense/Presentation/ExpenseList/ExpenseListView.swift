@@ -28,6 +28,7 @@ public struct ExpenseListView: View {
     @State private var profileRoute: ExpenseUserProfileRoute?
     @State private var listMode: ExpenseListMode = .all
     @State private var refreshController = SplickRefreshController()
+    @State private var navigationPath = NavigationPath()
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.pullToRefreshActive) private var pullToRefreshActive
@@ -63,7 +64,7 @@ public struct ExpenseListView: View {
     }
 
     public var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             VStack(spacing: 0) {
                 if friendListViewModel != nil, makeFriendDetailViewModel != nil {
                     Picker("", selection: $listMode) {
@@ -79,6 +80,16 @@ public struct ExpenseListView: View {
                 selectedContent
             }
             .splickTabScreenHeader(languageService.text(.expenseTitle))
+            .navigationDestination(for: ExpenseFriendDetailRoute.self) { route in
+                if let makeFriendDetailViewModel {
+                    ExpenseFriendDetailView(
+                        viewModel: makeFriendDetailViewModel(route.debtSummary)
+                    )
+                }
+            }
+        }
+        .onChange(of: listMode) { _ in
+            navigationPath = NavigationPath()
         }
         .onFirstAppear {
             viewModel.updateCurrentUserId(currentUserId)
@@ -111,13 +122,10 @@ public struct ExpenseListView: View {
 
     @ViewBuilder
     private var selectedContent: some View {
-        if listMode == .friends,
-           let friendListViewModel,
-           let makeFriendDetailViewModel {
-            ExpenseFriendListView(
-                viewModel: friendListViewModel,
-                makeDetailViewModel: makeFriendDetailViewModel
-            )
+        if listMode == .friends, let friendListViewModel {
+            ExpenseFriendListView(viewModel: friendListViewModel) { debt in
+                navigationPath.append(ExpenseFriendDetailRoute(debt: debt))
+            }
         } else {
             Group {
                 switch viewModel.state {
