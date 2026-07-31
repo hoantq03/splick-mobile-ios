@@ -94,8 +94,8 @@ private struct SplickProfileToolbarModifier: ViewModifier {
             .navigationBarTitleDisplayMode(titleDisplayMode)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    if !isSuppressed, let openCurrentUserProfile, let user = currentUserSummary {
-                        Button(action: openCurrentUserProfile) {
+                    if !isSuppressed, let openProfileSettings, let user = currentUserSummary {
+                        Button(action: openProfileSettings) {
                             AvatarView(
                                 imageURL: user.avatarURL,
                                 name: user.displayName,
