@@ -1316,10 +1316,45 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
             pagerIndex = Tab.pagerTabs.firstIndex(of: initial) ?? 0
         }
         .onChange(of: selectedTab) { newTab in
-            if newTab.isPagerTab {
-                activatedTabs.insert(newTab)
-                let idx = Tab.pagerTabs.firstIndex(of: newTab) ?? 0
-                guard idx != pagerIndex else { return }
+            guard newTab.isPagerTab else { return }
+            moveToPagerTab(newTab)
+        }
+    }
+
+    private func moveToPagerTab(_ newTab: Tab) {
+        let idx = Tab.pagerTabs.firstIndex(of: newTab) ?? 0
+        guard idx != pagerIndex else {
+            activatedTabs.insert(newTab)
+            return
+        }
+
+        let from = pagerIndex
+        let range = min(from, idx)...max(from, idx)
+        let needsMount = range.contains { !activatedTabs.contains(Tab.pagerTabs[$0]) }
+
+        transitionGeneration += 1
+        let generation = transitionGeneration
+
+        if needsMount {
+            // Mount destination (and any in-between tabs) without sliding first.
+            // Animating in the same frame as first mount makes the new page pop in
+            // while only the outgoing page slides.
+            var mountTransaction = Transaction()
+            mountTransaction.disablesAnimations = true
+            withTransaction(mountTransaction) {
+                for i in range {
+                    activatedTabs.insert(Tab.pagerTabs[i])
+                }
+            }
+            Task { @MainActor in
+                await Task.yield()
+                guard generation == transitionGeneration else { return }
+                withAnimation(MainTabPagerMotion.spring) {
+                    pagerIndex = idx
+                }
+            }
+        } else {
+            withAnimation(MainTabPagerMotion.spring) {
                 pagerIndex = idx
             }
         }
@@ -1327,13 +1362,17 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
 
     @ViewBuilder
     private func tabPage<T: View>(_ tab: Tab, width: CGFloat, @ViewBuilder content: () -> T) -> some View {
-        if activatedTabs.contains(tab) {
-            content()
-                .frame(width: width)
-        } else {
-            Color.clear
-                .frame(width: width)
+        Group {
+            if activatedTabs.contains(tab) {
+                content()
+            } else {
+                // Keep a stable-sized placeholder so HStack geometry stays correct
+                // before the tab is visited for the first time.
+                Color.clear
+            }
         }
+        .frame(width: width)
+        .frame(maxHeight: .infinity)
     }
 }
 
