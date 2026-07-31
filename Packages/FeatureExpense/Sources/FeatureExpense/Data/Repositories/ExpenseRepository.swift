@@ -39,6 +39,13 @@ public final class ExpenseRepository: ExpenseRepositoryProtocol, Sendable {
     return page.content.map(ExpenseMapper.toDebtSummary)
   }
 
+  public func fetchMonthlySummary(months: Int) async throws -> MonthlyExpenseSummary {
+    let dto: MonthlyExpenseSummaryDTO = try await apiClient.request(
+      ExpenseEndpoint.monthlySummary(months: months)
+    )
+    return ExpenseMapper.toMonthlySummary(dto)
+  }
+
   public func fetchExpenses(
     counterpartyId: UUID,
     page: Int,

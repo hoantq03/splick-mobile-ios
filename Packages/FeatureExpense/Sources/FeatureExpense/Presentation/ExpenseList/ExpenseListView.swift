@@ -11,36 +11,31 @@ private struct ExpenseUserProfileRoute: Identifiable {
     var id: UUID { user.id }
 }
 
-private enum ExpenseListMode: String, CaseIterable, Identifiable {
-    case all
-    case friends
-
-    var id: String { rawValue }
-}
-
 public struct ExpenseListView: View {
     @ObservedObject private var viewModel: ExpenseListViewModel
     @StateObject private var friendSearchViewModel: ExpenseUserSearchViewModel
-    @State private var isOverviewExpanded = false
+    @StateObject private var expenseSegmentScrollState = FeedSegmentScrollState()
     @State private var showFilterPanel = false
     @State private var captionQueryDraft = ""
     @State private var friendQueryDraft = ""
     @State private var profileRoute: ExpenseUserProfileRoute?
-    @State private var listMode: ExpenseListMode = .all
+    @State private var selectedSegment: ExpenseContentSegment = .overview
+    @State private var chartMode: ExpenseChartMode = .income
     @State private var refreshController = SplickRefreshController()
+    @State private var overviewRefreshController = SplickRefreshController()
     @State private var navigationPath = NavigationPath()
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.pullToRefreshActive) private var pullToRefreshActive
     @Environment(\.openPostCaptureFlow) private var openPostCaptureFlow
     @Environment(\.openLinkedPost) private var openLinkedPost
+    @Environment(\.notificationsPresented) private var notificationsPresented
     private let currentUserId: UUID?
     private let isTabActive: Bool
     private let profileDependencies: FriendUserProfileDependencies?
     private let friendListViewModel: ExpenseFriendListViewModel?
     private let makeFriendDetailViewModel: ((DebtSummary) -> ExpenseFriendDetailViewModel)?
 
-    private let overviewToggleAnimation = Animation.spring(response: 0.48, dampingFraction: 0.86)
     private let listFilterAnimation = Animation.spring(response: 0.42, dampingFraction: 0.86)
 
     public init(
@@ -65,21 +60,29 @@ public struct ExpenseListView: View {
 
     public var body: some View {
         NavigationStack(path: $navigationPath) {
-            VStack(spacing: 0) {
-                if friendListViewModel != nil, makeFriendDetailViewModel != nil {
-                    Picker("", selection: $listMode) {
-                        Text(languageService.text(.expenseModeAll)).tag(ExpenseListMode.all)
-                        Text(languageService.text(.expenseModeFriends)).tag(ExpenseListMode.friends)
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal, SplickTheme.Spacing.md)
-                    .padding(.vertical, SplickTheme.Spacing.xs)
-                    .accessibilityLabel(languageService.text(.expenseFriendsTitle))
-                }
-
-                selectedContent
+            ExpenseContentPager(selection: $selectedSegment) {
+                historyPage
+            } overview: {
+                overviewPage
+            } friends: {
+                friendsPage
             }
-            .splickTabScreenHeader(languageService.text(.expenseTitle))
+            .background(SplickTheme.Colors.background.ignoresSafeArea())
+            .navigationTitle("")
+            .splickTabNavigationBarChrome()
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    if !notificationsPresented {
+                        ExpenseNavPills(
+                            selection: $selectedSegment,
+                            collapseProgress: expenseSegmentScrollState.collapseProgress,
+                            historyLabel: languageService.text(.expenseModeHistory),
+                            overviewLabel: languageService.text(.expenseModeOverview),
+                            friendsLabel: languageService.text(.expenseModeFriends)
+                        )
+                    }
+                }
+            }
             .navigationDestination(for: ExpenseFriendDetailRoute.self) { route in
                 if let makeFriendDetailViewModel {
                     ExpenseFriendDetailView(
@@ -88,8 +91,11 @@ public struct ExpenseListView: View {
                 }
             }
         }
-        .onChange(of: listMode) { _ in
+        .environment(\.feedSegmentScrollState, expenseSegmentScrollState)
+        .onChange(of: selectedSegment) { _ in
             navigationPath = NavigationPath()
+            expenseSegmentScrollState.reset()
+            tabBarScrollState?.reset()
         }
         .onFirstAppear {
             viewModel.updateCurrentUserId(currentUserId)
@@ -120,46 +126,74 @@ public struct ExpenseListView: View {
         }
     }
 
+    // MARK: - Pages
+
     @ViewBuilder
-    private var selectedContent: some View {
-        if listMode == .friends, let friendListViewModel {
-            ExpenseFriendListView(viewModel: friendListViewModel) { debt in
-                navigationPath.append(ExpenseFriendDetailRoute(debt: debt))
-            }
-        } else {
-            Group {
-                switch viewModel.state {
-                case .idle, .loading:
-                    LoadingView(message: languageService.text(.expenseLoading))
+    private var historyPage: some View {
+        Group {
+            switch viewModel.state {
+            case .idle, .loading:
+                LoadingView(message: languageService.text(.expenseLoading))
 
-                case .loaded where viewModel.expenses.isEmpty:
-                    EmptyStateView(
-                        icon: "dollarsign.circle",
-                        title: languageService.text(.expenseEmptyTitle),
-                        message: languageService.text(.expenseEmptyMessage),
-                        actionTitle: languageService.text(.expenseEmptyAction)
-                    ) {
-                        openPostCapture()
-                    }
+            case .loaded where viewModel.expenses.isEmpty:
+                EmptyStateView(
+                    icon: "dollarsign.circle",
+                    title: languageService.text(.expenseEmptyTitle),
+                    message: languageService.text(.expenseEmptyMessage),
+                    actionTitle: languageService.text(.expenseEmptyAction)
+                ) {
+                    openPostCapture()
+                }
 
-                case .loaded:
-                    expenseContent
+            case .loaded:
+                historyContent
 
-                case .failed(let message):
-                    ErrorView(message: message) {
-                        Task { await viewModel.load() }
-                    }
+            case .failed(let message):
+                ErrorView(message: message) {
+                    Task { await viewModel.load() }
                 }
             }
         }
     }
 
-    private var expenseContent: some View {
+    @ViewBuilder
+    private var overviewPage: some View {
+        Group {
+            switch viewModel.state {
+            case .idle, .loading:
+                LoadingView(message: languageService.text(.expenseLoading))
+
+            case .failed(let message):
+                ErrorView(message: message) {
+                    Task { await viewModel.load() }
+                }
+
+            default:
+                overviewContent
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var friendsPage: some View {
+        if let friendListViewModel {
+            ExpenseFriendListView(viewModel: friendListViewModel) { debt in
+                navigationPath.append(ExpenseFriendDetailRoute(debt: debt))
+            }
+        } else {
+            EmptyStateView(
+                icon: "person.2",
+                title: languageService.text(.expenseFriendsEmptyTitle),
+                message: languageService.text(.expenseFriendsEmptyMessage)
+            )
+        }
+    }
+
+    private var historyContent: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: SplickTheme.Spacing.md) {
                     Color.clear.frame(height: 0).id("expenseScrollTop")
-                    debtSummarySection
                     expenseRecordsSection
                 }
                 .padding(.horizontal, SplickTheme.Spacing.md)
@@ -169,6 +203,7 @@ public struct ExpenseListView: View {
                     }
                 }
             }
+            .scrollChromeTracking()
             .tabBarHideOnScroll()
             .splickNativeRefreshable(controller: refreshController) {
                 await viewModel.load(isPullToRefresh: true)
@@ -178,7 +213,7 @@ public struct ExpenseListView: View {
                 scrollProxy: proxy,
                 refreshController: refreshController,
                 isAtTop: { tabBarScrollState?.isAtTop == true },
-                isEnabled: { isTabActive }
+                isEnabled: { isTabActive && selectedSegment == .history }
             )
             .onAppear {
                 if captionQueryDraft.isEmpty {
@@ -186,6 +221,66 @@ public struct ExpenseListView: View {
                 }
             }
         }
+    }
+
+    private var overviewContent: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: SplickTheme.Spacing.md) {
+                    Color.clear.frame(height: 0).id("expenseOverviewScrollTop")
+
+                    ExpenseOverviewSummaryBoxes(
+                        received: viewModel.currentMonthReceived,
+                        paid: viewModel.currentMonthPaid,
+                        currency: viewModel.monthlySummaryCurrency,
+                        incomeLabel: languageService.text(.expenseOverviewIncome),
+                        expenditureLabel: languageService.text(.expenseOverviewExpenditure),
+                        thisMonthLabel: languageService.text(.expenseOverviewThisMonth)
+                    )
+
+                    ExpenseMonthlyBarChart(
+                        data: viewModel.chartData,
+                        currency: viewModel.monthlySummaryCurrency,
+                        selectedMode: $chartMode,
+                        incomeLabel: languageService.text(.expenseOverviewIncome),
+                        expenditureLabel: languageService.text(.expenseOverviewExpenditure),
+                        chartTitle: languageService.text(.expenseOverviewChartTitle)
+                    )
+
+                    debtSummaryCard
+                }
+                .padding(.horizontal, SplickTheme.Spacing.md)
+                .padding(.top, SplickTheme.Spacing.sm)
+                .transaction { transaction in
+                    if pullToRefreshActive {
+                        transaction.animation = nil
+                    }
+                }
+            }
+            .scrollChromeTracking()
+            .tabBarHideOnScroll()
+            .splickNativeRefreshable(controller: overviewRefreshController) {
+                await viewModel.load(isPullToRefresh: true)
+            }
+            .splickSameTabTapBehavior(
+                scrollTopID: "expenseOverviewScrollTop",
+                scrollProxy: proxy,
+                refreshController: overviewRefreshController,
+                isAtTop: { tabBarScrollState?.isAtTop == true },
+                isEnabled: { isTabActive && selectedSegment == .overview }
+            )
+        }
+    }
+
+    private var debtSummaryCard: some View {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
+            overviewSectionHeader
+            overviewDebtCharts(showsDetailedLegend: true)
+        }
+        .splickCard(
+            padding: SplickTheme.Spacing.md,
+            cornerRadius: ExpenseScreenChrome.cardRadius
+        )
     }
 
     private var expenseRecordsSection: some View {
@@ -231,23 +326,6 @@ public struct ExpenseListView: View {
         .splickCard(cornerRadius: ExpenseScreenChrome.cardRadius)
     }
 
-    private var debtSummarySection: some View {
-        VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
-            overviewSectionHeader
-
-            ExpenseOverviewAnimatedBody(isExpanded: isOverviewExpanded) {
-                overviewDebtCharts(showsDetailedLegend: true)
-            } collapsed: {
-                overviewDebtCharts(showsDetailedLegend: false)
-            }
-        }
-        .splickCard(
-            padding: SplickTheme.Spacing.md,
-            cornerRadius: ExpenseScreenChrome.cardRadius
-        )
-        .animation(pullToRefreshActive ? nil : overviewToggleAnimation, value: isOverviewExpanded)
-    }
-
     private func overviewDebtCharts(showsDetailedLegend: Bool) -> some View {
         HStack(alignment: .top, spacing: SplickTheme.Spacing.md) {
             ExpenseDebtDonutChart(
@@ -265,8 +343,8 @@ public struct ExpenseListView: View {
                 emptyLabel: languageService.text(.expenseOverviewEmptyChart),
                 countFormat: { languageService.format(.expenseOverviewOweUnpaidCount, $0) },
                 filterHint: languageService.text(.expenseOverviewFilterHint),
-                onSelect: viewModel.applyOverviewDebtFilter,
-                onExpandRequest: expandOverviewIfNeeded
+                onSelect: selectOverviewDebtFilter,
+                onExpandRequest: {}
             )
 
             ExpenseDebtDonutChart(
@@ -284,77 +362,51 @@ public struct ExpenseListView: View {
                 emptyLabel: languageService.text(.expenseOverviewEmptyChart),
                 countFormat: { languageService.format(.expenseOverviewOwedUnpaidCount, $0) },
                 filterHint: languageService.text(.expenseOverviewFilterHint),
-                onSelect: viewModel.applyOverviewDebtFilter,
-                onExpandRequest: expandOverviewIfNeeded
+                onSelect: selectOverviewDebtFilter,
+                onExpandRequest: {}
             )
         }
     }
 
-    private func expandOverviewIfNeeded() {
-        guard !isOverviewExpanded else { return }
-        withAnimation(overviewToggleAnimation) {
-            isOverviewExpanded = true
+    private func selectOverviewDebtFilter(_ status: ExpenseDebtFilter) {
+        viewModel.applyOverviewDebtFilter(status)
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.80)) {
+            selectedSegment = .history
         }
     }
 
     private var overviewSectionHeader: some View {
-        Button {
-            withAnimation(overviewToggleAnimation) {
-                isOverviewExpanded.toggle()
-            }
-        } label: {
-            HStack(spacing: SplickTheme.Spacing.xs) {
-                Image(systemName: "chart.pie.fill")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(SplickTheme.Colors.info)
-                    .frame(width: 22, height: 22)
-                    .background {
-                        Circle()
-                            .fill(SplickTheme.Colors.info.opacity(0.14))
-                    }
-
-                HStack(spacing: SplickTheme.Spacing.xxxs) {
-                    Text(languageService.text(.expenseOverviewSectionTitle))
-                        .font(SplickTheme.Typography.captionBold)
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
-                        .textCase(.uppercase)
-                        .lineLimit(1)
-
-                    if let periodLabel = datePeriodSubtitle {
-                        Text(periodLabel)
-                            .font(SplickTheme.Typography.caption)
-                            .foregroundStyle(SplickTheme.Colors.textTertiary)
-                            .lineLimit(1)
-                    }
+        HStack(spacing: SplickTheme.Spacing.xs) {
+            Image(systemName: "person.2.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(SplickTheme.Colors.info)
+                .frame(width: 22, height: 22)
+                .background {
+                    Circle()
+                        .fill(SplickTheme.Colors.info.opacity(0.14))
                 }
 
-                Spacer(minLength: 0)
+            HStack(spacing: SplickTheme.Spacing.xxxs) {
+                Text(languageService.text(.expenseOverviewDebtSectionTitle))
+                    .font(SplickTheme.Typography.captionBold)
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    .textCase(.uppercase)
+                    .lineLimit(1)
 
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(SplickTheme.Colors.textTertiary)
-                    .rotationEffect(.degrees(isOverviewExpanded ? 0 : -180))
+                if let periodLabel = datePeriodSubtitle {
+                    Text(periodLabel)
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.textTertiary)
+                        .lineLimit(1)
+                }
             }
-            .padding(.horizontal, SplickTheme.Spacing.xxs)
-            .contentShape(Rectangle())
+
+            Spacer(minLength: 0)
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, SplickTheme.Spacing.xxs)
+        .accessibilityElement(children: .combine)
         .accessibilityLabel(languageService.text(.expenseOverviewSectionTitle))
-        .accessibilityValue(
-            [
-                isOverviewExpanded
-                    ? languageService.text(.expenseOverviewExpandedAccessibility)
-                    : languageService.text(.expenseOverviewCollapsedAccessibility),
-                datePeriodSubtitle
-            ]
-            .compactMap { $0 }
-            .joined(separator: ", ")
-        )
-        .accessibilityHint(
-            isOverviewExpanded
-                ? languageService.text(.expenseOverviewCollapseHint)
-                : languageService.text(.expenseOverviewExpandHint)
-        )
+        .accessibilityValue(datePeriodSubtitle ?? "")
     }
 
     private func recordsSection<Content: View>(@ViewBuilder content: () -> Content) -> some View {
@@ -1229,31 +1281,13 @@ private struct ExpenseRowPressStyle: ButtonStyle {
     }
 }
 
-private enum ExpenseScreenChrome {
+enum ExpenseScreenChrome {
     /// Outer cards on the expense screen — softer than the global default.
     static let cardRadius: CGFloat = SplickTheme.CornerRadius.extraLarge
     /// Nested chart / filter containers inside cards.
     static let insetRadius: CGFloat = SplickTheme.CornerRadius.large
     /// Text fields and compact rows nested one level deeper.
     static let controlRadius: CGFloat = SplickTheme.CornerRadius.medium
-}
-
-private struct ExpenseOverviewAnimatedBody<Expanded: View, Collapsed: View>: View {
-    let isExpanded: Bool
-    @ViewBuilder var expanded: () -> Expanded
-    @ViewBuilder var collapsed: () -> Collapsed
-
-    var body: some View {
-        Group {
-            if isExpanded {
-                expanded()
-            } else {
-                collapsed()
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-        .clipped()
-    }
 }
 
 private struct ExpenseDebtDonutChart: View {

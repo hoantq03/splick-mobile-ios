@@ -520,6 +520,10 @@ final class DependencyContainer: ObservableObject {
         FetchDebtSummaryUseCase(repository: expenseRepository)
     }()
 
+    lazy var fetchMonthlySummaryUseCase: FetchMonthlySummaryUseCaseProtocol = {
+        FetchMonthlySummaryUseCase(repository: expenseRepository)
+    }()
+
     lazy var fetchCounterpartyExpensesUseCase: FetchCounterpartyExpensesUseCaseProtocol = {
         FetchCounterpartyExpensesUseCase(repository: expenseRepository)
     }()
@@ -889,6 +893,7 @@ final class DependencyContainer: ObservableObject {
         ExpenseListViewModel(
             fetchExpensesUseCase: fetchExpensesUseCase,
             fetchDebtSummaryUseCase: fetchDebtSummaryUseCase,
+            fetchMonthlySummaryUseCase: fetchMonthlySummaryUseCase,
             languageService: languageService,
             onBadgeCountsChanged: { [weak self] in
                 await self?.badgeCountService.refresh(force: true)

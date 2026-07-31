@@ -164,6 +164,34 @@ public actor FakeExpenseRepository: ExpenseRepositoryProtocol {
         return debts
     }
 
+    public func fetchMonthlySummary(months: Int) async throws -> MonthlyExpenseSummary {
+        logger.log("Fetch monthly summary months=\(months)")
+        try await Task.sleep(for: .milliseconds(200))
+
+        let calendar = Calendar.current
+        let now = Date()
+        var series: [MonthData] = []
+        for offset in stride(from: months - 1, through: 0, by: -1) {
+            guard let date = calendar.date(byAdding: .month, value: -offset, to: now) else {
+                continue
+            }
+            let components = calendar.dateComponents([.year, .month], from: date)
+            let factor = Decimal(months - offset)
+            series.append(
+                MonthData(
+                    year: components.year ?? 2026,
+                    month: components.month ?? 1,
+                    totalSettledReceived: 800_000 * factor / Decimal(months),
+                    totalSettledPaid: 1_200_000 * factor / Decimal(months)
+                )
+            )
+        }
+        let current = series.last ?? MonthData(
+            year: 2026, month: 7, totalSettledReceived: 0, totalSettledPaid: 0
+        )
+        return MonthlyExpenseSummary(currency: "VND", currentMonth: current, months: series)
+    }
+
     public func fetchExpenses(
         counterpartyId: UUID,
         page: Int,

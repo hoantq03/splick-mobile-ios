@@ -83,6 +83,23 @@ enum ExpenseMapper {
     )
   }
 
+  static func toMonthlySummary(_ dto: MonthlyExpenseSummaryDTO) -> MonthlyExpenseSummary {
+    MonthlyExpenseSummary(
+      currency: dto.currency,
+      currentMonth: toMonthData(dto.currentMonth),
+      months: dto.months.map(toMonthData)
+    )
+  }
+
+  static func toMonthData(_ dto: MonthDataDTO) -> MonthData {
+    MonthData(
+      year: dto.year,
+      month: dto.month,
+      totalSettledReceived: Decimal(string: dto.totalSettledReceived) ?? .zero,
+      totalSettledPaid: Decimal(string: dto.totalSettledPaid) ?? .zero
+    )
+  }
+
   static func toRequestDTO(_ request: CreateExpenseRequest) -> CreateExpenseRequestDTO {
     var customAmountsDTO: [String: String]?
     if let customAmounts = request.customAmounts {

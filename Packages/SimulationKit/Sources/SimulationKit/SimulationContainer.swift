@@ -37,6 +37,7 @@ public final class SimulationContainer: @unchecked Sendable {
     public let fetchExpensesUseCase: FetchExpensesUseCase
     public let createExpenseUseCase: CreateExpenseUseCase
     public let fetchDebtSummaryUseCase: FetchDebtSummaryUseCase
+    public let fetchMonthlySummaryUseCase: FetchMonthlySummaryUseCase
 
     public let fetchNotificationsUseCase: FetchNotificationsUseCase
     public let markNotificationReadUseCase: MarkNotificationReadUseCase
@@ -72,6 +73,7 @@ public final class SimulationContainer: @unchecked Sendable {
         self.fetchExpensesUseCase = FetchExpensesUseCase(repository: expenseRepository)
         self.createExpenseUseCase = CreateExpenseUseCase(repository: expenseRepository)
         self.fetchDebtSummaryUseCase = FetchDebtSummaryUseCase(repository: expenseRepository)
+        self.fetchMonthlySummaryUseCase = FetchMonthlySummaryUseCase(repository: expenseRepository)
 
         self.fetchNotificationsUseCase = FetchNotificationsUseCase(repository: notificationRepository)
         self.markNotificationReadUseCase = MarkNotificationReadUseCase(repository: notificationRepository)

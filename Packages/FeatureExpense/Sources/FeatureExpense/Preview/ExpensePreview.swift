@@ -19,6 +19,32 @@ final class MockFetchDebtSummaryUseCase: FetchDebtSummaryUseCaseProtocol, Sendab
     }
 }
 
+final class MockFetchMonthlySummaryUseCase: FetchMonthlySummaryUseCaseProtocol, Sendable {
+    func execute(months: Int) async throws -> MonthlyExpenseSummary {
+        let calendar = Calendar.current
+        let now = Date()
+        var series: [MonthData] = []
+        for offset in stride(from: months - 1, through: 0, by: -1) {
+            guard let date = calendar.date(byAdding: .month, value: -offset, to: now) else {
+                continue
+            }
+            let components = calendar.dateComponents([.year, .month], from: date)
+            series.append(
+                MonthData(
+                    year: components.year ?? 2026,
+                    month: components.month ?? 1,
+                    totalSettledReceived: Decimal((months - offset) * 150_000),
+                    totalSettledPaid: Decimal((months - offset) * 220_000)
+                )
+            )
+        }
+        let current = series.last ?? MonthData(
+            year: 2026, month: 7, totalSettledReceived: 0, totalSettledPaid: 0
+        )
+        return MonthlyExpenseSummary(currency: "VND", currentMonth: current, months: series)
+    }
+}
+
 final class MockCreateExpenseUseCase: CreateExpenseUseCaseProtocol, Sendable {
     func execute(_ request: CreateExpenseRequest) async throws -> Expense {
         try await Task.sleep(for: .seconds(1))
@@ -47,6 +73,7 @@ final class MockUserSearchUseCase: UserSearchUseCaseProtocol, Sendable {
         viewModel: ExpenseListViewModel(
             fetchExpensesUseCase: MockFetchExpensesUseCase(),
             fetchDebtSummaryUseCase: MockFetchDebtSummaryUseCase(),
+            fetchMonthlySummaryUseCase: MockFetchMonthlySummaryUseCase(),
             languageService: previewLanguageService,
             currentUserId: PreviewData.currentUser.id
         ),

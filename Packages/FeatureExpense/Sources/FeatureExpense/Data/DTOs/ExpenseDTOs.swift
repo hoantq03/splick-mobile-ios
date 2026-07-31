@@ -106,3 +106,16 @@ struct SubmitBulkSettlementRequestDTO: Encodable {
 struct RejectBulkSettlementRequestDTO: Encodable {
   let reason: String?
 }
+
+struct MonthlyExpenseSummaryDTO: Decodable {
+  let currency: String
+  let currentMonth: MonthDataDTO
+  let months: [MonthDataDTO]
+}
+
+struct MonthDataDTO: Decodable {
+  let year: Int
+  let month: Int
+  let totalSettledReceived: String
+  let totalSettledPaid: String
+}

@@ -135,6 +135,7 @@ public struct ExpenseFriendListView: View {
       .padding(.horizontal, SplickTheme.Spacing.md)
     }
     .splickInstantScrollTaps()
+    .scrollChromeTracking()
     .refreshable { await viewModel.load(isPullToRefresh: true) }
   }
 

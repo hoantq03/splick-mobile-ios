@@ -10,6 +10,7 @@ public final class ExpenseListViewModel: ObservableObject {
         didSet { reconcileDisplayedExpenses() }
     }
     @Published var debts: [DebtSummary] = []
+    @Published var monthlySummary: MonthlyExpenseSummary?
     @Published var state: LoadingState<[Expense]> = .idle
     @Published private(set) var isRefreshing = false
     @Published var showCreateExpense = false
@@ -22,6 +23,7 @@ public final class ExpenseListViewModel: ObservableObject {
 
     private let fetchExpensesUseCase: FetchExpensesUseCaseProtocol
     private let fetchDebtSummaryUseCase: FetchDebtSummaryUseCaseProtocol
+    private let fetchMonthlySummaryUseCase: FetchMonthlySummaryUseCaseProtocol?
     private let languageService: LanguageService
     private let onBadgeCountsChanged: (() async -> Void)?
     private let onDataLoaded: (([DebtSummary], [Expense], UUID?) async -> Void)?
@@ -35,6 +37,7 @@ public final class ExpenseListViewModel: ObservableObject {
     public init(
         fetchExpensesUseCase: FetchExpensesUseCaseProtocol,
         fetchDebtSummaryUseCase: FetchDebtSummaryUseCaseProtocol,
+        fetchMonthlySummaryUseCase: FetchMonthlySummaryUseCaseProtocol? = nil,
         languageService: LanguageService,
         groupId: UUID? = nil,
         currentUserId: UUID? = nil,
@@ -43,6 +46,7 @@ public final class ExpenseListViewModel: ObservableObject {
     ) {
         self.fetchExpensesUseCase = fetchExpensesUseCase
         self.fetchDebtSummaryUseCase = fetchDebtSummaryUseCase
+        self.fetchMonthlySummaryUseCase = fetchMonthlySummaryUseCase
         self.languageService = languageService
         self.onBadgeCountsChanged = onBadgeCountsChanged
         self.onDataLoaded = onDataLoaded
@@ -129,6 +133,22 @@ public final class ExpenseListViewModel: ObservableObject {
         overviewCount(for: .owedPaid)
     }
 
+    var currentMonthReceived: Decimal {
+        monthlySummary?.currentMonth.totalSettledReceived ?? .zero
+    }
+
+    var currentMonthPaid: Decimal {
+        monthlySummary?.currentMonth.totalSettledPaid ?? .zero
+    }
+
+    var chartData: [MonthData] {
+        monthlySummary?.months ?? []
+    }
+
+    var monthlySummaryCurrency: String {
+        monthlySummary?.currency ?? "VND"
+    }
+
     private func overviewTotal(for state: ExpenseUserDebtState) -> Decimal {
         overviewScopedExpenses.reduce(Decimal.zero) { partial, expense in
             partial + expense.userDebtAmount(userId: currentUserId, state: state)
@@ -203,12 +223,29 @@ public final class ExpenseListViewModel: ObservableObject {
             let (fetchedExpenses, fetchedDebts) = try await (expensesTask, debtsTask)
             expenses = fetchedExpenses
             debts = fetchedDebts
+
+            if let fetchMonthlySummaryUseCase {
+                do {
+                    monthlySummary = try await fetchMonthlySummaryUseCase.execute(months: 12)
+                } catch {
+                    Log.warning(
+                        "Monthly summary load failed",
+                        category: .expense,
+                        metadata: ["error": error.localizedDescription]
+                    )
+                }
+            }
+
             state = .loaded(fetchedExpenses)
             lastSuccessfulLoadAt = Date()
             Log.info(
                 "Loaded expenses",
                 category: .expense,
-                metadata: ["expenseCount": String(fetchedExpenses.count), "debtCount": String(fetchedDebts.count)]
+                metadata: [
+                    "expenseCount": String(fetchedExpenses.count),
+                    "debtCount": String(fetchedDebts.count),
+                    "hasMonthlySummary": String(monthlySummary != nil),
+                ]
             )
             if isPullToRefresh {
                 await onBadgeCountsChanged?()
