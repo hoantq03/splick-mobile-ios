@@ -115,4 +115,24 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
             updatedAt: updatedAt
         )
     }
+
+    /// Local inbox patch from a live message (WebSocket) — keeps list snappy without a full REST reload.
+    public func updating(
+        lastMessage: ChatMessage,
+        unreadCount: Int,
+        updatedAt: Date
+    ) -> Conversation {
+        Conversation(
+            id: id,
+            type: type,
+            unreadCount: max(0, unreadCount),
+            peer: peer,
+            groupName: groupName,
+            groupAvatarUrl: groupAvatarUrl,
+            memberCount: memberCount,
+            lastMessage: lastMessage,
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
+    }
 }

@@ -46,7 +46,13 @@ private actor StubMessagingRepository: MessagingRepositoryProtocol {
         Conversation(id: groupId, unreadCount: 0, peer: nil, lastMessage: nil, createdAt: .now, updatedAt: .now)
     }
     func transferGroupAdmin(groupId: UUID, newAdminUserId: UUID) async throws {}
-    func fetchMessages(conversationId: UUID, page: Int, limit: Int) async throws -> [ChatMessage] { messages }
+    func fetchMessages(conversationId: UUID, page: Int, limit: Int) async throws -> [ChatMessage] {
+        // API order: newest first.
+        let start = page * limit
+        guard start < messages.count else { return [] }
+        let end = min(start + limit, messages.count)
+        return Array(messages[start..<end])
+    }
     func sendMessage(
         conversationId: UUID,
         body: String,
@@ -252,5 +258,106 @@ final class ChatThreadViewModelTests: XCTestCase {
         XCTAssertEqual(vm.messages.first?.id, targetId)
         XCTAssertEqual(vm.highlightedMessageId, targetId)
         XCTAssertGreaterThan(vm.scrollToMessageToken, 0)
+    }
+
+    // MARK: Pagination
+
+    func test_loadOlderMessages_prependsUniqueOlderPage() async {
+        // API newest-first: page0 = m30..m1 (newest), page1 = older batch.
+        // Build 40 messages where index 0 is newest.
+        var newestFirst: [ChatMessage] = []
+        for index in 0..<40 {
+            let created = Date(timeIntervalSince1970: TimeInterval(1_700_000_000 - index))
+            newestFirst.append(
+                ChatMessage(
+                    id: UUID(uuidString: String(format: "dddddddd-0000-0000-0000-%012d", index))!,
+                    conversationId: ChatThreadViewModelTestFixtures.conversationId,
+                    senderId: ChatThreadViewModelTestFixtures.senderId,
+                    body: "msg-\(index)",
+                    clientMessageId: UUID(uuidString: String(format: "eeeeeeee-0000-0000-0000-%012d", index))!,
+                    createdAt: created
+                )
+            )
+        }
+
+        let repo = StubMessagingRepository(messages: newestFirst)
+        let wsClient = MessagingWebSocketClient(tokenProvider: { nil })
+        let vm = makeViewModel(repo: repo, wsClient: wsClient)
+
+        await vm.load()
+        XCTAssertEqual(vm.messages.count, 30)
+        XCTAssertTrue(vm.hasMoreMessages)
+        let firstAfterLoad = vm.messages.first!
+
+        await vm.loadOlderMessagesIfNeeded(current: firstAfterLoad)
+
+        XCTAssertEqual(vm.messages.count, 40)
+        XCTAssertFalse(vm.hasMoreMessages)
+        XCTAssertEqual(vm.messages.first?.body, "msg-39")
+        XCTAssertEqual(vm.prependAnchorMessageId, firstAfterLoad.clientMessageId)
+    }
+
+    func test_loadOlderMessages_ignoredWhenNotAtTop() async {
+        let page = (0..<30).map { index in
+            ChatMessage(
+                id: UUID(),
+                conversationId: ChatThreadViewModelTestFixtures.conversationId,
+                senderId: ChatThreadViewModelTestFixtures.senderId,
+                body: "msg-\(index)",
+                clientMessageId: UUID(),
+                createdAt: Date(timeIntervalSince1970: TimeInterval(1_700_000_000 - index))
+            )
+        }
+        let repo = StubMessagingRepository(messages: page)
+        let wsClient = MessagingWebSocketClient(tokenProvider: { nil })
+        let vm = makeViewModel(repo: repo, wsClient: wsClient)
+
+        await vm.load()
+        guard let notFirst = vm.messages.last else {
+            return XCTFail("Expected messages")
+        }
+        await vm.loadOlderMessagesIfNeeded(current: notFirst)
+        XCTAssertEqual(vm.messages.count, 30)
+    }
+
+    // MARK: Cache
+
+    func test_load_paintsCachedMessagesThenReconciles() async {
+        let cachedMessage = makeMessage(body: "Cached")
+        let freshMessage = makeMessage(body: "Fresh")
+        let cache = MessageThreadCache(capacity: 5)
+        cache.store(
+            conversationId: ChatThreadViewModelTestFixtures.conversationId,
+            messages: [cachedMessage],
+            highestLoadedPage: 0,
+            hasMoreMessages: false
+        )
+
+        let repo = StubMessagingRepository(messages: [freshMessage])
+        let wsClient = MessagingWebSocketClient(tokenProvider: { nil })
+        let vm = ChatThreadViewModel(
+            conversationId: ChatThreadViewModelTestFixtures.conversationId,
+            currentUserId: ChatThreadViewModelTestFixtures.currentUserId,
+            fetchMessagesUseCase: FetchMessagesUseCase(repository: repo),
+            sendMessageUseCase: SendMessageUseCase(repository: repo),
+            reactToMessageUseCase: StubReactToMessageUseCase(),
+            repository: repo,
+            uploadImage: { _, _ in
+                MessageImageAttachment(
+                    mediaId: UUID(),
+                    url: URL(string: "https://example.com/image.jpg")!,
+                    thumbnailURL: nil
+                )
+            },
+            wsClient: wsClient,
+            languageService: LanguageService(userDefaults: UserDefaultsService()),
+            messageCache: cache
+        )
+
+        await vm.load()
+
+        XCTAssertEqual(vm.messages.count, 1)
+        XCTAssertEqual(vm.messages.first?.body, "Fresh")
+        XCTAssertEqual(cache.entry(for: ChatThreadViewModelTestFixtures.conversationId)?.messages.first?.body, "Fresh")
     }
 }

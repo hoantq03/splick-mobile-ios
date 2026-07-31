@@ -86,6 +86,7 @@ public final class ChatThreadViewModelFactory: ObservableObject {
     private let uploadImage: (Data, String) async throws -> MessageImageAttachment
     private let wsClient: MessagingWebSocketClient
     private let languageService: LanguageService
+    private let messageCache: MessageThreadCache
     private let onConversationRead: ((UUID) async -> Void)?
 
     public init(
@@ -97,6 +98,7 @@ public final class ChatThreadViewModelFactory: ObservableObject {
         uploadImage: @escaping (Data, String) async throws -> MessageImageAttachment,
         wsClient: MessagingWebSocketClient,
         languageService: LanguageService,
+        messageCache: MessageThreadCache = MessageThreadCache(),
         onConversationRead: ((UUID) async -> Void)? = nil
     ) {
         self.currentUserId = currentUserId
@@ -107,6 +109,7 @@ public final class ChatThreadViewModelFactory: ObservableObject {
         self.uploadImage = uploadImage
         self.wsClient = wsClient
         self.languageService = languageService
+        self.messageCache = messageCache
         self.onConversationRead = onConversationRead
     }
 
@@ -123,6 +126,7 @@ public final class ChatThreadViewModelFactory: ObservableObject {
             uploadImage: uploadImage,
             wsClient: wsClient,
             languageService: languageService,
+            messageCache: messageCache,
             onConversationRead: onConversationRead
         )
     }

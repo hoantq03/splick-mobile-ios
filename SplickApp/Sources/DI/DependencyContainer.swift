@@ -643,6 +643,9 @@ final class DependencyContainer: ObservableObject {
         })
     }()
 
+    /// Shared across chat thread VMs so reopening a conversation paints cached messages instantly.
+    let messageThreadCache = MessageThreadCache(capacity: 5)
+
     private lazy var messagingRepository: MessagingRepositoryProtocol = {
         MessagingRepository(apiClient: apiClient)
     }()
@@ -709,6 +712,7 @@ final class DependencyContainer: ObservableObject {
             },
             wsClient: messagingWebSocketClient,
             languageService: languageService,
+            messageCache: messageThreadCache,
             onConversationRead: { [weak self] conversationId in
                 await self?.handleConversationRead(conversationId: conversationId)
             }
@@ -849,6 +853,7 @@ final class DependencyContainer: ObservableObject {
 
     func resetTabViewModels() {
         messagingWebSocketClient.disconnect()
+        messageThreadCache.removeAll()
         feedViewModel = makeFeedViewModel()
         photoAlbumViewModel = makePhotoAlbumViewModel()
         streakViewModel = makeStreakViewModel()

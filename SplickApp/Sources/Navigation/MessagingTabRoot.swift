@@ -57,6 +57,12 @@ struct MessagingTabRoot: View {
         ))
         .environment(\.chatPeerRelationshipActions, container.makeChatPeerRelationshipActions())
         .environment(\.chatGroupManagementActions, container.makeChatGroupManagementActions())
+        .onAppear {
+            container.conversationListViewModel.currentUserId = appState.currentUser?.id
+        }
+        .onChange(of: appState.currentUser?.id) { userId in
+            container.conversationListViewModel.currentUserId = userId
+        }
         .environment(\.messagingReactionPicker, MessagingReactionPickerAction { onPick in
             reactionPickHandler = onPick
             showsReactionPicker = true

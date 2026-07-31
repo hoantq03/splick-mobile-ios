@@ -24,6 +24,10 @@ public final class ChatThreadViewModel: ObservableObject {
     @Published public private(set) var highlightedMessageId: UUID?
     @Published public private(set) var newlySentMessageIds: Set<UUID> = []
     @Published public var replyDraft: MessageReplyDraft?
+    @Published public private(set) var hasMoreMessages = false
+    @Published public private(set) var isLoadingOlder = false
+    /// After older messages are prepended, the list scrolls to this client id to avoid jump.
+    @Published public private(set) var prependAnchorMessageId: UUID?
 
     private static let maxPagesForMessageLookup = 10
     private static let pageSize = 30
@@ -45,12 +49,15 @@ public final class ChatThreadViewModel: ObservableObject {
     private let onConversationRead: ((UUID) async -> Void)?
     private let wsClient: MessagingWebSocketClient
     private let languageService: LanguageService
+    private let messageCache: MessageThreadCache?
     private var cancellables = Set<AnyCancellable>()
     private var highlightClearTask: Task<Void, Never>?
     private var floatSwayByMessageId: [UUID: CGFloat] = [:]
     private var pendingBodiesByClientId: [UUID: String] = [:]
     private var pendingAttachmentsByClientId: [UUID: [MessageImageAttachment]] = [:]
     private var pendingReplyByClientId: [UUID: UUID?] = [:]
+    /// Highest page index successfully loaded (API page 0 = newest).
+    private var highestLoadedPage = 0
 
     public init(
         conversationId: UUID,
@@ -63,6 +70,7 @@ public final class ChatThreadViewModel: ObservableObject {
         uploadImage: @escaping (Data, String) async throws -> MessageImageAttachment,
         wsClient: MessagingWebSocketClient,
         languageService: LanguageService,
+        messageCache: MessageThreadCache? = nil,
         onConversationRead: ((UUID) async -> Void)? = nil
     ) {
         self.conversationId = conversationId
@@ -75,6 +83,7 @@ public final class ChatThreadViewModel: ObservableObject {
         self.uploadImage = uploadImage
         self.wsClient = wsClient
         self.languageService = languageService
+        self.messageCache = messageCache
         self.onConversationRead = onConversationRead
         bindWsEvents()
     }
@@ -88,6 +97,10 @@ public final class ChatThreadViewModel: ObservableObject {
         floatSwayByMessageId[messageId] ?? 0
     }
 
+    public func clearPrependAnchor() {
+        prependAnchorMessageId = nil
+    }
+
     public func loadIfNeeded() async {
         switch state {
         case .loaded, .loading:
@@ -99,14 +112,33 @@ public final class ChatThreadViewModel: ObservableObject {
 
     public func load() async {
         guard !isLoading else { return }
-        state = .loading
+
+        // Paint cached thread immediately, then reconcile with the network.
+        if highlightMessageId == nil,
+           let cached = messageCache?.entry(for: conversationId),
+           !cached.messages.isEmpty {
+            highestLoadedPage = cached.highestLoadedPage
+            hasMoreMessages = cached.hasMoreMessages
+            state = .loaded(cached.messages)
+            requestScrollToBottom()
+        } else {
+            state = .loading
+        }
+
         do {
             if let targetId = highlightMessageId {
                 try await loadUntilMessage(id: targetId)
             } else {
-                let msgs = try await fetchMessagesUseCase.execute(conversationId: conversationId)
+                let msgs = try await fetchMessagesUseCase.execute(
+                    conversationId: conversationId,
+                    page: 0,
+                    limit: Self.pageSize
+                )
                 let sorted = msgs.reversed() as [ChatMessage]
+                highestLoadedPage = 0
+                hasMoreMessages = msgs.count >= Self.pageSize
                 state = .loaded(sorted)
+                persistCache()
                 requestScrollToBottom()
                 if let lastId = sorted.last?.id {
                     markRead(upToMessageId: lastId)
@@ -115,7 +147,63 @@ public final class ChatThreadViewModel: ObservableObject {
             }
         } catch {
             Log.error(error, category: .network, metadata: ["action": "loadMessages"])
+            if case .loaded = state {
+                // Keep cached messages visible; surface failure only when empty.
+                return
+            }
             state = .failed(languageService.localizedMessage(for: error))
+        }
+    }
+
+    /// Fetches the next older page when the user scrolls to the top of the thread.
+    public func loadOlderMessagesIfNeeded(current message: ChatMessage) async {
+        guard hasMoreMessages, !isLoadingOlder, !isLoading else { return }
+        guard messages.first?.id == message.id else { return }
+
+        isLoadingOlder = true
+        defer { isLoadingOlder = false }
+
+        let nextPage = highestLoadedPage + 1
+        let anchorClientId = message.clientMessageId
+
+        do {
+            let batch = try await fetchMessagesUseCase.execute(
+                conversationId: conversationId,
+                page: nextPage,
+                limit: Self.pageSize
+            )
+            guard !batch.isEmpty else {
+                hasMoreMessages = false
+                persistCache()
+                return
+            }
+
+            let olderChronological = batch.reversed() as [ChatMessage]
+            let existingIds = Set(messages.map(\.id))
+            let existingClientIds = Set(messages.map(\.clientMessageId))
+            let uniqueOlder = olderChronological.filter {
+                !existingIds.contains($0.id) && !existingClientIds.contains($0.clientMessageId)
+            }
+
+            guard !uniqueOlder.isEmpty else {
+                hasMoreMessages = batch.count >= Self.pageSize
+                highestLoadedPage = nextPage
+                persistCache()
+                return
+            }
+
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                state = .loaded(uniqueOlder + messages)
+                highestLoadedPage = nextPage
+                hasMoreMessages = batch.count >= Self.pageSize
+                // Published after messages so the list can re-anchor once content exists.
+                prependAnchorMessageId = anchorClientId
+            }
+            persistCache()
+        } catch {
+            Log.error(error, category: .network, metadata: ["action": "loadOlderMessages"])
         }
     }
 
@@ -307,6 +395,7 @@ public final class ChatThreadViewModel: ObservableObject {
     private func loadUntilMessage(id targetId: UUID) async throws {
         var messagesById: [UUID: ChatMessage] = [:]
         var page = 0
+        var lastBatchCount = 0
 
         while page < Self.maxPagesForMessageLookup {
             let batch = try await fetchMessagesUseCase.execute(
@@ -315,6 +404,7 @@ public final class ChatThreadViewModel: ObservableObject {
                 limit: Self.pageSize
             )
             if batch.isEmpty { break }
+            lastBatchCount = batch.count
             for message in batch {
                 messagesById[message.id] = message
             }
@@ -323,7 +413,10 @@ public final class ChatThreadViewModel: ObservableObject {
         }
 
         let sorted = messagesById.values.sorted { $0.createdAt < $1.createdAt }
+        highestLoadedPage = page
+        hasMoreMessages = lastBatchCount >= Self.pageSize
         state = .loaded(sorted)
+        persistCache()
 
         if messagesById[targetId] != nil {
             activateHighlight(for: targetId)
@@ -356,7 +449,12 @@ public final class ChatThreadViewModel: ObservableObject {
     private func updateMessage(at index: Int, with message: ChatMessage) {
         guard case .loaded(var messages) = state, messages.indices.contains(index) else { return }
         messages[index] = message
-        state = .loaded(messages)
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            state = .loaded(messages)
+        }
+        persistCache()
     }
 
     private func replaceMessage(matching clientMessageId: UUID, with message: ChatMessage) {
@@ -371,6 +469,7 @@ public final class ChatThreadViewModel: ObservableObject {
         withTransaction(transaction) {
             state = .loaded(messages)
         }
+        persistCache()
     }
 
     private func updateDeliveryStatus(for clientMessageId: UUID, status: MessageDeliveryStatus) {
@@ -382,6 +481,7 @@ public final class ChatThreadViewModel: ObservableObject {
         withTransaction(transaction) {
             state = .loaded(messages)
         }
+        persistCache()
     }
 
     private func reconcileReaction(messageId: UUID, optimisticId: UUID, with server: Reaction) {
@@ -392,7 +492,12 @@ public final class ChatThreadViewModel: ObservableObject {
         var reactions = message.reactions.filter { $0.id != optimisticId }
         reactions.append(server)
         messages[index] = message.updating(reactions: reactions)
-        state = .loaded(messages)
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            state = .loaded(messages)
+        }
+        persistCache()
     }
 
     private func removeReaction(messageId: UUID, reactionId: UUID) {
@@ -403,7 +508,12 @@ public final class ChatThreadViewModel: ObservableObject {
         messages[index] = message.updating(
             reactions: message.reactions.filter { $0.id != reactionId }
         )
-        state = .loaded(messages)
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            state = .loaded(messages)
+        }
+        persistCache()
     }
 
     private func appendMessage(_ message: ChatMessage) {
@@ -413,6 +523,7 @@ public final class ChatThreadViewModel: ObservableObject {
         withAnimation(ChatScrollAnimation.spring) {
             state = .loaded(msgs)
         }
+        persistCache()
         requestScrollToBottom()
     }
 
@@ -432,6 +543,16 @@ public final class ChatThreadViewModel: ObservableObject {
 
     private func sendDeliveryAck(for messageId: UUID) {
         wsClient.sendDeliveryAck(conversationId: conversationId, messageId: messageId)
+    }
+
+    private func persistCache() {
+        guard case .loaded(let messages) = state else { return }
+        messageCache?.store(
+            conversationId: conversationId,
+            messages: messages,
+            highestLoadedPage: highestLoadedPage,
+            hasMoreMessages: hasMoreMessages
+        )
     }
 
     private func bindWsEvents() {
@@ -469,7 +590,14 @@ public final class ChatThreadViewModel: ObservableObject {
             messages[index] = message.updating(deliveryStatus: .delivered)
             changed = true
         }
-        if changed { state = .loaded(messages) }
+        if changed {
+            var transaction = Transaction()
+            transaction.animation = nil
+            withTransaction(transaction) {
+                state = .loaded(messages)
+            }
+            persistCache()
+        }
     }
 
     private func applyReadReceipt(upToMessageId: UUID) {
@@ -485,7 +613,14 @@ public final class ChatThreadViewModel: ObservableObject {
             messages[index] = message.updating(deliveryStatus: .read)
             changed = true
         }
-        if changed { state = .loaded(messages) }
+        if changed {
+            var transaction = Transaction()
+            transaction.animation = nil
+            withTransaction(transaction) {
+                state = .loaded(messages)
+            }
+            persistCache()
+        }
     }
 
     private func resolveImageAttachments(

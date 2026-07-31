@@ -51,7 +51,13 @@ struct ChatMessageListView: View {
         ScrollViewReader { proxy in
             ZStack {
                 ScrollView {
-                    VStack(spacing: 0) {
+                    LazyVStack(spacing: 0) {
+                        if viewModel.isLoadingOlder {
+                            ProgressView()
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, SplickTheme.Spacing.sm)
+                        }
+
                         ForEach(displayMessages) { item in
                             MessageBubble(
                                 displayMessage: item,
@@ -81,6 +87,10 @@ struct ChatMessageListView: View {
                             .allowsHitTesting(reactionFocusMessageId != item.message.id)
                             .id(item.message.clientMessageId)
                             .transition(ChatScrollAnimation.messageInsert)
+                            .onAppear {
+                                guard item.message.id == messages.first?.id else { return }
+                                Task { await viewModel.loadOlderMessagesIfNeeded(current: item.message) }
+                            }
                         }
 
                         Color.clear
@@ -92,10 +102,25 @@ struct ChatMessageListView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .modifier(ChatBottomScrollAnchorModifier())
-                .animation(ChatScrollAnimation.spring, value: messages.map(\.clientMessageId))
                 .onPreferenceChange(MessageReactionAnchorFrameKey.self) { frames in
+                    var next = reactionAnchorFrames
+                    var didChange = false
                     for (id, frame) in frames where frame.width > 1 && frame.height > 1 {
-                        reactionAnchorFrames[id] = frame
+                        if next[id] != frame {
+                            next[id] = frame
+                            didChange = true
+                        }
+                    }
+                    if didChange {
+                        reactionAnchorFrames = next
+                    }
+                }
+                .onChange(of: viewModel.prependAnchorMessageId) { anchorId in
+                    guard let anchorId else { return }
+                    // Keep visual position after older messages are prepended.
+                    DispatchQueue.main.async {
+                        proxy.scrollTo(anchorId, anchor: .top)
+                        viewModel.clearPrependAnchor()
                     }
                 }
                 .simultaneousGesture(
@@ -344,39 +369,32 @@ struct ChatMessageListView: View {
     }
 
     private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
-        guard let lastMessageId = viewModel.messages.last?.id else { return }
+        guard viewModel.messages.last != nil else { return }
 
         func performScroll(useAnimation: Bool) {
             if useAnimation {
                 withAnimation(ChatScrollAnimation.spring) {
-                    proxy.scrollTo(lastMessageId, anchor: .bottom)
                     proxy.scrollTo(ChatScrollAnimation.bottomAnchor, anchor: .bottom)
                 }
             } else {
-                proxy.scrollTo(lastMessageId, anchor: .bottom)
                 proxy.scrollTo(ChatScrollAnimation.bottomAnchor, anchor: .bottom)
             }
         }
 
-        let delays: [TimeInterval] = animated ? [0, 0.05, 0.12] : [0, 0.05, 0.12, 0.25]
-        for (index, delay) in delays.enumerated() {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                performScroll(useAnimation: animated && index > 0)
-            }
+        // Immediate + one layout-settled retry (LazyVStack / keyboard timing).
+        performScroll(useAnimation: false)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            performScroll(useAnimation: animated)
         }
     }
 
     private func scrollToMessage(_ messageId: UUID, proxy: ScrollViewProxy) {
-        let delays: [TimeInterval] = [0, 0.05, 0.12, 0.25]
-        for (index, delay) in delays.enumerated() {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                if index == 0 {
-                    proxy.scrollTo(messageId, anchor: .center)
-                } else {
-                    withAnimation(ChatScrollAnimation.spring) {
-                        proxy.scrollTo(messageId, anchor: .center)
-                    }
-                }
+        // Bubbles use clientMessageId as ScrollViewReader id (stable across optimistic→server replace).
+        let scrollId = messages.first(where: { $0.id == messageId })?.clientMessageId ?? messageId
+        proxy.scrollTo(scrollId, anchor: .center)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            withAnimation(ChatScrollAnimation.spring) {
+                proxy.scrollTo(scrollId, anchor: .center)
             }
         }
     }

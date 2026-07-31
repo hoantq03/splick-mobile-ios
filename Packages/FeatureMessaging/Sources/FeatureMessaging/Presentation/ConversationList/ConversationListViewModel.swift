@@ -44,8 +44,12 @@ public final class ConversationListViewModel: ObservableObject {
     @Published public private(set) var peekMessages: [ChatMessage] = []
     @Published public private(set) var peekLoadState: PeekLoadState = .idle
 
+    /// Used to decide whether an incoming WS message should bump unread.
+    public var currentUserId: UUID?
+
     private static let pageSize = 20
     private static let peekMessageLimit = 8
+    private static let wsRefreshDebounce: Duration = .seconds(30)
 
     private let fetchConversationsUseCase: FetchConversationsUseCase
     private let fetchMessagesUseCase: FetchMessagesUseCase
@@ -59,6 +63,7 @@ public final class ConversationListViewModel: ObservableObject {
     private var refreshTask: Task<Void, Never>?
     private var loadMoreTask: Task<Void, Never>?
     private var peekTask: Task<[ChatMessage], Error>?
+    private var debouncedRefreshTask: Task<Void, Never>?
     private var currentPage = 0
 
     public init(
@@ -391,10 +396,59 @@ public final class ConversationListViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] event in
                 guard let self else { return }
-                if case .newMessage = event {
-                    Task { await self.refresh() }
+                if case .newMessage(let conversationId, let message) = event {
+                    self.applyIncomingMessage(conversationId: conversationId, message: message)
                 }
             }
             .store(in: &cancellables)
+    }
+
+    /// Patches the inbox row from the WS payload instead of refetching the whole list.
+    private func applyIncomingMessage(conversationId: UUID, message: ChatMessage) {
+        guard case .loaded(var items) = state,
+              let index = items.firstIndex(where: { $0.id == conversationId }) else {
+            // Conversation missing from the loaded page / filter — reconcile soon.
+            scheduleDebouncedRefresh()
+            return
+        }
+
+        let existing = items[index]
+        let isFromSelf = currentUserId.map { message.senderId == $0 } ?? false
+        let wasUnread = existing.unreadCount > 0
+        let nextUnread: Int
+        if isFromSelf {
+            nextUnread = existing.unreadCount
+        } else {
+            nextUnread = existing.unreadCount + 1
+        }
+
+        let patched = existing.updating(
+            lastMessage: message,
+            unreadCount: nextUnread,
+            updatedAt: message.createdAt
+        )
+        items.remove(at: index)
+        items.insert(patched, at: 0)
+
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            state = .loaded(items)
+            if !isFromSelf, !wasUnread {
+                unreadConversationCount += 1
+            }
+        }
+
+        // Periodic reconcile in case local patch drifts from server ordering / filters.
+        scheduleDebouncedRefresh()
+    }
+
+    private func scheduleDebouncedRefresh() {
+        debouncedRefreshTask?.cancel()
+        debouncedRefreshTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.wsRefreshDebounce)
+            guard !Task.isCancelled else { return }
+            await self?.refresh()
+        }
     }
 }
