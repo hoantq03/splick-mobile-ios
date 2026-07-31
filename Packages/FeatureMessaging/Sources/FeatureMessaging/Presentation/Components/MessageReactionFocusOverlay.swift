@@ -138,10 +138,18 @@ struct MessageReactionFocusOverlay: View {
             DispatchQueue.main.async {
                 withAnimation(MessageReactionTrayMotion.present) {
                     isRevealed = true
-                    if !isMessageCapped {
+                }
+                if !isMessageCapped {
+                    withAnimation(MessageReactionTrayMotion.bubblePop) {
                         messagePopScale = messageFocusScale
                     }
                 }
+            }
+        }
+        // Isolate focus bounce from list preference / status transaction noise.
+        .transaction { transaction in
+            if !isDismissing {
+                transaction.disablesAnimations = false
             }
         }
     }

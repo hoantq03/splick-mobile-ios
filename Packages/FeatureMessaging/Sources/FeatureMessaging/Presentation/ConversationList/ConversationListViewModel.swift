@@ -109,13 +109,22 @@ public final class ConversationListViewModel: ObservableObject {
         do {
             let messages = try await task.value
             guard !Task.isCancelled, peekConversation?.id == conversationId else { return }
-            peekMessages = Array(messages.reversed())
-            peekLoadState = .loaded
+            // Don't cancel the peek row bounce when preview content arrives.
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                peekMessages = Array(messages.reversed())
+                peekLoadState = .loaded
+            }
         } catch is CancellationError {
             return
         } catch {
             guard peekConversation?.id == conversationId else { return }
-            peekLoadState = .failed
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                peekLoadState = .failed
+            }
             Log.error(
                 error,
                 category: .network,

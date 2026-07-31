@@ -49,7 +49,7 @@ struct ConversationPeekOverlay: View {
                         width: context.anchorFrame.width,
                         height: context.anchorFrame.height
                     )
-                    .scaleEffect(isRevealed ? 1.06 : 1)
+                    .scaleEffect(isRevealed ? 1.08 : 1)
                     .position(
                         x: context.anchorFrame.midX,
                         y: context.anchorFrame.midY
@@ -60,7 +60,7 @@ struct ConversationPeekOverlay: View {
 
                 previewCard
                     .frame(width: cardFrame.width, height: cardFrame.height)
-                    .scaleEffect(isRevealed ? 1 : 0.94, anchor: cardFrame.minY > context.anchorFrame.maxY ? .top : .bottom)
+                    .scaleEffect(isRevealed ? 1 : 0.92, anchor: cardFrame.minY > context.anchorFrame.maxY ? .top : .bottom)
                     .opacity(isRevealed ? 1 : 0)
                     .position(x: cardFrame.midX, y: cardFrame.midY)
                     .onTapGesture {
@@ -69,11 +69,17 @@ struct ConversationPeekOverlay: View {
             }
         }
         .onAppear {
-            withAnimation(MessageReactionTrayMotion.present) {
+            withAnimation(MessageReactionTrayMotion.bubblePop) {
                 isRevealed = true
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.dismissArmDelay) {
                 dismissIsArmed = true
+            }
+        }
+        // Keep peek bounce independent of parent list transactions (refresh / WS patch).
+        .transaction { transaction in
+            if !isDismissing {
+                transaction.disablesAnimations = false
             }
         }
         .accessibilityElement(children: .contain)

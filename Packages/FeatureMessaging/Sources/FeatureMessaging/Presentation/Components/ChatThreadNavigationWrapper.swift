@@ -77,6 +77,7 @@ private struct ChatThreadScreen: View {
 }
 
 /// Factory injected via environment to create ChatThreadViewModel per conversation.
+@MainActor
 public final class ChatThreadViewModelFactory: ObservableObject {
     public let currentUserId: UUID
     private let fetchMessagesUseCase: FetchMessagesUseCase
@@ -98,7 +99,7 @@ public final class ChatThreadViewModelFactory: ObservableObject {
         uploadImage: @escaping (Data, String) async throws -> MessageImageAttachment,
         wsClient: MessagingWebSocketClient,
         languageService: LanguageService,
-        messageCache: MessageThreadCache = MessageThreadCache(),
+        messageCache: MessageThreadCache? = nil,
         onConversationRead: ((UUID) async -> Void)? = nil
     ) {
         self.currentUserId = currentUserId
@@ -109,11 +110,10 @@ public final class ChatThreadViewModelFactory: ObservableObject {
         self.uploadImage = uploadImage
         self.wsClient = wsClient
         self.languageService = languageService
-        self.messageCache = messageCache
+        self.messageCache = messageCache ?? MessageThreadCache()
         self.onConversationRead = onConversationRead
     }
 
-    @MainActor
     public func make(conversationId: UUID, highlightMessageId: UUID? = nil) -> ChatThreadViewModel {
         ChatThreadViewModel(
             conversationId: conversationId,
