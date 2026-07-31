@@ -212,6 +212,10 @@ struct RejectPaymentEvidenceRequestDTO: Encodable {
     let reason: String
 }
 
+struct BatchViewPostsRequestDTO: Encodable {
+    let postIds: [UUID]
+}
+
 struct StreakSummaryDTO: Decodable {
     let currentStreak: Int
     let hasTodayPhoto: Bool

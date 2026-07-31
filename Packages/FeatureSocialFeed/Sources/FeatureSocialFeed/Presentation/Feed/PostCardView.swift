@@ -1,5 +1,4 @@
 import SwiftUI
-import PhotosUI
 import UIKit
 import DesignSystem
 import Common
@@ -7,45 +6,14 @@ import Localization
 import SplickDomain
 import FeatureStickers
 
-private enum PostCardSheet: Identifiable {
-    case reactions
-    case emojiPicker
-    case viewers
-    case share
-
-    var id: String {
-        switch self {
-        case .reactions: "reactions"
-        case .emojiPicker: "emojiPicker"
-        case .viewers: "viewers"
-        case .share: "share"
-        }
-    }
-}
-
-struct PostCardView: View {
+struct PostCardView: View, Equatable {
     @EnvironmentObject private var languageService: LanguageService
     @EnvironmentObject private var emojiStore: CustomEmojiStore
-    @Environment(\.customEmojiDependencies) private var customEmojiDependencies
     let post: Post
     let currentUser: UserSummary?
-    let onReact: (String) -> Void
-    let onDelete: () -> Void
-    let onUserTap: (UserSummary) -> Void
-    let onOpenComments: () -> Void
-    let onShowCompanions: () -> Void
+    let actions: PostCardActions
     /// When false (e.g. post detail), reactions/views still show; only the comment preview link is hidden.
     var showsCommentPreview: Bool = true
-    /// Tap on caption/media (feed) navigates to post detail with the current media page index.
-    var onOpenDetail: ((Int) -> Void)? = nil
-    /// Tap on a media item in detail opens fullscreen viewer at that index.
-    var onMediaTap: ((Int) -> Void)? = nil
-    var onSendBillReminder: (
-        (UUID, [UUID]?, String, [CommentSubmissionAttachment]) async throws
-            -> SendBillReminderResult
-    )? = nil
-    var onSubmitPaymentEvidence: ((UUID, UUID, String?, [CommentSubmissionAttachment]) async throws -> Void)? = nil
-    var makeGifPickerViewModel: GifPickerViewModelFactory? = nil
     /// When true, the bill split section below media starts expanded (e.g. opened from Expenses tab).
     var initiallyExpandedBillSplit: Bool = false
     /// Restores carousel position when opening detail after swiping media in the feed.
@@ -55,15 +23,19 @@ struct PostCardView: View {
     @State private var mediaPageIndex = 0
     @State private var appliedInitialMediaIndex = false
     @State private var isMediaPinchZooming = false
-    @State private var activeSheet: PostCardSheet?
-    @State private var showCustomEmojiUpload = false
     @State private var reminderSentMessage: String?
-    @State private var showPaymentEvidencePhotoPicker = false
-    @State private var showPaymentEvidenceSheet = false
-    @State private var paymentEvidencePhotoPickerItems: [PhotosPickerItem] = []
-    @State private var paymentEvidenceAttachments: [CommentSubmissionAttachment] = []
     @State private var reactionAnchors: [String: CGPoint] = [:]
     @State private var flyingEmojis: [FlyingEmojiFlight] = []
+
+    static func == (lhs: PostCardView, rhs: PostCardView) -> Bool {
+        lhs.post == rhs.post
+            && lhs.currentUser?.id == rhs.currentUser?.id
+            && lhs.showsCommentPreview == rhs.showsCommentPreview
+            && lhs.initiallyExpandedBillSplit == rhs.initiallyExpandedBillSplit
+            && lhs.initialMediaIndex == rhs.initialMediaIndex
+            && lhs.uploadState == rhs.uploadState
+            && lhs.actions === rhs.actions
+    }
 
     private var reactionPreview: (top: [UserReactionSummary], otherPeopleCount: Int) {
         post.reactionPreview(topLimit: 3)
@@ -93,6 +65,12 @@ struct PostCardView: View {
     }
 
     var body: some View {
+        let signpost = FeedSignposts.beginPostCardBody(postId: post.id)
+        return cardBody
+            .onAppear { FeedSignposts.endPostCardBody(signpost) }
+    }
+
+    private var cardBody: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
             authorHeader
 
@@ -134,69 +112,24 @@ struct PostCardView: View {
         }
         .coordinateSpace(name: "postCard")
         .onPreferenceChange(ReactionTargetAnchorsKey.self) { anchors in
-            // Avoid AttributeGraph churn when GeometryReader republishes identical points.
             guard anchors != reactionAnchors else { return }
             reactionAnchors = anchors
         }
         .overlay {
-            GeometryReader { geo in
-                let cardOrigin = geo.frame(in: .global).origin
-                ForEach(flyingEmojis) { flight in
-                    FlyingEmojiView(
-                        flight: flight,
-                        cardOriginGlobal: cardOrigin,
-                        onComplete: {
-                            flyingEmojis.removeAll { $0.id == flight.id }
-                        }
-                    )
+            if !flyingEmojis.isEmpty {
+                GeometryReader { geo in
+                    let cardOrigin = geo.frame(in: .global).origin
+                    ForEach(flyingEmojis) { flight in
+                        FlyingEmojiView(
+                            flight: flight,
+                            cardOriginGlobal: cardOrigin,
+                            onComplete: {
+                                flyingEmojis.removeAll { $0.id == flight.id }
+                            }
+                        )
+                    }
                 }
-            }
-        }
-        .sheet(item: $activeSheet) { sheet in
-            switch sheet {
-            case .reactions:
-                ReactionDetailSheet(
-                    summaries: post.userReactionSummaries(),
-                    onUserTap: openProfileFromSheet
-                )
-            case .emojiPicker:
-                EmojiPickerSheet(
-                    currentUserId: currentUser?.id,
-                    onPick: { emoji in onReact(emoji) },
-                    onOpenUpload: { openCustomEmojiUpload() }
-                )
-            case .viewers:
-                ViewersListSheet(viewers: post.viewers, onUserTap: openProfileFromSheet)
-            case .share:
-                SharePostSheet(
-                    post: post,
-                    fallbackCaption: languageService.text(.feedShareFallbackCaption)
-                )
-            }
-        }
-        .sheet(isPresented: $showCustomEmojiUpload) {
-            customEmojiUploadSheet
-        }
-        .photosPicker(
-            isPresented: $showPaymentEvidencePhotoPicker,
-            selection: $paymentEvidencePhotoPickerItems,
-            maxSelectionCount: 3,
-            matching: .images
-        )
-        .onChange(of: paymentEvidencePhotoPickerItems) { items in
-            Task { await preparePaymentEvidenceAttachments(from: items) }
-        }
-        .sheet(
-            isPresented: $showPaymentEvidenceSheet,
-            onDismiss: { paymentEvidenceAttachments = [] }
-        ) {
-            if let split = currentUserSplitLine {
-                PaymentEvidenceSheet(
-                    postAuthorName: post.author.displayName,
-                    initialAttachments: paymentEvidenceAttachments
-                ) { message, attachments in
-                    try await onSubmitPaymentEvidence?(post.id, split.id, message, attachments)
-                }
+                .allowsHitTesting(false)
             }
         }
         .alert(
@@ -216,7 +149,7 @@ struct PostCardView: View {
 
     private var authorHeader: some View {
         HStack(spacing: SplickTheme.Spacing.xs) {
-            Button { onUserTap(post.author) } label: {
+            Button { actions.onUserTap(post.author) } label: {
                 AvatarView(
                     imageURL: post.author.avatarURL,
                     name: post.author.displayName,
@@ -226,7 +159,7 @@ struct PostCardView: View {
             }
             .buttonStyle(.plain)
 
-            Button { onUserTap(post.author) } label: {
+            Button { actions.onUserTap(post.author) } label: {
                 Text(post.author.displayName)
                     .font(SplickTheme.Typography.headline)
                     .foregroundStyle(SplickTheme.Colors.textPrimary)
@@ -249,7 +182,7 @@ struct PostCardView: View {
     private var postOptionsMenu: some View {
         Menu {
             Button {
-                activeSheet = .share
+                actions.onPresent(.share(post))
             } label: {
                 Label(languageService.text(.commonShare), systemImage: "square.and.arrow.up")
             }
@@ -257,7 +190,7 @@ struct PostCardView: View {
             if isAuthor {
                 if post.canDelete {
                     Button(languageService.text(.feedPostDelete), systemImage: "trash", role: .destructive) {
-                        onDelete()
+                        actions.onDelete(post.id)
                     }
                 } else {
                     Button {} label: {
@@ -282,12 +215,16 @@ struct PostCardView: View {
         MentionText(caption, fontSize: 16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
-            .onTapGesture { onOpenDetail?(mediaPageIndex) }
+            .onTapGesture { actions.onOpenDetail?(post, mediaPageIndex) }
     }
 
     private var resolvedMediaTap: ((Int) -> Void)? {
-        if let onMediaTap { return onMediaTap }
-        if let onOpenDetail { return onOpenDetail }
+        if let onMediaTap = actions.onMediaTap {
+            return { index in onMediaTap(post, index) }
+        }
+        if let onOpenDetail = actions.onOpenDetail {
+            return { index in onOpenDetail(post, index) }
+        }
         return nil
     }
 
@@ -301,7 +238,7 @@ struct PostCardView: View {
     @ViewBuilder
     private var companionsSection: some View {
         if hasCompanionsSummary {
-            Button(action: onShowCompanions) {
+            Button { actions.onShowCompanions(post) } label: {
                 HStack(alignment: .center, spacing: 6) {
                     Image(systemName: "person.2.fill")
                         .font(.system(size: 10))
@@ -379,7 +316,7 @@ struct PostCardView: View {
                 BillSplitSectionView(
                     bill: bill,
                     groupId: post.groupId,
-                    onUserTap: onUserTap,
+                    onUserTap: { actions.onUserTap($0) },
                     initiallyExpanded: initiallyExpandedBillSplit,
                     onSendReminder: isAuthor
                         ? { user, message, attachments in
@@ -402,63 +339,31 @@ struct PostCardView: View {
                             )
                         }
                         : nil,
-                    makeGifPickerViewModel: makeGifPickerViewModel,
+                    makeGifPickerViewModel: actions.makeGifPickerViewModel,
                     paymentStatus: currentUserSplitLine?.paymentStatus,
                     evidenceWasRejected: currentUserSplitLine?.paymentStatus == .unpaid
                         && currentUserSplitLine?.lastRejectedAt != nil,
                     onPaymentTap: shouldShowPaymentEvidenceAction
-                        ? {
-                            showPaymentEvidencePhotoPicker = true
-                        }
+                        ? { actions.onPresent(.paymentEvidencePhotoPicker(post)) }
                         : nil
                 )
             }
         }
     }
 
-    // MARK: - Reactions
-
-    @ViewBuilder
-    private var customEmojiUploadSheet: some View {
-        if let deps = customEmojiDependencies {
-            CustomEmojiUploadSheet(
-                currentUserId: currentUser?.id,
-                customEmojiFetcher: deps.fetcher,
-                uploadMediaUseCase: deps.uploadMediaUseCase,
-                addEmojiUseCase: deps.addEmojiUseCase,
-                deleteEmojiUseCase: deps.deleteEmojiUseCase
-            )
-        }
-    }
-
-    private func openCustomEmojiUpload() {
-        activeSheet = nil
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            showCustomEmojiUpload = true
-        }
-    }
-
-    private func openProfileFromSheet(for user: UserSummary) {
-        activeSheet = nil
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            onUserTap(user)
-        }
-    }
-
     private enum Layout {
         static let reactionBarHeight: CGFloat = 40
-        /// Keeps emoji row clear of the views button on the author's post.
         static let viewsButtonReservedWidth: CGFloat = 52
     }
 
     private var reactionBarRow: some View {
         ZStack(alignment: .trailing) {
             InlineReactionBar(
-                onReact: onReact,
+                onReact: { emoji in actions.onReact(post.id, emoji) },
                 onDragRelease: { emoji, sourceGlobal in
                     scheduleFlyingEmoji(emoji: emoji, sourceGlobal: sourceGlobal)
                 },
-                onCustomEmoji: { activeSheet = .emojiPicker }
+                onCustomEmoji: { actions.onPresent(.emojiPicker(post)) }
             )
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.trailing, isAuthor ? Layout.viewsButtonReservedWidth : 0)
@@ -472,7 +377,7 @@ struct PostCardView: View {
     }
 
     private var viewsEntryButton: some View {
-        Button { activeSheet = .viewers } label: {
+        Button { actions.onPresent(.viewers(post)) } label: {
             viewsEntryButtonLabel(viewCount: displayViewCount)
         }
         .buttonStyle(.plain)
@@ -510,14 +415,13 @@ struct PostCardView: View {
             sourceFrameGlobal: sourceGlobal,
             end: end
         )
-        let maxConcurrentFlights = 16
+        let maxConcurrentFlights = 8
         if flyingEmojis.count >= maxConcurrentFlights {
             flyingEmojis.removeFirst(flyingEmojis.count - maxConcurrentFlights + 1)
         }
         flyingEmojis.append(flight)
     }
 
-    /// Avatar in top 3, otherwise the "+N người…" chip, otherwise below the bar.
     private func flyTargetPoint() -> CGPoint {
         guard let userId = currentUser?.id else {
             return CGPoint(x: 40, y: 68)
@@ -546,7 +450,7 @@ struct PostCardView: View {
     private var reactionSummaryRow: some View {
         let preview = reactionPreview
         if !preview.top.isEmpty {
-            Button { activeSheet = .reactions } label: {
+            Button { actions.onPresent(.reactions(post)) } label: {
                 HStack(spacing: 6) {
                     ForEach(preview.top, id: \.userId) { summary in
                         UserReactionBadgeView(summary: summary)
@@ -563,7 +467,7 @@ struct PostCardView: View {
 
     private var commentPreviewRow: some View {
         Button {
-            onOpenComments()
+            actions.onOpenComments(post)
         } label: {
             HStack(spacing: 6) {
                 commentIconWithCount
@@ -591,7 +495,7 @@ struct PostCardView: View {
         singleName: String?,
         count: Int? = nil
     ) {
-        guard let onSendBillReminder else { return }
+        guard let onSendBillReminder = actions.onSendBillReminder else { return }
         Task {
             do {
                 let result = try await onSendBillReminder(
@@ -613,31 +517,5 @@ struct PostCardView: View {
                 reminderSentMessage = languageService.localizedMessage(for: error)
             }
         }
-    }
-
-    @MainActor
-    private func preparePaymentEvidenceAttachments(from items: [PhotosPickerItem]) async {
-        guard !items.isEmpty else { return }
-
-        var attachments: [CommentSubmissionAttachment] = []
-        for (index, item) in items.prefix(3).enumerated() {
-            guard let data = try? await item.loadTransferable(type: Data.self),
-                  let image = UIImage(data: data),
-                  let jpegData = image.jpegData(compressionQuality: 0.92) else { continue }
-            attachments.append(
-                CommentSubmissionAttachment(
-                    kind: .image,
-                    data: jpegData,
-                    mimeType: "image/jpeg",
-                    fileName: "payment-proof-\(index + 1).jpg"
-                )
-            )
-        }
-
-        paymentEvidencePhotoPickerItems = []
-
-        guard !attachments.isEmpty else { return }
-        paymentEvidenceAttachments = attachments
-        showPaymentEvidenceSheet = true
     }
 }

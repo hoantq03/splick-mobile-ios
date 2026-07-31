@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import UIKit
+import PhotosUI
 import DesignSystem
 import Common
 import Localization
@@ -139,8 +140,6 @@ public struct FeedView: View {
         .environment(\.feedSegmentScrollState, feedSegmentScrollState)
         .onFirstAppear {
             viewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
-            // Initial posts come from AppStartupCoordinator (`GET /v1/app/startup`).
-            // Fallback load runs from bootstrap when startup leaves the feed empty.
         }
         .onChange(of: currentUserSummary?.id) { _ in
             viewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
@@ -211,7 +210,6 @@ public struct FeedView: View {
     private func handleSameTabTap() {
         guard sameTabTapHandlingEnabled, isTabActive else { return }
 
-        // Detail → root first (Instagram-style).
         if !navigationPath.isEmpty {
             navigationPath = NavigationPath()
             tabBarScrollState?.show()
@@ -220,10 +218,8 @@ public struct FeedView: View {
 
         guard selectedSegment == .feed else { return }
 
-        // NotificationCenter crosses UIHostingController boundaries reliably.
         if tabBarScrollState?.isAtTop ?? true {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            // Single path: hosted scroll view shows spinner and calls loadFeed.
             NotificationCenter.default.post(name: FeedSameTabNotification.refresh, object: nil)
         } else {
             NotificationCenter.default.post(name: FeedSameTabNotification.scrollToTop, object: nil)
@@ -242,6 +238,7 @@ private struct FeedPrimaryPage: View {
     @Environment(\.openPostCaptureFlow) private var openPostCaptureFlow
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.feedSegmentScrollState) private var feedSegmentScrollState
+    @Environment(\.customEmojiDependencies) private var customEmojiDependencies
     @ObservedObject var viewModel: FeedViewModel
     @Binding var navigationPath: NavigationPath
     @Binding var companionsRoute: CompanionsSheetRoute?
@@ -250,14 +247,119 @@ private struct FeedPrimaryPage: View {
     let onOpenProfile: (UserSummary) -> Void
 
     @State private var feedScrollLocked = false
+    @State private var mediaContainerWidth: CGFloat = 0
+    @State private var cardPresentation: PostCardPresentation?
+    @State private var paymentEvidencePhotoPickerItems: [PhotosPickerItem] = []
+    @StateObject private var cardActions = PostCardActions()
 
     var body: some View {
         feedPane
+            .onAppear { configureCardActions() }
             .onReceive(
                 NotificationCenter.default.publisher(for: FeedScrollLock.notification)
             ) { notification in
                 feedScrollLocked = notification.userInfo?["locked"] as? Bool ?? false
             }
+            .postCardPresentationHost(
+                presentation: $cardPresentation,
+                currentUser: viewModel.currentUser,
+                languageService: languageService,
+                onUserTap: onOpenProfile,
+                onReact: { postId, emoji in
+                    if let error = viewModel.react(to: postId, emoji: emoji) {
+                        viewModel.alertMessage = error
+                    }
+                },
+                onSubmitPaymentEvidence: { postId, splitId, message, attachments in
+                    try await viewModel.submitPaymentEvidence(
+                        postId: postId,
+                        splitId: splitId,
+                        message: message,
+                        submissionAttachments: attachments
+                    )
+                },
+                customEmojiDependencies: customEmojiDependencies,
+                paymentEvidencePhotoPickerItems: $paymentEvidencePhotoPickerItems,
+                onPaymentEvidencePhotosPicked: preparePaymentEvidenceAttachments
+            )
+    }
+
+    private func configureCardActions() {
+        cardActions.onReact = { postId, emoji in
+            if let error = viewModel.react(to: postId, emoji: emoji) {
+                viewModel.alertMessage = error
+            }
+        }
+        cardActions.onDelete = { postId in
+            Task { await viewModel.deletePost(id: postId) }
+        }
+        cardActions.onUserTap = onOpenProfile
+        cardActions.onShowCompanions = { post in
+            companionsRoute = CompanionsSheetRoute(id: post.id, companions: post.companions)
+        }
+        cardActions.onOpenComments = { post in
+            guard viewModel.postUploadState(for: post.id) == nil else { return }
+            navigationPath.append(
+                FeedPostDestination(
+                    postId: post.id,
+                    mediaIndex: 0,
+                    focusComposerOnAppear: post.commentCount == 0
+                )
+            )
+        }
+        cardActions.onOpenDetail = { post, mediaIndex in
+            guard viewModel.postUploadState(for: post.id) == nil else { return }
+            navigationPath.append(FeedPostDestination(postId: post.id, mediaIndex: mediaIndex))
+        }
+        cardActions.onPresent = { presentation in
+            cardPresentation = presentation
+        }
+        cardActions.onSendBillReminder = { postId, targetUserIds, message, attachments in
+            try await viewModel.sendBillReminder(
+                postId: postId,
+                targetUserIds: targetUserIds,
+                message: message,
+                submissionAttachments: attachments
+            )
+        }
+        cardActions.onSubmitPaymentEvidence = { postId, splitId, message, attachments in
+            try await viewModel.submitPaymentEvidence(
+                postId: postId,
+                splitId: splitId,
+                message: message,
+                submissionAttachments: attachments
+            )
+        }
+        cardActions.makeGifPickerViewModel = makeGifPickerViewModel
+    }
+
+    @MainActor
+    private func preparePaymentEvidenceAttachments(from items: [PhotosPickerItem]) async {
+        guard !items.isEmpty else { return }
+        guard case .paymentEvidencePhotoPicker(let post) = cardPresentation else { return }
+
+        var attachments: [CommentSubmissionAttachment] = []
+        for (index, item) in items.prefix(3).enumerated() {
+            guard let data = try? await item.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data),
+                  let jpegData = image.jpegData(compressionQuality: 0.92) else { continue }
+            attachments.append(
+                CommentSubmissionAttachment(
+                    kind: .image,
+                    data: jpegData,
+                    mimeType: "image/jpeg",
+                    fileName: "payment-proof-\(index + 1).jpg"
+                )
+            )
+        }
+
+        paymentEvidencePhotoPickerItems = []
+        guard !attachments.isEmpty,
+              let split = post.billSplitLine(for: viewModel.currentUser?.id ?? UUID()) else {
+            cardPresentation = nil
+            return
+        }
+        cardPresentation = .paymentEvidence(post, splitId: split.id, attachments: attachments)
     }
 
     @ViewBuilder
@@ -305,58 +407,10 @@ private struct FeedPrimaryPage: View {
                     PostCardView(
                         post: post,
                         currentUser: viewModel.currentUser,
-                        onReact: { emoji in
-                            if let error = viewModel.react(to: post.id, emoji: emoji) {
-                                viewModel.alertMessage = error
-                            }
-                        },
-                        onDelete: {
-                            Task { await viewModel.deletePost(id: post.id) }
-                        },
-                        onUserTap: { user in
-                            onOpenProfile(user)
-                        },
-                        onOpenComments: {
-                            guard viewModel.postUploadState(for: post.id) == nil else { return }
-                            navigationPath.append(
-                                FeedPostDestination(
-                                    postId: post.id,
-                                    mediaIndex: 0,
-                                    focusComposerOnAppear: post.commentCount == 0
-                                )
-                            )
-                        },
-                        onShowCompanions: {
-                            companionsRoute = CompanionsSheetRoute(
-                                id: post.id,
-                                companions: post.companions
-                            )
-                        },
-                        onOpenDetail: { mediaIndex in
-                            guard viewModel.postUploadState(for: post.id) == nil else { return }
-                            navigationPath.append(
-                                FeedPostDestination(postId: post.id, mediaIndex: mediaIndex)
-                            )
-                        },
-                        onSendBillReminder: { postId, targetUserIds, message, attachments in
-                            try await viewModel.sendBillReminder(
-                                postId: postId,
-                                targetUserIds: targetUserIds,
-                                message: message,
-                                submissionAttachments: attachments
-                            )
-                        },
-                        onSubmitPaymentEvidence: { postId, splitId, message, attachments in
-                            try await viewModel.submitPaymentEvidence(
-                                postId: postId,
-                                splitId: splitId,
-                                message: message,
-                                submissionAttachments: attachments
-                            )
-                        },
-                        makeGifPickerViewModel: makeGifPickerViewModel,
+                        actions: cardActions,
                         uploadState: viewModel.postUploadState(for: post.id)
                     )
+                    .equatable()
                     .onAppear {
                         guard !viewModel.isRefreshing else { return }
                         Task { await viewModel.trackViewOnScrollIfNeeded(for: post) }
@@ -378,10 +432,27 @@ private struct FeedPrimaryPage: View {
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
             .padding(.top, SplickTheme.Spacing.md)
+            .background {
+                GeometryReader { proxy in
+                    Color.clear
+                        .onAppear { updateMediaWidth(proxy.size.width) }
+                        .onChange(of: proxy.size.width) { updateMediaWidth($0) }
+                }
+            }
         }
         .scrollDisabled(feedScrollLocked)
         .environment(\.feedVideoCoordinator, videoCoordinator)
+        .environment(\.feedMediaContainerWidth, mediaContainerWidth)
         .feedVideoVisibilityHandling(coordinator: videoCoordinator)
+    }
+
+    private func updateMediaWidth(_ width: CGFloat) {
+        let minimumCredibleWidth = min(FeedMediaLayout.estimatedCardContentWidth * 0.55, 180)
+        guard width >= minimumCredibleWidth, abs(width - mediaContainerWidth) > 1 else { return }
+        DispatchQueue.main.async {
+            guard width >= minimumCredibleWidth, abs(width - mediaContainerWidth) > 1 else { return }
+            mediaContainerWidth = width
+        }
     }
 
     private var feedEndReachedFooter: some View {

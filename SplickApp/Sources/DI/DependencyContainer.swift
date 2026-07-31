@@ -297,6 +297,10 @@ final class DependencyContainer: ObservableObject {
         FetchPostUseCase(repository: feedRepository)
     }()
 
+    lazy var recordPostViewsUseCase: RecordPostViewsUseCaseProtocol = {
+        RecordPostViewsUseCase(repository: feedRepository)
+    }()
+
     lazy var reactToPostUseCase: ReactToPostUseCaseProtocol = {
         ReactToPostUseCase(repository: feedRepository)
     }()
@@ -883,6 +887,8 @@ final class DependencyContainer: ObservableObject {
             rejectPaymentEvidenceUseCase: rejectPaymentEvidenceUseCase,
             createPostUseCase: createPostUseCase,
             languageService: languageService,
+            recordPostViewsUseCase: recordPostViewsUseCase,
+            feedRepository: feedRepository,
             onFeedLoaded: { [weak self] posts, userId in
                 await self?.widgetSyncBridge.syncFeed(posts: posts, currentUserId: userId)
             }

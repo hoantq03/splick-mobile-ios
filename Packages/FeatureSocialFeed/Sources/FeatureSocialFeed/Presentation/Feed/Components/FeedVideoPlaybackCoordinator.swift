@@ -1,12 +1,20 @@
 import SwiftUI
+import UIKit
+import AVFoundation
 
-/// Picks the most visible feed video post for autoplay while scrolling.
+/// Picks the most visible feed video post for autoplay and owns a small AVPlayer pool.
 @MainActor
 final class FeedVideoPlaybackCoordinator: ObservableObject {
     @Published private(set) var activePostId: UUID?
 
     private var visibilityByPost: [UUID: CGFloat] = [:]
     private let activationThreshold: CGFloat = 0.35
+
+    /// Max concurrent AVPlayers kept alive for feed cells (active + one warm neighbor).
+    private let poolCapacity = 2
+    private var pooledControllers: [UUID: FeedVideoPlaybackController] = [:]
+    private var pooledURLs: [UUID: URL] = [:]
+    private var lruOrder: [UUID] = []
 
     func updateVisibility(postId: UUID, ratio: CGFloat) {
         if ratio <= 0.01 {
@@ -30,6 +38,7 @@ final class FeedVideoPlaybackCoordinator: ObservableObject {
         if activePostId == postId {
             activePostId = nil
         }
+        releaseController(for: postId)
         pickActivePost()
     }
 
@@ -37,18 +46,84 @@ final class FeedVideoPlaybackCoordinator: ObservableObject {
     func suspendPlayback() {
         visibilityByPost.removeAll()
         activePostId = nil
+        for controller in pooledControllers.values {
+            controller.setAutoplayActive(false)
+        }
+        releaseAllControllers()
+    }
+
+    /// Returns a pooled controller only when this post is the autoplay target (or already pooled).
+    func controller(for postId: UUID, url: URL) -> FeedVideoPlaybackController? {
+        guard activePostId == postId || pooledControllers[postId] != nil else {
+            return nil
+        }
+        return acquireController(for: postId, url: url)
+    }
+
+    func acquireController(for postId: UUID, url: URL) -> FeedVideoPlaybackController {
+        if let existing = pooledControllers[postId] {
+            touchLRU(postId)
+            if pooledURLs[postId] != url {
+                existing.replaceURL(url)
+                pooledURLs[postId] = url
+            }
+            return existing
+        }
+
+        evictIfNeeded(reserving: postId)
+        let controller = FeedVideoPlaybackController(url: url)
+        pooledControllers[postId] = controller
+        pooledURLs[postId] = url
+        touchLRU(postId)
+        return controller
+    }
+
+    func releaseController(for postId: UUID) {
+        guard let controller = pooledControllers.removeValue(forKey: postId) else { return }
+        pooledURLs.removeValue(forKey: postId)
+        lruOrder.removeAll { $0 == postId }
+        controller.tearDown()
+    }
+
+    private func releaseAllControllers() {
+        for id in Array(pooledControllers.keys) {
+            releaseController(for: id)
+        }
+    }
+
+    private func evictIfNeeded(reserving reservedId: UUID) {
+        while pooledControllers.count >= poolCapacity {
+            let victim = lruOrder.first(where: { $0 != reservedId && $0 != activePostId })
+                ?? lruOrder.first(where: { $0 != reservedId })
+            guard let victim else { break }
+            releaseController(for: victim)
+        }
+    }
+
+    private func touchLRU(_ postId: UUID) {
+        lruOrder.removeAll { $0 == postId }
+        lruOrder.append(postId)
     }
 
     private func pickActivePost() {
         guard let best = visibilityByPost.max(by: { $0.value < $1.value }),
               best.value >= activationThreshold else {
             if activePostId != nil {
+                let previous = activePostId
                 activePostId = nil
+                if let previous, let controller = pooledControllers[previous] {
+                    controller.setAutoplayActive(false)
+                }
             }
             return
         }
         if activePostId != best.key {
+            let previous = activePostId
             activePostId = best.key
+            if let previous, let controller = pooledControllers[previous] {
+                controller.setAutoplayActive(false)
+            }
+            objectWillChange.send()
         }
     }
 }
@@ -86,6 +161,18 @@ extension EnvironmentValues {
     var feedTabIsActive: Bool {
         get { self[FeedTabIsActiveKey.self] }
         set { self[FeedTabIsActiveKey.self] = newValue }
+    }
+}
+
+private struct FeedMediaContainerWidthKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+
+extension EnvironmentValues {
+    /// Shared measured content width for feed media — avoids per-card GeometryReader.
+    var feedMediaContainerWidth: CGFloat {
+        get { self[FeedMediaContainerWidthKey.self] }
+        set { self[FeedMediaContainerWidthKey.self] = newValue }
     }
 }
 

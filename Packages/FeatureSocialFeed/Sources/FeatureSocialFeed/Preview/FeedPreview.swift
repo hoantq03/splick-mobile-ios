@@ -205,11 +205,7 @@ final class MockFetchPhotoAlbumUseCase: FetchPhotoAlbumUseCaseProtocol, Sendable
             displayName: PreviewData.currentUser.displayName,
             avatarURL: nil
         ),
-        onReact: { _ in },
-        onDelete: {},
-        onUserTap: { _ in },
-        onOpenComments: {},
-        onShowCompanions: {}
+        actions: PostCardActions()
     )
     .padding()
     .environmentObject(previewLanguageService)

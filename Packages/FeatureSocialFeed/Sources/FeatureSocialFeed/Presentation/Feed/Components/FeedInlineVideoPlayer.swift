@@ -2,6 +2,7 @@ import SwiftUI
 import AVFoundation
 import Combine
 import DesignSystem
+import os.signpost
 
 enum FeedVideoSpeed {
     static let options: [Float] = stride(from: Float(0), through: Float(2), by: Float(0.25)).map { $0 }
@@ -16,6 +17,7 @@ enum FeedVideoSpeed {
 }
 
 /// Custom inline feed player: autoplay when visible, muted by default, scrubber + speed menu.
+/// Uses a pooled AVPlayer from `FeedVideoPlaybackCoordinator` — inactive cells show poster only.
 struct FeedInlineVideoPlayer: View {
     let postId: UUID
     let url: URL
@@ -25,35 +27,28 @@ struct FeedInlineVideoPlayer: View {
 
     @Environment(\.feedVideoCoordinator) private var autoplayCoordinator
     @Environment(\.feedTabIsActive) private var feedTabIsActive
-    @StateObject private var controller: FeedVideoPlaybackController
     @State private var isScrubbing = false
     @State private var scrubProgress: Double = 0
     @State private var showSpeedMenu = false
+    /// Observe the pooled controller when this post is active.
+    @StateObject private var controllerProxy = FeedVideoControllerProxy()
 
     private let centerButtonSize: CGFloat = 88
-
-    init(
-        postId: UUID,
-        url: URL,
-        posterURL: URL?,
-        durationSeconds: Int?,
-        displayHeight: CGFloat = FeedMediaLayout.defaultHeight
-    ) {
-        self.postId = postId
-        self.url = url
-        self.posterURL = posterURL
-        self.durationSeconds = durationSeconds
-        self.displayHeight = displayHeight
-        _controller = StateObject(wrappedValue: FeedVideoPlaybackController(url: url))
-    }
 
     private var isAutoplayActive: Bool {
         feedTabIsActive && autoplayCoordinator?.activePostId == postId
     }
 
+    private var controller: FeedVideoPlaybackController? {
+        controllerProxy.controller
+    }
+
     private var sliderProgress: Binding<Double> {
         Binding(
-            get: { isScrubbing ? scrubProgress : controller.progress },
+            get: {
+                guard let controller else { return 0 }
+                return isScrubbing ? scrubProgress : controller.progress
+            },
             set: { newValue in
                 scrubProgress = newValue
                 isScrubbing = true
@@ -74,7 +69,9 @@ struct FeedInlineVideoPlayer: View {
                     }
             }
 
-            if !controller.isPlaying || controller.showsCenterTransport {
+            if let controller, !controller.isPlaying || controller.showsCenterTransport {
+                centerPlaybackButton
+            } else if controller == nil {
                 centerPlaybackButton
             }
 
@@ -83,23 +80,46 @@ struct FeedInlineVideoPlayer: View {
         .frame(height: displayHeight)
         .background(FeedVideoVisibilityReporter(postId: postId))
         .onChange(of: isAutoplayActive) { active in
-            controller.setAutoplayActive(active)
+            syncController(active: active)
         }
         .onAppear {
             guard feedTabIsActive else { return }
             autoplayCoordinator?.updateVisibility(postId: postId, ratio: 0.85)
-            controller.setAutoplayActive(isAutoplayActive)
+            syncController(active: isAutoplayActive)
         }
         .onDisappear {
             autoplayCoordinator?.clearPost(postId)
-            controller.setAutoplayActive(false)
+            controllerProxy.detach()
+        }
+        .onChange(of: autoplayCoordinator?.activePostId) { _ in
+            syncController(active: isAutoplayActive)
+        }
+    }
+
+    private func syncController(active: Bool) {
+        guard let autoplayCoordinator else {
+            controllerProxy.detach()
+            return
+        }
+        if active {
+            let pooled = autoplayCoordinator.acquireController(for: postId, url: url)
+            controllerProxy.attach(pooled)
+            pooled.setAutoplayActive(true)
+            FeedSignposts.videoPlayerAcquire(postId: postId)
+        } else {
+            controller?.setAutoplayActive(false)
+            // Keep poster-only for inactive cells; release pool slot on clearPost/suspend.
+            if controllerProxy.controller != nil, autoplayCoordinator.activePostId != postId {
+                // Detach observation but leave pool entry for LRU warm reuse until evicted.
+                controllerProxy.detach()
+            }
         }
     }
 
     @ViewBuilder
     private var mediaLayer: some View {
         Group {
-            if controller.showsVideoSurface {
+            if let controller, controller.showsVideoSurface {
                 FeedVideoPlayerLayerView(player: controller.player)
             } else if let posterURL {
                 RemoteImage(
@@ -125,7 +145,14 @@ struct FeedInlineVideoPlayer: View {
 
     private var centerPlaybackButton: some View {
         Button {
-            controller.togglePlaybackFromCenter()
+            if let controller {
+                controller.togglePlaybackFromCenter()
+            } else {
+                // User tapped play on inactive cell — promote to active via coordinator.
+                autoplayCoordinator?.updateVisibility(postId: postId, ratio: 1)
+                syncController(active: true)
+                controllerProxy.controller?.togglePlaybackFromCenter()
+            }
         } label: {
             Circle()
                 .fill(.black.opacity(0.5))
@@ -142,7 +169,7 @@ struct FeedInlineVideoPlayer: View {
     }
 
     private var centerIconName: String {
-        if controller.isPlaying, controller.showsCenterTransport {
+        if let controller, controller.isPlaying, controller.showsCenterTransport {
             return "pause.fill"
         }
         return "play.fill"
@@ -153,7 +180,7 @@ struct FeedInlineVideoPlayer: View {
             HStack {
                 muteButton
                 Spacer()
-                if !controller.showsVideoSurface, let durationSeconds {
+                if controller?.showsVideoSurface != true, let durationSeconds {
                     durationBadge(seconds: durationSeconds)
                 }
             }
@@ -162,35 +189,38 @@ struct FeedInlineVideoPlayer: View {
 
             Spacer()
 
-            transportRow
-                .padding(.horizontal, 12)
-                .padding(.bottom, 10)
-            .background(
-                LinearGradient(
-                    colors: [.clear, .black.opacity(0.65)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
+            if controller != nil {
+                transportRow
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 10)
+                    .background(
+                        LinearGradient(
+                            colors: [.clear, .black.opacity(0.65)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+            }
         }
     }
 
     private var muteButton: some View {
         Button {
-            controller.toggleMute()
+            controller?.toggleMute()
         } label: {
-            Image(systemName: controller.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+            Image(systemName: (controller?.isMuted ?? true) ? "speaker.slash.fill" : "speaker.wave.2.fill")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.white)
                 .frame(width: 32, height: 32)
                 .background(.black.opacity(0.45), in: Circle())
         }
         .buttonStyle(.plain)
+        .disabled(controller == nil)
     }
 
     private var transportRow: some View {
         HStack(spacing: 8) {
-            Text(controller.elapsedLabel)
+            Text(controller?.elapsedLabel ?? "0:00")
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(.white.opacity(0.9))
                 .frame(width: 34, alignment: .leading)
@@ -203,7 +233,7 @@ struct FeedInlineVideoPlayer: View {
                     if editing {
                         isScrubbing = true
                     } else {
-                        controller.seek(toFraction: scrubProgress)
+                        controller?.seek(toFraction: scrubProgress)
                         isScrubbing = false
                     }
                 }
@@ -235,7 +265,7 @@ struct FeedInlineVideoPlayer: View {
             HStack(spacing: 3) {
                 Image(systemName: "gauge.with.dots.needle.67percent")
                     .font(.system(size: 11, weight: .semibold))
-                Text(FeedVideoSpeed.label(for: controller.playbackRate))
+                Text(FeedVideoSpeed.label(for: controller?.playbackRate ?? 1))
                     .font(.system(size: 9, weight: .bold))
             }
             .foregroundStyle(.white)
@@ -251,15 +281,18 @@ struct FeedInlineVideoPlayer: View {
             VStack(spacing: 0) {
                 ForEach(FeedVideoSpeed.options, id: \.self) { rate in
                     Button {
-                        controller.setPlaybackRate(rate)
+                        controller?.setPlaybackRate(rate)
                         withAnimation(.easeOut(duration: 0.12)) {
                             showSpeedMenu = false
                         }
                     } label: {
                         Text(FeedVideoSpeed.label(for: rate))
-                            .font(.system(size: 9, weight: controller.playbackRate == rate ? .bold : .medium))
+                            .font(.system(
+                                size: 9,
+                                weight: (controller?.playbackRate ?? 1) == rate ? .bold : .medium
+                            ))
                             .foregroundStyle(
-                                controller.playbackRate == rate ? .white : .white.opacity(0.75)
+                                (controller?.playbackRate ?? 1) == rate ? .white : .white.opacity(0.75)
                             )
                             .frame(width: 38, height: 14)
                     }
@@ -286,6 +319,27 @@ struct FeedInlineVideoPlayer: View {
     }
 }
 
+// MARK: - Controller proxy (observe pooled controller without @StateObject)
+
+@MainActor
+final class FeedVideoControllerProxy: ObservableObject {
+    @Published private(set) var controller: FeedVideoPlaybackController?
+    private var cancellable: AnyCancellable?
+
+    func attach(_ controller: FeedVideoPlaybackController) {
+        guard self.controller !== controller else { return }
+        self.controller = controller
+        cancellable = controller.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
+    }
+
+    func detach() {
+        cancellable = nil
+        controller = nil
+    }
+}
+
 @MainActor
 final class FeedVideoPlaybackController: ObservableObject {
     @Published private(set) var isPlaying = false
@@ -302,7 +356,7 @@ final class FeedVideoPlaybackController: ObservableObject {
         return formatTime(seconds)
     }
 
-    private let playerItem: AVPlayerItem
+    private var playerItem: AVPlayerItem
     private var duration: Double = 0
     private var endObserver: NSObjectProtocol?
     private var timeObserver: Any?
@@ -311,41 +365,48 @@ final class FeedVideoPlaybackController: ObservableObject {
     private var userPaused = false
     private var autoplayActive = false
     private var pendingPlay = false
+    private var tornDown = false
 
     init(url: URL) {
-        playerItem = AVPlayerItem(url: url)
-        playerItem.preferredMaximumResolution = CGSize(
-            width: FeedMediaLayout.decodeMaxPixelSide,
-            height: FeedMediaLayout.decodeMaxPixelSide
-        )
+        playerItem = Self.makeItem(url: url)
         player = AVPlayer(playerItem: playerItem)
         Self.configureAudioSession()
         player.actionAtItemEnd = .pause
         player.isMuted = true
         player.automaticallyWaitsToMinimizeStalling = true
-
-        endObserver = NotificationCenter.default.addObserver(
-            forName: .AVPlayerItemDidPlayToEndTime,
-            object: playerItem,
-            queue: .main
-        ) { [weak self] _ in
-            self?.handlePlaybackEnded()
-        }
-
-        statusObserver = playerItem.observe(\.status, options: [.new]) { [weak self] item, _ in
-            guard let self, item.status == .readyToPlay, self.pendingPlay else { return }
-            self.beginPlayback()
-        }
-
+        bindItemObservers()
         setupTimeObserver()
+        FeedSignposts.videoPlayerCreate()
+    }
+
+    func replaceURL(_ url: URL) {
+        pause(userInitiated: false)
+        unbindItemObservers()
+        playerItem = Self.makeItem(url: url)
+        player.replaceCurrentItem(with: playerItem)
+        progress = 0
+        duration = 0
+        showsVideoSurface = false
+        bindItemObservers()
+    }
+
+    func tearDown() {
+        guard !tornDown else { return }
+        tornDown = true
+        hideTransportTask?.cancel()
+        pause(userInitiated: false)
+        unbindItemObservers()
+        if let timeObserver {
+            player.removeTimeObserver(timeObserver)
+            self.timeObserver = nil
+        }
+        player.replaceCurrentItem(with: nil)
+        FeedSignposts.videoPlayerRelease()
     }
 
     deinit {
         if let endObserver {
             NotificationCenter.default.removeObserver(endObserver)
-        }
-        if let timeObserver {
-            player.removeTimeObserver(timeObserver)
         }
         statusObserver?.invalidate()
     }
@@ -464,6 +525,39 @@ final class FeedVideoPlaybackController: ObservableObject {
                 showsCenterTransport = false
             }
         }
+    }
+
+    private static func makeItem(url: URL) -> AVPlayerItem {
+        let item = AVPlayerItem(url: url)
+        item.preferredMaximumResolution = CGSize(
+            width: FeedMediaLayout.decodeMaxPixelSide,
+            height: FeedMediaLayout.decodeMaxPixelSide
+        )
+        return item
+    }
+
+    private func bindItemObservers() {
+        endObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: playerItem,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handlePlaybackEnded()
+        }
+
+        statusObserver = playerItem.observe(\.status, options: [.new]) { [weak self] item, _ in
+            guard let self, item.status == .readyToPlay, self.pendingPlay else { return }
+            self.beginPlayback()
+        }
+    }
+
+    private func unbindItemObservers() {
+        if let endObserver {
+            NotificationCenter.default.removeObserver(endObserver)
+            self.endObserver = nil
+        }
+        statusObserver?.invalidate()
+        statusObserver = nil
     }
 
     private func setupTimeObserver() {

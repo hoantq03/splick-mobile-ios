@@ -10,6 +10,8 @@ public protocol FeedRepositoryProtocol: Sendable {
         cursor: String
     ) async throws -> AlbumPhotoPage
     func fetchPost(id: UUID) async throws -> Post
+    /// Records views for many posts in one call; returns refreshed posts for those recorded.
+    func recordPostViews(postIds: [UUID]) async throws -> [Post]
     func addReaction(postId: UUID, emoji: String) async throws -> Reaction
     func removeReaction(postId: UUID, reactionId: UUID) async throws
     func createPost(_ input: CreatePostInput) async throws -> Post
@@ -42,6 +44,10 @@ public protocol FeedRepositoryProtocol: Sendable {
     func fetchStreakSummary() async throws -> StreakSummary
     func fetchStreakCalendar(year: Int, month: Int) async throws -> [StreakDay]
     func fetchStreakDayPhotos(date: String) async throws -> [AlbumPhoto]
+
+    // MARK: - Disk cache
+    func loadCachedFeed(userId: UUID) async -> [Post]?
+    func saveCachedFeed(_ posts: [Post], userId: UUID) async
 }
 
 public extension FeedRepositoryProtocol {

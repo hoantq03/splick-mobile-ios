@@ -3,10 +3,12 @@ import Networking
 import Common
 import SplickDomain
 import FeatureMedia
+import Storage
 
 public final class FeedRepository: FeedRepositoryProtocol, Sendable {
     private let apiClient: APIClientProtocol
     private let mediaRepository: MediaRepositoryProtocol
+    private static let maxCachedPosts = 40
 
     public init(
         apiClient: APIClientProtocol,
@@ -25,6 +27,27 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
             FeedEndpoint.feed(page: page, limit: limit, authorId: authorId)
         )
         return dtos.map(FeedMapper.toPost)
+    }
+
+    public func recordPostViews(postIds: [UUID]) async throws -> [Post] {
+        guard !postIds.isEmpty else { return [] }
+        let dtos: [PostDTO] = try await apiClient.request(
+            FeedEndpoint.batchViewed(BatchViewPostsRequestDTO(postIds: Array(postIds.prefix(20))))
+        )
+        return dtos.map(FeedMapper.toPost)
+    }
+
+    public func loadCachedFeed(userId: UUID) async -> [Post]? {
+        await DiskCache.shared.read(FeedCachePayload.self, key: Self.cacheKey(for: userId))?.posts
+    }
+
+    public func saveCachedFeed(_ posts: [Post], userId: UUID) async {
+        let capped = Array(posts.prefix(Self.maxCachedPosts))
+        await DiskCache.shared.write(FeedCachePayload(posts: capped), key: Self.cacheKey(for: userId))
+    }
+
+    private static func cacheKey(for userId: UUID) -> String {
+        "feed.page0.\(userId.uuidString)"
     }
 
     public func fetchPhotoAlbumFirstPage(

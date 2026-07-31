@@ -25,6 +25,8 @@ public final class AppStartupCoordinator {
         // startup batch (badges, conversations, etc.) does not leave reactions broken.
         await customEmojiStore.load(fetcher: customEmojiFetcher)
 
+        feedViewModel.updateSession(user: nil, userId: userId)
+
         if let cached = await repository.loadCached(userId: userId) {
             apply(
                 cached,
@@ -35,6 +37,9 @@ public final class AppStartupCoordinator {
                 streakViewModel: streakViewModel
             )
         }
+
+        // Feed-only disk cache covers cold starts when startup payload is missing/empty.
+        await feedViewModel.loadDiskCacheIfNeeded()
 
         do {
             let fresh = try await fetchAppStartupUseCase.execute()

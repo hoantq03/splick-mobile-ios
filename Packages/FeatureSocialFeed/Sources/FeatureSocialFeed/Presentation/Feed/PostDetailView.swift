@@ -1,4 +1,6 @@
 import SwiftUI
+import PhotosUI
+import UIKit
 import DesignSystem
 import Common
 import Localization
@@ -19,6 +21,7 @@ struct PostDetailView: View {
 
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.currentUserSummary) private var currentUserSummary
+    @Environment(\.customEmojiDependencies) private var customEmojiDependencies
     @StateObject private var commentPager: PostDetailViewModel
     @State private var profileRoute: ProfileRoute?
     @State private var companionsRoute: CompanionsSheetRoute?
@@ -32,6 +35,9 @@ struct PostDetailView: View {
     @State private var rejectReason = ""
     @State private var gifPickerViewModel: GifPickerViewModel?
     @State private var detailScrollLocked = false
+    @State private var cardPresentation: PostCardPresentation?
+    @State private var paymentEvidencePhotoPickerItems: [PhotosPickerItem] = []
+    @StateObject private var cardActions = PostCardActions()
 
     init(
         post: Post,
@@ -69,46 +75,12 @@ struct PostDetailView: View {
                     PostCardView(
                         post: livePost,
                         currentUser: feedViewModel.currentUser,
-                        onReact: { emoji in
-                            if let error = feedViewModel.react(to: post.id, emoji: emoji) {
-                                feedViewModel.alertMessage = error
-                            }
-                        },
-                        onDelete: {
-                            Task { await feedViewModel.deletePost(id: post.id) }
-                        },
-                        onUserTap: { openProfile(for: $0) },
-                        onOpenComments: {},
-                        onShowCompanions: {
-                            companionsRoute = CompanionsSheetRoute(
-                                id: livePost.id,
-                                companions: livePost.companions
-                            )
-                        },
+                        actions: cardActions,
                         showsCommentPreview: false,
-                        onMediaTap: { index in
-                            mediaViewerRoute = MediaViewerRoute(index: index)
-                        },
-                        onSendBillReminder: { postId, targetUserIds, message, attachments in
-                            try await feedViewModel.sendBillReminder(
-                                postId: postId,
-                                targetUserIds: targetUserIds,
-                                message: message,
-                                submissionAttachments: attachments
-                            )
-                        },
-                        onSubmitPaymentEvidence: { postId, splitId, message, attachments in
-                            try await feedViewModel.submitPaymentEvidence(
-                                postId: postId,
-                                splitId: splitId,
-                                message: message,
-                                submissionAttachments: attachments
-                            )
-                        },
-                        makeGifPickerViewModel: makeGifPickerViewModel,
                         initiallyExpandedBillSplit: expandBillSplitInitially,
                         initialMediaIndex: initialMediaIndex
                     )
+                    .equatable()
 
                     commentsSection
                 }
@@ -144,6 +116,7 @@ struct PostDetailView: View {
         }
         .task { await feedViewModel.refreshPost(id: post.id, allowingConcurrentFeedRefresh: true) }
         .onAppear {
+            configureCardActions()
             // Defer @Published updates so we don't publish during view updates.
             Task { @MainActor in
                 feedViewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
@@ -166,6 +139,28 @@ struct PostDetailView: View {
                 composerFocused = true
             }
         }
+        .postCardPresentationHost(
+            presentation: $cardPresentation,
+            currentUser: feedViewModel.currentUser,
+            languageService: languageService,
+            onUserTap: openProfile,
+            onReact: { postId, emoji in
+                if let error = feedViewModel.react(to: postId, emoji: emoji) {
+                    feedViewModel.alertMessage = error
+                }
+            },
+            onSubmitPaymentEvidence: { postId, splitId, message, attachments in
+                try await feedViewModel.submitPaymentEvidence(
+                    postId: postId,
+                    splitId: splitId,
+                    message: message,
+                    submissionAttachments: attachments
+                )
+            },
+            customEmojiDependencies: customEmojiDependencies,
+            paymentEvidencePhotoPickerItems: $paymentEvidencePhotoPickerItems,
+            onPaymentEvidencePhotosPicked: preparePaymentEvidenceAttachments
+        )
         .sheet(item: $profileRoute) { route in
             if let profileDependencies {
                 FriendUserProfileView(
@@ -380,6 +375,78 @@ struct PostDetailView: View {
 
     private func openProfile(for user: UserSummary) {
         profileRoute = ProfileRoute(user: user)
+    }
+
+    private func configureCardActions() {
+        cardActions.onReact = { postId, emoji in
+            if let error = feedViewModel.react(to: postId, emoji: emoji) {
+                feedViewModel.alertMessage = error
+            }
+        }
+        cardActions.onDelete = { postId in
+            Task { await feedViewModel.deletePost(id: postId) }
+        }
+        cardActions.onUserTap = { openProfile(for: $0) }
+        cardActions.onOpenComments = { _ in }
+        cardActions.onShowCompanions = { post in
+            companionsRoute = CompanionsSheetRoute(id: post.id, companions: post.companions)
+        }
+        cardActions.onMediaTap = { _, index in
+            mediaViewerRoute = MediaViewerRoute(index: index)
+        }
+        cardActions.onPresent = { presentation in
+            cardPresentation = presentation
+        }
+        cardActions.onSendBillReminder = { postId, targetUserIds, message, attachments in
+            try await feedViewModel.sendBillReminder(
+                postId: postId,
+                targetUserIds: targetUserIds,
+                message: message,
+                submissionAttachments: attachments
+            )
+        }
+        cardActions.onSubmitPaymentEvidence = { postId, splitId, message, attachments in
+            try await feedViewModel.submitPaymentEvidence(
+                postId: postId,
+                splitId: splitId,
+                message: message,
+                submissionAttachments: attachments
+            )
+        }
+        cardActions.makeGifPickerViewModel = makeGifPickerViewModel
+    }
+
+    @MainActor
+    private func preparePaymentEvidenceAttachments(from items: [PhotosPickerItem]) async {
+        guard !items.isEmpty else { return }
+        guard case .paymentEvidencePhotoPicker(let evidencePost) = cardPresentation else { return }
+
+        var attachments: [CommentSubmissionAttachment] = []
+        for (index, item) in items.prefix(3).enumerated() {
+            guard let data = try? await item.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data),
+                  let jpegData = image.jpegData(compressionQuality: 0.92) else { continue }
+            attachments.append(
+                CommentSubmissionAttachment(
+                    kind: .image,
+                    data: jpegData,
+                    mimeType: "image/jpeg",
+                    fileName: "payment-proof-\(index + 1).jpg"
+                )
+            )
+        }
+
+        paymentEvidencePhotoPickerItems = []
+        guard !attachments.isEmpty,
+              let split = evidencePost.billSplitLine(for: feedViewModel.currentUser?.id ?? UUID()) else {
+            cardPresentation = nil
+            return
+        }
+        cardPresentation = .paymentEvidence(
+            evidencePost,
+            splitId: split.id,
+            attachments: attachments
+        )
     }
 
     /// Prevents the feed comment-row tap from passing through to the docked composer after push.

@@ -314,6 +314,21 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
         return post
     }
 
+    public func recordPostViews(postIds: [UUID]) async throws -> [Post] {
+        logger.log("Batch view posts: \(postIds.count)")
+        return postIds.compactMap { id in posts.first(where: { $0.id == id }) }
+    }
+
+    public func loadCachedFeed(userId: UUID) async -> [Post]? {
+        _ = userId
+        return posts.isEmpty ? nil : Array(posts.prefix(20))
+    }
+
+    public func saveCachedFeed(_ posts: [Post], userId: UUID) async {
+        _ = posts
+        _ = userId
+    }
+
     public func addReaction(postId: UUID, emoji: String) async throws -> Reaction {
         logger.log("Add reaction: \(emoji) to post \(postId.uuidString.prefix(8))")
         try await Task.sleep(for: .milliseconds(30))

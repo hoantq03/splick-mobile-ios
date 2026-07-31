@@ -148,7 +148,8 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         viewCount: Int? = nil,
         viewers: [UserSummary]? = nil,
         mediaItems: [PostMediaItem]? = nil,
-        billSplit: PostBillSplit? = nil
+        billSplit: PostBillSplit? = nil,
+        companionGroupName: String? = nil
     ) -> Post {
         Post(
             id: id,
@@ -159,7 +160,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
             reactions: reactions ?? self.reactions,
             comments: comments ?? self.comments,
             groupId: groupId,
-            companionGroupName: companionGroupName,
+            companionGroupName: companionGroupName ?? self.companionGroupName,
             createdAt: createdAt,
             mediaType: mediaType,
             videoURL: videoURL,
