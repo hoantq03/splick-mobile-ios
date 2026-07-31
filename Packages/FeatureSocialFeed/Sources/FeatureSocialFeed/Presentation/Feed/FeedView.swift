@@ -21,6 +21,7 @@ public struct FeedView: View {
     private let pendingFeedPostNavigation: PendingFeedPostNavigation?
     private let onPendingPostHandled: (() -> Void)?
     @Environment(\.openPostCaptureFlow) private var openPostCaptureFlow
+    @Environment(\.openProfileSettings) private var openProfileSettings
     @Environment(\.currentUserSummary) private var currentUserSummary
     @Environment(\.notificationsPresented) private var notificationsPresented
     @Environment(\.tabBarScrollState) private var tabBarScrollState
