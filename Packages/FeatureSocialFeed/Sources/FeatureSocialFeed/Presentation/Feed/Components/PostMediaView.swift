@@ -10,8 +10,7 @@ struct PostMediaView: View {
     /// When true, the parent should lift z-index and relax clipping so pinch zoom can escape the card.
     @Binding var isPinchZooming: Bool
 
-    @Environment(\.feedMediaContainerWidth) private var environmentWidth
-    @State private var measuredWidth: CGFloat = 0
+    @State private var containerWidth: CGFloat = FeedMediaLayout.estimatedCardContentWidth
 
     init(
         post: Post,
@@ -30,13 +29,7 @@ struct PostMediaView: View {
     }
 
     private var resolvedWidth: CGFloat {
-        if environmentWidth > 0 {
-            return environmentWidth
-        }
-        if measuredWidth > 0 {
-            return measuredWidth
-        }
-        return FeedMediaLayout.estimatedCardContentWidth
+        containerWidth > 0 ? containerWidth : FeedMediaLayout.estimatedCardContentWidth
     }
 
     var body: some View {
@@ -52,14 +45,13 @@ struct PostMediaView: View {
             }
         }
         .frame(maxWidth: .infinity)
+        // Measure width without PreferenceKey → @State in the same AttributeGraph pass
+        // (that pattern causes "AttributeGraph: cycle detected" on post detail + keyboard).
         .background {
-            // Fallback measure only when parent did not provide environment width.
-            if environmentWidth <= 0 {
-                GeometryReader { proxy in
-                    Color.clear
-                        .onAppear { scheduleWidthUpdate(proxy.size.width) }
-                        .onChange(of: proxy.size.width) { scheduleWidthUpdate($0) }
-                }
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear { scheduleWidthUpdate(proxy.size.width) }
+                    .onChange(of: proxy.size.width) { scheduleWidthUpdate($0) }
             }
         }
         .modifier(PostMediaClipModifier(isPinchZooming: isPinchZooming))
@@ -74,11 +66,13 @@ struct PostMediaView: View {
 
     /// Defers `@State` writes off the layout pass to break AttributeGraph cycles.
     private func scheduleWidthUpdate(_ width: CGFloat) {
+        // TabView/GeometryReader can report tiny transient widths before layout settles;
+        // accepting them squeezes media into a thin vertical strip.
         let minimumCredibleWidth = min(FeedMediaLayout.estimatedCardContentWidth * 0.55, 180)
-        guard width >= minimumCredibleWidth, abs(width - measuredWidth) > 1 else { return }
+        guard width >= minimumCredibleWidth, abs(width - containerWidth) > 1 else { return }
         DispatchQueue.main.async {
-            guard width >= minimumCredibleWidth, abs(width - measuredWidth) > 1 else { return }
-            measuredWidth = width
+            guard width >= minimumCredibleWidth, abs(width - containerWidth) > 1 else { return }
+            containerWidth = width
         }
     }
 
@@ -129,8 +123,11 @@ struct PostMediaView: View {
     private func imageContent(for item: PostMediaItem, fixedHeight: CGFloat?) -> some View {
         let width = resolvedWidth
         let height = fixedHeight ?? FeedMediaLayout.displayHeight(for: item, containerWidth: width)
+        // Carousel pages share one height — always fill to avoid letterboxed thin strips
+        // when metadata aspect and decoded pixels disagree (EXIF / bad thumbnail).
         let fillFrame = fixedHeight != nil
             || FeedMediaLayout.shouldFillFrame(for: item, containerWidth: width)
+        // Prefer full media URL so pinch zoom stays sharp past the feed decode budget.
         let imageURL = item.mediaURL
         let decodeSide = max(
             FeedMediaLayout.feedMediaMaxDecodePixelSize(containerWidth: width, displayHeight: height),

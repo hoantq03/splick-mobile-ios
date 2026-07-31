@@ -247,7 +247,6 @@ private struct FeedPrimaryPage: View {
     let onOpenProfile: (UserSummary) -> Void
 
     @State private var feedScrollLocked = false
-    @State private var mediaContainerWidth: CGFloat = 0
     @State private var cardPresentation: PostCardPresentation?
     @State private var paymentEvidencePhotoPickerItems: [PhotosPickerItem] = []
     @StateObject private var cardActions = PostCardActions()
@@ -432,27 +431,10 @@ private struct FeedPrimaryPage: View {
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
             .padding(.top, SplickTheme.Spacing.md)
-            .background {
-                GeometryReader { proxy in
-                    Color.clear
-                        .onAppear { updateMediaWidth(proxy.size.width) }
-                        .onChange(of: proxy.size.width) { updateMediaWidth($0) }
-                }
-            }
         }
         .scrollDisabled(feedScrollLocked)
         .environment(\.feedVideoCoordinator, videoCoordinator)
-        .environment(\.feedMediaContainerWidth, mediaContainerWidth)
         .feedVideoVisibilityHandling(coordinator: videoCoordinator)
-    }
-
-    private func updateMediaWidth(_ width: CGFloat) {
-        let minimumCredibleWidth = min(FeedMediaLayout.estimatedCardContentWidth * 0.55, 180)
-        guard width >= minimumCredibleWidth, abs(width - mediaContainerWidth) > 1 else { return }
-        DispatchQueue.main.async {
-            guard width >= minimumCredibleWidth, abs(width - mediaContainerWidth) > 1 else { return }
-            mediaContainerWidth = width
-        }
     }
 
     private var feedEndReachedFooter: some View {

@@ -164,18 +164,6 @@ extension EnvironmentValues {
     }
 }
 
-private struct FeedMediaContainerWidthKey: EnvironmentKey {
-    static let defaultValue: CGFloat = 0
-}
-
-extension EnvironmentValues {
-    /// Shared measured content width for feed media — avoids per-card GeometryReader.
-    var feedMediaContainerWidth: CGFloat {
-        get { self[FeedMediaContainerWidthKey.self] }
-        set { self[FeedMediaContainerWidthKey.self] = newValue }
-    }
-}
-
 extension View {
     /// Collects per-post visibility ratios without `onChange(of: CGRect)` (fatal on iOS 26+).
     func feedVideoVisibilityHandling(coordinator: FeedVideoPlaybackCoordinator) -> some View {
