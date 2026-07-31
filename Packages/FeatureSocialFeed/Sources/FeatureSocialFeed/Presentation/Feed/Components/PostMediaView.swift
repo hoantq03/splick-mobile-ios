@@ -177,19 +177,26 @@ struct PostMediaView: View {
         showProgress: Bool = false,
         height: CGFloat = FeedMediaLayout.placeholderHeight
     ) -> some View {
-        SplickTheme.Colors.secondaryBackground
-            .frame(width: resolvedWidth, height: height)
-            .overlay {
-                if showProgress {
-                    ProgressView()
-                        .progressViewStyle(.circular)
-                        .controlSize(.regular)
-                } else if let icon {
-                    Image(systemName: icon)
-                        .font(.largeTitle)
-                        .foregroundStyle(SplickTheme.Colors.textTertiary)
-                }
+        Group {
+            if showProgress {
+                // Static bone (no per-cell TimelineView) — avoids N shimmer clocks while scrolling.
+                SkeletonBone(
+                    height: height,
+                    shape: .rectangle(cornerRadius: FeedMediaLayout.cornerRadius)
+                )
+                .frame(width: resolvedWidth, height: height)
+            } else {
+                SplickTheme.Colors.secondaryBackground
+                    .frame(width: resolvedWidth, height: height)
+                    .overlay {
+                        if let icon {
+                            Image(systemName: icon)
+                                .font(.largeTitle)
+                                .foregroundStyle(SplickTheme.Colors.textTertiary)
+                        }
+                    }
             }
+        }
     }
 }
 
