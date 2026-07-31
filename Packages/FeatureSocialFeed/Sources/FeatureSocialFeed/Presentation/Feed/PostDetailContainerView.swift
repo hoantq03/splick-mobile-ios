@@ -69,6 +69,7 @@ struct PostDetailContainerView: View {
             loadFailedAsUnavailable = false
             return
         }
+        loadAttemptFinished = false
         loadFailedAsUnavailable = false
         let result = await feedViewModel.ensurePostLoaded(id: destination.postId)
         loadFailedAsUnavailable = (result == .unavailable)
