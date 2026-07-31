@@ -44,7 +44,7 @@ struct ExpenseNavPills: View {
                 .allowsHitTesting(false)
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.82), value: collapseProgress)
-        .animation(.spring(response: 0.28, dampingFraction: 0.80), value: selection)
+        .animation(ExpenseSegmentStripMotion.selectionSpring, value: selection)
     }
 
     @ViewBuilder
@@ -97,16 +97,43 @@ private struct ExpenseMaterialPills: View {
     let overviewLabel: String
     let friendsLabel: String
 
-    @Namespace private var ns
     @State private var hoverSegment: ExpenseContentSegment?
     @State private var isInteracting = false
 
+    private var selectedIndex: Int {
+        expenseSegmentStripOrder.firstIndex(of: selection) ?? 1
+    }
+
+    private var emphasized: Bool {
+        hoverSegment == selection || (hoverSegment == nil && isInteracting)
+    }
+
     var body: some View {
         GeometryReader { proxy in
-            HStack(spacing: 0) {
-                pill(.history, label: historyLabel)
-                pill(.overview, label: overviewLabel)
-                pill(.friends, label: friendsLabel)
+            ZStack(alignment: .leading) {
+                Capsule(style: .continuous)
+                    .fill(.regularMaterial)
+                    .overlay {
+                        Capsule(style: .continuous)
+                            .stroke(.white.opacity(emphasized ? 0.75 : 0.45), lineWidth: 0.8)
+                    }
+                    .shadow(
+                        color: .black.opacity(emphasized ? 0.10 : 0.05),
+                        radius: emphasized ? 10 : 5,
+                        y: emphasized ? 4 : 2
+                    )
+                    .frame(
+                        width: FeedSegmentPillLayout.segmentWidth,
+                        height: FeedSegmentPillLayout.segmentHeight
+                    )
+                    .scaleEffect(emphasized ? 1.08 : 1)
+                    .offset(x: CGFloat(selectedIndex) * FeedSegmentPillLayout.segmentWidth)
+
+                HStack(spacing: 0) {
+                    pill(.history, label: historyLabel)
+                    pill(.overview, label: overviewLabel)
+                    pill(.friends, label: friendsLabel)
+                }
             }
             .padding(FeedSegmentPillLayout.chromePadding)
             .frame(width: proxy.size.width, height: proxy.size.height)
@@ -122,7 +149,7 @@ private struct ExpenseMaterialPills: View {
 
     private func pill(_ segment: ExpenseContentSegment, label: String) -> some View {
         let isSelected = selection == segment
-        let isEmphasized = isSelected && (hoverSegment == segment || (hoverSegment == nil && isInteracting))
+        let isEmphasized = isSelected && emphasized
         return Button {
             guard selection != segment else { return }
             withAnimation(ExpenseSegmentStripMotion.selectionSpring) {
@@ -145,23 +172,7 @@ private struct ExpenseMaterialPills: View {
                     height: FeedSegmentPillLayout.segmentHeight
                 )
                 .scaleEffect(isEmphasized ? 1.03 : 1)
-                .background {
-                    if isSelected {
-                        Capsule(style: .continuous)
-                            .fill(.regularMaterial)
-                            .overlay {
-                                Capsule(style: .continuous)
-                                    .stroke(.white.opacity(isEmphasized ? 0.75 : 0.45), lineWidth: 0.8)
-                            }
-                            .shadow(
-                                color: .black.opacity(isEmphasized ? 0.10 : 0.05),
-                                radius: isEmphasized ? 10 : 5,
-                                y: isEmphasized ? 4 : 2
-                            )
-                            .scaleEffect(isEmphasized ? 1.08 : 1)
-                            .matchedGeometryEffect(id: "expenseIndicator", in: ns)
-                    }
-                }
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .hoverEffect(.lift)
@@ -213,16 +224,44 @@ private struct ExpenseGlassPills: View {
     let overviewLabel: String
     let friendsLabel: String
 
-    @Namespace private var ns
     @State private var hoverSegment: ExpenseContentSegment?
     @State private var isInteracting = false
 
+    private var selectedIndex: Int {
+        expenseSegmentStripOrder.firstIndex(of: selection) ?? 1
+    }
+
+    private var emphasized: Bool {
+        hoverSegment == selection || (hoverSegment == nil && isInteracting)
+    }
+
     var body: some View {
         GeometryReader { proxy in
-            HStack(spacing: 0) {
-                pill(.history, label: historyLabel)
-                pill(.overview, label: overviewLabel)
-                pill(.friends, label: friendsLabel)
+            ZStack(alignment: .leading) {
+                Capsule(style: .continuous)
+                    .fill(.clear)
+                    .glassEffect(.regular)
+                    .overlay {
+                        Capsule(style: .continuous)
+                            .stroke(.white.opacity(emphasized ? 0.55 : 0.32), lineWidth: 0.9)
+                    }
+                    .shadow(
+                        color: .white.opacity(emphasized ? 0.18 : 0.08),
+                        radius: emphasized ? 12 : 6,
+                        y: emphasized ? 4 : 2
+                    )
+                    .frame(
+                        width: FeedSegmentPillLayout.segmentWidth,
+                        height: FeedSegmentPillLayout.segmentHeight
+                    )
+                    .scaleEffect(emphasized ? 1.10 : 1)
+                    .offset(x: CGFloat(selectedIndex) * FeedSegmentPillLayout.segmentWidth)
+
+                HStack(spacing: 0) {
+                    pill(.history, label: historyLabel)
+                    pill(.overview, label: overviewLabel)
+                    pill(.friends, label: friendsLabel)
+                }
             }
             .padding(FeedSegmentPillLayout.chromePadding)
             .frame(width: proxy.size.width, height: proxy.size.height)
@@ -246,7 +285,7 @@ private struct ExpenseGlassPills: View {
 
     private func pill(_ segment: ExpenseContentSegment, label: String) -> some View {
         let isSelected = selection == segment
-        let isEmphasized = isSelected && (hoverSegment == segment || (hoverSegment == nil && isInteracting))
+        let isEmphasized = isSelected && emphasized
         return Button {
             guard selection != segment else { return }
             withAnimation(ExpenseSegmentStripMotion.selectionSpring) {
@@ -269,24 +308,7 @@ private struct ExpenseGlassPills: View {
                     height: FeedSegmentPillLayout.segmentHeight
                 )
                 .scaleEffect(isEmphasized ? 1.03 : 1)
-                .background {
-                    if isSelected {
-                        Capsule(style: .continuous)
-                            .fill(.clear)
-                            .glassEffect(.regular)
-                            .overlay {
-                                Capsule(style: .continuous)
-                                    .stroke(.white.opacity(isEmphasized ? 0.55 : 0.32), lineWidth: 0.9)
-                            }
-                            .shadow(
-                                color: .white.opacity(isEmphasized ? 0.18 : 0.08),
-                                radius: isEmphasized ? 12 : 6,
-                                y: isEmphasized ? 4 : 2
-                            )
-                            .scaleEffect(isEmphasized ? 1.10 : 1)
-                            .matchedGeometryEffect(id: "expenseIndicator", in: ns)
-                    }
-                }
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .hoverEffect(.lift)

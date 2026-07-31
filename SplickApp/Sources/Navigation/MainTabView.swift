@@ -1287,13 +1287,10 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
     @ViewBuilder var camera: () -> Camera
 
     @State private var pagerIndex: Int = 0
-    @State private var activatedTabs: Set<Tab> = [.feed]
-    /// Bumps on every tab request so a deferred slide can be cancelled by a newer tap.
-    @State private var transitionGeneration: Int = 0
 
     var body: some View {
         GeometryReader { proxy in
-            let width = proxy.size.width
+            let width = max(proxy.size.width, 1)
             let pageCount = CGFloat(Tab.pagerTabs.count)
 
             ZStack(alignment: .topLeading) {
@@ -1305,7 +1302,6 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
                 }
                 .frame(width: width * pageCount, alignment: .leading)
                 .offset(x: -CGFloat(pagerIndex) * width)
-                .animation(MainTabPagerMotion.slide, value: pagerIndex)
 
                 if selectedTab == .camera {
                     camera()
@@ -1320,60 +1316,12 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
         .animation(MainTabPagerMotion.slide, value: selectedTab == .camera)
         .onAppear {
             let initial = selectedTab.isPagerTab ? selectedTab : .feed
-            activatedTabs.insert(initial)
             pagerIndex = Tab.pagerTabs.firstIndex(of: initial) ?? 0
-            prewarmRemainingTabs()
         }
         .onChange(of: selectedTab) { newTab in
             guard newTab.isPagerTab else { return }
-            moveToPagerTab(newTab)
-        }
-    }
-
-    /// Mount the other pager tabs after first paint so later switches never pay a mount hitch mid-gesture.
-    private func prewarmRemainingTabs() {
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(400))
-            guard activatedTabs.count < Tab.pagerTabs.count else { return }
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                activatedTabs.formUnion(Tab.pagerTabs)
-            }
-        }
-    }
-
-    private func moveToPagerTab(_ newTab: Tab) {
-        let idx = Tab.pagerTabs.firstIndex(of: newTab) ?? 0
-        guard idx != pagerIndex else {
-            activatedTabs.insert(newTab)
-            return
-        }
-
-        let from = pagerIndex
-        let range = min(from, idx)...max(from, idx)
-        let needsMount = range.contains { !activatedTabs.contains(Tab.pagerTabs[$0]) }
-
-        transitionGeneration += 1
-        let generation = transitionGeneration
-
-        if needsMount {
-            // Rare path before prewarm finishes: mount first, slide on the next turn.
-            var mountTransaction = Transaction()
-            mountTransaction.disablesAnimations = true
-            withTransaction(mountTransaction) {
-                for i in range {
-                    activatedTabs.insert(Tab.pagerTabs[i])
-                }
-            }
-            Task { @MainActor in
-                await Task.yield()
-                guard generation == transitionGeneration else { return }
-                withAnimation(MainTabPagerMotion.slide) {
-                    pagerIndex = idx
-                }
-            }
-        } else {
+            let idx = Tab.pagerTabs.firstIndex(of: newTab) ?? 0
+            guard idx != pagerIndex else { return }
             withAnimation(MainTabPagerMotion.slide) {
                 pagerIndex = idx
             }
@@ -1382,20 +1330,10 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
 
     @ViewBuilder
     private func tabPage<T: View>(_ tab: Tab, width: CGFloat, @ViewBuilder content: () -> T) -> some View {
-        Group {
-            if activatedTabs.contains(tab) {
-                content()
-                    // Keep tab-switch animation on the pager offset only — not child layout/opacity.
-                    .transaction { $0.animation = nil }
-            } else {
-                // Keep a stable-sized placeholder so HStack geometry stays correct
-                // before the tab is visited for the first time.
-                Color.clear
-            }
-        }
-        .frame(width: width)
-        .frame(maxHeight: .infinity)
-        .allowsHitTesting(selectedTab == tab)
+        content()
+            .frame(width: width)
+            .frame(maxHeight: .infinity)
+            .allowsHitTesting(selectedTab == tab)
     }
 }
 
