@@ -155,9 +155,6 @@ struct MainTabView: View {
             .environment(\.openProfileSettings) {
                 appState.showProfileSettings = true
             }
-            .environment(\.openCurrentUserProfile) {
-                showCurrentUserProfile = true
-            }
             .environment(\.openNotifications) { bellFrame in
                 Task { @MainActor in
                     if appState.showNotifications {
