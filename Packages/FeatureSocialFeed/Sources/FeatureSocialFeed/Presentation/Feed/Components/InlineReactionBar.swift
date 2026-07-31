@@ -53,8 +53,12 @@ struct InlineReactionBar: View {
             }
         )
         .onPreferenceChange(ReactionBarFrameKey.self) { frame in
-            guard frame != .zero else { return }
-            barFrame = frame
+            guard frame != .zero, frame != barFrame else { return }
+            // Defer @State write off PreferenceKey layout pass.
+            DispatchQueue.main.async {
+                guard frame != barFrame else { return }
+                barFrame = frame
+            }
         }
         .simultaneousGesture(longPressDragGesture)
         .onAppear {
