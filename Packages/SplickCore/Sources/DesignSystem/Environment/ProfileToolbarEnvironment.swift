@@ -6,10 +6,6 @@ private struct OpenProfileActionKey: EnvironmentKey {
     static let defaultValue: (() -> Void)? = nil
 }
 
-private struct OpenCurrentUserProfileActionKey: EnvironmentKey {
-    static let defaultValue: (() -> Void)? = nil
-}
-
 private struct CurrentUserSummaryKey: EnvironmentKey {
     static let defaultValue: UserSummary? = nil
 }
