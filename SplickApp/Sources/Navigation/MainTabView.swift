@@ -35,7 +35,6 @@ struct MainTabView: View {
     /// bar chrome can start sliding in immediately, in parallel with the overlay collapsing.
     /// Reset to `false` once `showNotifications` fully clears.
     @State private var notificationIsDismissing = false
-    @State private var showCurrentUserProfile = false
 
     private var currentUserSummary: UserSummary? {
         appState.currentUser.map {
