@@ -248,7 +248,10 @@ private struct ExpenseGlassPills: View {
         let isSelected = selection == segment
         let isEmphasized = isSelected && (hoverSegment == segment || (hoverSegment == nil && isInteracting))
         return Button {
-            selection = segment
+            guard selection != segment else { return }
+            withAnimation(ExpenseSegmentStripMotion.selectionSpring) {
+                selection = segment
+            }
         } label: {
             Text(label)
                 .font(.system(size: 15, weight: isSelected ? .semibold : .medium))
