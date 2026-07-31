@@ -82,7 +82,7 @@ private struct SplickProfileToolbarModifier: ViewModifier {
     var isSuppressed: Bool = false
     var showsBell: Bool = true
 
-    @Environment(\.openCurrentUserProfile) private var openCurrentUserProfile
+    @Environment(\.openProfileSettings) private var openProfileSettings
     @Environment(\.currentUserSummary) private var currentUserSummary
     @Environment(\.openNotifications) private var openNotifications
     @Environment(\.notificationUnreadCount) private var notificationUnreadCount
