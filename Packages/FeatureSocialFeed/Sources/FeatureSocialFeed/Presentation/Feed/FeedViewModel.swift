@@ -218,6 +218,10 @@ public final class FeedViewModel: ObservableObject {
         } catch {
             FeedSignposts.endFeedLoad(signpost, count: 0)
             if error.isRequestCancellation {
+                // Avoid infinite skeleton/spinner when the latest request dies with an empty feed.
+                if generation == loadFeedGeneration, posts.isEmpty, state.isLoading {
+                    state = .idle
+                }
                 return false
             }
             Log.error(error, category: .feed)
@@ -235,6 +239,13 @@ public final class FeedViewModel: ObservableObject {
             }
             return false
         }
+    }
+
+    /// Loads the first page when the feed is still empty (idle / stuck loading after cancel).
+    public func loadFeedIfNeeded() async {
+        guard posts.isEmpty else { return }
+        if case .failed = state { return }
+        await loadFeed()
     }
 
     /// Show the new post immediately, then sync the first page from the server.
