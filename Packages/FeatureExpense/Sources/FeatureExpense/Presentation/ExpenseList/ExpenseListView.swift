@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import UIKit
 import DesignSystem
 import Common
 import Localization
@@ -23,9 +24,14 @@ public struct ExpenseListView: View {
     @State private var chartMode: ExpenseChartMode = .income
     @State private var refreshController = SplickRefreshController()
     @State private var overviewRefreshController = SplickRefreshController()
+    @State private var friendsRefreshController = SplickRefreshController()
+    @State private var historyScrollTopSignal = 0
+    @State private var overviewScrollTopSignal = 0
+    @State private var friendsScrollTopSignal = 0
     @State private var navigationPath = NavigationPath()
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.tabBarScrollState) private var tabBarScrollState
+    @Environment(\.sameTabTapHandlingEnabled) private var sameTabTapHandlingEnabled
     @Environment(\.pullToRefreshActive) private var pullToRefreshActive
     @Environment(\.openPostCaptureFlow) private var openPostCaptureFlow
     @Environment(\.openLinkedPost) private var openLinkedPost
@@ -38,6 +44,11 @@ public struct ExpenseListView: View {
     private let makeFriendDetailViewModel: ((DebtSummary) -> ExpenseFriendDetailViewModel)?
 
     private let listFilterAnimation = Animation.spring(response: 0.42, dampingFraction: 0.86)
+
+    private var sameTabTapPublisher: AnyPublisher<Void, Never> {
+        tabBarScrollState?.sameTabTapSubject.eraseToAnyPublisher()
+            ?? Empty().eraseToAnyPublisher()
+    }
 
     public init(
         viewModel: ExpenseListViewModel,
@@ -106,7 +117,11 @@ public struct ExpenseListView: View {
         .onChange(of: isTabActive) { active in
             guard active else { return }
             viewModel.updateCurrentUserId(currentUserId)
+            tabBarScrollState?.reset()
             Task { await viewModel.loadIfNeeded() }
+        }
+        .onReceive(sameTabTapPublisher) { _ in
+            handleSameTabTap()
         }
         .onReceive(NotificationCenter.default.publisher(for: .paymentEvidenceStatusDidChange)) { _ in
             guard isTabActive else { return }
@@ -124,6 +139,38 @@ public struct ExpenseListView: View {
                     )
                 )
             }
+        }
+    }
+
+    private func handleSameTabTap() {
+        guard sameTabTapHandlingEnabled, isTabActive else { return }
+
+        if !navigationPath.isEmpty {
+            navigationPath = NavigationPath()
+            tabBarScrollState?.show()
+            return
+        }
+
+        if tabBarScrollState?.isAtTop ?? true {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            switch selectedSegment {
+            case .history:
+                refreshController.refresh()
+            case .overview:
+                overviewRefreshController.refresh()
+            case .friends:
+                friendsRefreshController.refresh()
+            }
+        } else {
+            switch selectedSegment {
+            case .history:
+                historyScrollTopSignal += 1
+            case .overview:
+                overviewScrollTopSignal += 1
+            case .friends:
+                friendsScrollTopSignal += 1
+            }
+            tabBarScrollState?.reset()
         }
     }
 
@@ -180,7 +227,8 @@ public struct ExpenseListView: View {
         if let friendListViewModel {
             ExpenseFriendListView(
                 viewModel: friendListViewModel,
-                isSameTabHandlingEnabled: isTabActive && selectedSegment == .friends
+                refreshController: friendsRefreshController,
+                scrollTopSignal: friendsScrollTopSignal
             ) { debt in
                 navigationPath.append(ExpenseFriendDetailRoute(debt: debt))
             }
@@ -212,13 +260,11 @@ public struct ExpenseListView: View {
             .splickNativeRefreshable(controller: refreshController) {
                 await viewModel.load(isPullToRefresh: true)
             }
-            .splickSameTabTapBehavior(
-                scrollTopID: "expenseScrollTop",
-                scrollProxy: proxy,
-                refreshController: refreshController,
-                isAtTop: { tabBarScrollState?.isAtTop == true },
-                isEnabled: { isTabActive && selectedSegment == .history }
-            )
+            .onChange(of: historyScrollTopSignal) { _ in
+                withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                    proxy.scrollTo("expenseScrollTop", anchor: .top)
+                }
+            }
             .onAppear {
                 if captionQueryDraft.isEmpty {
                     captionQueryDraft = viewModel.filters.captionQuery
@@ -266,13 +312,11 @@ public struct ExpenseListView: View {
             .splickNativeRefreshable(controller: overviewRefreshController) {
                 await viewModel.load(isPullToRefresh: true)
             }
-            .splickSameTabTapBehavior(
-                scrollTopID: "expenseOverviewScrollTop",
-                scrollProxy: proxy,
-                refreshController: overviewRefreshController,
-                isAtTop: { tabBarScrollState?.isAtTop == true },
-                isEnabled: { isTabActive && selectedSegment == .overview }
-            )
+            .onChange(of: overviewScrollTopSignal) { _ in
+                withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                    proxy.scrollTo("expenseOverviewScrollTop", anchor: .top)
+                }
+            }
         }
     }
 

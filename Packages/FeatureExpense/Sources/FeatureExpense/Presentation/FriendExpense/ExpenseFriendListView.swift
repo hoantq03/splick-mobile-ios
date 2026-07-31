@@ -1,11 +1,9 @@
 import Common
-import Combine
 import DesignSystem
 import Foundation
 import Localization
 import SplickDomain
 import SwiftUI
-import UIKit
 
 /// Stable navigation value so detail push survives list reload / pull-to-refresh.
 public struct ExpenseFriendDetailRoute: Hashable, Sendable {
@@ -83,12 +81,10 @@ private enum ExpenseFriendsScrollAnchor {
 
 public struct ExpenseFriendListView: View {
   @ObservedObject private var viewModel: ExpenseFriendListViewModel
+  @ObservedObject private var refreshController: SplickRefreshController
   @EnvironmentObject private var languageService: LanguageService
   @Environment(\.tabBarScrollState) private var tabBarScrollState
-  @Environment(\.sameTabTapHandlingEnabled) private var sameTabTapHandlingEnabled
-  @State private var refreshController = SplickRefreshController()
-  @State private var scrollTopSignal = 0
-  private let isSameTabHandlingEnabled: Bool
+  private let scrollTopSignal: Int
   private let onSelectFriend: (DebtSummary) -> Void
 
   private var hasScrollableFriends: Bool {
@@ -96,18 +92,15 @@ public struct ExpenseFriendListView: View {
     return false
   }
 
-  private var sameTabTapPublisher: AnyPublisher<Void, Never> {
-    tabBarScrollState?.sameTabTapSubject.eraseToAnyPublisher()
-      ?? Empty().eraseToAnyPublisher()
-  }
-
   public init(
     viewModel: ExpenseFriendListViewModel,
-    isSameTabHandlingEnabled: Bool = false,
+    refreshController: SplickRefreshController,
+    scrollTopSignal: Int = 0,
     onSelectFriend: @escaping (DebtSummary) -> Void
   ) {
     self.viewModel = viewModel
-    self.isSameTabHandlingEnabled = isSameTabHandlingEnabled
+    _refreshController = ObservedObject(wrappedValue: refreshController)
+    self.scrollTopSignal = scrollTopSignal
     self.onSelectFriend = onSelectFriend
   }
 
@@ -141,8 +134,9 @@ public struct ExpenseFriendListView: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .onReceive(sameTabTapPublisher) { _ in
-      handleSameTabTap()
+    .onChange(of: refreshController.requestID) { requestID in
+      guard requestID > 0, !hasScrollableFriends else { return }
+      Task { await viewModel.load(isPullToRefresh: true) }
     }
     .task {
       if case .idle = viewModel.state {
@@ -185,23 +179,7 @@ public struct ExpenseFriendListView: View {
         withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
           proxy.scrollTo(ExpenseFriendsScrollAnchor.top, anchor: .top)
         }
-        tabBarScrollState?.reset()
       }
-    }
-  }
-
-  private func handleSameTabTap() {
-    guard sameTabTapHandlingEnabled, isSameTabHandlingEnabled else { return }
-
-    if tabBarScrollState?.isAtTop ?? true {
-      UIImpactFeedbackGenerator(style: .light).impactOccurred()
-      if hasScrollableFriends {
-        refreshController.refresh()
-      } else {
-        Task { await viewModel.load(isPullToRefresh: true) }
-      }
-    } else {
-      scrollTopSignal += 1
     }
   }
 
