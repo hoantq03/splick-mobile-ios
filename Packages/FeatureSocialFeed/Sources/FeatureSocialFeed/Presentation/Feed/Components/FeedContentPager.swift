@@ -520,6 +520,26 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
         }
     }
 
+    /// Programmatic segment change (nav pills) — same horizontal slide as a finished swipe.
+    func animateTo(_ index: Int) {
+        let from = coordinator.state.currentIndex
+        guard index != from, feedSegmentOrder.indices.contains(index) else { return }
+
+        let lower = min(from, index)
+        let upper = max(from, index)
+        for mountedIndex in lower...upper {
+            ensureSegmentMounted(at: mountedIndex)
+        }
+
+        let width = max(currentWidth, view.bounds.width, 1)
+        let adjustedOffset = CGFloat(index - from) * width
+        let fraction = min(1, abs(adjustedOffset) / max(width, 1))
+        let damping = 0.92 - 0.18 * fraction
+        let response = 0.28 + 0.06 * fraction
+
+        settle(to: index, adjustedOffset: adjustedOffset, response: response, damping: damping)
+    }
+
     func jump(to index: Int) {
         ensureSegmentMounted(at: index)
         coordinator.state.jump(to: index)
