@@ -21,6 +21,7 @@ struct PostDetailView: View {
 
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.currentUserSummary) private var currentUserSummary
+    @Environment(\.openProfileSettings) private var openProfileSettings
     @Environment(\.customEmojiDependencies) private var customEmojiDependencies
     @StateObject private var commentPager: PostDetailViewModel
     @State private var profileRoute: ProfileRoute?
