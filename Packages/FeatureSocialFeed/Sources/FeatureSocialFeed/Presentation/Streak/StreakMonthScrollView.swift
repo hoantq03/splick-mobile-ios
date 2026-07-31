@@ -2,6 +2,10 @@ import SwiftUI
 import DesignSystem
 import SplickDomain
 
+private enum StreakScrollAnchor {
+    static let top = "streakScrollTop"
+}
+
 /// Continuous vertical month list (like photo album). Older months prepend at the top;
 /// scroll position is preserved so the viewport does not jump while paginating upward.
 struct StreakMonthScrollView: View {
@@ -13,6 +17,8 @@ struct StreakMonthScrollView: View {
     let onDayTap: (StreakDay) -> Void
     let onRefresh: () async -> Void
 
+    @Environment(\.tabBarScrollState) private var tabBarScrollState
+    @State private var refreshController = SplickRefreshController()
     @State private var didInitialScroll = false
     @State private var scrollAnchorAfterPrepend: String?
     @State private var lastOlderLoadTriggerSectionID: String?
@@ -22,6 +28,10 @@ struct StreakMonthScrollView: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
+                Color.clear
+                    .frame(height: 0)
+                    .id(StreakScrollAnchor.top)
+
                 monthStack
             }
             .scrollContentBackground(.hidden)
@@ -33,9 +43,17 @@ struct StreakMonthScrollView: View {
                         .allowsHitTesting(false)
                 }
             }
-            .refreshable { await onRefresh() }
             .feedScrollSoftTopEdge()
             .scrollChromeTracking()
+            .splickNativeRefreshable(controller: refreshController) {
+                await onRefresh()
+            }
+            .splickSameTabTapBehavior(
+                scrollTopID: StreakScrollAnchor.top,
+                scrollProxy: proxy,
+                refreshController: refreshController,
+                isAtTop: { tabBarScrollState?.isAtTop == true }
+            )
             .onAppear {
                 trackedSectionCount = sections.count
                 scrollToCurrentMonth(using: proxy, animated: false)
