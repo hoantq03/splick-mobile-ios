@@ -5,10 +5,9 @@ import Nuke
 /// Renders remote animated GIF/WebP via Nuke cache + `UIImageView` playback.
 ///
 /// Nuke 12 `LazyImage` uses `SwiftUI.Image`, which only shows the first GIF frame.
-/// This view loads via `ImagePipeline` and decodes GIF frames with ImageIO **off the main thread**.
-///
-/// Important: animated loads must **not** use Nuke thumbnail options — thumbnails drop
-/// `container.data`, which makes `UIImage.animatedImage` impossible.
+/// This view loads via `ImagePipeline.loadData` (bytes only) and decodes GIF frames with
+/// ImageIO **off the main thread**, then CPU-downscales — avoiding Nuke's full-GIF decode
+/// that triggers `CVPixelBufferCreate … RGBA (-6680)` for many sticker sizes.
 public struct AnimatedRemoteImage: UIViewRepresentable {
     private let url: URL?
     private let contentMode: ContentMode
@@ -159,11 +158,47 @@ public struct AnimatedRemoteImage: UIViewRepresentable {
             loadedWantsAnimation = isAnimating
             reportedSize = nil
 
-            // Thumbnail pipeline strips GIF data → animation becomes impossible.
-            let request: ImageRequest
             if isAnimating {
-                request = ImageRequest(url: url)
-            } else if let maxPixelSize, maxPixelSize > 0 {
+                // Bytes only — Nuke `loadImage` decodes every GIF frame at native size and
+                // spams `CVPixelBufferCreate … RGBA (-6680)` for sticker/comment sources.
+                task = ImagePipeline.shared.loadData(with: ImageRequest(url: url)) { [weak self] result in
+                    guard let self else { return }
+                    guard self.loadedURL == url, generation == self.decodeGeneration else { return }
+
+                    switch result {
+                    case .success(let (data, _)):
+                        DispatchQueue.global(qos: .userInitiated).async {
+                            let animated = GIFAnimatedImageFactory.animatedImage(
+                                from: data,
+                                maxPixelSize: maxPixelSize
+                            )
+                            let still = animated.flatMap { Self.stillFrame(from: $0) }
+                                ?? GIFAnimatedImageFactory.firstFrame(from: data, maxPixelSize: maxPixelSize)
+                                ?? animated
+
+                            DispatchQueue.main.async {
+                                guard self.loadedURL == url, generation == self.decodeGeneration else { return }
+                                self.animatedImage = animated
+                                self.staticImage = still
+                                let displayed = self.loadedWantsAnimation ? (animated ?? still) : still
+                                self.imageView?.image = displayed
+                                if let displayed {
+                                    self.reportSizeIfNeeded(from: displayed)
+                                }
+                            }
+                        }
+                    case .failure:
+                        DispatchQueue.main.async {
+                            guard self.loadedURL == url, generation == self.decodeGeneration else { return }
+                            self.imageView?.image = nil
+                        }
+                    }
+                }
+                return
+            }
+
+            let request: ImageRequest
+            if let maxPixelSize, maxPixelSize > 0 {
                 request = RemoteImageRequestFactory.boundedRequest(url: url, maxPixelWidth: maxPixelSize)
             } else {
                 request = ImageRequest(url: url)
@@ -176,46 +211,17 @@ public struct AnimatedRemoteImage: UIViewRepresentable {
                 switch result {
                 case .success(let response):
                     let container = response.container
-                    let placeholder = container.image
-
-                    DispatchQueue.main.async {
-                        guard self.loadedURL == url, generation == self.decodeGeneration else { return }
-                        if self.imageView?.image == nil {
-                            self.staticImage = placeholder
-                            self.imageView?.image = placeholder
-                        }
-                        self.reportSizeIfNeeded(from: placeholder)
-                    }
-
                     DispatchQueue.global(qos: .userInitiated).async {
-                        let animated: UIImage?
-                        let still: UIImage
-                        if isAnimating {
-                            let decoded = GIFAnimatedImageFactory.uiImage(
-                                from: container,
-                                maxPixelSize: maxPixelSize
-                            )
-                            animated = decoded
-                            still = Self.stillFrame(from: decoded)
-                                ?? GIFAnimatedImageFactory.firstFrame(
-                                    from: container,
-                                    maxPixelSize: maxPixelSize
-                                )
-                        } else {
-                            animated = nil
-                            still = GIFAnimatedImageFactory.firstFrame(
-                                from: container,
-                                maxPixelSize: maxPixelSize
-                            )
-                        }
-
+                        let still = GIFAnimatedImageFactory.firstFrame(
+                            from: container,
+                            maxPixelSize: maxPixelSize
+                        )
                         DispatchQueue.main.async {
                             guard self.loadedURL == url, generation == self.decodeGeneration else { return }
-                            self.animatedImage = animated
+                            self.animatedImage = nil
                             self.staticImage = still
-                            let displayed = self.loadedWantsAnimation ? (animated ?? still) : still
-                            self.imageView?.image = displayed
-                            self.reportSizeIfNeeded(from: displayed)
+                            self.imageView?.image = still
+                            self.reportSizeIfNeeded(from: still)
                         }
                     }
                 case .failure:
