@@ -525,6 +525,10 @@ public struct ExpenseListView: View {
 
     private func openCreatorProfile(_ user: UserSummary) {
         guard profileDependencies != nil else { return }
+        if user.id == currentUserId {
+            openProfileSettings?()
+            return
+        }
         profileRoute = ExpenseUserProfileRoute(user: user)
     }
 
