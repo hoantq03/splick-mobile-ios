@@ -1246,8 +1246,8 @@ struct ProfileSettingsView: View {
 // MARK: - Main tab pager
 
 private enum MainTabPagerMotion {
-    /// Smooth slide without spring overshoot (overshoot reads as a hitch at the end).
-    static let slide = Animation.easeInOut(duration: 0.28)
+    /// Snappy horizontal page change with a light end bounce.
+    static let spring = Animation.spring(response: 0.36, dampingFraction: 0.72, blendDuration: 0.04)
 }
 
 private extension Tab {
@@ -1313,7 +1313,7 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
         }
         .ignoresSafeArea(edges: [.top, .bottom])
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .animation(MainTabPagerMotion.slide, value: selectedTab == .camera)
+        .animation(MainTabPagerMotion.spring, value: selectedTab == .camera)
         .onAppear {
             let initial = selectedTab.isPagerTab ? selectedTab : .feed
             pagerIndex = Tab.pagerTabs.firstIndex(of: initial) ?? 0
@@ -1322,7 +1322,7 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
             guard newTab.isPagerTab else { return }
             let idx = Tab.pagerTabs.firstIndex(of: newTab) ?? 0
             guard idx != pagerIndex else { return }
-            withAnimation(MainTabPagerMotion.slide) {
+            withAnimation(MainTabPagerMotion.spring) {
                 pagerIndex = idx
             }
         }

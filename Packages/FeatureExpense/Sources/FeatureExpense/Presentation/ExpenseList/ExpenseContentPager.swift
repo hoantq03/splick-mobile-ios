@@ -2,7 +2,8 @@ import SwiftUI
 import DesignSystem
 
 private enum ExpensePagerMotion {
-    static let slide = Animation.easeInOut(duration: 0.28)
+    /// Match main-tab page change: snappy slide with a light end bounce.
+    static let spring = Animation.spring(response: 0.36, dampingFraction: 0.72, blendDuration: 0.04)
 }
 
 /// Horizontal paging between expense segments — History / Overview / Friends.
@@ -37,7 +38,7 @@ struct ExpenseContentPager<History: View, Overview: View, Friends: View>: View {
         .onChange(of: selection) { newSelection in
             let idx = expenseSegmentStripOrder.firstIndex(of: newSelection) ?? 1
             guard idx != pagerIndex else { return }
-            withAnimation(ExpensePagerMotion.slide) {
+            withAnimation(ExpensePagerMotion.spring) {
                 dragOffset = 0
                 pagerIndex = idx
             }
@@ -91,7 +92,7 @@ struct ExpenseContentPager<History: View, Overview: View, Friends: View>: View {
                 }
 
                 let newSelection = expenseSegmentStripOrder[target]
-                withAnimation(ExpensePagerMotion.slide) {
+                withAnimation(ExpensePagerMotion.spring) {
                     dragOffset = 0
                     pagerIndex = target
                     selection = newSelection
