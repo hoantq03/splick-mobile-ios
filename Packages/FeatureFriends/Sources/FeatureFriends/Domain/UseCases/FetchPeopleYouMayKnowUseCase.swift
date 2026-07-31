@@ -34,6 +34,7 @@ public protocol FetchPeopleYouMayKnowUseCaseProtocol: Sendable {
 public struct FetchPeopleYouMayKnowUseCase: FetchPeopleYouMayKnowUseCaseProtocol {
     private static let maxGroupsToScan = 12
     private static let maxSuggestions = 40
+    private static let maxConcurrentGroupFetches = 4
 
     private let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol
     private let fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol
@@ -99,43 +100,59 @@ public struct FetchPeopleYouMayKnowUseCase: FetchPeopleYouMayKnowUseCaseProtocol
 
         var suggestionsByUserId: [UUID: PeopleYouMayKnowSuggestion] = [:]
 
-        for group in directory.groups.prefix(Self.maxGroupsToScan) {
-            let members: [GroupMemberItem]
-            do {
-                members = try await fetchGroupMembersUseCase.execute(groupId: group.id, status: "ACTIVE")
-            } catch {
-                continue
-            }
+        let groupsToScan = Array(directory.groups.prefix(Self.maxGroupsToScan))
+        for batchStart in stride(from: 0, to: groupsToScan.count, by: Self.maxConcurrentGroupFetches) {
+            let batchEnd = min(batchStart + Self.maxConcurrentGroupFetches, groupsToScan.count)
+            let batch = groupsToScan[batchStart..<batchEnd]
 
-            for member in members where !member.isPending {
-                let userId = member.userId
-                guard userId != currentUserId else { continue }
-                guard !friendIds.contains(userId) else { continue }
-                guard !blockedIds.contains(userId) else { continue }
-                guard incomingByUserId[userId] == nil else { continue }
-                guard outgoingByUserId[userId] == nil else { continue }
-
-                let user = UserSummary(
-                    id: userId,
-                    username: member.username,
-                    displayName: member.displayName,
-                    avatarURL: member.avatarURL
-                )
-
-                if let existing = suggestionsByUserId[userId] {
-                    if existing.sharedGroupName == nil {
-                        suggestionsByUserId[userId] = PeopleYouMayKnowSuggestion(
-                            user: user,
-                            friendStatus: .none,
-                            sharedGroupName: group.name
-                        )
+            await withTaskGroup(of: (Group, [GroupMemberItem])?.self) { taskGroup in
+                for group in batch {
+                    taskGroup.addTask {
+                        do {
+                            let members = try await self.fetchGroupMembersUseCase.execute(
+                                groupId: group.id,
+                                status: "ACTIVE"
+                            )
+                            return (group, members)
+                        } catch {
+                            return nil
+                        }
                     }
-                } else {
-                    suggestionsByUserId[userId] = PeopleYouMayKnowSuggestion(
-                        user: user,
-                        friendStatus: .none,
-                        sharedGroupName: group.name
-                    )
+                }
+
+                for await result in taskGroup {
+                    guard let (group, members) = result else { continue }
+                    for member in members where !member.isPending {
+                        let userId = member.userId
+                        guard userId != currentUserId else { continue }
+                        guard !friendIds.contains(userId) else { continue }
+                        guard !blockedIds.contains(userId) else { continue }
+                        guard incomingByUserId[userId] == nil else { continue }
+                        guard outgoingByUserId[userId] == nil else { continue }
+
+                        let user = UserSummary(
+                            id: userId,
+                            username: member.username,
+                            displayName: member.displayName,
+                            avatarURL: member.avatarURL
+                        )
+
+                        if let existing = suggestionsByUserId[userId] {
+                            if existing.sharedGroupName == nil {
+                                suggestionsByUserId[userId] = PeopleYouMayKnowSuggestion(
+                                    user: user,
+                                    friendStatus: .none,
+                                    sharedGroupName: group.name
+                                )
+                            }
+                        } else {
+                            suggestionsByUserId[userId] = PeopleYouMayKnowSuggestion(
+                                user: user,
+                                friendStatus: .none,
+                                sharedGroupName: group.name
+                            )
+                        }
+                    }
                 }
             }
         }

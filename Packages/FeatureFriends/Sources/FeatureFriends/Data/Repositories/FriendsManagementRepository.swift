@@ -1,9 +1,11 @@
 import Foundation
 import Networking
 import SplickDomain
+import Storage
 
 public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
     private let apiClient: APIClientProtocol
+    private static let maxCachedFriends = 200
 
     public init(apiClient: APIClientProtocol) {
         self.apiClient = apiClient
@@ -17,6 +19,32 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
             return (response.content, response.page)
         }
         return friends.map(FriendsMapper.toUserSummary)
+    }
+
+    public func fetchMyFriendsPage(page: Int, size: Int) async throws -> FriendsPageResult {
+        let response: SocialPageFriendResponseDTO = try await apiClient.request(
+            SocialEndpoint.listFriends(page: page, size: size)
+        )
+        let friends = response.content.map(FriendsMapper.toUserSummary)
+        let hasMore = page + 1 < max(response.page.totalPages, 1) && !response.content.isEmpty
+        return FriendsPageResult(friends: friends, page: page, hasMore: hasMore)
+    }
+
+    public func loadCachedFriends(userId: UUID) async -> [UserSummary]? {
+        await DiskCache.shared.read(FriendsCachePayload.self, key: Self.cacheKey(for: userId))?.friends
+    }
+
+    public func saveCachedFriends(_ friends: [UserSummary], userId: UUID) async {
+        let capped = Array(friends.prefix(Self.maxCachedFriends))
+        await DiskCache.shared.write(FriendsCachePayload(friends: capped), key: Self.cacheKey(for: userId))
+    }
+
+    public func invalidateCachedFriends(userId: UUID) async {
+        await DiskCache.shared.remove(key: Self.cacheKey(for: userId))
+    }
+
+    private static func cacheKey(for userId: UUID) -> String {
+        "friends.directory.\(userId.uuidString)"
     }
 
     public func fetchUserProfile(userId: UUID) async throws -> PublicUserProfile {

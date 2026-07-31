@@ -50,6 +50,26 @@ public actor FakeFriendsRepository: FriendsRepositoryProtocol, FriendsManagement
 
     public func fetchMyFriends() async throws -> [UserSummary] { [] }
 
+    public func fetchMyFriendsPage(page: Int, size: Int) async throws -> FriendsPageResult {
+        _ = page
+        _ = size
+        return FriendsPageResult(friends: [], page: page, hasMore: false)
+    }
+
+    public func loadCachedFriends(userId: UUID) async -> [UserSummary]? {
+        _ = userId
+        return nil
+    }
+
+    public func saveCachedFriends(_ friends: [UserSummary], userId: UUID) async {
+        _ = friends
+        _ = userId
+    }
+
+    public func invalidateCachedFriends(userId: UUID) async {
+        _ = userId
+    }
+
     public func fetchUserProfile(userId: UUID) async throws -> PublicUserProfile {
         _ = userId
         throw FriendsError.notImplemented

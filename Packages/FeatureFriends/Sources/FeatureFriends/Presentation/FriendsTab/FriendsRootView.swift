@@ -389,7 +389,7 @@ public struct FriendsRootView: View {
         }
         .onFirstAppear {
             Task {
-                async let directory: Void = viewModel.load()
+                async let directory: Void = viewModel.load(userId: currentUserSummary?.id)
                 async let blocked: Void = blockedUsersViewModel.load()
                 _ = await (directory, blocked)
                 // PYMK scans group members (N API calls) — only when user opens that sheet.
@@ -704,9 +704,14 @@ public struct FriendsRootView: View {
                                         removal: .opacity
                                     )
                                 )
+                                .onAppear {
+                                    Task {
+                                        await viewModel.loadMoreSearchIfNeeded(currentItemID: item.id)
+                                    }
+                                }
                         }
 
-                        if viewModel.isSearchFetching {
+                        if viewModel.isSearchFetching || viewModel.isLoadingMoreSearch {
                             searchFetchingIndicator
                                 .padding(.vertical, SplickTheme.Spacing.sm)
                         }
@@ -842,6 +847,18 @@ public struct FriendsRootView: View {
                         } else {
                             ForEach(items) { item in
                                 directoryRow(item)
+                                    .onAppear {
+                                        Task {
+                                            await viewModel.loadMoreFriendsIfNeeded(currentItemID: item.id)
+                                        }
+                                    }
+                            }
+
+                            if viewModel.isLoadingMoreFriends {
+                                ProgressView()
+                                    .controlSize(.regular)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, SplickTheme.Spacing.sm)
                             }
                         }
                     }
