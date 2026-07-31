@@ -253,7 +253,10 @@ private struct FeedPrimaryPage: View {
 
     var body: some View {
         feedPane
-            .onAppear { configureCardActions() }
+            .onAppear {
+                configureCardActions()
+                Task { await viewModel.loadFeedIfNeeded() }
+            }
             .onReceive(
                 NotificationCenter.default.publisher(for: FeedScrollLock.notification)
             ) { notification in
