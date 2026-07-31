@@ -23,7 +23,7 @@ public struct StreakView: View {
     public var body: some View {
         switch viewModel.state {
         case .idle, .loading:
-            LoadingView(message: languageService.text(.feedStreakLoading))
+            FeedSkeletonLoadingView(cardCount: 2)
                 .feedPagerPageTopInset(isEnabled: true)
                 .onFirstAppear { Task { await viewModel.loadIfNeeded() } }
 
