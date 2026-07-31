@@ -369,10 +369,9 @@ public struct ExpenseListView: View {
     }
 
     private func selectOverviewDebtFilter(_ status: ExpenseDebtFilter) {
+        // Stay on Overview — only highlight the selected donut segment.
+        // History keeps its own filters unless the user switches tabs later.
         viewModel.applyOverviewDebtFilter(status)
-        withAnimation(.spring(response: 0.28, dampingFraction: 0.80)) {
-            selectedSegment = .history
-        }
     }
 
     private var overviewSectionHeader: some View {
