@@ -69,7 +69,7 @@ struct FeedContentPager<Feed: View, Album: View, Streak: View>: View {
                 },
                 streak: {
                     streak().modifier(
-                        pagerEnvironment(sameTabTapHandlingEnabled: false)
+                        pagerEnvironment(sameTabTapHandlingEnabled: sameTabTapHandlingEnabled && selection == .streak)
                     )
                 }
             )
