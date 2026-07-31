@@ -566,8 +566,11 @@ final class FeedVideoPlaybackController: ObservableObject {
             guard let self else { return }
             let itemDuration = self.playerItem.duration.seconds
             guard itemDuration.isFinite, itemDuration > 0 else { return }
+            let next = min(max(time.seconds / itemDuration, 0), 1)
             self.duration = itemDuration
-            self.progress = min(max(time.seconds / itemDuration, 0), 1)
+            // Skip sub-percent noise so scrubber publishes do not thrash SwiftUI mid-layout.
+            guard abs(next - self.progress) >= 0.01 || next <= 0.001 || next >= 0.999 else { return }
+            self.progress = next
         }
     }
 
