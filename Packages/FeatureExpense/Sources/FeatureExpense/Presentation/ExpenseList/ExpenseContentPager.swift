@@ -58,8 +58,8 @@ struct ExpenseContentPager<History: View, Overview: View, Friends: View>: View {
     private func pageDrag(width: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 14, coordinateSpace: .local)
             .onChanged { value in
-                let dx = value.translation.x
-                let dy = value.translation.y
+                let dx = value.translation.width
+                let dy = value.translation.height
 
                 if dragAxis == nil {
                     guard max(abs(dx), abs(dy)) > 10 else { return }
@@ -79,8 +79,8 @@ struct ExpenseContentPager<History: View, Overview: View, Friends: View>: View {
                     return
                 }
 
-                let dx = value.translation.x
-                let predicted = value.predictedEndTranslation.x
+                let dx = value.translation.width
+                let predicted = value.predictedEndTranslation.width
                 let threshold = width * 0.28
                 var target = pagerIndex
                 if dx < -threshold || predicted < -width * 0.45 {
