@@ -128,7 +128,10 @@ struct PostCardView: View, Equatable {
                             flight: flight,
                             cardOriginGlobal: cardOrigin,
                             onComplete: {
-                                flyingEmojis.removeAll { $0.id == flight.id }
+                                // Defer @State mutation off animation/layout coalescing.
+                                DispatchQueue.main.async {
+                                    flyingEmojis.removeAll { $0.id == flight.id }
+                                }
                             }
                         )
                     }
