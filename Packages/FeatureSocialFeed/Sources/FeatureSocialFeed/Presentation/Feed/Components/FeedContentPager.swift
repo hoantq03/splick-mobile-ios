@@ -318,7 +318,7 @@ private struct _PagerHostRep<Feed: View, Album: View, Streak: View>: UIViewContr
 
         let idx = feedSegmentOrder.firstIndex(of: selection) ?? 1
         if idx != coordinator.state.currentIndex {
-            viewController.jump(to: idx)
+            viewController.animateTo(idx)
         }
 
         viewController.updatePages(
