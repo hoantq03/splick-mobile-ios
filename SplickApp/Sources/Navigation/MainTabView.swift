@@ -1369,10 +1369,14 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
             Task { @MainActor in
                 await Task.yield()
                 guard generation == transitionGeneration else { return }
-                pagerIndex = idx
+                withAnimation(MainTabPagerMotion.slide) {
+                    pagerIndex = idx
+                }
             }
         } else {
-            pagerIndex = idx
+            withAnimation(MainTabPagerMotion.slide) {
+                pagerIndex = idx
+            }
         }
     }
 

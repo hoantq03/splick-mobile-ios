@@ -82,12 +82,16 @@ struct ExpenseContentPager<History: View, Overview: View, Friends: View>: View {
             Task { @MainActor in
                 await Task.yield()
                 guard generation == transitionGeneration else { return }
+                withAnimation(ExpensePagerMotion.slide) {
+                    dragOffset = 0
+                    pagerIndex = idx
+                }
+            }
+        } else {
+            withAnimation(ExpensePagerMotion.slide) {
                 dragOffset = 0
                 pagerIndex = idx
             }
-        } else {
-            dragOffset = 0
-            pagerIndex = idx
         }
     }
 
