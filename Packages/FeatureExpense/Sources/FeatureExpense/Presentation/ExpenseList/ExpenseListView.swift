@@ -109,8 +109,12 @@ public struct ExpenseListView: View {
         .environment(\.feedSegmentScrollState, expenseSegmentScrollState)
         .onChange(of: selectedSegment) { _ in
             navigationPath = NavigationPath()
-            expenseSegmentScrollState.reset()
-            tabBarScrollState?.reset()
+            // Defer chrome resets so they don't contend with the segment slide animation.
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(280))
+                expenseSegmentScrollState.reset()
+                tabBarScrollState?.reset()
+            }
         }
         .onFirstAppear {
             viewModel.updateCurrentUserId(currentUserId)

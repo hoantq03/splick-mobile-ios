@@ -369,7 +369,13 @@ struct MainTabView: View {
         Log.debug("Tab selected", category: .ui, metadata: ["tab": tab.rawValue])
         if tab == .camera {
             tabBarScrollState.hide(flushToBottom: true)
-        } else {
+            return
+        }
+        // Defer chrome reset until the pager slide has mostly finished so reset
+        // work does not contend with the offset animation on the main thread.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(280))
+            guard appState.selectedTab == tab else { return }
             tabBarScrollState.reset()
         }
         // Badge counts: startup apply + 30s polling + force refresh on mutations.
@@ -1239,8 +1245,8 @@ struct ProfileSettingsView: View {
 // MARK: - Main tab pager
 
 private enum MainTabPagerMotion {
-    /// Faster than original, with a lighter spring bounce.
-    static let spring = Animation.spring(response: 0.36, dampingFraction: 0.72, blendDuration: 0.04)
+    /// Smooth slide without spring overshoot (overshoot reads as a hitch at the end).
+    static let slide = Animation.easeInOut(duration: 0.28)
 }
 
 private extension Tab {
@@ -1298,6 +1304,7 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
                 }
                 .frame(width: width * pageCount, alignment: .leading)
                 .offset(x: -CGFloat(pagerIndex) * width)
+                .animation(MainTabPagerMotion.slide, value: pagerIndex)
 
                 if selectedTab == .camera {
                     camera()
@@ -1309,15 +1316,29 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
         }
         .ignoresSafeArea(edges: [.top, .bottom])
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .animation(MainTabPagerMotion.spring, value: selectedTab == .camera)
+        .animation(MainTabPagerMotion.slide, value: selectedTab == .camera)
         .onAppear {
             let initial = selectedTab.isPagerTab ? selectedTab : .feed
             activatedTabs.insert(initial)
             pagerIndex = Tab.pagerTabs.firstIndex(of: initial) ?? 0
+            prewarmRemainingTabs()
         }
         .onChange(of: selectedTab) { newTab in
             guard newTab.isPagerTab else { return }
             moveToPagerTab(newTab)
+        }
+    }
+
+    /// Mount the other pager tabs after first paint so later switches never pay a mount hitch mid-gesture.
+    private func prewarmRemainingTabs() {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard activatedTabs.count < Tab.pagerTabs.count else { return }
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                activatedTabs.formUnion(Tab.pagerTabs)
+            }
         }
     }
 
@@ -1336,9 +1357,7 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
         let generation = transitionGeneration
 
         if needsMount {
-            // Mount destination (and any in-between tabs) without sliding first.
-            // Animating in the same frame as first mount makes the new page pop in
-            // while only the outgoing page slides.
+            // Rare path before prewarm finishes: mount first, slide on the next turn.
             var mountTransaction = Transaction()
             mountTransaction.disablesAnimations = true
             withTransaction(mountTransaction) {
@@ -1349,14 +1368,10 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
             Task { @MainActor in
                 await Task.yield()
                 guard generation == transitionGeneration else { return }
-                withAnimation(MainTabPagerMotion.spring) {
-                    pagerIndex = idx
-                }
-            }
-        } else {
-            withAnimation(MainTabPagerMotion.spring) {
                 pagerIndex = idx
             }
+        } else {
+            pagerIndex = idx
         }
     }
 
@@ -1365,6 +1380,8 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
         Group {
             if activatedTabs.contains(tab) {
                 content()
+                    // Keep tab-switch animation on the pager offset only — not child layout/opacity.
+                    .transaction { $0.animation = nil }
             } else {
                 // Keep a stable-sized placeholder so HStack geometry stays correct
                 // before the tab is visited for the first time.
@@ -1373,6 +1390,7 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
         }
         .frame(width: width)
         .frame(maxHeight: .infinity)
+        .allowsHitTesting(selectedTab == tab)
     }
 }
 

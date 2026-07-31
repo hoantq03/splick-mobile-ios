@@ -165,12 +165,13 @@ public struct FeedView: View {
             }
         }
         .onChange(of: selectedSegment) { segment in
+            if segment != .feed {
+                videoCoordinator.suspendPlayback()
+            }
             Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(280))
                 feedSegmentScrollState.reset()
                 tabBarScrollState?.reset()
-                if segment != .feed {
-                    videoCoordinator.suspendPlayback()
-                }
             }
         }
         .onChange(of: viewModel.state) { state in

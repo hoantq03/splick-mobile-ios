@@ -533,9 +533,10 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
 
         let width = max(currentWidth, view.bounds.width, 1)
         let adjustedOffset = CGFloat(index - from) * width
-        let fraction = min(1, abs(adjustedOffset) / max(width, 1))
-        let damping = 0.92 - 0.18 * fraction
-        let response = 0.28 + 0.06 * fraction
+        // Ease-like settle: less overshoot than swipe flings, avoids end hitch on pill taps.
+        let pageDistance = min(1, CGFloat(abs(index - from)))
+        let damping: CGFloat = 0.92
+        let response: CGFloat = 0.26 + 0.04 * pageDistance
 
         settle(to: index, adjustedOffset: adjustedOffset, response: response, damping: damping)
     }
