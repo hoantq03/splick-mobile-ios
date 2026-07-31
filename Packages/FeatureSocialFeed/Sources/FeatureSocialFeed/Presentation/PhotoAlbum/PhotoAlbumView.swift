@@ -93,7 +93,7 @@ public struct PhotoAlbumView: View {
     private var albumContent: some View {
         switch viewModel.state {
         case .idle, .loading where viewModel.photos.isEmpty:
-            LoadingView(message: languageService.text(.feedAlbumLoading))
+            FeedAlbumSkeletonLoadingView()
 
         case .loaded where viewModel.photos.isEmpty:
             EmptyStateView(
@@ -145,9 +145,14 @@ public struct PhotoAlbumView: View {
             .padding(.top, SplickTheme.Spacing.xs)
 
             if viewModel.isLoadingMore {
-                ProgressView()
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, SplickTheme.Spacing.md)
+                SkeletonShimmerHost {
+                    SkeletonBone(
+                        height: 72,
+                        shape: .rectangle(cornerRadius: SplickTheme.CornerRadius.small)
+                    )
+                }
+                .padding(.horizontal, SplickTheme.Spacing.md)
+                .padding(.vertical, SplickTheme.Spacing.md)
             }
         }
         .feedPagerScrollInsets()
