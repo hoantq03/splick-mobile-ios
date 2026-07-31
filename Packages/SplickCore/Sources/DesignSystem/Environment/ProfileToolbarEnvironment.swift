@@ -27,14 +27,10 @@ private struct OpenUserProfileKey: EnvironmentKey {
 }
 
 extension EnvironmentValues {
+    /// Opens the signed-in user's settings (avatar top-leading). Public profiles are for other users only.
     public var openProfileSettings: (() -> Void)? {
         get { self[OpenProfileActionKey.self] }
         set { self[OpenProfileActionKey.self] = newValue }
-    }
-
-    public var openCurrentUserProfile: (() -> Void)? {
-        get { self[OpenCurrentUserProfileActionKey.self] }
-        set { self[OpenCurrentUserProfileActionKey.self] = newValue }
     }
 
     public var currentUserSummary: UserSummary? {
