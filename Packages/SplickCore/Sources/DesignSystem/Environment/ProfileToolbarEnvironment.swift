@@ -105,8 +105,8 @@ private struct SplickProfileToolbarModifier: ViewModifier {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(
-                            languageService?.text(.profileTitle)
-                                ?? L10n.string(.profileTitle, locale: .default)
+                            languageService?.text(.profileSettingsAccessibility)
+                                ?? L10n.string(.profileSettingsAccessibility, locale: .default)
                         )
                     }
                 }
