@@ -136,7 +136,10 @@ private struct MaterialPills: View {
         let isSelected = selection == segment
         let isEmphasized = isSelected && (hoverSegment == segment || (hoverSegment == nil && isInteracting))
         return Button {
-            selection = segment
+            guard selection != segment else { return }
+            withAnimation(FeedSegmentStripMotion.selectionSpring) {
+                selection = segment
+            }
         } label: {
             Text(label)
                 .font(.system(size: 15, weight: isSelected ? .semibold : .medium))
