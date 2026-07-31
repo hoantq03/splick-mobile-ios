@@ -26,6 +26,8 @@ struct PostCardView: View, Equatable {
     @State private var reminderSentMessage: String?
     @State private var reactionAnchors: [String: CGPoint] = [:]
     @State private var flyingEmojis: [FlyingEmojiFlight] = []
+    @State private var cachedReactionPreview: (top: [UserReactionSummary], otherPeopleCount: Int)?
+    @State private var cachedReactionVersion: UInt64?
 
     static func == (lhs: PostCardView, rhs: PostCardView) -> Bool {
         lhs.post == rhs.post
@@ -38,7 +40,16 @@ struct PostCardView: View, Equatable {
     }
 
     private var reactionPreview: (top: [UserReactionSummary], otherPeopleCount: Int) {
-        post.reactionPreview(topLimit: 3)
+        if let cachedReactionPreview, cachedReactionVersion == post.version {
+            return cachedReactionPreview
+        }
+        return post.reactionPreview(topLimit: 3)
+    }
+
+    private func refreshReactionPreviewCacheIfNeeded() {
+        guard cachedReactionVersion != post.version else { return }
+        cachedReactionPreview = post.reactionPreview(topLimit: 3)
+        cachedReactionVersion = post.version
     }
 
     private var isAuthor: Bool {
@@ -106,9 +117,13 @@ struct PostCardView: View, Equatable {
             }
         }
         .onAppear {
+            refreshReactionPreviewCacheIfNeeded()
             guard !appliedInitialMediaIndex, initialMediaIndex > 0 else { return }
             mediaPageIndex = min(initialMediaIndex, max(post.displayMediaItems.count - 1, 0))
             appliedInitialMediaIndex = true
+        }
+        .onChange(of: post.version) { _ in
+            refreshReactionPreviewCacheIfNeeded()
         }
         .coordinateSpace(name: "postCard")
         .onPreferenceChange(ReactionTargetAnchorsKey.self) { anchors in

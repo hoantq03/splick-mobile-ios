@@ -7,6 +7,8 @@ Use these signposts (subsystem `com.splick.feed`, category `Performance`) with I
 | `FeedLoad` | Initial load / pull-to-refresh duration |
 | `FeedMerge` | Client-state merge after network fetch |
 | `PostCardBody` | Post card body evaluation |
+| `ImagePrefetch` | Prefetch batch duration / URL count |
+| `PostEquality` | Equatable fast-path result (optional) |
 | `VideoPlayerCreate` / `VideoPlayerAcquire` / `VideoPlayerRelease` | AVPlayer pool lifecycle |
 
 ## Suggested Instruments templates

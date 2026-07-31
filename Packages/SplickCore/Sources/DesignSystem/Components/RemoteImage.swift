@@ -5,6 +5,8 @@ import NukeUI
 
 /// Drop-in replacement for `AsyncImage` backed by Nuke memory + disk cache.
 /// Nuke is an implementation detail — feature packages import `DesignSystem` only.
+/// Uses `.onDisappear(.lowerPriority)` so scroll-off does not cancel in-flight downloads;
+/// completed bytes stay in DataCache and are not re-fetched from the network.
 public struct RemoteImage<Content: View>: View {
     private let url: URL?
     private let maxPixelWidth: CGFloat?
@@ -43,7 +45,7 @@ public struct RemoteImage<Content: View>: View {
                 content(.empty)
             }
         }
-        .onDisappear(.cancel)
+        .onDisappear(.lowerPriority)
     }
 
     private var imageRequest: ImageRequest? {

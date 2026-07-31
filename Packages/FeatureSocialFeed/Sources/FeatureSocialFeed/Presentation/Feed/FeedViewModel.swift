@@ -62,6 +62,12 @@ public final class FeedViewModel: ObservableObject {
     @Published private(set) var postUploadStates: [UUID: PostUploadState] = [:]
     private var postUploadTasks: [UUID: Task<Void, Never>] = [:]
 
+    /// O(1) lookup for post mutations — rebuilt on full-feed assign, patched on insert/remove.
+    private var postIndexById: [UUID: Int] = [:]
+    /// Cached companion group names — invalidated on full-feed replace.
+    private var cachedCompanionGroupNames: [UUID: String] = [:]
+    private var companionIndexDirty = true
+
     public init(
         fetchFeedUseCase: FetchFeedUseCaseProtocol,
         fetchPostUseCase: FetchPostUseCaseProtocol,
@@ -116,24 +122,24 @@ public final class FeedViewModel: ObservableObject {
         // Cancel any in-flight `GET /v1/feed` that raced startup.
         loadFeedTask?.cancel()
         loadFeedTask = nil
-        posts = startupPosts
-        state = .loaded(startupPosts)
+        assignPosts(startupPosts, preserveVersionsFrom: nil)
+        state = .loaded(posts)
         currentPage = 0
         canLoadMore = startupPosts.count >= 20
         hasReachedFeedEnd = startupPosts.count < 20
-        prefetchImages(for: startupPosts)
+        prefetchImages(for: posts)
         persistFeedCache()
     }
 
     /// Applies disk-cached feed posts when memory is empty (cold start before network).
     public func applyCachedPostsIfEmpty(_ cached: [Post]) {
         guard posts.isEmpty, !cached.isEmpty else { return }
-        posts = cached
-        state = .loaded(cached)
+        assignPosts(cached, preserveVersionsFrom: nil)
+        state = .loaded(posts)
         currentPage = 0
         canLoadMore = cached.count >= 20
         hasReachedFeedEnd = false
-        prefetchImages(for: cached)
+        prefetchImages(for: posts)
     }
 
     /// Loads feed disk cache when posts are still empty (before/alongside startup).
@@ -203,8 +209,13 @@ public final class FeedViewModel: ObservableObject {
             let posts = try await fetchFeedUseCase.execute(page: 0)
             let mergeSignpost = FeedSignposts.beginFeedMerge()
             let companionNames = companionGroupNameIndex()
+            let previousById = Dictionary(uniqueKeysWithValues: self.posts.map { ($0.id, $0) })
             let hydratedPosts = posts.map { preserveClientMetadata(on: $0, companionNames: companionNames) }
-            self.posts = mergeFeedPreservingClientState(with: hydratedPosts)
+            let merged = mergeFeedPreservingClientState(with: hydratedPosts)
+            assignPosts(
+                merged.map { $0.ensuringVersion(relativeTo: previousById[$0.id]) },
+                preserveVersionsFrom: nil
+            )
             FeedSignposts.endFeedMerge(mergeSignpost)
             state = .loaded(self.posts)
             canLoadMore = !posts.isEmpty
@@ -274,7 +285,14 @@ public final class FeedViewModel: ObservableObject {
 
         do {
             let newPosts = try await fetchFeedUseCase.execute(page: currentPage)
+            let startIndex = posts.count
             posts.append(contentsOf: newPosts)
+            for (offset, post) in newPosts.enumerated() {
+                postIndexById[post.id] = startIndex + offset
+                if let name = post.companionGroupName {
+                    cachedCompanionGroupNames[post.id] = name
+                }
+            }
             canLoadMore = !newPosts.isEmpty
             markPostsLoaded()
             updateHasReachedFeedEnd()
@@ -299,7 +317,7 @@ public final class FeedViewModel: ObservableObject {
         }
 
         do {
-            let previous = posts.first(where: { $0.id == id })
+            let previous: Post? = indexOfPost(id: id).map { posts[$0] }
             let companionNames = companionGroupNameIndex()
             let updated = preserveClientMetadata(
                 on: try await fetchPostUseCase.execute(postId: id),
@@ -352,8 +370,8 @@ public final class FeedViewModel: ObservableObject {
                 let companionNames = companionGroupNameIndex()
                 for remote in updated {
                     let hydrated = preserveClientMetadata(on: remote, companionNames: companionNames)
-                    if let previous = posts.first(where: { $0.id == hydrated.id }) {
-                        replacePost(hydrated.mergingBillReminderCounts(from: previous))
+                    if let index = indexOfPost(id: hydrated.id) {
+                        replacePost(hydrated.mergingBillReminderCounts(from: posts[index]))
                     } else {
                         replacePost(hydrated)
                     }
@@ -396,7 +414,8 @@ public final class FeedViewModel: ObservableObject {
         parentCommentId: UUID?,
         fallbackId: UUID
     ) -> UUID {
-        guard let post = posts.first(where: { $0.id == postId }) else { return fallbackId }
+        guard let index = indexOfPost(id: postId) else { return fallbackId }
+        let post = posts[index]
         let normalizedText = normalizedCommentBody(text)
         let byAuthorAndBody = post.comments.filter {
             $0.author.id == authorId && normalizedCommentBody($0.text) == normalizedText
@@ -419,7 +438,7 @@ public final class FeedViewModel: ObservableObject {
             return languageService.text(.feedPostStillUploading)
         }
         guard let userId = currentUserId else { return nil }
-        guard let index = posts.firstIndex(where: { $0.id == postId }) else { return nil }
+        guard let index = indexOfPost(id: postId) else { return nil }
 
         let post = posts[index]
         let distinctEmojis = Set(
@@ -477,7 +496,7 @@ public final class FeedViewModel: ObservableObject {
     }
 
     private func reconcileReaction(postId: UUID, optimisticId: UUID, with server: Reaction) {
-        guard let index = posts.firstIndex(where: { $0.id == postId }) else { return }
+        guard let index = indexOfPost(id: postId) else { return }
         let post = posts[index]
         let reactions = post.reactions.map { reaction in
             reaction.id == optimisticId ? server : reaction
@@ -486,7 +505,7 @@ public final class FeedViewModel: ObservableObject {
     }
 
     private func removeReaction(postId: UUID, reactionId: UUID) {
-        guard let index = posts.firstIndex(where: { $0.id == postId }) else { return }
+        guard let index = indexOfPost(id: postId) else { return }
         let post = posts[index]
         posts[index] = post.updating(
             reactions: post.reactions.filter { $0.id != reactionId }
@@ -528,7 +547,7 @@ public final class FeedViewModel: ObservableObject {
         )
         let optimisticId = comment.id
 
-        guard let index = posts.firstIndex(where: { $0.id == postId }) else {
+        guard let index = indexOfPost(id: postId) else {
             return AddCommentResult(error: languageService.text(.feedPostNotFound), createdCommentId: nil)
         }
 
@@ -572,7 +591,7 @@ public final class FeedViewModel: ObservableObject {
     }
 
     private func removeCommentFromPost(postId: UUID, commentId: UUID) {
-        guard let index = posts.firstIndex(where: { $0.id == postId }) else { return }
+        guard let index = indexOfPost(id: postId) else { return }
         let post = posts[index]
         guard post.comments.contains(where: { $0.id == commentId }) else { return }
         posts[index] = post.updating(
@@ -582,11 +601,14 @@ public final class FeedViewModel: ObservableObject {
     }
 
     func deletePost(id: UUID) async {
-        guard let post = posts.first(where: { $0.id == id }) else { return }
+        guard let index = indexOfPost(id: id) else { return }
+        let post = posts[index]
 
         if postUploadStates[id] != nil {
             cancelPendingPostUpload(postId: id)
-            posts.removeAll { $0.id == id }
+            posts.remove(at: index)
+            rebuildPostIndex()
+            cachedCompanionGroupNames.removeValue(forKey: id)
             markPostsLoaded()
             return
         }
@@ -598,7 +620,11 @@ public final class FeedViewModel: ObservableObject {
 
         do {
             try await deletePostUseCase.execute(postId: id)
-            posts.removeAll { $0.id == id }
+            if let currentIndex = indexOfPost(id: id) {
+                posts.remove(at: currentIndex)
+                rebuildPostIndex()
+                cachedCompanionGroupNames.removeValue(forKey: id)
+            }
             markPostsLoaded()
         } catch {
             alertMessage = languageService.localizedMessage(for: error)
@@ -608,8 +634,12 @@ public final class FeedViewModel: ObservableObject {
 
     /// Inserts a newly created post at the top of the feed (optimistic UI after create).
     public func prependCreatedPost(_ post: Post) {
-        guard !posts.contains(where: { $0.id == post.id }) else { return }
+        guard postIndexById[post.id] == nil else { return }
         posts.insert(post, at: 0)
+        rebuildPostIndex()
+        if let name = post.companionGroupName {
+            cachedCompanionGroupNames[post.id] = name
+        }
         markPostsLoaded()
     }
 
@@ -632,8 +662,17 @@ public final class FeedViewModel: ObservableObject {
     private func replaceOptimisticPost(localId: UUID, with serverPost: Post) {
         let companionNames = companionGroupNameIndex()
         let resolvedServerPost = preserveClientMetadata(on: serverPost, companionNames: companionNames)
-        if let index = posts.firstIndex(where: { $0.id == localId }) {
-            posts[index] = resolvedServerPost
+        if let index = indexOfPost(id: localId) {
+            let previous = posts[index]
+            posts[index] = resolvedServerPost.ensuringVersion(relativeTo: previous)
+            postIndexById.removeValue(forKey: localId)
+            postIndexById[resolvedServerPost.id] = index
+            if localId != resolvedServerPost.id {
+                cachedCompanionGroupNames.removeValue(forKey: localId)
+            }
+            if let name = posts[index].companionGroupName {
+                cachedCompanionGroupNames[posts[index].id] = name
+            }
         } else {
             prependCreatedPost(resolvedServerPost)
             return
@@ -660,12 +699,17 @@ public final class FeedViewModel: ObservableObject {
     }
 
     private func companionGroupNameIndex() -> [UUID: String] {
-        Dictionary(
+        if !companionIndexDirty {
+            return cachedCompanionGroupNames
+        }
+        cachedCompanionGroupNames = Dictionary(
             uniqueKeysWithValues: posts.compactMap { post in
                 guard let name = post.companionGroupName else { return nil }
                 return (post.id, name)
             }
         )
+        companionIndexDirty = false
+        return cachedCompanionGroupNames
     }
 
     private func preserveClientMetadata(on post: Post, companionNames: [UUID: String]) -> Post {
@@ -676,10 +720,20 @@ public final class FeedViewModel: ObservableObject {
         return post.updating(companionGroupName: companionGroupName)
     }
 
-    /// Indexed single-post mutation — avoids rewriting `state` when already `.loaded`.
+    /// Indexed single-post mutation — skips publish when card content is unchanged.
     private func replacePost(_ post: Post) {
-        guard let index = posts.firstIndex(where: { $0.id == post.id }) else { return }
-        posts[index] = post
+        guard let index = indexOfPost(id: post.id) else { return }
+        let previous = posts[index]
+        if previous.hasSameCardContent(as: post) {
+            FeedSignposts.postEquality(changed: false)
+            return
+        }
+        let stamped = post.ensuringVersion(relativeTo: previous)
+        posts[index] = stamped
+        if let name = stamped.companionGroupName {
+            cachedCompanionGroupNames[stamped.id] = name
+        }
+        FeedSignposts.postEquality(changed: true)
         markPostsLoaded()
     }
 
@@ -692,25 +746,60 @@ public final class FeedViewModel: ObservableObject {
         state = .loaded(posts)
     }
 
-    private func prefetchImages(for posts: [Post]) {
-        var urls: [URL] = []
-        urls.reserveCapacity(posts.count * 2)
-        for post in posts {
-            if let thumb = post.thumbnailURL {
-                urls.append(thumb)
-            } else if let first = post.displayMediaItems.first {
-                urls.append(first.thumbnailURL ?? first.mediaURL)
-            } else {
-                urls.append(post.imageURL)
-            }
-            if let avatar = post.author.avatarURL {
-                urls.append(avatar)
-            }
+    private func indexOfPost(id: UUID) -> Int? {
+        if let index = postIndexById[id], posts.indices.contains(index), posts[index].id == id {
+            return index
         }
-        ImagePrefetching.prefetch(
-            urls: urls,
-            thumbnailWidth: FeedMediaLayout.decodeMaxPixelSide
-        )
+        // Fallback + heal index if drifted.
+        guard let index = posts.firstIndex(where: { $0.id == id }) else { return nil }
+        postIndexById[id] = index
+        return index
+    }
+
+    private func assignPosts(_ newPosts: [Post], preserveVersionsFrom _: [Post]?) {
+        posts = newPosts
+        rebuildPostIndex()
+        companionIndexDirty = true
+        _ = companionGroupNameIndex()
+    }
+
+    private func rebuildPostIndex() {
+        var index: [UUID: Int] = [:]
+        index.reserveCapacity(posts.count)
+        for (i, post) in posts.enumerated() {
+            index[post.id] = i
+        }
+        postIndexById = index
+    }
+
+    private func prefetchImages(for posts: [Post]) {
+        let snapshot = posts
+        let mediaDecodeSide = FeedMediaLayout.decodeMaxPixelSide
+        let avatarDecodeSide = RemoteImageMetrics.avatarMaxPixelWidth(pointSize: 32)
+        Task.detached(priority: .utility) {
+            let signpost = FeedSignposts.beginImagePrefetch()
+            var mediaURLs: [URL] = []
+            var avatarURLs: [URL] = []
+            mediaURLs.reserveCapacity(snapshot.count)
+            avatarURLs.reserveCapacity(snapshot.count)
+            for post in snapshot {
+                if let thumb = post.thumbnailURL {
+                    mediaURLs.append(thumb)
+                } else if let first = post.displayMediaItems.first {
+                    mediaURLs.append(first.thumbnailURL ?? first.mediaURL)
+                } else {
+                    mediaURLs.append(post.imageURL)
+                }
+                if let avatar = post.author.avatarURL {
+                    avatarURLs.append(avatar)
+                }
+            }
+            await MainActor.run {
+                ImagePrefetching.prefetch(urls: mediaURLs, thumbnailWidth: mediaDecodeSide)
+                ImagePrefetching.prefetch(urls: avatarURLs, thumbnailWidth: avatarDecodeSide)
+            }
+            FeedSignposts.endImagePrefetch(signpost, count: mediaURLs.count + avatarURLs.count)
+        }
     }
 
     private func persistFeedCache() {
@@ -736,13 +825,17 @@ public final class FeedViewModel: ObservableObject {
 
     @discardableResult
     public func ensurePostLoaded(id: UUID) async -> PostLoadResult {
-        if posts.contains(where: { $0.id == id }) {
+        if indexOfPost(id: id) != nil {
             return .loaded
         }
 
         do {
             let post = try await fetchPostUseCase.execute(postId: id)
             posts.insert(post, at: 0)
+            rebuildPostIndex()
+            if let name = post.companionGroupName {
+                cachedCompanionGroupNames[post.id] = name
+            }
             markPostsLoaded()
             return .loaded
         } catch {
@@ -795,7 +888,7 @@ public final class FeedViewModel: ObservableObject {
             submissionAttachments: submissionAttachments
         )
 
-        guard let index = posts.firstIndex(where: { $0.id == postId }) else {
+        guard let index = indexOfPost(id: postId) else {
             return result
         }
 
@@ -814,7 +907,7 @@ public final class FeedViewModel: ObservableObject {
         await refreshPost(id: postId, allowingConcurrentFeedRefresh: true)
 
         // Keep optimistic counts if the server payload is still missing reminderCount.
-        if let refreshedIndex = posts.firstIndex(where: { $0.id == postId }) {
+        if let refreshedIndex = indexOfPost(id: postId) {
             posts[refreshedIndex] = posts[refreshedIndex].mergingBillReminderCounts(from: optimistic)
             markPostsLoaded()
         }

@@ -16,6 +16,10 @@ final class FeedVideoPlaybackCoordinator: ObservableObject {
     private var pooledURLs: [UUID: URL] = [:]
     private var lruOrder: [UUID] = []
 
+    private var pendingVisibilityReports: [FeedVideoVisibilityReport]?
+    private var visibilityFlushTask: Task<Void, Never>?
+    private static let visibilityDebounceNanos: UInt64 = 100_000_000 // 100ms
+
     func updateVisibility(postId: UUID, ratio: CGFloat) {
         if ratio <= 0.01 {
             visibilityByPost.removeValue(forKey: postId)
@@ -33,6 +37,19 @@ final class FeedVideoPlaybackCoordinator: ObservableObject {
         pickActivePost()
     }
 
+    /// Coalesces high-frequency PreferenceKey updates during fast scroll.
+    func scheduleVisibilityUpdate(_ reports: [FeedVideoVisibilityReport]) {
+        pendingVisibilityReports = reports
+        guard visibilityFlushTask == nil else { return }
+        visibilityFlushTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: Self.visibilityDebounceNanos)
+            visibilityFlushTask = nil
+            guard let pending = pendingVisibilityReports else { return }
+            pendingVisibilityReports = nil
+            applyVisibilityReports(pending)
+        }
+    }
+
     func clearPost(_ postId: UUID) {
         visibilityByPost.removeValue(forKey: postId)
         if activePostId == postId {
@@ -44,6 +61,9 @@ final class FeedVideoPlaybackCoordinator: ObservableObject {
 
     /// Stops autoplay when the feed tab is hidden (other tabs / background).
     func suspendPlayback() {
+        visibilityFlushTask?.cancel()
+        visibilityFlushTask = nil
+        pendingVisibilityReports = nil
         visibilityByPost.removeAll()
         activePostId = nil
         for controller in pooledControllers.values {
@@ -165,11 +185,11 @@ extension EnvironmentValues {
 
 extension View {
     /// Collects per-post visibility ratios without `onChange(of: CGRect)` (fatal on iOS 26+).
-    /// Deferred off the PreferenceKey pass to avoid "Publishing changes from within view updates".
+    /// Debounced off the PreferenceKey pass to avoid layout thrash during fast scroll.
     func feedVideoVisibilityHandling(coordinator: FeedVideoPlaybackCoordinator) -> some View {
         onPreferenceChange(FeedVideoVisibilityPreferenceKey.self) { reports in
             DispatchQueue.main.async {
-                coordinator.applyVisibilityReports(reports)
+                coordinator.scheduleVisibilityUpdate(reports)
             }
         }
     }

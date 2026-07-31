@@ -7,7 +7,8 @@ import SplickDomain
 public struct StreakView: View {
     @EnvironmentObject private var languageService: LanguageService
     @ObservedObject private var viewModel: StreakViewModel
-    @ObservedObject private var feedViewModel: FeedViewModel
+    /// Unobserved — only used for `ensurePostLoaded` actions, never reads `@Published` state.
+    private let feedViewModel: FeedViewModel
     @Binding private var navigationPath: NavigationPath
 
     public init(
@@ -16,7 +17,7 @@ public struct StreakView: View {
         navigationPath: Binding<NavigationPath>
     ) {
         self._viewModel = ObservedObject(wrappedValue: viewModel)
-        self._feedViewModel = ObservedObject(wrappedValue: feedViewModel)
+        self.feedViewModel = feedViewModel
         self._navigationPath = navigationPath
     }
 

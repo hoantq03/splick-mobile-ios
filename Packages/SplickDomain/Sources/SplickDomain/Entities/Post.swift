@@ -88,6 +88,13 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
     public let companionGroupName: String?
     public let createdAt: Date
 
+    /// Monotonic revision for O(1) `Equatable` — bumps on every `updating()` / explicit stamp.
+    public let version: UInt64
+    /// Precomputed carousel items (sorted once at init).
+    public let displayMediaItems: [PostMediaItem]
+    /// Precomputed non-deleted comment count.
+    public let commentCount: Int
+
     public var shareURL: URL {
         URL(string: "https://splick.app/post/\(id.uuidString)")!
     }
@@ -113,7 +120,8 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         billSplit: PostBillSplit? = nil,
         viewCount: Int = 0,
         viewers: [UserSummary] = [],
-        audience: PostAudience = .friends
+        audience: PostAudience = .friends,
+        version: UInt64 = 0
     ) {
         self.id = id
         self.author = author
@@ -136,11 +144,33 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         self.groupId = groupId
         self.companionGroupName = companionGroupName
         self.createdAt = createdAt
+        self.version = version
+        self.displayMediaItems = Self.makeDisplayMediaItems(
+            id: id,
+            mediaItems: mediaItems,
+            mediaType: mediaType,
+            imageURL: imageURL,
+            thumbnailURL: thumbnailURL,
+            videoURL: videoURL,
+            videoDurationSeconds: videoDurationSeconds
+        )
+        self.commentCount = comments.reduce(0) { count, comment in
+            comment.isDeleted ? count : count + 1
+        }
+    }
+
+    /// O(1) equality for SwiftUI `.equatable()` diffs — relies on `version` stamps from `updating()` / feed merge.
+    public static func == (lhs: Post, rhs: Post) -> Bool {
+        lhs.id == rhs.id && lhs.version == rhs.version
     }
 
     public var reactionCount: Int { reactions.count }
 
     public var canDelete: Bool { viewCount == 0 }
+
+    public var hasMultipleMedia: Bool {
+        displayMediaItems.count > 1
+    }
 
     public func updating(
         reactions: [Reaction]? = nil,
@@ -172,8 +202,70 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
             billSplit: billSplit ?? self.billSplit,
             viewCount: viewCount ?? self.viewCount,
             viewers: viewers ?? self.viewers,
-            audience: audience
+            audience: audience,
+            version: version &+ 1
         )
+    }
+
+    /// Returns a copy with an explicit version (used when merging network posts against local state).
+    public func withVersion(_ version: UInt64) -> Post {
+        guard version != self.version else { return self }
+        return Post(
+            id: id,
+            author: author,
+            imageURL: imageURL,
+            thumbnailURL: thumbnailURL,
+            caption: caption,
+            reactions: reactions,
+            comments: comments,
+            groupId: groupId,
+            companionGroupName: companionGroupName,
+            createdAt: createdAt,
+            mediaType: mediaType,
+            videoURL: videoURL,
+            videoDurationSeconds: videoDurationSeconds,
+            mediaItems: mediaItems,
+            companions: companions,
+            feedKind: feedKind,
+            checkInPlace: checkInPlace,
+            billSplit: billSplit,
+            viewCount: viewCount,
+            viewers: viewers,
+            audience: audience,
+            version: version
+        )
+    }
+
+    /// Deep content compare for feed-card UI (used at merge time, not during scroll diffs).
+    public func hasSameCardContent(as other: Post) -> Bool {
+        reactions == other.reactions
+            && comments == other.comments
+            && viewCount == other.viewCount
+            && viewers == other.viewers
+            && billSplit == other.billSplit
+            && companionGroupName == other.companionGroupName
+            && mediaItems == other.mediaItems
+            && caption == other.caption
+            && author == other.author
+            && imageURL == other.imageURL
+            && thumbnailURL == other.thumbnailURL
+            && videoURL == other.videoURL
+            && videoDurationSeconds == other.videoDurationSeconds
+            && mediaType == other.mediaType
+            && companions == other.companions
+            && feedKind == other.feedKind
+            && checkInPlace == other.checkInPlace
+            && audience == other.audience
+            && groupId == other.groupId
+    }
+
+    /// Preserves local version when content is unchanged; otherwise bumps so Equatable detects the change.
+    public func ensuringVersion(relativeTo previous: Post?) -> Post {
+        guard let previous, previous.id == id else { return self }
+        if hasSameCardContent(as: previous) {
+            return withVersion(previous.version)
+        }
+        return withVersion(previous.version &+ 1)
     }
 
     /// Bumps reminder counts for unpaid targets after a successful remind action.
@@ -230,8 +322,24 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         )
     }
 
-    /// Items to render in the feed carousel (API gallery or legacy single image/video).
-    public var displayMediaItems: [PostMediaItem] {
+    public var knownUsers: [UUID: UserSummary] {
+        var map = [author.id: author]
+        companions.forEach { map[$0.id] = $0 }
+        billSplit?.splits.forEach { map[$0.user.id] = $0.user }
+        comments.forEach { map[$0.author.id] = $0.author }
+        viewers.forEach { map[$0.id] = $0 }
+        return map
+    }
+
+    private static func makeDisplayMediaItems(
+        id: UUID,
+        mediaItems: [PostMediaItem],
+        mediaType: PostMediaType,
+        imageURL: URL,
+        thumbnailURL: URL?,
+        videoURL: URL?,
+        videoDurationSeconds: Int?
+    ) -> [PostMediaItem] {
         if !mediaItems.isEmpty {
             return mediaItems.sorted { $0.sortOrder < $1.sortOrder }
         }
@@ -247,22 +355,88 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         ]
     }
 
-    public var hasMultipleMedia: Bool {
-        displayMediaItems.count > 1
+    // MARK: - Codable (version / derived fields are not persisted)
+
+    private enum CodingKeys: String, CodingKey {
+        case id, author, mediaItems, mediaType, imageURL, thumbnailURL, videoURL
+        case videoDurationSeconds, caption, reactions, comments, companions
+        case feedKind, checkInPlace, billSplit, viewCount, viewers, audience
+        case groupId, companionGroupName, createdAt
     }
 
-    public var knownUsers: [UUID: UserSummary] {
-        var map = [author.id: author]
-        companions.forEach { map[$0.id] = $0 }
-        billSplit?.splits.forEach { map[$0.user.id] = $0.user }
-        comments.forEach { map[$0.author.id] = $0.author }
-        viewers.forEach { map[$0.id] = $0 }
-        return map
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let id = try container.decode(UUID.self, forKey: .id)
+        let author = try container.decode(UserSummary.self, forKey: .author)
+        let mediaItems = try container.decodeIfPresent([PostMediaItem].self, forKey: .mediaItems) ?? []
+        let mediaType = try container.decodeIfPresent(PostMediaType.self, forKey: .mediaType) ?? .image
+        let imageURL = try container.decode(URL.self, forKey: .imageURL)
+        let thumbnailURL = try container.decodeIfPresent(URL.self, forKey: .thumbnailURL)
+        let videoURL = try container.decodeIfPresent(URL.self, forKey: .videoURL)
+        let videoDurationSeconds = try container.decodeIfPresent(Int.self, forKey: .videoDurationSeconds)
+        let caption = try container.decodeIfPresent(String.self, forKey: .caption)
+        let reactions = try container.decodeIfPresent([Reaction].self, forKey: .reactions) ?? []
+        let comments = try container.decodeIfPresent([PostComment].self, forKey: .comments) ?? []
+        let companions = try container.decodeIfPresent([UserSummary].self, forKey: .companions) ?? []
+        let feedKind = try container.decodeIfPresent(PostFeedKind.self, forKey: .feedKind) ?? .checkIn
+        let checkInPlace = try container.decodeIfPresent(String.self, forKey: .checkInPlace)
+        let billSplit = try container.decodeIfPresent(PostBillSplit.self, forKey: .billSplit)
+        let viewCount = try container.decodeIfPresent(Int.self, forKey: .viewCount) ?? 0
+        let viewers = try container.decodeIfPresent([UserSummary].self, forKey: .viewers) ?? []
+        let audience = try container.decodeIfPresent(PostAudience.self, forKey: .audience) ?? .friends
+        let groupId = try container.decodeIfPresent(UUID.self, forKey: .groupId)
+        let companionGroupName = try container.decodeIfPresent(String.self, forKey: .companionGroupName)
+        let createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? .now
+
+        self.init(
+            id: id,
+            author: author,
+            imageURL: imageURL,
+            thumbnailURL: thumbnailURL,
+            caption: caption,
+            reactions: reactions,
+            comments: comments,
+            groupId: groupId,
+            companionGroupName: companionGroupName,
+            createdAt: createdAt,
+            mediaType: mediaType,
+            videoURL: videoURL,
+            videoDurationSeconds: videoDurationSeconds,
+            mediaItems: mediaItems,
+            companions: companions,
+            feedKind: feedKind,
+            checkInPlace: checkInPlace,
+            billSplit: billSplit,
+            viewCount: viewCount,
+            viewers: viewers,
+            audience: audience,
+            version: 0
+        )
     }
 
-    /// All non-deleted comments on the post (root + nested replies).
-    public var commentCount: Int {
-        comments.filter { !$0.isDeleted }.count
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(author, forKey: .author)
+        try container.encode(mediaItems, forKey: .mediaItems)
+        try container.encode(mediaType, forKey: .mediaType)
+        try container.encode(imageURL, forKey: .imageURL)
+        try container.encodeIfPresent(thumbnailURL, forKey: .thumbnailURL)
+        try container.encodeIfPresent(videoURL, forKey: .videoURL)
+        try container.encodeIfPresent(videoDurationSeconds, forKey: .videoDurationSeconds)
+        try container.encodeIfPresent(caption, forKey: .caption)
+        try container.encode(reactions, forKey: .reactions)
+        try container.encode(comments, forKey: .comments)
+        try container.encode(companions, forKey: .companions)
+        try container.encode(feedKind, forKey: .feedKind)
+        try container.encodeIfPresent(checkInPlace, forKey: .checkInPlace)
+        try container.encodeIfPresent(billSplit, forKey: .billSplit)
+        try container.encode(viewCount, forKey: .viewCount)
+        try container.encode(viewers, forKey: .viewers)
+        try container.encode(audience, forKey: .audience)
+        try container.encodeIfPresent(groupId, forKey: .groupId)
+        try container.encodeIfPresent(companionGroupName, forKey: .companionGroupName)
+        try container.encode(createdAt, forKey: .createdAt)
     }
 }
 

@@ -22,6 +22,9 @@ public enum ImagePipelineConfigurator {
             name: "com.splick.image-cache",
             sizeLimit: diskCacheSize
         )
+        // Persist both original bytes and processed (resized) variants so scroll-back
+        // and cold start never re-fetch the same feed/album URL from the network.
+        configuration.dataCachePolicy = .storeAll
         configuration.imageCache = ImageCache(
             costLimit: memoryCacheCostLimit,
             countLimit: 80

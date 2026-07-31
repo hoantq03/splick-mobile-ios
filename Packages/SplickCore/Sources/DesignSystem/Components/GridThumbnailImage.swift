@@ -4,6 +4,8 @@ import NukeUI
 
 /// Square grid thumbnail backed by Nuke disk + memory cache.
 /// Uses a downscaled request so album grids decode faster and reuse cache entries.
+/// On disappear, priority is lowered (not cancelled) so in-flight downloads finish once
+/// and land in DataCache — scroll-back does not re-hit the network.
 public struct GridThumbnailImage<Placeholder: View>: View {
     private let url: URL?
     private let thumbnailWidth: CGFloat
@@ -36,7 +38,7 @@ public struct GridThumbnailImage<Placeholder: View>: View {
                     }
             }
         }
-        .onDisappear(.cancel)
+        .onDisappear(.lowerPriority)
     }
 
     private var imageRequest: ImageRequest? {

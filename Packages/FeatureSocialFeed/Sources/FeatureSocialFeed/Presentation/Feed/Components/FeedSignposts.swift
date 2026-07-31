@@ -66,4 +66,24 @@ enum FeedSignposts {
     static func endPostCardBody(_ id: OSSignpostID) {
         os_signpost(.end, log: log, name: "PostCardBody", signpostID: id)
     }
+
+    static func beginImagePrefetch() -> OSSignpostID {
+        let id = OSSignpostID(log: log)
+        os_signpost(.begin, log: log, name: "ImagePrefetch", signpostID: id)
+        return id
+    }
+
+    static func endImagePrefetch(_ id: OSSignpostID, count: Int) {
+        os_signpost(.end, log: log, name: "ImagePrefetch", signpostID: id, "count=%{public}d", count)
+    }
+
+    static func postEquality(changed: Bool) {
+        os_signpost(
+            .event,
+            log: log,
+            name: "PostEquality",
+            "changed=%{public}d",
+            changed ? 1 : 0
+        )
+    }
 }
