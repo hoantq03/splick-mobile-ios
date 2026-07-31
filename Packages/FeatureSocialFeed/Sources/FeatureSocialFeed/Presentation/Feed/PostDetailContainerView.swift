@@ -37,7 +37,12 @@ struct PostDetailContainerView: View {
                     focusComposerOnAppear: destination.focusComposerOnAppear
                 )
             } else if !loadAttemptFinished {
-                LoadingView(message: languageService.text(.feedLoading))
+                SkeletonShimmerHost {
+                    FeedPostCardSkeleton(variant: 0)
+                        .padding(.horizontal, SplickTheme.Spacing.md)
+                        .padding(.top, SplickTheme.Spacing.md)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             } else if loadFailedAsUnavailable {
                 unavailableView
             } else {
