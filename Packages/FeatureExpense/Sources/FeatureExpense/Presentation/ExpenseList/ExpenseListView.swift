@@ -95,6 +95,9 @@ public struct ExpenseListView: View {
                     }
                 }
             }
+            .overlay(alignment: .top) {
+                SplickScrollTopFadeOverlay()
+            }
             .navigationDestination(for: ExpenseFriendDetailRoute.self) { route in
                 if let makeFriendDetailViewModel {
                     ExpenseFriendDetailView(
@@ -257,6 +260,7 @@ public struct ExpenseListView: View {
             }
             .scrollChromeTracking()
             .tabBarHideOnScroll()
+            .splickScrollSoftTopEdge()
             .splickNativeRefreshable(controller: refreshController) {
                 await viewModel.load(isPullToRefresh: true)
             }
@@ -309,6 +313,7 @@ public struct ExpenseListView: View {
             }
             .scrollChromeTracking()
             .tabBarHideOnScroll()
+            .splickScrollSoftTopEdge()
             .splickNativeRefreshable(controller: overviewRefreshController) {
                 await viewModel.load(isPullToRefresh: true)
             }
