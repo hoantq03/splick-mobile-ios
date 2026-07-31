@@ -1281,6 +1281,8 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
 
     @State private var pagerIndex: Int = 0
     @State private var activatedTabs: Set<Tab> = [.feed]
+    /// Bumps on every tab request so a deferred slide can be cancelled by a newer tap.
+    @State private var transitionGeneration: Int = 0
 
     var body: some View {
         GeometryReader { proxy in
