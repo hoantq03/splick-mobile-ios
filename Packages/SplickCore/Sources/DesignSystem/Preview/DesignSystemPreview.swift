@@ -49,6 +49,11 @@ import SwiftUI
     LoadingView(message: "Loading your feed...")
 }
 
+#Preview("Feed Skeleton") {
+    FeedSkeletonLoadingView()
+        .background(SplickTheme.Colors.background)
+}
+
 #Preview("Spinner sizes") {
     HStack(spacing: 24) {
         SplickSpinner(size: .small)
