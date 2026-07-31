@@ -178,7 +178,10 @@ public struct ExpenseListView: View {
     @ViewBuilder
     private var friendsPage: some View {
         if let friendListViewModel {
-            ExpenseFriendListView(viewModel: friendListViewModel) { debt in
+            ExpenseFriendListView(
+                viewModel: friendListViewModel,
+                isSameTabHandlingEnabled: isTabActive && selectedSegment == .friends
+            ) { debt in
                 navigationPath.append(ExpenseFriendDetailRoute(debt: debt))
             }
         } else {

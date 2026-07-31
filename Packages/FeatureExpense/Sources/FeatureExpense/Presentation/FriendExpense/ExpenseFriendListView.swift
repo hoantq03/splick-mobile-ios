@@ -1,9 +1,11 @@
 import Common
+import Combine
 import DesignSystem
 import Foundation
 import Localization
 import SplickDomain
 import SwiftUI
+import UIKit
 
 /// Stable navigation value so detail push survives list reload / pull-to-refresh.
 public struct ExpenseFriendDetailRoute: Hashable, Sendable {
@@ -75,16 +77,37 @@ public final class ExpenseFriendListViewModel: ObservableObject {
   }
 }
 
+private enum ExpenseFriendsScrollAnchor {
+  static let top = "expenseFriendsScrollTop"
+}
+
 public struct ExpenseFriendListView: View {
   @ObservedObject private var viewModel: ExpenseFriendListViewModel
   @EnvironmentObject private var languageService: LanguageService
+  @Environment(\.tabBarScrollState) private var tabBarScrollState
+  @Environment(\.sameTabTapHandlingEnabled) private var sameTabTapHandlingEnabled
+  @State private var refreshController = SplickRefreshController()
+  @State private var scrollTopSignal = 0
+  private let isSameTabHandlingEnabled: Bool
   private let onSelectFriend: (DebtSummary) -> Void
+
+  private var hasScrollableFriends: Bool {
+    if case .loaded = viewModel.state { return !viewModel.debts.isEmpty }
+    return false
+  }
+
+  private var sameTabTapPublisher: AnyPublisher<Void, Never> {
+    tabBarScrollState?.sameTabTapSubject.eraseToAnyPublisher()
+      ?? Empty().eraseToAnyPublisher()
+  }
 
   public init(
     viewModel: ExpenseFriendListViewModel,
+    isSameTabHandlingEnabled: Bool = false,
     onSelectFriend: @escaping (DebtSummary) -> Void
   ) {
     self.viewModel = viewModel
+    self.isSameTabHandlingEnabled = isSameTabHandlingEnabled
     self.onSelectFriend = onSelectFriend
   }
 
@@ -94,20 +117,33 @@ public struct ExpenseFriendListView: View {
       case .idle, .loading:
         LoadingView(message: languageService.text(.expenseFriendsLoading))
       case .loaded where viewModel.debts.isEmpty:
-        EmptyStateView(
-          icon: "person.2",
-          title: languageService.text(.expenseFriendsEmptyTitle),
-          message: languageService.text(.expenseFriendsEmptyMessage)
-        )
+        ScrollView {
+          EmptyStateView(
+            icon: "person.2",
+            title: languageService.text(.expenseFriendsEmptyTitle),
+            message: languageService.text(.expenseFriendsEmptyMessage)
+          )
+          .frame(maxWidth: .infinity)
+          .padding(.top, SplickTheme.Spacing.xxl)
+        }
+        .refreshable { await viewModel.load(isPullToRefresh: true) }
       case .loaded:
         friendRecords
       case .failed(let message):
-        ErrorView(message: message) {
-          Task { await viewModel.load() }
+        ScrollView {
+          ErrorView(message: message) {
+            Task { await viewModel.load() }
+          }
+          .frame(maxWidth: .infinity)
+          .padding(.top, SplickTheme.Spacing.xxl)
         }
+        .refreshable { await viewModel.load(isPullToRefresh: true) }
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .onReceive(sameTabTapPublisher) { _ in
+      handleSameTabTap()
+    }
     .task {
       if case .idle = viewModel.state {
         await viewModel.load()
@@ -116,27 +152,57 @@ public struct ExpenseFriendListView: View {
   }
 
   private var friendRecords: some View {
-    ScrollView {
-      LazyVStack(spacing: 0) {
-        ForEach(viewModel.debts, id: \.user.id) { debt in
-          Button {
-            onSelectFriend(debt)
-          } label: {
-            friendRow(debt)
-          }
-          .buttonStyle(ExpenseFriendRowButtonStyle())
+    ScrollViewReader { proxy in
+      ScrollView {
+        Color.clear
+          .frame(height: 0)
+          .id(ExpenseFriendsScrollAnchor.top)
 
-          if debt.user.id != viewModel.debts.last?.user.id {
-            Divider()
-              .padding(.leading, 64)
+        LazyVStack(spacing: 0) {
+          ForEach(viewModel.debts, id: \.user.id) { debt in
+            Button {
+              onSelectFriend(debt)
+            } label: {
+              friendRow(debt)
+            }
+            .buttonStyle(ExpenseFriendRowButtonStyle())
+
+            if debt.user.id != viewModel.debts.last?.user.id {
+              Divider()
+                .padding(.leading, 64)
+            }
           }
         }
+        .padding(.horizontal, SplickTheme.Spacing.md)
       }
-      .padding(.horizontal, SplickTheme.Spacing.md)
+      .splickInstantScrollTaps()
+      .scrollChromeTracking()
+      .tabBarHideOnScroll()
+      .splickNativeRefreshable(controller: refreshController) {
+        await viewModel.load(isPullToRefresh: true)
+      }
+      .onChange(of: scrollTopSignal) { _ in
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+          proxy.scrollTo(ExpenseFriendsScrollAnchor.top, anchor: .top)
+        }
+        tabBarScrollState?.reset()
+      }
     }
-    .splickInstantScrollTaps()
-    .scrollChromeTracking()
-    .refreshable { await viewModel.load(isPullToRefresh: true) }
+  }
+
+  private func handleSameTabTap() {
+    guard sameTabTapHandlingEnabled, isSameTabHandlingEnabled else { return }
+
+    if tabBarScrollState?.isAtTop ?? true {
+      UIImpactFeedbackGenerator(style: .light).impactOccurred()
+      if hasScrollableFriends {
+        refreshController.refresh()
+      } else {
+        Task { await viewModel.load(isPullToRefresh: true) }
+      }
+    } else {
+      scrollTopSignal += 1
+    }
   }
 
   private func friendRow(_ debt: DebtSummary) -> some View {
