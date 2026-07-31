@@ -215,16 +215,6 @@ struct MainTabView: View {
         .sheet(isPresented: $appState.showProfileSettings) {
             ProfileSettingsView()
         }
-        .sheet(isPresented: $showCurrentUserProfile) {
-            if let user = currentUserSummary {
-                FriendUserProfileView(
-                    viewModel: container.friendUserProfileDependencies.makeViewModel(
-                        user: user,
-                        currentUserId: user.id
-                    )
-                )
-            }
-        }
         .overlay {
             if appState.showNotifications {
                 DesignSystem.SplickNotificationRevealOverlay(
