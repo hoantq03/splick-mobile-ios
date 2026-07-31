@@ -368,7 +368,7 @@ private struct FeedPrimaryPage: View {
     private var feedPane: some View {
         switch viewModel.state {
         case .idle, .loading:
-            LoadingView(message: languageService.text(.feedLoading))
+            FeedSkeletonLoadingView()
                 .feedPagerPageTopInset(isEnabled: true)
 
         case .loaded(let posts) where posts.isEmpty:
@@ -423,9 +423,10 @@ private struct FeedPrimaryPage: View {
                 }
 
                 if viewModel.isLoadingMore {
-                    ProgressView()
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, SplickTheme.Spacing.md)
+                    SkeletonShimmerHost {
+                        FeedPostCardSkeleton(variant: 0)
+                    }
+                    .padding(.vertical, SplickTheme.Spacing.xxs)
                 }
 
                 if viewModel.hasReachedFeedEnd {
