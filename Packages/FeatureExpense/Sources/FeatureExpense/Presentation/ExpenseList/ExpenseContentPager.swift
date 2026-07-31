@@ -14,6 +14,8 @@ struct ExpenseContentPager<History: View, Overview: View, Friends: View>: View {
     @ViewBuilder var friends: () -> Friends
 
     @State private var pagerIndex: Int = 1
+    @State private var dragOffset: CGFloat = 0
+    @State private var dragAxis: Axis?
 
     var body: some View {
         GeometryReader { proxy in
@@ -25,7 +27,8 @@ struct ExpenseContentPager<History: View, Overview: View, Friends: View>: View {
                 page(friends, segment: .friends, width: width)
             }
             .frame(width: width * CGFloat(expenseSegmentStripOrder.count), alignment: .leading)
-            .offset(x: -CGFloat(pagerIndex) * width)
+            .offset(x: -CGFloat(pagerIndex) * width + dragOffset)
+            .simultaneousGesture(pageDrag(width: width))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
@@ -35,6 +38,7 @@ struct ExpenseContentPager<History: View, Overview: View, Friends: View>: View {
             let idx = expenseSegmentStripOrder.firstIndex(of: newSelection) ?? 1
             guard idx != pagerIndex else { return }
             withAnimation(ExpensePagerMotion.spring) {
+                dragOffset = 0
                 pagerIndex = idx
             }
         }
@@ -49,5 +53,48 @@ struct ExpenseContentPager<History: View, Overview: View, Friends: View>: View {
             .frame(width: width)
             .frame(maxHeight: .infinity)
             .environment(\.scrollChromeTrackingEnabled, selection == segment)
+    }
+
+    private func pageDrag(width: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 14, coordinateSpace: .local)
+            .onChanged { value in
+                let dx = value.translation.x
+                let dy = value.translation.y
+
+                if dragAxis == nil {
+                    guard max(abs(dx), abs(dy)) > 10 else { return }
+                    dragAxis = abs(dx) > abs(dy) ? .horizontal : .vertical
+                }
+                guard dragAxis == .horizontal else { return }
+
+                let atLeft = pagerIndex == 0 && dx > 0
+                let atRight = pagerIndex == expenseSegmentStripOrder.count - 1 && dx < 0
+                dragOffset = (atLeft || atRight) ? dx * 0.20 : dx
+            }
+            .onEnded { value in
+                let axis = dragAxis
+                dragAxis = nil
+                guard axis == .horizontal else {
+                    dragOffset = 0
+                    return
+                }
+
+                let dx = value.translation.x
+                let predicted = value.predictedEndTranslation.x
+                let threshold = width * 0.28
+                var target = pagerIndex
+                if dx < -threshold || predicted < -width * 0.45 {
+                    target = min(pagerIndex + 1, expenseSegmentStripOrder.count - 1)
+                } else if dx > threshold || predicted > width * 0.45 {
+                    target = max(pagerIndex - 1, 0)
+                }
+
+                let newSelection = expenseSegmentStripOrder[target]
+                withAnimation(ExpensePagerMotion.spring) {
+                    dragOffset = 0
+                    pagerIndex = target
+                    selection = newSelection
+                }
+            }
     }
 }
