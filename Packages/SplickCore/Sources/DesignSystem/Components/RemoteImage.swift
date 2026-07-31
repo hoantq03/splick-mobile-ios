@@ -2,7 +2,6 @@ import SwiftUI
 import UIKit
 import Nuke
 import NukeUI
-import Common
 
 /// Drop-in replacement for `AsyncImage` backed by Nuke memory + disk cache.
 /// Nuke is an implementation detail — feature packages import `DesignSystem` only.
@@ -63,15 +62,14 @@ public enum RemoteImageRequestFactory {
     ///
     /// ImageIO thumbnails frequently hit `CVPixelBufferCreate … RGBA (-6680)` on simulator/device
     /// and can yield corrupt or mis-sized images (feed media rendering as a thin vertical strip).
+    ///
+    /// Animated GIF/WebP URLs still get `Resize` when a max size is provided — `RemoteImage` only
+    /// needs a still. Full-frame animation belongs in `AnimatedRemoteImage` (`loadData` + ImageIO).
     public static func boundedRequest(
         url: URL,
         maxPixelDimensions: CGSize? = nil,
         maxPixelWidth: CGFloat? = nil
     ) -> ImageRequest {
-        // Keep animated formats on the full decode path (GIF/WebP).
-        if url.isLikelyAnimatedImage {
-            return ImageRequest(url: url)
-        }
         guard let maxPixelSize = resolvedMaxPixelSize(
             maxPixelDimensions: maxPixelDimensions,
             maxPixelWidth: maxPixelWidth
