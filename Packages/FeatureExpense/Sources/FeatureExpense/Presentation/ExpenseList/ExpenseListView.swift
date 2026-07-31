@@ -29,6 +29,7 @@ public struct ExpenseListView: View {
     @Environment(\.pullToRefreshActive) private var pullToRefreshActive
     @Environment(\.openPostCaptureFlow) private var openPostCaptureFlow
     @Environment(\.openLinkedPost) private var openLinkedPost
+    @Environment(\.openProfileSettings) private var openProfileSettings
     @Environment(\.notificationsPresented) private var notificationsPresented
     private let currentUserId: UUID?
     private let isTabActive: Bool
