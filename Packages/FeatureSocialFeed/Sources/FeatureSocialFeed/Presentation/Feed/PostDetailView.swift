@@ -375,6 +375,10 @@ struct PostDetailView: View {
     }
 
     private func openProfile(for user: UserSummary) {
+        if user.id == currentUserSummary?.id {
+            openProfileSettings?()
+            return
+        }
         profileRoute = ProfileRoute(user: user)
     }
 
