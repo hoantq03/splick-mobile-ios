@@ -62,6 +62,10 @@ struct MessagingTabRoot: View {
             showsReactionPicker = true
         })
         .environment(\.openUserProfile) { user in
+            if user.id == appState.currentUser?.id {
+                appState.showProfileSettings = true
+                return
+            }
             profileRoute = MessagingUserProfileRoute(user: user)
         }
         .onChange(of: appState.pendingMessagingNavigation?.conversationId) { _ in
