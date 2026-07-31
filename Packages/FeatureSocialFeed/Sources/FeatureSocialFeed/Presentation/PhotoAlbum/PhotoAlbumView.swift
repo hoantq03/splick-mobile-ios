@@ -1,4 +1,6 @@
 import SwiftUI
+import Combine
+import UIKit
 import DesignSystem
 import Common
 import Localization
@@ -7,6 +9,10 @@ import FeatureFriends
 
 struct PhotoAlbumRoute: Hashable {}
 
+private enum AlbumScrollAnchor {
+    static let top = "albumScrollTop"
+}
+
 private struct AlbumPostPreview {
     let post: Post
     let mediaIndex: Int
@@ -14,11 +20,15 @@ private struct AlbumPostPreview {
 
 public struct PhotoAlbumView: View {
     @EnvironmentObject private var languageService: LanguageService
+    @Environment(\.tabBarScrollState) private var tabBarScrollState
+    @Environment(\.sameTabTapHandlingEnabled) private var sameTabTapHandlingEnabled
     @ObservedObject private var viewModel: PhotoAlbumViewModel
     @ObservedObject private var feedViewModel: FeedViewModel
     @Binding private var navigationPath: NavigationPath
     @State private var postPreview: AlbumPostPreview?
     @State private var previewLoadingPostId: UUID?
+    @State private var refreshController = SplickRefreshController()
+    @State private var scrollTopSignal = 0
     private let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol?
     private let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
     private let isEmbedded: Bool
@@ -30,6 +40,15 @@ public struct PhotoAlbumView: View {
         repeating: GridItem(.flexible(), spacing: Self.gridSpacing),
         count: 4
     )
+
+    private var hasScrollablePhotos: Bool {
+        !viewModel.photos.isEmpty
+    }
+
+    private var sameTabTapPublisher: AnyPublisher<Void, Never> {
+        tabBarScrollState?.sameTabTapSubject.eraseToAnyPublisher()
+            ?? Empty().eraseToAnyPublisher()
+    }
 
     public init(
         viewModel: PhotoAlbumViewModel,
@@ -67,8 +86,8 @@ public struct PhotoAlbumView: View {
         .task {
             await viewModel.loadInitialIfNeeded()
         }
-        .refreshable {
-            await viewModel.refresh()
+        .onReceive(sameTabTapPublisher) { _ in
+            handleSameTabTap()
         }
         .overlay {
             if let postPreview {
@@ -96,71 +115,113 @@ public struct PhotoAlbumView: View {
             FeedAlbumSkeletonLoadingView()
 
         case .loaded where viewModel.photos.isEmpty:
-            EmptyStateView(
-                icon: "photo.on.rectangle.angled",
-                title: languageService.text(.feedAlbumEmptyTitle),
-                message: languageService.text(.feedAlbumEmptyMessage)
-            )
+            ScrollView {
+                EmptyStateView(
+                    icon: "photo.on.rectangle.angled",
+                    title: languageService.text(.feedAlbumEmptyTitle),
+                    message: languageService.text(.feedAlbumEmptyMessage)
+                )
+                .frame(maxWidth: .infinity)
+                .padding(.top, SplickTheme.Spacing.xxl)
+            }
+            .feedPagerScrollInsets()
+            .refreshable { await viewModel.refresh() }
 
         case .loaded, .loading:
             photoScrollView
 
         case .failed(let message):
-            ErrorView(message: message) {
-                Task { await viewModel.refresh() }
+            ScrollView {
+                ErrorView(message: message) {
+                    Task { await viewModel.refresh() }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, SplickTheme.Spacing.xxl)
             }
+            .feedPagerScrollInsets()
+            .refreshable { await viewModel.refresh() }
         }
     }
 
     private var photoScrollView: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
-                ForEach(viewModel.daySections(languageService: languageService)) { section in
-                    VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-                        Text(section.title)
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(SplickTheme.Colors.textPrimary)
-                            .padding(.leading, SplickTheme.Spacing.xxs)
+        ScrollViewReader { proxy in
+            ScrollView {
+                Color.clear
+                    .frame(height: 0)
+                    .id(AlbumScrollAnchor.top)
 
-                        LazyVGrid(columns: columns, spacing: Self.gridSpacing) {
-                            ForEach(section.photos) { photo in
-                                AlbumPhotoCell(
-                                    photo: photo,
-                                    cornerRadius: Self.cellCornerRadius,
-                                    isLoadingPreview: previewLoadingPostId == photo.postId,
-                                    onTap: { openPost(for: photo) },
-                                    onLongPress: { previewPost(for: photo) }
-                                )
-                                .onAppear {
-                                    if photo.id == viewModel.photos.last?.id {
-                                        Task { await viewModel.loadMore() }
+                LazyVStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
+                    ForEach(viewModel.daySections(languageService: languageService)) { section in
+                        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+                            Text(section.title)
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(SplickTheme.Colors.textPrimary)
+                                .padding(.leading, SplickTheme.Spacing.xxs)
+
+                            LazyVGrid(columns: columns, spacing: Self.gridSpacing) {
+                                ForEach(section.photos) { photo in
+                                    AlbumPhotoCell(
+                                        photo: photo,
+                                        cornerRadius: Self.cellCornerRadius,
+                                        isLoadingPreview: previewLoadingPostId == photo.postId,
+                                        onTap: { openPost(for: photo) },
+                                        onLongPress: { previewPost(for: photo) }
+                                    )
+                                    .onAppear {
+                                        if photo.id == viewModel.photos.last?.id {
+                                            Task { await viewModel.loadMore() }
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
-            }
-            .padding(.horizontal, SplickTheme.Spacing.md)
-            .padding(.top, SplickTheme.Spacing.xs)
-
-            if viewModel.isLoadingMore {
-                SkeletonShimmerHost {
-                    SkeletonBone(
-                        height: 72,
-                        shape: .rectangle(cornerRadius: SplickTheme.CornerRadius.small)
-                    )
-                }
                 .padding(.horizontal, SplickTheme.Spacing.md)
-                .padding(.vertical, SplickTheme.Spacing.md)
+                .padding(.top, SplickTheme.Spacing.xs)
+
+                if viewModel.isLoadingMore {
+                    SkeletonShimmerHost {
+                        SkeletonBone(
+                            height: 72,
+                            shape: .rectangle(cornerRadius: SplickTheme.CornerRadius.small)
+                        )
+                    }
+                    .padding(.horizontal, SplickTheme.Spacing.md)
+                    .padding(.vertical, SplickTheme.Spacing.md)
+                }
+            }
+            .feedPagerScrollInsets()
+            .feedScrollSoftTopEdge()
+            .scrollContentBackground(.hidden)
+            .background(SplickTheme.Colors.background)
+            .tabBarHideOnScroll()
+            .feedSegmentHideOnScroll()
+            .splickNativeRefreshable(controller: refreshController) {
+                await viewModel.refresh()
+            }
+            .onChange(of: scrollTopSignal) { _ in
+                withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                    proxy.scrollTo(AlbumScrollAnchor.top, anchor: .top)
+                }
+                tabBarScrollState?.reset()
             }
         }
-        .feedPagerScrollInsets()
-        .feedScrollSoftTopEdge()
-        .scrollContentBackground(.hidden)
-        .background(SplickTheme.Colors.background)
-        .tabBarHideOnScroll()
-        .feedSegmentHideOnScroll()
+    }
+
+    private func handleSameTabTap() {
+        guard sameTabTapHandlingEnabled else { return }
+
+        if tabBarScrollState?.isAtTop ?? true {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            if hasScrollablePhotos {
+                refreshController.refresh()
+            } else {
+                Task { await viewModel.refresh() }
+            }
+        } else {
+            scrollTopSignal += 1
+        }
     }
 
     private func openPost(for photo: AlbumPhoto) {
