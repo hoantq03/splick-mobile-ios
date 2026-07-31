@@ -112,8 +112,12 @@ struct PostCardView: View, Equatable {
         }
         .coordinateSpace(name: "postCard")
         .onPreferenceChange(ReactionTargetAnchorsKey.self) { anchors in
+            // Defer @State write off PreferenceKey layout pass.
             guard anchors != reactionAnchors else { return }
-            reactionAnchors = anchors
+            DispatchQueue.main.async {
+                guard anchors != reactionAnchors else { return }
+                reactionAnchors = anchors
+            }
         }
         .overlay {
             if !flyingEmojis.isEmpty {

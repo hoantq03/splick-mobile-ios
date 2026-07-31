@@ -123,7 +123,6 @@ final class FeedVideoPlaybackCoordinator: ObservableObject {
             if let previous, let controller = pooledControllers[previous] {
                 controller.setAutoplayActive(false)
             }
-            objectWillChange.send()
         }
     }
 }
@@ -166,9 +165,10 @@ extension EnvironmentValues {
 
 extension View {
     /// Collects per-post visibility ratios without `onChange(of: CGRect)` (fatal on iOS 26+).
+    /// Deferred off the PreferenceKey pass to avoid "Publishing changes from within view updates".
     func feedVideoVisibilityHandling(coordinator: FeedVideoPlaybackCoordinator) -> some View {
         onPreferenceChange(FeedVideoVisibilityPreferenceKey.self) { reports in
-            Task { @MainActor in
+            DispatchQueue.main.async {
                 coordinator.applyVisibilityReports(reports)
             }
         }

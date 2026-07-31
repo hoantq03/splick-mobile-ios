@@ -129,9 +129,11 @@ struct PostMediaView: View {
             || FeedMediaLayout.shouldFillFrame(for: item, containerWidth: width)
         // Prefer full media URL so pinch zoom stays sharp past the feed decode budget.
         let imageURL = item.mediaURL
-        let decodeSide = max(
-            FeedMediaLayout.feedMediaMaxDecodePixelSize(containerWidth: width, displayHeight: height),
-            1280
+        // Cap decode at FeedMediaLayout budget — do not floor at 1280 (that forces
+        // oversized RGBA buffers and triggers CVPixelBufferCreate -6680 for 1512×2016 sources).
+        let decodeSide = FeedMediaLayout.feedMediaMaxDecodePixelSize(
+            containerWidth: width,
+            displayHeight: height
         )
 
         return RemoteImage(
