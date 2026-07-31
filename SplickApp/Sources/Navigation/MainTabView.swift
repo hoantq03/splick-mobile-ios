@@ -1298,7 +1298,6 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
                 }
                 .frame(width: width * pageCount, alignment: .leading)
                 .offset(x: -CGFloat(pagerIndex) * width)
-                .animation(MainTabPagerMotion.spring, value: pagerIndex)
 
                 if selectedTab == .camera {
                     camera()
