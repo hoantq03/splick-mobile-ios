@@ -306,6 +306,7 @@ struct MainTabView: View {
             fetchMyGroupsUseCase: container.fetchMyGroupsUseCase,
             searchUsersUseCase: container.searchUsersUseCase,
             fetchUserProfileUseCase: container.fetchUserProfileUseCase,
+            fetchUserPostsUseCase: container.fetchUserPostsUseCase,
             fetchFriendPaymentProfileUseCase: container.fetchFriendPaymentProfileUseCase,
             generateMyQrUseCase: container.generateMyQrUseCase,
             addFriendUseCase: container.addFriendUseCase,

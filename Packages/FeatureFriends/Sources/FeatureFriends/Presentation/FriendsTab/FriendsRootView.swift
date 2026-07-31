@@ -91,6 +91,7 @@ public struct FriendsRootView: View {
         fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol,
         searchUsersUseCase: SearchUsersUseCaseProtocol,
         fetchUserProfileUseCase: FetchUserProfileUseCaseProtocol,
+        fetchUserPostsUseCase: FetchUserPostsUseCaseProtocol? = nil,
         fetchFriendPaymentProfileUseCase: FetchFriendPaymentProfileUseCaseProtocol,
         generateMyQrUseCase: GenerateMyQrUseCaseProtocol,
         addFriendUseCase: AddFriendUseCaseProtocol,
@@ -173,6 +174,7 @@ public struct FriendsRootView: View {
         self.revokeGroupQrUseCase = revokeGroupQrUseCase
         self.profileDependencies = FriendUserProfileDependencies(
             fetchUserProfileUseCase: fetchUserProfileUseCase,
+            fetchUserPostsUseCase: fetchUserPostsUseCase,
             fetchFriendPaymentProfileUseCase: fetchFriendPaymentProfileUseCase,
             addFriendUseCase: addFriendUseCase,
             fetchIncomingFriendRequestsUseCase: fetchIncomingFriendRequestsUseCase,
