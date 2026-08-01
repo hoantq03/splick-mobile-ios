@@ -19,6 +19,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
     func application(
         _ application: UIApplication,
+        supportedInterfaceOrientationsFor window: UIWindow?
+    ) -> UIInterfaceOrientationMask {
+        .portrait
+    }
+
+    func application(
+        _ application: UIApplication,
         didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
     ) {
         PushNotificationCoordinator.shared.handleDeviceTokenRegistration(deviceToken)
