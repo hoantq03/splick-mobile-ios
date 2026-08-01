@@ -11,7 +11,13 @@ enum MessagingEndpoint: APIEndpoint {
     case leaveGroup(groupId: UUID)
     case renameGroup(groupId: UUID, RenameGroupRequestDTO)
     case transferGroupAdmin(groupId: UUID, TransferGroupAdminRequestDTO)
-    case listMessages(conversationId: UUID, page: Int, limit: Int)
+    case listMessages(
+        conversationId: UUID,
+        page: Int,
+        limit: Int,
+        after: Int64?,
+        before: Int64?
+    )
     case sendMessage(
         conversationId: UUID,
         body: String,
@@ -24,6 +30,7 @@ enum MessagingEndpoint: APIEndpoint {
     case searchMessages(q: String, page: Int, limit: Int)
     case addReaction(conversationId: UUID, messageId: UUID, CreateReactionRequestDTO)
     case removeReaction(conversationId: UUID, messageId: UUID, reactionId: UUID)
+    case wsTicket
 
     var path: String {
         switch self {
@@ -43,7 +50,7 @@ enum MessagingEndpoint: APIEndpoint {
             return "/v1/messaging/groups/\(groupId)/name"
         case .transferGroupAdmin(let groupId, _):
             return "/v1/messaging/groups/\(groupId)/admin"
-        case .listMessages(let id, _, _):
+        case .listMessages(let id, _, _, _, _):
             return "/v1/messaging/conversations/\(id)/messages"
         case .sendMessage(let id, _, _, _, _):
             return "/v1/messaging/conversations/\(id)/messages"
@@ -57,16 +64,23 @@ enum MessagingEndpoint: APIEndpoint {
             return "/v1/messaging/conversations/\(conversationId)/messages/\(messageId)/reactions"
         case .removeReaction(let conversationId, let messageId, let reactionId):
             return "/v1/messaging/conversations/\(conversationId)/messages/\(messageId)/reactions/\(reactionId)"
+        case .wsTicket:
+            return "/v1/messaging/ws-ticket"
         }
     }
 
     var method: HTTPMethod {
         switch self {
-        case .listConversations, .listMessages, .unreadCount, .searchMessages, .conversationInboxSummary: return .get
-        case .getOrCreateConversation, .sendMessage, .markRead, .addReaction, .createGroup, .addGroupMember: return .post
-        case .removeReaction, .removeGroupMember, .leaveGroup: return .delete
-        case .renameGroup: return .patch
-        case .transferGroupAdmin: return .put
+        case .listConversations, .listMessages, .unreadCount, .searchMessages, .conversationInboxSummary:
+            return .get
+        case .getOrCreateConversation, .sendMessage, .markRead, .addReaction, .createGroup, .addGroupMember, .wsTicket:
+            return .post
+        case .removeReaction, .removeGroupMember, .leaveGroup:
+            return .delete
+        case .renameGroup:
+            return .patch
+        case .transferGroupAdmin:
+            return .put
         }
     }
 
@@ -84,18 +98,26 @@ enum MessagingEndpoint: APIEndpoint {
                 items.append(URLQueryItem(name: "unreadOnly", value: "true"))
             }
             return items
-        case .listMessages(_, let page, let limit):
-            return [
+        case .listMessages(_, let page, let limit, let after, let before):
+            var items = [
                 URLQueryItem(name: "page", value: "\(page)"),
                 URLQueryItem(name: "limit", value: "\(limit)"),
             ]
+            if let after {
+                items.append(URLQueryItem(name: "after", value: "\(after)"))
+            }
+            if let before {
+                items.append(URLQueryItem(name: "before", value: "\(before)"))
+            }
+            return items
         case .searchMessages(let q, let page, let limit):
             return [
                 URLQueryItem(name: "q", value: q),
                 URLQueryItem(name: "page", value: "\(page)"),
                 URLQueryItem(name: "limit", value: "\(limit)"),
             ]
-        default: return nil
+        default:
+            return nil
         }
     }
 
@@ -122,7 +144,8 @@ enum MessagingEndpoint: APIEndpoint {
             return MarkReadRequestDTO(upToMessageId: messageId)
         case .addReaction(_, _, let dto):
             return dto
-        default: return nil
+        default:
+            return nil
         }
     }
 }

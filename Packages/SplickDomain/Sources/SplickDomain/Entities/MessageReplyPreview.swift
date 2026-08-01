@@ -1,6 +1,6 @@
 import Foundation
 
-public struct MessageReplyPreview: Equatable, Hashable, Sendable {
+public struct MessageReplyPreview: Equatable, Hashable, Sendable, Codable {
     public let messageId: UUID
     public let senderId: UUID
     public let senderDisplayName: String?

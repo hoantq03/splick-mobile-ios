@@ -26,11 +26,11 @@ private actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
         self.shouldFailFetchingConversations = shouldFailFetchingConversations
     }
 
-    func fetchConversations(query: ConversationInboxQuery) async throws -> [Conversation] {
+    func fetchConversations(query: ConversationInboxQuery) async throws -> MessagingPage<Conversation> {
         if shouldFailFetchingConversations {
             throw NetworkError.serverError(statusCode: 500, traceId: "support-reference")
         }
-        return []
+        return MessagingPage(items: [], hasMore: false)
     }
     func fetchConversationInboxSummary() async throws -> Int { 0 }
     func getOrCreateConversation(friendUserId: UUID) async throws -> Conversation {
@@ -51,11 +51,18 @@ private actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
         makeConversation(id: groupId)
     }
     func transferGroupAdmin(groupId: UUID, newAdminUserId: UUID) async throws {}
-    func fetchMessages(conversationId: UUID, page: Int, limit: Int) async throws -> [ChatMessage] {
+    func fetchMessages(
+        conversationId: UUID,
+        page: Int,
+        limit: Int,
+        after: Int64?,
+        before: Int64?
+    ) async throws -> MessagingPage<ChatMessage> {
         if let delay = delayMillisecondsByConversation[conversationId], delay > 0 {
             try await Task.sleep(for: .milliseconds(delay))
         }
-        return Array((messagesByConversation[conversationId] ?? []).prefix(limit))
+        let items = Array((messagesByConversation[conversationId] ?? []).prefix(limit))
+        return MessagingPage(items: items, hasMore: false)
     }
     func sendMessage(
         conversationId: UUID,
@@ -81,6 +88,7 @@ private actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
     }
     func removeReaction(conversationId: UUID, messageId: UUID, reactionId: UUID) async throws {}
     func searchMessages(query: String, page: Int, limit: Int) async throws -> [MessageSearchHit] { [] }
+    func requestWsTicket() async throws -> String { "peek-ticket" }
 
     private func makeConversation(id: UUID) -> Conversation {
         Conversation(
@@ -104,7 +112,10 @@ final class ConversationListViewModelPeekTests: XCTestCase {
             fetchMessagesUseCase: FetchMessagesUseCase(repository: repository),
             searchProvider: PeekSearchProviderStub(),
             repository: repository,
-            wsClient: MessagingWebSocketClient(tokenProvider: { nil }),
+            wsClient: MessagingWebSocketClient(
+                ticketProvider: { "ticket" },
+                deviceIdProvider: { "device" }
+            ),
             languageService: languageService
         )
     }

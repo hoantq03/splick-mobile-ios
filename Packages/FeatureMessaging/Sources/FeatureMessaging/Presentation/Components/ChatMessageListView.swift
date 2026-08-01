@@ -96,6 +96,8 @@ struct ChatMessageListView: View {
                         Color.clear
                             .frame(height: 1)
                             .id(ChatScrollAnimation.bottomAnchor)
+                            .onAppear { viewModel.isNearBottom = true }
+                            .onDisappear { viewModel.isNearBottom = false }
                     }
                     .padding(.horizontal, SplickTheme.Spacing.md)
                     .padding(.vertical, SplickTheme.Spacing.sm)

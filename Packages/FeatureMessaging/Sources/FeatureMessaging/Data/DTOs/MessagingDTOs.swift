@@ -22,6 +22,30 @@ struct ConversationResponseDTO: Decodable {
     let lastMessage: MessageResponseDTO?
     let createdAt: Date
     let updatedAt: Date
+
+    init(
+        id: UUID,
+        type: String? = nil,
+        unreadCount: Int,
+        peer: ConversationPeerResponseDTO? = nil,
+        groupName: String? = nil,
+        groupAvatarUrl: String? = nil,
+        memberCount: Int? = nil,
+        lastMessage: MessageResponseDTO? = nil,
+        createdAt: Date,
+        updatedAt: Date
+    ) {
+        self.id = id
+        self.type = type
+        self.unreadCount = unreadCount
+        self.peer = peer
+        self.groupName = groupName
+        self.groupAvatarUrl = groupAvatarUrl
+        self.memberCount = memberCount
+        self.lastMessage = lastMessage
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
 }
 
 struct MessageResponseDTO: Decodable {
@@ -32,10 +56,60 @@ struct MessageResponseDTO: Decodable {
     let body: String
     let clientMessageId: UUID
     let createdAt: Date
+    let sequenceNo: Int64
     let reactions: [ReactionResponseDTO]?
     let status: String?
     let attachments: [MessageAttachmentResponseDTO]?
     let replyPreview: MessageReplyPreviewResponseDTO?
+
+    init(
+        id: UUID,
+        conversationId: UUID,
+        senderId: UUID,
+        senderDisplayName: String? = nil,
+        body: String,
+        clientMessageId: UUID,
+        createdAt: Date,
+        sequenceNo: Int64 = 0,
+        reactions: [ReactionResponseDTO]? = nil,
+        status: String? = nil,
+        attachments: [MessageAttachmentResponseDTO]? = nil,
+        replyPreview: MessageReplyPreviewResponseDTO? = nil
+    ) {
+        self.id = id
+        self.conversationId = conversationId
+        self.senderId = senderId
+        self.senderDisplayName = senderDisplayName
+        self.body = body
+        self.clientMessageId = clientMessageId
+        self.createdAt = createdAt
+        self.sequenceNo = sequenceNo
+        self.reactions = reactions
+        self.status = status
+        self.attachments = attachments
+        self.replyPreview = replyPreview
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        conversationId = try container.decode(UUID.self, forKey: .conversationId)
+        senderId = try container.decode(UUID.self, forKey: .senderId)
+        senderDisplayName = try container.decodeIfPresent(String.self, forKey: .senderDisplayName)
+        body = try container.decode(String.self, forKey: .body)
+        clientMessageId = try container.decode(UUID.self, forKey: .clientMessageId)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        sequenceNo = try container.decodeIfPresent(Int64.self, forKey: .sequenceNo) ?? 0
+        reactions = try container.decodeIfPresent([ReactionResponseDTO].self, forKey: .reactions)
+        status = try container.decodeIfPresent(String.self, forKey: .status)
+        attachments = try container.decodeIfPresent([MessageAttachmentResponseDTO].self, forKey: .attachments)
+        replyPreview = try container.decodeIfPresent(MessageReplyPreviewResponseDTO.self, forKey: .replyPreview)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, conversationId, senderId, senderDisplayName, body, clientMessageId
+        case createdAt, sequenceNo, reactions, status, attachments, replyPreview
+    }
 }
 
 struct MessageReplyPreviewResponseDTO: Decodable {
@@ -113,4 +187,8 @@ struct MessageSearchHitResponseDTO: Decodable {
     let body: String
     let createdAt: Date
     let peer: ConversationPeerResponseDTO?
+}
+
+struct WsTicketResponseDTO: Decodable {
+    let ticket: String
 }

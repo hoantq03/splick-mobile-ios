@@ -54,7 +54,10 @@ final class ConversationListViewModelWsPatchTests: XCTestCase {
             updatedAt: Date(timeIntervalSince1970: 2)
         )
 
-        let wsClient = MessagingWebSocketClient(tokenProvider: { nil })
+        let wsClient = MessagingWebSocketClient(
+            ticketProvider: { "ticket" },
+            deviceIdProvider: { "device" }
+        )
         // Repository returns empty — if WS triggered refresh, list would be wiped.
         let viewModel = makeViewModel(wsClient: wsClient)
         viewModel.applyStartupConversations([other, existing])
@@ -88,7 +91,10 @@ final class ConversationListViewModelWsPatchTests: XCTestCase {
             createdAt: .now,
             updatedAt: .now
         )
-        let wsClient = MessagingWebSocketClient(tokenProvider: { nil })
+        let wsClient = MessagingWebSocketClient(
+            ticketProvider: { "ticket" },
+            deviceIdProvider: { "device" }
+        )
         let viewModel = makeViewModel(wsClient: wsClient)
         viewModel.applyStartupConversations([existing])
 
@@ -115,7 +121,9 @@ private struct PeekSearchProviderStub: MessagingSearchProviding {
 }
 
 private actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
-    func fetchConversations(query: ConversationInboxQuery) async throws -> [Conversation] { [] }
+    func fetchConversations(query: ConversationInboxQuery) async throws -> MessagingPage<Conversation> {
+        MessagingPage(items: [], hasMore: false)
+    }
     func fetchConversationInboxSummary() async throws -> Int { 0 }
     func getOrCreateConversation(friendUserId: UUID) async throws -> Conversation {
         Conversation(id: UUID(), unreadCount: 0, peer: nil, lastMessage: nil, createdAt: .now, updatedAt: .now)
@@ -135,7 +143,15 @@ private actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
         Conversation(id: groupId, unreadCount: 0, peer: nil, lastMessage: nil, createdAt: .now, updatedAt: .now)
     }
     func transferGroupAdmin(groupId: UUID, newAdminUserId: UUID) async throws {}
-    func fetchMessages(conversationId: UUID, page: Int, limit: Int) async throws -> [ChatMessage] { [] }
+    func fetchMessages(
+        conversationId: UUID,
+        page: Int,
+        limit: Int,
+        after: Int64?,
+        before: Int64?
+    ) async throws -> MessagingPage<ChatMessage> {
+        MessagingPage(items: [], hasMore: false)
+    }
     func sendMessage(
         conversationId: UUID,
         body: String,
@@ -160,4 +176,5 @@ private actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
     }
     func removeReaction(conversationId: UUID, messageId: UUID, reactionId: UUID) async throws {}
     func searchMessages(query: String, page: Int, limit: Int) async throws -> [MessageSearchHit] { [] }
+    func requestWsTicket() async throws -> String { "ws-patch-ticket" }
 }

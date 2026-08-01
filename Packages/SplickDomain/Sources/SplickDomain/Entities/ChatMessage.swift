@@ -1,6 +1,6 @@
 import Foundation
 
-public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable {
+public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable, Codable {
     public let id: UUID
     public let conversationId: UUID
     public let senderId: UUID
@@ -8,6 +8,8 @@ public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable {
     public let body: String
     public let clientMessageId: UUID
     public let createdAt: Date
+    /// Monotonic per-conversation sequence from the server. `0` means unknown / legacy.
+    public let sequenceNo: Int64
     public let reactions: [Reaction]
     public let deliveryStatus: MessageDeliveryStatus
     public let imageAttachments: [MessageImageAttachment]
@@ -21,6 +23,7 @@ public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable {
         body: String,
         clientMessageId: UUID,
         createdAt: Date,
+        sequenceNo: Int64 = 0,
         reactions: [Reaction] = [],
         deliveryStatus: MessageDeliveryStatus = .sent,
         imageAttachments: [MessageImageAttachment] = [],
@@ -33,6 +36,7 @@ public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable {
         self.body = body
         self.clientMessageId = clientMessageId
         self.createdAt = createdAt
+        self.sequenceNo = sequenceNo
         self.reactions = reactions
         self.deliveryStatus = deliveryStatus
         self.imageAttachments = imageAttachments
@@ -48,6 +52,7 @@ public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable {
             body: body,
             clientMessageId: clientMessageId,
             createdAt: createdAt,
+            sequenceNo: sequenceNo,
             reactions: reactions,
             deliveryStatus: deliveryStatus,
             imageAttachments: imageAttachments,
@@ -64,6 +69,24 @@ public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable {
             body: body,
             clientMessageId: clientMessageId,
             createdAt: createdAt,
+            sequenceNo: sequenceNo,
+            reactions: reactions,
+            deliveryStatus: deliveryStatus,
+            imageAttachments: imageAttachments,
+            replyPreview: replyPreview
+        )
+    }
+
+    public func updating(body: String) -> ChatMessage {
+        ChatMessage(
+            id: id,
+            conversationId: conversationId,
+            senderId: senderId,
+            senderDisplayName: senderDisplayName,
+            body: body,
+            clientMessageId: clientMessageId,
+            createdAt: createdAt,
+            sequenceNo: sequenceNo,
             reactions: reactions,
             deliveryStatus: deliveryStatus,
             imageAttachments: imageAttachments,

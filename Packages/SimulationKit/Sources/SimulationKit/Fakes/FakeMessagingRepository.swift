@@ -18,7 +18,8 @@ public actor FakeMessagingRepository: MessagingRepositoryProtocol {
             senderId: aliceId,
             body: "Hey! Are you coming tonight? 🎉",
             clientMessageId: UUID(),
-            createdAt: Date().addingTimeInterval(-600)
+            createdAt: Date().addingTimeInterval(-600),
+            sequenceNo: 1
         )
         let msg2 = ChatMessage(
             id: UUID(),
@@ -26,7 +27,8 @@ public actor FakeMessagingRepository: MessagingRepositoryProtocol {
             senderId: bobId,
             body: "Sure, I'll check the menu.",
             clientMessageId: UUID(),
-            createdAt: Date().addingTimeInterval(-3600)
+            createdAt: Date().addingTimeInterval(-3600),
+            sequenceNo: 1
         )
         return [
             Conversation(
@@ -52,10 +54,12 @@ public actor FakeMessagingRepository: MessagingRepositoryProtocol {
         self.logger = logger
     }
 
-    public func fetchConversations(query: ConversationInboxQuery) async throws -> [Conversation] {
+    public func fetchConversations(query: ConversationInboxQuery) async throws -> MessagingPage<Conversation> {
         logger.log("fetchConversations page=\(query.page) limit=\(query.limit)")
         try await Task.sleep(for: .milliseconds(300))
-        guard query.page == 0 else { return [] }
+        guard query.page == 0 else {
+            return MessagingPage(items: [], hasMore: false)
+        }
 
         var items = Self.sampleConversations
         if let type = query.type {
@@ -64,7 +68,7 @@ public actor FakeMessagingRepository: MessagingRepositoryProtocol {
         if query.unreadOnly {
             items = items.filter { $0.unreadCount > 0 }
         }
-        return items
+        return MessagingPage(items: items, hasMore: false)
     }
 
     public func fetchConversationInboxSummary() async throws -> Int {
@@ -138,19 +142,30 @@ public actor FakeMessagingRepository: MessagingRepositoryProtocol {
         logger.log("transferGroupAdmin groupId=\(groupId) newAdminUserId=\(newAdminUserId)")
     }
 
-    public func fetchMessages(conversationId: UUID, page: Int, limit: Int) async throws -> [ChatMessage] {
-        logger.log("fetchMessages conversationId=\(conversationId)")
+    public func fetchMessages(
+        conversationId: UUID,
+        page: Int,
+        limit: Int,
+        after: Int64?,
+        before: Int64?
+    ) async throws -> MessagingPage<ChatMessage> {
+        logger.log("fetchMessages conversationId=\(conversationId) after=\(after as Any) before=\(before as Any)")
         guard page == 0,
+              after == nil,
+              before == nil,
               let conv = Self.sampleConversations.first(where: { $0.id == conversationId }),
-              let peer = conv.peer else { return [] }
-        return [
+              let peer = conv.peer else {
+            return MessagingPage(items: [], hasMore: false)
+        }
+        let items = [
             ChatMessage(
                 id: UUID(),
                 conversationId: conversationId,
                 senderId: Self.myId,
                 body: "Hi! What's up?",
                 clientMessageId: UUID(),
-                createdAt: Date().addingTimeInterval(-900)
+                createdAt: Date().addingTimeInterval(-900),
+                sequenceNo: 1
             ),
             ChatMessage(
                 id: UUID(),
@@ -159,9 +174,11 @@ public actor FakeMessagingRepository: MessagingRepositoryProtocol {
                 senderDisplayName: peer.displayTitle,
                 body: conv.lastMessage?.body ?? "Hello!",
                 clientMessageId: UUID(),
-                createdAt: Date().addingTimeInterval(-600)
+                createdAt: Date().addingTimeInterval(-600),
+                sequenceNo: 2
             ),
         ]
+        return MessagingPage(items: items, hasMore: false)
     }
 
     public func sendMessage(
@@ -180,6 +197,7 @@ public actor FakeMessagingRepository: MessagingRepositoryProtocol {
             body: body,
             clientMessageId: clientMessageId,
             createdAt: Date(),
+            sequenceNo: 3,
             imageAttachments: imageAttachments
         )
     }
@@ -221,5 +239,9 @@ public actor FakeMessagingRepository: MessagingRepositoryProtocol {
                 peer: peer
             )
         ]
+    }
+
+    public func requestWsTicket() async throws -> String {
+        "fake-ws-ticket"
     }
 }

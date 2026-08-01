@@ -8,7 +8,19 @@ public final class FetchMessagesUseCase: Sendable {
         self.repository = repository
     }
 
-    public func execute(conversationId: UUID, page: Int = 0, limit: Int = 30) async throws -> [ChatMessage] {
-        try await repository.fetchMessages(conversationId: conversationId, page: page, limit: limit)
+    public func execute(
+        conversationId: UUID,
+        page: Int = 0,
+        limit: Int = 30,
+        after: Int64? = nil,
+        before: Int64? = nil
+    ) async throws -> MessagingPage<ChatMessage> {
+        try await repository.fetchMessages(
+            conversationId: conversationId,
+            page: page,
+            limit: limit,
+            after: after,
+            before: before
+        )
     }
 }

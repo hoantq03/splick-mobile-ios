@@ -62,7 +62,7 @@ public final class ConversationListViewModel: ObservableObject {
     private var searchTask: Task<Void, Never>?
     private var refreshTask: Task<Void, Never>?
     private var loadMoreTask: Task<Void, Never>?
-    private var peekTask: Task<[ChatMessage], Error>?
+    private var peekTask: Task<MessagingPage<ChatMessage>, Error>?
     private var debouncedRefreshTask: Task<Void, Never>?
     private var currentPage = 0
 
@@ -107,13 +107,13 @@ public final class ConversationListViewModel: ObservableObject {
         peekTask = task
 
         do {
-            let messages = try await task.value
+            let page = try await task.value
             guard !Task.isCancelled, peekConversation?.id == conversationId else { return }
             // Don't cancel the peek row bounce when preview content arrives.
             var transaction = Transaction()
             transaction.disablesAnimations = true
             withTransaction(transaction) {
-                peekMessages = Array(messages.reversed())
+                peekMessages = Array(page.items.reversed())
                 peekLoadState = .loaded
             }
         } catch is CancellationError {
@@ -329,16 +329,16 @@ public final class ConversationListViewModel: ObservableObject {
         do {
             async let conversationsTask = fetchConversationsUseCase.execute(query: inboxQuery(page: 0))
             async let summaryTask = repository.fetchConversationInboxSummary()
-            let (items, summary) = try await (conversationsTask, summaryTask)
+            let (page, summary) = try await (conversationsTask, summaryTask)
 
             var transaction = Transaction()
             transaction.disablesAnimations = true
             withTransaction(transaction) {
-                state = .loaded(items)
+                state = .loaded(page.items)
                 unreadConversationCount = summary
-                hasMorePages = items.count >= Self.pageSize
+                hasMorePages = page.hasMore
             }
-            await onInboxLoaded?(items, summary)
+            await onInboxLoaded?(page.items, summary)
         } catch {
             Log.error(error, category: .network, metadata: ["action": "reloadInbox"])
             if showLoadingState || conversations.isEmpty {
@@ -353,8 +353,8 @@ public final class ConversationListViewModel: ObservableObject {
 
         let nextPage = currentPage + 1
         do {
-            let items = try await fetchConversationsUseCase.execute(query: inboxQuery(page: nextPage))
-            guard !items.isEmpty else {
+            let page = try await fetchConversationsUseCase.execute(query: inboxQuery(page: nextPage))
+            guard !page.items.isEmpty else {
                 hasMorePages = false
                 return
             }
@@ -362,10 +362,10 @@ public final class ConversationListViewModel: ObservableObject {
             var transaction = Transaction()
             transaction.disablesAnimations = true
             withTransaction(transaction) {
-                let merged = conversations + items
+                let merged = conversations + page.items
                 state = .loaded(merged)
                 currentPage = nextPage
-                hasMorePages = items.count >= Self.pageSize
+                hasMorePages = page.hasMore
             }
         } catch {
             Log.error(error, category: .network, metadata: ["action": "loadMoreConversations"])
@@ -405,8 +405,13 @@ public final class ConversationListViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] event in
                 guard let self else { return }
-                if case .newMessage(let conversationId, let message) = event {
+                switch event {
+                case .connected:
+                    Task { await self.refresh() }
+                case .newMessage(let conversationId, let message):
                     self.applyIncomingMessage(conversationId: conversationId, message: message)
+                default:
+                    break
                 }
             }
             .store(in: &cancellables)

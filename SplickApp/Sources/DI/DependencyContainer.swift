@@ -13,6 +13,7 @@ import FeatureFriends
 import FeatureMessaging
 import FeatureStickers
 import SplickWidgetKit
+import UIKit
 
 @MainActor
 final class DependencyContainer: ObservableObject {
@@ -638,13 +639,25 @@ final class DependencyContainer: ObservableObject {
     // MARK: - Messaging
 
     lazy var messagingWebSocketClient: MessagingWebSocketClient = {
-        MessagingWebSocketClient(tokenProvider: { [weak self] in
-            await self?.tokenProvider.accessToken()
-        })
+        MessagingWebSocketClient(
+            ticketProvider: { [weak self] in
+                guard let self else { throw URLError(.cancelled) }
+                return try await self.messagingRepository.requestWsTicket()
+            },
+            deviceIdProvider: {
+                UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
+            },
+            forceTokenRefresh: { [weak self] in
+                guard let self else { return }
+                try? await self.refreshTokenUseCase.refreshSession()
+            }
+        )
     }()
 
     /// Shared across chat thread VMs so reopening a conversation paints cached messages instantly.
     let messageThreadCache = MessageThreadCache(capacity: 5)
+    let pendingMessageStore = PendingMessageStore()
+    let networkPathMonitor = NetworkPathMonitor()
 
     private lazy var messagingRepository: MessagingRepositoryProtocol = {
         MessagingRepository(apiClient: apiClient)
@@ -713,6 +726,8 @@ final class DependencyContainer: ObservableObject {
             wsClient: messagingWebSocketClient,
             languageService: languageService,
             messageCache: messageThreadCache,
+            pendingMessageStore: pendingMessageStore,
+            networkPathMonitor: networkPathMonitor,
             onConversationRead: { [weak self] conversationId in
                 await self?.handleConversationRead(conversationId: conversationId)
             }

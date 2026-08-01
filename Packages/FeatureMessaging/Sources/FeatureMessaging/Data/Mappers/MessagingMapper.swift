@@ -37,6 +37,7 @@ enum MessagingMapper {
             body: dto.body,
             clientMessageId: dto.clientMessageId,
             createdAt: dto.createdAt,
+            sequenceNo: dto.sequenceNo,
             reactions: (dto.reactions ?? []).map(toReaction),
             deliveryStatus: mapDeliveryStatus(dto.status),
             imageAttachments: (dto.attachments ?? []).compactMap(toImageAttachment),

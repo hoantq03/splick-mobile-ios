@@ -88,6 +88,8 @@ public final class ChatThreadViewModelFactory: ObservableObject {
     private let wsClient: MessagingWebSocketClient
     private let languageService: LanguageService
     private let messageCache: MessageThreadCache
+    private let pendingMessageStore: PendingMessageStore
+    private let networkPathMonitor: NetworkPathMonitor
     private let onConversationRead: ((UUID) async -> Void)?
 
     public init(
@@ -100,6 +102,8 @@ public final class ChatThreadViewModelFactory: ObservableObject {
         wsClient: MessagingWebSocketClient,
         languageService: LanguageService,
         messageCache: MessageThreadCache? = nil,
+        pendingMessageStore: PendingMessageStore? = nil,
+        networkPathMonitor: NetworkPathMonitor? = nil,
         onConversationRead: ((UUID) async -> Void)? = nil
     ) {
         self.currentUserId = currentUserId
@@ -111,6 +115,8 @@ public final class ChatThreadViewModelFactory: ObservableObject {
         self.wsClient = wsClient
         self.languageService = languageService
         self.messageCache = messageCache ?? MessageThreadCache()
+        self.pendingMessageStore = pendingMessageStore ?? PendingMessageStore()
+        self.networkPathMonitor = networkPathMonitor ?? NetworkPathMonitor()
         self.onConversationRead = onConversationRead
     }
 
@@ -127,6 +133,8 @@ public final class ChatThreadViewModelFactory: ObservableObject {
             wsClient: wsClient,
             languageService: languageService,
             messageCache: messageCache,
+            pendingMessageStore: pendingMessageStore,
+            networkPathMonitor: networkPathMonitor,
             onConversationRead: onConversationRead
         )
     }

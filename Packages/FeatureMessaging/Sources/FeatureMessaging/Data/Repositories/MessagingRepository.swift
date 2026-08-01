@@ -9,11 +9,15 @@ public final class MessagingRepository: MessagingRepositoryProtocol, Sendable {
         self.apiClient = apiClient
     }
 
-    public func fetchConversations(query: ConversationInboxQuery) async throws -> [Conversation] {
-        let dtos: [ConversationResponseDTO] = try await apiClient.request(
+    public func fetchConversations(query: ConversationInboxQuery) async throws -> MessagingPage<Conversation> {
+        let page: PageResponseDTO<ConversationResponseDTO> = try await apiClient.request(
             MessagingEndpoint.listConversations(query)
         )
-        return dtos.map(MessagingMapper.toConversation)
+        return MessagingPage(
+            items: page.items.map(MessagingMapper.toConversation),
+            nextCursor: page.nextCursor,
+            hasMore: page.hasMore
+        )
     }
 
     public func fetchConversationInboxSummary() async throws -> Int {
@@ -84,11 +88,27 @@ public final class MessagingRepository: MessagingRepositoryProtocol, Sendable {
         )
     }
 
-    public func fetchMessages(conversationId: UUID, page: Int, limit: Int) async throws -> [ChatMessage] {
-        let dtos: [MessageResponseDTO] = try await apiClient.request(
-            MessagingEndpoint.listMessages(conversationId: conversationId, page: page, limit: limit)
+    public func fetchMessages(
+        conversationId: UUID,
+        page: Int,
+        limit: Int,
+        after: Int64?,
+        before: Int64?
+    ) async throws -> MessagingPage<ChatMessage> {
+        let pageDTO: PageResponseDTO<MessageResponseDTO> = try await apiClient.request(
+            MessagingEndpoint.listMessages(
+                conversationId: conversationId,
+                page: page,
+                limit: limit,
+                after: after,
+                before: before
+            )
         )
-        return dtos.map(MessagingMapper.toMessage)
+        return MessagingPage(
+            items: pageDTO.items.map(MessagingMapper.toMessage),
+            nextCursor: pageDTO.nextCursor,
+            hasMore: pageDTO.hasMore
+        )
     }
 
     public func sendMessage(
@@ -154,5 +174,10 @@ public final class MessagingRepository: MessagingRepositoryProtocol, Sendable {
             MessagingEndpoint.searchMessages(q: query, page: page, limit: limit)
         )
         return dtos.compactMap(MessagingMapper.toMessageSearchHit)
+    }
+
+    public func requestWsTicket() async throws -> String {
+        let dto: WsTicketResponseDTO = try await apiClient.request(MessagingEndpoint.wsTicket)
+        return dto.ticket
     }
 }

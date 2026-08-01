@@ -12,12 +12,15 @@ private actor StubMessagingRepository: MessagingRepositoryProtocol {
     var messages: [ChatMessage]
     var markReadCalls: [(UUID, UUID)] = []
     private(set) var sendMessageCallCount = 0
+    private(set) var afterFetchCalls: [Int64] = []
 
     init(messages: [ChatMessage] = []) {
         self.messages = messages
     }
 
-    func fetchConversations(query: ConversationInboxQuery) async throws -> [Conversation] { [] }
+    func fetchConversations(query: ConversationInboxQuery) async throws -> MessagingPage<Conversation> {
+        MessagingPage(items: [], hasMore: false)
+    }
     func fetchConversationInboxSummary() async throws -> Int { 0 }
     func getOrCreateConversation(friendUserId: UUID) async throws -> Conversation {
         Conversation(id: UUID(), unreadCount: 0, peer: nil, lastMessage: nil, createdAt: .now, updatedAt: .now)
@@ -46,12 +49,24 @@ private actor StubMessagingRepository: MessagingRepositoryProtocol {
         Conversation(id: groupId, unreadCount: 0, peer: nil, lastMessage: nil, createdAt: .now, updatedAt: .now)
     }
     func transferGroupAdmin(groupId: UUID, newAdminUserId: UUID) async throws {}
-    func fetchMessages(conversationId: UUID, page: Int, limit: Int) async throws -> [ChatMessage] {
+    func fetchMessages(
+        conversationId: UUID,
+        page: Int,
+        limit: Int,
+        after: Int64?,
+        before: Int64?
+    ) async throws -> MessagingPage<ChatMessage> {
+        if let after {
+            afterFetchCalls.append(after)
+            let gap = messages.filter { $0.sequenceNo > after }.sorted { $0.sequenceNo < $1.sequenceNo }
+            return MessagingPage(items: gap, hasMore: false)
+        }
         // API order: newest first.
         let start = page * limit
-        guard start < messages.count else { return [] }
+        guard start < messages.count else { return MessagingPage(items: [], hasMore: false) }
         let end = min(start + limit, messages.count)
-        return Array(messages[start..<end])
+        let slice = Array(messages[start..<end])
+        return MessagingPage(items: slice, hasMore: end < messages.count)
     }
     func sendMessage(
         conversationId: UUID,
@@ -68,6 +83,7 @@ private actor StubMessagingRepository: MessagingRepositoryProtocol {
             body: body,
             clientMessageId: clientMessageId,
             createdAt: .now,
+            sequenceNo: 1,
             imageAttachments: imageAttachments
         )
     }
@@ -80,6 +96,7 @@ private actor StubMessagingRepository: MessagingRepositoryProtocol {
     }
     func removeReaction(conversationId: UUID, messageId: UUID, reactionId: UUID) async throws {}
     func searchMessages(query: String, page: Int, limit: Int) async throws -> [MessageSearchHit] { [] }
+    func requestWsTicket() async throws -> String { "test-ticket" }
     func recordedMarkReadCalls() async -> [(UUID, UUID)] { markReadCalls }
     func recordedSendMessageCallCount() async -> Int { sendMessageCallCount }
 }
@@ -98,6 +115,14 @@ private enum ChatThreadViewModelTestFixtures {
     static let currentUserId = UUID(uuidString: "cccccccc-0000-0000-0000-000000000001")!
 }
 
+@MainActor
+private func makeTestWsClient() -> MessagingWebSocketClient {
+    MessagingWebSocketClient(
+        ticketProvider: { "ticket" },
+        deviceIdProvider: { "device" }
+    )
+}
+
 // MARK: - Tests
 
 @MainActor
@@ -107,7 +132,8 @@ final class ChatThreadViewModelTests: XCTestCase {
         conversationId: UUID = ChatThreadViewModelTestFixtures.conversationId,
         highlightMessageId: UUID? = nil,
         repo: StubMessagingRepository,
-        wsClient: MessagingWebSocketClient
+        wsClient: MessagingWebSocketClient,
+        pendingStore: PendingMessageStore? = nil
     ) -> ChatThreadViewModel {
         ChatThreadViewModel(
             conversationId: conversationId,
@@ -125,24 +151,30 @@ final class ChatThreadViewModelTests: XCTestCase {
                 )
             },
             wsClient: wsClient,
-            languageService: LanguageService(userDefaults: UserDefaultsService())
+            languageService: LanguageService(userDefaults: UserDefaultsService()),
+            pendingMessageStore: pendingStore
         )
     }
 
-    private func makeMessage(id: UUID = UUID(), body: String = "Hello") -> ChatMessage {
+    private func makeMessage(
+        id: UUID = UUID(),
+        body: String = "Hello",
+        sequenceNo: Int64 = 0
+    ) -> ChatMessage {
         ChatMessage(
             id: id,
             conversationId: ChatThreadViewModelTestFixtures.conversationId,
             senderId: ChatThreadViewModelTestFixtures.senderId,
             body: body,
             clientMessageId: UUID(),
-            createdAt: .now
+            createdAt: .now,
+            sequenceNo: sequenceNo
         )
     }
 
     func test_send_withMultipleImages_makesSingleRepositoryCall() async {
         let repo = StubMessagingRepository(messages: [])
-        let wsClient = MessagingWebSocketClient(tokenProvider: { nil })
+        let wsClient = makeTestWsClient()
         let vm = makeViewModel(repo: repo, wsClient: wsClient)
 
         await vm.load()
@@ -170,7 +202,7 @@ final class ChatThreadViewModelTests: XCTestCase {
     func test_appendMessage_deduplicates_onWsEvent() async {
         let existingMsg = makeMessage(body: "Already here")
         let repo = StubMessagingRepository(messages: [existingMsg])
-        let wsClient = MessagingWebSocketClient(tokenProvider: { nil })
+        let wsClient = makeTestWsClient()
         let vm = makeViewModel(repo: repo, wsClient: wsClient)
 
         await vm.load()
@@ -186,32 +218,34 @@ final class ChatThreadViewModelTests: XCTestCase {
 
     func test_appendMessage_addsNewMessage_onWsEvent() async {
         let repo = StubMessagingRepository(messages: [])
-        let wsClient = MessagingWebSocketClient(tokenProvider: { nil })
+        let wsClient = makeTestWsClient()
         let vm = makeViewModel(repo: repo, wsClient: wsClient)
 
         await vm.load()
         XCTAssertEqual(vm.messages.count, 0)
 
-        let newMsg = makeMessage(body: "New incoming")
+        let newMsg = makeMessage(body: "New incoming", sequenceNo: 5)
         wsClient.eventSubject.send(.newMessage(conversationId: ChatThreadViewModelTestFixtures.conversationId, message: newMsg))
         await Task.yield()
 
         XCTAssertEqual(vm.messages.count, 1)
         XCTAssertEqual(vm.messages.first?.body, "New incoming")
+        XCTAssertEqual(vm.messages.first?.sequenceNo, 5)
     }
 
     // MARK: Mark-read on load
 
     func test_load_callsMarkRead_withLastMessageId_whenMessagesExist() async {
-        let msg1 = makeMessage(body: "First")
-        let msg2 = makeMessage(body: "Last")
+        let msg1 = makeMessage(body: "First", sequenceNo: 1)
+        let msg2 = makeMessage(body: "Last", sequenceNo: 2)
         let repo = StubMessagingRepository(messages: [msg1, msg2])
-        let wsClient = MessagingWebSocketClient(tokenProvider: { nil })
+        let wsClient = makeTestWsClient()
         let vm = makeViewModel(repo: repo, wsClient: wsClient)
+        vm.isNearBottom = true
 
         await vm.load()
-        // Give async markRead task a chance to complete
-        try? await Task.sleep(nanoseconds: 50_000_000)
+        // Debounced markRead (500ms)
+        try? await Task.sleep(nanoseconds: 700_000_000)
 
         let calls = await repo.recordedMarkReadCalls()
         XCTAssertFalse(calls.isEmpty, "markRead should be called after loading messages")
@@ -220,26 +254,47 @@ final class ChatThreadViewModelTests: XCTestCase {
 
     func test_load_doesNotCallMarkRead_whenNoMessages() async {
         let repo = StubMessagingRepository(messages: [])
-        let wsClient = MessagingWebSocketClient(tokenProvider: { nil })
+        let wsClient = makeTestWsClient()
         let vm = makeViewModel(repo: repo, wsClient: wsClient)
 
         await vm.load()
-        try? await Task.sleep(nanoseconds: 50_000_000)
+        try? await Task.sleep(nanoseconds: 700_000_000)
 
         let calls = await repo.recordedMarkReadCalls()
         XCTAssertTrue(calls.isEmpty, "markRead must not be called when there are no messages")
+    }
+
+    func test_markRead_skippedWhenNotNearBottom() async {
+        let msg = makeMessage(body: "Only", sequenceNo: 1)
+        let repo = StubMessagingRepository(messages: [msg])
+        let wsClient = makeTestWsClient()
+        let vm = makeViewModel(repo: repo, wsClient: wsClient)
+        vm.isNearBottom = false
+
+        await vm.load()
+        try? await Task.sleep(nanoseconds: 700_000_000)
+
+        let calls = await repo.recordedMarkReadCalls()
+        XCTAssertTrue(calls.isEmpty)
     }
 
     // MARK: WS event from different conversation is ignored
 
     func test_wsEvent_fromDifferentConversation_isIgnored() async {
         let repo = StubMessagingRepository(messages: [])
-        let wsClient = MessagingWebSocketClient(tokenProvider: { nil })
+        let wsClient = makeTestWsClient()
         let vm = makeViewModel(repo: repo, wsClient: wsClient)
 
         await vm.load()
         let otherConvId = UUID()
-        let msg = ChatMessage(id: UUID(), conversationId: otherConvId, senderId: ChatThreadViewModelTestFixtures.senderId, body: "Other", clientMessageId: UUID(), createdAt: .now)
+        let msg = ChatMessage(
+            id: UUID(),
+            conversationId: otherConvId,
+            senderId: ChatThreadViewModelTestFixtures.senderId,
+            body: "Other",
+            clientMessageId: UUID(),
+            createdAt: .now
+        )
         wsClient.eventSubject.send(.newMessage(conversationId: otherConvId, message: msg))
         await Task.yield()
 
@@ -250,7 +305,7 @@ final class ChatThreadViewModelTests: XCTestCase {
         let targetId = UUID()
         let targetMessage = makeMessage(id: targetId, body: "Find me")
         let repo = StubMessagingRepository(messages: [targetMessage])
-        let wsClient = MessagingWebSocketClient(tokenProvider: { nil })
+        let wsClient = makeTestWsClient()
         let vm = makeViewModel(highlightMessageId: targetId, repo: repo, wsClient: wsClient)
 
         await vm.load()
@@ -263,8 +318,6 @@ final class ChatThreadViewModelTests: XCTestCase {
     // MARK: Pagination
 
     func test_loadOlderMessages_prependsUniqueOlderPage() async {
-        // API newest-first: page0 = m30..m1 (newest), page1 = older batch.
-        // Build 40 messages where index 0 is newest.
         var newestFirst: [ChatMessage] = []
         for index in 0..<40 {
             let created = Date(timeIntervalSince1970: TimeInterval(1_700_000_000 - index))
@@ -275,13 +328,14 @@ final class ChatThreadViewModelTests: XCTestCase {
                     senderId: ChatThreadViewModelTestFixtures.senderId,
                     body: "msg-\(index)",
                     clientMessageId: UUID(uuidString: String(format: "eeeeeeee-0000-0000-0000-%012d", index))!,
-                    createdAt: created
+                    createdAt: created,
+                    sequenceNo: Int64(40 - index)
                 )
             )
         }
 
         let repo = StubMessagingRepository(messages: newestFirst)
-        let wsClient = MessagingWebSocketClient(tokenProvider: { nil })
+        let wsClient = makeTestWsClient()
         let vm = makeViewModel(repo: repo, wsClient: wsClient)
 
         await vm.load()
@@ -305,11 +359,12 @@ final class ChatThreadViewModelTests: XCTestCase {
                 senderId: ChatThreadViewModelTestFixtures.senderId,
                 body: "msg-\(index)",
                 clientMessageId: UUID(),
-                createdAt: Date(timeIntervalSince1970: TimeInterval(1_700_000_000 - index))
+                createdAt: Date(timeIntervalSince1970: TimeInterval(1_700_000_000 - index)),
+                sequenceNo: Int64(30 - index)
             )
         }
         let repo = StubMessagingRepository(messages: page)
-        let wsClient = MessagingWebSocketClient(tokenProvider: { nil })
+        let wsClient = makeTestWsClient()
         let vm = makeViewModel(repo: repo, wsClient: wsClient)
 
         await vm.load()
@@ -334,7 +389,7 @@ final class ChatThreadViewModelTests: XCTestCase {
         )
 
         let repo = StubMessagingRepository(messages: [freshMessage])
-        let wsClient = MessagingWebSocketClient(tokenProvider: { nil })
+        let wsClient = makeTestWsClient()
         let vm = ChatThreadViewModel(
             conversationId: ChatThreadViewModelTestFixtures.conversationId,
             currentUserId: ChatThreadViewModelTestFixtures.currentUserId,

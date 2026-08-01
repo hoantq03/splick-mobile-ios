@@ -7,7 +7,7 @@ public final class FetchConversationsUseCase: Sendable {
         self.repository = repository
     }
 
-    public func execute(query: ConversationInboxQuery) async throws -> [Conversation] {
+    public func execute(query: ConversationInboxQuery) async throws -> MessagingPage<Conversation> {
         try await repository.fetchConversations(query: query)
     }
 }
