@@ -258,6 +258,7 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case feedStreakQuoteLegend = "feed.streak.quote.legend"
     case feedStreakLoading = "feed.streak.loading"
     case feedStreakError = "feed.streak.error"
+    case feedStreakEndOfHistory = "feed.streak.end_of_history"
     case feedFilterTitle = "feed.filter.title"
     case feedFilterNoFriends = "feed.filter.no_friends"
     case feedFilterFriendsNotFound = "feed.filter.friends_not_found"

@@ -26,6 +26,7 @@ enum StringsFeatureEn {
         .feedStreakQuoteLegend: "True legend. NASA called but you were busy taking photos.",
         .feedStreakLoading: "Loading streak...",
         .feedStreakError: "Failed to load streak",
+        .feedStreakEndOfHistory: "You've reached the end",
         .feedFilterTitle: "Filters",
         .feedFilterNoFriends: "You have no friends yet",
         .feedFilterFriendsNotFound: "No friends found",

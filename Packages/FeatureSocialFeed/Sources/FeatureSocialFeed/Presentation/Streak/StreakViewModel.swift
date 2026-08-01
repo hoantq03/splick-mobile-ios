@@ -14,13 +14,15 @@ public final class StreakViewModel: ObservableObject {
     @Published private(set) var isDayPhotosLoading = false
     @Published private(set) var isLoadingOlderMonths = false
     @Published private(set) var hasReachedOldestMonth = false
+    /// Increments after each full calendar load/refresh so the list pins to the end.
+    @Published private(set) var scrollToEndToken = 0
 
     private let fetchStreakUseCase: FetchStreakUseCaseProtocol
     private let onStreakUpdated: ((StreakSummary) async -> Void)?
     private let calendar = Calendar.current
     private var loadTask: Task<Void, Never>?
-    /// Current month only on first open; older months load via `loadOlderMonthIfNeeded`.
-    private let initialMonthCount = 1
+    /// Current month + recent history on first open; older months paginate only when scrolled near top.
+    private let initialMonthCount = 3
     private static let maxMonthsInPast = 24
 
     public init(
@@ -102,7 +104,12 @@ public final class StreakViewModel: ObservableObject {
                 month: previous.month,
                 days: days
             )
-            monthSections.insert(olderSection, at: 0)
+            // Silent prepend — no animation so the viewport can stay put.
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                monthSections.insert(olderSection, at: 0)
+            }
             if let nextOlder = previousMonth(year: olderSection.year, month: olderSection.month),
                !isMonthAllowed(year: nextOlder.year, month: nextOlder.month) {
                 hasReachedOldestMonth = true
@@ -147,6 +154,7 @@ public final class StreakViewModel: ObservableObject {
             hasReachedOldestMonth = false
             monthSections = months.sorted { $0.monthDate < $1.monthDate }
             state = .loaded(monthSections)
+            scrollToEndToken += 1
             await onStreakUpdated?(summary)
         } catch {
             guard !Task.isCancelled else { return }

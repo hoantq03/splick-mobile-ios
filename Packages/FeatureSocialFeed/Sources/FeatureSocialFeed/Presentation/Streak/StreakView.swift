@@ -49,7 +49,9 @@ public struct StreakView: View {
             StreakMonthScrollView(
                 sections: viewModel.monthSections,
                 anchorMonthID: viewModel.anchorMonthID,
+                scrollToEndToken: viewModel.scrollToEndToken,
                 isLoadingOlder: viewModel.isLoadingOlderMonths,
+                hasReachedOldestMonth: viewModel.hasReachedOldestMonth,
                 canLoadOlder: !viewModel.hasReachedOldestMonth,
                 onLoadOlder: { section in
                     await viewModel.loadOlderMonthIfNeeded(for: section)

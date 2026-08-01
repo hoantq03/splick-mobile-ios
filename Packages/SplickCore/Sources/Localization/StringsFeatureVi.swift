@@ -26,6 +26,7 @@ enum StringsFeatureVi {
         .feedStreakQuoteLegend: "Huyền thoại thật sự. NASA gọi mà bạn bận chụp ảnh.",
         .feedStreakLoading: "Đang tải chuỗi...",
         .feedStreakError: "Không tải được chuỗi",
+        .feedStreakEndOfHistory: "Đã hết",
         .feedFilterTitle: "Bộ lọc",
         .feedFilterNoFriends: "Bạn chưa có bạn bè",
         .feedFilterFriendsNotFound: "Không tìm thấy bạn bè",
