@@ -44,7 +44,8 @@ struct ExpenseNavPills: View {
                 .allowsHitTesting(false)
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.82), value: collapseProgress)
-        .animation(ExpenseSegmentStripMotion.selectionSpring, value: selection)
+        // Match pager spring so pill indicator and page offset share one motion feel.
+        .animation(ExpensePagerMotion.slide, value: selection)
     }
 
     @ViewBuilder
@@ -87,7 +88,7 @@ private enum FeedSegmentPillLayout {
 }
 
 private enum ExpenseSegmentStripMotion {
-    static let selectionSpring = Animation.spring(response: 0.28, dampingFraction: 0.80)
+    /// Keep press feedback snappy; selection motion is driven by ExpensePagerMotion.slide.
     static let pressSpring = Animation.spring(response: 0.22, dampingFraction: 0.72)
 }
 
@@ -142,7 +143,7 @@ private struct ExpenseMaterialPills: View {
             .simultaneousGesture(stripGesture(totalWidth: proxy.size.width))
         }
         .frame(width: FeedSegmentPillLayout.stripWidth, height: FeedSegmentPillLayout.stripHeight)
-        .animation(ExpenseSegmentStripMotion.selectionSpring, value: selection)
+        .animation(ExpensePagerMotion.slide, value: selection)
         .animation(ExpenseSegmentStripMotion.pressSpring, value: hoverSegment)
         .animation(ExpenseSegmentStripMotion.pressSpring, value: isInteracting)
     }
@@ -152,9 +153,8 @@ private struct ExpenseMaterialPills: View {
         let isEmphasized = isSelected && emphasized
         return Button {
             guard selection != segment else { return }
-            withAnimation(ExpenseSegmentStripMotion.selectionSpring) {
-                selection = segment
-            }
+            // Pager owns the page spring; pill indicator follows via .animation(value:).
+            selection = segment
         } label: {
             Text(label)
                 .font(.system(size: 15, weight: isSelected ? .semibold : .medium))
@@ -186,16 +186,12 @@ private struct ExpenseMaterialPills: View {
                 guard let segment = segment(at: value.location.x, totalWidth: totalWidth) else { return }
                 hoverSegment = segment
                 guard selection != segment else { return }
-                withAnimation(ExpenseSegmentStripMotion.selectionSpring) {
-                    selection = segment
-                }
+                selection = segment
             }
             .onEnded { value in
                 if let segment = segment(at: value.location.x, totalWidth: totalWidth) ?? hoverSegment,
                    selection != segment {
-                    withAnimation(ExpenseSegmentStripMotion.selectionSpring) {
-                        selection = segment
-                    }
+                    selection = segment
                 }
                 withAnimation(ExpenseSegmentStripMotion.pressSpring) {
                     hoverSegment = nil
@@ -278,7 +274,7 @@ private struct ExpenseGlassPills: View {
             .simultaneousGesture(stripGesture(totalWidth: proxy.size.width))
         }
         .frame(width: FeedSegmentPillLayout.stripWidth, height: FeedSegmentPillLayout.stripHeight)
-        .animation(ExpenseSegmentStripMotion.selectionSpring, value: selection)
+        .animation(ExpensePagerMotion.slide, value: selection)
         .animation(ExpenseSegmentStripMotion.pressSpring, value: hoverSegment)
         .animation(ExpenseSegmentStripMotion.pressSpring, value: isInteracting)
     }
@@ -288,9 +284,8 @@ private struct ExpenseGlassPills: View {
         let isEmphasized = isSelected && emphasized
         return Button {
             guard selection != segment else { return }
-            withAnimation(ExpenseSegmentStripMotion.selectionSpring) {
-                selection = segment
-            }
+            // Pager owns the page spring; pill indicator follows via .animation(value:).
+            selection = segment
         } label: {
             Text(label)
                 .font(.system(size: 15, weight: isSelected ? .semibold : .medium))
@@ -322,16 +317,12 @@ private struct ExpenseGlassPills: View {
                 guard let segment = segment(at: value.location.x, totalWidth: totalWidth) else { return }
                 hoverSegment = segment
                 guard selection != segment else { return }
-                withAnimation(ExpenseSegmentStripMotion.selectionSpring) {
-                    selection = segment
-                }
+                selection = segment
             }
             .onEnded { value in
                 if let segment = segment(at: value.location.x, totalWidth: totalWidth) ?? hoverSegment,
                    selection != segment {
-                    withAnimation(ExpenseSegmentStripMotion.selectionSpring) {
-                        selection = segment
-                    }
+                    selection = segment
                 }
                 withAnimation(ExpenseSegmentStripMotion.pressSpring) {
                     hoverSegment = nil

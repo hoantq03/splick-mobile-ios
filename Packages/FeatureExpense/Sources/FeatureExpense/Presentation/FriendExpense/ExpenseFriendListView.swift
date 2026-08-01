@@ -172,6 +172,7 @@ public struct ExpenseFriendListView: View {
       .splickInstantScrollTaps()
       .scrollChromeTracking()
       .tabBarHideOnScroll()
+      .splickSegmentPagerScrollInsets()
       .splickScrollSoftTopEdge()
       .splickNativeRefreshable(controller: refreshController) {
         await viewModel.load(isPullToRefresh: true)

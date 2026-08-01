@@ -108,10 +108,12 @@ public struct ExpenseListView: View {
         }
         .environment(\.feedSegmentScrollState, expenseSegmentScrollState)
         .onChange(of: selectedSegment) { _ in
-            navigationPath = NavigationPath()
-            // Defer chrome resets so they don't contend with the segment slide animation.
+            if !navigationPath.isEmpty {
+                navigationPath = NavigationPath()
+            }
+            // Wait for segment spring to settle before chrome resets contend on main thread.
             Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(280))
+                try? await Task.sleep(for: .milliseconds(ExpensePagerMotion.settleMilliseconds))
                 expenseSegmentScrollState.reset()
                 tabBarScrollState?.reset()
             }
@@ -124,7 +126,12 @@ public struct ExpenseListView: View {
         .onChange(of: isTabActive) { active in
             guard active else { return }
             viewModel.updateCurrentUserId(currentUserId)
-            tabBarScrollState?.reset()
+            // Defer chrome reset so it does not fight the main-tab slide animation.
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(ExpensePagerMotion.settleMilliseconds))
+                guard isTabActive else { return }
+                tabBarScrollState?.reset()
+            }
             Task { await viewModel.loadIfNeeded() }
         }
         .onReceive(sameTabTapPublisher) { _ in
@@ -189,6 +196,7 @@ public struct ExpenseListView: View {
             switch viewModel.state {
             case .idle, .loading:
                 LoadingView(message: languageService.text(.expenseLoading))
+                    .splickSegmentPagerPageTopInset(isEnabled: true)
 
             case .loaded where viewModel.expenses.isEmpty:
                 EmptyStateView(
@@ -199,6 +207,7 @@ public struct ExpenseListView: View {
                 ) {
                     openPostCapture()
                 }
+                .splickSegmentPagerPageTopInset(isEnabled: true)
 
             case .loaded:
                 historyContent
@@ -207,6 +216,7 @@ public struct ExpenseListView: View {
                 ErrorView(message: message) {
                     Task { await viewModel.load() }
                 }
+                .splickSegmentPagerPageTopInset(isEnabled: true)
             }
         }
     }
@@ -217,11 +227,13 @@ public struct ExpenseListView: View {
             switch viewModel.state {
             case .idle, .loading:
                 LoadingView(message: languageService.text(.expenseLoading))
+                    .splickSegmentPagerPageTopInset(isEnabled: true)
 
             case .failed(let message):
                 ErrorView(message: message) {
                     Task { await viewModel.load() }
                 }
+                .splickSegmentPagerPageTopInset(isEnabled: true)
 
             default:
                 overviewContent
@@ -245,6 +257,7 @@ public struct ExpenseListView: View {
                 title: languageService.text(.expenseFriendsEmptyTitle),
                 message: languageService.text(.expenseFriendsEmptyMessage)
             )
+            .splickSegmentPagerPageTopInset(isEnabled: true)
         }
     }
 
@@ -264,6 +277,7 @@ public struct ExpenseListView: View {
             }
             .scrollChromeTracking()
             .tabBarHideOnScroll()
+            .splickSegmentPagerScrollInsets()
             .splickScrollSoftTopEdge()
             .splickNativeRefreshable(controller: refreshController) {
                 await viewModel.load(isPullToRefresh: true)
@@ -317,6 +331,7 @@ public struct ExpenseListView: View {
             }
             .scrollChromeTracking()
             .tabBarHideOnScroll()
+            .splickSegmentPagerScrollInsets()
             .splickScrollSoftTopEdge()
             .splickNativeRefreshable(controller: overviewRefreshController) {
                 await viewModel.load(isPullToRefresh: true)
