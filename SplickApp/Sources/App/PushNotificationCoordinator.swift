@@ -354,6 +354,8 @@ final class PushNotificationCoordinator: ObservableObject {
             (userInfo["postId"] as? String)
             ?? (userInfo["post_id"] as? String)
             ?? (userInfo["destinationPostId"] as? String)
+            ?? (userInfo["conversationId"] as? String)
+            ?? (userInfo["conversation_id"] as? String)
             ?? (userInfo["referenceId"] as? String)
 
         guard let screen else { return nil }
@@ -374,6 +376,8 @@ final class PushNotificationCoordinator: ObservableObject {
                 (dictionary["postId"] as? String)
                 ?? (dictionary["post_id"] as? String)
                 ?? (dictionary["destinationPostId"] as? String)
+                ?? (dictionary["conversationId"] as? String)
+                ?? (dictionary["conversation_id"] as? String)
             guard let screen else { return nil }
             return NotificationDestination(
                 screen: screen,

@@ -52,8 +52,8 @@ public struct AppNotification: Identifiable, Codable, Equatable, Sendable {
         case .friends:
             return .friends
         case .messages:
-            if let referenceId {
-                return .conversation(referenceId)
+            if let conversationId = destination?.conversationId ?? referenceId {
+                return .conversation(conversationId)
             }
             return .messages
         case .feed:

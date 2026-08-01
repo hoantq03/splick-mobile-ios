@@ -2,6 +2,7 @@ import Foundation
 
 public struct NotificationDestination: Codable, Equatable, Sendable {
     public let screen: NotificationScreen
+    /// Post id for `.postDetail`, conversation id for `.messages`.
     public let postId: UUID?
 
     public init(screen: NotificationScreen, postId: UUID? = nil) {
@@ -15,6 +16,11 @@ public struct NotificationDestination: Codable, Equatable, Sendable {
 
     public var postDetailId: UUID? {
         guard screen == .postDetail else { return nil }
+        return postId
+    }
+
+    public var conversationId: UUID? {
+        guard screen == .messages else { return nil }
         return postId
     }
 }

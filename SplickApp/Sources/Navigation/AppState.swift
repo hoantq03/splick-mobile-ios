@@ -230,7 +230,7 @@ final class AppState: ObservableObject {
         case .friends:
             return .friends
         case .messages:
-            if let conversationId = destination.postId {
+            if let conversationId = destination.conversationId {
                 return .conversation(conversationId)
             }
             return .messages

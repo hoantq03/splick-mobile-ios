@@ -52,6 +52,23 @@ final class AppNotificationNavigationTests: XCTestCase {
         XCTAssertEqual(NotificationType(rawValue: "GROUP_INVITE"), .groupInvite)
     }
 
+    func testNavigationTargetOpensConversationFromMessagesDestination() {
+        let conversationId = UUID()
+        let notification = AppNotification(
+            id: UUID(),
+            type: .directMessage,
+            title: "Alice",
+            body: "Hello",
+            destination: NotificationDestination(screen: .messages, postId: conversationId)
+        )
+
+        XCTAssertEqual(notification.navigationTarget, .conversation(conversationId))
+        XCTAssertEqual(
+            NotificationDestination(screen: .messages, postId: conversationId).conversationId,
+            conversationId
+        )
+    }
+
     func testNavigationTargetRoutesBulkSettlementToExpenses() {
         let notification = AppNotification(
             id: UUID(),
