@@ -25,7 +25,7 @@ struct UserReactionBadgeView: View {
             .frame(width: Metrics.avatarSize, height: Metrics.avatarSize)
             .reactionTargetAnchor(
                 id: "user:\(summary.userId.uuidString)",
-                placement: .topTrailing()
+                placement: .center
             )
 
             if !summary.emojiCounts.isEmpty {

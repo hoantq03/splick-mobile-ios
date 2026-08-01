@@ -28,7 +28,8 @@ struct InlineReactionBar: View {
 
     private let slotSize: CGFloat = 36
     private let slotSpacing: CGFloat = 4
-    private let reactionCommitDelay: TimeInterval = 0.16
+    /// Keep the fly (pop + fall ≈ 0.67s) visible before the feed diff remounts the card.
+    private let reactionCommitDelay: TimeInterval = 0.55
     private static let selectionFeedback = UISelectionFeedbackGenerator()
     private static let impactFeedback = UIImpactFeedbackGenerator(style: .light)
 

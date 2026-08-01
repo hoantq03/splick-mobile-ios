@@ -25,6 +25,7 @@ struct PostCardView: View, Equatable {
     @State private var isMediaPinchZooming = false
     @State private var reminderSentMessage: String?
     @State private var reactionAnchors: [String: CGPoint] = [:]
+    @State private var cardOriginGlobal: CGPoint = .zero
     @State private var flyingEmojis: [FlyingEmojiFlight] = []
     @State private var cachedReactionPreview: (top: [UserReactionSummary], otherPeopleCount: Int)?
     @State private var cachedReactionVersion: UInt64?
@@ -135,24 +136,29 @@ struct PostCardView: View, Equatable {
             }
         }
         .overlay {
-            if !flyingEmojis.isEmpty {
-                GeometryReader { geo in
-                    let cardOrigin = geo.frame(in: .global).origin
-                    ForEach(flyingEmojis) { flight in
-                        FlyingEmojiView(
-                            flight: flight,
-                            cardOriginGlobal: cardOrigin,
-                            onComplete: {
-                                // Defer @State mutation off animation/layout coalescing.
-                                DispatchQueue.main.async {
-                                    flyingEmojis.removeAll { $0.id == flight.id }
-                                }
-                            }
-                        )
+            GeometryReader { geo in
+                let cardOrigin = geo.frame(in: .global).origin
+                Color.clear
+                    .onAppear { cardOriginGlobal = cardOrigin }
+                    .onChange(of: flyingEmojis.count) { _ in
+                        cardOriginGlobal = cardOrigin
                     }
+
+                ForEach(flyingEmojis) { flight in
+                    FlyingEmojiView(
+                        flight: flight,
+                        cardOriginGlobal: cardOrigin,
+                        onComplete: {
+                            // Defer @State mutation off animation/layout coalescing.
+                            DispatchQueue.main.async {
+                                flyingEmojis.removeAll { $0.id == flight.id }
+                            }
+                        }
+                    )
+                    .frame(width: geo.size.width, height: geo.size.height)
                 }
-                .allowsHitTesting(false)
             }
+            .allowsHitTesting(false)
         }
         .alert(
             languageService.text(.friendsRelationSent),
@@ -373,9 +379,16 @@ struct PostCardView: View, Equatable {
         }
     }
 
+    /// Reserved / live landing for the current user's avatar under the emoji tray.
+    private static let selfAvatarLandingAnchorId = "selfAvatarLanding"
+
     private enum Layout {
         static let reactionBarHeight: CGFloat = 40
         static let viewsButtonReservedWidth: CGFloat = 52
+        static let selfAvatarSize: CGFloat = 28
+        /// Tray mid → avatar-row center when preference anchors are not ready yet.
+        static let trayToAvatarFallbackOffsetY: CGFloat = 44
+        static let selfAvatarLeadingPadding: CGFloat = 0
     }
 
     private var reactionBarRow: some View {
@@ -431,7 +444,7 @@ struct PostCardView: View, Equatable {
     }
 
     private func scheduleFlyingEmoji(emoji: String, sourceGlobal: CGRect) {
-        let end = flyTargetPoint()
+        let end = flyTargetPoint(sourceGlobal: sourceGlobal)
         let flight = FlyingEmojiFlight.make(
             emoji: emoji,
             sourceFrameGlobal: sourceGlobal,
@@ -444,46 +457,69 @@ struct PostCardView: View, Equatable {
         flyingEmojis.append(flight)
     }
 
-    private func flyTargetPoint() -> CGPoint {
-        guard let userId = currentUser?.id else {
-            return CGPoint(x: 40, y: 68)
+    private func flyTargetPoint(sourceGlobal: CGRect) -> CGPoint {
+        let startLocal = CGPoint(
+            x: sourceGlobal.midX - cardOriginGlobal.x,
+            y: sourceGlobal.midY - cardOriginGlobal.y
+        )
+
+        if let userId = currentUser?.id {
+            let userKey = "user:\(userId.uuidString)"
+            // Prefer the reactor's own avatar badge under the tray.
+            if let anchor = reactionAnchors[userKey] {
+                return anchor
+            }
         }
 
-        let preview = post.reactionPreview(topLimit: 3)
-        let userKey = "user:\(userId.uuidString)"
-
-        if preview.top.contains(where: { $0.userId == userId }),
-           let anchor = reactionAnchors[userKey] {
-            return anchor
+        // First reaction (avatar not mounted yet): reserved slot in the summary row.
+        if let landing = reactionAnchors[Self.selfAvatarLandingAnchorId] {
+            return landing
         }
 
-        if preview.otherPeopleCount > 0, let anchor = reactionAnchors["more"] {
-            return anchor
-        }
-
-        if let anchor = reactionAnchors[userKey] {
-            return anchor
-        }
-
-        return CGPoint(x: 40, y: 68)
+        // Last resort: avatar column under the tray — never back onto the emoji tray.
+        return CGPoint(
+            x: Layout.selfAvatarSize / 2 + Layout.selfAvatarLeadingPadding,
+            y: startLocal.y + Layout.trayToAvatarFallbackOffsetY
+        )
     }
 
     @ViewBuilder
     private var reactionSummaryRow: some View {
         let preview = reactionPreview
-        if !preview.top.isEmpty {
+        let myId = currentUser?.id
+        let hasMyBadge = myId.map { id in preview.top.contains(where: { $0.userId == id }) } ?? false
+
+        let badges = HStack(spacing: 6) {
+            ForEach(preview.top, id: \.userId) { summary in
+                UserReactionBadgeView(summary: summary)
+                    .id(summary.userId)
+            }
+
+            if preview.otherPeopleCount > 0 {
+                MoreReactorsChip(count: preview.otherPeopleCount)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .frame(minHeight: Layout.selfAvatarSize, alignment: .leading)
+        // When the current user is not in the summary yet, keep an invisible
+        // avatar-sized target under the tray for the fly-to-self landing.
+        .background(alignment: .leading) {
+            if !hasMyBadge {
+                Color.clear
+                    .frame(width: Layout.selfAvatarSize, height: Layout.selfAvatarSize)
+                    .reactionTargetAnchor(id: Self.selfAvatarLandingAnchorId)
+            }
+        }
+
+        if !preview.top.isEmpty || preview.otherPeopleCount > 0 {
             Button { actions.onPresent(.reactions(post)) } label: {
-                HStack(spacing: 6) {
-                    ForEach(preview.top, id: \.userId) { summary in
-                        UserReactionBadgeView(summary: summary)
-                            .id(summary.userId)
-                    }
-                    if preview.otherPeopleCount > 0 {
-                        MoreReactorsChip(count: preview.otherPeopleCount)
-                    }
-                }
+                badges
             }
             .buttonStyle(.plain)
+        } else {
+            badges
+                .accessibilityHidden(true)
         }
     }
 

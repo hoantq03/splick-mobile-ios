@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import DesignSystem
 import SplickDomain
 
@@ -64,112 +65,140 @@ struct FlyingEmojiFlight: Identifiable {
 }
 
 /// Pop upward first, then fall naturally down into the avatar target.
+/// Uses UIKit animation so ancestor SwiftUI `.transaction { animation = nil }`
+/// (e.g. tab pagers) cannot strip the launch/fall phases.
 struct FlyingEmojiView: View {
     let flight: FlyingEmojiFlight
     let cardOriginGlobal: CGPoint
     let onComplete: () -> Void
 
-    @State private var animatedPosition: CGPoint = .zero
-    @State private var animatedScale: CGFloat = 1
-    @State private var animatedOpacity: Double = 1
-    @State private var animatedRotation: Double = 0
-    @State private var hasStarted = false
+    var body: some View {
+        FlyingEmojiUIKitFlight(
+            flight: flight,
+            cardOriginGlobal: cardOriginGlobal,
+            onComplete: onComplete
+        )
+        .allowsHitTesting(false)
+    }
+}
+
+// MARK: - UIKit-driven flight (immune to SwiftUI transaction animation = nil)
+
+private struct FlyingEmojiUIKitFlight: UIViewRepresentable {
+    let flight: FlyingEmojiFlight
+    let cardOriginGlobal: CGPoint
+    let onComplete: () -> Void
+
+    func makeUIView(context: Context) -> FlyingEmojiHostView {
+        let view = FlyingEmojiHostView()
+        view.onComplete = onComplete
+        view.start(flight: flight, cardOriginGlobal: cardOriginGlobal)
+        return view
+    }
+
+    func updateUIView(_ uiView: FlyingEmojiHostView, context: Context) {
+        uiView.onComplete = onComplete
+        // Do not restart mid-flight when the card scrolls; position is card-local.
+    }
+}
+
+private final class FlyingEmojiHostView: UIView {
+    var onComplete: (() -> Void)?
+
+    private var hosting: UIHostingController<EmojiView>?
+    private var hasStarted = false
 
     private let launchDuration: TimeInterval = 0.19
     private let fallDuration: TimeInterval = 0.46
     private let apexHoldDuration: TimeInterval = 0.02
 
-    var body: some View {
-        EmojiView(value: flight.emoji, size: glyphSize)
-            .frame(width: glyphSize, height: glyphSize)
-            .scaleEffect(animatedScale)
-            .rotationEffect(.degrees(animatedRotation))
-            .position(hasStarted ? animatedPosition : startPoint)
-            .opacity(animatedOpacity)
-            .allowsHitTesting(false)
-            .onAppear {
-                runAnimation()
-            }
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .clear
+        isUserInteractionEnabled = false
     }
 
-    private var startPoint: CGPoint {
-        flight.startLocal(relativeTo: cardOriginGlobal)
-    }
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { nil }
 
-    private var glyphSize: CGFloat {
-        flight.sourceSize()
-    }
-    
-    private var apexPoint: CGPoint {
-        let start = startPoint
-        return CGPoint(
+    func start(flight: FlyingEmojiFlight, cardOriginGlobal: CGPoint) {
+        guard !hasStarted else { return }
+        hasStarted = true
+
+        let glyphSize = flight.sourceSize()
+        let start = flight.startLocal(relativeTo: cardOriginGlobal)
+        let apex = CGPoint(
             x: start.x + flight.popVector.dx,
             y: start.y + flight.popVector.dy - flight.apexOvershoot
         )
-    }
-
-    private var fallPoint: CGPoint {
-        CGPoint(
-            x: flight.end.x + flight.lateralDrift,
-            y: flight.end.y
+        // Land on the reactor avatar under the tray — never back onto the emoji tray.
+        var end = flight.end
+        let minAvatarRowY = start.y + 36
+        if end.y < minAvatarRowY {
+            end = CGPoint(x: end.x, y: minAvatarRowY)
+        }
+        let fall = CGPoint(
+            x: end.x + flight.lateralDrift * 0.35,
+            y: end.y
         )
-    }
 
-    private var launchRotation: Double {
-        rotationDirection * 9
-    }
-
-    private var fallRotation: Double {
-        rotationDirection * -4
-    }
-
-    private var settledRotation: Double {
-        0
-    }
-
-    private var rotationDirection: Double {
-        switch flight.launchStyle {
-        case .upLeft:
-            return -1
-        case .upRight:
-            return 1
-        case .straightUp:
-            return flight.lateralDrift >= 0 ? 1 : -1
-        }
-    }
-    
-    private func runAnimation() {
-        hasStarted = true
-        animatedPosition = startPoint
-        animatedScale = 1
-        animatedOpacity = 1
-        animatedRotation = 0
-
-        withAnimation(.interpolatingSpring(stiffness: 260, damping: 24)) {
-            animatedPosition = apexPoint
-            animatedScale = 4
-            animatedRotation = launchRotation
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + launchDuration + apexHoldDuration) {
-            withAnimation(.timingCurve(0.18, 0.78, 0.28, 1, duration: fallDuration)) {
-                animatedPosition = fallPoint
-                animatedScale = 0.32
-                animatedRotation = fallRotation
+        let rotationDirection: CGFloat = {
+            switch flight.launchStyle {
+            case .upLeft: return -1
+            case .upRight: return 1
+            case .straightUp: return flight.lateralDrift >= 0 ? 1 : -1
             }
+        }()
+
+        let emoji = EmojiView(value: flight.emoji, size: glyphSize)
+        let host = UIHostingController(rootView: emoji)
+        host.view.backgroundColor = .clear
+        if #available(iOS 16.4, *) {
+            host.safeAreaRegions = []
+        }
+        hosting = host
+        addSubview(host.view)
+
+        host.view.bounds = CGRect(x: 0, y: 0, width: glyphSize, height: glyphSize)
+        host.view.center = start
+        host.view.transform = .identity
+        host.view.alpha = 1
+
+        // Phase 1 — pop up and enlarge.
+        UIView.animate(
+            withDuration: launchDuration,
+            delay: 0,
+            usingSpringWithDamping: 0.72,
+            initialSpringVelocity: 0.8,
+            options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseOut]
+        ) {
+            host.view.center = apex
+            host.view.transform = CGAffineTransform(scaleX: 4, y: 4)
+                .rotated(by: rotationDirection * 9 * .pi / 180)
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + launchDuration + apexHoldDuration + fallDuration * 0.58) {
-            withAnimation(.easeOut(duration: fallDuration * 0.18)) {
-                animatedPosition = flight.end
-                animatedScale = 0.14
-                animatedOpacity = 0
-                animatedRotation = settledRotation
-            }
+        // Phase 2 — fall toward avatar.
+        UIView.animate(
+            withDuration: fallDuration,
+            delay: launchDuration + apexHoldDuration,
+            options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseInOut]
+        ) {
+            host.view.center = fall
+            host.view.transform = CGAffineTransform(scaleX: 0.32, y: 0.32)
+                .rotated(by: rotationDirection * -4 * .pi / 180)
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + launchDuration + apexHoldDuration + fallDuration) {
-            onComplete()
+        // Phase 3 — settle into the badge and fade out.
+        UIView.animate(
+            withDuration: fallDuration * 0.18,
+            delay: launchDuration + apexHoldDuration + fallDuration * 0.58,
+            options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseOut]
+        ) {
+            host.view.center = end
+            host.view.transform = CGAffineTransform(scaleX: 0.14, y: 0.14)
+            host.view.alpha = 0
+        } completion: { [weak self] _ in
+            self?.onComplete?()
         }
     }
 }
