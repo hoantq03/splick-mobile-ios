@@ -163,8 +163,8 @@ private struct ModernSplickTabBar: View {
                     ? SplickTheme.Colors.primaryGradientStart
                     : SplickTheme.Colors.textTertiary
             )
-            .scaleEffect(tappedTab == tab ? 1.18 : 1.0)
-            .animation(.spring(response: 0.30, dampingFraction: 0.52), value: tappedTab == tab)
+            .scaleEffect(tappedTab == tab ? 1.08 : 1.0)
+            .animation(.easeOut(duration: 0.16), value: tappedTab == tab)
             TabBarBadgeView(count: badge)
                 .offset(x: 10, y: -6)
         }
@@ -254,8 +254,8 @@ private struct LegacySplickTabBar: View {
                     ? SplickTheme.Colors.primaryGradientStart
                     : SplickTheme.Colors.textTertiary
             )
-            .scaleEffect(tappedTab == tab ? 1.18 : 1.0)
-            .animation(.spring(response: 0.30, dampingFraction: 0.52), value: tappedTab == tab)
+            .scaleEffect(tappedTab == tab ? 1.08 : 1.0)
+            .animation(.easeOut(duration: 0.16), value: tappedTab == tab)
             .frame(maxWidth: .infinity)
             .onChange(of: tappedTab) { _ in
                 guard tappedTab == tab else { return }

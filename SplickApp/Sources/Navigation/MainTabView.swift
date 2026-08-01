@@ -27,6 +27,9 @@ struct MainTabView: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var tabBarScrollState = TabBarScrollState()
     @State private var badgeCounts: TabBadgeCounts = .zero
+    /// Drives heavy tab work (loads, video, chrome) — updated after the pager slide settles
+    /// so activation cost does not hitch the slide itself.
+    @State private var settledPagerTab: Tab = .feed
     /// Toggled to `true` by the bell button while the panel is open; the overlay's onChange
     /// observes this, resets it, and runs `dismissAnimated()` so the collapse animation plays
     /// before the overlay is removed from the hierarchy.
@@ -123,6 +126,9 @@ struct MainTabView: View {
         }
         .animation(LinkedPostMotion.spring, value: appState.linkedPostPresentation)
             .onAppear {
+                if appState.selectedTab.isPagerTab {
+                    settledPagerTab = appState.selectedTab
+                }
                 Task { @MainActor in
                     badgeCounts = container.badgeCountService.counts
                     pushNotificationCoordinator.syncAppIconBadge(count: badgeCounts.total)
@@ -261,7 +267,7 @@ struct MainTabView: View {
             onPendingPostHandled: {
                 appState.clearPendingPostNavigation()
             },
-            isTabActive: appState.selectedTab == .feed
+            isTabActive: settledPagerTab == .feed
         )
         .environmentObject(container.customEmojiStore)
         .environment(\.customEmojiDependencies, container.customEmojiDependencies)
@@ -277,7 +283,7 @@ struct MainTabView: View {
                 )
             }
         )
-        .environment(\.sameTabTapHandlingEnabled, appState.selectedTab == .feed)
+        .environment(\.sameTabTapHandlingEnabled, settledPagerTab == .feed)
     }
 
     @ViewBuilder
@@ -285,7 +291,7 @@ struct MainTabView: View {
         ExpenseListView(
             viewModel: container.expenseListViewModel,
             currentUserId: appState.currentUser?.id,
-            isTabActive: appState.selectedTab == .expenses,
+            isTabActive: settledPagerTab == .expenses,
             userSearchUseCase: container.expenseFriendSearchUseCase,
             profileDependencies: container.friendUserProfileDependencies,
             friendListViewModel: container.expenseFriendListViewModel,
@@ -296,7 +302,7 @@ struct MainTabView: View {
                 )
             }
         )
-        .environment(\.sameTabTapHandlingEnabled, appState.selectedTab == .expenses)
+        .environment(\.sameTabTapHandlingEnabled, settledPagerTab == .expenses)
     }
 
     @ViewBuilder
@@ -349,13 +355,13 @@ struct MainTabView: View {
         )
         .environmentObject(container.customEmojiStore)
         .environment(\.customEmojiDependencies, container.customEmojiDependencies)
-        .environment(\.sameTabTapHandlingEnabled, appState.selectedTab == .friends)
+        .environment(\.sameTabTapHandlingEnabled, settledPagerTab == .friends)
     }
 
     @ViewBuilder
     private var messagesTabContent: some View {
         MessagingTabRoot()
-            .environment(\.sameTabTapHandlingEnabled, appState.selectedTab == .messages)
+            .environment(\.sameTabTapHandlingEnabled, settledPagerTab == .messages)
     }
 
     @ViewBuilder
@@ -372,11 +378,11 @@ struct MainTabView: View {
             tabBarScrollState.hide(flushToBottom: true)
             return
         }
-        // Defer chrome reset until the pager slide has mostly finished so reset
-        // work does not contend with the offset animation on the main thread.
+        // Defer heavy tab activation + chrome reset until the pager slide has finished.
         Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(280))
+            try? await Task.sleep(for: .milliseconds(MainTabPagerMotion.settleMilliseconds))
             guard appState.selectedTab == tab else { return }
+            settledPagerTab = tab
             tabBarScrollState.reset()
         }
         // Badge counts: startup apply + 30s polling + force refresh on mutations.
@@ -1246,8 +1252,24 @@ struct ProfileSettingsView: View {
 // MARK: - Main tab pager
 
 private enum MainTabPagerMotion {
-    /// Snappy horizontal page change with a light end bounce.
-    static let spring = Animation.spring(response: 0.36, dampingFraction: 0.72, blendDuration: 0.04)
+    /// Snappy ease-out slide; keep short so settle work starts sooner.
+    static let slide = Animation.easeOut(duration: 0.22)
+    static let settleMilliseconds: UInt64 = 240
+}
+
+/// Interpolates only the X translation at the render level — avoids SwiftUI
+/// re-animating child layout on every pager tick (main hitch source).
+private struct MainTabPagerSlideOffset: GeometryEffect {
+    var offsetX: CGFloat
+
+    var animatableData: CGFloat {
+        get { offsetX }
+        set { offsetX = newValue }
+    }
+
+    func effectValue(size: CGSize) -> ProjectionTransform {
+        ProjectionTransform(CGAffineTransform(translationX: offsetX, y: 0))
+    }
 }
 
 private extension Tab {
@@ -1287,6 +1309,9 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
     @ViewBuilder var camera: () -> Camera
 
     @State private var pagerIndex: Int = 0
+    @State private var activatedTabs: Set<Tab> = [.feed]
+    /// Bumps on every tab request so a deferred slide can be cancelled by a newer tap.
+    @State private var transitionGeneration: Int = 0
 
     var body: some View {
         GeometryReader { proxy in
@@ -1301,7 +1326,7 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
                     tabPage(.messages, width: width, content: messages)
                 }
                 .frame(width: width * pageCount, alignment: .leading)
-                .offset(x: -CGFloat(pagerIndex) * width)
+                .modifier(MainTabPagerSlideOffset(offsetX: -CGFloat(pagerIndex) * width))
 
                 if selectedTab == .camera {
                     camera()
@@ -1313,16 +1338,68 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
         }
         .ignoresSafeArea(edges: [.top, .bottom])
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .animation(MainTabPagerMotion.spring, value: selectedTab == .camera)
+        .animation(MainTabPagerMotion.slide, value: selectedTab == .camera)
         .onAppear {
             let initial = selectedTab.isPagerTab ? selectedTab : .feed
-            pagerIndex = Tab.pagerTabs.firstIndex(of: initial) ?? 0
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                activatedTabs.insert(initial)
+                pagerIndex = Tab.pagerTabs.firstIndex(of: initial) ?? 0
+            }
+            prewarmRemainingTabs()
         }
         .onChange(of: selectedTab) { newTab in
             guard newTab.isPagerTab else { return }
-            let idx = Tab.pagerTabs.firstIndex(of: newTab) ?? 0
-            guard idx != pagerIndex else { return }
-            withAnimation(MainTabPagerMotion.spring) {
+            moveToPagerTab(newTab)
+        }
+    }
+
+    /// Mount the other pager tabs after first paint so later switches never pay a mount hitch mid-gesture.
+    private func prewarmRemainingTabs() {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard activatedTabs.count < Tab.pagerTabs.count else { return }
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                activatedTabs.formUnion(Tab.pagerTabs)
+            }
+        }
+    }
+
+    private func moveToPagerTab(_ newTab: Tab) {
+        let idx = Tab.pagerTabs.firstIndex(of: newTab) ?? 0
+        guard idx != pagerIndex else {
+            activatedTabs.insert(newTab)
+            return
+        }
+
+        let from = pagerIndex
+        let range = min(from, idx)...max(from, idx)
+        let needsMount = range.contains { !activatedTabs.contains(Tab.pagerTabs[$0]) }
+
+        transitionGeneration += 1
+        let generation = transitionGeneration
+
+        if needsMount {
+            // Mount destination first without sliding, then ease the page on the next turn.
+            var mountTransaction = Transaction()
+            mountTransaction.disablesAnimations = true
+            withTransaction(mountTransaction) {
+                for i in range {
+                    activatedTabs.insert(Tab.pagerTabs[i])
+                }
+            }
+            Task { @MainActor in
+                await Task.yield()
+                guard generation == transitionGeneration else { return }
+                withAnimation(MainTabPagerMotion.slide) {
+                    pagerIndex = idx
+                }
+            }
+        } else {
+            withAnimation(MainTabPagerMotion.slide) {
                 pagerIndex = idx
             }
         }
@@ -1330,10 +1407,19 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
 
     @ViewBuilder
     private func tabPage<T: View>(_ tab: Tab, width: CGFloat, @ViewBuilder content: () -> T) -> some View {
-        content()
-            .frame(width: width)
-            .frame(maxHeight: .infinity)
-            .allowsHitTesting(selectedTab == tab)
+        Group {
+            if activatedTabs.contains(tab) {
+                content()
+            } else {
+                // Keep a stable-sized placeholder so HStack geometry stays correct
+                // before the tab is visited for the first time.
+                Color.clear
+            }
+        }
+        .frame(width: width)
+        .frame(maxHeight: .infinity)
+        // Keep hit-testing on the selected tab immediately; heavy activation is deferred.
+        .allowsHitTesting(selectedTab == tab)
     }
 }
 
