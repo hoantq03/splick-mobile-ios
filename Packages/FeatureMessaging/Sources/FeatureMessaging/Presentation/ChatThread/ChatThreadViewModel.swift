@@ -365,12 +365,6 @@ public final class ChatThreadViewModel: ObservableObject {
             return nil
         }
 
-        let distinctEmojis = Set(message.reactions.filter { $0.userId == currentUserId }.map(\.emoji))
-        if !distinctEmojis.contains(emoji),
-           distinctEmojis.count >= ReactionConstants.maxDistinctEmojiPerUser {
-            return languageService.text(.messagingReactionEmojiLimit)
-        }
-
         let optimisticId = UUID()
         let reaction = Reaction(id: optimisticId, emoji: emoji, userId: currentUserId)
         updateMessage(at: index, with: message.updating(reactions: message.reactions + [reaction]))

@@ -441,12 +441,6 @@ public final class FeedViewModel: ObservableObject {
         guard let index = indexOfPost(id: postId) else { return nil }
 
         let post = posts[index]
-        let distinctEmojis = Set(
-            post.reactions.filter { $0.userId == userId }.map(\.emoji)
-        )
-        if !distinctEmojis.contains(emoji), distinctEmojis.count >= ReactionConstants.maxDistinctEmojiPerUser {
-            return languageService.text(.feedReactionEmojiLimit)
-        }
 
         let optimisticId = UUID()
         let reaction = Reaction(id: optimisticId, emoji: emoji, userId: userId)
