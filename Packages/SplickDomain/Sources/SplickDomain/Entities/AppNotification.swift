@@ -65,19 +65,20 @@ public struct AppNotification: Identifiable, Codable, Equatable, Sendable {
         }
 
         switch type {
-        case .feedTaggedInPost, .feedMentioned, .feedMentionedInPost, .feedMentionedInComment,
-             .postCommented, .postReactionMilestone, .postReacted, .reaction, .newPost:
+        case .feedTaggedInPost, .feedMentionedInPost, .feedMentionedInComment,
+             .postCommented, .postReactionMilestone:
             if let referenceId {
                 return .post(referenceId)
             }
             return .feed
         case .paymentEvidenceSubmitted, .paymentEvidenceApproved, .paymentEvidenceRejected,
-             .expenseCreated, .expenseSplitBill, .expenseReminder, .expenseSettled,
-             .dailyDebtReminder:
+             .expenseSplitBill, .expenseReminder, .expenseSettled,
+             .dailyDebtReminder, .bulkSettlementPendingApproval, .bulkSettlementApproved,
+             .bulkSettlementRejected:
             return .expenses
         case .streakReminderMidday, .streakReminderEvening:
             return .feed
-        case .friendRequest, .friendRequestSent, .friendRequestAccepted, .groupInvite:
+        case .friendRequestSent, .friendRequestAccepted, .groupInvite:
             return .friends
         case .directMessage, .groupMessage, .groupCreated, .groupMemberAdded,
              .groupMemberRemoved, .groupRenamed, .groupAdminTransferred:
@@ -107,12 +108,8 @@ public struct AppNotification: Identifiable, Codable, Equatable, Sendable {
 }
 
 public enum NotificationType: String, Codable, Sendable {
-    case newPost = "NEW_POST"
-    case reaction = "REACTION"
-    case postReacted = "POST_REACTED"
     case postReactionMilestone = "POST_REACTION_MILESTONE"
     case feedTaggedInPost = "FEED_TAGGED_IN_POST"
-    case feedMentioned = "FEED_MENTIONED"
     case feedMentionedInPost = "FEED_MENTIONED_IN_POST"
     case feedMentionedInComment = "FEED_MENTIONED_IN_COMMENT"
     case postCommented = "POST_COMMENTED"
@@ -122,11 +119,12 @@ public enum NotificationType: String, Codable, Sendable {
     case streakReminderMidday = "STREAK_REMINDER_MIDDAY"
     case streakReminderEvening = "STREAK_REMINDER_EVENING"
     case dailyDebtReminder = "DAILY_DEBT_REMINDER"
-    case expenseCreated = "EXPENSE_CREATED"
     case expenseSplitBill = "EXPENSE_SPLIT_BILL"
     case expenseReminder = "EXPENSE_REMINDER"
     case expenseSettled = "EXPENSE_SETTLED"
-    case friendRequest = "FRIEND_REQUEST"
+    case bulkSettlementPendingApproval = "BULK_SETTLEMENT_PENDING_APPROVAL"
+    case bulkSettlementApproved = "BULK_SETTLEMENT_APPROVED"
+    case bulkSettlementRejected = "BULK_SETTLEMENT_REJECTED"
     case friendRequestSent = "FRIEND_REQUEST_SENT"
     case friendRequestAccepted = "FRIEND_REQUEST_ACCEPTED"
     case groupInvite = "GROUP_INVITE"
@@ -137,6 +135,7 @@ public enum NotificationType: String, Codable, Sendable {
     case groupMemberRemoved = "GROUP_MEMBER_REMOVED"
     case groupRenamed = "GROUP_RENAMED"
     case groupAdminTransferred = "GROUP_ADMIN_TRANSFERRED"
+    /// Fallback for unknown/legacy backend type strings.
     case system = "SYSTEM"
 
     public var isMessagingNotification: Bool {
@@ -151,23 +150,24 @@ public enum NotificationType: String, Codable, Sendable {
 
     public var icon: String {
         switch self {
-        case .newPost, .feedTaggedInPost, .postCommented:
+        case .feedTaggedInPost, .postCommented:
             return "photo.fill"
-        case .reaction, .postReacted, .postReactionMilestone:
+        case .postReactionMilestone:
             return "heart.fill"
-        case .feedMentioned, .feedMentionedInPost, .feedMentionedInComment:
+        case .feedMentionedInPost, .feedMentionedInComment:
             return "at"
-        case .paymentEvidenceSubmitted, .expenseCreated, .expenseSplitBill, .dailyDebtReminder:
+        case .paymentEvidenceSubmitted, .expenseSplitBill, .dailyDebtReminder,
+             .bulkSettlementPendingApproval:
             return "dollarsign.circle.fill"
-        case .paymentEvidenceApproved, .expenseSettled:
+        case .paymentEvidenceApproved, .expenseSettled, .bulkSettlementApproved:
             return "checkmark.circle.fill"
-        case .paymentEvidenceRejected:
+        case .paymentEvidenceRejected, .bulkSettlementRejected:
             return "xmark.circle.fill"
         case .expenseReminder:
             return "bell.fill"
         case .streakReminderMidday, .streakReminderEvening:
             return "flame.fill"
-        case .friendRequest, .friendRequestSent, .friendRequestAccepted:
+        case .friendRequestSent, .friendRequestAccepted:
             return "person.badge.plus"
         case .groupInvite:
             return "person.3.fill"

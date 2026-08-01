@@ -44,5 +44,22 @@ final class AppNotificationNavigationTests: XCTestCase {
         XCTAssertEqual(NotificationType(rawValue: "FEED_MENTIONED_IN_POST"), .feedMentionedInPost)
         XCTAssertEqual(NotificationType(rawValue: "FEED_MENTIONED_IN_COMMENT"), .feedMentionedInComment)
         XCTAssertEqual(NotificationType(rawValue: "FRIEND_REQUEST_ACCEPTED"), .friendRequestAccepted)
+        XCTAssertEqual(
+            NotificationType(rawValue: "BULK_SETTLEMENT_PENDING_APPROVAL"),
+            .bulkSettlementPendingApproval
+        )
+        XCTAssertEqual(NotificationType(rawValue: "EXPENSE_SPLIT_BILL"), .expenseSplitBill)
+        XCTAssertEqual(NotificationType(rawValue: "GROUP_INVITE"), .groupInvite)
+    }
+
+    func testNavigationTargetRoutesBulkSettlementToExpenses() {
+        let notification = AppNotification(
+            id: UUID(),
+            type: .bulkSettlementApproved,
+            title: "Settlement approved",
+            body: "Your settlement was approved"
+        )
+
+        XCTAssertEqual(notification.navigationTarget, .expenses)
     }
 }

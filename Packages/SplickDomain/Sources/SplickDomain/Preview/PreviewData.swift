@@ -181,14 +181,14 @@ public enum PreviewData {
 
     public static let sampleNotifications: [AppNotification] = [
         AppNotification(
-            id: UUID(), type: .expenseCreated,
+            id: UUID(), type: .expenseSplitBill,
             title: "New Expense", body: "Linh added 'Dinner at Korean BBQ' - 450,000₫",
             isRead: false, actorUserId: friendUser.id,
             actorAvatarURL: friendUser.avatarURL,
             createdAt: Date().addingTimeInterval(-1800)
         ),
         AppNotification(
-            id: UUID(), type: .reaction,
+            id: UUID(), type: .postReactionMilestone,
             title: "New Reaction", body: "Duc reacted ❤️ to your photo",
             isRead: false, actorUserId: friend2.id,
             actorAvatarURL: friend2.avatarURL,
@@ -200,7 +200,7 @@ public enum PreviewData {
             isRead: true, createdAt: Date().addingTimeInterval(-86400)
         ),
         AppNotification(
-            id: UUID(), type: .friendRequest,
+            id: UUID(), type: .friendRequestSent,
             title: "Friend Request", body: "Minh Thu wants to connect with you",
             isRead: true, actorUserId: UUID(),
             createdAt: Date().addingTimeInterval(-172800)

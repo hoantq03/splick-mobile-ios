@@ -14,14 +14,14 @@ public actor FakeNotificationRepository: NotificationRepositoryProtocol {
     public func seed() {
         notifications = [
             AppNotification(
-                id: UUID(), type: .expenseCreated,
+                id: UUID(), type: .expenseSplitBill,
                 title: "New Expense",
                 body: "Linh added 'Korean BBQ dinner' — 450,000₫",
                 isRead: false,
                 createdAt: Date().addingTimeInterval(-1800)
             ),
             AppNotification(
-                id: UUID(), type: .reaction,
+                id: UUID(), type: .postReactionMilestone,
                 title: "New Reaction",
                 body: "Duc reacted ❤️ to your photo",
                 isRead: false,
@@ -35,16 +35,16 @@ public actor FakeNotificationRepository: NotificationRepositoryProtocol {
                 createdAt: Date().addingTimeInterval(-86400)
             ),
             AppNotification(
-                id: UUID(), type: .friendRequest,
+                id: UUID(), type: .friendRequestSent,
                 title: "Friend Request",
                 body: "Minh Thu wants to connect with you",
                 isRead: true,
                 createdAt: Date().addingTimeInterval(-172800)
             ),
             AppNotification(
-                id: UUID(), type: .newPost,
-                title: "New Photo",
-                body: "Duc shared a new moment with you",
+                id: UUID(), type: .feedTaggedInPost,
+                title: "Tagged in post",
+                body: "Duc tagged you in a new moment",
                 isRead: true,
                 createdAt: Date().addingTimeInterval(-259200)
             ),
@@ -101,11 +101,12 @@ public actor FakeNotificationRepository: NotificationRepositoryProtocol {
         var expenses = 0
         for item in unread {
             switch item.type {
-            case .friendRequest, .friendRequestSent, .friendRequestAccepted, .groupInvite:
+            case .friendRequestSent, .friendRequestAccepted, .groupInvite:
                 friends += 1
-            case .expenseCreated, .expenseSplitBill, .expenseReminder, .expenseSettled,
+            case .expenseSplitBill, .expenseReminder, .expenseSettled,
                  .paymentEvidenceSubmitted, .paymentEvidenceApproved, .paymentEvidenceRejected,
-                 .dailyDebtReminder:
+                 .dailyDebtReminder, .bulkSettlementPendingApproval, .bulkSettlementApproved,
+                 .bulkSettlementRejected:
                 expenses += 1
             default:
                 notificationsCount += 1
