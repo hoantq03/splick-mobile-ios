@@ -26,12 +26,18 @@ final class QRScannerViewController: UIViewController, AVCaptureMetadataOutputOb
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
+        view.layer.cornerCurve = .continuous
+        view.layer.cornerRadius = 18 // SplickTheme.CornerRadius.large
+        view.clipsToBounds = true
         configureSession()
     }
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         previewLayer?.frame = view.layer.bounds
+        previewLayer?.cornerCurve = .continuous
+        previewLayer?.cornerRadius = view.layer.cornerRadius
+        previewLayer?.masksToBounds = true
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -85,6 +91,9 @@ final class QRScannerViewController: UIViewController, AVCaptureMetadataOutputOb
         let preview = AVCaptureVideoPreviewLayer(session: session)
         preview.videoGravity = .resizeAspectFill
         preview.frame = view.layer.bounds
+        preview.cornerCurve = .continuous
+        preview.cornerRadius = view.layer.cornerRadius
+        preview.masksToBounds = true
         view.layer.addSublayer(preview)
         previewLayer = preview
 

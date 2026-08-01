@@ -569,6 +569,7 @@ public struct FriendsRootView: View {
     }
 
     private var friendsSearchField: some View {
+        // Match messaging inbox search capsule (`MessagingSearchChromeMetrics.rowHeight` = 44).
         HStack(spacing: SplickTheme.Spacing.xs) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 14, weight: .medium))
@@ -584,9 +585,8 @@ public struct FriendsRootView: View {
             if hasSearchText {
                 Button(action: clearSearch) {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 16, weight: .medium))
+                        .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(SplickTheme.Colors.textTertiary)
-                        .frame(width: 28, height: 28)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(languageService.text(.commonClose))
@@ -598,9 +598,8 @@ public struct FriendsRootView: View {
                     showQRScanner = true
                 } label: {
                     Image(systemName: "qrcode.viewfinder")
-                        .font(.system(size: 18, weight: .medium))
+                        .font(.system(size: 16, weight: .medium))
                         .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                        .frame(width: 32, height: 32)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(languageService.text(.friendsScanQRUnified))
@@ -608,10 +607,9 @@ public struct FriendsRootView: View {
             }
         }
         .animation(.easeOut(duration: 0.18), value: hasSearchText)
-        .padding(.leading, SplickTheme.Spacing.md)
-        .padding(.trailing, SplickTheme.Spacing.sm)
+        .padding(.horizontal, SplickTheme.Spacing.md)
         .padding(.vertical, SplickTheme.Spacing.sm)
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, minHeight: 44)
         .background(SplickTheme.Colors.secondaryBackground)
         .clipShape(Capsule(style: .continuous))
     }

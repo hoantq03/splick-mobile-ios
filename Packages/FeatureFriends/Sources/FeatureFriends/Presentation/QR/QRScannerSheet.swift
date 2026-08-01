@@ -34,6 +34,9 @@ struct QRScannerSheet: View {
             VStack(spacing: 0) {
                 cameraSection
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.horizontal, SplickTheme.Spacing.md)
+                    .padding(.top, SplickTheme.Spacing.sm)
+                    .padding(.bottom, SplickTheme.Spacing.sm)
 
                 bottomActions
             }
@@ -97,7 +100,7 @@ struct QRScannerSheet: View {
                 viewfinderOverlay
             }
         }
-        .clipped()
+        .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.large, style: .continuous))
     }
 
     private var viewfinderOverlay: some View {
