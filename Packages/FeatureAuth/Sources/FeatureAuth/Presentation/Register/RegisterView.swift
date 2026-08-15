@@ -166,7 +166,9 @@ public struct RegisterView: View {
                 errorMessage: viewModel.passwordError,
                 icon: "lock",
                 validationStatus: viewModel.passwordStatus,
-                onValidationAccessoryTap: { viewModel.showPasswordRequirements = true }
+                onValidationAccessoryTap: { viewModel.showPasswordRequirements = true },
+                passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
+                passwordHiddenAccessibilityLabel: languageService.text(.authHidePassword)
             )
             .textContentType(.newPassword)
             .onChange(of: viewModel.password) { _ in viewModel.validatePasswordField() }
@@ -177,7 +179,9 @@ public struct RegisterView: View {
                 isSecure: true,
                 errorMessage: viewModel.confirmPasswordError,
                 icon: "lock.fill",
-                validationStatus: viewModel.confirmPasswordStatus
+                validationStatus: viewModel.confirmPasswordStatus,
+                passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
+                passwordHiddenAccessibilityLabel: languageService.text(.authHidePassword)
             )
             .textContentType(.newPassword)
             .onChange(of: viewModel.confirmPassword) { _ in viewModel.validateConfirmPasswordField() }
