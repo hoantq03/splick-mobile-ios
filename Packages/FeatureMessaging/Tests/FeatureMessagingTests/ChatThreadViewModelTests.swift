@@ -264,7 +264,7 @@ final class ChatThreadViewModelTests: XCTestCase {
         XCTAssertTrue(calls.isEmpty, "markRead must not be called when there are no messages")
     }
 
-    func test_markRead_skippedWhenNotNearBottom() async {
+    func test_load_marksRead_evenWhenNotNearBottom() async {
         let msg = makeMessage(body: "Only", sequenceNo: 1)
         let repo = StubMessagingRepository(messages: [msg])
         let wsClient = makeTestWsClient()
@@ -275,7 +275,81 @@ final class ChatThreadViewModelTests: XCTestCase {
         try? await Task.sleep(nanoseconds: 700_000_000)
 
         let calls = await repo.recordedMarkReadCalls()
-        XCTAssertTrue(calls.isEmpty)
+        XCTAssertFalse(calls.isEmpty, "Opening a chat should mark read even when not near bottom")
+        XCTAssertEqual(calls.first?.1, msg.id)
+    }
+
+    func test_wsNewMessage_skipsMarkReadWhenNotNearBottom() async {
+        let existing = makeMessage(body: "Existing", sequenceNo: 1)
+        let repo = StubMessagingRepository(messages: [existing])
+        let wsClient = makeTestWsClient()
+        let vm = makeViewModel(repo: repo, wsClient: wsClient)
+        await vm.load()
+        try? await Task.sleep(nanoseconds: 700_000_000)
+        let callsAfterLoad = await repo.recordedMarkReadCalls()
+        let baseline = callsAfterLoad.count
+
+        vm.isNearBottom = false
+        let incoming = ChatMessage(
+            id: UUID(),
+            conversationId: ChatThreadViewModelTestFixtures.conversationId,
+            senderId: ChatThreadViewModelTestFixtures.senderId,
+            body: "While scrolled up",
+            clientMessageId: UUID(),
+            createdAt: .now,
+            sequenceNo: 2
+        )
+        wsClient.eventSubject.send(
+            .newMessage(
+                conversationId: ChatThreadViewModelTestFixtures.conversationId,
+                message: incoming
+            )
+        )
+        try? await Task.sleep(nanoseconds: 700_000_000)
+
+        let calls = await repo.recordedMarkReadCalls()
+        XCTAssertEqual(calls.count, baseline, "Incoming while scrolled up must not advance read cursor")
+    }
+
+    func test_deliveryAck_cascadesOlderOutgoingMessages() async {
+        let olderId = UUID()
+        let newerId = UUID()
+        let older = ChatMessage(
+            id: olderId,
+            conversationId: ChatThreadViewModelTestFixtures.conversationId,
+            senderId: ChatThreadViewModelTestFixtures.currentUserId,
+            body: "Older",
+            clientMessageId: olderId,
+            createdAt: Date(timeIntervalSince1970: 1),
+            sequenceNo: 1,
+            deliveryStatus: .sent
+        )
+        let newer = ChatMessage(
+            id: newerId,
+            conversationId: ChatThreadViewModelTestFixtures.conversationId,
+            senderId: ChatThreadViewModelTestFixtures.currentUserId,
+            body: "Newer",
+            clientMessageId: newerId,
+            createdAt: Date(timeIntervalSince1970: 2),
+            sequenceNo: 2,
+            deliveryStatus: .sent
+        )
+        // API order newest-first for page 0.
+        let repo = StubMessagingRepository(messages: [newer, older])
+        let wsClient = makeTestWsClient()
+        let vm = makeViewModel(repo: repo, wsClient: wsClient)
+        await vm.load()
+
+        wsClient.eventSubject.send(
+            .deliveryAck(
+                conversationId: ChatThreadViewModelTestFixtures.conversationId,
+                messageId: newerId
+            )
+        )
+        await Task.yield()
+
+        XCTAssertEqual(vm.messages.first(where: { $0.id == olderId })?.deliveryStatus, .delivered)
+        XCTAssertEqual(vm.messages.first(where: { $0.id == newerId })?.deliveryStatus, .delivered)
     }
 
     // MARK: WS event from different conversation is ignored
