@@ -109,6 +109,7 @@ public struct ExpenseFriendListView: View {
       switch viewModel.state {
       case .idle, .loading:
         LoadingView(message: languageService.text(.expenseFriendsLoading))
+          .splickSegmentPagerPageTopInset(isEnabled: true)
       case .loaded where viewModel.debts.isEmpty:
         ScrollView {
           EmptyStateView(
@@ -117,8 +118,8 @@ public struct ExpenseFriendListView: View {
             message: languageService.text(.expenseFriendsEmptyMessage)
           )
           .frame(maxWidth: .infinity)
-          .padding(.top, SplickTheme.Spacing.xxl)
         }
+        .splickSegmentPagerScrollInsets()
         .refreshable { await viewModel.load(isPullToRefresh: true) }
       case .loaded:
         friendRecords
@@ -128,8 +129,8 @@ public struct ExpenseFriendListView: View {
             Task { await viewModel.load() }
           }
           .frame(maxWidth: .infinity)
-          .padding(.top, SplickTheme.Spacing.xxl)
         }
+        .splickSegmentPagerScrollInsets()
         .refreshable { await viewModel.load(isPullToRefresh: true) }
       }
     }
@@ -168,6 +169,7 @@ public struct ExpenseFriendListView: View {
           }
         }
         .padding(.horizontal, SplickTheme.Spacing.md)
+        .padding(.top, SplickTheme.Spacing.md)
       }
       .splickInstantScrollTaps()
       .scrollChromeTracking()
