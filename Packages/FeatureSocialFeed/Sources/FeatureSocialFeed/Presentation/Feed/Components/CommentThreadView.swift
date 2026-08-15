@@ -3,6 +3,94 @@ import DesignSystem
 import Localization
 import SplickDomain
 
+private enum CommentParticipantBadge: Equatable {
+    case author
+    case tagged
+    case billHost
+    case billPaid
+    case billPendingApproval
+    case billUnpaid(days: Int)
+
+    static func resolve(authorId: UUID, post: Post, now: Date = .now) -> CommentParticipantBadge? {
+        if post.feedKind == .shareBill {
+            if authorId == post.author.id {
+                return .billHost
+            }
+            if let line = post.billSplitLine(for: authorId) {
+                switch line.paymentStatus {
+                case .paid:
+                    return .billPaid
+                case .pendingApproval:
+                    return .billPendingApproval
+                case .unpaid:
+                    return .billUnpaid(days: unpaidDayCount(since: post.createdAt, now: now))
+                }
+            }
+            if post.companions.contains(where: { $0.id == authorId }) {
+                return .tagged
+            }
+            return nil
+        }
+
+        if authorId == post.author.id {
+            return .author
+        }
+        if post.companions.contains(where: { $0.id == authorId }) {
+            return .tagged
+        }
+        return nil
+    }
+
+    var titleKey: L10nKey? {
+        switch self {
+        case .author: return .feedCommentRoleAuthor
+        case .tagged: return .feedCommentRoleTagged
+        case .billHost: return .feedCommentRoleBillHost
+        case .billPaid: return .feedCommentRoleBillPaid
+        case .billPendingApproval: return .feedCommentRoleBillPendingApproval
+        case .billUnpaid: return nil
+        }
+    }
+
+    var unpaidDays: Int? {
+        if case .billUnpaid(let days) = self { return days }
+        return nil
+    }
+
+    var color: Color {
+        switch self {
+        case .author, .billHost:
+            return SplickTheme.Colors.primaryGradientStart
+        case .tagged:
+            return SplickTheme.Colors.info
+        case .billPaid:
+            return SplickTheme.Colors.success
+        case .billPendingApproval:
+            return Color(hex: 0xF2C94C)
+        case .billUnpaid(let days):
+            return Self.unpaidColor(days: days)
+        }
+    }
+
+    /// 1 ngày → vàng, từ 3 ngày → cam, từ 7 ngày → đỏ.
+    private static func unpaidColor(days: Int) -> Color {
+        if days >= 7 {
+            return SplickTheme.Colors.error
+        }
+        if days >= 3 {
+            return SplickTheme.Colors.warning
+        }
+        return Color(hex: 0xF2C94C)
+    }
+
+    private static func unpaidDayCount(since date: Date, now: Date) -> Int {
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: date)
+        let end = calendar.startOfDay(for: now)
+        return max(0, calendar.dateComponents([.day], from: start, to: end).day ?? 0)
+    }
+}
+
 private enum CommentRowStyle {
     case root
     case reply
@@ -51,12 +139,14 @@ private enum CommentRowStyle {
 
 /// Recursive comment tree with Facebook-style thread lines and smaller reply rows.
 struct CommentThreadView: View {
+    let post: Post
     let comments: [PostComment]
     let roots: [PostComment]
     let depth: Int
     let threadGroupId: UUID?
     let expandedParents: Set<UUID>
     let highlightedCommentId: UUID?
+    let pendingCommentIds: Set<UUID>
     let repliesPreviewCount: Int
     let canReplyToComment: (PostComment) -> Bool
     let canModerateEvidence: (PostComment) -> Bool
@@ -73,12 +163,14 @@ struct CommentThreadView: View {
     let parentBranchSpaceName: String?
 
     init(
+        post: Post,
         comments: [PostComment],
         roots: [PostComment],
         depth: Int = 0,
         threadGroupId: UUID? = nil,
         expandedParents: Set<UUID> = [],
         highlightedCommentId: UUID? = nil,
+        pendingCommentIds: Set<UUID> = [],
         repliesPreviewCount: Int = 2,
         canReplyToComment: @escaping (PostComment) -> Bool = { _ in true },
         canModerateEvidence: @escaping (PostComment) -> Bool = { _ in false },
@@ -89,12 +181,14 @@ struct CommentThreadView: View {
         onRejectEvidence: @escaping (PostComment) -> Void = { _ in },
         parentBranchSpaceName: String? = nil
     ) {
+        self.post = post
         self.comments = comments
         self.roots = roots
         self.depth = depth
         self.threadGroupId = threadGroupId
         self.expandedParents = expandedParents
         self.highlightedCommentId = highlightedCommentId
+        self.pendingCommentIds = pendingCommentIds
         self.repliesPreviewCount = repliesPreviewCount
         self.canReplyToComment = canReplyToComment
         self.canModerateEvidence = canModerateEvidence
@@ -109,6 +203,7 @@ struct CommentThreadView: View {
     var body: some View {
         ForEach(roots) { comment in
             CommentBranchView(
+                post: post,
                 comment: comment,
                 comments: comments,
                 depth: depth,
@@ -116,6 +211,7 @@ struct CommentThreadView: View {
                 parentBranchSpaceName: parentBranchSpaceName,
                 expandedParents: expandedParents,
                 highlightedCommentId: highlightedCommentId,
+                pendingCommentIds: pendingCommentIds,
                 repliesPreviewCount: repliesPreviewCount,
                 canReplyToComment: canReplyToComment,
                 canModerateEvidence: canModerateEvidence,
@@ -134,6 +230,7 @@ struct CommentThreadView: View {
 private struct CommentBranchView: View {
     @EnvironmentObject private var languageService: LanguageService
 
+    let post: Post
     let comment: PostComment
     let comments: [PostComment]
     let depth: Int
@@ -143,6 +240,7 @@ private struct CommentBranchView: View {
     let parentBranchSpaceName: String?
     let expandedParents: Set<UUID>
     let highlightedCommentId: UUID?
+    let pendingCommentIds: Set<UUID>
     let repliesPreviewCount: Int
     let canReplyToComment: (PostComment) -> Bool
     let canModerateEvidence: (PostComment) -> Bool
@@ -195,6 +293,7 @@ private struct CommentBranchView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             CommentRowView(
+                post: post,
                 comment: comment,
                 depth: depth,
                 avatarThreadGroupId: inheritedThreadGroupId,
@@ -203,6 +302,7 @@ private struct CommentBranchView: View {
                 avatarAnchorCoordinateSpace: parentBranchSpaceName.map { .named($0) } ?? .named(branchSpaceName),
                 threadStartCoordinateSpace: .named(branchSpaceName),
                 isHighlighted: highlightedCommentId == comment.id,
+                isPending: pendingCommentIds.contains(comment.id),
                 showsReplyAction: canReplyToComment(comment),
                 canModerateEvidence: canModerateEvidence(comment),
                 anchorsThreadForChildren: !children.isEmpty,
@@ -216,12 +316,14 @@ private struct CommentBranchView: View {
             if !children.isEmpty {
                 VStack(alignment: .leading, spacing: 0) {
                     CommentThreadView(
+                        post: post,
                         comments: comments,
                         roots: visibleChildren,
                         depth: depth + 1,
                         threadGroupId: comment.id,
                         expandedParents: expandedParents,
                         highlightedCommentId: highlightedCommentId,
+                        pendingCommentIds: pendingCommentIds,
                         repliesPreviewCount: repliesPreviewCount,
                         canReplyToComment: canReplyToComment,
                         canModerateEvidence: canModerateEvidence,
@@ -304,6 +406,7 @@ private struct CommentThreadConnectorOverlay: View {
 struct CommentRowView: View {
     @EnvironmentObject private var languageService: LanguageService
 
+    let post: Post
     let comment: PostComment
     let depth: Int
     var avatarThreadGroupId: UUID? = nil
@@ -313,6 +416,7 @@ struct CommentRowView: View {
     /// Coordinate space for the thread-start anchor (own branch's named space).
     var threadStartCoordinateSpace: CoordinateSpace = .named("__unused__")
     let isHighlighted: Bool
+    var isPending: Bool = false
     var showsReplyAction: Bool = true
     var canModerateEvidence: Bool = false
     var anchorsThreadForChildren: Bool = false
@@ -322,6 +426,10 @@ struct CommentRowView: View {
     let onRejectEvidence: () -> Void
 
     private var style: CommentRowStyle { CommentRowStyle.forDepth(depth) }
+
+    private var participantBadge: CommentParticipantBadge? {
+        CommentParticipantBadge.resolve(authorId: comment.author.id, post: post)
+    }
 
     private var reportsAvatarToThread: Bool {
         guard let avatarThreadGroupId else { return false }
@@ -357,7 +465,7 @@ struct CommentRowView: View {
             ))
 
             VStack(alignment: .leading, spacing: 3) {
-                HStack(alignment: .center, spacing: 6) {
+                HStack(alignment: .center, spacing: 4) {
                     Button { onUserTap(comment.author) } label: {
                         Text(comment.author.displayName)
                             .font(.system(size: style.nameFontSize, weight: .semibold))
@@ -365,8 +473,17 @@ struct CommentRowView: View {
                     }
                     .buttonStyle(.plain)
 
-                    if comment.isEvidence {
-                        evidenceBadge
+                    metaDot
+
+                    Text(languageService.compactRelativeTime(from: comment.createdAt))
+                        .font(.system(size: style.metaFontSize))
+                        .foregroundStyle(SplickTheme.Colors.textTertiary)
+
+                    if let participantBadge {
+                        metaDot
+                        Text(participantBadgeTitle(participantBadge))
+                            .font(.system(size: style.metaFontSize, weight: .semibold))
+                            .foregroundStyle(participantBadge.color)
                     }
 
                     if let outcome = comment.moderationOutcome {
@@ -380,10 +497,6 @@ struct CommentRowView: View {
                     }
 
                     Spacer(minLength: 0)
-
-                    Text(comment.createdAt.relativeString)
-                        .font(.system(size: style.metaFontSize))
-                        .foregroundStyle(SplickTheme.Colors.textTertiary)
                 }
 
                 commentBody
@@ -391,6 +504,7 @@ struct CommentRowView: View {
                 if !comment.isDeleted {
                     CommentAttachmentsView(
                         attachments: comment.attachments,
+                        isPending: isPending,
                         maxImageWidth: depth == 0 ? 220 : 200
                     )
 
@@ -398,6 +512,8 @@ struct CommentRowView: View {
                         Button(languageService.text(.messagingReplyAction), action: onReply)
                             .font(.system(size: style.replyActionFontSize, weight: .medium))
                             .foregroundStyle(SplickTheme.Colors.textTertiary)
+                            .disabled(isPending)
+                            .opacity(isPending ? 0.45 : 1)
                     }
 
                     if canModerateEvidence {
@@ -408,6 +524,7 @@ struct CommentRowView: View {
         }
         .padding(.vertical, depth == 0 ? 6 : 4)
         .padding(.horizontal, isHighlighted ? 6 : 0)
+        .opacity(isPending ? 0.94 : 1)
         .background {
             if isHighlighted {
                 RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.inset, style: .continuous)
@@ -416,35 +533,21 @@ struct CommentRowView: View {
         }
     }
 
-    private var evidenceBadge: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "banknote")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-            Text(languageService.text(.feedPaymentEvidenceBadge))
-                .font(.system(size: style.metaFontSize, weight: .semibold))
-                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                .lineLimit(1)
-            if let status = comment.evidenceStatus {
-                Text("·")
-                    .font(.system(size: style.metaFontSize, weight: .medium))
-                    .foregroundStyle(SplickTheme.Colors.textTertiary)
-                Text(evidenceStatusLabel(status))
-                    .font(.system(size: style.metaFontSize, weight: .medium))
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
-                    .lineLimit(1)
-            }
+    private var metaDot: some View {
+        Text("·")
+            .font(.system(size: style.metaFontSize + 4, weight: .bold))
+            .foregroundStyle(SplickTheme.Colors.textTertiary)
+            .accessibilityHidden(true)
+    }
+
+    private func participantBadgeTitle(_ badge: CommentParticipantBadge) -> String {
+        if let days = badge.unpaidDays {
+            return languageService.format(.feedCommentRoleBillUnpaidDays, days)
         }
-        .padding(.horizontal, SplickTheme.Spacing.xs)
-        .padding(.vertical, 3)
-        .background {
-            Capsule(style: .continuous)
-                .fill(SplickTheme.Colors.primaryGradientStart.opacity(0.12))
+        if let key = badge.titleKey {
+            return languageService.text(key)
         }
-        .overlay {
-            Capsule(style: .continuous)
-                .strokeBorder(SplickTheme.Colors.primaryGradientStart.opacity(0.2), lineWidth: 1)
-        }
+        return ""
     }
 
     private func moderationOutcomeBadge(_ outcome: EvidenceStatus) -> some View {
@@ -516,14 +619,6 @@ struct CommentRowView: View {
         .buttonStyle(.plain)
     }
 
-    private func evidenceStatusLabel(_ status: EvidenceStatus) -> String {
-        switch status {
-        case .pending: return languageService.text(.feedPaymentPending)
-        case .approved: return languageService.text(.feedPaymentEvidenceStatusApproved)
-        case .rejected: return languageService.text(.feedPaymentEvidenceStatusRejected)
-        }
-    }
-
     @ViewBuilder
     private var commentBody: some View {
         if comment.isDeleted {
@@ -582,12 +677,16 @@ private struct CommentThreadStartAnchorModifier: ViewModifier {
 
 private struct CommentAttachmentsView: View {
     let attachments: [CommentAttachment]
+    var isPending: Bool = false
     var maxImageWidth: CGFloat = 220
 
     @State private var mediaViewerRoute: MediaViewerRoute?
 
     private var imageAttachments: [CommentAttachment] {
-        attachments.filter { $0.kind == .image && $0.url != nil }
+        attachments.filter { attachment in
+            guard attachment.kind == .image else { return false }
+            return attachment.url != nil || isPending
+        }
     }
 
     private var otherAttachments: [CommentAttachment] {
@@ -595,7 +694,9 @@ private struct CommentAttachmentsView: View {
     }
 
     private var imagePreviewModels: [InlineAttachmentPreviewImage] {
-        imageAttachments.compactMap(\.inlinePreviewImage)
+        imageAttachments.compactMap { attachment in
+            attachment.inlinePreviewImage(isPending: isPending)
+        }
     }
 
     private var mediaItems: [PostMediaItem] {
@@ -632,6 +733,7 @@ private struct CommentAttachmentsView: View {
                         images: imagePreviewModels,
                         maxWidth: maxImageWidth,
                         onTapImage: { imageIndex in
+                            guard !isPending else { return }
                             guard imageAttachments.indices.contains(imageIndex) else { return }
                             openViewer(for: imageAttachments[imageIndex].id)
                         }
@@ -641,14 +743,16 @@ private struct CommentAttachmentsView: View {
                 ForEach(otherAttachments) { attachment in
                     switch attachment.kind {
                     case .gif:
-                        if let url = attachment.url {
-                            InlineGifAttachmentView(
-                                url: url,
-                                previewURL: attachment.thumbnailURL,
-                                maxWidth: maxImageWidth
-                            )
-                            .onTapGesture { openViewer(for: attachment.id) }
-                        }
+                        CommentGifAttachmentFrame(
+                            url: attachment.url,
+                            previewURL: attachment.thumbnailURL,
+                            maxWidth: maxImageWidth,
+                            isPending: isPending,
+                            onTap: {
+                                guard !isPending else { return }
+                                openViewer(for: attachment.id)
+                            }
+                        )
                     case .video:
                         Button {
                             openViewer(for: attachment.id)
@@ -662,6 +766,7 @@ private struct CommentAttachmentsView: View {
                             .foregroundStyle(SplickTheme.Colors.textSecondary)
                         }
                         .buttonStyle(.plain)
+                        .disabled(isPending || attachment.url == nil)
                     case .file:
                         HStack(spacing: 6) {
                             Image(systemName: "doc")
@@ -694,5 +799,62 @@ private struct CommentAttachmentsView: View {
     private func openViewer(for attachmentId: UUID) {
         guard let index = mediaItems.firstIndex(where: { $0.id == attachmentId }) else { return }
         mediaViewerRoute = MediaViewerRoute(index: index)
+    }
+}
+
+/// GIF / emoji sticker frame: skeleton first, then replace when the animation is ready.
+private struct CommentGifAttachmentFrame: View {
+    let url: URL?
+    let previewURL: URL?
+    let maxWidth: CGFloat
+    let isPending: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        Group {
+            if let url {
+                InlineGifAttachmentView(
+                    url: url,
+                    previewURL: previewURL,
+                    maxWidth: maxWidth,
+                    showsLoadingPlaceholder: true
+                )
+                .overlay {
+                    if isPending {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.black.opacity(0.22))
+                            .overlay {
+                                ProgressView()
+                                    .progressViewStyle(.circular)
+                                    .controlSize(.regular)
+                                    .tint(.white)
+                            }
+                            .allowsHitTesting(false)
+                            .accessibilityLabel("Đang gửi bình luận")
+                    }
+                }
+            } else {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(SplickTheme.Colors.tertiaryBackground)
+                    .frame(width: maxWidth, height: maxWidth)
+                    .overlay {
+                        SplickSpinner(size: .small)
+                    }
+                    .overlay {
+                        if isPending {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color.black.opacity(0.22))
+                                .overlay {
+                                    ProgressView()
+                                        .progressViewStyle(.circular)
+                                        .controlSize(.regular)
+                                        .tint(.white)
+                                }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .onTapGesture(perform: onTap)
     }
 }
