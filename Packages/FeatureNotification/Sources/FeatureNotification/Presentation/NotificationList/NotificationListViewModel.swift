@@ -154,7 +154,12 @@ public final class NotificationListViewModel: ObservableObject {
 
     public func markMessageNotificationsRead(conversationId: UUID) async {
         let unreadMessageNotifications = notifications.filter {
-            !$0.isRead && $0.referenceId == conversationId && $0.type.isMessagingNotification
+            !$0.isRead
+                && $0.type.isMessagingNotification
+                && (
+                    $0.destination?.conversationId == conversationId
+                        || $0.referenceId == conversationId
+                )
         }
         guard !unreadMessageNotifications.isEmpty else { return }
 
