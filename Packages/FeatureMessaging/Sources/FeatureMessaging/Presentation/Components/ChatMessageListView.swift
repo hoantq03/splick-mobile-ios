@@ -13,7 +13,11 @@ struct ChatMessageListView: View {
     let senderDisplayName: (ChatMessage) -> String
     let userDisplayName: (UUID) -> String
     let onRequestComposerFocus: () -> Void
+    var peerAvatarURL: URL? = nil
+    var peerDisplayName: String = ""
+    var conversationId: UUID? = nil
 
+    @Namespace private var readReceiptAvatarNamespace
     @State private var reactionFocusMessageId: UUID?
     /// Fresh identity each open so `@State isRevealed` cannot stick across odd/even mounts.
     @State private var reactionFocusSession = UUID()
@@ -36,6 +40,13 @@ struct ChatMessageListView: View {
     private static let replySwipeThreshold: CGFloat = 56
     /// Past the icon slot (46) so threshold is reachable while reveal stays 1:1.
     private static let replySwipeMaxOffset: CGFloat = 72
+
+    private var latestReadOutgoingMessageId: UUID? {
+        MessageReadReceiptPresentation.latestReadOutgoingMessageId(
+            in: messages,
+            currentUserId: currentUserId
+        )
+    }
 
     private enum ListPanSession {
         case undecided
@@ -81,7 +92,12 @@ struct ChatMessageListView: View {
                                 },
                                 onReply: {
                                     beginReply(to: item.message)
-                                }
+                                },
+                                readReceiptPeerAvatarURL: peerAvatarURL,
+                                readReceiptPeerName: peerDisplayName,
+                                showsReadReceiptAvatar: item.message.id == latestReadOutgoingMessageId,
+                                readReceiptNamespace: readReceiptAvatarNamespace,
+                                conversationId: conversationId ?? item.message.conversationId
                             )
                             .opacity(reactionFocusMessageId == item.message.id ? 0 : 1)
                             .allowsHitTesting(reactionFocusMessageId != item.message.id)
