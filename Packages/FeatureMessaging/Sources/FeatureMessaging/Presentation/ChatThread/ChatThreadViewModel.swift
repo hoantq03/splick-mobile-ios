@@ -162,7 +162,7 @@ public final class ChatThreadViewModel: ObservableObject {
                 persistCache()
                 requestScrollToBottom()
                 if let lastId = sorted.last?.id {
-                    scheduleMarkRead(upToMessageId: lastId)
+                    scheduleMarkRead(upToMessageId: lastId, requireNearBottom: false)
                     sendDeliveryAck(for: lastId)
                 }
             }
@@ -351,7 +351,7 @@ public final class ChatThreadViewModel: ObservableObject {
     }
 
     public func markRead(upToMessageId: UUID) {
-        scheduleMarkRead(upToMessageId: upToMessageId)
+        scheduleMarkRead(upToMessageId: upToMessageId, requireNearBottom: false)
     }
 
     @discardableResult
@@ -503,22 +503,28 @@ public final class ChatThreadViewModel: ObservableObject {
         pendingMessageStore.remove(clientMessageId: clientMessageId)
     }
 
-    // MARK: - Mark read (debounced, near-bottom only)
+    // MARK: - Mark read (debounced)
 
-    private func scheduleMarkRead(upToMessageId: UUID) {
-        guard isNearBottom else { return }
+    /// Marks up to `upToMessageId` as read.
+    /// - Parameter requireNearBottom: when true, skip if the user is scrolled up reading history.
+    ///   Opening the thread uses `false` so entering the chat counts as "đã xem".
+    private func scheduleMarkRead(upToMessageId: UUID, requireNearBottom: Bool = true) {
+        if requireNearBottom, !isNearBottom { return }
         if lastMarkedReadMessageId == upToMessageId { return }
 
         markReadTask?.cancel()
         markReadTask = Task { [weak self] in
             try? await Task.sleep(for: Self.markReadDebounce)
             guard !Task.isCancelled else { return }
-            await self?.performMarkRead(upToMessageId: upToMessageId)
+            await self?.performMarkRead(
+                upToMessageId: upToMessageId,
+                requireNearBottom: requireNearBottom
+            )
         }
     }
 
-    private func performMarkRead(upToMessageId: UUID) async {
-        guard isNearBottom else { return }
+    private func performMarkRead(upToMessageId: UUID, requireNearBottom: Bool = true) async {
+        if requireNearBottom, !isNearBottom { return }
         if lastMarkedReadMessageId == upToMessageId { return }
         // Only advance cursor — never mark an older message after a newer one.
         if let current = lastMarkedReadMessageId,
@@ -582,7 +588,7 @@ public final class ChatThreadViewModel: ObservableObject {
 
         isNearBottom = highlightMessageId == nil
         if let lastId = sorted.last?.id {
-            scheduleMarkRead(upToMessageId: lastId)
+            scheduleMarkRead(upToMessageId: lastId, requireNearBottom: false)
             sendDeliveryAck(for: lastId)
         }
     }
@@ -729,7 +735,10 @@ public final class ChatThreadViewModel: ObservableObject {
     }
 
     private func sendDeliveryAck(for messageId: UUID) {
-        wsClient.sendDeliveryAck(conversationId: conversationId, messageId: messageId)
+        MessageDeliveryAckService.shared.acknowledge(
+            conversationId: conversationId,
+            messageId: messageId
+        )
     }
 
     private func persistCache() {
@@ -806,12 +815,26 @@ public final class ChatThreadViewModel: ObservableObject {
 
     private func applyDeliveryAck(messageId: UUID) {
         guard case .loaded(var messages) = state else { return }
+        guard let ackIndex = messages.firstIndex(where: { $0.id == messageId }) else { return }
+        let ackMessage = messages[ackIndex]
+        let ackSequence = ackMessage.sequenceNo
+        let ackCreatedAt = ackMessage.createdAt
+
         var changed = false
         for index in messages.indices {
             let message = messages[index]
             guard message.senderId == currentUserId,
-                  message.id == messageId,
-                  message.deliveryStatus == .sent || message.deliveryStatus == .sending else { continue }
+                  message.deliveryStatus == .sent || message.deliveryStatus == .sending
+            else { continue }
+
+            let covers: Bool
+            if ackSequence > 0, message.sequenceNo > 0 {
+                covers = message.sequenceNo <= ackSequence
+            } else {
+                covers = message.createdAt <= ackCreatedAt
+            }
+            guard covers else { continue }
+
             messages[index] = message.updating(deliveryStatus: .delivered)
             changed = true
         }
