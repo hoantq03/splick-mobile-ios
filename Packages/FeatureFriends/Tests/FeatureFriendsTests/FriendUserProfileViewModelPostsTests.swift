@@ -49,6 +49,33 @@ final class FriendUserProfileViewModelPostsTests: XCTestCase {
         XCTAssertNotNil(viewModel.postsError)
     }
 
+    func test_loadPostsCancellation_doesNotExposeError() async {
+        let user = makeUser()
+        let viewModel = FriendUserProfileViewModel(
+            user: user,
+            fetchUserProfileUseCase: nil,
+            fetchUserPostsUseCase: StubFetchUserPostsUseCase(error: CancellationError())
+        )
+
+        await viewModel.loadPostsIfNeeded()
+
+        XCTAssertTrue(viewModel.posts.isEmpty)
+        XCTAssertNil(viewModel.postsError)
+    }
+
+    func test_loadProfileCancellation_doesNotExposeError() async {
+        let user = makeUser()
+        let viewModel = FriendUserProfileViewModel(
+            user: user,
+            fetchUserProfileUseCase: StubFetchUserProfileUseCase(error: CancellationError())
+        )
+
+        await viewModel.loadProfile()
+
+        XCTAssertNil(viewModel.profileError)
+        XCTAssertNil(viewModel.stats)
+    }
+
     private func makeUser() -> UserSummary {
         UserSummary(
             id: UUID(),
@@ -81,6 +108,18 @@ private actor StubFetchUserPostsUseCase: FetchUserPostsUseCaseProtocol {
             throw error
         }
         return pages[page] ?? []
+    }
+}
+
+private struct StubFetchUserProfileUseCase: FetchUserProfileUseCaseProtocol {
+    private let error: Error
+
+    init(error: Error) {
+        self.error = error
+    }
+
+    func execute(userId: UUID) async throws -> PublicUserProfile {
+        throw error
     }
 }
 
