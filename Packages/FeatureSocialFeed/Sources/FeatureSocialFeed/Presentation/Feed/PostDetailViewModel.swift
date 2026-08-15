@@ -65,4 +65,31 @@ final class PostDetailViewModel: ObservableObject {
             comments.contains { $0.id == parentId }
         }
     }
+
+    /// Ensures a comment (and its ancestors) are mounted so `ScrollViewReader` can target it.
+    func ensureCommentVisible(_ commentId: UUID) {
+        guard let comment = allComments.first(where: { $0.id == commentId }) else { return }
+
+        expandAncestorChain(of: comment)
+        if let parentId = comment.parentCommentId {
+            expandReplies(for: parentId)
+        }
+
+        let rootId = rootCommentId(for: comment)
+        let topLevel = allComments.topLevel
+        guard let rootIndex = topLevel.firstIndex(where: { $0.id == rootId }) else { return }
+        guard rootIndex >= loadedTopLevelCount else { return }
+
+        loadedTopLevelCount = rootIndex + 1
+        displayedTopLevel = Array(topLevel.prefix(loadedTopLevelCount))
+    }
+
+    private func rootCommentId(for comment: PostComment) -> UUID {
+        var current = comment
+        while let parentId = current.parentCommentId,
+              let parent = allComments.first(where: { $0.id == parentId }) {
+            current = parent
+        }
+        return current.id
+    }
 }
