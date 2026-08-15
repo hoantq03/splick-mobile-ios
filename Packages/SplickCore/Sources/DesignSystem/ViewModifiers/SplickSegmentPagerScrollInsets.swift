@@ -1,10 +1,19 @@
 import SwiftUI
 
-/// Top content margin so segment-pager tabs (feed / expense) scroll under soft fade chrome
-/// instead of sitting under a hard opaque navigation edge.
+/// How a segment-pager page sits relative to the navigation / pill chrome.
+public enum SplickSegmentPagerTopInsetStyle: Equatable, Sendable {
+    /// Content already starts below the nav bar. Tight gap only.
+    case tight
+    /// Content extends under nav + segment pills (feed / expense pagers).
+    case underChrome
+}
+
+/// Top content margin so segment-pager tabs (feed / expense) sit correctly under chrome.
 public enum SplickSegmentPagerTopInsetMetrics {
     private static let belowSegmentSpacing: CGFloat = SplickTheme.Spacing.lg
     private static let toolbarBuffer: CGFloat = SplickTheme.Spacing.sm
+    /// Pages whose pager is already laid out below the nav bar.
+    public static let tightTopGap: CGFloat = SplickTheme.Spacing.sm
 
     private static var segmentChromeHeight: CGFloat {
         FeedSegmentChromeMetrics.navigationBarHeight
@@ -18,7 +27,19 @@ public enum SplickSegmentPagerTopInsetMetrics {
 
     public static var defaultScrollTopMargin: CGFloat { minimumTopGap }
 
-    public static func resolvedTopMargin(for geometry: GeometryProxy) -> CGFloat {
+    public static func resolvedTopMargin(
+        for geometry: GeometryProxy,
+        style: SplickSegmentPagerTopInsetStyle
+    ) -> CGFloat {
+        switch style {
+        case .tight:
+            return tightTopGap
+        case .underChrome:
+            return resolvedUnderChromeTopMargin(for: geometry)
+        }
+    }
+
+    private static func resolvedUnderChromeTopMargin(for geometry: GeometryProxy) -> CGFloat {
         let globalMinY = geometry.frame(in: .global).minY
         let safeTop = geometry.safeAreaInsets.top
         let chromeBottom = safeTop + segmentChromeHeight
@@ -33,19 +54,34 @@ public enum SplickSegmentPagerTopInsetMetrics {
 
 extension View {
     /// Keeps scroll content below the inline segment row; pairs with `SplickScrollTopFadeOverlay`.
-    public func splickSegmentPagerScrollInsets() -> some View {
-        modifier(SplickSegmentPagerScrollInsetsModifier())
+    public func splickSegmentPagerScrollInsets(
+        style: SplickSegmentPagerTopInsetStyle = .underChrome
+    ) -> some View {
+        modifier(SplickSegmentPagerScrollInsetsModifier(style: style))
     }
 
     /// Top inset for non-scroll pager pages (loading, empty, error).
-    public func splickSegmentPagerPageTopInset(isEnabled: Bool) -> some View {
-        modifier(SplickSegmentPagerPageTopInsetModifier(isEnabled: isEnabled))
+    public func splickSegmentPagerPageTopInset(
+        isEnabled: Bool,
+        style: SplickSegmentPagerTopInsetStyle = .underChrome
+    ) -> some View {
+        modifier(SplickSegmentPagerPageTopInsetModifier(isEnabled: isEnabled, style: style))
     }
 }
 
 private struct SplickSegmentPagerScrollInsetsModifier: ViewModifier {
+    let style: SplickSegmentPagerTopInsetStyle
     @Environment(\.pullToRefreshActive) private var pullToRefreshActive
-    @State private var topMargin: CGFloat = SplickSegmentPagerTopInsetMetrics.defaultScrollTopMargin
+    @State private var topMargin: CGFloat
+
+    init(style: SplickSegmentPagerTopInsetStyle) {
+        self.style = style
+        _topMargin = State(
+            initialValue: style == .tight
+                ? SplickSegmentPagerTopInsetMetrics.tightTopGap
+                : SplickSegmentPagerTopInsetMetrics.defaultScrollTopMargin
+        )
+    }
 
     func body(content: Content) -> some View {
         Group {
@@ -58,21 +94,23 @@ private struct SplickSegmentPagerScrollInsetsModifier: ViewModifier {
         .scrollContentBackground(.hidden)
         .background(SplickTheme.Colors.background)
         .background {
-            GeometryReader { geometry in
-                Color.clear
-                    .onAppear {
-                        applyTopMargin(from: geometry)
-                    }
-                    .onChange(of: geometry.frame(in: .global).minY) { _ in
-                        applyTopMargin(from: geometry)
-                    }
+            if style == .underChrome {
+                GeometryReader { geometry in
+                    Color.clear
+                        .onAppear {
+                            applyTopMargin(from: geometry)
+                        }
+                        .onChange(of: geometry.frame(in: .global).minY) { _ in
+                            applyTopMargin(from: geometry)
+                        }
+                }
             }
         }
     }
 
     private func applyTopMargin(from geometry: GeometryProxy) {
         guard !pullToRefreshActive else { return }
-        let next = SplickSegmentPagerTopInsetMetrics.resolvedTopMargin(for: geometry)
+        let next = SplickSegmentPagerTopInsetMetrics.resolvedTopMargin(for: geometry, style: style)
         guard abs(next - topMargin) > 0.5 else { return }
         topMargin = next
     }
@@ -80,13 +118,24 @@ private struct SplickSegmentPagerScrollInsetsModifier: ViewModifier {
 
 private struct SplickSegmentPagerPageTopInsetModifier: ViewModifier {
     let isEnabled: Bool
-    @State private var topPadding: CGFloat = SplickSegmentPagerTopInsetMetrics.defaultScrollTopMargin
+    let style: SplickSegmentPagerTopInsetStyle
+    @State private var topPadding: CGFloat
+
+    init(isEnabled: Bool, style: SplickSegmentPagerTopInsetStyle) {
+        self.isEnabled = isEnabled
+        self.style = style
+        _topPadding = State(
+            initialValue: style == .tight
+                ? SplickSegmentPagerTopInsetMetrics.tightTopGap
+                : SplickSegmentPagerTopInsetMetrics.defaultScrollTopMargin
+        )
+    }
 
     func body(content: Content) -> some View {
         content
             .padding(.top, isEnabled ? topPadding : 0)
             .background {
-                if isEnabled {
+                if isEnabled, style == .underChrome {
                     GeometryReader { geometry in
                         Color.clear
                             .onAppear {
@@ -101,7 +150,7 @@ private struct SplickSegmentPagerPageTopInsetModifier: ViewModifier {
     }
 
     private func applyTopPadding(from geometry: GeometryProxy) {
-        let next = SplickSegmentPagerTopInsetMetrics.resolvedTopMargin(for: geometry)
+        let next = SplickSegmentPagerTopInsetMetrics.resolvedTopMargin(for: geometry, style: style)
         guard abs(next - topPadding) > 0.5 else { return }
         topPadding = next
     }
