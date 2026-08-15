@@ -8,6 +8,7 @@ import FeatureStickers
 /// Loads post data if needed, then shows `PostDetailView` (avoids blank navigation).
 struct PostDetailContainerView: View {
     @EnvironmentObject private var languageService: LanguageService
+    @Environment(\.tabBarScrollState) private var tabBarScrollState
     let destination: FeedPostDestination
     @ObservedObject var feedViewModel: FeedViewModel
     let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
@@ -52,6 +53,9 @@ struct PostDetailContainerView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear {
+            tabBarScrollState?.hide(flushToBottom: true)
+        }
         .task { await loadPost() }
     }
 
