@@ -3,6 +3,8 @@ import SwiftUI
 public enum SplickScrollChromeFadeMetrics {
     /// Extra fade tail below the segment pills so content dissolves gradually.
     public static let fadeTail: CGFloat = 56
+    /// Short dissolve when the overlay sits *below* the nav bar.
+    public static let compactFadeTail: CGFloat = 36
 
     public static func totalHeight(safeTop: CGFloat) -> CGFloat {
         safeTop
@@ -39,41 +41,60 @@ public enum SplickScrollChromeFadeMetrics {
             .init(color: .clear, location: 1)
         ]
     }
+
+    public static var compactBackgroundStops: [Gradient.Stop] {
+        let bg = backgroundColor
+        return [
+            .init(color: bg.opacity(0.42), location: 0),
+            .init(color: bg.opacity(0.22), location: 0.4),
+            .init(color: bg.opacity(0.08), location: 0.72),
+            .init(color: bg.opacity(0), location: 1)
+        ]
+    }
 }
 
 /// Gradual top fade when scroll content passes beneath segment navigation chrome.
 public struct SplickScrollTopFadeOverlay: View {
-    public init() {}
+    /// When true, overlay sits *below* the nav bar — short dissolve, no opaque band.
+    public var compact: Bool
+
+    public init(compact: Bool = false) {
+        self.compact = compact
+    }
 
     public var body: some View {
         GeometryReader { proxy in
-            let height = SplickScrollChromeFadeMetrics.totalHeight(
-                safeTop: proxy.safeAreaInsets.top
-            )
+            let height = compact
+                ? SplickScrollChromeFadeMetrics.compactFadeTail
+                : SplickScrollChromeFadeMetrics.totalHeight(safeTop: proxy.safeAreaInsets.top)
 
             ZStack(alignment: .top) {
                 LinearGradient(
-                    stops: SplickScrollChromeFadeMetrics.backgroundStops,
+                    stops: compact
+                        ? SplickScrollChromeFadeMetrics.compactBackgroundStops
+                        : SplickScrollChromeFadeMetrics.backgroundStops,
                     startPoint: .top,
                     endPoint: .bottom
                 )
 
-                Rectangle()
-                    .fill(.ultraThinMaterial)
-                    .mask {
-                        LinearGradient(
-                            stops: SplickScrollChromeFadeMetrics.materialMaskStops,
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    }
+                if !compact {
+                    Rectangle()
+                        .fill(.ultraThinMaterial)
+                        .mask {
+                            LinearGradient(
+                                stops: SplickScrollChromeFadeMetrics.materialMaskStops,
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        }
+                }
             }
             .frame(height: height)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .compositingGroup()
         }
         .allowsHitTesting(false)
-        .ignoresSafeArea(edges: .top)
+        .ignoresSafeArea(edges: compact ? [] : .top)
         .accessibilityHidden(true)
     }
 }
