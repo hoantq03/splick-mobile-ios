@@ -147,6 +147,11 @@ public struct AttachmentComposerView<TextField: View, Accessory: View, SendButto
                         sendButton()
                     }
                     .disabled(!canSubmit)
+                    .foregroundStyle(
+                        canSubmit
+                            ? SplickTheme.Colors.primaryGradientStart
+                            : SplickTheme.Colors.textTertiary
+                    )
                     .transition(
                         .asymmetric(
                             insertion: .scale(scale: 0.35, anchor: .center)
