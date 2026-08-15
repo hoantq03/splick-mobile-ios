@@ -80,6 +80,7 @@ public struct ExpenseListView: View {
                 friendsPage
             }
             .background(SplickTheme.Colors.background.ignoresSafeArea())
+            .splickScrollSoftTopEdge()
             .navigationTitle("")
             .splickTabNavigationBarChrome()
             .toolbar {
@@ -322,7 +323,7 @@ public struct ExpenseListView: View {
                     debtSummaryCard
                 }
                 .padding(.horizontal, SplickTheme.Spacing.md)
-                .padding(.top, SplickTheme.Spacing.sm)
+                .padding(.top, SplickTheme.Spacing.md)
                 .transaction { transaction in
                     if pullToRefreshActive {
                         transaction.animation = nil
