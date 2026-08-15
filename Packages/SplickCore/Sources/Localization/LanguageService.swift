@@ -31,6 +31,10 @@ public final class LanguageService: ObservableObject, LocaleHeaderProviding {
         String(format: L10n.string(key, locale: locale), arguments: arguments)
     }
 
+    public func compactRelativeTime(from date: Date, relativeTo now: Date = .now) -> String {
+        LocaleFormatting.compactRelativeDate(date, appLocale: locale, now: now)
+    }
+
     public func localizedMessage(for error: Error) -> String {
         APIErrorLocalization.message(for: error, locale: locale)
     }
