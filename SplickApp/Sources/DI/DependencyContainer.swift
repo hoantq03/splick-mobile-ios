@@ -639,7 +639,7 @@ final class DependencyContainer: ObservableObject {
     // MARK: - Messaging
 
     lazy var messagingWebSocketClient: MessagingWebSocketClient = {
-        MessagingWebSocketClient(
+        let client = MessagingWebSocketClient(
             ticketProvider: { [weak self] in
                 guard let self else { throw URLError(.cancelled) }
                 return try await self.messagingRepository.requestWsTicket()
@@ -652,6 +652,8 @@ final class DependencyContainer: ObservableObject {
                 try? await self.refreshTokenUseCase.refreshSession()
             }
         )
+        MessageDeliveryAckService.shared.configure(wsClient: client)
+        return client
     }()
 
     /// Shared across chat thread VMs so reopening a conversation paints cached messages instantly.
