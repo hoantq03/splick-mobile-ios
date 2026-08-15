@@ -43,12 +43,19 @@ public struct InlineAttachmentPreviewImage: Identifiable, Equatable {
 
 public extension CommentAttachment {
     var inlinePreviewImage: InlineAttachmentPreviewImage? {
-        guard kind == .image, url != nil else { return nil }
+        inlinePreviewImage(isPending: false)
+    }
+
+    /// Builds a grid preview; when `isPending`, shows the frame immediately (even without URL)
+    /// and an uploading overlay until the comment is confirmed.
+    func inlinePreviewImage(isPending: Bool) -> InlineAttachmentPreviewImage? {
+        guard kind == .image else { return nil }
+        guard url != nil || isPending else { return nil }
         return InlineAttachmentPreviewImage(
             id: id,
             localPreview: nil,
-            remoteURL: url,
-            uploadStatus: .uploaded,
+            remoteURL: url ?? thumbnailURL,
+            uploadStatus: isPending ? .uploading : .uploaded,
             accessibilityLabel: fileName ?? "Ảnh đính kèm"
         )
     }
