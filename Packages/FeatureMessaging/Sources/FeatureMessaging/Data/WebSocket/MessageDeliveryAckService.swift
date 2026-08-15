@@ -24,7 +24,19 @@ public final class MessageDeliveryAckService {
         }
         recentAcks[key] = now
         pruneStaleAcks(now: now)
+        lastAcknowledgedConversationId = conversationId
+        lastAcknowledgedMessageId = messageId
         wsClient?.sendDeliveryAck(conversationId: conversationId, messageId: messageId)
+    }
+
+    /// Test/observation hook for the most recent ACK.
+    public private(set) var lastAcknowledgedConversationId: UUID?
+    public private(set) var lastAcknowledgedMessageId: UUID?
+
+    public func resetAckTrackingForTests() {
+        recentAcks.removeAll()
+        lastAcknowledgedConversationId = nil
+        lastAcknowledgedMessageId = nil
     }
 
     private func pruneStaleAcks(now: Date) {
