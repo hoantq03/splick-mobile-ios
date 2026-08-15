@@ -7,7 +7,7 @@ enum FeedPagerTopInsetMetrics {
     static var defaultScrollTopMargin: CGFloat { SplickSegmentPagerTopInsetMetrics.defaultScrollTopMargin }
 
     static func resolvedTopMargin(for geometry: GeometryProxy) -> CGFloat {
-        SplickSegmentPagerTopInsetMetrics.resolvedTopMargin(for: geometry)
+        SplickSegmentPagerTopInsetMetrics.resolvedTopMargin(for: geometry, style: .underChrome)
     }
 }
 
