@@ -33,6 +33,12 @@ struct MessageBubble: View {
     let onRetry: (() -> Void)?
     let onLongPress: (() -> Void)?
     let onReply: (() -> Void)?
+    /// Peer avatar for the latest `.read` outgoing receipt (DIRECT).
+    var readReceiptPeerAvatarURL: URL? = nil
+    var readReceiptPeerName: String = ""
+    var showsReadReceiptAvatar: Bool = false
+    var readReceiptNamespace: Namespace.ID? = nil
+    var conversationId: UUID? = nil
 
     @State private var imageViewerRoute: AttachmentPreviewRoute?
 
@@ -135,7 +141,14 @@ struct MessageBubble: View {
     private var outgoingTrailingMeta: some View {
         HStack(alignment: .center, spacing: SplickTheme.Spacing.xxs) {
             if message.deliveryStatus != .failed {
-                MessageStatusIndicator(status: message.deliveryStatus)
+                MessageStatusIndicator(
+                    status: message.deliveryStatus,
+                    showsReadAvatar: showsReadReceiptAvatar,
+                    readAvatarURL: readReceiptPeerAvatarURL,
+                    readAvatarName: readReceiptPeerName,
+                    readAvatarNamespace: readReceiptNamespace,
+                    conversationId: conversationId
+                )
             }
             replyRevealIcon
             timestampRevealLabel
