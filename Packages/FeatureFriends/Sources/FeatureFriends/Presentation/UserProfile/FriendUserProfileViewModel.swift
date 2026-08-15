@@ -91,7 +91,7 @@ public final class FriendUserProfileViewModel: ObservableObject {
     }
 
     func refreshPosts() async {
-        guard !isBotProfile, let fetchUserPostsUseCase, !isLoadingPosts else { return }
+        guard !isBotProfile, let fetchUserPostsUseCase else { return }
         isLoadingPosts = true
         postsError = nil
         defer { isLoadingPosts = false }
@@ -102,9 +102,8 @@ public final class FriendUserProfileViewModel: ObservableObject {
             posts = firstPage
             postsPage = 0
             hasMorePosts = firstPage.count == Self.postsPageSize
-        } catch is CancellationError {
-            return
         } catch {
+            guard !error.isRequestCancellation else { return }
             postsError = error.localizedDescription
         }
     }
@@ -129,9 +128,8 @@ public final class FriendUserProfileViewModel: ObservableObject {
             posts.append(contentsOf: nextPage.filter { !existingIds.contains($0.id) })
             postsPage = nextPageIndex
             hasMorePosts = nextPage.count == Self.postsPageSize
-        } catch is CancellationError {
-            return
         } catch {
+            guard !error.isRequestCancellation else { return }
             postsError = error.localizedDescription
         }
     }
@@ -160,12 +158,15 @@ public final class FriendUserProfileViewModel: ObservableObject {
 
         do {
             let profile = try await fetchUserProfileUseCase.execute(userId: user.id)
+            guard !Task.isCancelled else { return }
             user = profile.user
             friendStatus = profile.friendStatus
             stats = profile.stats
             nicknameDraft = profile.user.displayName
             await loadPaymentProfileIfFriend()
         } catch {
+            // Pull-to-refresh / overlapping `.task` cancels in-flight loads — not a user-facing failure.
+            guard !error.isRequestCancellation else { return }
             profileError = error.localizedDescription
         }
     }
@@ -181,6 +182,7 @@ public final class FriendUserProfileViewModel: ObservableObject {
 
         do {
             let profile = try await fetchFriendPaymentProfileUseCase.execute(userId: user.id)
+            guard !Task.isCancelled else { return }
             if profile.hasAnyContent {
                 paymentProfile = profile
             } else {
@@ -189,6 +191,7 @@ public final class FriendUserProfileViewModel: ObservableObject {
         } catch NetworkError.notFound {
             friendPaymentNotConfigured = true
         } catch {
+            guard !error.isRequestCancellation else { return }
             paymentProfileError = error.localizedDescription
         }
     }
