@@ -1,13 +1,16 @@
 import SwiftUI
 import AVKit
 import UIKit
+import Photos
 import Common
 import DesignSystem
+import Localization
 import SplickDomain
 
 // MARK: - SwiftUI entry
 
 struct MediaViewerView: View {
+    @EnvironmentObject private var languageService: LanguageService
     let items: [PostMediaItem]
     let initialIndex: Int
     @Binding var isPresented: Bool
@@ -16,11 +19,26 @@ struct MediaViewerView: View {
         MediaViewerContainer(
             items: items,
             initialIndex: initialIndex,
+            strings: MediaViewerActionStrings(
+                save: languageService.text(.profilePaymentSaveImage),
+                copy: languageService.text(.feedMediaCopyImage),
+                saved: languageService.text(.profilePaymentImageSaved),
+                copied: languageService.text(.feedMediaCopied),
+                saveFailed: languageService.text(.profilePaymentImageSaveFailed)
+            ),
             onDismiss: { isPresented = false }
         )
         .ignoresSafeArea()
         .statusBarHidden(true)
     }
+}
+
+private struct MediaViewerActionStrings {
+    let save: String
+    let copy: String
+    let saved: String
+    let copied: String
+    let saveFailed: String
 }
 
 // MARK: - Presentation route (avoids fullScreenCover reading stale index)
@@ -35,10 +53,15 @@ struct MediaViewerRoute: Identifiable {
 private struct MediaViewerContainer: UIViewControllerRepresentable {
     let items: [PostMediaItem]
     let initialIndex: Int
+    let strings: MediaViewerActionStrings
     let onDismiss: () -> Void
 
     func makeUIViewController(context: Context) -> MediaViewerViewController {
-        let controller = MediaViewerViewController(items: items, initialIndex: initialIndex)
+        let controller = MediaViewerViewController(
+            items: items,
+            initialIndex: initialIndex,
+            strings: strings
+        )
         controller.onDismiss = onDismiss
         controller.onPageChanged = { index in
             context.coordinator.currentIndex = index
@@ -64,6 +87,7 @@ private struct MediaViewerContainer: UIViewControllerRepresentable {
 
 private final class MediaViewerViewController: UIPageViewController, UIPageViewControllerDataSource, UIPageViewControllerDelegate {
     private let items: [PostMediaItem]
+    private let strings: MediaViewerActionStrings
     private var pages: [MediaPageViewController] = []
     private var currentIndex: Int
     private let pageIndicator = UILabel()
@@ -74,8 +98,9 @@ private final class MediaViewerViewController: UIPageViewController, UIPageViewC
     var onDismiss: (() -> Void)?
     var onPageChanged: ((Int) -> Void)?
 
-    init(items: [PostMediaItem], initialIndex: Int) {
+    init(items: [PostMediaItem], initialIndex: Int, strings: MediaViewerActionStrings) {
         self.items = items
+        self.strings = strings
         self.currentIndex = min(max(initialIndex, 0), max(items.count - 1, 0))
         super.init(
             transitionStyle: .scroll,
@@ -94,7 +119,7 @@ private final class MediaViewerViewController: UIPageViewController, UIPageViewC
         delegate = self
 
         pages = items.enumerated().map { index, item in
-            let page = MediaPageViewController(item: item)
+            let page = MediaPageViewController(item: item, strings: strings)
             page.pageIndex = index
             page.onVerticalDismissChanged = { [weak self] offset in
                 self?.applyDismissOffset(offset)
@@ -270,8 +295,9 @@ extension MediaViewerViewController: UIGestureRecognizerDelegate {
 
 // MARK: - Single page (image zoom or video)
 
-private final class MediaPageViewController: UIViewController, UIScrollViewDelegate {
+private final class MediaPageViewController: UIViewController, UIScrollViewDelegate, UIContextMenuInteractionDelegate {
     let item: PostMediaItem
+    private let strings: MediaViewerActionStrings
     var pageIndex: Int = 0
     var onVerticalDismissChanged: ((CGFloat) -> Void)?
     var onVerticalDismissEnded: ((CGFloat) -> Void)?
@@ -281,11 +307,13 @@ private final class MediaPageViewController: UIViewController, UIScrollViewDeleg
     private var videoController: AVPlayerViewController?
     private var verticalDismissPan: UIPanGestureRecognizer!
     private var imageLoadHandle: RemoteUIImageLoadHandle?
+    private var toastLabel: UILabel?
 
     var isZoomed: Bool { scrollView.zoomScale > scrollView.minimumZoomScale + 0.01 }
 
-    init(item: PostMediaItem) {
+    init(item: PostMediaItem, strings: MediaViewerActionStrings) {
         self.item = item
+        self.strings = strings
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -327,6 +355,7 @@ private final class MediaPageViewController: UIViewController, UIScrollViewDeleg
 
         imageView.contentMode = .scaleAspectFit
         imageView.isUserInteractionEnabled = true
+        imageView.addInteraction(UIContextMenuInteraction(delegate: self))
         scrollView.addSubview(imageView)
 
         NSLayoutConstraint.activate([
@@ -440,6 +469,91 @@ private final class MediaPageViewController: UIViewController, UIScrollViewDeleg
         frame.origin.x = frame.width < boundsSize.width ? (boundsSize.width - frame.width) / 2 : 0
         frame.origin.y = frame.height < boundsSize.height ? (boundsSize.height - frame.height) / 2 : 0
         imageView.frame = frame
+    }
+
+    func contextMenuInteraction(
+        _ interaction: UIContextMenuInteraction,
+        configurationForMenuAtLocation location: CGPoint
+    ) -> UIContextMenuConfiguration? {
+        guard item.mediaType == .image, imageView.image != nil else { return nil }
+        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
+            guard let self else { return nil }
+            let save = UIAction(
+                title: self.strings.save,
+                image: UIImage(systemName: "square.and.arrow.down")
+            ) { _ in
+                self.saveCurrentImage()
+            }
+            let copy = UIAction(
+                title: self.strings.copy,
+                image: UIImage(systemName: "doc.on.doc")
+            ) { _ in
+                self.copyCurrentImage()
+            }
+            return UIMenu(children: [save, copy])
+        }
+    }
+
+    private func copyCurrentImage() {
+        guard let image = imageView.image else { return }
+        UIPasteboard.general.image = image
+        showToast(strings.copied)
+    }
+
+    private func saveCurrentImage() {
+        guard let image = imageView.image else {
+            showToast(strings.saveFailed)
+            return
+        }
+
+        Task { @MainActor in
+            let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+            guard status == .authorized || status == .limited else {
+                showToast(strings.saveFailed)
+                return
+            }
+
+            let saved = await withCheckedContinuation { continuation in
+                PHPhotoLibrary.shared().performChanges({
+                    PHAssetChangeRequest.creationRequestForAsset(from: image)
+                }) { success, _ in
+                    continuation.resume(returning: success)
+                }
+            }
+            showToast(saved ? strings.saved : strings.saveFailed)
+        }
+    }
+
+    private func showToast(_ message: String) {
+        toastLabel?.removeFromSuperview()
+        let label = UILabel()
+        label.text = "  \(message)  "
+        label.font = .systemFont(ofSize: 14, weight: .semibold)
+        label.textColor = .white
+        label.backgroundColor = UIColor.black.withAlphaComponent(0.72)
+        label.textAlignment = .center
+        label.layer.cornerRadius = 14
+        label.clipsToBounds = true
+        label.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(label)
+        toastLabel = label
+        NSLayoutConstraint.activate([
+            label.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            label.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -48),
+            label.heightAnchor.constraint(equalToConstant: 36),
+            label.widthAnchor.constraint(greaterThanOrEqualToConstant: 140)
+        ])
+        label.layoutIfNeeded()
+        label.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 14, bottom: 0, trailing: 14)
+        UIView.animate(withDuration: 0.2) { label.alpha = 1 }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { [weak self, weak label] in
+            UIView.animate(withDuration: 0.25, animations: { label?.alpha = 0 }) { _ in
+                label?.removeFromSuperview()
+                if self?.toastLabel === label {
+                    self?.toastLabel = nil
+                }
+            }
+        }
     }
 }
 
