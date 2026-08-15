@@ -24,6 +24,7 @@ final class AppState: ObservableObject {
     @Published var linkedPostPresentation: PendingFeedPostNavigation?
 
     @Published var pendingMessagingNavigation: PendingMessagingNavigation?
+    @Published var pendingUserProfileNavigation: UUID?
 
     /// In-memory only — `false` every cold launch and after logout.
     /// `true` only after the user taps through the 4-page onboarding this session.
@@ -71,6 +72,7 @@ final class AppState: ObservableObject {
         pendingFeedPostNavigation = nil
         linkedPostPresentation = nil
         pendingMessagingNavigation = nil
+        pendingUserProfileNavigation = nil
         PushNotificationCoordinator.shared.syncAppIconBadge(count: 0)
         Log.info("User signed out", category: .lifecycle)
     }
@@ -87,11 +89,16 @@ final class AppState: ObservableObject {
         pendingFeedPostNavigation = nil
         linkedPostPresentation = nil
         pendingMessagingNavigation = nil
+        pendingUserProfileNavigation = nil
         PushNotificationCoordinator.shared.syncAppIconBadge(count: 0)
     }
 
     func clearPendingMessagingNavigation() {
         pendingMessagingNavigation = nil
+    }
+
+    func clearPendingUserProfileNavigation() {
+        pendingUserProfileNavigation = nil
     }
 
     /// Called when user taps through the last onboarding page.
@@ -194,6 +201,12 @@ final class AppState: ObservableObject {
         case .friends:
             selectedTab = .friends
             showNotifications = false
+        case .userProfile(let userId):
+            pendingUserProfileNavigation = userId
+            withAnimation(.easeInOut(duration: 0.35)) {
+                selectedTab = .friends
+            }
+            showNotifications = false
         case .messages:
             withAnimation(.easeInOut(duration: 0.35)) {
                 selectedTab = .messages
@@ -228,6 +241,11 @@ final class AppState: ObservableObject {
         case .expenses:
             return .expenses
         case .friends:
+            return .friends
+        case .userProfile:
+            if let userId = destination.userProfileId {
+                return .userProfile(userId)
+            }
             return .friends
         case .messages:
             if let conversationId = destination.conversationId {
