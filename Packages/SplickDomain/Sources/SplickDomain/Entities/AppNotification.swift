@@ -41,6 +41,10 @@ public struct AppNotification: Identifiable, Codable, Equatable, Sendable {
             return .post(postId)
         }
 
+        if let userId = destination?.userProfileId ?? (destination?.screen == .userProfile ? actorUserId : nil) {
+            return .userProfile(userId)
+        }
+
         switch destination?.screen {
         case .postDetail:
             if let referenceId {
@@ -60,6 +64,8 @@ public struct AppNotification: Identifiable, Codable, Equatable, Sendable {
             return .feed
         case .inbox:
             return .inbox
+        case .userProfile:
+            break
         case .unknown, .none:
             break
         }
@@ -78,7 +84,12 @@ public struct AppNotification: Identifiable, Codable, Equatable, Sendable {
             return .expenses
         case .streakReminderMidday, .streakReminderEvening:
             return .feed
-        case .friendRequestSent, .friendRequestAccepted, .groupInvite:
+        case .friendRequestAccepted:
+            if let actorUserId {
+                return .userProfile(actorUserId)
+            }
+            return .friends
+        case .friendRequestSent, .groupInvite:
             return .friends
         case .directMessage, .groupMessage, .groupCreated, .groupMemberAdded,
              .groupMemberRemoved, .groupRenamed, .groupAdminTransferred:
