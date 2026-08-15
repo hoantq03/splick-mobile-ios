@@ -9,6 +9,17 @@ public struct MentionTextEditor: UIViewRepresentable {
     var placeholder: String
     var isFocused: Bool
 
+    /// Horizontal padding shared with `MentionTextField` placeholder.
+    public static let textInsets = UIEdgeInsets(top: 0, left: 12, bottom: 0, right: 12)
+
+    /// Compact single-line fields (comment composer, expense description) center text vertically.
+    static let compactHeightThreshold: CGFloat = 48
+
+    static func textInsets(minHeight: CGFloat) -> UIEdgeInsets {
+        let vertical: CGFloat = minHeight <= compactHeightThreshold ? 0 : 10
+        return UIEdgeInsets(top: vertical, left: 12, bottom: vertical, right: 12)
+    }
+
     public init(
         text: Binding<String>,
         fontSize: CGFloat = 13,
@@ -28,14 +39,16 @@ public struct MentionTextEditor: UIViewRepresentable {
     }
 
     public func makeUIView(context: Context) -> UITextView {
-        let textView = UITextView()
+        let textView = CompactCenteredTextView()
         textView.backgroundColor = .clear
         textView.delegate = context.coordinator
         textView.isScrollEnabled = false
         textView.font = .systemFont(ofSize: fontSize)
         textView.textColor = .label
-        textView.textContainerInset = UIEdgeInsets(top: 8, left: 6, bottom: 8, right: 6)
+        textView.textContainerInset = Self.textInsets(minHeight: minHeight)
         textView.textContainer.lineFragmentPadding = 0
+        textView.contentInsetAdjustmentBehavior = .never
+        textView.compactMinHeight = minHeight
         textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         context.coordinator.applyStyles(to: textView, text: text)
         return textView
@@ -43,6 +56,14 @@ public struct MentionTextEditor: UIViewRepresentable {
 
     public func updateUIView(_ uiView: UITextView, context: Context) {
         context.coordinator.parent = self
+        uiView.textContainer.lineFragmentPadding = 0
+        if let compactView = uiView as? CompactCenteredTextView {
+            compactView.compactMinHeight = minHeight
+        }
+
+        if minHeight > Self.compactHeightThreshold {
+            uiView.textContainerInset = Self.textInsets(minHeight: minHeight)
+        }
 
         // Sync programmatic updates (e.g. reply prefill `@username`) even while focused.
         if context.coordinator.lastSyncedText != text {
@@ -57,14 +78,27 @@ public struct MentionTextEditor: UIViewRepresentable {
         } else if context.coordinator.managesExternalFocus, uiView.isFirstResponder {
             uiView.resignFirstResponder()
         }
+
+        (uiView as? CompactCenteredTextView)?.applyCompactVerticalCentering()
     }
 
     public func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
         let width = proposal.width ?? (UIScreen.main.bounds.width - 120)
+        let clampedWidth = max(1, width)
+        if let compactView = uiView as? CompactCenteredTextView,
+           minHeight <= Self.compactHeightThreshold {
+            let used = compactView.textBlockHeight()
+            let lineHeight = uiView.font?.lineHeight ?? UIFont.systemFont(ofSize: fontSize).lineHeight
+            let height = used <= lineHeight * 1.5
+                ? minHeight
+                : used + 16
+            return CGSize(width: clampedWidth, height: height)
+        }
+
         let fitting = uiView.sizeThatFits(
-            CGSize(width: max(1, width), height: .greatestFiniteMagnitude)
+            CGSize(width: clampedWidth, height: .greatestFiniteMagnitude)
         )
-        return CGSize(width: max(1, width), height: max(minHeight, fitting.height))
+        return CGSize(width: clampedWidth, height: max(minHeight, fitting.height))
     }
 
     public final class Coordinator: NSObject, UITextViewDelegate {
@@ -84,6 +118,7 @@ public struct MentionTextEditor: UIViewRepresentable {
             parent.text = plain
             lastSyncedText = plain
             applyStyles(to: textView, text: plain)
+            (textView as? CompactCenteredTextView)?.applyCompactVerticalCentering()
         }
 
         func applyStyles(to textView: UITextView, text: String) {
@@ -93,6 +128,8 @@ public struct MentionTextEditor: UIViewRepresentable {
             if text.isEmpty {
                 textView.attributedText = nil
                 textView.text = ""
+                textView.font = .systemFont(ofSize: parent.fontSize)
+                textView.textColor = .label
             } else {
                 textView.attributedText = MentionStyler.attributedString(
                     text: text,
@@ -109,6 +146,40 @@ public struct MentionTextEditor: UIViewRepresentable {
                 textView.selectedRange = NSRange(location: location, length: lengthClamped)
             }
             isApplyingStyles = false
+            (textView as? CompactCenteredTextView)?.applyCompactVerticalCentering()
+        }
+    }
+}
+
+/// Centers a single line in a compact pill field; top-aligns once the field grows.
+private final class CompactCenteredTextView: UITextView {
+    var compactMinHeight: CGFloat = 36
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        applyCompactVerticalCentering()
+    }
+
+    func textBlockHeight() -> CGFloat {
+        let fontLine = font?.lineHeight ?? UIFont.systemFont(ofSize: 14).lineHeight
+        layoutManager.ensureLayout(for: textContainer)
+        let glyphRange = layoutManager.glyphRange(for: textContainer)
+        guard glyphRange.length > 0 else {
+            return ceil(fontLine)
+        }
+        return max(ceil(layoutManager.usedRect(for: textContainer).height), ceil(fontLine))
+    }
+
+    func applyCompactVerticalCentering() {
+        guard compactMinHeight <= MentionTextEditor.compactHeightThreshold else { return }
+        let boundsHeight = bounds.height > 1 ? bounds.height : compactMinHeight
+        let usedHeight = textBlockHeight()
+        let leftover = boundsHeight - usedHeight
+        let top = leftover > 0 ? floor(leftover / 2) : 0
+        let bottom = leftover > 0 ? leftover - top : 0
+        let inset = UIEdgeInsets(top: top, left: 12, bottom: bottom, right: 12)
+        if textContainerInset != inset {
+            textContainerInset = inset
         }
     }
 }
@@ -135,14 +206,20 @@ public struct MentionTextField: View {
         self.minHeight = minHeight
     }
 
+    private var isCompactField: Bool {
+        minHeight <= MentionTextEditor.compactHeightThreshold
+    }
+
     public var body: some View {
-        ZStack(alignment: .topLeading) {
+        ZStack(alignment: isCompactField ? .leading : .topLeading) {
             if text.isEmpty {
                 Text(placeholder)
-                    .font(.system(size: fontSize))
+                    .font(Font(UIFont.systemFont(ofSize: fontSize)))
                     .foregroundStyle(SplickTheme.Colors.textTertiary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, MentionTextEditor.textInsets.left)
+                    .padding(.top, isCompactField ? 0 : MentionTextEditor.textInsets(minHeight: minHeight).top)
+                    .padding(.bottom, isCompactField ? 0 : MentionTextEditor.textInsets(minHeight: minHeight).bottom)
+                    .frame(maxWidth: .infinity, maxHeight: isCompactField ? .infinity : nil, alignment: .leading)
                     .allowsHitTesting(false)
             }
 
