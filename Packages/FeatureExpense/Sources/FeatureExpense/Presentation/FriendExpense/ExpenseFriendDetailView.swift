@@ -240,11 +240,15 @@ public struct ExpenseFriendDetailView: View {
         }
         expenseSection(
           title: languageService.text(.expenseYouOwe),
-          expenses: viewModel.youOweExpenses
+          expenses: viewModel.youOweExpenses,
+          tint: SplickTheme.Colors.error,
+          icon: "arrow.up.right.circle.fill"
         )
         expenseSection(
           title: languageService.text(.expenseYouAreOwed),
-          expenses: viewModel.theyOweExpenses
+          expenses: viewModel.theyOweExpenses,
+          tint: SplickTheme.Colors.success,
+          icon: "arrow.down.left.circle.fill"
         )
         if viewModel.hasNextPage {
           SplickButton(
@@ -273,48 +277,121 @@ public struct ExpenseFriendDetailView: View {
     VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
       Text(languageService.text(.expenseFriendSummary))
         .font(SplickTheme.Typography.headline)
-      HStack {
-        metric(
-          languageService.text(.expenseFriendYouOwe),
-          summary.actorOwesTotal.chartAmountString(currencyCode: summary.currency)
+        .foregroundStyle(SplickTheme.Colors.textPrimary)
+
+      HStack(spacing: SplickTheme.Spacing.sm) {
+        metricBox(
+          title: languageService.text(.expenseFriendYouOwe),
+          amount: summary.actorOwesTotal.chartAmountString(currencyCode: summary.currency),
+          tint: SplickTheme.Colors.error,
+          icon: "arrow.up.right.circle.fill"
         )
-        metric(
-          languageService.text(.expenseFriendOwesYou),
-          summary.counterpartyOwesTotal.chartAmountString(currencyCode: summary.currency)
+        metricBox(
+          title: languageService.text(.expenseFriendOwesYou),
+          amount: summary.counterpartyOwesTotal.chartAmountString(currencyCode: summary.currency),
+          tint: SplickTheme.Colors.success,
+          icon: "arrow.down.left.circle.fill"
         )
       }
-      Divider()
-      HStack {
-        VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
-          Text(languageService.text(.expenseFriendNetAmount))
-            .font(SplickTheme.Typography.caption)
-            .foregroundStyle(SplickTheme.Colors.textSecondary)
-          Text(summary.netAmount.chartAmountString(currencyCode: summary.currency))
-            .font(SplickTheme.Typography.title.monospacedDigit())
-        }
-        Spacer()
-        VStack(alignment: .trailing, spacing: SplickTheme.Spacing.xxxs) {
-          Text(languageService.format(.expenseFriendExpenseCount, summary.expensesInvolved))
-          Text(languageService.format(.expenseFriendSplitCount, summary.unpaidSplitCount))
-        }
-        .font(SplickTheme.Typography.caption)
-        .foregroundStyle(SplickTheme.Colors.textSecondary)
-      }
+
+      netBalanceRow(summary)
       settlementAction(summary)
     }
     .splickCard()
     .accessibilityElement(children: .contain)
   }
 
-  private func metric(_ title: String, _ amount: String) -> some View {
-    VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
-      Text(title)
-        .font(SplickTheme.Typography.caption)
-        .foregroundStyle(SplickTheme.Colors.textSecondary)
+  private func metricBox(
+    title: String,
+    amount: String,
+    tint: Color,
+    icon: String
+  ) -> some View {
+    VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+      HStack(spacing: SplickTheme.Spacing.xxs) {
+        Image(systemName: icon)
+          .font(.system(size: 14, weight: .semibold))
+          .foregroundStyle(tint)
+        Text(title)
+          .font(SplickTheme.Typography.captionBold)
+          .foregroundStyle(tint)
+          .lineLimit(1)
+        Spacer(minLength: 0)
+      }
+
       Text(amount)
-        .font(SplickTheme.Typography.headline.monospacedDigit())
+        .font(SplickTheme.Typography.title.monospacedDigit())
+        .foregroundStyle(tint)
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
     }
+    .padding(SplickTheme.Spacing.sm)
     .frame(maxWidth: .infinity, alignment: .leading)
+    .background(
+      RoundedRectangle(cornerRadius: ExpenseScreenChrome.insetRadius, style: .continuous)
+        .fill(tint.opacity(0.10))
+    )
+    .overlay(
+      RoundedRectangle(cornerRadius: ExpenseScreenChrome.insetRadius, style: .continuous)
+        .strokeBorder(tint.opacity(0.18), lineWidth: 1)
+    )
+  }
+
+  private func netBalanceRow(_ summary: NettingSummary) -> some View {
+    let tint = netDirectionTint(summary.netDirection)
+    return HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
+      VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
+        Text(languageService.text(.expenseFriendNetAmount))
+          .font(SplickTheme.Typography.captionBold)
+          .foregroundStyle(tint)
+        Text(signedNetAmount(summary))
+          .font(SplickTheme.Typography.title.monospacedDigit())
+          .foregroundStyle(tint)
+          .lineLimit(1)
+          .minimumScaleFactor(0.8)
+      }
+
+      Spacer(minLength: 0)
+
+      VStack(alignment: .trailing, spacing: SplickTheme.Spacing.xxxs) {
+        Text(languageService.format(.expenseFriendExpenseCount, summary.expensesInvolved))
+        Text(languageService.format(.expenseFriendSplitCount, summary.unpaidSplitCount))
+      }
+      .font(SplickTheme.Typography.caption)
+      .foregroundStyle(SplickTheme.Colors.textSecondary)
+    }
+    .padding(SplickTheme.Spacing.sm)
+    .background(
+      RoundedRectangle(cornerRadius: ExpenseScreenChrome.insetRadius, style: .continuous)
+        .fill(tint.opacity(0.10))
+    )
+    .overlay(
+      RoundedRectangle(cornerRadius: ExpenseScreenChrome.insetRadius, style: .continuous)
+        .strokeBorder(tint.opacity(0.18), lineWidth: 1)
+    )
+  }
+
+  private func netDirectionTint(_ direction: NetDirection) -> Color {
+    switch direction {
+    case .actorOwes:
+      return SplickTheme.Colors.error
+    case .counterpartyOwes:
+      return SplickTheme.Colors.success
+    case .settled:
+      return SplickTheme.Colors.success
+    }
+  }
+
+  private func signedNetAmount(_ summary: NettingSummary) -> String {
+    let amount = summary.netAmount.chartAmountString(currencyCode: summary.currency)
+    switch summary.netDirection {
+    case .actorOwes:
+      return "−" + amount
+    case .counterpartyOwes:
+      return "+" + amount
+    case .settled:
+      return amount
+    }
   }
 
   @ViewBuilder
@@ -361,11 +438,17 @@ public struct ExpenseFriendDetailView: View {
   }
 
   @ViewBuilder
-  private func expenseSection(title: String, expenses: [Expense]) -> some View {
+  private func expenseSection(title: String, expenses: [Expense], tint: Color, icon: String) -> some View {
     if !expenses.isEmpty {
       VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
-        Text(title)
-          .font(SplickTheme.Typography.headline)
+        HStack(spacing: SplickTheme.Spacing.xxs) {
+          Image(systemName: icon)
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(tint)
+          Text(title)
+            .font(SplickTheme.Typography.headline)
+            .foregroundStyle(tint)
+        }
 
         VStack(spacing: 0) {
           ForEach(Array(expenses.enumerated()), id: \.element.id) { index, expense in
