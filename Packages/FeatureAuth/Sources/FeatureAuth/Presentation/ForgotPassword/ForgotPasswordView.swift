@@ -237,7 +237,9 @@ public struct ForgotPasswordView: View {
                 isSecure: true,
                 errorMessage: localized(viewModel.passwordErrorKey),
                 icon: "lock",
-                cornerRadius: fieldCornerRadius
+                cornerRadius: fieldCornerRadius,
+                passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
+                passwordHiddenAccessibilityLabel: languageService.text(.authHidePassword)
             )
             .textContentType(.newPassword)
             .onChange(of: viewModel.password) { _ in viewModel.validatePasswordField() }
@@ -248,7 +250,9 @@ public struct ForgotPasswordView: View {
                 isSecure: true,
                 errorMessage: localized(viewModel.confirmPasswordErrorKey),
                 icon: "lock.fill",
-                cornerRadius: fieldCornerRadius
+                cornerRadius: fieldCornerRadius,
+                passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
+                passwordHiddenAccessibilityLabel: languageService.text(.authHidePassword)
             )
             .textContentType(.newPassword)
             .onChange(of: viewModel.confirmPassword) { _ in viewModel.validateConfirmPasswordField() }
