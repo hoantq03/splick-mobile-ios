@@ -72,6 +72,7 @@ struct ExpenseContentPager<History: View, Overview: View, Friends: View>: View {
             )
             .frame(width: width, height: height)
         }
+        .ignoresSafeArea(edges: [.top, .bottom])
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
