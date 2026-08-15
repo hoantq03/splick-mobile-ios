@@ -18,6 +18,7 @@ import FeatureMessaging
 private struct TabBarChromeAnimationToken: Equatable {
     let isChromePresented: Bool
     let isVisible: Bool
+    let animated: Bool
 }
 
 struct MainTabView: View {
@@ -59,7 +60,8 @@ struct MainTabView: View {
     private var tabBarChromeAnimationToken: TabBarChromeAnimationToken {
         TabBarChromeAnimationToken(
             isChromePresented: isTabBarChromePresented,
-            isVisible: tabBarScrollState.isVisible
+            isVisible: tabBarScrollState.isVisible,
+            animated: tabBarScrollState.animatesVisibility
         )
     }
 
@@ -195,7 +197,10 @@ struct MainTabView: View {
                 .allowsHitTesting(isTabBarChromePresented && tabBarScrollState.isVisible)
                 .frame(height: tabBarInsetHeight)
                 .clipped()
-                .animation(TabBarMotion.slide, value: tabBarChromeAnimationToken)
+                .animation(
+                    tabBarChromeAnimationToken.animated ? TabBarMotion.slide : nil,
+                    value: tabBarChromeAnimationToken
+                )
                 .ignoresSafeArea(edges: .bottom)
             }
             .onChange(of: appState.selectedTab, perform: handleSelectedTabChange)
@@ -351,7 +356,8 @@ struct MainTabView: View {
             },
             onFriendRequestsLoaded: { requests in
                 container.widgetSyncBridge.syncFriendRequests(requests)
-            }
+            },
+            pendingUserProfileUserId: $appState.pendingUserProfileNavigation
         )
         .environmentObject(container.customEmojiStore)
         .environment(\.customEmojiDependencies, container.customEmojiDependencies)
