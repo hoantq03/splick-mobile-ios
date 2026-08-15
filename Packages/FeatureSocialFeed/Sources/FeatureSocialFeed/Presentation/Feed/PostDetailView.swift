@@ -28,6 +28,7 @@ struct PostDetailView: View {
     @State private var companionsRoute: CompanionsSheetRoute?
     @State private var replyTarget: PostComment?
     @State private var scrollToCommentId: UUID?
+    @State private var scrollToCommentExpectsMedia = false
     @State private var showEmojiPicker = false
     @State private var mediaViewerRoute: MediaViewerRoute?
     @State private var composerFocused = false
@@ -38,6 +39,7 @@ struct PostDetailView: View {
     @State private var detailScrollLocked = false
     @State private var cardPresentation: PostCardPresentation?
     @State private var paymentEvidencePhotoPickerItems: [PhotosPickerItem] = []
+    @State private var observedPendingCommentIds = Set<UUID>()
     @StateObject private var cardActions = PostCardActions()
 
     init(
@@ -96,7 +98,30 @@ struct PostDetailView: View {
             }
             .onChange(of: scrollToCommentId) { commentId in
                 guard let commentId else { return }
-                scrollToComment(commentId, proxy: scrollProxy)
+                scrollToComment(
+                    commentId,
+                    expectsMedia: scrollToCommentExpectsMedia,
+                    proxy: scrollProxy
+                )
+            }
+            .onChange(of: feedViewModel.pendingCommentIds) { pendingIds in
+                let newlyPending = pendingIds.subtracting(observedPendingCommentIds)
+                observedPendingCommentIds = pendingIds
+                guard let pendingId = livePost.comments.last(where: { newlyPending.contains($0.id) })?.id
+                else { return }
+                let expectsMedia = livePost.comments.first(where: { $0.id == pendingId })?
+                    .attachments.isEmpty == false
+                commentPager.ensureCommentVisible(pendingId)
+                if let parentId = livePost.comments.first(where: { $0.id == pendingId })?.parentCommentId {
+                    commentPager.expandReplies(for: parentId)
+                }
+                scrollToCommentExpectsMedia = expectsMedia
+                scrollToCommentId = pendingId
+            }
+            .onChange(of: replyTarget) { target in
+                guard let target else { return }
+                composerFocused = true
+                scrollReplyParent(target.id, proxy: scrollProxy)
             }
         }
         .navigationTitle(languageService.text(.feedPostCommentsTitle))
@@ -117,28 +142,21 @@ struct PostDetailView: View {
         }
         .task { await feedViewModel.refreshPost(id: post.id, allowingConcurrentFeedRefresh: true) }
         .onAppear {
+            tabBarScrollState?.hide(flushToBottom: true)
             configureCardActions()
-            // Defer @Published updates so we don't publish during view updates.
+            // Defer remaining @Published updates so we don't publish during view updates.
             Task { @MainActor in
                 feedViewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
-                tabBarScrollState?.hide(flushToBottom: true)
                 commentPager.refresh(with: livePost.comments)
                 commentPager.loadInitial()
                 enableComposerInteraction()
             }
         }
         .onDisappear {
-            Task { @MainActor in
-                tabBarScrollState?.show()
-            }
+            tabBarScrollState?.show()
         }
         .onChange(of: livePost.comments) { comments in
             commentPager.refresh(with: comments)
-        }
-        .onChange(of: replyTarget) { target in
-            if target != nil {
-                composerFocused = true
-            }
         }
         .postCardPresentationHost(
             presentation: $cardPresentation,
@@ -235,8 +253,16 @@ struct PostDetailView: View {
         VStack(spacing: SplickTheme.Spacing.xs) {
             if let replyTarget {
                 CommentReplyBanner(replyingTo: replyTarget.author) {
-                    self.replyTarget = nil
+                    withAnimation(Self.replyBannerAnimation) {
+                        self.replyTarget = nil
+                    }
                 }
+                .transition(
+                    .asymmetric(
+                        insertion: .move(edge: .bottom).combined(with: .opacity),
+                        removal: .move(edge: .bottom).combined(with: .opacity)
+                    )
+                )
             }
 
             CommentComposerView(
@@ -249,8 +275,8 @@ struct PostDetailView: View {
             ) { text, attachments in
                 Task { await submitComment(text: text, attachments: attachments) }
             }
-            .id(replyTarget?.id ?? post.id)
         }
+        .animation(Self.replyBannerAnimation, value: replyTarget?.id)
         .padding(.horizontal, SplickTheme.Spacing.md)
         .padding(.top, SplickTheme.Spacing.sm)
         .padding(.bottom, SplickTheme.Spacing.sm)
@@ -263,6 +289,11 @@ struct PostDetailView: View {
             }
         }
     }
+
+    private static let replyBannerAnimation = Animation.spring(
+        response: 0.36,
+        dampingFraction: 0.88
+    )
 
     private var commentComposerDockBackground: some View {
         UnevenRoundedRectangle(
@@ -290,6 +321,7 @@ struct PostDetailView: View {
 
     private func submitComment(text: String, attachments: [CommentSubmissionAttachment]) async {
         let parentId = replyTarget?.id
+        let expectsMedia = !attachments.isEmpty
 
         let result = await feedViewModel.addComment(
             to: post.id,
@@ -299,22 +331,70 @@ struct PostDetailView: View {
         )
         if let error = result.error {
             feedViewModel.alertMessage = error
-        } else {
-            if let parentId {
-                commentPager.expandReplies(for: parentId)
-            }
+            return
+        }
+
+        withAnimation(Self.replyBannerAnimation) {
             replyTarget = nil
-            scrollToCommentId = result.createdCommentId
+        }
+        composerFocused = false
+
+        // Sync pager immediately — don't wait for `onChange(of: livePost.comments)`.
+        commentPager.refresh(with: livePost.comments)
+        if let parentId {
+            commentPager.expandReplies(for: parentId)
+        }
+        if let createdId = result.createdCommentId {
+            commentPager.ensureCommentVisible(createdId)
+            scrollToCommentExpectsMedia = expectsMedia
+            scrollToCommentId = createdId
         }
     }
 
-    private func scrollToComment(_ commentId: UUID, proxy: ScrollViewProxy) {
+    private func scrollReplyParent(_ commentId: UUID, proxy: ScrollViewProxy) {
         Task { @MainActor in
+            commentPager.ensureCommentVisible(commentId)
+            // Wait for reply banner slide-in + keyboard before pinning the parent.
             try? await Task.sleep(nanoseconds: 120_000_000)
-            withAnimation(.easeInOut(duration: 0.35)) {
-                proxy.scrollTo(commentId, anchor: .center)
+            withAnimation(.easeInOut(duration: 0.34)) {
+                // Keep parent comment just above the reply dock / composer.
+                proxy.scrollTo(commentId, anchor: UnitPoint(x: 0.5, y: 0.82))
             }
-            scrollToCommentId = nil
+            try? await Task.sleep(nanoseconds: 280_000_000)
+            withAnimation(.easeInOut(duration: 0.28)) {
+                proxy.scrollTo(commentId, anchor: UnitPoint(x: 0.5, y: 0.82))
+            }
+        }
+    }
+
+    private func scrollToComment(
+        _ commentId: UUID,
+        expectsMedia: Bool,
+        proxy: ScrollViewProxy
+    ) {
+        Task { @MainActor in
+            commentPager.ensureCommentVisible(commentId)
+            // Image/GIF rows need more time for LazyVStack + remote media layout.
+            let initialDelay: UInt64 = expectsMedia ? 320_000_000 : 160_000_000
+            let retryDelay: UInt64 = expectsMedia ? 380_000_000 : 220_000_000
+            try? await Task.sleep(nanoseconds: initialDelay)
+            withAnimation(.easeInOut(duration: 0.35)) {
+                proxy.scrollTo(commentId, anchor: UnitPoint(x: 0.5, y: 0.28))
+            }
+            try? await Task.sleep(nanoseconds: retryDelay)
+            withAnimation(.easeInOut(duration: 0.28)) {
+                proxy.scrollTo(commentId, anchor: UnitPoint(x: 0.5, y: 0.28))
+            }
+            if expectsMedia {
+                try? await Task.sleep(nanoseconds: 420_000_000)
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    proxy.scrollTo(commentId, anchor: UnitPoint(x: 0.5, y: 0.28))
+                }
+            }
+            if scrollToCommentId == commentId {
+                scrollToCommentId = nil
+                scrollToCommentExpectsMedia = false
+            }
         }
     }
 
@@ -330,18 +410,21 @@ struct PostDetailView: View {
             }
 
             CommentThreadView(
+                post: livePost,
                 comments: commentPager.allComments,
                 roots: commentPager.displayedTopLevel,
                 expandedParents: commentPager.expandedParents,
                 highlightedCommentId: highlightedCommentId,
+                pendingCommentIds: feedViewModel.pendingCommentIds,
                 repliesPreviewCount: commentPager.repliesPreviewCount,
                 canReplyToComment: { feedViewModel.canReply(to: $0) },
                 canModerateEvidence: { feedViewModel.canModerateEvidence(on: $0, post: livePost) },
                 onReply: { comment in
                     guard feedViewModel.canReply(to: comment) else { return }
                     commentPager.expandAncestorChain(of: comment)
-                    replyTarget = comment
-                    composerFocused = true
+                    withAnimation(Self.replyBannerAnimation) {
+                        replyTarget = comment
+                    }
                 },
                 onUserTap: { openProfile(for: $0) },
                 onViewMoreReplies: { parentId in
