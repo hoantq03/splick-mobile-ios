@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 private struct SuppressKeyboardAutoFocusKey: EnvironmentKey {
     static let defaultValue = false
@@ -67,17 +68,86 @@ private struct FirstAppearModifier: ViewModifier {
 
 private struct DismissKeyboardOnTapModifier: ViewModifier {
     func body(content: Content) -> some View {
-        content
-            .contentShape(Rectangle())
-            .simultaneousGesture(
-                TapGesture().onEnded {
-                    UIApplication.shared.sendAction(
-                        #selector(UIResponder.resignFirstResponder),
-                        to: nil,
-                        from: nil,
-                        for: nil
-                    )
-                }
+        content.background(DismissKeyboardTapInstaller())
+    }
+}
+
+/// Installs a UIKit tap recognizer that dismisses the keyboard only when the tap
+/// is outside text inputs — so select/copy/paste inside fields keeps focus.
+private struct DismissKeyboardTapInstaller: UIViewRepresentable {
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.backgroundColor = .clear
+        view.isUserInteractionEnabled = false
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        DispatchQueue.main.async {
+            context.coordinator.attach(to: uiView)
+        }
+    }
+
+    static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) {
+        coordinator.detach()
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        private weak var hostView: UIView?
+        private lazy var recognizer: UITapGestureRecognizer = {
+            let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap))
+            tap.cancelsTouchesInView = false
+            tap.delegate = self
+            return tap
+        }()
+
+        func attach(to markerView: UIView) {
+            guard let host = markerView.superview else { return }
+            if hostView === host, recognizer.view === host { return }
+            detach()
+            host.addGestureRecognizer(recognizer)
+            hostView = host
+        }
+
+        func detach() {
+            if let view = recognizer.view {
+                view.removeGestureRecognizer(recognizer)
+            }
+            hostView = nil
+        }
+
+        @objc private func handleTap() {
+            UIApplication.shared.sendAction(
+                #selector(UIResponder.resignFirstResponder),
+                to: nil,
+                from: nil,
+                for: nil
             )
+        }
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldReceive touch: UITouch
+        ) -> Bool {
+            var view = touch.view
+            while let current = view {
+                if current is UITextField || current is UITextView {
+                    return false
+                }
+                view = current.superview
+            }
+            return true
+        }
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            true
+        }
     }
 }
