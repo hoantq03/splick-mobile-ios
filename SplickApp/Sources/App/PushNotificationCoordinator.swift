@@ -3,6 +3,7 @@ import Combine
 import UIKit
 import UserNotifications
 import Common
+import FeatureMessaging
 import Networking
 import SplickDomain
 import Storage
@@ -156,6 +157,8 @@ final class PushNotificationCoordinator: ObservableObject {
             syncAppIconBadge(count: badge)
         }
 
+        acknowledgeMessagingDeliveryIfNeeded(userInfo: userInfo)
+
         guard let destination = parseDestination(from: userInfo) else {
             Log.debug("Remote notification had no destination", category: .notification)
             return
@@ -166,6 +169,27 @@ final class PushNotificationCoordinator: ObservableObject {
             "Queued notification destination",
             category: .notification,
             metadata: ["screen": destination.screen.rawValue]
+        )
+    }
+
+    /// When a messaging push is presented/received, ACK delivery so the sender sees "đã nhận".
+    private func acknowledgeMessagingDeliveryIfNeeded(userInfo: [AnyHashable: Any]) {
+        guard let destination = parseDestination(from: userInfo),
+              destination.screen == .messages,
+              let conversationId = destination.conversationId ?? destination.postId
+        else { return }
+
+        let messageIdString =
+            (userInfo["messageId"] as? String)
+            ?? (userInfo["message_id"] as? String)
+            ?? ((userInfo["payload"] as? [String: Any])?["messageId"] as? String)
+        guard let messageIdString,
+              let messageId = UUID(uuidString: messageIdString)
+        else { return }
+
+        MessageDeliveryAckService.shared.acknowledge(
+            conversationId: conversationId,
+            messageId: messageId
         )
     }
 
