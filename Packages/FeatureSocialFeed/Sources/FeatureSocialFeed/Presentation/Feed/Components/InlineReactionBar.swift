@@ -28,6 +28,9 @@ struct InlineReactionBar: View {
 
     private let slotSize: CGFloat = 36
     private let slotSpacing: CGFloat = 4
+    /// Long-press hover (doubled from 1.45 / -10).
+    private let hoverScale: CGFloat = 2.9
+    private let hoverLift: CGFloat = -20
     /// Keep the fly (pop + fall ≈ 0.67s) visible before the feed diff remounts the card.
     private let reactionCommitDelay: TimeInterval = 0.55
     private static let selectionFeedback = UISelectionFeedbackGenerator()
@@ -78,8 +81,9 @@ struct InlineReactionBar: View {
         } label: {
             EmojiView(value: emoji, size: slotSize)
                 .frame(width: slotSize, height: slotSize)
-                .scaleEffect(isHighlighted ? 1.45 : (isBouncing ? 1.22 : 1))
-                .offset(y: isHighlighted ? -10 : 0)
+                .scaleEffect(isHighlighted ? hoverScale : (isBouncing ? 1.22 : 1))
+                .offset(y: isHighlighted ? hoverLift : 0)
+                .zIndex(isHighlighted ? 1 : 0)
                 .animation(.spring(response: 0.18, dampingFraction: 0.78), value: isHighlighted)
                 .animation(.spring(response: 0.24, dampingFraction: 0.72), value: isBouncing)
         }
@@ -99,8 +103,9 @@ struct InlineReactionBar: View {
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
                 .frame(width: slotSize, height: slotSize)
                 .background(Circle().fill(SplickTheme.Colors.tertiaryBackground))
-                .scaleEffect(isHighlighted ? 1.45 : 1)
-                .offset(y: isHighlighted ? -10 : 0)
+                .scaleEffect(isHighlighted ? hoverScale : 1)
+                .offset(y: isHighlighted ? hoverLift : 0)
+                .zIndex(isHighlighted ? 1 : 0)
                 .animation(.spring(response: 0.18, dampingFraction: 0.78), value: isHighlighted)
         }
         .buttonStyle(.plain)
