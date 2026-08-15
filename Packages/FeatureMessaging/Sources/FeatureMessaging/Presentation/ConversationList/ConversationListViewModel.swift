@@ -85,6 +85,11 @@ public final class ConversationListViewModel: ObservableObject {
         bindWsEvents()
     }
 
+    /// Applies a WS inbox patch without going through the live event subject (tests).
+    public func handleIncomingWsMessageForTesting(conversationId: UUID, message: ChatMessage) {
+        applyIncomingMessage(conversationId: conversationId, message: message)
+    }
+
     public var conversations: [Conversation] {
         if case .loaded(let items) = state { return items }
         return []
@@ -419,6 +424,14 @@ public final class ConversationListViewModel: ObservableObject {
 
     /// Patches the inbox row from the WS payload instead of refetching the whole list.
     private func applyIncomingMessage(conversationId: UUID, message: ChatMessage) {
+        let isFromSelf = currentUserId.map { message.senderId == $0 } ?? false
+        if !isFromSelf {
+            MessageDeliveryAckService.shared.acknowledge(
+                conversationId: conversationId,
+                messageId: message.id
+            )
+        }
+
         guard case .loaded(var items) = state,
               let index = items.firstIndex(where: { $0.id == conversationId }) else {
             // Conversation missing from the loaded page / filter — reconcile soon.
@@ -427,7 +440,6 @@ public final class ConversationListViewModel: ObservableObject {
         }
 
         let existing = items[index]
-        let isFromSelf = currentUserId.map { message.senderId == $0 } ?? false
         let wasUnread = existing.unreadCount > 0
         let nextUnread: Int
         if isFromSelf {
