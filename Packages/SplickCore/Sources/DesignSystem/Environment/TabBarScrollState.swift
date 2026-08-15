@@ -23,6 +23,8 @@ public final class TabBarScrollState: ObservableObject {
     @Published public private(set) var isVisible = true
     /// When true (e.g. post detail), no extra bottom inset — composer can sit on the screen edge.
     @Published public private(set) var suppressesBottomInset = false
+    /// Scroll hide uses a slide; navigation hide is instant so the bar never covers a docked composer.
+    @Published public private(set) var animatesVisibility = true
 
     /// Fires when the user taps the tab button while already on that tab.
     public let sameTabTapSubject = PassthroughSubject<Void, Never>()
@@ -83,16 +85,20 @@ public final class TabBarScrollState: ObservableObject {
         offsetNormalizer.reset()
         distanceNormalizer.reset()
         suppressesBottomInset = false
+        animatesVisibility = true
         setVisibleImmediate(true, applyCooldown: false)
     }
 
     public func show() {
         suppressesBottomInset = false
+        animatesVisibility = true
         setVisibleImmediate(true, applyCooldown: false)
     }
 
     /// Hides the tab bar. Set `flushToBottom` on detail screens so bottom inset becomes zero.
+    /// Navigation hides (`flushToBottom: true`) skip the slide so the bar is gone before the composer docks.
     public func hide(flushToBottom: Bool = false) {
+        animatesVisibility = !flushToBottom
         suppressesBottomInset = flushToBottom
         setVisibleImmediate(false, applyCooldown: true)
     }
@@ -118,6 +124,7 @@ public final class TabBarScrollState: ObservableObject {
 
     private func setVisible(_ visible: Bool) {
         guard isVisible != visible else { return }
+        animatesVisibility = true
         setVisibleImmediate(visible, applyCooldown: !visible)
     }
 }
