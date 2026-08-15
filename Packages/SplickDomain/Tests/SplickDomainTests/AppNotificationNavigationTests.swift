@@ -69,6 +69,20 @@ final class AppNotificationNavigationTests: XCTestCase {
         )
     }
 
+    func testNavigationTargetOpensUserProfileFromFriendAccepted() {
+        let actorId = UUID()
+        let notification = AppNotification(
+            id: UUID(),
+            type: .friendRequestAccepted,
+            title: "Kết bạn thành công",
+            body: "Alice",
+            destination: NotificationDestination(screen: .userProfile, postId: actorId),
+            actorUserId: actorId
+        )
+
+        XCTAssertEqual(notification.navigationTarget, .userProfile(actorId))
+    }
+
     func testNavigationTargetRoutesBulkSettlementToExpenses() {
         let notification = AppNotification(
             id: UUID(),
