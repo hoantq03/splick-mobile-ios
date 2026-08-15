@@ -81,6 +81,45 @@ final class ConversationListViewModelWsPatchTests: XCTestCase {
         XCTAssertEqual(viewModel.conversations.count, 2, "Must not wipe list via full refresh")
     }
 
+    func test_wsNewMessage_fromPeer_acknowledgesDelivery() async {
+        MessageDeliveryAckService.shared.resetAckTrackingForTests()
+        let conversationId = UUID()
+        let messageId = UUID()
+        let existing = Conversation(
+            id: conversationId,
+            unreadCount: 0,
+            peer: ConversationPeer(
+                userId: peerUserId,
+                username: "peer",
+                displayName: "Peer",
+                avatarUrl: nil
+            ),
+            lastMessage: nil,
+            createdAt: .now,
+            updatedAt: .now
+        )
+        let wsClient = MessagingWebSocketClient(
+            ticketProvider: { "ticket" },
+            deviceIdProvider: { "device" }
+        )
+        MessageDeliveryAckService.shared.configure(wsClient: wsClient)
+        let viewModel = makeViewModel(wsClient: wsClient)
+        viewModel.applyStartupConversations([existing])
+
+        let incoming = ChatMessage(
+            id: messageId,
+            conversationId: conversationId,
+            senderId: peerUserId,
+            body: "Delivered to device",
+            clientMessageId: UUID(),
+            createdAt: .now
+        )
+        viewModel.handleIncomingWsMessageForTesting(conversationId: conversationId, message: incoming)
+
+        XCTAssertEqual(MessageDeliveryAckService.shared.lastAcknowledgedConversationId, conversationId)
+        XCTAssertEqual(MessageDeliveryAckService.shared.lastAcknowledgedMessageId, messageId)
+    }
+
     func test_wsNewMessage_fromSelf_doesNotBumpUnread() async {
         let conversationId = UUID()
         let existing = Conversation(
