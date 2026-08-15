@@ -55,7 +55,7 @@ public final class FeedViewModel: ObservableObject {
     private static let viewTrackDebounceNanos: UInt64 = 2_000_000_000
 
     /// Optimistic comment ids not yet confirmed by the server — block reply to avoid invalid parent ids.
-    private var pendingCommentIds = Set<UUID>()
+    @Published private(set) var pendingCommentIds = Set<UUID>()
 
     // MARK: - Lazy post upload (optimistic feed card → background upload)
 
@@ -412,22 +412,46 @@ public final class FeedViewModel: ObservableObject {
         authorId: UUID,
         text: String?,
         parentCommentId: UUID?,
+        prefersAttachments: Bool,
         fallbackId: UUID
     ) -> UUID {
         guard let index = indexOfPost(id: postId) else { return fallbackId }
-        let post = posts[index]
+        let comments = posts[index].comments
         let normalizedText = normalizedCommentBody(text)
-        let byAuthorAndBody = post.comments.filter {
-            $0.author.id == authorId && normalizedCommentBody($0.text) == normalizedText
+
+        var candidates = comments.filter {
+            $0.author.id == authorId && $0.parentCommentId == parentCommentId
         }
-        if let exact = byAuthorAndBody.first(where: { $0.parentCommentId == parentCommentId }) {
-            return exact.id
+
+        if let normalizedText {
+            let bodyMatched = candidates.filter { normalizedCommentBody($0.text) == normalizedText }
+            if !bodyMatched.isEmpty {
+                candidates = bodyMatched
+            }
+        } else if prefersAttachments {
+            let withAttachments = candidates.filter { !$0.attachments.isEmpty }
+            if !withAttachments.isEmpty {
+                candidates = withAttachments
+            } else {
+                let emptyBody = candidates.filter { normalizedCommentBody($0.text) == nil }
+                if !emptyBody.isEmpty {
+                    candidates = emptyBody
+                }
+            }
+        } else {
+            let emptyBody = candidates.filter { normalizedCommentBody($0.text) == nil }
+            if !emptyBody.isEmpty {
+                candidates = emptyBody
+            }
         }
-        if let latest = byAuthorAndBody.max(by: { $0.createdAt < $1.createdAt }) {
+
+        if let latest = candidates.max(by: { $0.createdAt < $1.createdAt }) {
             return latest.id
         }
-        return post.comments
-            .filter { $0.author.id == authorId && $0.parentCommentId == parentCommentId }
+
+        // Never fall back to a removed optimistic id if a newer author comment exists.
+        return comments
+            .filter { $0.author.id == authorId }
             .max(by: { $0.createdAt < $1.createdAt })?
             .id ?? fallbackId
     }
@@ -536,7 +560,7 @@ public final class FeedViewModel: ObservableObject {
         let comment = PostComment(
             author: author,
             text: trimmed.isEmpty ? nil : trimmed,
-            attachments: [],
+            attachments: Self.optimisticAttachments(from: submissionAttachments),
             parentCommentId: parentCommentId
         )
         let optimisticId = comment.id
@@ -550,9 +574,11 @@ public final class FeedViewModel: ObservableObject {
         }
 
         let post = posts[index]
-        pendingCommentIds.insert(optimisticId)
         posts[index] = post.updating(comments: post.comments + [comment])
+        pendingCommentIds.insert(optimisticId)
         markPostsLoaded()
+        // Let the thread paint the optimistic frame (image/GIF skeleton) before the network wait.
+        await Task.yield()
 
         do {
             try await addCommentUseCase.execute(
@@ -569,6 +595,7 @@ public final class FeedViewModel: ObservableObject {
                 authorId: author.id,
                 text: comment.text,
                 parentCommentId: parentCommentId,
+                prefersAttachments: !submissionAttachments.isEmpty,
                 fallbackId: optimisticId
             )
             return AddCommentResult(error: nil, createdCommentId: resolvedId)
@@ -580,6 +607,22 @@ public final class FeedViewModel: ObservableObject {
             return AddCommentResult(
                 error: languageService.localizedMessage(for: error),
                 createdCommentId: nil
+            )
+        }
+    }
+
+    /// Local/remote frames shown immediately while the comment API finishes.
+    private static func optimisticAttachments(
+        from submissions: [CommentSubmissionAttachment]
+    ) -> [CommentAttachment] {
+        submissions.map { submission in
+            CommentAttachment(
+                id: submission.uploadedMediaId ?? UUID(),
+                kind: submission.kind,
+                url: submission.remoteURL,
+                fileName: submission.fileName,
+                thumbnailURL: submission.uploadedThumbnailURL,
+                sizeBytes: submission.uploadedSizeBytes ?? submission.data?.count ?? 0
             )
         }
     }
