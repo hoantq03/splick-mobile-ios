@@ -12,7 +12,7 @@ struct PostCardView: View, Equatable {
     let post: Post
     let currentUser: UserSummary?
     let actions: PostCardActions
-    /// When false (e.g. post detail), reactions/views still show; only the comment preview link is hidden.
+    /// When false (e.g. post detail), reactions/views still show; only the comment entry control is hidden.
     var showsCommentPreview: Bool = true
     /// When true, the bill split section below media starts expanded (e.g. opened from Expenses tab).
     var initiallyExpandedBillSplit: Bool = false
@@ -101,10 +101,6 @@ struct PostCardView: View, Equatable {
 
             reactionBarRow
             reactionSummaryRow
-
-            if showsCommentPreview {
-                commentPreviewRow
-            }
         }
         .splickCard()
         .zIndex(isMediaPinchZooming ? 100 : 0)
@@ -384,29 +380,24 @@ struct PostCardView: View, Equatable {
 
     private enum Layout {
         static let reactionBarHeight: CGFloat = 40
-        static let viewsButtonReservedWidth: CGFloat = 52
         static let selfAvatarSize: CGFloat = 28
         /// Tray mid → avatar-row center when preference anchors are not ready yet.
         static let trayToAvatarFallbackOffsetY: CGFloat = 44
         static let selfAvatarLeadingPadding: CGFloat = 0
+        static let commentIconSize: CGFloat = 17
+        static let commentCountFontSize: CGFloat = 13
+        static let trailingActionSpacing: CGFloat = 10
     }
 
     private var reactionBarRow: some View {
-        ZStack(alignment: .trailing) {
-            InlineReactionBar(
-                onReact: { emoji in actions.onReact(post.id, emoji) },
-                onDragRelease: { emoji, sourceGlobal in
-                    scheduleFlyingEmoji(emoji: emoji, sourceGlobal: sourceGlobal)
-                },
-                onCustomEmoji: { actions.onPresent(.emojiPicker(post)) }
-            )
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.trailing, isAuthor ? Layout.viewsButtonReservedWidth : 0)
-
-            if isAuthor {
-                viewsEntryButton
-            }
-        }
+        InlineReactionBar(
+            onReact: { emoji in actions.onReact(post.id, emoji) },
+            onDragRelease: { emoji, sourceGlobal in
+                scheduleFlyingEmoji(emoji: emoji, sourceGlobal: sourceGlobal)
+            },
+            onCustomEmoji: { actions.onPresent(.emojiPicker(post)) }
+        )
+        .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: Layout.reactionBarHeight, alignment: .center)
         .padding(.top, SplickTheme.Spacing.xxs)
     }
@@ -421,26 +412,41 @@ struct PostCardView: View, Equatable {
     private func viewsEntryButtonLabel(viewCount: Int) -> some View {
         HStack(spacing: 4) {
             Image(systemName: "eye.fill")
-                .font(.system(size: 14))
+                .font(.system(size: 15))
             Text("\(viewCount)")
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: Layout.commentCountFontSize, weight: .medium))
                 .monospacedDigit()
         }
         .foregroundStyle(SplickTheme.Colors.textSecondary)
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 6)
         .padding(.vertical, 6)
+        .contentShape(Rectangle())
     }
 
-    private var commentIconWithCount: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "bubble.right")
-                .font(.system(size: 12))
-            if post.commentCount > 0 {
-                Text("\(post.commentCount)")
-                    .font(.system(size: 11, weight: .medium))
+    private var commentEntryButton: some View {
+        Button {
+            actions.onOpenComments(post)
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "bubble.right")
+                    .font(.system(size: Layout.commentIconSize, weight: .medium))
+                if post.commentCount > 0 {
+                    Text("\(post.commentCount)")
+                        .font(.system(size: Layout.commentCountFontSize, weight: .semibold))
+                        .monospacedDigit()
+                }
             }
+            .foregroundStyle(SplickTheme.Colors.textSecondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
         }
-        .foregroundStyle(SplickTheme.Colors.textSecondary)
+        .buttonStyle(.plain)
+        .accessibilityLabel(
+            post.commentCount > 0
+                ? languageService.format(.feedPostViewAllComments, post.commentCount)
+                : languageService.text(.feedPostWriteComment)
+        )
     }
 
     private func scheduleFlyingEmoji(emoji: String, sourceGlobal: CGRect) {
@@ -488,7 +494,37 @@ struct PostCardView: View, Equatable {
         let preview = reactionPreview
         let myId = currentUser?.id
         let hasMyBadge = myId.map { id in preview.top.contains(where: { $0.userId == id }) } ?? false
+        let hasReactions = !preview.top.isEmpty || preview.otherPeopleCount > 0
+        let showsTrailingActions = showsCommentPreview || isAuthor
 
+        if hasReactions || showsTrailingActions {
+            HStack(alignment: .center, spacing: Layout.trailingActionSpacing) {
+                reactionPeopleBadges(
+                    preview: preview,
+                    hasMyBadge: hasMyBadge,
+                    tappable: hasReactions
+                )
+
+                Spacer(minLength: 0)
+
+                if isAuthor {
+                    viewsEntryButton
+                }
+
+                if showsCommentPreview {
+                    commentEntryButton
+                }
+            }
+            .frame(minHeight: Layout.selfAvatarSize, alignment: .center)
+        }
+    }
+
+    @ViewBuilder
+    private func reactionPeopleBadges(
+        preview: (top: [UserReactionSummary], otherPeopleCount: Int),
+        hasMyBadge: Bool,
+        tappable: Bool
+    ) -> some View {
         let badges = HStack(spacing: 6) {
             ForEach(preview.top, id: \.userId) { summary in
                 UserReactionBadgeView(summary: summary)
@@ -498,12 +534,8 @@ struct PostCardView: View, Equatable {
             if preview.otherPeopleCount > 0 {
                 MoreReactorsChip(count: preview.otherPeopleCount)
             }
-
-            Spacer(minLength: 0)
         }
         .frame(minHeight: Layout.selfAvatarSize, alignment: .leading)
-        // When the current user is not in the summary yet, keep an invisible
-        // avatar-sized target under the tray for the fly-to-self landing.
         .background(alignment: .leading) {
             if !hasMyBadge {
                 Color.clear
@@ -512,7 +544,7 @@ struct PostCardView: View, Equatable {
             }
         }
 
-        if !preview.top.isEmpty || preview.otherPeopleCount > 0 {
+        if tappable {
             Button { actions.onPresent(.reactions(post)) } label: {
                 badges
             }
@@ -521,29 +553,6 @@ struct PostCardView: View, Equatable {
             badges
                 .accessibilityHidden(true)
         }
-    }
-
-    private var commentPreviewRow: some View {
-        Button {
-            actions.onOpenComments(post)
-        } label: {
-            HStack(spacing: 6) {
-                commentIconWithCount
-
-                Group {
-                    if post.commentCount > 0 {
-                        Text(languageService.format(.feedPostViewAllComments, post.commentCount))
-                    } else {
-                        Text(languageService.text(.feedPostWriteComment))
-                    }
-                }
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(SplickTheme.Colors.textSecondary)
-
-                Spacer(minLength: 0)
-            }
-        }
-        .buttonStyle(.plain)
     }
 
     private func sendReminder(
