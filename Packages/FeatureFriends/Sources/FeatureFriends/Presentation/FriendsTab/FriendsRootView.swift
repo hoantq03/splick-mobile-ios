@@ -85,6 +85,7 @@ public struct FriendsRootView: View {
     private let onBadgeCountsChanged: (() async -> Void)?
     private let onDirectoryLoaded: (([SplickDomain.Group]) async -> Void)?
     private let onFriendRequestsLoaded: (([IncomingFriendRequest]) async -> Void)?
+    private let pendingUserProfileUserId: Binding<UUID?>?
 
     public init(
         fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol,
@@ -126,11 +127,13 @@ public struct FriendsRootView: View {
         languageService: LanguageService,
         onBadgeCountsChanged: (() async -> Void)? = nil,
         onDirectoryLoaded: (([SplickDomain.Group]) async -> Void)? = nil,
-        onFriendRequestsLoaded: (([IncomingFriendRequest]) async -> Void)? = nil
+        onFriendRequestsLoaded: (([IncomingFriendRequest]) async -> Void)? = nil,
+        pendingUserProfileUserId: Binding<UUID?>? = nil
     ) {
         self.onBadgeCountsChanged = onBadgeCountsChanged
         self.onDirectoryLoaded = onDirectoryLoaded
         self.onFriendRequestsLoaded = onFriendRequestsLoaded
+        self.pendingUserProfileUserId = pendingUserProfileUserId
         self.fetchMyFriendsUseCase = fetchMyFriendsUseCase
         let rootVM = FriendsRootViewModel(
             fetchMyFriendsUseCase: fetchMyFriendsUseCase,
@@ -412,10 +415,32 @@ public struct FriendsRootView: View {
                 scrollTopSignal += 1
             }
         }
+        .onChange(of: pendingUserProfileUserId?.wrappedValue) { userId in
+            guard let userId else { return }
+            openUserProfileFromNotification(userId: userId)
+            pendingUserProfileUserId?.wrappedValue = nil
+        }
+        .onAppear {
+            if let userId = pendingUserProfileUserId?.wrappedValue {
+                openUserProfileFromNotification(userId: userId)
+                pendingUserProfileUserId?.wrappedValue = nil
+            }
+        }
     }
 
     private func openUserProfile(user: UserSummary, status: FriendRelationStatus) {
         profileRoute = UserProfileRoute(user: user, initialFriendStatus: status)
+    }
+
+    private func openUserProfileFromNotification(userId: UUID) {
+        if let friend = viewModel.friends.first(where: { $0.id == userId }) {
+            openUserProfile(user: friend, status: .friends)
+            return
+        }
+        openUserProfile(
+            user: UserSummary(id: userId, username: "", displayName: ""),
+            status: .none
+        )
     }
 
     private var sameTabTapPublisher: AnyPublisher<Void, Never> {
