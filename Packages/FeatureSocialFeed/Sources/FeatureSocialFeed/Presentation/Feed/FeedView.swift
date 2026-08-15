@@ -307,6 +307,7 @@ private struct FeedPrimaryPage: View {
         }
         cardActions.onOpenComments = { post in
             guard viewModel.postUploadState(for: post.id) == nil else { return }
+            tabBarScrollState?.hide(flushToBottom: true)
             navigationPath.append(
                 FeedPostDestination(
                     postId: post.id,
@@ -317,6 +318,7 @@ private struct FeedPrimaryPage: View {
         }
         cardActions.onOpenDetail = { post, mediaIndex in
             guard viewModel.postUploadState(for: post.id) == nil else { return }
+            tabBarScrollState?.hide(flushToBottom: true)
             navigationPath.append(FeedPostDestination(postId: post.id, mediaIndex: mediaIndex))
         }
         cardActions.onPresent = { presentation in
