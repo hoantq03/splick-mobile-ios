@@ -412,7 +412,10 @@ public struct ChatThreadView: View {
                 currentUserId: currentUserId,
                 senderDisplayName: senderDisplayName(for:),
                 userDisplayName: userDisplayName(for:),
-                onRequestComposerFocus: { isInputFocused = true }
+                onRequestComposerFocus: { isInputFocused = true },
+                peerAvatarURL: peer?.avatarUrl.flatMap(URL.init(string:)),
+                peerDisplayName: peer?.displayTitle ?? "",
+                conversationId: viewModel.conversationId
             )
         case .failed(let error):
             ErrorView(message: error) {
