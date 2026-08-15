@@ -880,9 +880,7 @@ public final class ChatThreadViewModel: ObservableObject {
         }
 
         if changed {
-            var transaction = Transaction()
-            transaction.animation = nil
-            withTransaction(transaction) {
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
                 state = .loaded(messages)
             }
             persistCache()
