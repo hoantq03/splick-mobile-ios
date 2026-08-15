@@ -31,9 +31,25 @@ struct CommentComposerView: View {
     @State private var showEmojiInsertPicker = false
     @State private var showCustomEmojiUpload = false
 
-    private let composerHeight: CGFloat = 36
+    private enum Layout {
+        static let fieldHeight: CGFloat = 44
+        static let actionButtonSize: CGFloat = 44
+        static let photoIconSize: CGFloat = 20
+        static let emojiIconSize: CGFloat = 22
+        static let sendIconSize: CGFloat = 20
+        static let fieldCornerRadius: CGFloat = 22
+    }
 
     private var currentUserId: UUID? { currentUserSummary?.id }
+
+    private var composerConfiguration: AttachmentComposerConfiguration {
+        AttachmentComposerConfiguration(
+            photoIconSize: Layout.photoIconSize,
+            composerHeight: Layout.fieldHeight,
+            actionButtonSize: Layout.actionButtonSize,
+            actionSpacing: 10
+        )
+    }
 
     init(
         placeholder: String,
@@ -67,17 +83,18 @@ struct CommentComposerView: View {
                 attachmentDrafts: $attachmentDrafts,
                 validationMessage: $validationMessage,
                 isFocused: $isFocused,
+                configuration: composerConfiguration,
                 onSend: onSubmit,
                 textField: {
                     MentionTextField(
                         placeholder,
                         text: $draft,
                         isFocused: $isFocused,
-                        fontSize: 13,
-                        minHeight: composerHeight
+                        fontSize: 14,
+                        minHeight: Layout.fieldHeight
                     )
                     .background(
-                        RoundedRectangle(cornerRadius: 18)
+                        RoundedRectangle(cornerRadius: Layout.fieldCornerRadius)
                             .fill(SplickTheme.Colors.tertiaryBackground)
                     )
                     .onChange(of: draft) { newValue in
@@ -89,13 +106,12 @@ struct CommentComposerView: View {
                 },
                 sendButton: {
                     Image(systemName: "paperplane.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(
-                            canSubmit
-                                ? SplickTheme.Colors.primaryGradientStart
-                                : SplickTheme.Colors.textTertiary
-                        )
-                        .frame(width: composerHeight, height: composerHeight)
+                        .font(.system(size: Layout.sendIconSize, weight: .semibold))
+                        .frame(width: Layout.actionButtonSize, height: Layout.actionButtonSize)
+                        .background {
+                            Circle()
+                                .fill(SplickTheme.Colors.secondaryBackground)
+                        }
                 }
             )
         }
@@ -160,26 +176,15 @@ struct CommentComposerView: View {
             }
         } label: {
             Image(systemName: "face.smiling")
-                .font(.system(size: 18, weight: .medium))
+                .font(.system(size: Layout.emojiIconSize, weight: .medium))
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
-                .frame(width: 36, height: 36)
+                .frame(width: Layout.actionButtonSize, height: Layout.actionButtonSize)
                 .background {
                     Circle()
                         .fill(SplickTheme.Colors.secondaryBackground)
                 }
         }
         .buttonStyle(.plain)
-    }
-
-    private var canSubmit: Bool {
-        guard !attachmentDrafts.contains(where: { $0.phase == .loading }) else { return false }
-        guard !attachmentDrafts.contains(where: {
-            if case .failed = $0.phase { return true }
-            return false
-        }) else { return false }
-        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let hasReadyAttachments = attachmentDrafts.contains { $0.phase == .ready && $0.submission != nil }
-        return !trimmed.isEmpty || hasReadyAttachments
     }
 
     private func openCustomEmojiUpload() {
