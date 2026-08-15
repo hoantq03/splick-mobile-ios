@@ -242,7 +242,9 @@ public struct LoginView: View {
                 isSecure: true,
                 errorMessage: viewModel.passwordError,
                 icon: "lock",
-                cornerRadius: Self.fieldCornerRadius
+                cornerRadius: Self.fieldCornerRadius,
+                passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
+                passwordHiddenAccessibilityLabel: languageService.text(.authHidePassword)
             )
             .textContentType(.password)
 
@@ -294,7 +296,9 @@ public struct LoginView: View {
                 icon: "lock",
                 validationStatus: viewModel.passwordStatus,
                 onValidationAccessoryTap: { viewModel.showPasswordRequirements = true },
-                cornerRadius: Self.fieldCornerRadius
+                cornerRadius: Self.fieldCornerRadius,
+                passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
+                passwordHiddenAccessibilityLabel: languageService.text(.authHidePassword)
             )
             .textContentType(.newPassword)
             .onChange(of: viewModel.password) { _ in viewModel.validatePasswordField() }
@@ -306,7 +310,9 @@ public struct LoginView: View {
                 errorMessage: viewModel.confirmPasswordError,
                 icon: "lock.fill",
                 validationStatus: viewModel.confirmPasswordStatus,
-                cornerRadius: Self.fieldCornerRadius
+                cornerRadius: Self.fieldCornerRadius,
+                passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
+                passwordHiddenAccessibilityLabel: languageService.text(.authHidePassword)
             )
             .textContentType(.newPassword)
             .onChange(of: viewModel.confirmPassword) { _ in viewModel.validateConfirmPasswordField() }
