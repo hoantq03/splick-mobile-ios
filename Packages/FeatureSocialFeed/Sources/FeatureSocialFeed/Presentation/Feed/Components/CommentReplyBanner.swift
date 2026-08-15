@@ -22,6 +22,7 @@ struct CommentReplyBanner: View {
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(SplickTheme.Colors.info)
             }
+            .lineLimit(1)
 
             Spacer(minLength: 0)
 
@@ -34,9 +35,9 @@ struct CommentReplyBanner: View {
             .accessibilityLabel(languageService.text(.messagingReplyCancelAccessibility))
         }
         .padding(.horizontal, SplickTheme.Spacing.sm)
-        .padding(.vertical, 8)
+        .padding(.vertical, 9)
         .background(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(SplickTheme.Colors.tertiaryBackground)
         )
     }
