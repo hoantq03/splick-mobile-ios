@@ -77,7 +77,7 @@ struct PostDetailView: View {
                 LazyVStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
                     PostCardView(
                         post: livePost,
-                        currentUser: feedViewModel.currentUser,
+                        currentUser: feedViewModel.currentUser ?? currentUserSummary,
                         actions: cardActions,
                         showsCommentPreview: false,
                         initiallyExpandedBillSplit: expandBillSplitInitially,
@@ -284,6 +284,7 @@ struct PostDetailView: View {
         .padding(.top, SplickTheme.Spacing.sm)
         .padding(.bottom, SplickTheme.Spacing.sm)
         .frame(maxWidth: .infinity)
+        .fixedSize(horizontal: false, vertical: true)
         .background { commentComposerDockBackground }
         .allowsHitTesting(composerHitTestingEnabled)
         .onAppear {
