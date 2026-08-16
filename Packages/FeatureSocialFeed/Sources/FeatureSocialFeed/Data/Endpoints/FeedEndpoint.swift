@@ -6,6 +6,7 @@ enum FeedEndpoint: APIEndpoint {
     case photoAlbumFirstPage(limit: Int, filters: PhotoAlbumFilters)
     case photoAlbumCursor(cursor: String, limit: Int, filters: PhotoAlbumFilters)
     case post(id: UUID)
+    case postReactions(postId: UUID)
     case batchViewed(BatchViewPostsRequestDTO)
     case createPost(CreatePostRequestDTO)
     case addReaction(postId: UUID, CreateReactionRequestDTO)
@@ -25,6 +26,7 @@ enum FeedEndpoint: APIEndpoint {
         case .feed: return "/v1/feed"
         case .photoAlbumFirstPage, .photoAlbumCursor: return "/v1/feed/photos"
         case .post(let id), .deletePost(let id): return "/v1/feed/posts/\(id)"
+        case .postReactions(let postId): return "/v1/feed/posts/\(postId)/reactions"
         case .batchViewed: return "/v1/feed/posts/batch-viewed"
         case .createPost: return "/v1/feed/posts"
         case .addReaction(let postId, _): return "/v1/feed/posts/\(postId)/reactions"
@@ -45,7 +47,7 @@ enum FeedEndpoint: APIEndpoint {
 
     var method: HTTPMethod {
         switch self {
-        case .feed, .post, .photoAlbumFirstPage, .photoAlbumCursor,
+        case .feed, .post, .postReactions, .photoAlbumFirstPage, .photoAlbumCursor,
              .streakSummary, .streakCalendar, .streakDayPhotos:
             return .get
         case .createPost, .addReaction, .addComment, .sendBillReminder,

@@ -84,6 +84,11 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
         return FeedMapper.toPost(dto)
     }
 
+    public func fetchPostReactions(postId: UUID) async throws -> [UserReactionSummary] {
+        let dto: PostReactionsDTO = try await apiClient.request(FeedEndpoint.postReactions(postId: postId))
+        return FeedMapper.toPostReactions(dto).items
+    }
+
     public func addReaction(postId: UUID, emoji: String) async throws -> Reaction {
         let requestDTO = CreateReactionRequestDTO(emoji: emoji)
         let dto: ReactionDTO = try await apiClient.request(
