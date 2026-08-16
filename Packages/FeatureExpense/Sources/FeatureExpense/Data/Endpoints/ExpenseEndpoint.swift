@@ -2,13 +2,15 @@ import Foundation
 import Networking
 
 enum ExpenseEndpoint: APIEndpoint {
-  case list(groupId: UUID?, page: Int, limit: Int)
+  case list(groupId: UUID?, page: Int, limit: Int, cursor: String?)
   case detail(id: UUID)
   case create(CreateExpenseRequestDTO)
   case settle(expenseId: UUID, SettleExpenseRequestDTO)
   case debtSummary(groupId: UUID?)
   case monthlySummary(months: Int)
-  case withCounterparty(id: UUID, page: Int, limit: Int, status: CounterpartyExpenseStatus)
+  case withCounterparty(
+    id: UUID, page: Int, limit: Int, status: CounterpartyExpenseStatus, cursor: String?
+  )
   case netting(counterpartyId: UUID)
   case submitBulkSettlement(counterpartyId: UUID, SubmitBulkSettlementRequestDTO)
   case approveBulkSettlement(id: UUID)
@@ -22,7 +24,7 @@ enum ExpenseEndpoint: APIEndpoint {
     case .settle(let expenseId, _): return "/v1/expenses/\(expenseId)/settle"
     case .debtSummary: return "/v1/expenses/debts"
     case .monthlySummary: return "/v1/expenses/monthly-summary"
-    case .withCounterparty(let id, _, _, _): return "/v1/expenses/with-user/\(id)"
+    case .withCounterparty(let id, _, _, _, _): return "/v1/expenses/with-user/\(id)"
     case .netting(let counterpartyId): return "/v1/expenses/netting/\(counterpartyId)"
     case .submitBulkSettlement(let counterpartyId, _):
       return "/v1/expenses/netting/\(counterpartyId)/settle"
@@ -44,11 +46,15 @@ enum ExpenseEndpoint: APIEndpoint {
 
   var queryItems: [URLQueryItem]? {
     switch self {
-    case .list(let groupId, let page, let limit):
+    case .list(let groupId, let page, let limit, let cursor):
       var items = [
-        URLQueryItem(name: "page", value: "\(page)"),
-        URLQueryItem(name: "limit", value: "\(limit)"),
+        URLQueryItem(name: "limit", value: "\(limit)")
       ]
+      if let cursor, !cursor.isEmpty {
+        items.append(URLQueryItem(name: "cursor", value: cursor))
+      } else {
+        items.append(URLQueryItem(name: "page", value: "\(page)"))
+      }
       if let groupId {
         items.append(URLQueryItem(name: "groupId", value: groupId.uuidString))
       }
@@ -61,12 +67,17 @@ enum ExpenseEndpoint: APIEndpoint {
     case .monthlySummary(let months):
       return [URLQueryItem(name: "months", value: "\(months)")]
 
-    case .withCounterparty(_, let page, let limit, let status):
-      return [
-        URLQueryItem(name: "page", value: "\(page)"),
+    case .withCounterparty(_, let page, let limit, let status, let cursor):
+      var items = [
         URLQueryItem(name: "limit", value: "\(limit)"),
         URLQueryItem(name: "status", value: status.rawValue),
       ]
+      if let cursor, !cursor.isEmpty {
+        items.append(URLQueryItem(name: "cursor", value: cursor))
+      } else {
+        items.append(URLQueryItem(name: "page", value: "\(page)"))
+      }
+      return items
 
     default: return nil
     }
