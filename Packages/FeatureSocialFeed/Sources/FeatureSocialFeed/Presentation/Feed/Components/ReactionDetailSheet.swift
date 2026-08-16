@@ -10,28 +10,46 @@ private enum ReactionDetailMetrics {
 
 struct ReactionDetailSheet: View {
     @EnvironmentObject private var languageService: LanguageService
-    let summaries: [UserReactionSummary]
+    let postId: UUID
+    let fallbackSummaries: [UserReactionSummary]
+    let loadReactions: ((UUID) async throws -> [UserReactionSummary])?
     let onUserTap: (UserSummary) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @State private var summaries: [UserReactionSummary] = []
+    @State private var isLoading = true
+    @State private var loadError: String?
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
-                    if summaries.isEmpty {
-                        Text(languageService.text(.notificationInboxEmpty))
-                            .font(SplickTheme.Typography.caption)
-                            .foregroundStyle(SplickTheme.Colors.textSecondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    } else {
-                        ForEach(summaries) { summary in
-                            reactionSummaryRow(summary)
+            Group {
+                if isLoading {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let loadError {
+                    Text(loadError)
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                        .padding(SplickTheme.Spacing.md)
+                } else {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
+                            if summaries.isEmpty {
+                                Text(languageService.text(.notificationInboxEmpty))
+                                    .font(SplickTheme.Typography.caption)
+                                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            } else {
+                                ForEach(summaries) { summary in
+                                    reactionSummaryRow(summary)
+                                }
+                            }
                         }
                     }
+                    .padding(SplickTheme.Spacing.md)
                 }
             }
-            .padding(SplickTheme.Spacing.md)
             .background(SplickTheme.Colors.background)
             .navigationTitle(languageService.text(.feedReactionsTitle))
             .navigationBarTitleDisplayMode(.inline)
@@ -39,6 +57,30 @@ struct ReactionDetailSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(languageService.text(.commonDone)) { dismiss() }
                 }
+            }
+            .task { await loadIfNeeded() }
+        }
+    }
+
+    private func loadIfNeeded() async {
+        isLoading = true
+        loadError = nil
+        defer { isLoading = false }
+
+        guard let loadReactions else {
+            summaries = fallbackSummaries
+            return
+        }
+
+        do {
+            summaries = try await loadReactions(postId)
+        } catch is CancellationError {
+            return
+        } catch {
+            if !fallbackSummaries.isEmpty {
+                summaries = fallbackSummaries
+            } else {
+                loadError = languageService.localizedMessage(for: error)
             }
         }
     }

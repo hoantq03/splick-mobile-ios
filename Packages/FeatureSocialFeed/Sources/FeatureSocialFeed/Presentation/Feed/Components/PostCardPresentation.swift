@@ -72,6 +72,7 @@ struct PostCardPresentationHost: ViewModifier {
     let languageService: LanguageService
     let onUserTap: (UserSummary) -> Void
     let onReact: (UUID, String) -> Void
+    let loadReactions: ((UUID) async throws -> [UserReactionSummary])?
     let onSubmitPaymentEvidence: ((UUID, UUID, String?, [CommentSubmissionAttachment]) async throws -> Void)?
     let customEmojiDependencies: CustomEmojiDependencies?
     @Binding var paymentEvidencePhotoPickerItems: [PhotosPickerItem]
@@ -108,7 +109,9 @@ struct PostCardPresentationHost: ViewModifier {
         switch item {
         case .reactions(let post):
             ReactionDetailSheet(
-                summaries: post.userReactionSummaries(),
+                postId: post.id,
+                fallbackSummaries: post.userReactionSummaries(),
+                loadReactions: loadReactions,
                 onUserTap: { user in
                     presentation = nil
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
@@ -181,6 +184,7 @@ extension View {
         languageService: LanguageService,
         onUserTap: @escaping (UserSummary) -> Void,
         onReact: @escaping (UUID, String) -> Void,
+        loadReactions: ((UUID) async throws -> [UserReactionSummary])? = nil,
         onSubmitPaymentEvidence: (
             (UUID, UUID, String?, [CommentSubmissionAttachment]) async throws -> Void
         )?,
@@ -195,6 +199,7 @@ extension View {
                 languageService: languageService,
                 onUserTap: onUserTap,
                 onReact: onReact,
+                loadReactions: loadReactions,
                 onSubmitPaymentEvidence: onSubmitPaymentEvidence,
                 customEmojiDependencies: customEmojiDependencies,
                 paymentEvidencePhotoPickerItems: paymentEvidencePhotoPickerItems,
