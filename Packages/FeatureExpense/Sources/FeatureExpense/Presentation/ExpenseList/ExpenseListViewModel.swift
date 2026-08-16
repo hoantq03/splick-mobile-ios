@@ -29,7 +29,8 @@ public final class ExpenseListViewModel: ObservableObject {
     private let onDataLoaded: (([DebtSummary], [Expense], UUID?) async -> Void)?
     private let groupId: UUID?
     private(set) var currentUserId: UUID?
-    private var currentPage = 0
+    private var nextCursor: String?
+    private var hasMorePages = true
     /// Single in-flight load for both cold load and pull-to-refresh.
     private var inFlightLoadTask: Task<Void, Never>?
     private var lastSuccessfulLoadAt: Date?
@@ -213,16 +214,24 @@ public final class ExpenseListViewModel: ObservableObject {
     }
 
     private func performLoad(isPullToRefresh: Bool) async {
-        currentPage = 0
+        nextCursor = nil
+        hasMorePages = true
         Log.info("Loading expenses", category: .expense, metadata: ["pullToRefresh": String(isPullToRefresh)])
 
         do {
-            async let expensesTask = fetchExpensesUseCase.execute(groupId: groupId, page: 0)
+            async let expensesTask = fetchExpensesUseCase.execute(
+                groupId: groupId, page: 0, cursor: nil)
             async let debtsTask = fetchDebtSummaryUseCase.execute(groupId: groupId)
 
             let (fetchedExpenses, fetchedDebts) = try await (expensesTask, debtsTask)
             expenses = fetchedExpenses
             debts = fetchedDebts
+            hasMorePages = fetchedExpenses.count >= 20
+            if let last = fetchedExpenses.last {
+                nextCursor = ExpenseListCursor.encode(createdAt: last.createdAt, expenseId: last.id)
+            } else {
+                nextCursor = nil
+            }
 
             if let fetchMonthlySummaryUseCase {
                 do {
@@ -262,13 +271,20 @@ public final class ExpenseListViewModel: ObservableObject {
     }
 
     func loadMore() async {
-        currentPage += 1
+        guard hasMorePages, let cursor = nextCursor else { return }
         do {
-            let newExpenses = try await fetchExpensesUseCase.execute(groupId: groupId, page: currentPage)
+            let newExpenses = try await fetchExpensesUseCase.execute(
+                groupId: groupId, page: 0, cursor: cursor)
             expenses.append(contentsOf: newExpenses)
+            hasMorePages = newExpenses.count >= 20
+            if let last = newExpenses.last {
+                nextCursor = ExpenseListCursor.encode(createdAt: last.createdAt, expenseId: last.id)
+            } else {
+                nextCursor = nil
+                hasMorePages = false
+            }
             state = .loaded(expenses)
         } catch {
-            currentPage -= 1
             Log.error(error, category: .expense)
         }
     }
