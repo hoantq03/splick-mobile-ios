@@ -412,7 +412,8 @@ private actor StubExpensesUseCase: FetchCounterpartyExpensesUseCaseProtocol {
   func execute(
     counterpartyId: UUID,
     page: Int,
-    status: CounterpartyExpenseStatus
+    status: CounterpartyExpenseStatus,
+    cursor: String?
   ) async throws -> ExpensePage {
     callCount += 1
     return try result.get()
