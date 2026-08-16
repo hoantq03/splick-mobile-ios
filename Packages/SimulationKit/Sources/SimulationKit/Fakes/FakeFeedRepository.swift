@@ -212,9 +212,42 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
         }
 
         let end = min(start + limit, filteredPosts.count)
-        let result = Array(filteredPosts[start..<end])
+        let result = Array(filteredPosts[start..<end]).map(Self.compactFeedCard)
         logger.success("Feed loaded: \(result.count) posts (page \(page))")
         return result
+    }
+
+    /// Mimics production list payload: empty `reactions[]` + top-3 preview.
+    private static func compactFeedCard(_ post: Post) -> Post {
+        let summaries = post.userReactionSummaries()
+        return Post(
+            id: post.id,
+            author: post.author,
+            imageURL: post.imageURL,
+            thumbnailURL: post.thumbnailURL,
+            caption: post.caption,
+            reactions: [],
+            reactionCount: post.reactionCount,
+            reactorCount: post.reactorCount > 0 ? post.reactorCount : summaries.count,
+            reactionPreview: Array(summaries.prefix(3)),
+            comments: Array(post.comments.suffix(3)),
+            commentCount: post.commentCount,
+            groupId: post.groupId,
+            companionGroupName: post.companionGroupName,
+            createdAt: post.createdAt,
+            mediaType: post.mediaType,
+            videoURL: post.videoURL,
+            videoDurationSeconds: post.videoDurationSeconds,
+            mediaItems: post.mediaItems,
+            companions: post.companions,
+            feedKind: post.feedKind,
+            checkInPlace: post.checkInPlace,
+            billSplit: post.billSplit,
+            viewCount: post.viewCount,
+            viewers: Array(post.viewers.prefix(5)),
+            audience: post.audience,
+            version: post.version
+        )
     }
 
     public func fetchPhotoAlbumFirstPage(
@@ -311,7 +344,45 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
             logger.failure("Post not found: \(id)")
             throw NetworkError.notFound
         }
-        return post
+        // Mimic compact detail: keep preview/counts, omit raw reaction rows.
+        return Post(
+            id: post.id,
+            author: post.author,
+            imageURL: post.imageURL,
+            thumbnailURL: post.thumbnailURL,
+            caption: post.caption,
+            reactions: [],
+            reactionCount: post.reactionCount,
+            reactorCount: post.reactorCount,
+            reactionPreview: post.reactionPreview.isEmpty
+                ? Array(post.userReactionSummaries().prefix(3))
+                : post.reactionPreview,
+            comments: post.comments,
+            commentCount: post.commentCount,
+            groupId: post.groupId,
+            companionGroupName: post.companionGroupName,
+            createdAt: post.createdAt,
+            mediaType: post.mediaType,
+            videoURL: post.videoURL,
+            videoDurationSeconds: post.videoDurationSeconds,
+            mediaItems: post.mediaItems,
+            companions: post.companions,
+            feedKind: post.feedKind,
+            checkInPlace: post.checkInPlace,
+            billSplit: post.billSplit,
+            viewCount: post.viewCount,
+            viewers: post.viewers,
+            audience: post.audience,
+            version: post.version
+        )
+    }
+
+    public func fetchPostReactions(postId: UUID) async throws -> [UserReactionSummary] {
+        logger.log("Fetch post reactions: \(postId)")
+        guard let post = posts.first(where: { $0.id == postId }) else {
+            throw NetworkError.notFound
+        }
+        return post.userReactionSummaries()
     }
 
     public func recordPostViews(postIds: [UUID]) async throws -> [Post] {
@@ -333,11 +404,18 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
         logger.log("Add reaction: \(emoji) to post \(postId.uuidString.prefix(8))")
         try await Task.sleep(for: .milliseconds(30))
 
-        let reaction = Reaction(id: UUID(), emoji: emoji, userId: UUID(), createdAt: .now)
+        let reactorId = UUID()
+        let reaction = Reaction(id: UUID(), emoji: emoji, userId: reactorId, createdAt: .now)
 
         if let index = posts.firstIndex(where: { $0.id == postId }) {
             let post = posts[index]
-            posts[index] = post.updating(reactions: post.reactions + [reaction])
+            let user = post.knownUsers[reactorId]
+                ?? UserSummary(id: reactorId, username: "user", displayName: "User")
+            posts[index] = post.applyingOptimisticReaction(
+                emoji: emoji,
+                reactionId: reaction.id,
+                user: user
+            )
         }
 
         logger.success("Reaction added: \(emoji)")
