@@ -89,7 +89,8 @@ final class WidgetSyncBridge {
     private func syncGroupExpenses(for groups: [Group]) async {
         for group in groups {
             do {
-                async let expensesTask = fetchExpensesUseCase.execute(groupId: group.id, page: 0)
+                async let expensesTask = fetchExpensesUseCase.execute(
+                    groupId: group.id, page: 0, cursor: nil)
                 async let debtsTask = fetchDebtSummaryUseCase.execute(groupId: group.id)
                 let (expenses, debts) = try await (expensesTask, debtsTask)
                 syncService.syncGroupExpense(
