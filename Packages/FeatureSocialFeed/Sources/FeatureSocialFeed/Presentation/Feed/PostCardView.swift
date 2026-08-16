@@ -236,7 +236,11 @@ struct PostCardView: View, Equatable {
     }
 
     private func captionSection(_ caption: String) -> some View {
-        MentionText(caption, fontSize: 16)
+        MentionText(
+            caption,
+            fontSize: 16,
+            displayNamesByUsername: post.mentionDisplayNamesByUsername
+        )
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .onTapGesture { actions.onOpenDetail?(post, mediaPageIndex) }
