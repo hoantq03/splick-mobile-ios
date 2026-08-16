@@ -14,6 +14,9 @@ public struct MentionTextEditor: UIViewRepresentable {
 
     /// Compact single-line fields (comment composer, expense description) center text vertically.
     static let compactHeightThreshold: CGFloat = 48
+    /// Prevents `safeAreaInset` from stretching the comment field to the remaining screen height.
+    static let compactMaxHeight: CGFloat = 120
+    static let expandedMaxHeight: CGFloat = 220
 
     static func textInsets(minHeight: CGFloat) -> UIEdgeInsets {
         let vertical: CGFloat = minHeight <= compactHeightThreshold ? 0 : 10
@@ -83,22 +86,38 @@ public struct MentionTextEditor: UIViewRepresentable {
     }
 
     public func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
-        let width = proposal.width ?? (UIScreen.main.bounds.width - 120)
-        let clampedWidth = max(1, width)
+        let fallbackWidth = max(120, UIScreen.main.bounds.width - 120)
+        let proposedWidth = proposal.width ?? fallbackWidth
+        let clampedWidth = (proposedWidth.isFinite && proposedWidth > 40) ? proposedWidth : fallbackWidth
+        let maxHeight = minHeight <= Self.compactHeightThreshold
+            ? Self.compactMaxHeight
+            : max(minHeight, Self.expandedMaxHeight)
+
         if let compactView = uiView as? CompactCenteredTextView,
            minHeight <= Self.compactHeightThreshold {
+            let insets = uiView.textContainerInset
+            let containerWidth = max(
+                1,
+                clampedWidth - insets.left - insets.right - uiView.textContainer.lineFragmentPadding * 2
+            )
+            uiView.textContainer.size = CGSize(width: containerWidth, height: .greatestFiniteMagnitude)
             let used = compactView.textBlockHeight()
             let lineHeight = uiView.font?.lineHeight ?? UIFont.systemFont(ofSize: fontSize).lineHeight
-            let height = used <= lineHeight * 1.5
+            let rawHeight = used <= lineHeight * 1.5
                 ? minHeight
                 : used + 16
+            let height = min(max(minHeight, rawHeight), maxHeight)
+            uiView.isScrollEnabled = rawHeight > maxHeight + 0.5
             return CGSize(width: clampedWidth, height: height)
         }
 
         let fitting = uiView.sizeThatFits(
             CGSize(width: clampedWidth, height: .greatestFiniteMagnitude)
         )
-        return CGSize(width: clampedWidth, height: max(minHeight, fitting.height))
+        let rawHeight = max(minHeight, fitting.height)
+        let height = min(rawHeight, maxHeight)
+        uiView.isScrollEnabled = rawHeight > maxHeight + 0.5
+        return CGSize(width: clampedWidth, height: height)
     }
 
     public final class Coordinator: NSObject, UITextViewDelegate {
@@ -172,9 +191,13 @@ private final class CompactCenteredTextView: UITextView {
 
     func applyCompactVerticalCentering() {
         guard compactMinHeight <= MentionTextEditor.compactHeightThreshold else { return }
-        let boundsHeight = bounds.height > 1 ? bounds.height : compactMinHeight
         let usedHeight = textBlockHeight()
-        let leftover = boundsHeight - usedHeight
+        let lineHeight = font?.lineHeight ?? UIFont.systemFont(ofSize: 14).lineHeight
+        // Center within the compact pill height, never the stretched SwiftUI bounds
+        // (safeAreaInset can propose the remaining screen height).
+        let leftover = usedHeight <= lineHeight * 1.5
+            ? max(0, compactMinHeight - usedHeight)
+            : 0
         let top = leftover > 0 ? floor(leftover / 2) : 0
         let bottom = leftover > 0 ? leftover - top : 0
         let inset = UIEdgeInsets(top: top, left: 12, bottom: bottom, right: 12)
@@ -219,7 +242,7 @@ public struct MentionTextField: View {
                     .padding(.horizontal, MentionTextEditor.textInsets.left)
                     .padding(.top, isCompactField ? 0 : MentionTextEditor.textInsets(minHeight: minHeight).top)
                     .padding(.bottom, isCompactField ? 0 : MentionTextEditor.textInsets(minHeight: minHeight).bottom)
-                    .frame(maxWidth: .infinity, maxHeight: isCompactField ? .infinity : nil, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .allowsHitTesting(false)
             }
 
@@ -231,7 +254,14 @@ public struct MentionTextField: View {
                 isFocused: isFocused
             )
         }
-        .frame(minHeight: minHeight)
+        .frame(minHeight: minHeight, maxHeight: maxFieldHeight)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var maxFieldHeight: CGFloat {
+        isCompactField
+            ? MentionTextEditor.compactMaxHeight
+            : max(minHeight, MentionTextEditor.expandedMaxHeight)
     }
 }
