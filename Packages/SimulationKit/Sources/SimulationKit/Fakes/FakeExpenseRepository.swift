@@ -84,8 +84,12 @@ public actor FakeExpenseRepository: ExpenseRepositoryProtocol {
         logger.log("Seeded \(expenses.count) expenses")
     }
 
-    public func fetchExpenses(groupId: UUID?, page: Int, limit: Int) async throws -> [Expense] {
-        logger.log("Fetch expenses: page=\(page), limit=\(limit), groupId=\(groupId?.uuidString.prefix(8) ?? "nil")")
+    public func fetchExpenses(groupId: UUID?, page: Int, limit: Int, cursor: String?) async throws
+        -> [Expense]
+    {
+        logger.log(
+            "Fetch expenses: page=\(page), limit=\(limit), cursor=\(cursor ?? "nil"), groupId=\(groupId?.uuidString.prefix(8) ?? "nil")"
+        )
         try await Task.sleep(for: .milliseconds(400))
 
         var filtered = expenses
@@ -196,7 +200,8 @@ public actor FakeExpenseRepository: ExpenseRepositoryProtocol {
         counterpartyId: UUID,
         page: Int,
         limit: Int,
-        status: CounterpartyExpenseStatus
+        status: CounterpartyExpenseStatus,
+        cursor: String?
     ) async throws -> ExpensePage {
         let matching = expenses.filter { expense in
             expense.paidBy.id == counterpartyId
@@ -206,12 +211,14 @@ public actor FakeExpenseRepository: ExpenseRepositoryProtocol {
         let pageExpenses = start < matching.count
             ? Array(matching[start..<min(start + limit, matching.count)])
             : []
+        let hasNext = start + limit < matching.count
         return ExpensePage(
             expenses: pageExpenses,
             page: page,
             totalPages: max(1, Int(ceil(Double(matching.count) / Double(limit)))),
             totalItems: matching.count,
-            hasNext: start + limit < matching.count
+            hasNext: hasNext,
+            nextCursor: hasNext ? "fake-cursor" : nil
         )
     }
 
