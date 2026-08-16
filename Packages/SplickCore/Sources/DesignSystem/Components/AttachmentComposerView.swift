@@ -138,7 +138,8 @@ public struct AttachmentComposerView<TextField: View, Accessory: View, SendButto
                 }
 
                 textField()
-                    .frame(minHeight: configuration.composerHeight)
+                    .frame(minHeight: configuration.composerHeight, maxHeight: MentionTextEditor.compactMaxHeight)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .layoutPriority(1)
 
