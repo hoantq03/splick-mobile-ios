@@ -7,7 +7,7 @@ import SplickDomain
 #if DEBUG
 
 final class MockFetchExpensesUseCase: FetchExpensesUseCaseProtocol, Sendable {
-    func execute(groupId: UUID?, page: Int) async throws -> [Expense] {
+    func execute(groupId: UUID?, page: Int, cursor: String?) async throws -> [Expense] {
         try await Task.sleep(for: .milliseconds(500))
         return PreviewData.sampleExpenses
     }
