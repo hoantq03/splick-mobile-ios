@@ -245,6 +245,7 @@ private struct FeedPrimaryPage: View {
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.feedSegmentScrollState) private var feedSegmentScrollState
     @Environment(\.customEmojiDependencies) private var customEmojiDependencies
+    @Environment(\.currentUserSummary) private var currentUserSummary
     @ObservedObject var viewModel: FeedViewModel
     @Binding var navigationPath: NavigationPath
     @Binding var companionsRoute: CompanionsSheetRoute?
@@ -260,6 +261,7 @@ private struct FeedPrimaryPage: View {
     var body: some View {
         feedPane
             .onAppear {
+                viewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
                 configureCardActions()
                 Task { await viewModel.loadFeedIfNeeded() }
             }
@@ -419,7 +421,7 @@ private struct FeedPrimaryPage: View {
                 ForEach(viewModel.posts) { post in
                     PostCardView(
                         post: post,
-                        currentUser: viewModel.currentUser,
+                        currentUser: viewModel.currentUser ?? currentUserSummary,
                         actions: cardActions,
                         uploadState: viewModel.postUploadState(for: post.id)
                     )
