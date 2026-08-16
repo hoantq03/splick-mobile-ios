@@ -37,7 +37,8 @@ public final class FeedViewModel: ObservableObject {
     private var loadFeedTask: Task<Bool, Never>?
     private var loadFeedGeneration = 0
 
-    private var currentUserSummary: UserSummary?
+    /// Published so feed cards re-render author-only chrome (view count) when session hydrates.
+    @Published private var currentUserSummary: UserSummary?
 
     // MARK: - Reaction sync (optimistic UI → one API call per tap, serialized per post)
 
@@ -116,8 +117,10 @@ public final class FeedViewModel: ObservableObject {
     }
 
     func updateSession(user: UserSummary?, userId: UUID?) {
+        let resolvedId = userId ?? user?.id
+        guard currentUserSummary != user || currentUserId != resolvedId else { return }
         currentUserSummary = user
-        currentUserId = userId ?? user?.id
+        currentUserId = resolvedId
     }
 
     public func applyStartupPosts(_ startupPosts: [Post]) {
