@@ -5,7 +5,8 @@ public protocol FetchCounterpartyExpensesUseCaseProtocol: Sendable {
   func execute(
     counterpartyId: UUID,
     page: Int,
-    status: CounterpartyExpenseStatus
+    status: CounterpartyExpenseStatus,
+    cursor: String?
   ) async throws -> ExpensePage
 }
 
@@ -24,13 +25,15 @@ public final class FetchCounterpartyExpensesUseCase:
   public func execute(
     counterpartyId: UUID,
     page: Int,
-    status: CounterpartyExpenseStatus = .all
+    status: CounterpartyExpenseStatus = .all,
+    cursor: String? = nil
   ) async throws -> ExpensePage {
     try await repository.fetchExpenses(
       counterpartyId: counterpartyId,
       page: page,
       limit: pageSize,
-      status: status
+      status: status,
+      cursor: cursor
     )
   }
 }
