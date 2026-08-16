@@ -278,6 +278,9 @@ private struct FeedPrimaryPage: View {
                         viewModel.alertMessage = error
                     }
                 },
+                loadReactions: { postId in
+                    try await viewModel.loadPostReactions(postId: postId)
+                },
                 onSubmitPaymentEvidence: { postId, splitId, message, attachments in
                     try await viewModel.submitPaymentEvidence(
                         postId: postId,

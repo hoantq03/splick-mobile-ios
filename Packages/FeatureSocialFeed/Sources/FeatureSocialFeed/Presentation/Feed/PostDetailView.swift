@@ -168,6 +168,9 @@ struct PostDetailView: View {
                     feedViewModel.alertMessage = error
                 }
             },
+            loadReactions: { postId in
+                try await feedViewModel.loadPostReactions(postId: postId)
+            },
             onSubmitPaymentEvidence: { postId, splitId, message, attachments in
                 try await feedViewModel.submitPaymentEvidence(
                     postId: postId,

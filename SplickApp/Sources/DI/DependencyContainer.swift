@@ -306,6 +306,10 @@ final class DependencyContainer: ObservableObject {
         ReactToPostUseCase(repository: feedRepository)
     }()
 
+    lazy var listPostReactionsUseCase: ListPostReactionsUseCaseProtocol = {
+        ListPostReactionsUseCase(repository: feedRepository)
+    }()
+
     lazy var deletePostUseCase: DeletePostUseCaseProtocol = {
         DeletePostUseCase(repository: feedRepository)
     }()
@@ -910,6 +914,7 @@ final class DependencyContainer: ObservableObject {
             createPostUseCase: createPostUseCase,
             languageService: languageService,
             recordPostViewsUseCase: recordPostViewsUseCase,
+            listPostReactionsUseCase: listPostReactionsUseCase,
             feedRepository: feedRepository,
             onFeedLoaded: { [weak self] posts, userId in
                 await self?.widgetSyncBridge.syncFeed(posts: posts, currentUserId: userId)
