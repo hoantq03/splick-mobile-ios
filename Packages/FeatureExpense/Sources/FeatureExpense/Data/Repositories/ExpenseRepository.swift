@@ -9,9 +9,11 @@ public final class ExpenseRepository: ExpenseRepositoryProtocol, Sendable {
     self.apiClient = apiClient
   }
 
-  public func fetchExpenses(groupId: UUID?, page: Int, limit: Int) async throws -> [Expense] {
+  public func fetchExpenses(groupId: UUID?, page: Int, limit: Int, cursor: String?) async throws
+    -> [Expense]
+  {
     let dtos: [ExpenseResponseDTO] = try await apiClient.request(
-      ExpenseEndpoint.list(groupId: groupId, page: page, limit: limit)
+      ExpenseEndpoint.list(groupId: groupId, page: page, limit: limit, cursor: cursor)
     )
     return dtos.map(ExpenseMapper.toExpense)
   }
@@ -50,14 +52,16 @@ public final class ExpenseRepository: ExpenseRepositoryProtocol, Sendable {
     counterpartyId: UUID,
     page: Int,
     limit: Int,
-    status: CounterpartyExpenseStatus
+    status: CounterpartyExpenseStatus,
+    cursor: String?
   ) async throws -> ExpensePage {
     let response: ExpensePageResponseDTO<ExpenseResponseDTO> = try await apiClient.request(
       ExpenseEndpoint.withCounterparty(
         id: counterpartyId,
         page: page,
         limit: limit,
-        status: status
+        status: status,
+        cursor: cursor
       )
     )
     return ExpensePage(
@@ -65,7 +69,8 @@ public final class ExpenseRepository: ExpenseRepositoryProtocol, Sendable {
       page: response.page,
       totalPages: response.totalPages,
       totalItems: response.clampedTotalElements,
-      hasNext: response.hasNext
+      hasNext: response.hasNext,
+      nextCursor: response.nextCursor
     )
   }
 
