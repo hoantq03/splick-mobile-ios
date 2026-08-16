@@ -15,7 +15,8 @@ enum FeedMapper {
             (firstMediaItem?.mediaType == .video
                 ? firstMediaItem?.mediaURL
                 : dto.videoUrl.flatMap(URL.init(string:)))
-        let reactions = dto.reactions.map(toReaction)
+        let reactions = (dto.reactions ?? []).map(toReaction)
+        let serverPreview = dto.reactionPreview?.map(toReactionUserSummary)
         let comments = dto.comments?.map(toComment) ?? []
         let companions = dto.companions?.map(toUserSummary) ?? []
         let feedKind = PostFeedKind(rawValue: dto.feedKind ?? PostFeedKind.checkIn.rawValue) ?? .checkIn
@@ -34,7 +35,11 @@ enum FeedMapper {
             thumbnailURL: thumbnailURL,
             caption: dto.caption,
             reactions: reactions,
+            reactionCount: dto.reactionCount,
+            reactorCount: dto.reactorCount,
+            reactionPreview: serverPreview,
             comments: comments,
+            commentCount: dto.commentCount,
             groupId: dto.groupId,
             companionGroupName: nil,
             createdAt: dto.createdAt,
@@ -101,6 +106,25 @@ enum FeedMapper {
             emoji: dto.emoji,
             userId: dto.userId,
             createdAt: dto.createdAt
+        )
+    }
+
+    static func toReactionUserSummary(_ dto: ReactionUserSummaryDTO) -> UserReactionSummary {
+        UserReactionSummary(
+            user: toUserSummary(dto.user),
+            emojiCounts: dto.emojiCounts.map { UserEmojiCount(emoji: $0.emoji, count: $0.count) }
+        )
+    }
+
+    static func toPostReactions(_ dto: PostReactionsDTO) -> (
+        reactionCount: Int,
+        reactorCount: Int,
+        items: [UserReactionSummary]
+    ) {
+        (
+            dto.reactionCount,
+            dto.reactorCount,
+            dto.items.map(toReactionUserSummary)
         )
     }
 
