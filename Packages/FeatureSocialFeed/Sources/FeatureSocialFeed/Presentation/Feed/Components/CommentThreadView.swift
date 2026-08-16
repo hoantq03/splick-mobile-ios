@@ -130,6 +130,17 @@ private enum CommentRowStyle {
         }
     }
 
+    /// Lifts the name row so glyphs sit flush with the avatar's top edge (Text line metrics).
+    var nameTopOpticalInset: CGFloat {
+        switch self {
+        case .root: return -4
+        case .reply: return -3.5
+        }
+    }
+
+    /// Spacing between name row and comment body (tight Facebook-style stack).
+    var nameToBodySpacing: CGFloat { 0 }
+
     static func forDepth(_ depth: Int) -> CommentRowStyle {
         depth == 0 ? .root : .reply
     }
@@ -464,12 +475,15 @@ struct CommentRowView: View {
                 threadGroupId: comment.id
             ))
 
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(alignment: .center, spacing: 4) {
+            VStack(alignment: .leading, spacing: 0) {
+                // Top-align with avatar rim: Text line metrics sit below the view top;
+                // firstTextBaseline + lift keeps the name flush with avatar top.
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Button { onUserTap(comment.author) } label: {
                         Text(comment.author.displayName)
                             .font(.system(size: style.nameFontSize, weight: .semibold))
                             .foregroundStyle(SplickTheme.Colors.textPrimary)
+                            .lineLimit(1)
                     }
                     .buttonStyle(.plain)
 
@@ -498,27 +512,32 @@ struct CommentRowView: View {
 
                     Spacer(minLength: 0)
                 }
+                .padding(.top, style.nameTopOpticalInset)
 
                 commentBody
+                    .padding(.top, style.nameToBodySpacing)
 
                 if !comment.isDeleted {
-                    CommentAttachmentsView(
-                        attachments: comment.attachments,
-                        isPending: isPending,
-                        maxImageWidth: depth == 0 ? 220 : 200
-                    )
+                    VStack(alignment: .leading, spacing: 3) {
+                        CommentAttachmentsView(
+                            attachments: comment.attachments,
+                            isPending: isPending,
+                            maxImageWidth: depth == 0 ? 220 : 200
+                        )
 
-                    if showsReplyAction {
-                        Button(languageService.text(.messagingReplyAction), action: onReply)
-                            .font(.system(size: style.replyActionFontSize, weight: .medium))
-                            .foregroundStyle(SplickTheme.Colors.textTertiary)
-                            .disabled(isPending)
-                            .opacity(isPending ? 0.45 : 1)
-                    }
+                        if showsReplyAction {
+                            Button(languageService.text(.messagingReplyAction), action: onReply)
+                                .font(.system(size: style.replyActionFontSize, weight: .medium))
+                                .foregroundStyle(SplickTheme.Colors.textTertiary)
+                                .disabled(isPending)
+                                .opacity(isPending ? 0.45 : 1)
+                        }
 
-                    if canModerateEvidence {
-                        evidenceModerationActions
+                        if canModerateEvidence {
+                            evidenceModerationActions
+                        }
                     }
+                    .padding(.top, 3)
                 }
             }
         }
@@ -627,7 +646,11 @@ struct CommentRowView: View {
                 .italic()
                 .foregroundStyle(SplickTheme.Colors.textTertiary)
         } else if let text = comment.displayText, !text.isEmpty {
-            MentionText(text, fontSize: style.bodyFontSize)
+            MentionText(
+                text,
+                fontSize: style.bodyFontSize,
+                displayNamesByUsername: post.mentionDisplayNamesByUsername
+            )
         }
     }
 }
