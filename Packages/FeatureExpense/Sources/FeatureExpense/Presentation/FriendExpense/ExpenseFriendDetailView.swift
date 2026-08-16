@@ -27,7 +27,7 @@ public final class ExpenseFriendDetailViewModel: ObservableObject {
   private let rejectUseCase: RejectBulkSettlementUseCaseProtocol
   private let uploadEvidence: ExpenseEvidenceUpload
   private let languageService: LanguageService
-  private var currentPage = 0
+  private var nextCursor: String?
 
   public init(
     counterparty: UserSummary,
@@ -100,19 +100,21 @@ public final class ExpenseFriendDetailViewModel: ObservableObject {
       state = .loading
     }
     loadMoreError = nil
-    currentPage = 0
+    nextCursor = nil
     do {
       async let summaryTask = fetchNettingUseCase.execute(counterpartyId: counterparty.id)
       async let pageTask = fetchExpensesUseCase.execute(
         counterpartyId: counterparty.id,
         page: 0,
-        status: .all
+        status: .all,
+        cursor: nil
       )
       let (newSummary, page) = try await (summaryTask, pageTask)
       summary = newSummary
       bulkSettlement = newSummary.pendingSettlement
       expenses = page.expenses
       hasNextPage = page.hasNext
+      nextCursor = page.nextCursor
       state = .loaded(expenses)
     } catch {
       if isPullToRefresh, !expenses.isEmpty {
@@ -133,16 +135,16 @@ public final class ExpenseFriendDetailViewModel: ObservableObject {
     loadMoreError = nil
     defer { isLoadingMore = false }
     do {
-      let nextPage = currentPage + 1
       let page = try await fetchExpensesUseCase.execute(
         counterpartyId: counterparty.id,
-        page: nextPage,
-        status: .all
+        page: 0,
+        status: .all,
+        cursor: nextCursor
       )
-      currentPage = nextPage
       let existingIDs = Set(expenses.map(\.id))
       expenses.append(contentsOf: page.expenses.filter { !existingIDs.contains($0.id) })
       hasNextPage = page.hasNext
+      nextCursor = page.nextCursor
       state = .loaded(expenses)
     } catch {
       loadMoreError = languageService.localizedMessage(for: error)
