@@ -456,6 +456,13 @@ public final class FeedViewModel: ObservableObject {
             .id ?? fallbackId
     }
 
+    func fetchReactions(for postId: UUID) async throws -> [UserReactionSummary] {
+        if let feedRepository {
+            return try await feedRepository.fetchPostReactions(postId: postId).items
+        }
+        return posts.first(where: { $0.id == postId })?.userReactionSummaries() ?? []
+    }
+
     @discardableResult
     func react(to postId: UUID, emoji: String) -> String? {
         guard postUploadStates[postId] == nil else {
@@ -465,10 +472,13 @@ public final class FeedViewModel: ObservableObject {
         guard let index = indexOfPost(id: postId) else { return nil }
 
         let post = posts[index]
-
         let optimisticId = UUID()
-        let reaction = Reaction(id: optimisticId, emoji: emoji, userId: userId)
-        posts[index] = post.updating(reactions: post.reactions + [reaction])
+        if let currentUser {
+            posts[index] = post.applyingReaction(emoji: emoji, from: currentUser, id: optimisticId)
+        } else {
+            let reaction = Reaction(id: optimisticId, emoji: emoji, userId: userId)
+            posts[index] = post.updating(reactions: post.reactions + [reaction])
+        }
 
         pendingReactionSends[postId, default: []].append(
             PendingReactionSend(emoji: emoji, optimisticId: optimisticId)
@@ -506,7 +516,11 @@ public final class FeedViewModel: ObservableObject {
                     with: serverReaction
                 )
             } catch {
-                removeReaction(postId: postId, reactionId: pending.optimisticId)
+                revertOptimisticReaction(
+                    postId: postId,
+                    emoji: pending.emoji,
+                    reactionId: pending.optimisticId
+                )
                 Log.error(error, category: .feed)
                 alertMessage = languageService.localizedMessage(for: error)
             }
@@ -516,18 +530,27 @@ public final class FeedViewModel: ObservableObject {
     private func reconcileReaction(postId: UUID, optimisticId: UUID, with server: Reaction) {
         guard let index = indexOfPost(id: postId) else { return }
         let post = posts[index]
+        guard !post.reactions.isEmpty else { return }
         let reactions = post.reactions.map { reaction in
             reaction.id == optimisticId ? server : reaction
         }
         posts[index] = post.updating(reactions: reactions)
     }
 
-    private func removeReaction(postId: UUID, reactionId: UUID) {
+    private func revertOptimisticReaction(postId: UUID, emoji: String, reactionId: UUID) {
         guard let index = indexOfPost(id: postId) else { return }
         let post = posts[index]
-        posts[index] = post.updating(
-            reactions: post.reactions.filter { $0.id != reactionId }
-        )
+        if let currentUser {
+            posts[index] = post.revertingReaction(
+                emoji: emoji,
+                userId: currentUser.id,
+                reactionId: reactionId
+            )
+        } else {
+            posts[index] = post.updating(
+                reactions: post.reactions.filter { $0.id != reactionId }
+            )
+        }
     }
 
     struct AddCommentResult: Equatable {

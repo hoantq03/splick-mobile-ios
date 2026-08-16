@@ -176,6 +176,9 @@ struct PostDetailView: View {
                     submissionAttachments: attachments
                 )
             },
+            onFetchReactions: { postId in
+                try await feedViewModel.fetchReactions(for: postId)
+            },
             customEmojiDependencies: customEmojiDependencies,
             paymentEvidencePhotoPickerItems: $paymentEvidencePhotoPickerItems,
             onPaymentEvidencePhotosPicked: preparePaymentEvidenceAttachments

@@ -73,6 +73,7 @@ struct PostCardPresentationHost: ViewModifier {
     let onUserTap: (UserSummary) -> Void
     let onReact: (UUID, String) -> Void
     let onSubmitPaymentEvidence: ((UUID, UUID, String?, [CommentSubmissionAttachment]) async throws -> Void)?
+    let onFetchReactions: ((UUID) async throws -> [UserReactionSummary])?
     let customEmojiDependencies: CustomEmojiDependencies?
     @Binding var paymentEvidencePhotoPickerItems: [PhotosPickerItem]
     let onPaymentEvidencePhotosPicked: ([PhotosPickerItem]) async -> Void
@@ -108,7 +109,10 @@ struct PostCardPresentationHost: ViewModifier {
         switch item {
         case .reactions(let post):
             ReactionDetailSheet(
-                summaries: post.userReactionSummaries(),
+                post: post,
+                load: onFetchReactions.map { fetch in
+                    { try await fetch(post.id) }
+                },
                 onUserTap: { user in
                     presentation = nil
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
@@ -184,6 +188,7 @@ extension View {
         onSubmitPaymentEvidence: (
             (UUID, UUID, String?, [CommentSubmissionAttachment]) async throws -> Void
         )?,
+        onFetchReactions: ((UUID) async throws -> [UserReactionSummary])? = nil,
         customEmojiDependencies: CustomEmojiDependencies?,
         paymentEvidencePhotoPickerItems: Binding<[PhotosPickerItem]>,
         onPaymentEvidencePhotosPicked: @escaping ([PhotosPickerItem]) async -> Void
@@ -196,6 +201,7 @@ extension View {
                 onUserTap: onUserTap,
                 onReact: onReact,
                 onSubmitPaymentEvidence: onSubmitPaymentEvidence,
+                onFetchReactions: onFetchReactions,
                 customEmojiDependencies: customEmojiDependencies,
                 paymentEvidencePhotoPickerItems: paymentEvidencePhotoPickerItems,
                 onPaymentEvidencePhotosPicked: onPaymentEvidencePhotosPicked

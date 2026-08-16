@@ -286,6 +286,9 @@ private struct FeedPrimaryPage: View {
                         submissionAttachments: attachments
                     )
                 },
+                onFetchReactions: { postId in
+                    try await viewModel.fetchReactions(for: postId)
+                },
                 customEmojiDependencies: customEmojiDependencies,
                 paymentEvidencePhotoPickerItems: $paymentEvidencePhotoPickerItems,
                 onPaymentEvidencePhotosPicked: preparePaymentEvidenceAttachments

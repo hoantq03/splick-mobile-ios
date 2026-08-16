@@ -2,6 +2,7 @@ import SwiftUI
 import DesignSystem
 import Localization
 import SplickDomain
+import Common
 
 private enum ReactionDetailMetrics {
     static let identityWidth: CGFloat = 74
@@ -10,16 +11,43 @@ private enum ReactionDetailMetrics {
 
 struct ReactionDetailSheet: View {
     @EnvironmentObject private var languageService: LanguageService
-    let summaries: [UserReactionSummary]
+    let post: Post
+    let load: (() async throws -> [UserReactionSummary])?
     let onUserTap: (UserSummary) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @State private var summaries: [UserReactionSummary]
+    @State private var isLoading: Bool
+    @State private var errorMessage: String?
+
+    init(
+        post: Post,
+        load: (() async throws -> [UserReactionSummary])? = nil,
+        onUserTap: @escaping (UserSummary) -> Void
+    ) {
+        self.post = post
+        self.load = load
+        self.onUserTap = onUserTap
+        let local = post.userReactionSummaries()
+        let needsFetch = post.reactions.isEmpty && load != nil
+        _summaries = State(initialValue: local)
+        _isLoading = State(initialValue: needsFetch)
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
-                    if summaries.isEmpty {
+                    if isLoading {
+                        ProgressView()
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.top, SplickTheme.Spacing.lg)
+                    } else if let errorMessage {
+                        Text(errorMessage)
+                            .font(SplickTheme.Typography.caption)
+                            .foregroundStyle(SplickTheme.Colors.textSecondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else if summaries.isEmpty {
                         Text(languageService.text(.notificationInboxEmpty))
                             .font(SplickTheme.Typography.caption)
                             .foregroundStyle(SplickTheme.Colors.textSecondary)
@@ -40,6 +68,20 @@ struct ReactionDetailSheet: View {
                     Button(languageService.text(.commonDone)) { dismiss() }
                 }
             }
+            .task { await loadIfNeeded() }
+        }
+    }
+
+    private func loadIfNeeded() async {
+        guard post.reactions.isEmpty, let load else { return }
+        isLoading = true
+        errorMessage = nil
+        do {
+            summaries = try await load()
+            isLoading = false
+        } catch {
+            errorMessage = languageService.localizedMessage(for: error)
+            isLoading = false
         }
     }
 
