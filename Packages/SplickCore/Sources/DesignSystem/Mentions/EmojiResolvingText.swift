@@ -5,15 +5,18 @@ public struct EmojiResolvingText: View {
     private let text: String
     private let fontSize: CGFloat
     private let plainColor: Color
+    private let displayNamesByUsername: [String: String]
 
     public init(
         _ text: String,
         fontSize: CGFloat = 12,
-        plainColor: Color = SplickTheme.Colors.textPrimary
+        plainColor: Color = SplickTheme.Colors.textPrimary,
+        displayNamesByUsername: [String: String] = [:]
     ) {
         self.text = text
         self.fontSize = fontSize
         self.plainColor = plainColor
+        self.displayNamesByUsername = displayNamesByUsername
     }
 
     public var body: some View {
@@ -41,7 +44,7 @@ public struct EmojiResolvingText: View {
                 .fixedSize(horizontal: false, vertical: true)
 
         case .mention(let value):
-            Text(value)
+            Text(mentionLabel(for: value))
                 .font(.system(size: fontSize, weight: .semibold))
                 .foregroundStyle(SplickTheme.Colors.info)
                 .fixedSize(horizontal: false, vertical: true)
@@ -49,5 +52,15 @@ public struct EmojiResolvingText: View {
         case .customEmoji(let shortcode):
             EmojiView(value: ":\(shortcode):", size: fontSize * 1.2)
         }
+    }
+
+    /// `value` is the raw token including `@` (e.g. `@hoantran`).
+    private func mentionLabel(for value: String) -> String {
+        let username = value.hasPrefix("@") ? String(value.dropFirst()) : value
+        let key = username.lowercased()
+        if let displayName = displayNamesByUsername[key], !displayName.isEmpty {
+            return "@\(displayName)"
+        }
+        return value
     }
 }
