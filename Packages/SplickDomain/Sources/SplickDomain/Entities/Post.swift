@@ -75,7 +75,14 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
     public let videoURL: URL?
     public let videoDurationSeconds: Int?
     public let caption: String?
+    /// Raw reaction rows (empty on compact list/detail payloads). Prefer `reactionPreview` + counts.
     public let reactions: [Reaction]
+    /// Total reaction rows on the post (may exceed `reactions.count` on compact payloads).
+    public let reactionCount: Int
+    /// Distinct users who reacted.
+    public let reactorCount: Int
+    /// Top reactors from the API (at most 3). Empty means "derive from `reactions`" when present.
+    public let reactionPreview: [UserReactionSummary]
     public let comments: [PostComment]
     public let companions: [UserSummary]
     public let feedKind: PostFeedKind
@@ -92,7 +99,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
     public let version: UInt64
     /// Precomputed carousel items (sorted once at init).
     public let displayMediaItems: [PostMediaItem]
-    /// Precomputed non-deleted comment count.
+    /// Total comments on the post (may exceed embedded `comments` preview length).
     public let commentCount: Int
 
     public var shareURL: URL {
@@ -106,7 +113,11 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         thumbnailURL: URL? = nil,
         caption: String? = nil,
         reactions: [Reaction] = [],
+        reactionCount: Int? = nil,
+        reactorCount: Int? = nil,
+        reactionPreview: [UserReactionSummary]? = nil,
         comments: [PostComment] = [],
+        commentCount: Int? = nil,
         groupId: UUID? = nil,
         companionGroupName: String? = nil,
         createdAt: Date = .now,
@@ -133,6 +144,9 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         self.videoDurationSeconds = videoDurationSeconds
         self.caption = caption
         self.reactions = reactions
+        self.reactionCount = reactionCount ?? reactions.count
+        self.reactorCount = reactorCount ?? Set(reactions.map(\.userId)).count
+        self.reactionPreview = reactionPreview ?? []
         self.comments = comments
         self.companions = companions
         self.feedKind = feedKind
@@ -154,17 +168,16 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
             videoURL: videoURL,
             videoDurationSeconds: videoDurationSeconds
         )
-        self.commentCount = comments.reduce(0) { count, comment in
+        let derivedCommentCount = comments.reduce(0) { count, comment in
             comment.isDeleted ? count : count + 1
         }
+        self.commentCount = commentCount ?? derivedCommentCount
     }
 
     /// O(1) equality for SwiftUI `.equatable()` diffs — relies on `version` stamps from `updating()` / feed merge.
     public static func == (lhs: Post, rhs: Post) -> Bool {
         lhs.id == rhs.id && lhs.version == rhs.version
     }
-
-    public var reactionCount: Int { reactions.count }
 
     public var canDelete: Bool { viewCount == 0 }
 
@@ -174,21 +187,41 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
 
     public func updating(
         reactions: [Reaction]? = nil,
+        reactionCount: Int? = nil,
+        reactorCount: Int? = nil,
+        reactionPreview: [UserReactionSummary]? = nil,
         comments: [PostComment]? = nil,
+        commentCount: Int? = nil,
         viewCount: Int? = nil,
         viewers: [UserSummary]? = nil,
         mediaItems: [PostMediaItem]? = nil,
         billSplit: PostBillSplit? = nil,
         companionGroupName: String? = nil
     ) -> Post {
-        Post(
+        let nextReactions = reactions ?? self.reactions
+        let nextComments = comments ?? self.comments
+        let nextCommentCount: Int
+        if let commentCount {
+            nextCommentCount = commentCount
+        } else if comments != nil {
+            nextCommentCount = nextComments.reduce(0) { count, comment in
+                comment.isDeleted ? count : count + 1
+            }
+        } else {
+            nextCommentCount = self.commentCount
+        }
+        return Post(
             id: id,
             author: author,
             imageURL: imageURL,
             thumbnailURL: thumbnailURL,
             caption: caption,
-            reactions: reactions ?? self.reactions,
-            comments: comments ?? self.comments,
+            reactions: nextReactions,
+            reactionCount: reactionCount ?? self.reactionCount,
+            reactorCount: reactorCount ?? self.reactorCount,
+            reactionPreview: reactionPreview ?? self.reactionPreview,
+            comments: nextComments,
+            commentCount: nextCommentCount,
             groupId: groupId,
             companionGroupName: companionGroupName ?? self.companionGroupName,
             createdAt: createdAt,
@@ -217,7 +250,11 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
             thumbnailURL: thumbnailURL,
             caption: caption,
             reactions: reactions,
+            reactionCount: reactionCount,
+            reactorCount: reactorCount,
+            reactionPreview: reactionPreview,
             comments: comments,
+            commentCount: commentCount,
             groupId: groupId,
             companionGroupName: companionGroupName,
             createdAt: createdAt,
@@ -239,7 +276,11 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
     /// Deep content compare for feed-card UI (used at merge time, not during scroll diffs).
     public func hasSameCardContent(as other: Post) -> Bool {
         reactions == other.reactions
+            && reactionCount == other.reactionCount
+            && reactorCount == other.reactorCount
+            && reactionPreview == other.reactionPreview
             && comments == other.comments
+            && commentCount == other.commentCount
             && viewCount == other.viewCount
             && viewers == other.viewers
             && billSplit == other.billSplit
@@ -328,6 +369,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         billSplit?.splits.forEach { map[$0.user.id] = $0.user }
         comments.forEach { map[$0.author.id] = $0.author }
         viewers.forEach { map[$0.id] = $0 }
+        reactionPreview.forEach { map[$0.user.id] = $0.user }
         return map
     }
 
@@ -359,7 +401,8 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case id, author, mediaItems, mediaType, imageURL, thumbnailURL, videoURL
-        case videoDurationSeconds, caption, reactions, comments, companions
+        case videoDurationSeconds, caption, reactions, reactionCount, reactorCount
+        case reactionPreview, comments, commentCount, companions
         case feedKind, checkInPlace, billSplit, viewCount, viewers, audience
         case groupId, companionGroupName, createdAt
     }
@@ -376,7 +419,11 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         let videoDurationSeconds = try container.decodeIfPresent(Int.self, forKey: .videoDurationSeconds)
         let caption = try container.decodeIfPresent(String.self, forKey: .caption)
         let reactions = try container.decodeIfPresent([Reaction].self, forKey: .reactions) ?? []
+        let reactionCount = try container.decodeIfPresent(Int.self, forKey: .reactionCount)
+        let reactorCount = try container.decodeIfPresent(Int.self, forKey: .reactorCount)
+        let reactionPreview = try container.decodeIfPresent([UserReactionSummary].self, forKey: .reactionPreview)
         let comments = try container.decodeIfPresent([PostComment].self, forKey: .comments) ?? []
+        let commentCount = try container.decodeIfPresent(Int.self, forKey: .commentCount)
         let companions = try container.decodeIfPresent([UserSummary].self, forKey: .companions) ?? []
         let feedKind = try container.decodeIfPresent(PostFeedKind.self, forKey: .feedKind) ?? .checkIn
         let checkInPlace = try container.decodeIfPresent(String.self, forKey: .checkInPlace)
@@ -395,7 +442,11 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
             thumbnailURL: thumbnailURL,
             caption: caption,
             reactions: reactions,
+            reactionCount: reactionCount,
+            reactorCount: reactorCount,
+            reactionPreview: reactionPreview,
             comments: comments,
+            commentCount: commentCount,
             groupId: groupId,
             companionGroupName: companionGroupName,
             createdAt: createdAt,
@@ -426,7 +477,11 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         try container.encodeIfPresent(videoDurationSeconds, forKey: .videoDurationSeconds)
         try container.encodeIfPresent(caption, forKey: .caption)
         try container.encode(reactions, forKey: .reactions)
+        try container.encode(reactionCount, forKey: .reactionCount)
+        try container.encode(reactorCount, forKey: .reactorCount)
+        try container.encode(reactionPreview, forKey: .reactionPreview)
         try container.encode(comments, forKey: .comments)
+        try container.encode(commentCount, forKey: .commentCount)
         try container.encode(companions, forKey: .companions)
         try container.encode(feedKind, forKey: .feedKind)
         try container.encodeIfPresent(checkInPlace, forKey: .checkInPlace)
@@ -454,13 +509,18 @@ public struct Reaction: Codable, Equatable, Hashable, Sendable, Identifiable {
     }
 }
 
-public struct UserEmojiCount: Equatable, Sendable {
+public struct UserEmojiCount: Codable, Equatable, Sendable {
     public let emoji: String
     public let count: Int
+
+    public init(emoji: String, count: Int) {
+        self.emoji = emoji
+        self.count = count
+    }
 }
 
 /// Reactions grouped by user, e.g. User A: ❤️×5 😂×10
-public struct UserReactionSummary: Identifiable, Equatable, Sendable {
+public struct UserReactionSummary: Identifiable, Codable, Equatable, Sendable {
     public let userId: UUID
     public let user: UserSummary
     public let emojiCounts: [UserEmojiCount]
@@ -474,10 +534,24 @@ public struct UserReactionSummary: Identifiable, Equatable, Sendable {
     public var compactLabel: String {
         emojiCounts.map { "\($0.emoji)×\($0.count)" }.joined(separator: " ")
     }
+
+    public init(userId: UUID, user: UserSummary, emojiCounts: [UserEmojiCount]) {
+        self.userId = userId
+        self.user = user
+        self.emojiCounts = emojiCounts
+    }
+
+    public init(user: UserSummary, emojiCounts: [UserEmojiCount]) {
+        self.init(userId: user.id, user: user, emojiCounts: emojiCounts)
+    }
 }
 
 public extension Post {
+    /// Prefer server `reactionPreview` when present; otherwise aggregate from raw `reactions`.
     func userReactionSummaries() -> [UserReactionSummary] {
+        if !reactionPreview.isEmpty && reactions.isEmpty {
+            return reactionPreview
+        }
         let grouped = Dictionary(grouping: reactions, by: \.userId)
 
         return grouped
@@ -491,6 +565,7 @@ public extension Post {
                     }
 
                 let user = knownUsers[userId]
+                    ?? reactionPreview.first(where: { $0.userId == userId })?.user
                     ?? UserSummary(id: userId, username: "user", displayName: "User")
 
                 return UserReactionSummary(userId: userId, user: user, emojiCounts: counts)
@@ -503,10 +578,110 @@ public extension Post {
 
     /// Top reactors and how many additional people reacted (not emoji count).
     func reactionPreview(topLimit: Int = 3) -> (top: [UserReactionSummary], otherPeopleCount: Int) {
+        if !self.reactionPreview.isEmpty {
+            let top = Array(self.reactionPreview.prefix(topLimit))
+            let others = max(0, reactorCount - top.count)
+            return (top, others)
+        }
         let all = userReactionSummaries()
         let top = Array(all.prefix(topLimit))
-        let others = max(0, all.count - topLimit)
+        let others = max(0, (reactorCount > 0 ? reactorCount : all.count) - topLimit)
         return (top, others)
+    }
+
+    /// Applies an optimistic reaction from the current user without requiring a full row list.
+    func applyingOptimisticReaction(
+        emoji: String,
+        reactionId: UUID,
+        user: UserSummary
+    ) -> Post {
+        let alreadyReactor = reactionPreview.contains { $0.userId == user.id }
+            || reactions.contains { $0.userId == user.id }
+        let nextReactionCount = reactionCount + 1
+        let nextReactorCount = alreadyReactor ? reactorCount : reactorCount + 1
+
+        var preview = reactionPreview
+        if preview.isEmpty, !reactions.isEmpty {
+            preview = userReactionSummaries()
+        }
+
+        if let index = preview.firstIndex(where: { $0.userId == user.id }) {
+            var counts = preview[index].emojiCounts
+            if let emojiIndex = counts.firstIndex(where: { $0.emoji == emoji }) {
+                counts[emojiIndex] = UserEmojiCount(emoji: emoji, count: counts[emojiIndex].count + 1)
+            } else {
+                counts.append(UserEmojiCount(emoji: emoji, count: 1))
+            }
+            counts.sort { lhs, rhs in
+                if lhs.count != rhs.count { return lhs.count > rhs.count }
+                return lhs.emoji < rhs.emoji
+            }
+            preview[index] = UserReactionSummary(user: user, emojiCounts: counts)
+        } else {
+            preview.insert(
+                UserReactionSummary(user: user, emojiCounts: [UserEmojiCount(emoji: emoji, count: 1)]),
+                at: 0
+            )
+        }
+
+        // Pin actor first, then by total count, then userId — matches backend ordering.
+        let actorId = user.id
+        preview.sort { lhs, rhs in
+            if lhs.userId == actorId { return true }
+            if rhs.userId == actorId { return false }
+            if lhs.totalCount != rhs.totalCount { return lhs.totalCount > rhs.totalCount }
+            return lhs.userId.uuidString < rhs.userId.uuidString
+        }
+        if preview.count > 3 {
+            preview = Array(preview.prefix(3))
+        }
+
+        var nextReactions = reactions
+        if !reactions.isEmpty || reactionPreview.isEmpty {
+            nextReactions = reactions + [
+                Reaction(id: reactionId, emoji: emoji, userId: user.id),
+            ]
+        }
+
+        return updating(
+            reactions: nextReactions,
+            reactionCount: nextReactionCount,
+            reactorCount: nextReactorCount,
+            reactionPreview: preview
+        )
+    }
+
+    /// Rolls back a failed optimistic reaction.
+    func removingOptimisticReaction(reactionId: UUID, emoji: String, userId: UUID) -> Post {
+        let nextReactions = reactions.filter { $0.id != reactionId }
+        var preview = reactionPreview
+        if let index = preview.firstIndex(where: { $0.userId == userId }) {
+            var counts = preview[index].emojiCounts
+            if let emojiIndex = counts.firstIndex(where: { $0.emoji == emoji }) {
+                let next = counts[emojiIndex].count - 1
+                if next <= 0 {
+                    counts.remove(at: emojiIndex)
+                } else {
+                    counts[emojiIndex] = UserEmojiCount(emoji: emoji, count: next)
+                }
+            }
+            if counts.isEmpty {
+                preview.remove(at: index)
+            } else {
+                preview[index] = UserReactionSummary(
+                    user: preview[index].user,
+                    emojiCounts: counts
+                )
+            }
+        }
+        let stillReactor = preview.contains { $0.userId == userId }
+            || nextReactions.contains { $0.userId == userId }
+        return updating(
+            reactions: nextReactions,
+            reactionCount: max(0, reactionCount - 1),
+            reactorCount: stillReactor ? reactorCount : max(0, reactorCount - 1),
+            reactionPreview: preview
+        )
     }
 
     /// e.g. "Linh Pham" or "Linh Pham và +50 người khác"
