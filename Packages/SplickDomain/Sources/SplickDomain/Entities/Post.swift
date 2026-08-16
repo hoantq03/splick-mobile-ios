@@ -373,6 +373,18 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         return map
     }
 
+    /// Username (lowercased) → display name for rendering `@mentions` while storage stays `@username`.
+    public var mentionDisplayNamesByUsername: [String: String] {
+        var map: [String: String] = [:]
+        for user in knownUsers.values {
+            let key = user.username.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !key.isEmpty else { continue }
+            let name = user.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+            map[key] = name.isEmpty ? user.username : name
+        }
+        return map
+    }
+
     private static func makeDisplayMediaItems(
         id: UUID,
         mediaItems: [PostMediaItem],
