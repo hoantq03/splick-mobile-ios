@@ -2,7 +2,7 @@ import Foundation
 import SplickDomain
 
 public protocol ExpenseRepositoryProtocol: Sendable {
-  func fetchExpenses(groupId: UUID?, page: Int, limit: Int) async throws -> [Expense]
+  func fetchExpenses(groupId: UUID?, page: Int, limit: Int, cursor: String?) async throws -> [Expense]
   func fetchExpense(id: UUID) async throws -> Expense
   func createExpense(_ request: CreateExpenseRequest) async throws -> Expense
   func settleExpense(expenseId: UUID, splitId: UUID) async throws
@@ -12,7 +12,8 @@ public protocol ExpenseRepositoryProtocol: Sendable {
     counterpartyId: UUID,
     page: Int,
     limit: Int,
-    status: CounterpartyExpenseStatus
+    status: CounterpartyExpenseStatus,
+    cursor: String?
   ) async throws -> ExpensePage
   func fetchNetting(counterpartyId: UUID) async throws -> NettingSummary
   func submitBulkSettlement(
@@ -30,13 +31,22 @@ public struct ExpensePage: Equatable, Sendable {
   public let totalPages: Int
   public let totalItems: Int
   public let hasNext: Bool
+  public let nextCursor: String?
 
-  public init(expenses: [Expense], page: Int, totalPages: Int, totalItems: Int, hasNext: Bool) {
+  public init(
+    expenses: [Expense],
+    page: Int,
+    totalPages: Int,
+    totalItems: Int,
+    hasNext: Bool,
+    nextCursor: String? = nil
+  ) {
     self.expenses = expenses
     self.page = page
     self.totalPages = totalPages
     self.totalItems = totalItems
     self.hasNext = hasNext
+    self.nextCursor = nextCursor
   }
 }
 
