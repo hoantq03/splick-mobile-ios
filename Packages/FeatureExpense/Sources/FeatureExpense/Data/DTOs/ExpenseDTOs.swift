@@ -88,13 +88,17 @@ struct ExpensePageResponseDTO<T: Decodable>: Decodable {
   let limit: Int
   let totalElements: Int64
   let totalPages: Int
+  let nextCursor: String?
 
   var clampedTotalElements: Int {
     max(0, Int(clamping: totalElements))
   }
 
   var hasNext: Bool {
-    page >= 0 && totalPages > 0 && page < totalPages - 1
+    if let nextCursor, !nextCursor.isEmpty {
+      return true
+    }
+    return page >= 0 && totalPages > 0 && page < totalPages - 1
   }
 }
 
