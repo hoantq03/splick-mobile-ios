@@ -13,6 +13,7 @@ public protocol FeedRepositoryProtocol: Sendable {
     /// Records views for many posts in one call; returns refreshed posts for those recorded.
     func recordPostViews(postIds: [UUID]) async throws -> [Post]
     func addReaction(postId: UUID, emoji: String) async throws -> Reaction
+    func fetchPostReactions(postId: UUID) async throws -> PostReactionList
     func removeReaction(postId: UUID, reactionId: UUID) async throws
     func createPost(_ input: CreatePostInput) async throws -> Post
     func addComment(

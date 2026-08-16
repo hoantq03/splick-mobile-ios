@@ -344,6 +344,18 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
         return reaction
     }
 
+    public func fetchPostReactions(postId: UUID) async throws -> PostReactionList {
+        if let post = posts.first(where: { $0.id == postId }) {
+            let summaries = post.userReactionSummaries()
+            return PostReactionList(
+                reactionCount: post.reactionCount,
+                reactorCount: post.reactorCount,
+                items: summaries
+            )
+        }
+        return PostReactionList(reactionCount: 0, reactorCount: 0, items: [])
+    }
+
     public func removeReaction(postId: UUID, reactionId: UUID) async throws {
         logger.log("Remove reaction: \(reactionId) from post \(postId)")
         try await Task.sleep(for: .milliseconds(200))

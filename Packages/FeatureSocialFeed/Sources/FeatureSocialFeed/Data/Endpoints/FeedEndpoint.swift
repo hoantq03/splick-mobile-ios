@@ -9,6 +9,7 @@ enum FeedEndpoint: APIEndpoint {
     case batchViewed(BatchViewPostsRequestDTO)
     case createPost(CreatePostRequestDTO)
     case addReaction(postId: UUID, CreateReactionRequestDTO)
+    case listReactions(postId: UUID)
     case removeReaction(postId: UUID, reactionId: UUID)
     case addComment(postId: UUID, CreateCommentRequestDTO)
     case deletePost(id: UUID)
@@ -28,6 +29,7 @@ enum FeedEndpoint: APIEndpoint {
         case .batchViewed: return "/v1/feed/posts/batch-viewed"
         case .createPost: return "/v1/feed/posts"
         case .addReaction(let postId, _): return "/v1/feed/posts/\(postId)/reactions"
+        case .listReactions(let postId): return "/v1/feed/posts/\(postId)/reactions"
         case .removeReaction(let postId, let reactionId):
             return "/v1/feed/posts/\(postId)/reactions/\(reactionId)"
         case .addComment(let postId, _): return "/v1/feed/posts/\(postId)/comments"
@@ -46,7 +48,7 @@ enum FeedEndpoint: APIEndpoint {
     var method: HTTPMethod {
         switch self {
         case .feed, .post, .photoAlbumFirstPage, .photoAlbumCursor,
-             .streakSummary, .streakCalendar, .streakDayPhotos:
+             .streakSummary, .streakCalendar, .streakDayPhotos, .listReactions:
             return .get
         case .createPost, .addReaction, .addComment, .sendBillReminder,
              .submitPaymentEvidence, .approvePaymentEvidence, .rejectPaymentEvidence,

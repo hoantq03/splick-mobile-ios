@@ -47,6 +47,9 @@ struct PostDTO: Decodable {
     let viewCount: Int?
     let viewers: [AuthorDTO]?
     let audience: PostAudienceDTO?
+    let reactionCount: Int?
+    let reactorCount: Int?
+    let reactionPreview: [ReactionUserSummaryDTO]?
 }
 
 struct PostLocationDTO: Decodable {
@@ -103,6 +106,22 @@ struct ReactionDTO: Decodable {
     let emoji: String
     let userId: UUID
     let createdAt: Date
+}
+
+struct EmojiCountDTO: Decodable {
+    let emoji: String
+    let count: Int
+}
+
+struct ReactionUserSummaryDTO: Decodable {
+    let user: AuthorDTO
+    let emojiCounts: [EmojiCountDTO]
+}
+
+struct PostReactionsDTO: Decodable {
+    let reactionCount: Int
+    let reactorCount: Int
+    let items: [ReactionUserSummaryDTO]
 }
 
 struct AlbumPhotoPageDTO: Decodable {

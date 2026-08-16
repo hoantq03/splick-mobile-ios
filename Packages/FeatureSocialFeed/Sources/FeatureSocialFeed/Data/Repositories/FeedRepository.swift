@@ -92,6 +92,13 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
         return FeedMapper.toReaction(dto)
     }
 
+    public func fetchPostReactions(postId: UUID) async throws -> PostReactionList {
+        let dto: PostReactionsDTO = try await apiClient.request(
+            FeedEndpoint.listReactions(postId: postId)
+        )
+        return FeedMapper.toPostReactions(dto)
+    }
+
     public func removeReaction(postId: UUID, reactionId: UUID) async throws {
         try await apiClient.request(FeedEndpoint.removeReaction(postId: postId, reactionId: reactionId))
     }

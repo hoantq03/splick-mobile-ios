@@ -26,6 +26,7 @@ enum FeedMapper {
         let viewCount = dto.viewCount ?? 0
         let viewers = dto.viewers?.map(toUserSummary) ?? []
         let audience = dto.audience.map(toAudience) ?? .friends
+        let reactionPreview = (dto.reactionPreview ?? []).map(toReactionUserSummary)
 
         return Post(
             id: dto.id,
@@ -48,7 +49,10 @@ enum FeedMapper {
             billSplit: billSplit,
             viewCount: viewCount,
             viewers: viewers,
-            audience: audience
+            audience: audience,
+            reactionCount: dto.reactionCount,
+            reactorCount: dto.reactorCount,
+            reactionPreviewSummaries: reactionPreview
         )
     }
 
@@ -101,6 +105,22 @@ enum FeedMapper {
             emoji: dto.emoji,
             userId: dto.userId,
             createdAt: dto.createdAt
+        )
+    }
+
+    static func toReactionUserSummary(_ dto: ReactionUserSummaryDTO) -> UserReactionSummary {
+        UserReactionSummary(
+            userId: dto.user.id,
+            user: toUserSummary(dto.user),
+            emojiCounts: dto.emojiCounts.map { UserEmojiCount(emoji: $0.emoji, count: $0.count) }
+        )
+    }
+
+    static func toPostReactions(_ dto: PostReactionsDTO) -> PostReactionList {
+        PostReactionList(
+            reactionCount: dto.reactionCount,
+            reactorCount: dto.reactorCount,
+            items: dto.items.map(toReactionUserSummary)
         )
     }
 
