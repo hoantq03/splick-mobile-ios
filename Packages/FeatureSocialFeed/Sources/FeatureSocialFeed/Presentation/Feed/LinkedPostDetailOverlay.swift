@@ -57,8 +57,7 @@ public struct LinkedPostDetailOverlay: View {
                 onClose: dismiss
             )
             .navigationBarBackButtonHidden(true)
-            .toolbarBackground(SplickTheme.Colors.background, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(action: dismiss) {

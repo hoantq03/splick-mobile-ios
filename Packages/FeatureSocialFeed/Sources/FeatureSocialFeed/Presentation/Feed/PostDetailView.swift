@@ -90,6 +90,8 @@ struct PostDetailView: View {
                 .padding(.horizontal, SplickTheme.Spacing.md)
             }
             .scrollDisabled(detailScrollLocked)
+            .splickDetailScrollInsets()
+            .splickScrollSoftTopEdge()
             .onReceive(NotificationCenter.default.publisher(for: FeedScrollLock.notification)) { notification in
                 detailScrollLocked = notification.userInfo?["locked"] as? Bool ?? false
             }
@@ -126,6 +128,10 @@ struct PostDetailView: View {
         }
         .navigationTitle(languageService.text(.feedPostCommentsTitle))
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .overlay(alignment: .top) {
+            SplickScrollTopFadeOverlay(mode: .detailScreen)
+        }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             commentComposerInset
         }

@@ -13,6 +13,23 @@ public enum SplickScrollChromeFadeMetrics {
             + fadeTail
     }
 
+    public static func detailScreenHeight(safeTop: CGFloat) -> CGFloat {
+        safeTop
+            + FeedSegmentChromeMetrics.navigationBarHeight
+            + fadeTail
+    }
+
+    public static func height(for mode: SplickScrollTopFadeOverlay.Mode, safeTop: CGFloat) -> CGFloat {
+        switch mode {
+        case .feedTab:
+            return totalHeight(safeTop: safeTop)
+        case .detailScreen:
+            return detailScreenHeight(safeTop: safeTop)
+        case .compactBelowNav:
+            return compactFadeTail
+        }
+    }
+
     private static var backgroundColor: Color {
         SplickTheme.Colors.background
     }
@@ -53,31 +70,41 @@ public enum SplickScrollChromeFadeMetrics {
     }
 }
 
-/// Gradual top fade when scroll content passes beneath segment navigation chrome.
+/// Gradual top fade when scroll content passes beneath navigation chrome.
 public struct SplickScrollTopFadeOverlay: View {
-    /// When true, overlay sits *below* the nav bar — short dissolve, no opaque band.
-    public var compact: Bool
+    public enum Mode: Equatable {
+        /// Feed / expense tab: safe area + nav bar + segment row + fade tail.
+        case feedTab
+        /// Push-style detail (post detail): safe area + nav bar + fade tail.
+        case detailScreen
+        /// Short dissolve below an opaque nav bar.
+        case compactBelowNav
+    }
 
-    public init(compact: Bool = false) {
-        self.compact = compact
+    public var mode: Mode
+
+    public init(mode: Mode = .feedTab) {
+        self.mode = mode
     }
 
     public var body: some View {
         GeometryReader { proxy in
-            let height = compact
-                ? SplickScrollChromeFadeMetrics.compactFadeTail
-                : SplickScrollChromeFadeMetrics.totalHeight(safeTop: proxy.safeAreaInsets.top)
+            let height = SplickScrollChromeFadeMetrics.height(
+                for: mode,
+                safeTop: proxy.safeAreaInsets.top
+            )
+            let usesFullGradient = mode == .feedTab || mode == .detailScreen
 
             ZStack(alignment: .top) {
                 LinearGradient(
-                    stops: compact
-                        ? SplickScrollChromeFadeMetrics.compactBackgroundStops
-                        : SplickScrollChromeFadeMetrics.backgroundStops,
+                    stops: usesFullGradient
+                        ? SplickScrollChromeFadeMetrics.backgroundStops
+                        : SplickScrollChromeFadeMetrics.compactBackgroundStops,
                     startPoint: .top,
                     endPoint: .bottom
                 )
 
-                if !compact {
+                if usesFullGradient {
                     Rectangle()
                         .fill(.ultraThinMaterial)
                         .mask {
@@ -94,7 +121,7 @@ public struct SplickScrollTopFadeOverlay: View {
             .compositingGroup()
         }
         .allowsHitTesting(false)
-        .ignoresSafeArea(edges: compact ? [] : .top)
+        .ignoresSafeArea(edges: mode == .compactBelowNav ? [] : .top)
         .accessibilityHidden(true)
     }
 }

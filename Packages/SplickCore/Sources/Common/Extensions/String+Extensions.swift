@@ -11,6 +11,34 @@ extension String {
         return range(of: pattern, options: .regularExpression) != nil
     }
 
+    /// Username suggestion from the local part of an email (`name@domain` → `name`).
+    /// Invalid characters become `_`; result is empty when it cannot meet username rules.
+    public var suggestedUsernameFromEmail: String {
+        let trimmedValue = trimmed
+        guard let atIndex = trimmedValue.firstIndex(of: "@") else { return "" }
+        let localPart = trimmedValue[..<atIndex]
+        var collapsed = ""
+        collapsed.reserveCapacity(localPart.count)
+        var lastWasUnderscore = false
+        for character in localPart {
+            let isAllowed = character.isLetter || character.isNumber || character == "_" || character == "."
+            let mapped: Character = isAllowed ? character : "_"
+            if mapped == "_" {
+                if lastWasUnderscore { continue }
+                lastWasUnderscore = true
+            } else {
+                lastWasUnderscore = false
+            }
+            collapsed.append(mapped)
+        }
+        collapsed = collapsed.trimmingCharacters(in: CharacterSet(charactersIn: "._"))
+        if collapsed.count > AppConstants.Validation.maxUsernameLength {
+            collapsed = String(collapsed.prefix(AppConstants.Validation.maxUsernameLength))
+        }
+        guard collapsed.count >= 3, collapsed.isValidUsername else { return "" }
+        return collapsed
+    }
+
     /// E.164 — aligned with backend RegisterRequestValidator.
     public var isValidE164Phone: Bool {
         let pattern = #"^\+?[1-9]\d{7,14}$"#
