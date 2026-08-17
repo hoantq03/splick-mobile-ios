@@ -36,7 +36,7 @@ struct ReactionDetailSheet: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
                             if summaries.isEmpty {
-                                Text(languageService.text(.notificationInboxEmpty))
+                                Text(languageService.text(.feedReactionsNone))
                                     .font(SplickTheme.Typography.caption)
                                     .foregroundStyle(SplickTheme.Colors.textSecondary)
                                     .frame(maxWidth: .infinity, alignment: .leading)

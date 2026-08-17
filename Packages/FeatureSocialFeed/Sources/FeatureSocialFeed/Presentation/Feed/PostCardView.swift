@@ -499,28 +499,25 @@ struct PostCardView: View, Equatable {
         let myId = currentUser?.id
         let hasMyBadge = myId.map { id in preview.top.contains(where: { $0.userId == id }) } ?? false
         let hasReactions = !preview.top.isEmpty || preview.otherPeopleCount > 0
-        let showsTrailingActions = showsCommentPreview || isAuthor
 
-        if hasReactions || showsTrailingActions {
-            HStack(alignment: .center, spacing: Layout.trailingActionSpacing) {
-                reactionPeopleBadges(
-                    preview: preview,
-                    hasMyBadge: hasMyBadge,
-                    tappable: hasReactions
-                )
+        HStack(alignment: .center, spacing: Layout.trailingActionSpacing) {
+            reactionPeopleBadges(
+                preview: preview,
+                hasMyBadge: hasMyBadge,
+                tappable: hasReactions
+            )
 
-                Spacer(minLength: 0)
+            Spacer(minLength: 0)
 
-                if isAuthor {
-                    viewsEntryButton
-                }
-
-                if showsCommentPreview {
-                    commentEntryButton
-                }
+            if isAuthor {
+                viewsEntryButton
             }
-            .frame(minHeight: Layout.selfAvatarSize, alignment: .center)
+
+            if showsCommentPreview {
+                commentEntryButton
+            }
         }
+        .frame(minHeight: Layout.selfAvatarSize, alignment: .center)
     }
 
     @ViewBuilder
@@ -530,13 +527,19 @@ struct PostCardView: View, Equatable {
         tappable: Bool
     ) -> some View {
         let badges = HStack(spacing: 6) {
-            ForEach(preview.top, id: \.userId) { summary in
-                UserReactionBadgeView(summary: summary)
-                    .id(summary.userId)
-            }
+            if preview.top.isEmpty && preview.otherPeopleCount == 0 {
+                Text(languageService.text(.feedReactionsNone))
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(SplickTheme.Colors.textPrimary.opacity(0.45))
+            } else {
+                ForEach(preview.top, id: \.userId) { summary in
+                    UserReactionBadgeView(summary: summary)
+                        .id(summary.userId)
+                }
 
-            if preview.otherPeopleCount > 0 {
-                MoreReactorsChip(count: preview.otherPeopleCount)
+                if preview.otherPeopleCount > 0 {
+                    MoreReactorsChip(count: preview.otherPeopleCount)
+                }
             }
         }
         .frame(minHeight: Layout.selfAvatarSize, alignment: .leading)
@@ -555,7 +558,6 @@ struct PostCardView: View, Equatable {
             .buttonStyle(.plain)
         } else {
             badges
-                .accessibilityHidden(true)
         }
     }
 
