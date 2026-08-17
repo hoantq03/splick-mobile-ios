@@ -4,6 +4,8 @@ import Localization
 import SplickDomain
 import FeatureFriends
 
+private typealias AlbumGroup = SplickDomain.Group
+
 struct PhotoAlbumFilterBarView: View {
     @EnvironmentObject private var languageService: LanguageService
     @ObservedObject var viewModel: PhotoAlbumViewModel
@@ -186,13 +188,13 @@ private struct PhotoAlbumPeoplePickerSheet: View {
     let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol?
     let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
     let selectedAuthors: [UserSummary]
-    let selectedGroups: [Group]
-    let onApply: ([UserSummary], [Group]) -> Void
+    let selectedGroups: [AlbumGroup]
+    let onApply: ([UserSummary], [AlbumGroup]) -> Void
 
     @State private var friends: [UserSummary] = []
-    @State private var groups: [Group] = []
+    @State private var groups: [AlbumGroup] = []
     @State private var draftAuthors: [UserSummary]
-    @State private var draftGroups: [Group]
+    @State private var draftGroups: [AlbumGroup]
     @State private var searchQuery = ""
     @State private var isLoading = true
 
@@ -200,8 +202,8 @@ private struct PhotoAlbumPeoplePickerSheet: View {
         fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol?,
         fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?,
         selectedAuthors: [UserSummary],
-        selectedGroups: [Group],
-        onApply: @escaping ([UserSummary], [Group]) -> Void
+        selectedGroups: [AlbumGroup],
+        onApply: @escaping ([UserSummary], [AlbumGroup]) -> Void
     ) {
         self.fetchMyFriendsUseCase = fetchMyFriendsUseCase
         self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
@@ -221,7 +223,7 @@ private struct PhotoAlbumPeoplePickerSheet: View {
         }
     }
 
-    private var filteredGroups: [Group] {
+    private var filteredGroups: [AlbumGroup] {
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !query.isEmpty else { return groups }
         return groups.filter { $0.name.lowercased().contains(query) }
@@ -229,43 +231,7 @@ private struct PhotoAlbumPeoplePickerSheet: View {
 
     var body: some View {
         NavigationStack {
-            SwiftUI.Group {
-                if isLoading {
-                    ProgressView()
-                } else if friends.isEmpty && groups.isEmpty {
-                    Text(languageService.text(.feedAlbumPeopleEmpty))
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
-                } else if filteredFriends.isEmpty && filteredGroups.isEmpty {
-                    Text(languageService.text(.feedFilterFriendsNotFound))
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
-                } else {
-                    List {
-                        ForEach(filteredFriends) { friend in
-                            peopleRow(
-                                title: friend.displayName,
-                                subtitle: "@\(friend.username)",
-                                avatarURL: friend.avatarURL,
-                                isGroup: false,
-                                selected: draftAuthors.contains(where: { $0.id == friend.id })
-                            ) {
-                                toggleAuthor(friend)
-                            }
-                        }
-                        ForEach(filteredGroups) { group in
-                            peopleRow(
-                                title: group.name,
-                                subtitle: languageService.text(.feedFilterByGroups),
-                                avatarURL: group.avatarURL,
-                                isGroup: true,
-                                selected: draftGroups.contains(where: { $0.id == group.id })
-                            ) {
-                                toggleGroup(group)
-                            }
-                        }
-                    }
-                    .listStyle(.plain)
-                }
-            }
+            pickerContent
             .navigationTitle(languageService.text(.feedAlbumFilterPeople))
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $searchQuery, prompt: languageService.text(.feedCreateSearchFriendsGroups))
@@ -291,6 +257,45 @@ private struct PhotoAlbumPeoplePickerSheet: View {
                 friends = await loadedFriends
                 groups = await loadedGroups
             }
+        }
+    }
+
+    @ViewBuilder
+    private var pickerContent: some View {
+        if isLoading {
+            ProgressView()
+        } else if friends.isEmpty && groups.isEmpty {
+            Text(languageService.text(.feedAlbumPeopleEmpty))
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+        } else if filteredFriends.isEmpty && filteredGroups.isEmpty {
+            Text(languageService.text(.feedFilterFriendsNotFound))
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+        } else {
+            List {
+                ForEach(filteredFriends) { friend in
+                    peopleRow(
+                        title: friend.displayName,
+                        subtitle: "@\(friend.username)",
+                        avatarURL: friend.avatarURL,
+                        isGroup: false,
+                        selected: draftAuthors.contains(where: { $0.id == friend.id })
+                    ) {
+                        toggleAuthor(friend)
+                    }
+                }
+                ForEach(filteredGroups) { group in
+                    peopleRow(
+                        title: group.name,
+                        subtitle: languageService.text(.feedFilterByGroups),
+                        avatarURL: group.avatarURL,
+                        isGroup: true,
+                        selected: draftGroups.contains(where: { $0.id == group.id })
+                    ) {
+                        toggleGroup(group)
+                    }
+                }
+            }
+            .listStyle(.plain)
         }
     }
 
@@ -350,7 +355,7 @@ private struct PhotoAlbumPeoplePickerSheet: View {
         }
     }
 
-    private func toggleGroup(_ group: Group) {
+    private func toggleGroup(_ group: AlbumGroup) {
         if let index = draftGroups.firstIndex(where: { $0.id == group.id }) {
             draftGroups.remove(at: index)
         } else {
@@ -363,7 +368,7 @@ private struct PhotoAlbumPeoplePickerSheet: View {
         return (try? await fetchMyFriendsUseCase.execute()) ?? []
     }
 
-    private func loadGroups() async -> [Group] {
+    private func loadGroups() async -> [AlbumGroup] {
         guard let fetchMyGroupsUseCase else { return [] }
         return (try? await fetchMyGroupsUseCase.execute()) ?? []
     }
