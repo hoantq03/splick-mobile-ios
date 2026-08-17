@@ -15,14 +15,16 @@ public protocol AuthRepositoryProtocol: Sendable {
         username: String,
         password: String,
         otpCode: String,
-        displayName: String?
+        displayName: String?,
+        dateOfBirth: Date?
     ) async throws -> AuthSession
     func registerWithPhone(
         phoneNumber: String,
         username: String,
         password: String,
         otpCode: String,
-        displayName: String?
+        displayName: String?,
+        dateOfBirth: Date?
     ) async throws -> AuthSession
     func refreshToken(_ refreshToken: String) async throws -> AuthSession
     func forgotPassword(email: String) async throws

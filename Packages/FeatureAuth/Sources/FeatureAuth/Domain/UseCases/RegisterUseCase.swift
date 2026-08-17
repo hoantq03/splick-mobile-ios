@@ -9,7 +9,8 @@ public protocol RegisterUseCaseProtocol: Sendable {
         username: String,
         password: String,
         otpCode: String,
-        displayName: String?
+        displayName: String?,
+        dateOfBirth: Date?
     ) async throws -> AuthSession
 }
 
@@ -28,7 +29,8 @@ public final class RegisterUseCase: RegisterUseCaseProtocol, Sendable {
         username: String,
         password: String,
         otpCode: String,
-        displayName: String?
+        displayName: String?,
+        dateOfBirth: Date?
     ) async throws -> AuthSession {
         let session: AuthSession
         switch channel {
@@ -38,7 +40,8 @@ public final class RegisterUseCase: RegisterUseCaseProtocol, Sendable {
                 username: username,
                 password: password,
                 otpCode: otpCode,
-                displayName: displayName
+                displayName: displayName,
+                dateOfBirth: dateOfBirth
             )
         case .phone:
             session = try await repository.registerWithPhone(
@@ -46,7 +49,8 @@ public final class RegisterUseCase: RegisterUseCaseProtocol, Sendable {
                 username: username,
                 password: password,
                 otpCode: otpCode,
-                displayName: displayName
+                displayName: displayName,
+                dateOfBirth: dateOfBirth
             )
         }
         guard session.user.status.allowsSignIn else {

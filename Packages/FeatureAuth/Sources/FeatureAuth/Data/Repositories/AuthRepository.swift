@@ -105,7 +105,8 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
         username: String,
         password: String,
         otpCode: String,
-        displayName: String?
+        displayName: String?,
+        dateOfBirth: Date?
     ) async throws -> AuthSession {
         let session = SessionMetadata.current
         let dto = EmailRegisterRequestDTO(
@@ -114,6 +115,7 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
             password: password,
             otpCode: otpCode,
             displayName: displayName,
+            dateOfBirth: dateOfBirth?.apiCalendarDateString,
             deviceInfo: session.deviceInfo,
             deviceName: session.deviceName,
             loginLocation: session.loginLocation
@@ -128,7 +130,8 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
         username: String,
         password: String,
         otpCode: String,
-        displayName: String?
+        displayName: String?,
+        dateOfBirth: Date?
     ) async throws -> AuthSession {
         let session = SessionMetadata.current
         let dto = PhoneRegisterRequestDTO(
@@ -137,6 +140,7 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
             password: password,
             otpCode: otpCode,
             displayName: displayName,
+            dateOfBirth: dateOfBirth?.apiCalendarDateString,
             deviceInfo: session.deviceInfo,
             deviceName: session.deviceName,
             loginLocation: session.loginLocation

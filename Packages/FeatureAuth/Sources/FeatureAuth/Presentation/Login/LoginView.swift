@@ -145,6 +145,9 @@ public struct LoginView: View {
             LegalLinksFooter(
                 hasAcceptedTerms: $viewModel.hasAcceptedLegalTerms,
                 showsConsentCheckbox: viewModel.showsRegistrationFields,
+                consentPrefix: viewModel.showsRegistrationFields
+                    ? .legalConsentPrefix
+                    : .legalConsentPrefixSignIn,
                 onOpenTerms: { presentedLegalDocument = .terms },
                 onOpenPrivacy: { presentedLegalDocument = .privacy }
             )
@@ -274,10 +277,10 @@ public struct LoginView: View {
             .textContentType(.username)
             .autocorrectionDisabled()
             .textInputAutocapitalization(.never)
-            .onChange(of: viewModel.username) { _ in viewModel.validateUsernameField() }
+            .onChange(of: viewModel.username) { _ in viewModel.onUsernameChanged() }
 
             SplickTextField(
-                languageService.text(.authDisplayName),
+                languageService.text(.authDisplayNameOptional),
                 text: $viewModel.displayName,
                 errorMessage: viewModel.displayNameError,
                 icon: "textformat",
@@ -322,6 +325,7 @@ public struct LoginView: View {
     private var dateOfBirthField: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxs) {
             Button {
+                viewModel.prepareDateOfBirthPicker()
                 showDateOfBirthPicker = true
             } label: {
                 HStack(spacing: SplickTheme.Spacing.xs) {
@@ -329,11 +333,17 @@ public struct LoginView: View {
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
                         .frame(width: 20)
 
-                    Text(Self.birthDateFormatter.string(from: viewModel.dateOfBirth))
-                        .foregroundStyle(SplickTheme.Colors.textPrimary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if let dateOfBirth = viewModel.dateOfBirth {
+                        Text(Self.birthDateFormatter.string(from: dateOfBirth))
+                            .foregroundStyle(SplickTheme.Colors.textPrimary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        Text(languageService.text(.authDateOfBirthPlaceholder))
+                            .foregroundStyle(SplickTheme.Colors.textSecondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
 
-                    Text(languageService.text(.authDateOfBirth))
+                    Text(languageService.text(.authDateOfBirthOptional))
                         .font(SplickTheme.Typography.caption)
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
                 }
@@ -363,7 +373,7 @@ public struct LoginView: View {
             VStack {
                 DatePicker(
                     languageService.text(.authDateOfBirth),
-                    selection: $viewModel.dateOfBirth,
+                    selection: $viewModel.dateOfBirthDraft,
                     in: ...Date(),
                     displayedComponents: .date
                 )
@@ -372,12 +382,18 @@ public struct LoginView: View {
 
                 Spacer()
             }
-            .navigationTitle(languageService.text(.authDateOfBirth))
+            .navigationTitle(languageService.text(.authDateOfBirthOptional))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(languageService.text(.commonClear)) {
+                        viewModel.clearDateOfBirth()
+                        showDateOfBirthPicker = false
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(languageService.text(.commonDone)) {
-                        viewModel.validateDateOfBirthField()
+                        viewModel.confirmDateOfBirth()
                         showDateOfBirthPicker = false
                     }
                 }

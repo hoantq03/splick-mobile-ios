@@ -43,6 +43,9 @@ public final class RegisterViewModel: ObservableObject {
     private let requestPhoneOtpUseCase: RequestPhoneOtpUseCaseProtocol
     private let languageService: LanguageService
 
+    private var lastAutoFilledUsername = ""
+    private var usernameManuallyEdited = false
+
     private static let minUsernameLength = 3
 
     private var normalizedPhone: String { phoneNumber.normalizedE164Phone }
@@ -101,6 +104,14 @@ public final class RegisterViewModel: ObservableObject {
         }
     }
 
+    func suggestUsernameFromEmailIfNeeded() {
+        guard !usernameManuallyEdited else { return }
+        let suggested = email.suggestedUsernameFromEmail
+        username = suggested
+        lastAutoFilledUsername = suggested
+        validateUsernameField()
+    }
+
     func validatePhoneField() {
         let value = normalizedPhone
         if value.isEmpty {
@@ -118,6 +129,9 @@ public final class RegisterViewModel: ObservableObject {
     }
 
     func validateUsernameField() {
+        if username != lastAutoFilledUsername {
+            usernameManuallyEdited = true
+        }
         let value = username.trimmed
         if value.isEmpty {
             usernameError = nil
@@ -221,13 +235,16 @@ public final class RegisterViewModel: ObservableObject {
         otpInfoMessage = nil
         state = .loading
         do {
+            let resolvedUsername = username.trimmed
+            let trimmedDisplayName = displayName.trimmed
             let session = try await registerUseCase.execute(
                 channel: channel,
                 identifier: registrationIdentifier,
-                username: username.trimmed,
+                username: resolvedUsername,
                 password: password,
                 otpCode: otpCode,
-                displayName: displayName.trimmed
+                displayName: trimmedDisplayName.isEmpty ? resolvedUsername : trimmedDisplayName,
+                dateOfBirth: nil
             )
             state = .loaded(session)
             Log.info("Registration successful for \(session.user.username)", category: .auth)

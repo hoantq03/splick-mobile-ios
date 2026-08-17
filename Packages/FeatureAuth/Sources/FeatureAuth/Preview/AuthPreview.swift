@@ -102,7 +102,8 @@ final class MockRegisterUseCase: RegisterUseCaseProtocol, Sendable {
         username: String,
         password: String,
         otpCode: String,
-        displayName: String?
+        displayName: String?,
+        dateOfBirth: Date?
     ) async throws -> AuthSession {
         try await Task.sleep(for: .seconds(1))
         return AuthSession(

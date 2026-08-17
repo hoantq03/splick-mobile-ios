@@ -61,6 +61,7 @@ struct EmailRegisterRequestDTO: Encodable {
     let password: String
     let otpCode: String
     let displayName: String?
+    let dateOfBirth: String?
     let deviceInfo: String?
     let deviceName: String?
     let loginLocation: String?
@@ -72,6 +73,7 @@ struct PhoneRegisterRequestDTO: Encodable {
     let password: String
     let otpCode: String
     let displayName: String?
+    let dateOfBirth: String?
     let deviceInfo: String?
     let deviceName: String?
     let loginLocation: String?

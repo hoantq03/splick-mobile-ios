@@ -6,17 +6,20 @@ public struct LegalLinksFooter: View {
 
     @Binding private var hasAcceptedTerms: Bool
     private let showsConsentCheckbox: Bool
+    private let consentPrefix: L10nKey
     private let onOpenTerms: () -> Void
     private let onOpenPrivacy: () -> Void
 
     public init(
         hasAcceptedTerms: Binding<Bool> = .constant(true),
         showsConsentCheckbox: Bool = false,
+        consentPrefix: L10nKey = .legalConsentPrefixSignIn,
         onOpenTerms: @escaping () -> Void,
         onOpenPrivacy: @escaping () -> Void
     ) {
         _hasAcceptedTerms = hasAcceptedTerms
         self.showsConsentCheckbox = showsConsentCheckbox
+        self.consentPrefix = consentPrefix
         self.onOpenTerms = onOpenTerms
         self.onOpenPrivacy = onOpenPrivacy
     }
@@ -50,7 +53,7 @@ public struct LegalLinksFooter: View {
 
     private var consentText: some View {
         VStack(spacing: 4) {
-            Text(languageService.text(.legalConsentPrefix))
+            Text(languageService.text(consentPrefix))
                 .font(SplickTheme.Typography.caption)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
@@ -91,6 +94,7 @@ import Storage
             LegalLinksFooter(
                 hasAcceptedTerms: $accepted,
                 showsConsentCheckbox: true,
+                consentPrefix: .legalConsentPrefix,
                 onOpenTerms: {},
                 onOpenPrivacy: {}
             )

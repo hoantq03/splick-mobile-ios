@@ -31,7 +31,8 @@ public final class LoginViewModel: ObservableObject {
     @Published var confirmPassword = ""
     @Published var username = ""
     @Published var displayName = ""
-    @Published var dateOfBirth = Calendar.current.date(byAdding: .year, value: -18, to: Date()) ?? Date()
+    @Published var dateOfBirth: Date?
+    @Published var dateOfBirthDraft = LoginViewModel.defaultDateOfBirthDraft
     @Published var phoneNumber = ""
     @Published var otpCode = ""
     @Published var identifierError: String?
@@ -47,7 +48,7 @@ public final class LoginViewModel: ObservableObject {
     @Published var passwordStrength: PasswordStrengthResult = .empty
     @Published var showPasswordRequirements = false
     @Published var showErrorAlert = false
-    @Published var hasAcceptedLegalTerms = false
+    @Published var hasAcceptedLegalTerms = true
     @Published var legalConsentError: String?
 
     @Published private(set) var lookupState: IdentifierLookupState = .pending
@@ -70,6 +71,12 @@ public final class LoginViewModel: ObservableObject {
 
     private static let minUsernameLength = 3
     private static let minimumRegistrationAgeYears = 13
+    private static var defaultDateOfBirthDraft: Date {
+        Calendar.current.date(byAdding: .year, value: -18, to: Date()) ?? Date()
+    }
+
+    private var usernameManuallyEdited = false
+    private var lastAutoFilledUsername = ""
 
     var detectedKind: LoginIdentifierKind {
         identifier.detectedLoginIdentifierKind
@@ -139,6 +146,14 @@ public final class LoginViewModel: ObservableObject {
         if lookupState != .pending {
             resetLookupState()
         }
+        suggestUsernameFromEmailIfNeeded()
+    }
+
+    func onUsernameChanged() {
+        if username != lastAutoFilledUsername {
+            usernameManuallyEdited = true
+        }
+        validateUsernameField()
     }
 
     func validateIdentifierField() {
@@ -188,7 +203,7 @@ public final class LoginViewModel: ObservableObject {
     func validateDisplayNameField() {
         let value = displayName.trimmed
         if value.isEmpty {
-            displayNameError = languageService.text(.authDisplayNameRequired)
+            displayNameError = nil
             return
         }
         if value.count > 150 {
@@ -198,7 +213,25 @@ public final class LoginViewModel: ObservableObject {
         displayNameError = nil
     }
 
+    func prepareDateOfBirthPicker() {
+        dateOfBirthDraft = dateOfBirth ?? Self.defaultDateOfBirthDraft
+    }
+
+    func confirmDateOfBirth() {
+        dateOfBirth = dateOfBirthDraft
+        validateDateOfBirthField()
+    }
+
+    func clearDateOfBirth() {
+        dateOfBirth = nil
+        dateOfBirthError = nil
+    }
+
     func validateDateOfBirthField() {
+        guard let dateOfBirth else {
+            dateOfBirthError = nil
+            return
+        }
         let minimumBirthDate = Calendar.current.date(
             byAdding: .year,
             value: -Self.minimumRegistrationAgeYears,
@@ -289,6 +322,14 @@ public final class LoginViewModel: ObservableObject {
                 return
             }
             lookupState = exists ? .existingUser : .newUser
+            if exists {
+                hasAcceptedLegalTerms = true
+                legalConsentError = nil
+            } else {
+                hasAcceptedLegalTerms = false
+                legalConsentError = nil
+                suggestUsernameFromEmailIfNeeded()
+            }
             setState(.idle)
         } catch let error as NetworkError {
             setState(.failed(error.userMessage))
@@ -356,13 +397,16 @@ public final class LoginViewModel: ObservableObject {
         do {
             let channel: AuthRegistrationChannel = detectedKind == .email ? .email : .phone
             let registrationIdentifier = detectedKind == .email ? identifier.trimmed : phoneNumber
+            let resolvedUsername = username.trimmed
+            let trimmedDisplayName = displayName.trimmed
             let session = try await registerUseCase.execute(
                 channel: channel,
                 identifier: registrationIdentifier,
-                username: username.trimmed,
+                username: resolvedUsername,
                 password: password,
                 otpCode: otpCode,
-                displayName: displayName.trimmed
+                displayName: trimmedDisplayName.isEmpty ? resolvedUsername : trimmedDisplayName,
+                dateOfBirth: dateOfBirth
             )
             setState(.loaded(session))
             Log.info("Registration successful for \(session.user.username)", category: .auth)
@@ -528,7 +572,6 @@ public final class LoginViewModel: ObservableObject {
             && passwordError == nil
             && confirmPasswordError == nil
             && !username.trimmed.isEmpty
-            && !displayName.trimmed.isEmpty
             && passwordStrength.isStrong
             && password == confirmPassword
     }
@@ -539,7 +582,10 @@ public final class LoginViewModel: ObservableObject {
         confirmPassword = ""
         username = ""
         displayName = ""
-        dateOfBirth = Calendar.current.date(byAdding: .year, value: -18, to: Date()) ?? Date()
+        dateOfBirth = nil
+        dateOfBirthDraft = Self.defaultDateOfBirthDraft
+        usernameManuallyEdited = false
+        lastAutoFilledUsername = ""
         passwordError = nil
         confirmPasswordError = nil
         usernameError = nil
@@ -549,7 +595,7 @@ public final class LoginViewModel: ObservableObject {
         passwordStatus = .neutral
         confirmPasswordStatus = .neutral
         usernameStatus = .neutral
-        hasAcceptedLegalTerms = false
+        hasAcceptedLegalTerms = true
         legalConsentError = nil
     }
 
@@ -620,6 +666,8 @@ public final class LoginViewModel: ObservableObject {
             lookupState = .existingUser
             step = .credentials
             otpCode = ""
+            hasAcceptedLegalTerms = true
+            legalConsentError = nil
             setState(.failed(error.userMessage))
         case .usernameAlreadyExists:
             step = .credentials
@@ -662,5 +710,14 @@ public final class LoginViewModel: ObservableObject {
         }
 
         return isValid
+    }
+
+    private func suggestUsernameFromEmailIfNeeded() {
+        guard !usernameManuallyEdited else { return }
+        guard detectedKind == .email else { return }
+        let suggested = identifier.suggestedUsernameFromEmail
+        username = suggested
+        lastAutoFilledUsername = suggested
+        validateUsernameField()
     }
 }

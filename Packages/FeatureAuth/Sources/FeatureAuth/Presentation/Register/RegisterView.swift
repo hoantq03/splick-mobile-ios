@@ -124,7 +124,10 @@ public struct RegisterView: View {
                 .keyboardType(.emailAddress)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
-                .onChange(of: viewModel.email) { _ in viewModel.validateEmailField() }
+                .onChange(of: viewModel.email) { _ in
+                    viewModel.validateEmailField()
+                    viewModel.suggestUsernameFromEmailIfNeeded()
+                }
 
             case .phone:
                 SplickTextField(
@@ -153,7 +156,7 @@ public struct RegisterView: View {
             .onChange(of: viewModel.username) { _ in viewModel.validateUsernameField() }
 
             SplickTextField(
-                languageService.text(.authDisplayName),
+                languageService.text(.authDisplayNameOptional),
                 text: $viewModel.displayName,
                 icon: "textformat"
             )
