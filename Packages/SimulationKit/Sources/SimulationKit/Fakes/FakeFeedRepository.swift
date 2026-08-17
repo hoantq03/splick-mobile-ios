@@ -313,11 +313,13 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
                 }
         }
 
-        if let authorId = filters.author?.id {
-            allPhotos = allPhotos.filter { $0.author.id == authorId }
-        }
-        if let groupId = filters.group?.id {
-            allPhotos = allPhotos.filter { $0.groupId == groupId }
+        let authorIds = Set(filters.authors.map(\.id))
+        let groupIds = Set(filters.groups.map(\.id))
+        if !authorIds.isEmpty || !groupIds.isEmpty {
+            allPhotos = allPhotos.filter { photo in
+                (!authorIds.isEmpty && authorIds.contains(photo.author.id))
+                    || (!groupIds.isEmpty && photo.groupId.map(groupIds.contains) == true)
+            }
         }
         if let captionQuery = filters.apiCaptionQuery?.lowercased() {
             allPhotos = allPhotos.filter {

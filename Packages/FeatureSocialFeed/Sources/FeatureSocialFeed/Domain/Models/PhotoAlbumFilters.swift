@@ -2,17 +2,17 @@ import Foundation
 import SplickDomain
 
 public struct PhotoAlbumFilters: Equatable, Sendable {
-    public var author: UserSummary?
-    public var group: Group?
-    public var captionQuery: String = ""
+    public var authors: [UserSummary]
+    public var groups: [Group]
+    public var captionQuery: String
 
     public init(
-        author: UserSummary? = nil,
-        group: Group? = nil,
+        authors: [UserSummary] = [],
+        groups: [Group] = [],
         captionQuery: String = ""
     ) {
-        self.author = author
-        self.group = group
+        self.authors = authors
+        self.groups = groups
         self.captionQuery = captionQuery
     }
 
@@ -27,12 +27,12 @@ public struct PhotoAlbumFilters: Equatable, Sendable {
     }
 
     public var hasAnyFilter: Bool {
-        author != nil || group != nil || apiCaptionQuery != nil
+        !authors.isEmpty || !groups.isEmpty || apiCaptionQuery != nil
     }
 
     public mutating func clearAll() {
-        author = nil
-        group = nil
+        authors = []
+        groups = []
         captionQuery = ""
     }
 }

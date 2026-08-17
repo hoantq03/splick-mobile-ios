@@ -98,11 +98,11 @@ enum FeedEndpoint: APIEndpoint {
         if let cursor {
             items.append(URLQueryItem(name: "cursor", value: cursor))
         }
-        if let authorId = filters.author?.id {
-            items.append(URLQueryItem(name: "authorId", value: authorId.uuidString))
+        for author in filters.authors {
+            items.append(URLQueryItem(name: "authorId", value: author.id.uuidString))
         }
-        if let groupId = filters.group?.id {
-            items.append(URLQueryItem(name: "groupId", value: groupId.uuidString))
+        for group in filters.groups {
+            items.append(URLQueryItem(name: "groupId", value: group.id.uuidString))
         }
         if let query = filters.apiCaptionQuery {
             items.append(URLQueryItem(name: "q", value: query))
