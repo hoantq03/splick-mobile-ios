@@ -46,6 +46,8 @@ public protocol FeedRepositoryProtocol: Sendable {
     func fetchStreakSummary() async throws -> StreakSummary
     func fetchStreakCalendar(year: Int, month: Int) async throws -> [StreakDay]
     func fetchStreakDayPhotos(date: String) async throws -> [AlbumPhoto]
+    func searchLocations(query: String, lat: Double?, lon: Double?) async throws -> [PostPlace]
+    func nearbyLocations(lat: Double, lon: Double, radiusMeters: Int) async throws -> [PostPlace]
 
     // MARK: - Disk cache
     func loadCachedFeed(userId: UUID) async -> [Post]?

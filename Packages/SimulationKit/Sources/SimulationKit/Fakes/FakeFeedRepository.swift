@@ -643,6 +643,25 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
         return streakPhotos(on: dayDate)
     }
 
+    public func searchLocations(query: String, lat: Double?, lon: Double?) async throws -> [PostPlace] {
+        logger.log("Search locations: \(query)")
+        return [
+            PostPlace(placeId: "sim-search", displayName: query, lat: lat, lon: lon)
+        ]
+    }
+
+    public func nearbyLocations(lat: Double, lon: Double, radiusMeters: Int) async throws -> [PostPlace] {
+        logger.log("Nearby locations")
+        return [
+            PostPlace(
+                placeId: "sim-nearby",
+                displayName: "The Coffee House · Quận 7",
+                lat: lat,
+                lon: lon
+            )
+        ]
+    }
+
     private func streakPhotos(on date: Date) -> [AlbumPhoto] {
         let calendar = Calendar.current
         return filteredAlbumPhotos(filters: PhotoAlbumFilters()).filter {

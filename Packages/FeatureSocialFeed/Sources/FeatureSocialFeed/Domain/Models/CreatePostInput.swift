@@ -21,6 +21,7 @@ public struct CreatePostInput: Sendable {
     public let companionIds: [UUID]
     public let companionGroupName: String?
     public let checkInPlace: String?
+    public let location: PostPlace?
     public let feedKind: PostFeedKind
     public let billSplit: PostBillSplit?
     public let billSplitType: String?
@@ -34,6 +35,7 @@ public struct CreatePostInput: Sendable {
         companionIds: [UUID] = [],
         companionGroupName: String? = nil,
         checkInPlace: String? = nil,
+        location: PostPlace? = nil,
         feedKind: PostFeedKind = .checkIn,
         billSplit: PostBillSplit? = nil,
         billSplitType: String? = nil,
@@ -46,6 +48,7 @@ public struct CreatePostInput: Sendable {
         self.companionIds = companionIds
         self.companionGroupName = companionGroupName
         self.checkInPlace = checkInPlace
+        self.location = location
         self.feedKind = feedKind
         self.billSplit = billSplit
         self.billSplitType = billSplitType

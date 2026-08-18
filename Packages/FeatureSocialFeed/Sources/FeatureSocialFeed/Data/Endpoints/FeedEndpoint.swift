@@ -20,6 +20,8 @@ enum FeedEndpoint: APIEndpoint {
     case streakSummary
     case streakCalendar(year: Int, month: Int)
     case streakDayPhotos(date: String)
+    case searchLocations(query: String, limit: Int, lat: Double?, lon: Double?)
+    case nearbyLocations(lat: Double, lon: Double, radius: Int, limit: Int)
 
     var path: String {
         switch self {
@@ -42,13 +44,16 @@ enum FeedEndpoint: APIEndpoint {
         case .streakSummary: return "/v1/feed/streak"
         case .streakCalendar: return "/v1/feed/streak/calendar"
         case .streakDayPhotos(let date): return "/v1/feed/streak/days/\(date)/photos"
+        case .searchLocations: return "/v1/feed/locations/search"
+        case .nearbyLocations: return "/v1/feed/locations/nearby"
         }
     }
 
     var method: HTTPMethod {
         switch self {
         case .feed, .post, .postReactions, .photoAlbumFirstPage, .photoAlbumCursor,
-             .streakSummary, .streakCalendar, .streakDayPhotos:
+             .streakSummary, .streakCalendar, .streakDayPhotos,
+             .searchLocations, .nearbyLocations:
             return .get
         case .createPost, .addReaction, .addComment, .sendBillReminder,
              .submitPaymentEvidence, .approvePaymentEvidence, .rejectPaymentEvidence,
@@ -77,6 +82,21 @@ enum FeedEndpoint: APIEndpoint {
             return [
                 URLQueryItem(name: "year", value: "\(year)"),
                 URLQueryItem(name: "month", value: "\(month)"),
+            ]
+        case .searchLocations(let query, let limit, let lat, let lon):
+            var items = [
+                URLQueryItem(name: "q", value: query),
+                URLQueryItem(name: "limit", value: "\(limit)"),
+            ]
+            if let lat { items.append(URLQueryItem(name: "lat", value: "\(lat)")) }
+            if let lon { items.append(URLQueryItem(name: "lon", value: "\(lon)")) }
+            return items
+        case .nearbyLocations(let lat, let lon, let radius, let limit):
+            return [
+                URLQueryItem(name: "lat", value: "\(lat)"),
+                URLQueryItem(name: "lon", value: "\(lon)"),
+                URLQueryItem(name: "radius", value: "\(radius)"),
+                URLQueryItem(name: "limit", value: "\(limit)"),
             ]
         default:
             return nil

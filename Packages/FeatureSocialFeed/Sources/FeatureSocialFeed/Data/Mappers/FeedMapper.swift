@@ -49,7 +49,7 @@ enum FeedMapper {
             mediaItems: mappedMediaItems,
             companions: companions,
             feedKind: feedKind,
-            checkInPlace: dto.checkInPlace,
+            checkInPlace: dto.location?.displayName ?? dto.checkInPlace,
             billSplit: billSplit,
             viewCount: viewCount,
             viewers: viewers,
@@ -203,5 +203,11 @@ enum FeedMapper {
             lastRejectedAt: line.lastRejectedAt,
             reminderCount: line.reminderCount ?? 0
         )
+    }
+
+    static func toPlace(_ dto: PostLocationDTO) -> PostPlace? {
+        let name = dto.displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !name.isEmpty else { return nil }
+        return PostPlace(placeId: dto.placeId, displayName: name, lat: dto.lat, lon: dto.lon)
     }
 }

@@ -50,7 +50,8 @@ struct PostCaptureFlowView: View {
                 fetchMyGroupsUseCase: container.fetchMyGroupsUseCase,
                 languageService: container.languageService,
                 currentUser: currentUser,
-                currentUserId: currentUser?.id
+                currentUserId: currentUser?.id,
+                feedRepository: container.composeFeedRepository
             ),
             profileDependencies: container.friendUserProfileDependencies,
             onPostSubmit: { prepared in

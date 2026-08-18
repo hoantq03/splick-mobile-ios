@@ -162,6 +162,10 @@ struct CreateCommentAttachmentRequestDTO: Encodable {
     let sizeBytes: Int?
 }
 
+struct LocationSearchResponseDTO: Decodable {
+    let locations: [PostLocationDTO]
+}
+
 struct CreatePostRequestDTO: Encodable {
     let caption: String?
     let groupId: UUID?

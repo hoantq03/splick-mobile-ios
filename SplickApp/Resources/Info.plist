@@ -48,6 +48,8 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Splick uses the camera so you can capture and share photos and videos.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Splick uses your location to suggest nearby places when you check in.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Splick uses the microphone so you can record audio when capturing videos.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

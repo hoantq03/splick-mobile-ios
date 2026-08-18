@@ -3,6 +3,7 @@ import PhotosUI
 import AVFoundation
 import UniformTypeIdentifiers
 import UIKit
+import CoreLocation
 import DesignSystem
 import Localization
 import SplickDomain
@@ -1027,21 +1028,140 @@ private struct ComposeCompanionsEditorView: View {
 private struct ComposeLocationEditorView: View {
     @EnvironmentObject private var languageService: LanguageService
     @ObservedObject var viewModel: CreatePostComposeViewModel
+    @StateObject private var locationProvider = WhenInUseLocationProvider()
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
-                VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-                    Text(languageService.text(.feedCreateLocation))
-                        .font(SplickTheme.Typography.headline)
-                    SplickTextField(languageService.text(.feedCreateLocationPlaceholder), text: $viewModel.location)
+        List {
+            Section {
+                SplickTextField(languageService.text(.feedCreateLocationPlaceholder), text: $viewModel.location)
+                    .onChange(of: viewModel.location) { _ in
+                        viewModel.locationQueryDidChange()
+                    }
+                if !viewModel.locationGpsAvailable {
+                    Text(languageService.text(.feedCreateLocationEnableGps))
+                        .font(SplickTheme.Typography.footnote)
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
                 }
-                .splickCard()
+            } header: {
+                Text(languageService.text(.feedCreateLocation))
             }
-            .padding(SplickTheme.Spacing.md)
-            .padding(.bottom, SplickTheme.Spacing.xl)
+
+            if showsCustomPlaceRow {
+                Section {
+                    Button {
+                        viewModel.useTypedLocation()
+                    } label: {
+                        Text(languageService.format(.feedCreateLocationUseTyped, trimmedQuery))
+                    }
+                }
+            }
+
+            if trimmedQuery.count >= 2, !viewModel.searchPlaces.isEmpty {
+                Section(languageService.text(.feedCreateLocationSearchResults)) {
+                    ForEach(viewModel.searchPlaces, id: \.self) { place in
+                        placeButton(place)
+                    }
+                }
+            }
+
+            if trimmedQuery.count < 2, !viewModel.nearbyPlaces.isEmpty {
+                Section(languageService.text(.feedCreateLocationNearby)) {
+                    ForEach(viewModel.nearbyPlaces, id: \.self) { place in
+                        placeButton(place)
+                    }
+                }
+            }
         }
+        .listStyle(.insetGrouped)
         .navigationTitle(languageService.text(.feedCreateLocation))
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { locationProvider.request() }
+        .onReceive(locationProvider.$coordinate) { coordinate in
+            if let coordinate {
+                viewModel.onDeviceCoordinates(lat: coordinate.latitude, lon: coordinate.longitude)
+            }
+        }
+        .onReceive(locationProvider.$didFinishRequest) { finished in
+            if finished, locationProvider.coordinate == nil {
+                viewModel.onLocationPermissionDenied()
+            }
+        }
+    }
+
+    private var trimmedQuery: String {
+        viewModel.location.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var showsCustomPlaceRow: Bool {
+        trimmedQuery.count >= 2
+            && viewModel.searchPlaces.contains(where: {
+                $0.displayName.caseInsensitiveCompare(trimmedQuery) == .orderedSame
+            }) == false
+            && viewModel.selectedPlace?.displayName != trimmedQuery
+    }
+
+    private func placeButton(_ place: PostPlace) -> some View {
+        Button {
+            viewModel.selectPlace(place)
+        } label: {
+            HStack(spacing: SplickTheme.Spacing.sm) {
+                Image(systemName: "mappin.circle.fill")
+                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                Text(place.displayName)
+                    .foregroundStyle(SplickTheme.Colors.textPrimary)
+                    .multilineTextAlignment(.leading)
+                Spacer()
+            }
+        }
+    }
+}
+
+@MainActor
+private final class WhenInUseLocationProvider: NSObject, ObservableObject, CLLocationManagerDelegate {
+    @Published var coordinate: CLLocationCoordinate2D?
+    @Published var didFinishRequest = false
+
+    private let manager = CLLocationManager()
+
+    override init() {
+        super.init()
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+    }
+
+    func request() {
+        switch manager.authorizationStatus {
+        case .notDetermined:
+            manager.requestWhenInUseAuthorization()
+        case .authorizedWhenInUse, .authorizedAlways:
+            manager.requestLocation()
+        default:
+            didFinishRequest = true
+            coordinate = nil
+        }
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        switch manager.authorizationStatus {
+        case .authorizedWhenInUse, .authorizedAlways:
+            manager.requestLocation()
+        case .notDetermined:
+            break
+        default:
+            didFinishRequest = true
+            coordinate = nil
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        coordinate = locations.last?.coordinate
+        didFinishRequest = true
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        didFinishRequest = true
+        if coordinate == nil {
+            coordinate = nil
+        }
     }
 }

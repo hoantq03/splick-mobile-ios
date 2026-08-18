@@ -278,6 +278,8 @@ final class DependencyContainer: ObservableObject {
         FeedRepository(apiClient: apiClient, mediaRepository: mediaRepository)
     }()
 
+    var composeFeedRepository: FeedRepositoryProtocol { feedRepository }
+
     lazy var fetchFeedUseCase: FetchFeedUseCaseProtocol = {
         FetchFeedUseCase(repository: feedRepository)
     }()

@@ -141,7 +141,15 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
             groupId: input.groupId,
             feedKind: input.feedKind.rawValue,
             checkInPlace: input.checkInPlace,
-            location: nil,
+            location: input.location.flatMap { place in
+                guard place.hasCoordinates else { return nil }
+                return CreatePostLocationRequestDTO(
+                    placeId: place.placeId,
+                    displayName: place.displayName,
+                    lat: place.lat,
+                    lon: place.lon
+                )
+            },
             mediaItems: requestMediaItems,
             companionIds: input.companionIds,
             mediaId: primaryMediaId,
@@ -343,5 +351,19 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
             FeedEndpoint.streakDayPhotos(date: date)
         )
         return dtos.compactMap(FeedMapper.toAlbumPhoto)
+    }
+
+    public func searchLocations(query: String, lat: Double?, lon: Double?) async throws -> [PostPlace] {
+        let dto: LocationSearchResponseDTO = try await apiClient.request(
+            FeedEndpoint.searchLocations(query: query, limit: 10, lat: lat, lon: lon)
+        )
+        return dto.locations.compactMap(FeedMapper.toPlace)
+    }
+
+    public func nearbyLocations(lat: Double, lon: Double, radiusMeters: Int) async throws -> [PostPlace] {
+        let dto: LocationSearchResponseDTO = try await apiClient.request(
+            FeedEndpoint.nearbyLocations(lat: lat, lon: lon, radius: radiusMeters, limit: 10)
+        )
+        return dto.locations.compactMap(FeedMapper.toPlace)
     }
 }

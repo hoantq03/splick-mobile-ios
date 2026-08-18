@@ -37,6 +37,10 @@ public struct PreparedPostSubmit: Sendable {
 public final class CreatePostComposeViewModel: ObservableObject {
     @Published var caption = ""
     @Published var location = ""
+    @Published private(set) var selectedPlace: PostPlace?
+    @Published private(set) var nearbyPlaces: [PostPlace] = []
+    @Published private(set) var searchPlaces: [PostPlace] = []
+    @Published private(set) var locationGpsAvailable = false
     @Published var friendSearchQuery = ""
     @Published private(set) var friendSearchResults: [UserSummary] = []
     @Published private(set) var selectedCompanions: [UserSummary] = []
@@ -68,13 +72,17 @@ public final class CreatePostComposeViewModel: ObservableObject {
     private let languageService: LanguageService
     private let currentUser: UserSummary?
     private let currentUserId: UUID?
+    private let feedRepository: FeedRepositoryProtocol?
     private var friendSearchTask: Task<Void, Never>?
+    private var locationSearchTask: Task<Void, Never>?
     private var audienceFriendSearchTask: Task<Void, Never>?
     private var activeMentionQuery = ""
     private var friendSearchPage = 0
     private var friendSearchActiveQuery = ""
     private var hasLoadedAudienceGroups = false
     private var hasLoadedAudienceFriends = false
+    private var deviceLat: Double?
+    private var deviceLon: Double?
 
     private let friendSearchPageSize = 20
     private let audienceFriendPageSize = 10
@@ -97,13 +105,15 @@ public final class CreatePostComposeViewModel: ObservableObject {
         fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol,
         languageService: LanguageService,
         currentUser: UserSummary?,
-        currentUserId: UUID?
+        currentUserId: UUID?,
+        feedRepository: FeedRepositoryProtocol? = nil
     ) {
         self.fetchFriendsUseCase = fetchFriendsUseCase
         self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
         self.languageService = languageService
         self.currentUser = currentUser
         self.currentUserId = currentUserId ?? currentUser?.id
+        self.feedRepository = feedRepository
 
         if mediaType == .video,
            let videoURL,
@@ -256,6 +266,36 @@ public final class CreatePostComposeViewModel: ObservableObject {
 
     func isCurrentUser(_ user: UserSummary) -> Bool {
         user.id == currentUserId
+    }
+
+    func locationQueryDidChange() {
+        if selectedPlace?.displayName != location {
+            selectedPlace = nil
+        }
+        scheduleLocationSearch()
+    }
+
+    func selectPlace(_ place: PostPlace) {
+        selectedPlace = place
+        location = place.displayName
+        searchPlaces = []
+    }
+
+    func useTypedLocation() {
+        let query = location.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return }
+        selectedPlace = PostPlace(displayName: query)
+    }
+
+    func onDeviceCoordinates(lat: Double, lon: Double) {
+        deviceLat = lat
+        deviceLon = lon
+        locationGpsAvailable = true
+        Task { await loadNearbyPlaces() }
+    }
+
+    func onLocationPermissionDenied() {
+        locationGpsAvailable = false
     }
 
     func participantDisplayName(_ user: UserSummary) -> String {
@@ -573,7 +613,8 @@ public final class CreatePostComposeViewModel: ObservableObject {
             caption: caption.nilIfBlank,
             companionIds: companionUsersForSubmit.map(\.id),
             companionGroupName: enableBillSplit ? selectedCompanionGroup?.name : nil,
-            checkInPlace: location.nilIfBlank,
+            checkInPlace: selectedPlace?.displayName ?? location.nilIfBlank,
+            location: selectedPlace?.hasCoordinates == true ? selectedPlace : nil,
             feedKind: enableBillSplit ? .shareBill : .checkIn,
             billSplit: enableBillSplit ? buildBillSplit() : nil,
             billSplitType: enableBillSplit ? splitMode.apiSplitType : nil,
@@ -648,6 +689,44 @@ public final class CreatePostComposeViewModel: ObservableObject {
             }
             guard !Task.isCancelled else { return }
             await fetchFriendSearchPage(page: reset ? 0 : friendSearchPage + 1, reset: reset)
+        }
+    }
+
+    private func scheduleLocationSearch() {
+        locationSearchTask?.cancel()
+        let query = location.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard query.count >= 2 else {
+            searchPlaces = []
+            return
+        }
+        locationSearchTask = Task {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard !Task.isCancelled else { return }
+            guard let feedRepository else { return }
+            do {
+                let results = try await feedRepository.searchLocations(
+                    query: query,
+                    lat: deviceLat,
+                    lon: deviceLon
+                )
+                guard !Task.isCancelled else { return }
+                searchPlaces = results
+            } catch {
+                searchPlaces = []
+            }
+        }
+    }
+
+    private func loadNearbyPlaces() async {
+        guard let feedRepository, let deviceLat, let deviceLon else { return }
+        do {
+            nearbyPlaces = try await feedRepository.nearbyLocations(
+                lat: deviceLat,
+                lon: deviceLon,
+                radiusMeters: 2000
+            )
+        } catch {
+            nearbyPlaces = []
         }
     }
 
