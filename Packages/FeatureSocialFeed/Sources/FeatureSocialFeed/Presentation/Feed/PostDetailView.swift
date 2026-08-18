@@ -60,7 +60,16 @@ struct PostDetailView: View {
         self.makeGifPickerViewModel = makeGifPickerViewModel
         self.expandBillSplitInitially = expandBillSplitInitially
         self.focusComposerOnAppear = focusComposerOnAppear
-        _commentPager = StateObject(wrappedValue: PostDetailViewModel(comments: post.comments))
+        _commentPager = StateObject(
+            wrappedValue: PostDetailViewModel(postId: post.id) { postId, page, limit, filter in
+                try await feedViewModel.fetchPostComments(
+                    postId: postId,
+                    page: page,
+                    limit: limit,
+                    filter: filter
+                )
+            }
+        )
     }
 
     private var livePost: Post {
@@ -97,6 +106,7 @@ struct PostDetailView: View {
             }
             .refreshable {
                 await feedViewModel.refreshPost(id: post.id, allowingConcurrentFeedRefresh: true)
+                await commentPager.reload()
             }
             .onChange(of: scrollToCommentId) { commentId in
                 guard let commentId else { return }
@@ -109,12 +119,13 @@ struct PostDetailView: View {
             .onChange(of: feedViewModel.pendingCommentIds) { pendingIds in
                 let newlyPending = pendingIds.subtracting(observedPendingCommentIds)
                 observedPendingCommentIds = pendingIds
-                guard let pendingId = livePost.comments.last(where: { newlyPending.contains($0.id) })?.id
+                guard let pendingId = livePost.comments.last(where: { newlyPending.contains($0.id) })?.id,
+                      let pending = livePost.comments.first(where: { $0.id == pendingId })
                 else { return }
-                let expectsMedia = livePost.comments.first(where: { $0.id == pendingId })?
-                    .attachments.isEmpty == false
+                let expectsMedia = pending.attachments.isEmpty == false
+                commentPager.upsertOptimistic(pending)
                 commentPager.ensureCommentVisible(pendingId)
-                if let parentId = livePost.comments.first(where: { $0.id == pendingId })?.parentCommentId {
+                if let parentId = pending.parentCommentId {
                     commentPager.expandReplies(for: parentId)
                 }
                 scrollToCommentExpectsMedia = expectsMedia
@@ -146,23 +157,21 @@ struct PostDetailView: View {
         } message: {
             Text(feedViewModel.alertMessage ?? "")
         }
-        .task { await feedViewModel.refreshPost(id: post.id, allowingConcurrentFeedRefresh: true) }
+        .task {
+            await feedViewModel.refreshPost(id: post.id, allowingConcurrentFeedRefresh: true)
+            await commentPager.loadInitial()
+        }
         .onAppear {
             tabBarScrollState?.hide(flushToBottom: true)
             configureCardActions()
             // Defer remaining @Published updates so we don't publish during view updates.
             Task { @MainActor in
                 feedViewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
-                commentPager.refresh(with: livePost.comments)
-                commentPager.loadInitial()
                 enableComposerInteraction()
             }
         }
         .onDisappear {
             tabBarScrollState?.show()
-        }
-        .onChange(of: livePost.comments) { comments in
-            commentPager.refresh(with: comments)
         }
         .postCardPresentationHost(
             presentation: $cardPresentation,
@@ -184,6 +193,7 @@ struct PostDetailView: View {
                     message: message,
                     submissionAttachments: attachments
                 )
+                await reloadEvidenceComments()
             },
             customEmojiDependencies: customEmojiDependencies,
             paymentEvidencePhotoPickerItems: $paymentEvidencePhotoPickerItems,
@@ -247,6 +257,7 @@ struct PostDetailView: View {
                         evidenceId: evidenceId,
                         reason: reason
                     )
+                    await commentPager.reload()
                 }
                 rejectEvidenceTarget = nil
             }
@@ -349,8 +360,8 @@ struct PostDetailView: View {
         }
         composerFocused = false
 
-        // Sync pager immediately — don't wait for `onChange(of: livePost.comments)`.
-        commentPager.refresh(with: livePost.comments)
+        // Sync pager from the comments API — don't wait for embedded GET post comments.
+        await commentPager.reload(ensureVisibleId: result.createdCommentId)
         if let parentId {
             commentPager.expandReplies(for: parentId)
         }
@@ -410,13 +421,32 @@ struct PostDetailView: View {
 
     private var commentsSection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-            Text(languageService.text(.feedPostCommentsHeader))
-                .font(SplickTheme.Typography.headline)
+            HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
+                Text(languageService.text(.feedPostCommentsHeader))
+                    .font(SplickTheme.Typography.headline)
+                Spacer(minLength: 8)
+                CommentThreadFilterBar(
+                    selected: commentPager.commentFilter,
+                    onSelect: { filter in
+                        Task { await commentPager.setFilter(filter) }
+                    }
+                )
+            }
 
-            if commentPager.displayedTopLevel.isEmpty {
-                Text(languageService.text(.feedPostCommentsEmpty))
+            if commentPager.commentsLoaded && commentPager.displayedTopLevel.isEmpty {
+                Text(
+                    languageService.text(
+                        commentPager.commentFilter == .evidence
+                            ? .feedPostCommentsEmptyEvidence
+                            : .feedPostCommentsEmpty
+                    )
+                )
                     .font(.system(size: 12))
                     .foregroundStyle(SplickTheme.Colors.textTertiary)
+            } else if !commentPager.commentsLoaded && commentPager.isLoadingPage {
+                SplickSpinner(size: .small)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, SplickTheme.Spacing.sm)
             }
 
             CommentThreadView(
@@ -442,7 +472,10 @@ struct PostDetailView: View {
                 },
                 onApproveEvidence: { comment in
                     guard let evidenceId = comment.evidenceId else { return }
-                    Task { await feedViewModel.approvePaymentEvidence(postId: post.id, evidenceId: evidenceId) }
+                    Task {
+                        await feedViewModel.approvePaymentEvidence(postId: post.id, evidenceId: evidenceId)
+                        await commentPager.reload()
+                    }
                 },
                 onRejectEvidence: { comment in
                     rejectEvidenceTarget = comment
@@ -452,7 +485,7 @@ struct PostDetailView: View {
 
             if commentPager.canLoadMore {
                 Button {
-                    commentPager.loadNextPage()
+                    Task { await commentPager.loadNextPage() }
                 } label: {
                     if commentPager.isLoadingPage {
                         SplickSpinner(size: .small)
@@ -502,6 +535,7 @@ struct PostDetailView: View {
                 message: message,
                 submissionAttachments: attachments
             )
+            await commentPager.reload()
         }
         cardActions.onSubmitPaymentEvidence = { postId, splitId, message, attachments in
             try await feedViewModel.submitPaymentEvidence(
@@ -510,6 +544,7 @@ struct PostDetailView: View {
                 message: message,
                 submissionAttachments: attachments
             )
+            await reloadEvidenceComments()
         }
         cardActions.makeGifPickerViewModel = makeGifPickerViewModel
     }
@@ -556,6 +591,53 @@ struct PostDetailView: View {
             if focusComposerOnAppear {
                 composerFocused = true
             }
+        }
+    }
+
+    private func reloadEvidenceComments() async {
+        if commentPager.commentFilter != .evidence {
+            await commentPager.setFilter(.evidence)
+        } else {
+            await commentPager.reload()
+        }
+    }
+}
+
+private struct CommentThreadFilterBar: View {
+    @EnvironmentObject private var languageService: LanguageService
+    let selected: CommentThreadFilter
+    let onSelect: (CommentThreadFilter) -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(CommentThreadFilter.allCases, id: \.self) { filter in
+                let isSelected = filter == selected
+                Button {
+                    onSelect(filter)
+                } label: {
+                    Text(label(for: filter))
+                        .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background {
+                            if isSelected {
+                                Capsule().fill(SplickTheme.Colors.cardBackground)
+                                    .shadow(color: Color.black.opacity(0.12), radius: 3, y: 1)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(3)
+        .background(SplickTheme.Colors.secondaryBackground.opacity(0.85), in: Capsule())
+    }
+
+    private func label(for filter: CommentThreadFilter) -> String {
+        switch filter {
+        case .comments: return languageService.text(.feedPostCommentsFilterComments)
+        case .evidence: return languageService.text(.feedPostCommentsFilterEvidence)
+        case .all: return languageService.text(.feedPostCommentsFilterAll)
         }
     }
 }

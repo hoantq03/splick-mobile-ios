@@ -337,6 +337,24 @@ public final class FeedViewModel: ObservableObject {
         }
     }
 
+    func fetchPostComments(
+        postId: UUID,
+        page: Int,
+        limit: Int,
+        filter: CommentThreadFilter
+    ) async throws -> CommentThreadPage {
+        if let feedRepository {
+            return try await feedRepository.fetchPostComments(
+                postId: postId,
+                page: page,
+                limit: limit,
+                filter: filter
+            )
+        }
+        let comments = posts.first(where: { $0.id == postId })?.comments ?? []
+        return CommentThreadPage.paging(from: comments, page: page, limit: limit, filter: filter)
+    }
+
     func canReply(to comment: PostComment) -> Bool {
         !pendingCommentIds.contains(comment.id)
     }
