@@ -379,6 +379,24 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
         )
     }
 
+    public func fetchPostComments(
+        postId: UUID,
+        page: Int,
+        limit: Int,
+        filter: CommentThreadFilter
+    ) async throws -> CommentThreadPage {
+        logger.log("Fetch post comments: \(postId) page=\(page) filter=\(filter.apiValue)")
+        guard let post = posts.first(where: { $0.id == postId }) else {
+            throw NetworkError.notFound
+        }
+        return CommentThreadPage.paging(
+            from: post.comments,
+            page: page,
+            limit: limit,
+            filter: filter
+        )
+    }
+
     public func fetchPostReactions(postId: UUID) async throws -> [UserReactionSummary] {
         logger.log("Fetch post reactions: \(postId)")
         guard let post = posts.first(where: { $0.id == postId }) else {

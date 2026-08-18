@@ -84,6 +84,18 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
         return FeedMapper.toPost(dto)
     }
 
+    public func fetchPostComments(
+        postId: UUID,
+        page: Int,
+        limit: Int,
+        filter: CommentThreadFilter
+    ) async throws -> CommentThreadPage {
+        let dto: CommentThreadPageDTO = try await apiClient.request(
+            FeedEndpoint.postComments(postId: postId, page: page, limit: limit, filter: filter)
+        )
+        return FeedMapper.toCommentThreadPage(dto)
+    }
+
     public func fetchPostReactions(postId: UUID) async throws -> [UserReactionSummary] {
         let dto: PostReactionsDTO = try await apiClient.request(FeedEndpoint.postReactions(postId: postId))
         return FeedMapper.toPostReactions(dto).items

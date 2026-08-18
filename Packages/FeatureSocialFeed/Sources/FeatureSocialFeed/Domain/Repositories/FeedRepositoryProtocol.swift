@@ -10,6 +10,12 @@ public protocol FeedRepositoryProtocol: Sendable {
         cursor: String
     ) async throws -> AlbumPhotoPage
     func fetchPost(id: UUID) async throws -> Post
+    func fetchPostComments(
+        postId: UUID,
+        page: Int,
+        limit: Int,
+        filter: CommentThreadFilter
+    ) async throws -> CommentThreadPage
     /// Grouped reactors with per-emoji counts for the reaction detail sheet.
     func fetchPostReactions(postId: UUID) async throws -> [UserReactionSummary]
     /// Records views for many posts in one call; returns refreshed posts for those recorded.

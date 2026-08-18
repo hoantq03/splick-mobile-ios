@@ -89,6 +89,15 @@ enum FeedMapper {
         )
     }
 
+    static func toCommentThreadPage(_ dto: CommentThreadPageDTO) -> CommentThreadPage {
+        CommentThreadPage(
+            comments: dto.comments.map(toComment),
+            page: dto.page,
+            limit: dto.limit,
+            hasMore: dto.hasMore
+        )
+    }
+
     static func toCommentAttachment(_ dto: CommentAttachmentDTO) -> CommentAttachment {
         CommentAttachment(
             id: dto.id,

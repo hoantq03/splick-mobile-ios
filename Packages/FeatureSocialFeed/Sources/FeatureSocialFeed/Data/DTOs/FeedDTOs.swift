@@ -15,6 +15,13 @@ struct CommentDTO: Decodable {
     let evidenceStatus: String?
 }
 
+struct CommentThreadPageDTO: Decodable {
+    let comments: [CommentDTO]
+    let page: Int
+    let limit: Int
+    let hasMore: Bool
+}
+
 struct CommentAttachmentDTO: Decodable {
     let id: UUID
     let kind: String

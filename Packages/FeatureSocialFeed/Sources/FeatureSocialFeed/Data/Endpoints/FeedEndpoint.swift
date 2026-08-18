@@ -1,5 +1,6 @@
 import Foundation
 import Networking
+import SplickDomain
 
 enum FeedEndpoint: APIEndpoint {
     case feed(page: Int, limit: Int, authorId: UUID?)
@@ -7,6 +8,7 @@ enum FeedEndpoint: APIEndpoint {
     case photoAlbumCursor(cursor: String, limit: Int, filters: PhotoAlbumFilters)
     case post(id: UUID)
     case postReactions(postId: UUID)
+    case postComments(postId: UUID, page: Int, limit: Int, filter: CommentThreadFilter)
     case batchViewed(BatchViewPostsRequestDTO)
     case createPost(CreatePostRequestDTO)
     case addReaction(postId: UUID, CreateReactionRequestDTO)
@@ -29,6 +31,7 @@ enum FeedEndpoint: APIEndpoint {
         case .photoAlbumFirstPage, .photoAlbumCursor: return "/v1/feed/photos"
         case .post(let id), .deletePost(let id): return "/v1/feed/posts/\(id)"
         case .postReactions(let postId): return "/v1/feed/posts/\(postId)/reactions"
+        case .postComments(let postId, _, _, _): return "/v1/feed/posts/\(postId)/comments"
         case .batchViewed: return "/v1/feed/posts/batch-viewed"
         case .createPost: return "/v1/feed/posts"
         case .addReaction(let postId, _): return "/v1/feed/posts/\(postId)/reactions"
@@ -51,7 +54,7 @@ enum FeedEndpoint: APIEndpoint {
 
     var method: HTTPMethod {
         switch self {
-        case .feed, .post, .postReactions, .photoAlbumFirstPage, .photoAlbumCursor,
+        case .feed, .post, .postReactions, .postComments, .photoAlbumFirstPage, .photoAlbumCursor,
              .streakSummary, .streakCalendar, .streakDayPhotos,
              .searchLocations, .nearbyLocations:
             return .get
@@ -82,6 +85,12 @@ enum FeedEndpoint: APIEndpoint {
             return [
                 URLQueryItem(name: "year", value: "\(year)"),
                 URLQueryItem(name: "month", value: "\(month)"),
+            ]
+        case .postComments(_, let page, let limit, let filter):
+            return [
+                URLQueryItem(name: "page", value: "\(page)"),
+                URLQueryItem(name: "limit", value: "\(limit)"),
+                URLQueryItem(name: "filter", value: filter.apiValue),
             ]
         case .searchLocations(let query, let limit, let lat, let lon):
             var items = [
