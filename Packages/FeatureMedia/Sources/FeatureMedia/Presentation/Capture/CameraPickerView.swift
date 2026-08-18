@@ -5,7 +5,7 @@ import UIKit
 ///
 /// Control placement:
 ///   - Top-left    : X / exit button
-///   - Top-center  : Flash toggle (auto → on → off)
+///   - Top-center  : Flash toggle (off → auto → on)
 ///   - Top-right   : Camera flip (front / rear)
 ///   - Bottom-center : Shutter
 ///   - Bottom-left   : Album picker
@@ -36,34 +36,20 @@ struct CameraPickerView: UIViewControllerRepresentable {
         picker.showsCameraControls = false
         picker.cameraDevice = .rear
         picker.cameraCaptureMode = .photo
-        picker.cameraFlashMode = .auto
+        picker.cameraFlashMode = .off
         picker.modalPresentationStyle = .fullScreen
         picker.view.backgroundColor = .black
-
-        // Scale camera preview to fill the full screen.
-        // Without this, UIImagePickerController renders the feed at 4:3 aspect,
-        // leaving a black rectangle in the lower half on tall iPhones.
-        let screen = UIScreen.main.bounds
-        let cameraAspect: CGFloat = 4.0 / 3.0
-        let screenAspect = screen.height / screen.width
-        if screenAspect > cameraAspect {
-            let scale = screenAspect / cameraAspect
-            picker.cameraViewTransform = CGAffineTransform(scaleX: scale, y: scale)
-        }
 
         let overlay = CameraControlsOverlayView()
         overlay.frame = UIScreen.main.bounds
         overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         overlay.onCapture = { picker.takePicture() }
-        overlay.onFlip = {
-            let current = picker.cameraDevice
-            picker.cameraDevice = current == .rear ? .front : .rear
-        }
+        overlay.onFlip = { context.coordinator.flipCamera() }
         overlay.onFlashToggle = {
             switch picker.cameraFlashMode {
+            case .off:  picker.cameraFlashMode = .auto
             case .auto: picker.cameraFlashMode = .on
-            case .on:   picker.cameraFlashMode = .off
-            default:    picker.cameraFlashMode = .auto
+            default:    picker.cameraFlashMode = .off
             }
             overlay.setFlashMode(picker.cameraFlashMode)
         }
@@ -71,8 +57,10 @@ struct CameraPickerView: UIViewControllerRepresentable {
         overlay.onCancel   = { context.coordinator.onResult(.cancelled) }
         overlay.setAccumulatedCount(accumulatedCount)
         overlay.setFlashMode(picker.cameraFlashMode)
+        CameraPickerView.applyFillTransform(picker)
 
         picker.cameraOverlayView = overlay
+        context.coordinator.picker = picker
         context.coordinator.overlay = overlay
 
         return picker
@@ -82,12 +70,41 @@ struct CameraPickerView: UIViewControllerRepresentable {
         context.coordinator.overlay?.setAccumulatedCount(accumulatedCount)
     }
 
+    static func applyFillTransform(_ picker: UIImagePickerController) {
+        let screen = UIScreen.main.bounds
+        let cameraAspect: CGFloat = 4.0 / 3.0
+        let screenAspect = screen.height / screen.width
+        if screenAspect > cameraAspect {
+            let scale = screenAspect / cameraAspect
+            picker.cameraViewTransform = CGAffineTransform(scaleX: scale, y: scale)
+        } else {
+            picker.cameraViewTransform = .identity
+        }
+    }
+
     final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
         let onResult: (Result) -> Void
-        weak var overlay: CameraControlsOverlayView?
+        var overlay: CameraControlsOverlayView?
+        weak var picker: UIImagePickerController?
 
         init(onResult: @escaping (Result) -> Void) {
             self.onResult = onResult
+        }
+
+        func flipCamera() {
+            guard let picker else { return }
+            let next: UIImagePickerController.CameraDevice = picker.cameraDevice == .rear ? .front : .rear
+            guard UIImagePickerController.isCameraDeviceAvailable(next) else { return }
+            let overlay = picker.cameraOverlayView
+            // UIImagePickerController ignores cameraDevice changes while a custom
+            // overlay is attached; detach, switch, then restore.
+            picker.cameraOverlayView = nil
+            picker.cameraDevice = next
+            CameraPickerView.applyFillTransform(picker)
+            picker.cameraOverlayView = overlay
+            if let overlayView = overlay as? CameraControlsOverlayView {
+                overlayView.setFlashMode(picker.cameraFlashMode)
+            }
         }
 
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
@@ -274,10 +291,10 @@ final class CameraControlsOverlayView: UIView {
         cancelButton = makeCircleButton(systemImage: "xmark", size: 18, weight: .bold)
         cancelButton.addTarget(self, action: #selector(didTapCancel), for: .touchUpInside)
 
-        flashButton = makeCircleButton(systemImage: "bolt.badge.automatic", size: 20, weight: .medium)
+        flashButton = makeCircleButton(systemImage: "bolt.slash.fill", size: 20, weight: .medium)
         flashButton.addTarget(self, action: #selector(didTapFlash), for: .touchUpInside)
 
-        flipButton = makeCircleButton(systemImage: "arrow.triangle.2.circlepath.camera", size: 20, weight: .medium)
+        flipButton = makeCircleButton(systemImage: "arrow.triangle.2.circlepath", size: 20, weight: .medium)
         flipButton.addTarget(self, action: #selector(didTapFlip), for: .touchUpInside)
 
         shutterButton = makeShutterButton()
