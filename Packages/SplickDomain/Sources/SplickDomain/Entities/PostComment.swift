@@ -109,6 +109,73 @@ public struct PostComment: Identifiable, Codable, Equatable, Sendable {
     }
 }
 
+public enum CommentThreadFilter: String, CaseIterable, Equatable, Sendable {
+    case comments = "COMMENTS"
+    case evidence = "EVIDENCE"
+    case all = "ALL"
+
+    public var apiValue: String { rawValue }
+
+    public func includesRoot(_ comment: PostComment) -> Bool {
+        guard comment.parentCommentId == nil else { return false }
+        switch self {
+        case .all: return true
+        case .comments: return comment.commentType == .standard
+        case .evidence: return comment.commentType == .evidence
+        }
+    }
+}
+
+public struct CommentThreadPage: Equatable, Sendable {
+    public let comments: [PostComment]
+    public let page: Int
+    public let limit: Int
+    public let hasMore: Bool
+
+    public init(comments: [PostComment], page: Int, limit: Int, hasMore: Bool) {
+        self.comments = comments
+        self.page = page
+        self.limit = limit
+        self.hasMore = hasMore
+    }
+
+    /// In-memory paging used by fakes and previews. Matches backend: roots only, plus full subtrees.
+    public static func paging(
+        from comments: [PostComment],
+        page: Int,
+        limit: Int,
+        filter: CommentThreadFilter
+    ) -> CommentThreadPage {
+        let roots = comments
+            .filter { filter.includesRoot($0) }
+            .sorted {
+                if $0.createdAt != $1.createdAt { return $0.createdAt < $1.createdAt }
+                return $0.id.uuidString < $1.id.uuidString
+            }
+        let offset = max(page, 0) * max(limit, 1)
+        let hasMore = roots.count > offset + limit
+        let pageRoots = Array(roots.dropFirst(offset).prefix(limit))
+        var included = Set(pageRoots.map(\.id))
+        var grew = true
+        while grew {
+            grew = false
+            for comment in comments where !included.contains(comment.id) {
+                if let parentId = comment.parentCommentId, included.contains(parentId) {
+                    included.insert(comment.id)
+                    grew = true
+                }
+            }
+        }
+        let pageComments = comments
+            .filter { included.contains($0.id) }
+            .sorted {
+                if $0.createdAt != $1.createdAt { return $0.createdAt < $1.createdAt }
+                return $0.id.uuidString < $1.id.uuidString
+            }
+        return CommentThreadPage(comments: pageComments, page: page, limit: limit, hasMore: hasMore)
+    }
+}
+
 public extension Array where Element == PostComment {
     /// Top-level comments only (legacy flat list).
     var topLevel: [PostComment] {
