@@ -543,6 +543,7 @@ enum StringsFeatureVi {
         // Feed interactions / errors
         .feedPostDelete: "Xóa bài",
         .feedPostDeleteBlockedViews: "Không thể xóa (đã có %d lượt xem)",
+        .feedPostDeleteBlockedEvidence: "Không thể xóa (đã có chứng từ thanh toán)",
         .feedPostReport: "Báo cáo",
         .feedPostHide: "Ẩn",
         .feedCommentShowMoreReplies: "Xem thêm %d phản hồi",
@@ -575,6 +576,7 @@ enum StringsFeatureVi {
         .feedErrorAccountRefresh: "Không xác định được tài khoản. Hãy thử kéo refresh tab Feed.",
         .feedPostNotFound: "Không tìm thấy bài viết.",
         .feedPostDeleteHasViewers: "Không thể xóa vì đã có người xem bài viết.",
+        .feedPostDeleteHasEvidence: "Không thể xóa vì đã có chứng từ thanh toán.",
         .feedAlbumSearchCaption: "Tìm theo caption",
         .feedAlbumPickFriend: "Chọn bạn bè",
         .feedAlbumPickGroup: "Chọn nhóm",

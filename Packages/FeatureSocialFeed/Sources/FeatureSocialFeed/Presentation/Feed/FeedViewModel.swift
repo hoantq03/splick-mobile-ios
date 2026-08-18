@@ -690,7 +690,7 @@ public final class FeedViewModel: ObservableObject {
         }
 
         guard post.canDelete else {
-            alertMessage = languageService.text(.feedPostDeleteHasViewers)
+            alertMessage = languageService.text(.feedPostDeleteHasEvidence)
             return
         }
 

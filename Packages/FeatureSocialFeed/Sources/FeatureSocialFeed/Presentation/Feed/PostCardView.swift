@@ -219,7 +219,7 @@ struct PostCardView: View, Equatable {
                 } else {
                     Button {} label: {
                         Label(
-                            languageService.format(.feedPostDeleteBlockedViews, displayViewCount),
+                            languageService.text(.feedPostDeleteBlockedEvidence),
                             systemImage: "trash"
                         )
                     }

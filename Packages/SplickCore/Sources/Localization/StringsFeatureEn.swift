@@ -543,6 +543,7 @@ enum StringsFeatureEn {
         // Feed interactions / errors
         .feedPostDelete: "Delete post",
         .feedPostDeleteBlockedViews: "Can't delete (already has %d views)",
+        .feedPostDeleteBlockedEvidence: "Can't delete (payment proof already submitted)",
         .feedPostReport: "Report",
         .feedPostHide: "Hide",
         .feedCommentShowMoreReplies: "View %d more replies",
@@ -575,6 +576,7 @@ enum StringsFeatureEn {
         .feedErrorAccountRefresh: "Couldn't identify your account. Pull to refresh the Feed tab.",
         .feedPostNotFound: "Post not found.",
         .feedPostDeleteHasViewers: "Can't delete because someone has already viewed this post.",
+        .feedPostDeleteHasEvidence: "Can't delete because payment proof has already been submitted.",
         .feedAlbumSearchCaption: "Search by caption",
         .feedAlbumPickFriend: "Select friends",
         .feedAlbumPickGroup: "Select groups",

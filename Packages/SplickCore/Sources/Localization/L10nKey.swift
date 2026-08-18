@@ -779,6 +779,7 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     // Feed interactions / errors
     case feedPostDelete = "feed.post.delete"
     case feedPostDeleteBlockedViews = "feed.post.delete_blocked_views"
+    case feedPostDeleteBlockedEvidence = "feed.post.delete_blocked_evidence"
     case feedPostReport = "feed.post.report"
     case feedPostHide = "feed.post.hide"
     case feedCommentShowMoreReplies = "feed.comment.show_more_replies"
@@ -811,6 +812,7 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case feedErrorAccountRefresh = "feed.error.account_refresh"
     case feedPostNotFound = "feed.post.not_found"
     case feedPostDeleteHasViewers = "feed.post.delete_has_viewers"
+    case feedPostDeleteHasEvidence = "feed.post.delete_has_evidence"
     case feedAlbumSearchCaption = "feed.album.search_caption"
     case feedAlbumPickFriend = "feed.album.pick_friend"
     case feedAlbumPickGroup = "feed.album.pick_group"

@@ -497,7 +497,10 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
         }
 
         guard posts[index].canDelete else {
-            throw NetworkError.forbidden
+            throw NetworkError.apiError(
+                code: "POST_HAS_EVIDENCE",
+                message: "Can't delete because payment proof has already been submitted."
+            )
         }
 
         posts.remove(at: index)

@@ -117,6 +117,8 @@ public enum APIErrorLocalization {
             return L10n.string(.feedBillReminderNoTargets, locale: locale)
         case "REMINDER_RATE_LIMITED":
             return L10n.string(.feedBillReminderRateLimited, locale: locale)
+        case "POST_HAS_EVIDENCE":
+            return L10n.string(.feedPostDeleteHasEvidence, locale: locale)
         default:
             return fallback.isEmpty
                 ? L10n.string(.errorNetworkUnexpected, locale: locale)

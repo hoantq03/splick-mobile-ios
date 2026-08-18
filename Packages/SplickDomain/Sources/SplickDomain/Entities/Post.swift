@@ -179,7 +179,16 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         lhs.id == rhs.id && lhs.version == rhs.version
     }
 
-    public var canDelete: Bool { viewCount == 0 }
+    /// Author-only delete is enforced in the UI. Backend also blocks share-bill posts
+    /// that already have a payment-evidence comment (`POST_HAS_EVIDENCE`).
+    public var canDelete: Bool {
+        guard feedKind == .shareBill else { return true }
+        if comments.contains(where: { $0.isEvidence && !$0.isDeleted }) { return false }
+        if billSplit?.splits.contains(where: { $0.latestEvidenceCommentId != nil }) == true {
+            return false
+        }
+        return true
+    }
 
     public var hasMultipleMedia: Bool {
         displayMediaItems.count > 1
