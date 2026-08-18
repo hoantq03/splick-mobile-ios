@@ -51,9 +51,6 @@ struct PostDTO: Decodable {
     let viewCount: Int?
     let viewers: [AuthorDTO]?
     let audience: PostAudienceDTO?
-    let reactionCount: Int?
-    let reactorCount: Int?
-    let reactionPreview: [ReactionUserSummaryDTO]?
 }
 
 struct PostLocationDTO: Decodable {
