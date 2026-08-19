@@ -26,7 +26,9 @@ struct ProfileCompactActionButton: View {
             .padding(.horizontal, SplickTheme.Spacing.xxxs)
             .foregroundStyle(tint)
             .background(SplickTheme.Colors.secondaryBackground)
-            .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small, style: .continuous))
+            .clipShape(
+                RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous)
+            )
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)

@@ -12,6 +12,7 @@ public struct FriendUserProfileView: View {
     @Environment(\.openDirectMessage) private var openDirectMessage
     @Environment(\.openLinkedPost) private var openLinkedPost
     @Environment(\.openProfileSettings) private var openProfileSettings
+    @State private var isOpeningMessage = false
 
     private static let postGridSpacing = SplickTheme.Spacing.xs
     private let postGridColumns = Array(
@@ -71,6 +72,8 @@ public struct FriendUserProfileView: View {
                         SplickButton(languageService.text(.profileRetry), style: .secondary) {
                             Task { await viewModel.loadProfile() }
                         }
+                        .fixedSize(horizontal: true, vertical: false)
+                        .frame(maxWidth: .infinity)
                         .padding(.horizontal, SplickTheme.Spacing.xl)
                     } else if !viewModel.isBotProfile, !viewModel.isOwnProfile {
                         relationshipActions
@@ -101,7 +104,7 @@ public struct FriendUserProfileView: View {
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(languageService.text(.commonDone)) { dismiss() }
+                    Button(languageService.text(.commonClose)) { dismiss() }
                 }
             }
             .overlay {
@@ -358,7 +361,7 @@ public struct FriendUserProfileView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(SplickTheme.Spacing.md)
                 .background(SplickTheme.Colors.cardBackground)
-                .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium))
+                .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous))
         }
     }
 
@@ -422,9 +425,18 @@ public struct FriendUserProfileView: View {
                         icon: "message.fill",
                         title: languageService.text(.messagingMessageButton),
                         tint: SplickTheme.Colors.primaryGradientStart,
-                        isDisabled: viewModel.isProcessing
+                        isDisabled: viewModel.isProcessing || isOpeningMessage
                     ) {
-                        Task { _ = await openDM(viewModel.user.id) }
+                        guard !isOpeningMessage else { return }
+                        isOpeningMessage = true
+                        Task { @MainActor in
+                            let conversationId = await openDM(viewModel.user.id)
+                            if conversationId != nil {
+                                dismiss()
+                            } else {
+                                isOpeningMessage = false
+                            }
+                        }
                     }
                 }
 

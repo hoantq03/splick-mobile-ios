@@ -59,6 +59,7 @@ struct MessagingTabRoot: View {
         .environment(\.chatGroupManagementActions, container.makeChatGroupManagementActions())
         .onAppear {
             container.conversationListViewModel.currentUserId = appState.currentUser?.id
+            consumePendingMessagingNavigationIfNeeded()
         }
         .onChange(of: appState.currentUser?.id) { userId in
             container.conversationListViewModel.currentUserId = userId
@@ -75,11 +76,11 @@ struct MessagingTabRoot: View {
             profileRoute = MessagingUserProfileRoute(user: user)
         }
         .onChange(of: appState.pendingMessagingNavigation?.conversationId) { _ in
-            guard let navigation = appState.pendingMessagingNavigation else { return }
-            Task {
-                await openConversation(from: navigation)
-                appState.clearPendingMessagingNavigation()
-            }
+            consumePendingMessagingNavigationIfNeeded()
+        }
+        .onChange(of: appState.selectedTab) { tab in
+            guard tab == .messages else { return }
+            consumePendingMessagingNavigationIfNeeded()
         }
         .sheet(item: $profileRoute) { route in
             FriendUserProfileView(
@@ -124,6 +125,14 @@ struct MessagingTabRoot: View {
             .environmentObject(container.languageService)
             .environmentObject(container.customEmojiStore)
             .environment(\.customEmojiDependencies, container.customEmojiDependencies)
+        }
+    }
+
+    private func consumePendingMessagingNavigationIfNeeded() {
+        guard let navigation = appState.pendingMessagingNavigation else { return }
+        appState.clearPendingMessagingNavigation()
+        Task {
+            await openConversation(from: navigation)
         }
     }
 

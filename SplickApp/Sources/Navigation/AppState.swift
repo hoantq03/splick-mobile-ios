@@ -97,6 +97,19 @@ final class AppState: ObservableObject {
         pendingMessagingNavigation = nil
     }
 
+    /// Opens a chat thread from profile / deep link: switch to Messages and push the conversation.
+    func openConversation(_ conversationId: UUID, highlightMessageId: UUID? = nil) {
+        pendingMessagingNavigation = PendingMessagingNavigation(
+            conversationId: conversationId,
+            highlightMessageId: highlightMessageId
+        )
+        withAnimation(.easeInOut(duration: 0.35)) {
+            selectedTab = .messages
+        }
+        showNotifications = false
+        showProfileSettings = false
+    }
+
     func clearPendingUserProfileNavigation() {
         pendingUserProfileNavigation = nil
     }
@@ -213,14 +226,7 @@ final class AppState: ObservableObject {
             }
             showNotifications = false
         case .conversation(let conversationId, let highlightMessageId):
-            pendingMessagingNavigation = PendingMessagingNavigation(
-                conversationId: conversationId,
-                highlightMessageId: highlightMessageId
-            )
-            withAnimation(.easeInOut(duration: 0.35)) {
-                selectedTab = .messages
-            }
-            showNotifications = false
+            openConversation(conversationId, highlightMessageId: highlightMessageId)
         case .inbox:
             selectedTab = .feed
             showNotifications = true
