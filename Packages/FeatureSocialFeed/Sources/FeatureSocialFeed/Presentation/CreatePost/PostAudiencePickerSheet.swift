@@ -34,11 +34,12 @@ struct PostAudiencePickerSheet: View {
                     .padding(SplickTheme.Spacing.md)
                     .padding(.bottom, SplickTheme.Spacing.xl)
                 }
-                .navigationTitle(languageService.text(.feedAudienceTitle))
+                .navigationTitle("")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button(languageService.text(.commonClose)) { dismiss() }
+                    ToolbarItem(placement: .topBarLeading) {
+                        Text(languageService.text(.feedAudienceTitle))
+                            .font(SplickTheme.Typography.headline)
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button(languageService.text(.commonDone)) { dismiss() }

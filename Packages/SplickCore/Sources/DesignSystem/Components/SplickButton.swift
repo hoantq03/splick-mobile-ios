@@ -41,7 +41,7 @@ public struct SplickButton: View {
                 Text(title)
                     .font(SplickTheme.Typography.headline)
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, alignment: .center)
             .padding(.vertical, SplickTheme.Spacing.sm)
             .padding(.horizontal, SplickTheme.Spacing.lg)
             .background(backgroundColor)

@@ -56,7 +56,8 @@ public struct ErrorView: View {
                 SplickButton(retryLabel, style: .primary) {
                     retryAction()
                 }
-                .padding(.horizontal, SplickTheme.Spacing.xxl)
+                .fixedSize(horizontal: true, vertical: false)
+                .frame(maxWidth: .infinity)
                 .padding(.top, SplickTheme.Spacing.xs)
             }
         }
