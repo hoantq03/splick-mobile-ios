@@ -23,7 +23,15 @@ let package = Package(
                 .product(name: "Localization", package: "SplickCore"),
                 .product(name: "SplickDomain", package: "SplickDomain"),
             ],
-            path: "Sources/FeatureMedia"
+            path: "Sources/FeatureMedia",
+            resources: [
+                .process("Resources"),
+            ]
+        ),
+        .testTarget(
+            name: "FeatureMediaTests",
+            dependencies: ["FeatureMedia"],
+            path: "Tests/FeatureMediaTests"
         ),
     ]
 )
