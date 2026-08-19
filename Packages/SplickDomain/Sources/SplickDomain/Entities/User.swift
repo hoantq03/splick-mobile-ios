@@ -41,18 +41,21 @@ public struct UserSummary: Identifiable, Codable, Equatable, Sendable {
     /// Legal / profile display name when `displayName` shows a friend nickname.
     public let subtitle: String?
     public let avatarURL: URL?
+    public let viewedAt: Date?
 
     public init(
         id: UUID,
         username: String,
         displayName: String,
         subtitle: String? = nil,
-        avatarURL: URL? = nil
+        avatarURL: URL? = nil,
+        viewedAt: Date? = nil
     ) {
         self.id = id
         self.username = username
         self.displayName = displayName
         self.subtitle = subtitle
         self.avatarURL = avatarURL
+        self.viewedAt = viewedAt
     }
 }

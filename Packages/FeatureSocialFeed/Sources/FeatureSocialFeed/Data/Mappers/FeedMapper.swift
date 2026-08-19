@@ -159,7 +159,8 @@ enum FeedMapper {
             id: dto.id,
             username: dto.username,
             displayName: dto.displayName,
-            avatarURL: dto.avatarUrl.flatMap(URL.init(string:))
+            avatarURL: dto.avatarUrl.flatMap(URL.init(string:)),
+            viewedAt: dto.viewedAt
         )
     }
 

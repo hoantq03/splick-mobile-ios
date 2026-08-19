@@ -31,6 +31,13 @@ struct ViewersListSheet: View {
                                 .font(.system(size: 11))
                                 .foregroundStyle(SplickTheme.Colors.textTertiary)
                         }
+                        Spacer(minLength: 8)
+                        if let viewedAt = viewer.viewedAt {
+                            Text(languageService.compactRelativeTime(from: viewedAt))
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(SplickTheme.Colors.textTertiary)
+                                .monospacedDigit()
+                        }
                     }
                 }
                 .buttonStyle(.plain)

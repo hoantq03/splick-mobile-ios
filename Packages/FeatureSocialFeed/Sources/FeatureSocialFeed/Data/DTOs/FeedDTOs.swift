@@ -107,6 +107,7 @@ struct AuthorDTO: Decodable {
     let username: String
     let displayName: String
     let avatarUrl: String?
+    let viewedAt: Date?
 }
 
 struct ReactionDTO: Decodable {
