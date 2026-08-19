@@ -7,6 +7,7 @@ public enum WidgetCurrencyFormatter {
         formatter.maximumFractionDigits = currency == "VND" ? 0 : 2
         formatter.minimumFractionDigits = currency == "VND" ? 0 : 2
         formatter.groupingSeparator = ","
+        formatter.decimalSeparator = "."
         let numeric = NSDecimalNumber(decimal: amount)
         let formatted = formatter.string(from: numeric) ?? numeric.stringValue
         switch currency.uppercased() {

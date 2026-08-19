@@ -1,19 +1,10 @@
 import Foundation
 import SwiftUI
+import Common
 
 enum VNDMoneyFormat {
-    private static let displayFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.groupingSeparator = "."
-        formatter.decimalSeparator = ","
-        formatter.maximumFractionDigits = 0
-        formatter.minimumFractionDigits = 0
-        return formatter
-    }()
-
     static func format(_ amount: Decimal) -> String {
-        displayFormatter.string(from: amount as NSDecimalNumber) ?? "0"
+        SplickMoneyFormat.string(from: amount)
     }
 
     static func formatDisplay(_ amount: Decimal, currency: String = "đ") -> String {
@@ -31,7 +22,7 @@ enum VNDMoneyFormat {
         return Decimal(string: cleaned)
     }
 
-    /// Keeps digits only, formats with "." grouping while typing.
+    /// Keeps digits only, formats with "," grouping while typing.
     static func sanitizedInput(from raw: String) -> String {
         let digits = raw.filter(\.isNumber)
         guard !digits.isEmpty else { return "" }

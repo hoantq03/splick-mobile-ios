@@ -605,11 +605,8 @@ public struct ExpenseListView: View {
     }
 
     private func formatAmount(_ amount: Decimal) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "VND"
-        formatter.maximumFractionDigits = 0
-        return formatter.string(from: amount as NSDecimalNumber) ?? "\(amount)"
+        let symbol = Decimal.displayCurrencySymbol(for: "VND")
+        return "\(SplickMoneyFormat.string(from: amount))\(symbol)"
     }
 
     private func listRowRevealDelay(index: Int, total: Int) -> Double {
@@ -772,11 +769,12 @@ private struct ExpenseRowDescriptionText: View {
     }
 
     private func formatAmount(_ amount: Decimal) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = expense.currency
-        formatter.maximumFractionDigits = 0
-        return formatter.string(from: amount as NSDecimalNumber) ?? "\(amount)"
+        let symbol = Decimal.displayCurrencySymbol(for: expense.currency)
+        let numberPart = SplickMoneyFormat.string(from: amount)
+        if expense.currency.uppercased() == "USD" {
+            return "\(symbol)\(numberPart)"
+        }
+        return "\(numberPart)\(symbol)"
     }
 }
 

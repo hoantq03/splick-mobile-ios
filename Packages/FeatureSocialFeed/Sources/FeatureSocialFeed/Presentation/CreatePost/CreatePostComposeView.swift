@@ -1039,7 +1039,7 @@ private struct ComposeLocationEditorView: View {
                     }
                 if !viewModel.locationGpsAvailable {
                     Text(languageService.text(.feedCreateLocationEnableGps))
-                        .font(SplickTheme.Typography.footnote)
+                        .font(SplickTheme.Typography.caption)
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
                 }
             } header: {

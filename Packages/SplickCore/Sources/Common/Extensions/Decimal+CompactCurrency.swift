@@ -32,7 +32,7 @@ public extension Decimal {
         }
     }
 
-    /// Full digit amount with currency symbol for chart centers — e.g. `1.250.000đ`, `$1,250`.
+    /// Full digit amount with currency symbol for chart centers — e.g. `1,250,000đ`, `$1,250`.
     /// Shows up to 10 integer digits; larger values fall back to compact `K`/`M` form.
     func chartAmountString(currencyCode: String = "VND", locale: Locale = .current) -> String {
         Self.chartAmountString(for: self, currencyCode: currencyCode, locale: locale)
@@ -53,14 +53,7 @@ public extension Decimal {
         if digitCount > 10 {
             numberPart = compactAmountString(for: Decimal(absolute))
         } else {
-            let formatter = NumberFormatter()
-            formatter.numberStyle = .decimal
-            formatter.locale = locale
-            formatter.maximumFractionDigits = 0
-            formatter.minimumFractionDigits = 0
-            formatter.usesGroupingSeparator = true
-            numberPart = formatter.string(from: NSDecimalNumber(value: absolute))
-                ?? String(format: "%.0f", absolute)
+            numberPart = SplickMoneyFormat.string(from: Decimal(absolute))
         }
 
         let signedNumber = sign + numberPart
@@ -80,17 +73,15 @@ public extension Decimal {
 
     private static func formatCompactUnit(_ value: Double, suffix: String) -> String {
         if suffix.isEmpty {
-            return String(format: "%.0f", value.rounded())
+            return SplickMoneyFormat.string(from: Decimal(value.rounded()))
         }
 
         if value >= 100 {
-            return String(format: "%.0f%@", value.rounded(), suffix)
+            return SplickMoneyFormat.string(from: Decimal(value.rounded())) + suffix
         }
 
         let rounded = (value * 10).rounded() / 10
-        if rounded == rounded.rounded(.down) && rounded.truncatingRemainder(dividingBy: 1) == 0 {
-            return String(format: "%.0f%@", rounded, suffix)
-        }
-        return String(format: "%.1f%@", rounded, suffix)
+        let formatted = SplickMoneyFormat.string(from: Decimal(rounded), maxFractionDigits: 1)
+        return formatted + suffix
     }
 }

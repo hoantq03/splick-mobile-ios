@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Text field that formats VND amounts with "." while typing (not only on blur).
+/// Text field that formats VND amounts with "," grouping while typing (not only on blur).
 struct LiveVNDMoneyTextField: UIViewRepresentable {
     @Binding var text: String
     var font: UIFont = .systemFont(ofSize: 28, weight: .bold)

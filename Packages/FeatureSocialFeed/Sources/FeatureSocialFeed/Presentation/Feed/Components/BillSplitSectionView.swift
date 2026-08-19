@@ -1,5 +1,6 @@
 import SwiftUI
 import DesignSystem
+import Common
 import Localization
 import SplickDomain
 import FeatureStickers
@@ -595,10 +596,11 @@ struct BillSplitSectionView: View {
     }
 
     private func formatMoney(_ amount: Decimal, currency: String) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = currency
-        formatter.maximumFractionDigits = 0
-        return formatter.string(from: amount as NSDecimalNumber) ?? "\(amount)"
+        let symbol = Decimal.displayCurrencySymbol(for: currency)
+        let numberPart = SplickMoneyFormat.string(from: amount)
+        if currency.uppercased() == "USD" {
+            return "\(symbol)\(numberPart)"
+        }
+        return "\(numberPart)\(symbol)"
     }
 }

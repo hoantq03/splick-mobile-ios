@@ -1,4 +1,5 @@
 import Foundation
+import Common
 
 public enum LocaleFormatting {
     public static func locale(for appLocale: AppLocale) -> Locale {
@@ -6,11 +7,7 @@ public enum LocaleFormatting {
     }
 
     public static func currency(code: String, appLocale: AppLocale) -> NumberFormatter {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = code
-        formatter.locale = locale(for: appLocale)
-        return formatter
+        SplickMoneyFormat.numberFormatter(maxFractionDigits: code.uppercased() == "VND" ? 0 : 2)
     }
 
     public static func relativeDate(_ date: Date, appLocale: AppLocale) -> String {
