@@ -5,7 +5,8 @@ import SplickDomain
 import FeatureFriends
 import FeatureStickers
 
-/// Loads post data if needed, then shows `PostDetailView` (avoids blank navigation).
+/// Shows the already-loaded feed post immediately, then loads comments.
+/// Fetches only when the post is not already in the feed (notifications, deep links).
 struct PostDetailContainerView: View {
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.tabBarScrollState) private var tabBarScrollState

@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Top scroll margin for push-style detail screens (post detail) under a transparent nav bar.
 public enum SplickDetailScrollInsetMetrics {
-    private static let topGap: CGFloat = SplickTheme.Spacing.sm
+    private static let topGap: CGFloat = SplickTheme.Spacing.xxs
 
     public static func resolvedTopMargin(for geometry: GeometryProxy) -> CGFloat {
         let globalMinY = geometry.frame(in: .global).minY

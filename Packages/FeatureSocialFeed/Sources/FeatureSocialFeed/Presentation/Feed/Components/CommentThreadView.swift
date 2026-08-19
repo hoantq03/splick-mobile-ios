@@ -130,11 +130,11 @@ private enum CommentRowStyle {
         }
     }
 
-    /// Lifts the name row so glyphs sit flush with the avatar's top edge (Text line metrics).
+    /// Slight lift so the name lines up with the avatar, not above its rim.
     var nameTopOpticalInset: CGFloat {
         switch self {
-        case .root: return -4
-        case .reply: return -3.5
+        case .root: return -1
+        case .reply: return -1
         }
     }
 
@@ -476,8 +476,6 @@ struct CommentRowView: View {
             ))
 
             VStack(alignment: .leading, spacing: 0) {
-                // Top-align with avatar rim: Text line metrics sit below the view top;
-                // firstTextBaseline + lift keeps the name flush with avatar top.
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Button { onUserTap(comment.author) } label: {
                         Text(comment.author.displayName)

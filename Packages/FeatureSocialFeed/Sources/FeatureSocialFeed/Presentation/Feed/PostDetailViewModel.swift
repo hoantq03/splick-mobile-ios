@@ -36,8 +36,6 @@ final class PostDetailViewModel: ObservableObject {
     func setFilter(_ filter: CommentThreadFilter) async {
         guard filter != commentFilter else { return }
         commentFilter = filter
-        allComments = []
-        displayedTopLevel = []
         commentsLoaded = false
         hasMore = false
         await reload()

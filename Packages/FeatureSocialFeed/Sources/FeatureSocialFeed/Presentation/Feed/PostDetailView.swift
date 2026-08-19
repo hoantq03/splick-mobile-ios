@@ -40,7 +40,9 @@ struct PostDetailView: View {
     @State private var cardPresentation: PostCardPresentation?
     @State private var paymentEvidencePhotoPickerItems: [PhotosPickerItem] = []
     @State private var observedPendingCommentIds = Set<UUID>()
+    @State private var commentsListMinHeight: CGFloat = 0
     @StateObject private var cardActions = PostCardActions()
+    @State private var commentsRevealed = false
 
     init(
         post: Post,
@@ -83,7 +85,7 @@ struct PostDetailView: View {
     var body: some View {
         ScrollViewReader { scrollProxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
+                LazyVStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
                     PostCardView(
                         post: livePost,
                         currentUser: feedViewModel.currentUser ?? currentUserSummary,
@@ -93,8 +95,11 @@ struct PostDetailView: View {
                         initialMediaIndex: initialMediaIndex
                     )
                     .equatable()
+                    .id(post.id)
 
                     commentsSection
+                        .opacity(commentsRevealed ? 1 : 0)
+                        .offset(y: commentsRevealed ? 0 : 16)
                 }
                 .padding(.horizontal, SplickTheme.Spacing.md)
             }
@@ -158,12 +163,16 @@ struct PostDetailView: View {
             Text(feedViewModel.alertMessage ?? "")
         }
         .task {
-            await feedViewModel.refreshPost(id: post.id, allowingConcurrentFeedRefresh: true)
+            // Keep the feed card as-is; only append comments. Pull-to-refresh still
+            // reloads the post when the user asks.
             await commentPager.loadInitial()
         }
         .onAppear {
             tabBarScrollState?.hide(flushToBottom: true)
             configureCardActions()
+            withAnimation(.easeOut(duration: 0.34)) {
+                commentsRevealed = true
+            }
             // Defer remaining @Published updates so we don't publish during view updates.
             Task { @MainActor in
                 feedViewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
@@ -420,84 +429,103 @@ struct PostDetailView: View {
     }
 
     private var commentsSection: some View {
-        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-            HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
-                Text(languageService.text(.feedPostCommentsHeader))
-                    .font(SplickTheme.Typography.headline)
-                Spacer(minLength: 8)
-                CommentThreadFilterBar(
-                    selected: commentPager.commentFilter,
-                    onSelect: { filter in
-                        Task { await commentPager.setFilter(filter) }
-                    }
-                )
-            }
-
-            if commentPager.commentsLoaded && commentPager.displayedTopLevel.isEmpty {
-                Text(
-                    languageService.text(
-                        commentPager.commentFilter == .evidence
-                            ? .feedPostCommentsEmptyEvidence
-                            : .feedPostCommentsEmpty
+        ZStack(alignment: .topLeading) {
+            Color.clear
+                .frame(minHeight: commentsListMinHeight)
+                .frame(maxWidth: .infinity)
+            VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+                HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
+                    Text(languageService.text(.feedPostCommentsHeader))
+                        .font(SplickTheme.Typography.headline)
+                    Spacer(minLength: 8)
+                    CommentThreadFilterBar(
+                        selected: commentPager.commentFilter,
+                        onSelect: { filter in
+                            Task { await commentPager.setFilter(filter) }
+                        }
                     )
-                )
+                }
+
+                if commentPager.commentsLoaded && commentPager.displayedTopLevel.isEmpty {
+                    Text(
+                        languageService.text(
+                            commentPager.commentFilter == .evidence
+                                ? .feedPostCommentsEmptyEvidence
+                                : .feedPostCommentsEmpty
+                        )
+                    )
                     .font(.system(size: 12))
                     .foregroundStyle(SplickTheme.Colors.textTertiary)
-            } else if !commentPager.commentsLoaded && commentPager.isLoadingPage {
-                SplickSpinner(size: .small)
+                } else if !commentPager.commentsLoaded
+                    && commentPager.displayedTopLevel.isEmpty
+                    && commentPager.isLoadingPage {
+                    SplickSpinner(size: .small)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, SplickTheme.Spacing.sm)
+                }
+
+                CommentThreadView(
+                    post: livePost,
+                    comments: commentPager.allComments,
+                    roots: commentPager.displayedTopLevel,
+                    expandedParents: commentPager.expandedParents,
+                    highlightedCommentId: highlightedCommentId,
+                    pendingCommentIds: feedViewModel.pendingCommentIds,
+                    repliesPreviewCount: commentPager.repliesPreviewCount,
+                    canReplyToComment: { feedViewModel.canReply(to: $0) },
+                    canModerateEvidence: { feedViewModel.canModerateEvidence(on: $0, post: livePost) },
+                    onReply: { comment in
+                        guard feedViewModel.canReply(to: comment) else { return }
+                        commentPager.expandAncestorChain(of: comment)
+                        withAnimation(Self.replyBannerAnimation) {
+                            replyTarget = comment
+                        }
+                    },
+                    onUserTap: { openProfile(for: $0) },
+                    onViewMoreReplies: { parentId in
+                        commentPager.expandReplies(for: parentId)
+                    },
+                    onApproveEvidence: { comment in
+                        guard let evidenceId = comment.evidenceId else { return }
+                        Task {
+                            await feedViewModel.approvePaymentEvidence(postId: post.id, evidenceId: evidenceId)
+                            await commentPager.reload()
+                        }
+                    },
+                    onRejectEvidence: { comment in
+                        rejectEvidenceTarget = comment
+                        rejectReason = ""
+                    }
+                )
+
+                if commentPager.canLoadMore {
+                    Button {
+                        Task { await commentPager.loadNextPage() }
+                    } label: {
+                        if commentPager.isLoadingPage {
+                            SplickSpinner(size: .small)
+                        } else {
+                            Text(languageService.text(.feedPostCommentsLoadMore))
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                    }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, SplickTheme.Spacing.sm)
+                }
             }
-
-            CommentThreadView(
-                post: livePost,
-                comments: commentPager.allComments,
-                roots: commentPager.displayedTopLevel,
-                expandedParents: commentPager.expandedParents,
-                highlightedCommentId: highlightedCommentId,
-                pendingCommentIds: feedViewModel.pendingCommentIds,
-                repliesPreviewCount: commentPager.repliesPreviewCount,
-                canReplyToComment: { feedViewModel.canReply(to: $0) },
-                canModerateEvidence: { feedViewModel.canModerateEvidence(on: $0, post: livePost) },
-                onReply: { comment in
-                    guard feedViewModel.canReply(to: comment) else { return }
-                    commentPager.expandAncestorChain(of: comment)
-                    withAnimation(Self.replyBannerAnimation) {
-                        replyTarget = comment
-                    }
-                },
-                onUserTap: { openProfile(for: $0) },
-                onViewMoreReplies: { parentId in
-                    commentPager.expandReplies(for: parentId)
-                },
-                onApproveEvidence: { comment in
-                    guard let evidenceId = comment.evidenceId else { return }
-                    Task {
-                        await feedViewModel.approvePaymentEvidence(postId: post.id, evidenceId: evidenceId)
-                        await commentPager.reload()
-                    }
-                },
-                onRejectEvidence: { comment in
-                    rejectEvidenceTarget = comment
-                    rejectReason = ""
+            .fixedSize(horizontal: false, vertical: true)
+            .background {
+                GeometryReader { geo in
+                    Color.clear.preference(key: CommentListHeightKey.self, value: geo.size.height)
                 }
-            )
-
-            if commentPager.canLoadMore {
-                Button {
-                    Task { await commentPager.loadNextPage() }
-                } label: {
-                    if commentPager.isLoadingPage {
-                        SplickSpinner(size: .small)
-                    } else {
-                        Text(languageService.text(.feedPostCommentsLoadMore))
-                            .font(.system(size: 12, weight: .medium))
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, SplickTheme.Spacing.sm)
             }
         }
+        .onPreferenceChange(CommentListHeightKey.self) { height in
+            guard commentPager.commentsLoaded, height > 0 else { return }
+            commentsListMinHeight = height
+        }
+        .animation(.easeOut(duration: 0.32), value: commentPager.commentsLoaded)
+        .animation(.easeOut(duration: 0.28), value: commentPager.commentFilter)
     }
 
     private func openProfile(for user: UserSummary) {
@@ -529,13 +557,14 @@ struct PostDetailView: View {
             cardPresentation = presentation
         }
         cardActions.onSendBillReminder = { postId, targetUserIds, message, attachments in
-            try await feedViewModel.sendBillReminder(
+            let result = try await feedViewModel.sendBillReminder(
                 postId: postId,
                 targetUserIds: targetUserIds,
                 message: message,
                 submissionAttachments: attachments
             )
             await commentPager.reload()
+            return result
         }
         cardActions.onSubmitPaymentEvidence = { postId, splitId, message, attachments in
             try await feedViewModel.submitPaymentEvidence(
@@ -639,6 +668,13 @@ private struct CommentThreadFilterBar: View {
         case .evidence: return languageService.text(.feedPostCommentsFilterEvidence)
         case .all: return languageService.text(.feedPostCommentsFilterAll)
         }
+    }
+}
+
+private struct CommentListHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 
