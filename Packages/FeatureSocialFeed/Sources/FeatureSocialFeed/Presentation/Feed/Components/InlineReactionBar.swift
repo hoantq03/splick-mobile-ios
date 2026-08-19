@@ -13,7 +13,7 @@ private struct ReactionBarFrameKey: PreferenceKey {
     }
 }
 
-/// Always-visible emoji row. Tap = react with bounce; long-press + drag = hover scale + release to add.
+/// Always-visible emoji row. Tap or long-press to react; a swipe/scroll never drops an emoji.
 struct InlineReactionBar: View {
     @ObservedObject private var preferences = QuickReactionPreferences.shared
 
@@ -23,6 +23,7 @@ struct InlineReactionBar: View {
 
     @State private var highlightedIndex: Int?
     @State private var isDragSelecting = false
+    @State private var cancelledForScroll = false
     @State private var barFrame: CGRect = .zero
     @State private var bounceIndex: Int?
 
@@ -31,6 +32,9 @@ struct InlineReactionBar: View {
     /// Long-press hover (doubled from 1.45 / -10).
     private let hoverScale: CGFloat = 2.9
     private let hoverLift: CGFloat = -20
+    /// Fail the long-press if the finger moves this far — lets the feed scroll win.
+    private let longPressDuration: TimeInterval = 0.4
+    private let scrollCancelDistance: CGFloat = 16
     /// Keep the fly (pop + fall ≈ 0.67s) visible before the feed diff remounts the card.
     private let reactionCommitDelay: TimeInterval = 0.55
     private static let selectionFeedback = UISelectionFeedbackGenerator()
@@ -75,48 +79,55 @@ struct InlineReactionBar: View {
         let isHighlighted = highlightedIndex == index
         let isBouncing = bounceIndex == index
 
-        return Button {
-            guard !isDragSelecting else { return }
-            commitReaction(emoji: emoji, index: index)
-        } label: {
-            EmojiView(value: emoji, size: slotSize)
-                .frame(width: slotSize, height: slotSize)
-                .scaleEffect(isHighlighted ? hoverScale : (isBouncing ? 1.22 : 1))
-                .offset(y: isHighlighted ? hoverLift : 0)
-                .zIndex(isHighlighted ? 1 : 0)
-                .animation(.spring(response: 0.18, dampingFraction: 0.78), value: isHighlighted)
-                .animation(.spring(response: 0.24, dampingFraction: 0.72), value: isBouncing)
-        }
-        .buttonStyle(.plain)
+        return EmojiView(value: emoji, size: slotSize)
+            .frame(width: slotSize, height: slotSize)
+            .scaleEffect(isHighlighted ? hoverScale : (isBouncing ? 1.22 : 1))
+            .offset(y: isHighlighted ? hoverLift : 0)
+            .zIndex(isHighlighted ? 1 : 0)
+            .animation(.spring(response: 0.18, dampingFraction: 0.78), value: isHighlighted)
+            .animation(.spring(response: 0.24, dampingFraction: 0.72), value: isBouncing)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                guard !isDragSelecting, !cancelledForScroll else { return }
+                commitReaction(emoji: emoji, index: index)
+            }
+            .accessibilityAddTraits(.isButton)
     }
 
     private var plusButton: some View {
         let plusIndex = preferences.quickEmojis.count
         let isHighlighted = highlightedIndex == plusIndex
 
-        return Button {
-            guard !isDragSelecting else { return }
-            onCustomEmoji()
-        } label: {
-            Image(systemName: "plus")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(SplickTheme.Colors.textSecondary)
-                .frame(width: slotSize, height: slotSize)
-                .background(Circle().fill(SplickTheme.Colors.tertiaryBackground))
-                .scaleEffect(isHighlighted ? hoverScale : 1)
-                .offset(y: isHighlighted ? hoverLift : 0)
-                .zIndex(isHighlighted ? 1 : 0)
-                .animation(.spring(response: 0.18, dampingFraction: 0.78), value: isHighlighted)
-        }
-        .buttonStyle(.plain)
+        return Image(systemName: "plus")
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(SplickTheme.Colors.textSecondary)
+            .frame(width: slotSize, height: slotSize)
+            .background(Circle().fill(SplickTheme.Colors.tertiaryBackground))
+            .scaleEffect(isHighlighted ? hoverScale : 1)
+            .offset(y: isHighlighted ? hoverLift : 0)
+            .zIndex(isHighlighted ? 1 : 0)
+            .animation(.spring(response: 0.18, dampingFraction: 0.78), value: isHighlighted)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                guard !isDragSelecting, !cancelledForScroll else { return }
+                onCustomEmoji()
+            }
+            .accessibilityAddTraits(.isButton)
     }
 
     private var longPressDragGesture: some Gesture {
-        LongPressGesture(minimumDuration: 0.2)
+        LongPressGesture(minimumDuration: longPressDuration, maximumDistance: scrollCancelDistance)
             .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .global))
             .onChanged { value in
                 switch value {
+                case .first(_):
+                    cancelledForScroll = false
                 case .second(true, let drag?):
+                    guard !cancelledForScroll else { return }
+                    if isVerticalScroll(drag) {
+                        cancelSelectionForScroll()
+                        return
+                    }
                     if !isDragSelecting {
                         isDragSelecting = true
                         FeedScrollLock.setLocked(true)
@@ -127,16 +138,36 @@ struct InlineReactionBar: View {
                 }
             }
             .onEnded { value in
-                defer {
-                    highlightedIndex = nil
-                    isDragSelecting = false
-                    FeedScrollLock.setLocked(false)
+                let shouldCommit = isDragSelecting && !cancelledForScroll
+                let location: CGPoint? = {
+                    if case .second(true, let drag?) = value { return drag.location }
+                    return nil
+                }()
+                let keepCancelled = cancelledForScroll
+                highlightedIndex = nil
+                isDragSelecting = false
+                FeedScrollLock.setLocked(false)
+                if !keepCancelled {
+                    cancelledForScroll = false
                 }
-                guard isDragSelecting else { return }
-                if case .second(true, let drag?) = value {
-                    commitDragSelection(at: drag.location)
-                }
+                guard shouldCommit, let location else { return }
+                commitDragSelection(at: location)
             }
+    }
+
+    private func isVerticalScroll(_ drag: DragGesture.Value) -> Bool {
+        let dx = drag.translation.width
+        let dy = drag.translation.height
+        return abs(dy) > scrollCancelDistance && abs(dy) > abs(dx)
+    }
+
+    private func cancelSelectionForScroll() {
+        cancelledForScroll = true
+        highlightedIndex = nil
+        if isDragSelecting {
+            isDragSelecting = false
+            FeedScrollLock.setLocked(false)
+        }
     }
 
     private func updateHighlight(at point: CGPoint) {
