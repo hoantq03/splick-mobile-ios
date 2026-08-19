@@ -7,6 +7,8 @@ public struct SplickNotificationRevealOverlay<Content: View>: View {
     let anchorFrame: CGRect
     let unreadCount: Int
     let headerTitle: String?
+    let leadingActionTitle: String?
+    let onLeadingAction: (() -> Void)?
     let closeAccessibilityLabel: String
     let onDismissStarted: (() -> Void)?
     @ViewBuilder let content: (_ dismiss: @escaping () -> Void) -> Content
@@ -20,6 +22,8 @@ public struct SplickNotificationRevealOverlay<Content: View>: View {
         anchorFrame: CGRect,
         unreadCount: Int,
         headerTitle: String? = nil,
+        leadingActionTitle: String? = nil,
+        onLeadingAction: (() -> Void)? = nil,
         closeAccessibilityLabel: String = "Close notifications",
         dismissRequest: Binding<Bool> = .constant(false),
         onDismissStarted: (() -> Void)? = nil,
@@ -30,6 +34,8 @@ public struct SplickNotificationRevealOverlay<Content: View>: View {
         self.anchorFrame = anchorFrame
         self.unreadCount = unreadCount
         self.headerTitle = headerTitle
+        self.leadingActionTitle = leadingActionTitle
+        self.onLeadingAction = onLeadingAction
         self.closeAccessibilityLabel = closeAccessibilityLabel
         self.onDismissStarted = onDismissStarted
         self.content = content
@@ -70,13 +76,24 @@ public struct SplickNotificationRevealOverlay<Content: View>: View {
                         .font(SplickTheme.Typography.title)
                         .foregroundStyle(SplickTheme.Colors.textPrimary)
                         .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(maxWidth: .infinity, alignment: .center)
                         .frame(height: controlSize, alignment: .center)
-                        .padding(.leading, SplickTheme.Spacing.md)
-                        .padding(.trailing, SplickTheme.Spacing.md + 44)
+                        .padding(.horizontal, 108)
                         .padding(.top, headerTopInset)
                         .opacity(isRevealed ? 1 : 0)
                         .allowsHitTesting(false)
+                }
+
+                if unreadCount > 0, let leadingActionTitle, let onLeadingAction {
+                    Button(leadingActionTitle, action: onLeadingAction)
+                        .buttonStyle(.plain)
+                        .font(SplickTheme.Typography.callout)
+                        .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                        .frame(height: controlSize, alignment: .center)
+                        .padding(.leading, SplickTheme.Spacing.md)
+                        .padding(.top, headerTopInset)
+                        .opacity(isRevealed ? 1 : 0)
+                        .zIndex(3)
                 }
 
                 overlayCloseButton(action: dismissAnimated)

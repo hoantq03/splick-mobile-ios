@@ -40,16 +40,33 @@ public struct NotificationListView: View {
     public var body: some View {
         Group {
             if presentedAsSheet {
-                overlayBody
+                listContent
             } else {
                 NavigationStack {
                     listContent
-                        .splickProfileToolbar(titleDisplayMode: .inline)
+                        .navigationTitle(languageService.text(.notificationTitle))
+                        .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
-                            if viewModel.unreadCount > 0 {
-                                ToolbarItem(placement: .primaryAction) {
+                            ToolbarItem(placement: .topBarLeading) {
+                                if viewModel.unreadCount > 0 {
                                     markAllReadButton
                                 }
+                            }
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button {
+                                    if let onDismiss {
+                                        onDismiss()
+                                    } else {
+                                        dismiss()
+                                    }
+                                } label: {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 13, weight: .bold))
+                                        .foregroundColor(SplickTheme.Colors.textPrimary)
+                                        .frame(width: 34, height: 34)
+                                        .background(Circle().fill(SplickTheme.Colors.secondaryBackground.opacity(0.85)))
+                                }
+                                .accessibilityLabel(languageService.text(.notificationBellAccessibility))
                             }
                         }
                 }
@@ -70,30 +87,12 @@ public struct NotificationListView: View {
         }
     }
 
-    private var overlayBody: some View {
-        VStack(spacing: 0) {
-            overlayHeader
-            listContent
-        }
-    }
-
-    private var overlayHeader: some View {
-        HStack(spacing: SplickTheme.Spacing.sm) {
-            Spacer(minLength: 0)
-
-            if viewModel.unreadCount > 0 {
-                markAllReadButton
-            }
-        }
-        .padding(.horizontal, SplickTheme.Spacing.md)
-        .padding(.bottom, SplickTheme.Spacing.xxs)
-    }
-
     private var markAllReadButton: some View {
         Button(languageService.text(.notificationReadAll)) {
             Task { await viewModel.markAllAsRead() }
         }
         .font(SplickTheme.Typography.callout)
+        .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
     }
 
     @ViewBuilder
@@ -175,7 +174,7 @@ struct NotificationRowView: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: SplickTheme.Spacing.sm) {
+        HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
             NotificationAvatarBadgeView(notification: notification)
 
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
@@ -186,16 +185,16 @@ struct NotificationRowView: View {
                         .lineLimit(1)
                 }
 
-                HStack(alignment: .firstTextBaseline, spacing: SplickTheme.Spacing.xxs) {
+                HStack(alignment: .center, spacing: SplickTheme.Spacing.xxs) {
                     NotificationInlineBodyText(notification: notification)
-                        .lineLimit(3)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                     if !notification.isRead {
                         Circle()
                             .fill(SplickTheme.Colors.primaryGradientStart)
                             .frame(width: 8, height: 8)
-                            .padding(.top, 4)
                     }
                 }
 
@@ -206,12 +205,14 @@ struct NotificationRowView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(SplickTheme.Spacing.sm)
-        .background(
-            notification.isRead
-                ? Color.clear
-                : SplickTheme.Colors.primaryGradientStart.opacity(0.04)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.small, style: .continuous))
+        .background {
+            RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous)
+                .fill(
+                    notification.isRead
+                        ? Color.clear
+                        : SplickTheme.Colors.primaryGradientStart.opacity(0.08)
+                )
+        }
     }
 }
 
@@ -302,7 +303,7 @@ private struct NotificationInlineBodyText: View {
                 )
             }
         }
-        .fixedSize(horizontal: false, vertical: true)
-        .multilineTextAlignment(.leading)
+        .lineLimit(1)
+        .truncationMode(.tail)
     }
 }

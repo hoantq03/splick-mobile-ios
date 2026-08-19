@@ -181,8 +181,12 @@ struct MainTabView: View {
                 appState.openLinkedPost(postId, expandBillSplit: expandBillSplit)
             }
             .environment(\.openDirectMessage) { friendUserId in
-                    await container.getOrCreateConversationId(friendUserId: friendUserId)
+                guard let conversationId = await container.getOrCreateConversationId(friendUserId: friendUserId) else {
+                    return nil
                 }
+                appState.openConversation(conversationId)
+                return conversationId
+            }
             .environment(\.currentUserSummary, currentUserSummary)
             .environment(\.tabBarScrollState, tabBarScrollState)
             .overlay(alignment: .bottom) {
@@ -233,6 +237,10 @@ struct MainTabView: View {
                     anchorFrame: appState.notificationAnchorFrame,
                     unreadCount: badgeCounts.notifications,
                     headerTitle: container.languageService.text(.notificationTitle),
+                    leadingActionTitle: container.languageService.text(.notificationReadAll),
+                    onLeadingAction: {
+                        Task { await container.notificationListViewModel.markAllAsRead() }
+                    },
                     closeAccessibilityLabel: container.languageService.text(.notificationBellAccessibility),
                     dismissRequest: $notificationDismissRequest,
                     onDismissStarted: { notificationIsDismissing = true }
