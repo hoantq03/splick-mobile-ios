@@ -118,6 +118,10 @@ struct ChatMessageListView: View {
                     .padding(.horizontal, SplickTheme.Spacing.md)
                     .padding(.vertical, SplickTheme.Spacing.sm)
                     .frame(maxWidth: .infinity)
+                    .onAppear { prefetchRecentThreadMedia() }
+                    .onChange(of: messages.suffix(12).map(\.id)) { _ in
+                        prefetchRecentThreadMedia()
+                    }
                 }
                 .modifier(ChatBottomScrollAnchorModifier())
                 .onPreferenceChange(MessageReactionAnchorFrameKey.self) { frames in
@@ -367,6 +371,28 @@ struct ChatMessageListView: View {
             guard reactionFocusSession == session, reactionFocusMessageId != nil else { return }
             reactionFocusDismissArmed = true
         }
+    }
+
+    private func prefetchRecentThreadMedia() {
+        let recent = messages.suffix(12)
+        var stillURLs: [URL] = []
+        var gifURLs: [URL] = []
+        stillURLs.reserveCapacity(recent.count)
+        gifURLs.reserveCapacity(recent.count)
+        for message in recent {
+            for attachment in message.imageAttachments {
+                if attachment.url.isLikelyAnimatedImage {
+                    gifURLs.append(attachment.url)
+                } else {
+                    stillURLs.append(attachment.thumbnailURL ?? attachment.url)
+                }
+            }
+        }
+        ImagePrefetching.prefetch(
+            urls: stillURLs,
+            thumbnailWidth: RemoteImageMetrics.inlineAttachmentMaxPixelWidth(pointWidth: 220)
+        )
+        ImagePrefetching.prefetch(urls: gifURLs, thumbnailWidth: nil)
     }
 
     private func beginReply(to message: ChatMessage) {

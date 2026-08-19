@@ -14,7 +14,8 @@ public struct InlineGifAttachmentView: View {
     /// Skeleton + spinner until the first decoded frame arrives.
     public var showsLoadingPlaceholder: Bool
 
-    @State private var isVisible = true
+    /// Start still so the first chat layout is not blocked by GIF decode.
+    @State private var isVisible = false
     @State private var pixelAspectRatio: CGFloat = 1
     @State private var hasDecodedFrame = false
 

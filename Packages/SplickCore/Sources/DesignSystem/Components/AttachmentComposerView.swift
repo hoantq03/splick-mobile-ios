@@ -64,6 +64,7 @@ public struct AttachmentComposerView<TextField: View, Accessory: View, SendButto
     @ViewBuilder let sendButton: () -> SendButton
 
     @State private var photoPickerItems: [PhotosPickerItem] = []
+    @State private var showsPhotoPicker = false
     @State private var attachmentPreviewRoute: AttachmentPreviewRoute?
 
     public init(
@@ -112,11 +113,9 @@ public struct AttachmentComposerView<TextField: View, Accessory: View, SendButto
 
             HStack(alignment: .bottom, spacing: configuration.actionSpacing) {
                 HStack(spacing: configuration.actionSpacing) {
-                    PhotosPicker(
-                        selection: $photoPickerItems,
-                        maxSelectionCount: remainingImageSlots,
-                        matching: .images
-                    ) {
+                    Button {
+                        showsPhotoPicker = true
+                    } label: {
                         Image(systemName: "photo")
                             .font(.system(size: configuration.photoIconSize, weight: .medium))
                             .foregroundStyle(SplickTheme.Colors.textSecondary)
@@ -129,10 +128,8 @@ public struct AttachmentComposerView<TextField: View, Accessory: View, SendButto
                                     .fill(SplickTheme.Colors.secondaryBackground)
                             }
                     }
+                    .buttonStyle(.plain)
                     .disabled(remainingImageSlots == 0 || isExternallyDisabled)
-                    .onChange(of: photoPickerItems) { items in
-                        beginImportingPhotoPickerItems(items)
-                    }
 
                     accessoryAfterPhoto()
                 }
@@ -164,6 +161,15 @@ public struct AttachmentComposerView<TextField: View, Accessory: View, SendButto
                 }
             }
             .animation(AttachmentComposerMotion.sendReveal, value: showsSendButton)
+        }
+        .photosPicker(
+            isPresented: $showsPhotoPicker,
+            selection: $photoPickerItems,
+            maxSelectionCount: max(remainingImageSlots, 1),
+            matching: .images
+        )
+        .onChange(of: photoPickerItems) { items in
+            beginImportingPhotoPickerItems(items)
         }
         .fullScreenCover(item: $attachmentPreviewRoute) { route in
             attachmentFullscreenPreview(at: route.index)

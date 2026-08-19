@@ -324,26 +324,16 @@ struct MessageBubble: View {
     }
 
     private var textBubbleBody: some View {
-        ViewThatFits(in: .horizontal) {
-            // Prefer hugging the text width when it fits on one line.
-            messageTextLabel(lineLimit: 1)
-                .fixedSize(horizontal: true, vertical: true)
-                .padding(.horizontal, SplickTheme.Spacing.sm + 2)
-                .padding(.vertical, SplickTheme.Spacing.xs + 2)
-                .frame(minWidth: textReactionMinWidth, alignment: .leading)
-                .background(bubbleBackground)
-                .clipShape(bubbleShape)
-
-            // Otherwise wrap within the max content width and grow vertically.
-            messageTextLabel(lineLimit: nil)
-                .frame(maxWidth: textWrapMaxWidth, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, SplickTheme.Spacing.sm + 2)
-                .padding(.vertical, SplickTheme.Spacing.xs + 2)
-                .frame(minWidth: textReactionMinWidth, alignment: .leading)
-                .background(bubbleBackground)
-                .clipShape(bubbleShape)
-        }
+        // `frame(maxWidth:)` caps wrapping without `ViewThatFits` measuring two
+        // copies of every bubble on first layout (noticeable when opening a thread).
+        messageTextLabel(lineLimit: nil)
+            .frame(maxWidth: textWrapMaxWidth, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, SplickTheme.Spacing.sm + 2)
+            .padding(.vertical, SplickTheme.Spacing.xs + 2)
+            .frame(minWidth: textReactionMinWidth, alignment: .leading)
+            .background(bubbleBackground)
+            .clipShape(bubbleShape)
     }
 
     /// Grow a short text bubble to seat reaction pills without exceeding wrap max.
@@ -376,7 +366,8 @@ struct MessageBubble: View {
             InlineGifAttachmentView(
                 url: attachment.url,
                 widthFraction: mediaWidth / max(UIScreen.main.bounds.width, 1),
-                cornerRadius: Self.mediaCornerRadius
+                cornerRadius: Self.mediaCornerRadius,
+                showsLoadingPlaceholder: true
             )
             .frame(maxWidth: mediaWidth)
             .onTapGesture {

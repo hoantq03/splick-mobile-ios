@@ -100,11 +100,6 @@ struct MessageComposerInputBar: View {
         }
         .background(SplickTheme.Colors.background)
         .animation(MessageReplyIslandMotion.present, value: replyDraft?.messageId)
-        .onAppear {
-            if gifPickerViewModel == nil {
-                gifPickerViewModel = messagingGifPickerFactory?()
-            }
-        }
         .sheet(isPresented: $showEmojiInsertPicker) {
             EmojiPickerSheet(
                 currentUserId: currentUserId,
@@ -152,11 +147,7 @@ struct MessageComposerInputBar: View {
     @ViewBuilder
     private var emojiMenuButton: some View {
         Button {
-            if gifPickerViewModel != nil {
-                showAttachmentPicker = true
-            } else {
-                showEmojiInsertPicker = true
-            }
+            presentAttachmentPicker()
         } label: {
             Image(systemName: "face.smiling")
                 .font(.system(size: 18, weight: .medium))
@@ -180,6 +171,21 @@ struct MessageComposerInputBar: View {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasReadyAttachments = attachmentDrafts.contains { $0.phase == .ready && $0.submission != nil }
         return !trimmed.isEmpty || hasReadyAttachments
+    }
+
+    private func presentAttachmentPicker() {
+        if gifPickerViewModel == nil {
+            gifPickerViewModel = messagingGifPickerFactory?()
+            guard gifPickerViewModel != nil else {
+                showEmojiInsertPicker = true
+                return
+            }
+            DispatchQueue.main.async {
+                showAttachmentPicker = true
+            }
+            return
+        }
+        showAttachmentPicker = true
     }
 
     private func openCustomEmojiUpload() {

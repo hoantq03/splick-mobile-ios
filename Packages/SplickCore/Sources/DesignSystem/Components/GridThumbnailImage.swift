@@ -58,11 +58,15 @@ extension GridThumbnailImage where Placeholder == Color {
 
 public enum ImagePrefetching {
     /// Warms Nuke disk/memory cache for upcoming grid cells.
-    public static func prefetch(urls: [URL], thumbnailWidth: CGFloat = 300) {
-        let requests = urls.map { url in
-            RemoteImageRequestFactory.boundedRequest(url: url, maxPixelWidth: thumbnailWidth)
+    /// Pass `thumbnailWidth: nil` to fetch original bytes (GIF/WebP playback).
+    public static func prefetch(urls: [URL], thumbnailWidth: CGFloat? = 300) {
+        guard !urls.isEmpty else { return }
+        let requests = urls.map { url -> ImageRequest in
+            if let thumbnailWidth, thumbnailWidth > 0 {
+                return RemoteImageRequestFactory.boundedRequest(url: url, maxPixelWidth: thumbnailWidth)
+            }
+            return ImageRequest(url: url)
         }
-        guard !requests.isEmpty else { return }
         ImagePrefetcher().startPrefetching(with: requests)
     }
 }
