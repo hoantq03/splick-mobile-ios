@@ -247,17 +247,15 @@ public struct EmojiPickerSheet: View {
             } else {
                 LazyVGrid(columns: customColumns, spacing: 10) {
                     ForEach(filteredMyEmojis) { emoji in
-                        Button {
-                            handleEmojiTap(emoji.colonCode)
-                        } label: {
-                            EmojiView(value: emoji.colonCode, size: 36)
-                                .frame(height: 40)
+                        EmojiView(value: emoji.colonCode, size: 36)
+                            .frame(height: 40)
                             .frame(maxWidth: .infinity)
                             .frame(height: 52)
                             .background(SplickTheme.Colors.secondaryBackground)
                             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
+                            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .onTapGesture { handleEmojiTap(emoji.colonCode) }
+                            .accessibilityAddTraits(.isButton)
                     }
                 }
             }

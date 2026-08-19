@@ -80,28 +80,24 @@ public struct EmojiPickerContentView: View {
     private func emojiButton(for entry: EmojiPickerEntry) -> some View {
         switch entry {
         case .custom(let emoji):
-            Button {
-                onPick(emoji.colonCode)
-            } label: {
-                EmojiView(value: emoji.colonCode, size: 28)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 44)
-                    .background(SplickTheme.Colors.secondaryBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            }
-            .buttonStyle(.plain)
+            EmojiView(value: emoji.colonCode, size: 28)
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .background(SplickTheme.Colors.secondaryBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .onTapGesture { onPick(emoji.colonCode) }
+                .accessibilityAddTraits(.isButton)
         case .system(let emoji):
-            Button {
-                onPick(emoji.emoji)
-            } label: {
-                Text(emoji.emoji)
-                    .font(.system(size: 28))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 44)
-                    .background(SplickTheme.Colors.secondaryBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            }
-            .buttonStyle(.plain)
+            Text(emoji.emoji)
+                .font(.system(size: 28))
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .background(SplickTheme.Colors.secondaryBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .onTapGesture { onPick(emoji.emoji) }
+                .accessibilityAddTraits(.isButton)
         }
     }
 
