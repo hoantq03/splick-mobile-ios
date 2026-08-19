@@ -19,7 +19,7 @@ final class FilterEngine {
             return image
         case .cinematic, .vintage, .vivid:
             guard let name = preset.cubeResourceName else { return image }
-            return LUTFilterProcessor.apply(image, cubeName: name, intensity: max(intensity, 0.85))
+            return LUTFilterProcessor.apply(image, cubeName: name, intensity: intensity)
         case .beauty:
             requestFacesIfNeeded(image)
             return BeautyFilterGroup.apply(image, intensity: intensity, faceObservations: latestFaces)

@@ -1,8 +1,10 @@
 import ARKit
+import Combine
 import SceneKit
 import SwiftUI
+import UIKit
 
-final class ARCaptureHandle {
+final class ARCaptureHandle: ObservableObject {
     weak var renderer: FaceOverlayRenderer?
 
     func snapshot() -> UIImage? {

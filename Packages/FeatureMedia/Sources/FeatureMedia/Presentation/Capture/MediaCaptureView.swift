@@ -90,7 +90,7 @@ public struct MediaCaptureView: View {
 
     /// Hardware camera exists and user has not denied camera permission.
     private var isCameraAccessible: Bool {
-        guard UIImagePickerController.isSourceTypeAvailable(.camera) else { return false }
+        guard AVCaptureDevice.default(for: .video) != nil else { return false }
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized, .notDetermined:
             return true

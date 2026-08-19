@@ -1,6 +1,8 @@
 import AVFoundation
+import Combine
 import CoreImage
 import UIKit
+import Vision
 
 enum CameraFlashMode: Equatable {
     case off, on, auto
@@ -13,6 +15,7 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
     @Published var isFrontCamera = false
     @Published var filterPreset: CameraFilterPreset = .none
     @Published var filterIntensity: Float = 0.75
+    @Published var primaryFaceBounds: CGRect?
     @Published var lastErrorMessage: String?
 
     let filterEngine = FilterEngine()
@@ -25,6 +28,19 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
     private var photoContinuation: CheckedContinuation<UIImage, Error>?
 
     func start() {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            startSession()
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+                if granted { self?.startSession() }
+            }
+        default:
+            DispatchQueue.main.async { self.lastErrorMessage = "camera_denied" }
+        }
+    }
+
+    private func startSession() {
         sessionQueue.async { [weak self] in
             self?.configureIfNeeded()
             self?.session.startRunning()
@@ -151,6 +167,8 @@ enum CameraSessionError: Error {
 }
 
 extension AVCameraSessionModel: AVCaptureVideoDataOutputSampleBufferDelegate {
+    private var isDetectingFace = false
+
     func captureOutput(
         _ output: AVCaptureOutput,
         didOutput sampleBuffer: CMSampleBuffer,
@@ -161,8 +179,29 @@ extension AVCameraSessionModel: AVCaptureVideoDataOutputSampleBufferDelegate {
         let preset = filterPreset
         let intensity = filterIntensity
         let filtered = filterEngine.apply(raw, preset: preset, intensity: intensity)
+        if preset == .ar {
+            detectFaceIfNeeded(pixelBuffer)
+        }
         DispatchQueue.main.async {
             self.previewImage = filtered
+        }
+    }
+
+    private func detectFaceIfNeeded(_ pixelBuffer: CVPixelBuffer) {
+        if isDetectingFace { return }
+        isDetectingFace = true
+        let request = VNDetectFaceRectanglesRequest { [weak self] request, _ in
+            let box = (request.results as? [VNFaceObservation])?
+                .max(by: { $0.boundingBox.width * $0.boundingBox.height < $1.boundingBox.width * $1.boundingBox.height })?
+                .boundingBox
+            DispatchQueue.main.async {
+                self?.primaryFaceBounds = box
+                self?.isDetectingFace = false
+            }
+        }
+        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .right, options: [:])
+        sessionQueue.async {
+            try? handler.perform([request])
         }
     }
 }

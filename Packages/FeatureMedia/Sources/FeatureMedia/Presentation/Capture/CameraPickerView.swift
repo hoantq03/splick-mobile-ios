@@ -1,16 +1,10 @@
+import ARKit
 import SwiftUI
 import UIKit
 
-/// System camera UI (`UIImagePickerController`) with a fully custom control overlay.
-///
-/// Control placement:
-///   - Top-left    : X / exit button
-///   - Top-center  : Flash toggle (off → auto → on)
-///   - Top-right   : Camera flip (front / rear)
-///   - Bottom-center : Shutter
-///   - Bottom-left   : Album picker
-///   - Badge on album : number of accumulated captured photos
-struct CameraPickerView: UIViewControllerRepresentable {
+/// Custom camera UI backed by `AVCaptureSession` + Metal preview.
+/// Public `Result` API matches the previous `UIImagePickerController` wrapper.
+struct CameraPickerView: View {
     enum Result: Equatable {
         case image(UIImage)
         case video(URL)
@@ -21,356 +15,185 @@ struct CameraPickerView: UIViewControllerRepresentable {
     let onResult: (Result) -> Void
     var accumulatedCount: Int = 0
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator(onResult: onResult)
+    @StateObject private var session = AVCameraSessionModel()
+    @StateObject private var arHandle = ARCaptureHandle()
+    @State private var arEffect: ARFaceEffect = .glasses
+    @State private var isCapturing = false
+
+    private var faceTrackingSupported: Bool {
+        ARFaceTrackingConfiguration.isSupported
     }
 
-    func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
-        picker.sourceType = .camera
-        picker.mediaTypes = UIImagePickerController.availableMediaTypes(for: .camera) ?? ["public.image"]
-        picker.videoMaximumDuration = 60
-        picker.videoQuality = .typeHigh
-        picker.delegate = context.coordinator
-        picker.allowsEditing = false
-        picker.showsCameraControls = false
-        picker.cameraDevice = .rear
-        picker.cameraCaptureMode = .photo
-        picker.cameraFlashMode = .off
-        picker.modalPresentationStyle = .fullScreen
-        picker.view.backgroundColor = .black
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
 
-        let overlay = CameraControlsOverlayView()
-        overlay.frame = UIScreen.main.bounds
-        overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        overlay.onCapture = { picker.takePicture() }
-        overlay.onFlip = { context.coordinator.flipCamera() }
-        overlay.onFlashToggle = {
-            switch picker.cameraFlashMode {
-            case .off:  picker.cameraFlashMode = .auto
-            case .auto: picker.cameraFlashMode = .on
-            default:    picker.cameraFlashMode = .off
+            previewLayer
+                .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                topBar
+                Spacer()
+                FilterStripView(
+                    preset: $session.filterPreset,
+                    intensity: $session.filterIntensity,
+                    arEffect: $arEffect,
+                    faceTrackingSupported: faceTrackingSupported
+                )
+                .padding(.bottom, 8)
+                bottomBar
             }
-            overlay.setFlashMode(picker.cameraFlashMode)
         }
-        overlay.onLibrary = { context.coordinator.onResult(.openLibrary) }
-        overlay.onCancel   = { context.coordinator.onResult(.cancelled) }
-        overlay.setAccumulatedCount(accumulatedCount)
-        overlay.setFlashMode(picker.cameraFlashMode)
-        CameraPickerView.applyFillTransform(picker)
-
-        picker.cameraOverlayView = overlay
-        context.coordinator.picker = picker
-        context.coordinator.overlay = overlay
-
-        return picker
+        .onAppear { session.start() }
+        .onDisappear { session.stop() }
+        .onChange(of: session.filterPreset) { preset in
+            if preset == .ar && faceTrackingSupported {
+                session.stop()
+            } else if !session.isRunning {
+                session.start()
+            }
+        }
     }
 
-    func updateUIViewController(_ picker: UIImagePickerController, context: Context) {
-        context.coordinator.overlay?.setAccumulatedCount(accumulatedCount)
-    }
-
-    static func applyFillTransform(_ picker: UIImagePickerController) {
-        let screen = UIScreen.main.bounds
-        let cameraAspect: CGFloat = 4.0 / 3.0
-        let screenAspect = screen.height / screen.width
-        if screenAspect > cameraAspect {
-            let scale = screenAspect / cameraAspect
-            picker.cameraViewTransform = CGAffineTransform(scaleX: scale, y: scale)
+    @ViewBuilder
+    private var previewLayer: some View {
+        if session.filterPreset == .ar, faceTrackingSupported {
+            ARCameraView(effect: $arEffect, captureHandle: arHandle)
         } else {
-            picker.cameraViewTransform = .identity
+            ZStack {
+                MetalCameraPreviewView(image: session.previewImage)
+                if session.filterPreset == .ar {
+                    VisionFaceOverlayView(effect: arEffect, faceRect: session.primaryFaceBounds)
+                }
+            }
         }
     }
 
-    final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
-        let onResult: (Result) -> Void
-        var overlay: CameraControlsOverlayView?
-        weak var picker: UIImagePickerController?
-
-        init(onResult: @escaping (Result) -> Void) {
-            self.onResult = onResult
+    private var topBar: some View {
+        HStack {
+            circleButton(systemName: "xmark") { onResult(.cancelled) }
+            Spacer()
+            circleButton(systemName: flashSymbol) { session.cycleFlash() }
+            Spacer()
+            circleButton(systemName: "arrow.triangle.2.circlepath") { session.flipCamera() }
         }
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .background(
+            LinearGradient(colors: [.black.opacity(0.55), .clear], startPoint: .top, endPoint: .bottom)
+                .frame(height: 96)
+                .ignoresSafeArea(edges: .top),
+            alignment: .top
+        )
+    }
 
-        func flipCamera() {
-            guard let picker else { return }
-            let next: UIImagePickerController.CameraDevice = picker.cameraDevice == .rear ? .front : .rear
-            guard UIImagePickerController.isCameraDeviceAvailable(next) else { return }
-            let overlay = picker.cameraOverlayView
-            // UIImagePickerController ignores cameraDevice changes while a custom
-            // overlay is attached; detach, switch, then restore.
-            picker.cameraOverlayView = nil
-            picker.cameraDevice = next
-            CameraPickerView.applyFillTransform(picker)
-            picker.cameraOverlayView = overlay
-            if let overlayView = overlay as? CameraControlsOverlayView {
-                overlayView.setFlashMode(picker.cameraFlashMode)
+    private var bottomBar: some View {
+        HStack {
+            ZStack(alignment: .topTrailing) {
+                circleButton(systemName: "photo.on.rectangle", size: 50) { onResult(.openLibrary) }
+                if accumulatedCount > 0 {
+                    Text("\(accumulatedCount)")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 22, height: 22)
+                        .background(Circle().fill(Color.orange))
+                        .offset(x: 8, y: -8)
+                }
             }
-        }
-
-        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            finish(picker, result: .cancelled)
-        }
-
-        func imagePickerController(
-            _ picker: UIImagePickerController,
-            didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
-        ) {
-            if let mediaType = info[.mediaType] as? String, mediaType == "public.movie",
-               let url = info[.mediaURL] as? URL {
-                finish(picker, result: .video(MediaCaptureHelpers.copyVideoToTemporaryDirectory(url)))
-                return
+            Spacer()
+            Button(action: capture) {
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 72, height: 72)
+                    .overlay(Circle().stroke(Color.black.opacity(0.15), lineWidth: 3).padding(6))
+                    .scaleEffect(isCapturing ? 0.9 : 1)
             }
-            if let image = info[.originalImage] as? UIImage {
-                let normalized = PhotoEditorImageProcessor.normalizeOrientation(image)
-                finish(picker, result: .image(normalized))
-                return
-            }
-            finish(picker, result: .cancelled)
+            .disabled(isCapturing)
+            Spacer()
+            Color.clear.frame(width: 50, height: 50)
         }
+        .padding(.horizontal, 28)
+        .padding(.bottom, 20)
+        .background(
+            LinearGradient(colors: [.clear, .black.opacity(0.55)], startPoint: .top, endPoint: .bottom)
+                .allowsHitTesting(false)
+        )
+    }
 
-        private func finish(_ picker: UIImagePickerController, result: Result) {
-            // Never call picker.dismiss() here. When CameraPickerView is used as a
-            // UIViewControllerRepresentable inside a fullScreenCover, the picker is a
-            // CHILD view controller of the SwiftUI hosting VC. Calling dismiss() on it
-            // propagates up the presentation chain and closes the entire fullScreenCover
-            // (the compose / capture container), skipping the preview screen entirely.
-            // SwiftUI manages the VC lifecycle — just deliver the result and let the
-            // caller (MediaCaptureView) update its route state.
-            onResult(result)
+    private var flashSymbol: String {
+        switch session.flashMode {
+        case .auto: return "bolt.badge.automatic"
+        case .on: return "bolt.fill"
+        case .off: return "bolt.slash.fill"
+        }
+    }
+
+    private func circleButton(systemName: String, size: CGFloat = 44, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: size, height: size)
+                .background(Circle().fill(Color.black.opacity(0.3)))
+        }
+    }
+
+    private func capture() {
+        isCapturing = true
+        if session.filterPreset == .ar, faceTrackingSupported, let snapshot = arHandle.snapshot() {
+            isCapturing = false
+            onResult(.image(PhotoEditorImageProcessor.normalizeOrientation(snapshot)))
+            return
+        }
+        Task {
+            do {
+                let image = try await session.capturePhoto()
+                var output = image
+                if session.filterPreset == .ar, let bounds = session.primaryFaceBounds {
+                    output = VisionFaceOverlayCompositor.composite(image: image, effect: arEffect, faceRect: bounds)
+                }
+                await MainActor.run {
+                    isCapturing = false
+                    onResult(.image(output))
+                }
+            } catch {
+                await MainActor.run { isCapturing = false }
+            }
         }
     }
 }
 
-// MARK: - Custom camera overlay (UIKit)
-
-final class CameraControlsOverlayView: UIView {
-    var onCapture: (() -> Void)?
-    var onFlip: (() -> Void)?
-    var onFlashToggle: (() -> Void)?
-    var onLibrary: (() -> Void)?
-    var onCancel: (() -> Void)?
-
-    private var cancelButton: UIButton!
-    private var flashButton: UIButton!
-    private var flipButton: UIButton!
-    private var shutterButton: UIButton!
-    private var albumButton: UIButton!
-    private var badgeView: UIView!
-    private var badgeLabel: UILabel!
-    private var topGradientLayer = CAGradientLayer()
-    private var bottomGradientLayer = CAGradientLayer()
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        setup()
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    // MARK: - Public API
-
-    func setAccumulatedCount(_ count: Int) {
-        badgeView?.isHidden = count == 0
-        badgeLabel?.text = "\(count)"
-    }
-
-    func setFlashMode(_ mode: UIImagePickerController.CameraFlashMode) {
-        let imageName: String
-        switch mode {
-        case .auto: imageName = "bolt.badge.automatic"
-        case .on:   imageName = "bolt.fill"
-        default:    imageName = "bolt.slash.fill"
-        }
-        let config = UIImage.SymbolConfiguration(pointSize: 20, weight: .medium)
-        flashButton?.setImage(UIImage(systemName: imageName, withConfiguration: config), for: .normal)
-    }
-
-    // MARK: - Touch pass-through
-
-    /// Only intercept touches that land directly on interactive buttons.
-    /// Everything else is passed through to the underlying camera view.
-    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        for subview in subviews.reversed() {
-            guard subview.isUserInteractionEnabled, !subview.isHidden else { continue }
-            let subviewPoint = subview.convert(point, from: self)
-            if let hit = subview.hitTest(subviewPoint, with: event) {
-                return hit
+enum VisionFaceOverlayCompositor {
+    static func composite(image: UIImage, effect: ARFaceEffect, faceRect: CGRect) -> UIImage {
+        let size = image.size
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = image.scale
+        format.opaque = true
+        return UIGraphicsImageRenderer(size: size, format: format).image { ctx in
+            image.draw(in: CGRect(origin: .zero, size: size))
+            let frame = CGRect(
+                x: faceRect.minX * size.width,
+                y: (1 - faceRect.maxY) * size.height,
+                width: faceRect.width * size.width,
+                height: faceRect.height * size.height
+            )
+            switch effect {
+            case .glasses:
+                UIColor.black.withAlphaComponent(0.45).setFill()
+                let lensW = frame.width * 0.32
+                let lensH = frame.height * 0.18
+                let y = frame.minY + frame.height * 0.33
+                UIBezierPath(roundedRect: CGRect(x: frame.minX + frame.width * 0.12, y: y, width: lensW, height: lensH), cornerRadius: lensH / 2).fill()
+                UIBezierPath(roundedRect: CGRect(x: frame.maxX - frame.width * 0.12 - lensW, y: y, width: lensW, height: lensH), cornerRadius: lensH / 2).fill()
+            case .sparkle:
+                UIColor.systemYellow.setFill()
+                for offset in [0.25, 0.5, 0.75] {
+                    UIBezierPath(ovalIn: CGRect(x: frame.minX + frame.width * offset - 6, y: frame.minY + 4, width: 12, height: 12)).fill()
+                }
             }
-        }
-        return nil
-    }
-
-    // MARK: - Layout
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        guard bounds.width > 0 else { return }
-        layoutControls()
-    }
-
-    private func layoutControls() {
-        let w = bounds.width
-        let h = bounds.height
-        // safeAreaInsets are properly propagated after the view is in the hierarchy.
-        let safeTop    = max(safeAreaInsets.top, 20)
-        let safeBottom = max(safeAreaInsets.bottom, 16)
-
-        // Gradient heights
-        let topBarH: CGFloat = safeTop + 64
-        let bottomBarH: CGFloat = safeBottom + 90
-
-        topGradientLayer.frame = CGRect(x: 0, y: 0, width: w, height: topBarH)
-        bottomGradientLayer.frame = CGRect(x: 0, y: h - bottomBarH, width: w, height: bottomBarH)
-
-        let btnSize: CGFloat = 44
-        let topBtnY = safeTop + 10
-
-        // Cancel — top-left
-        cancelButton.frame = CGRect(x: 16, y: topBtnY, width: btnSize, height: btnSize)
-        cancelButton.layer.cornerRadius = btnSize / 2
-
-        // Flash — top-center
-        flashButton.frame = CGRect(x: (w - btnSize) / 2, y: topBtnY, width: btnSize, height: btnSize)
-        flashButton.layer.cornerRadius = btnSize / 2
-
-        // Flip — top-right
-        flipButton.frame = CGRect(x: w - 16 - btnSize, y: topBtnY, width: btnSize, height: btnSize)
-        flipButton.layer.cornerRadius = btnSize / 2
-
-        // Shutter — bottom-center
-        let shutterSize: CGFloat = 72
-        let shutterY = h - safeBottom - shutterSize - 20
-        shutterButton.frame = CGRect(
-            x: (w - shutterSize) / 2,
-            y: shutterY,
-            width: shutterSize,
-            height: shutterSize
-        )
-        shutterButton.layer.cornerRadius = shutterSize / 2
-
-        // Album — bottom-left, vertically centered with shutter
-        let albumSize: CGFloat = 50
-        let albumY = shutterButton.frame.midY - albumSize / 2
-        albumButton.frame = CGRect(x: 28, y: albumY, width: albumSize, height: albumSize)
-        albumButton.layer.cornerRadius = albumSize / 2
-
-        // Badge on album button
-        let badgeSize: CGFloat = 22
-        badgeView.frame = CGRect(
-            x: albumButton.frame.maxX - badgeSize / 2,
-            y: albumButton.frame.minY - badgeSize / 2,
-            width: badgeSize,
-            height: badgeSize
-        )
-        badgeView.layer.cornerRadius = badgeSize / 2
-        badgeLabel.frame = badgeView.bounds
-    }
-
-    // MARK: - Setup
-
-    private func setup() {
-        backgroundColor = .clear
-        isOpaque = false
-
-        // Gradient overlays (non-interactive, add as sublayers not subviews)
-        topGradientLayer.colors = [
-            UIColor.black.withAlphaComponent(0.55).cgColor,
-            UIColor.clear.cgColor
-        ]
-        topGradientLayer.locations = [0, 1]
-        layer.addSublayer(topGradientLayer)
-
-        bottomGradientLayer.colors = [
-            UIColor.clear.cgColor,
-            UIColor.black.withAlphaComponent(0.55).cgColor
-        ]
-        bottomGradientLayer.locations = [0, 1]
-        layer.addSublayer(bottomGradientLayer)
-
-        // Buttons
-        cancelButton = makeCircleButton(systemImage: "xmark", size: 18, weight: .bold)
-        cancelButton.addTarget(self, action: #selector(didTapCancel), for: .touchUpInside)
-
-        flashButton = makeCircleButton(systemImage: "bolt.slash.fill", size: 20, weight: .medium)
-        flashButton.addTarget(self, action: #selector(didTapFlash), for: .touchUpInside)
-
-        flipButton = makeCircleButton(systemImage: "arrow.triangle.2.circlepath", size: 20, weight: .medium)
-        flipButton.addTarget(self, action: #selector(didTapFlip), for: .touchUpInside)
-
-        shutterButton = makeShutterButton()
-
-        albumButton = makeCircleButton(systemImage: "photo.on.rectangle", size: 20, weight: .medium)
-        albumButton.addTarget(self, action: #selector(didTapAlbum), for: .touchUpInside)
-
-        // Badge
-        badgeView = UIView()
-        badgeView.backgroundColor = UIColor.systemOrange
-        badgeView.isUserInteractionEnabled = false
-        badgeView.isHidden = true
-
-        badgeLabel = UILabel()
-        badgeLabel.textColor = .white
-        badgeLabel.font = .systemFont(ofSize: 12, weight: .bold)
-        badgeLabel.textAlignment = .center
-        badgeView.addSubview(badgeLabel)
-
-        addSubview(cancelButton)
-        addSubview(flashButton)
-        addSubview(flipButton)
-        addSubview(shutterButton)
-        addSubview(albumButton)
-        addSubview(badgeView)
-    }
-
-    private func makeCircleButton(systemImage: String, size: CGFloat, weight: UIImage.SymbolWeight) -> UIButton {
-        let btn = UIButton(type: .system)
-        let config = UIImage.SymbolConfiguration(pointSize: size, weight: weight)
-        btn.setImage(UIImage(systemName: systemImage, withConfiguration: config), for: .normal)
-        btn.tintColor = .white
-        btn.backgroundColor = UIColor.black.withAlphaComponent(0.3)
-        return btn
-    }
-
-    private func makeShutterButton() -> UIButton {
-        let btn = UIButton(type: .custom)
-        btn.backgroundColor = .white
-        btn.addTarget(self, action: #selector(shutterDown), for: .touchDown)
-        btn.addTarget(self, action: #selector(shutterUp), for: [.touchUpInside, .touchUpOutside, .touchCancel])
-        btn.addTarget(self, action: #selector(didTapShutter), for: .touchUpInside)
-
-        // Inner ring
-        let ring = UIView()
-        ring.backgroundColor = .clear
-        ring.layer.borderColor = UIColor.black.withAlphaComponent(0.15).cgColor
-        ring.layer.borderWidth = 3
-        ring.frame = CGRect(x: 6, y: 6, width: 60, height: 60)
-        ring.layer.cornerRadius = 30
-        ring.isUserInteractionEnabled = false
-        btn.addSubview(ring)
-
-        return btn
-    }
-
-    // MARK: - Actions
-
-    @objc private func didTapCancel() { onCancel?() }
-    @objc private func didTapFlash()  { onFlashToggle?() }
-    @objc private func didTapFlip()   { onFlip?() }
-    @objc private func didTapShutter() { onCapture?() }
-    @objc private func didTapAlbum()  { onLibrary?() }
-
-    @objc private func shutterDown(_ sender: UIButton) {
-        UIView.animate(withDuration: 0.08) { sender.transform = CGAffineTransform(scaleX: 0.9, y: 0.9) }
-    }
-
-    @objc private func shutterUp(_ sender: UIButton) {
-        UIView.animate(withDuration: 0.12, delay: 0, usingSpringWithDamping: 0.5, initialSpringVelocity: 8) {
-            sender.transform = .identity
         }
     }
 }
-
-// MARK: - Shared helpers
 
 enum MediaCaptureHelpers {
     static func copyVideoToTemporaryDirectory(_ sourceURL: URL) -> URL {
