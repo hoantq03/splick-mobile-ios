@@ -573,6 +573,7 @@ enum StringsFeatureVi {
         .timeCompactMonths: "%d tháng",
         .timeCompactYears: "%d năm",
         .feedUploadFailed: "Đăng thất bại",
+        .feedUploadUploading: "Đang tải lên...",
         .feedRefreshFailed: "Chưa làm mới được feed. Thử lại sau nhé!",
         .feedPostStillUploading: "Bài viết đang được đăng.",
         .feedReactionEmojiLimit: "Mỗi bài bạn chỉ được dùng tối đa 5 loại emoji.",

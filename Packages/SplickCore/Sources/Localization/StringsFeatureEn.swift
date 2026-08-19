@@ -573,6 +573,7 @@ enum StringsFeatureEn {
         .timeCompactMonths: "%dmo",
         .timeCompactYears: "%dy",
         .feedUploadFailed: "Upload failed",
+        .feedUploadUploading: "Uploading...",
         .feedRefreshFailed: "Couldn't refresh the feed. Try again later!",
         .feedPostStillUploading: "This post is still being uploaded.",
         .feedReactionEmojiLimit: "You can use up to 5 emoji types per post.",

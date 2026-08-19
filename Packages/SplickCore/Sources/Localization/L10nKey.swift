@@ -809,6 +809,7 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case timeCompactMonths = "time.compact.months"
     case timeCompactYears = "time.compact.years"
     case feedUploadFailed = "feed.upload.failed"
+    case feedUploadUploading = "feed.upload.uploading"
     case feedRefreshFailed = "feed.refresh.failed"
     case feedPostStillUploading = "feed.post.still_uploading"
     case feedReactionEmojiLimit = "feed.reaction.emoji_limit"

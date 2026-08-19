@@ -17,7 +17,7 @@ struct PostUploadOverlay: View {
                         .progressViewStyle(.circular)
                         .controlSize(.large)
                         .tint(.white)
-                    Text(languageService.text(.feedCreatePosting))
+                    Text(languageService.text(.feedUploadUploading))
                         .font(SplickTheme.Typography.callout)
                         .fontWeight(.semibold)
                         .foregroundStyle(.white)
