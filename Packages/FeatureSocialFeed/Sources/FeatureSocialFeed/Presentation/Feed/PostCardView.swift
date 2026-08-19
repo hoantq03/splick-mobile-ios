@@ -420,6 +420,11 @@ struct PostCardView: View, Equatable {
             Text("\(viewCount)")
                 .font(.system(size: Layout.commentCountFontSize, weight: .medium))
                 .monospacedDigit()
+            if let viewedAt = post.viewers.first?.viewedAt {
+                Text(languageService.compactRelativeTime(from: viewedAt))
+                    .font(.system(size: 11, weight: .medium))
+                    .monospacedDigit()
+            }
         }
         .foregroundStyle(SplickTheme.Colors.textSecondary)
         .padding(.horizontal, 6)

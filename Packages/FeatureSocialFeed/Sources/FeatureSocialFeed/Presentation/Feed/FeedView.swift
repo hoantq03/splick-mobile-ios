@@ -39,6 +39,7 @@ public struct FeedView: View {
     @State private var selectedSegment: FeedContentSegment = .feed
     @StateObject private var feedSegmentScrollState = FeedSegmentScrollState()
     @StateObject private var videoCoordinator = FeedVideoPlaybackCoordinator()
+    @Namespace private var postZoomNamespace
 
     public init(
         viewModel: FeedViewModel,
@@ -125,6 +126,7 @@ public struct FeedView: View {
                     profileDependencies: profileDependencies,
                     makeGifPickerViewModel: makeGifPickerViewModel
                 )
+                .feedPostZoomDestination(postId: destination.postId)
             }
             .alert(
                 languageService.text(.commonError),
@@ -139,6 +141,7 @@ public struct FeedView: View {
             }
         }
         .environment(\.feedSegmentScrollState, feedSegmentScrollState)
+        .environment(\.feedPostZoomNamespace, postZoomNamespace)
         .onFirstAppear {
             viewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
         }
@@ -426,6 +429,7 @@ private struct FeedPrimaryPage: View {
                         uploadState: viewModel.postUploadState(for: post.id)
                     )
                     .equatable()
+                    .feedPostZoomSource(postId: post.id)
                     .onAppear {
                         guard !viewModel.isRefreshing else { return }
                         Task { await viewModel.trackViewOnScrollIfNeeded(for: post) }
