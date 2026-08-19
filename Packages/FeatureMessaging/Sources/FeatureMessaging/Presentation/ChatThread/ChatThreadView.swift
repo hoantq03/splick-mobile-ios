@@ -334,22 +334,12 @@ public struct ChatThreadView: View {
 
     @ViewBuilder
     private var bottomBar: some View {
-        if !relationshipViewModel.isActive {
-            inputBar
-        } else if relationshipViewModel.isBlocked {
+        if relationshipViewModel.isBlocked {
             blockedFooter
-        } else if relationshipViewModel.status == .unknown {
-            relationshipStatusPlaceholder
         } else {
+            // Paint the composer on the first frame; do not wait for peer status.
             inputBar
         }
-    }
-
-    private var relationshipStatusPlaceholder: some View {
-        Color.clear
-            .frame(height: 52)
-            .frame(maxWidth: .infinity)
-            .background(SplickTheme.Colors.background)
     }
 
     private var blockedFooter: some View {
