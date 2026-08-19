@@ -2,6 +2,7 @@ import Localization
 import SwiftUI
 
 struct FilterStripView: View {
+    @EnvironmentObject private var languageService: LanguageService
     @Binding var preset: CameraFilterPreset
     @Binding var intensity: Float
     @Binding var arEffect: ARFaceEffect
@@ -11,7 +12,7 @@ struct FilterStripView: View {
         VStack(spacing: 10) {
             if preset.showsIntensitySlider {
                 HStack(spacing: 10) {
-                    Text(L10n.t(.mediaFilterIntensity))
+                    Text(languageService.text(.mediaFilterIntensity))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.white.opacity(0.85))
                     Slider(value: Binding(
@@ -29,7 +30,7 @@ struct FilterStripView: View {
                         Button {
                             arEffect = effect
                         } label: {
-                            Text(L10n.t(effect.titleKey))
+                            Text(languageService.text(effect.titleKey))
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(arEffect == effect ? .black : .white)
                                 .padding(.horizontal, 12)
@@ -40,7 +41,7 @@ struct FilterStripView: View {
                         }
                     }
                     if !faceTrackingSupported {
-                        Text(L10n.t(.mediaFilterARUnsupported))
+                        Text(languageService.text(.mediaFilterARUnsupported))
                             .font(.caption2)
                             .foregroundStyle(.white.opacity(0.7))
                             .lineLimit(2)
@@ -62,7 +63,7 @@ struct FilterStripView: View {
                                     .overlay(
                                         Circle().stroke(preset == item ? Color.white : Color.white.opacity(0.25), lineWidth: 2)
                                     )
-                                Text(L10n.t(item.titleKey))
+                                Text(languageService.text(item.titleKey))
                                     .font(.caption2.weight(.semibold))
                                     .foregroundStyle(.white)
                                     .lineLimit(1)
