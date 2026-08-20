@@ -178,7 +178,7 @@ public final class NotificationListViewModel: ObservableObject {
         await onBadgeCountsChanged?()
     }
 
-    func markAllAsRead() async {
+    public func markAllAsRead() async {
         do {
             try await markReadUseCase.markAllRead()
             notifications = notifications.map { $0.markingAsRead() }
