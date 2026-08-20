@@ -132,7 +132,12 @@ struct ConversationPeekOverlay: View {
                 ScrollView(showsIndicators: false) {
                     LazyVStack(spacing: SplickTheme.Spacing.xxs) {
                         ForEach(MessageTimelineGrouping.buildDisplayMessages(from: messages)) { item in
-                            previewBubble(item)
+                            VStack(spacing: 0) {
+                                if item.showsTimeSeparator {
+                                    MessageTimeSeparatorLabel(date: item.message.createdAt)
+                                }
+                                previewBubble(item)
+                            }
                         }
                     }
                     .padding(SplickTheme.Spacing.md)

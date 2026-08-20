@@ -12,15 +12,23 @@ struct DisplayMessage: Identifiable, Equatable {
     let message: ChatMessage
     let groupPosition: MessageGroupPosition
     let showsTimestamp: Bool
+    /// Centered Facebook-style summary above this row (new cluster).
+    let showsTimeSeparator: Bool
     let imageAttachments: [MessageImageAttachment]
 
     var id: UUID { message.id }
 }
 
 enum MessageTimelineGrouping {
+    /// Same-sender bubbles stack tightly within this window.
     static let groupWindow: TimeInterval = 5 * 60
+    /// A new time-summary cluster starts after this idle gap (or a calendar-day change).
+    static let timeSeparatorWindow: TimeInterval = 30 * 60
 
-    static func buildDisplayMessages(from messages: [ChatMessage]) -> [DisplayMessage] {
+    static func buildDisplayMessages(
+        from messages: [ChatMessage],
+        calendar: Calendar = .current
+    ) -> [DisplayMessage] {
         guard !messages.isEmpty else { return [] }
 
         return messages.enumerated().map { index, message in
@@ -46,6 +54,11 @@ enum MessageTimelineGrouping {
                 message: message,
                 groupPosition: position,
                 showsTimestamp: !groupsWithNext,
+                showsTimeSeparator: shouldShowTimeSeparator(
+                    previous: previous,
+                    current: message,
+                    calendar: calendar
+                ),
                 imageAttachments: message.imageAttachments
             )
         }
@@ -54,5 +67,17 @@ enum MessageTimelineGrouping {
     static func isSameGroup(_ earlier: ChatMessage, _ later: ChatMessage) -> Bool {
         earlier.senderId == later.senderId
             && later.createdAt.timeIntervalSince(earlier.createdAt) <= groupWindow
+    }
+
+    static func shouldShowTimeSeparator(
+        previous: ChatMessage?,
+        current: ChatMessage,
+        calendar: Calendar = .current
+    ) -> Bool {
+        guard let previous else { return true }
+        if !calendar.isDate(previous.createdAt, inSameDayAs: current.createdAt) {
+            return true
+        }
+        return current.createdAt.timeIntervalSince(previous.createdAt) >= timeSeparatorWindow
     }
 }

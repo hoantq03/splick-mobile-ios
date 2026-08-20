@@ -70,37 +70,43 @@ struct ChatMessageListView: View {
                         }
 
                         ForEach(displayMessages) { item in
-                            MessageBubble(
-                                displayMessage: item,
-                                isOutgoing: item.message.senderId == currentUserId,
-                                currentUserId: currentUserId,
-                                isHighlighted: viewModel.highlightedMessageId == item.message.id,
-                                isFloatingSend: viewModel.newlySentMessageIds.contains(item.message.clientMessageId),
-                                floatSway: viewModel.floatSway(for: item.message.clientMessageId),
-                                timestampRevealTranslation: timestampRevealTranslation,
-                                replySwipeTranslation: replySwipeMessageId == item.message.id
-                                    ? replySwipeTranslation
-                                    : 0,
-                                onReact: { emoji in
-                                    _ = viewModel.react(to: item.message.id, emoji: emoji)
-                                },
-                                onRetry: {
-                                    Task { await viewModel.retrySend(messageId: item.message.id) }
-                                },
-                                onLongPress: {
-                                    openReactionFocus(for: item)
-                                },
-                                onReply: {
-                                    beginReply(to: item.message)
-                                },
-                                readReceiptPeerAvatarURL: peerAvatarURL,
-                                readReceiptPeerName: peerDisplayName,
-                                showsReadReceiptAvatar: item.message.id == latestReadOutgoingMessageId,
-                                readReceiptNamespace: readReceiptAvatarNamespace,
-                                conversationId: conversationId ?? item.message.conversationId
-                            )
-                            .opacity(reactionFocusMessageId == item.message.id ? 0 : 1)
-                            .allowsHitTesting(reactionFocusMessageId != item.message.id)
+                            VStack(spacing: 0) {
+                                if item.showsTimeSeparator {
+                                    MessageTimeSeparatorLabel(date: item.message.createdAt)
+                                }
+
+                                MessageBubble(
+                                    displayMessage: item,
+                                    isOutgoing: item.message.senderId == currentUserId,
+                                    currentUserId: currentUserId,
+                                    isHighlighted: viewModel.highlightedMessageId == item.message.id,
+                                    isFloatingSend: viewModel.newlySentMessageIds.contains(item.message.clientMessageId),
+                                    floatSway: viewModel.floatSway(for: item.message.clientMessageId),
+                                    timestampRevealTranslation: timestampRevealTranslation,
+                                    replySwipeTranslation: replySwipeMessageId == item.message.id
+                                        ? replySwipeTranslation
+                                        : 0,
+                                    onReact: { emoji in
+                                        _ = viewModel.react(to: item.message.id, emoji: emoji)
+                                    },
+                                    onRetry: {
+                                        Task { await viewModel.retrySend(messageId: item.message.id) }
+                                    },
+                                    onLongPress: {
+                                        openReactionFocus(for: item)
+                                    },
+                                    onReply: {
+                                        beginReply(to: item.message)
+                                    },
+                                    readReceiptPeerAvatarURL: peerAvatarURL,
+                                    readReceiptPeerName: peerDisplayName,
+                                    showsReadReceiptAvatar: item.message.id == latestReadOutgoingMessageId,
+                                    readReceiptNamespace: readReceiptAvatarNamespace,
+                                    conversationId: conversationId ?? item.message.conversationId
+                                )
+                                .opacity(reactionFocusMessageId == item.message.id ? 0 : 1)
+                                .allowsHitTesting(reactionFocusMessageId != item.message.id)
+                            }
                             .id(item.message.clientMessageId)
                             .transition(ChatScrollAnimation.messageInsert)
                             .onAppear {
