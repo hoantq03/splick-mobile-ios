@@ -15,6 +15,7 @@ struct MessageQuotedReplyView: View {
             RoundedRectangle(cornerRadius: 2, style: .continuous)
                 .fill(accentColor)
                 .frame(width: 3)
+                .padding(.vertical, 4)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(displayName)
@@ -25,11 +26,27 @@ struct MessageQuotedReplyView: View {
                 Text(quotedText)
                     .font(.system(size: 11))
                     .foregroundStyle(textColor)
-                    .lineLimit(1)
+                    .lineLimit(2)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.leading, 6)
+        .padding(.vertical, 5)
+        .padding(.trailing, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            if let cardFill {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(cardFill)
             }
         }
-        .padding(.vertical, 1)
-        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var cardFill: Color? {
+        guard usesBubbleTextColors else { return nil }
+        return isOutgoing
+            ? Color.white.opacity(0.16)
+            : SplickTheme.Colors.background.opacity(0.72)
     }
 
     private var displayName: String {
