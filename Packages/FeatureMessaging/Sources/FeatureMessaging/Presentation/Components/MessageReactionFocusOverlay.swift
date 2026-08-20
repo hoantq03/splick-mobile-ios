@@ -35,7 +35,7 @@ struct MessageReactionFocusOverlay: View {
     private let verticalMargin: CGFloat = SplickTheme.Spacing.md
     private let messageFocusScale: CGFloat = 1.12
     private static let actionImpact = UIImpactFeedbackGenerator(style: .light)
-    private let estimatedOptionsHeight: CGFloat = 200
+    private let estimatedOptionsHeight: CGFloat = 260
 
     private var contentAlignment: Alignment {
         context.isOutgoing ? .trailing : .leading
@@ -114,14 +114,14 @@ struct MessageReactionFocusOverlay: View {
                     }
                 }
                 .scaleEffect(
-                    isOptionsRevealed ? 1 : 0.42,
+                    isOptionsRevealed ? 1 : 0.36,
                     anchor: UnitPoint(
                         x: horizontalScaleAnchorX,
                         y: placeOptionsAbove ? 1 : 0
                     )
                 )
                 .opacity(isOptionsRevealed ? 1 : 0)
-                .offset(y: isOptionsRevealed ? 0 : (placeOptionsAbove ? 10 : -10))
+                .offset(y: isOptionsRevealed ? 0 : (placeOptionsAbove ? 14 : -14))
                 .position(x: geo.size.width / 2, y: optionsCenterY)
                 .zIndex(2)
             }
@@ -303,15 +303,22 @@ struct MessageReactionFocusOverlay: View {
         containerHeight: CGFloat,
         optionsHeight: CGFloat
     ) -> Bool {
+        // Default: place above the bubble.
+        //
+        // Only place below when BOTH conditions hold:
+        //   1. The bubble is in the upper portion of the screen (its midpoint is
+        //      within the top 42 % of the container), so there is naturally more
+        //      empty space below it.
+        //   2. There is enough room below for the options chrome without clamping.
+        //      (Clamping pushes the options center up, potentially overlapping the
+        //      bubble — exactly the bug this addresses.)
+        //
+        // Every other case — bottom-of-screen messages, keyboard-narrowed views,
+        // first-layout with an imprecise estimate — stays safely above.
         let needed = optionsHeight + stackSpacing
-        let spaceAbove = anchorFrame.minY - verticalMargin
         let spaceBelow = containerHeight - anchorFrame.maxY - verticalMargin
-        if spaceAbove >= needed, spaceBelow >= needed {
-            return spaceAbove >= spaceBelow
-        }
-        if spaceAbove >= needed { return true }
-        if spaceBelow >= needed { return false }
-        return spaceAbove >= spaceBelow
+        let bubbleIsInUpperRegion = anchorFrame.midY < containerHeight * 0.42
+        return !(bubbleIsInUpperRegion && spaceBelow >= needed)
     }
 
     /// Options float around the anchored bubble (or to a screen edge) — bubble never moves.
