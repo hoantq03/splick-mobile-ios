@@ -48,6 +48,7 @@ private struct SplickSameTabTapBehaviorModifier: ViewModifier {
     let isEnabled: () -> Bool
 
     @Environment(\.tabBarScrollState) private var tabBarScrollState
+    @Environment(\.feedSegmentScrollState) private var feedSegmentScrollState
     @Environment(\.sameTabTapHandlingEnabled) private var sameTabTapHandlingEnabled
 
     private var sameTabTapPublisher: AnyPublisher<Void, Never> {
@@ -67,6 +68,7 @@ private struct SplickSameTabTapBehaviorModifier: ViewModifier {
                 }
                 // Next same-tab tap should refresh once we've returned to top.
                 tabBarScrollState?.reset()
+                feedSegmentScrollState?.reset()
             }
         }
     }

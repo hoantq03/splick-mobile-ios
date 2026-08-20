@@ -233,6 +233,7 @@ public struct FeedView: View {
         } else {
             NotificationCenter.default.post(name: FeedSameTabNotification.scrollToTop, object: nil)
             tabBarScrollState?.reset()
+            feedSegmentScrollState.reset()
         }
     }
 

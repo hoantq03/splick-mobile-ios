@@ -18,13 +18,26 @@ public final class FeedSegmentScrollState: ObservableObject {
     public var isExpanded: Bool { collapseProgress < 0.5 }
 
     private var lastOffset: CGFloat = 0
+    private var lastRawOffset: CGFloat = 0
     private var offsetNormalizer = ScrollChromeOffsetNormalizer()
     private let showAtTopThreshold: CGFloat = 6
     private let collapseDistance: CGFloat = 38
+    /// Idle snap slack: bounce/settle can sit a few points above 0 while visually at top.
+    private let atTopSnapSlack: CGFloat = SplickTabBarMetrics.sameTabAtTopThreshold
 
     public init() {}
 
     public func updateScrollOffset(_ rawOffset: CGFloat) {
+        lastRawOffset = rawOffset
+        // Use raw geometry for "at top" so a drifted baseline cannot leave the
+        // title collapsed after the list has already settled at offset 0.
+        if rawOffset <= showAtTopThreshold {
+            offsetNormalizer.reset()
+            lastOffset = 0
+            setCollapseProgress(0)
+            return
+        }
+
         let offset = offsetNormalizer.normalize(rawOffset)
 
         if offset <= showAtTopThreshold {
@@ -40,12 +53,22 @@ public final class FeedSegmentScrollState: ObservableObject {
     }
 
     public func snapCollapseProgress() {
-        let target: CGFloat = collapseProgress >= 0.5 ? 1 : 0
-        setCollapseProgress(target, animated: true)
+        if lastRawOffset <= atTopSnapSlack {
+            setCollapseProgress(0, animated: true)
+            return
+        }
+        let progressFromOffset: CGFloat
+        if lastOffset <= showAtTopThreshold {
+            progressFromOffset = 0
+        } else {
+            progressFromOffset = min(1, (lastOffset - showAtTopThreshold) / collapseDistance)
+        }
+        setCollapseProgress(progressFromOffset >= 0.5 ? 1 : 0, animated: true)
     }
 
     public func reset() {
         lastOffset = 0
+        lastRawOffset = 0
         offsetNormalizer.reset()
         setCollapseProgress(0, animated: false)
     }
@@ -88,11 +111,15 @@ public struct FeedSegmentHideOnScrollModifier: ViewModifier {
                         geometry.contentOffset.y + geometry.contentInsets.top
                     } action: { previous, offset in
                         guard scrollChromeTrackingEnabled else { return }
-                        guard abs(previous - offset) > 0.25 else { return }
+                        let nearTop = offset <= SplickTabBarMetrics.showNearTopThreshold
+                        guard nearTop || abs(previous - offset) > 0.25 else { return }
                         feedSegmentScrollState.updateScrollOffset(offset)
                     }
-                    .onScrollPhaseChange { oldPhase, newPhase in
-                        if oldPhase == .interacting, newPhase != .interacting {
+                    .onScrollPhaseChange { _, newPhase, context in
+                        guard scrollChromeTrackingEnabled else { return }
+                        let offsetY = context.geometry.contentOffset.y + context.geometry.contentInsets.top
+                        feedSegmentScrollState.updateScrollOffset(offsetY)
+                        if newPhase == .idle {
                             feedSegmentScrollState.snapCollapseProgress()
                         }
                     }
@@ -131,15 +158,29 @@ public struct ScrollChromeTrackingModifier: ViewModifier {
                 .onScrollGeometryChange(for: CGFloat.self) { geometry in
                     geometry.contentOffset.y + geometry.contentInsets.top
                 } action: { previous, offsetY in
-                    guard scrollChromeTrackingEnabled, !pullToRefreshActive else { return }
+                    guard scrollChromeTrackingEnabled else { return }
                     let nearTop = offsetY <= SplickTabBarMetrics.showNearTopThreshold
+                    if pullToRefreshActive {
+                        if nearTop {
+                            feedSegmentScrollState?.updateScrollOffset(offsetY)
+                        }
+                        return
+                    }
                     guard nearTop || abs(previous - offsetY) > 0.25 else { return }
                     feedSegmentScrollState?.updateScrollOffset(offsetY)
                     tabBarScrollState?.updateScrollOffset(offsetY)
                 }
-                .onScrollPhaseChange { oldPhase, newPhase in
-                    if oldPhase == .interacting, newPhase != .interacting {
-                        guard scrollChromeTrackingEnabled, !pullToRefreshActive else { return }
+                .onScrollPhaseChange { _, newPhase, context in
+                    guard scrollChromeTrackingEnabled else { return }
+                    let offsetY = context.geometry.contentOffset.y + context.geometry.contentInsets.top
+                    let nearTop = offsetY <= SplickTabBarMetrics.showNearTopThreshold
+                    if !pullToRefreshActive || nearTop {
+                        feedSegmentScrollState?.updateScrollOffset(offsetY)
+                    }
+                    if !pullToRefreshActive {
+                        tabBarScrollState?.updateScrollOffset(offsetY)
+                    }
+                    if newPhase == .idle, !pullToRefreshActive {
                         feedSegmentScrollState?.snapCollapseProgress()
                     }
                 }

@@ -21,6 +21,7 @@ private struct AlbumPostPreview {
 public struct PhotoAlbumView: View {
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.tabBarScrollState) private var tabBarScrollState
+    @Environment(\.feedSegmentScrollState) private var feedSegmentScrollState
     @Environment(\.sameTabTapHandlingEnabled) private var sameTabTapHandlingEnabled
     @ObservedObject private var viewModel: PhotoAlbumViewModel
     @ObservedObject private var feedViewModel: FeedViewModel
@@ -205,6 +206,7 @@ public struct PhotoAlbumView: View {
                     proxy.scrollTo(AlbumScrollAnchor.top, anchor: .top)
                 }
                 tabBarScrollState?.reset()
+                feedSegmentScrollState?.reset()
             }
         }
     }
