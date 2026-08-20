@@ -80,7 +80,7 @@ private struct OverlappingEmojiStack: View {
     }
 }
 
-/// "+N người bày tỏ cảm xúc khác" chip — fly target when user is outside top 3.
+/// "+N others" / "+N người khác" capsule — fly target when user is outside top 3.
 struct MoreReactorsChip: View {
     @EnvironmentObject private var languageService: LanguageService
     let count: Int
@@ -89,8 +89,7 @@ struct MoreReactorsChip: View {
         Text(languageService.format(.feedReactionsMore, count))
             .font(.system(size: 10, weight: .medium))
             .foregroundStyle(SplickTheme.Colors.textSecondary)
-            .lineLimit(2)
-            .multilineTextAlignment(.leading)
+            .lineLimit(1)
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
             .frame(minHeight: 30)
