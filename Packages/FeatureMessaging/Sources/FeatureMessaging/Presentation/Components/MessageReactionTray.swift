@@ -55,7 +55,7 @@ struct MessageReactionTray: View {
     private func animateSlotsIn() {
         revealedSlotCount = 0
         for index in 0..<totalSlots {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.04 * Double(index)) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.036 * Double(index)) {
                 withAnimation(MessageReactionTrayMotion.emojiSlot) {
                     revealedSlotCount = index + 1
                 }
@@ -72,7 +72,7 @@ struct MessageReactionTray: View {
         } label: {
             EmojiView(value: emoji, size: slotSize)
                 .frame(width: slotSize, height: slotSize)
-                .scaleEffect(isVisible ? 1 : 0.2)
+                .scaleEffect(isVisible ? 1 : 0)
                 .opacity(isVisible ? 1 : 0)
                 .animation(MessageReactionTrayMotion.emojiSlot, value: isVisible)
                 .reactionTapBounce(isActive: isBouncing)
@@ -91,7 +91,7 @@ struct MessageReactionTray: View {
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
                 .frame(width: slotSize, height: slotSize)
                 .background(Circle().fill(SplickTheme.Colors.tertiaryBackground))
-                .scaleEffect(isVisible ? 1 : 0.2)
+                .scaleEffect(isVisible ? 1 : 0)
                 .opacity(isVisible ? 1 : 0)
                 .animation(MessageReactionTrayMotion.emojiSlot, value: isVisible)
         }

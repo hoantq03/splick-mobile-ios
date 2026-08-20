@@ -19,6 +19,9 @@ struct MessageReactionFocusOverlay: View {
     let onForceDismiss: () -> Void
 
     @State private var isRevealed = false
+    /// Drives the options chrome (reaction tray + action buttons) independently of the dimmer.
+    /// Animates in slightly after the bubble pop to create a cascade effect.
+    @State private var isOptionsRevealed = false
     @State private var isDismissing = false
     /// Only this drives the bubble motion — never animate position/frame.
     @State private var messagePopScale: CGFloat = 1
@@ -111,14 +114,14 @@ struct MessageReactionFocusOverlay: View {
                     }
                 }
                 .scaleEffect(
-                    isRevealed ? 1 : 0.42,
+                    isOptionsRevealed ? 1 : 0.42,
                     anchor: UnitPoint(
                         x: horizontalScaleAnchorX,
                         y: placeOptionsAbove ? 1 : 0
                     )
                 )
-                .opacity(isRevealed ? 1 : 0)
-                .offset(y: isRevealed ? 0 : (placeOptionsAbove ? 10 : -10))
+                .opacity(isOptionsRevealed ? 1 : 0)
+                .offset(y: isOptionsRevealed ? 0 : (placeOptionsAbove ? 10 : -10))
                 .position(x: geo.size.width / 2, y: optionsCenterY)
                 .zIndex(2)
             }
@@ -135,13 +138,22 @@ struct MessageReactionFocusOverlay: View {
             // Rest scale matches the list bubble; then pop in place (no slide).
             messagePopScale = 1
             isRevealed = false
+            isOptionsRevealed = false
             DispatchQueue.main.async {
+                // 1. Dim background immediately.
                 withAnimation(MessageReactionTrayMotion.present) {
                     isRevealed = true
                 }
+                // 2. Bubble pops up — fast underdamped spring produces a soft overshoot.
                 if !isMessageCapped {
                     withAnimation(MessageReactionTrayMotion.bubblePop) {
                         messagePopScale = messageFocusScale
+                    }
+                }
+                // 3. Options chrome cascades in just after the bubble settles into its first peak.
+                DispatchQueue.main.asyncAfter(deadline: .now() + MessageReactionTrayMotion.optionsChromeDelay) {
+                    withAnimation(MessageReactionTrayMotion.present) {
+                        isOptionsRevealed = true
                     }
                 }
             }
@@ -340,6 +352,7 @@ struct MessageReactionFocusOverlay: View {
         isDismissing = true
         withAnimation(MessageReactionTrayMotion.dismiss) {
             isRevealed = false
+            isOptionsRevealed = false
             messagePopScale = 1
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + MessageReactionTrayMotion.dismissSettlingDelay) {
