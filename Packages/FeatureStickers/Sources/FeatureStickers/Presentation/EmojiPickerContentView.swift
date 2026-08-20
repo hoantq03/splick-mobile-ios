@@ -84,8 +84,8 @@ public struct EmojiPickerContentView: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 44)
                 .background(SplickTheme.Colors.secondaryBackground)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .onTapGesture { onPick(emoji.colonCode) }
                 .accessibilityAddTraits(.isButton)
         case .system(let emoji):
@@ -94,8 +94,8 @@ public struct EmojiPickerContentView: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 44)
                 .background(SplickTheme.Colors.secondaryBackground)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .onTapGesture { onPick(emoji.emoji) }
                 .accessibilityAddTraits(.isButton)
         }
