@@ -108,7 +108,7 @@ public struct CreatePostComposeView: View {
                 onMediaCaptured: { media in
                     showCameraCapture = false
                     switch media {
-                    case .image(let image):
+                    case .image(let image, _):
                         viewModel.addImages([image])
                     case .images(let images):
                         viewModel.addImages(images)

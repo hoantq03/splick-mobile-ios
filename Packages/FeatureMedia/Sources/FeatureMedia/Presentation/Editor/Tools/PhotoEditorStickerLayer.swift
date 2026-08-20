@@ -10,7 +10,7 @@ struct PhotoEditorStickerLayer: View {
             ForEach(viewModel.stickerItems) { item in
                 StickerOverlayItemView(
                     item: item,
-                    center: displayMetrics.imageNormalizedToView(item.normalizedPosition),
+                    center: viewModel.overlayDisplayPoint(item.normalizedPosition, metrics: displayMetrics),
                     isSelected: viewModel.selectedStickerID == item.id,
                     isInteractive: isEditing,
                     displayFrame: displayMetrics.displayFrame,

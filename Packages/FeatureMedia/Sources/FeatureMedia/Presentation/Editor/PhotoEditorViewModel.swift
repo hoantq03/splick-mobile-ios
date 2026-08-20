@@ -1,4 +1,5 @@
 import Combine
+import CoreImage
 import Localization
 import PencilKit
 import SwiftUI
@@ -6,6 +7,9 @@ import UIKit
 
 enum EditorTool: String, CaseIterable, Identifiable {
     case crop
+    case rotate
+    case filter
+    case adjust
     case draw
     case text
     case sticker
@@ -16,6 +20,9 @@ enum EditorTool: String, CaseIterable, Identifiable {
     func title(using languageService: LanguageService) -> String {
         switch self {
         case .crop: return languageService.text(.mediaToolCrop)
+        case .rotate: return languageService.text(.mediaToolRotate)
+        case .filter: return languageService.text(.mediaToolFilter)
+        case .adjust: return languageService.text(.mediaToolAdjust)
         case .draw: return languageService.text(.mediaToolDraw)
         case .text: return languageService.text(.mediaToolText)
         case .sticker: return languageService.text(.mediaToolSticker)
@@ -24,7 +31,10 @@ enum EditorTool: String, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
-        case .crop: return "crop.rotate"
+        case .crop: return "crop"
+        case .rotate: return "rotate.right"
+        case .filter: return "camera.filters"
+        case .adjust: return "slider.horizontal.3"
         case .draw: return "scribble.variable"
         case .text: return "character.textbox"
         case .sticker: return "face.smiling"
@@ -65,49 +75,6 @@ struct EditorTextItem: Identifiable, Equatable {
     }
 }
 
-private struct EditorSnapshot {
-    var baseImage: UIImage
-    var drawing: PKDrawing
-    var textItems: [EditorTextItem]
-    var stickerItems: [EditorStickerItem]
-    var gifStickerData: [UUID: Data]
-    var normalizedCropRect: CGRect
-
-    var fingerprint: Data {
-        var data = drawing.dataRepresentation()
-        data.append(contentsOf: withUnsafeBytes(of: normalizedCropRect.origin.x) { Array($0) })
-        data.append(contentsOf: withUnsafeBytes(of: normalizedCropRect.origin.y) { Array($0) })
-        data.append(contentsOf: withUnsafeBytes(of: normalizedCropRect.size.width) { Array($0) })
-        data.append(contentsOf: withUnsafeBytes(of: normalizedCropRect.size.height) { Array($0) })
-        data.append(contentsOf: withUnsafeBytes(of: baseImage.size.width) { Array($0) })
-        data.append(contentsOf: withUnsafeBytes(of: baseImage.size.height) { Array($0) })
-
-        for item in textItems {
-            data.append(item.id.uuidString.data(using: .utf8) ?? Data())
-            data.append(item.text.data(using: .utf8) ?? Data())
-            data.append(contentsOf: withUnsafeBytes(of: item.normalizedPosition.x) { Array($0) })
-            data.append(contentsOf: withUnsafeBytes(of: item.normalizedPosition.y) { Array($0) })
-            data.append(contentsOf: withUnsafeBytes(of: item.scale) { Array($0) })
-            data.append(contentsOf: withUnsafeBytes(of: item.rotation.radians) { Array($0) })
-        }
-        for item in stickerItems {
-            data.append(item.id.uuidString.data(using: .utf8) ?? Data())
-            data.append(String(describing: item.kind).data(using: .utf8) ?? Data())
-            data.append(contentsOf: withUnsafeBytes(of: item.normalizedPosition.x) { Array($0) })
-            data.append(contentsOf: withUnsafeBytes(of: item.normalizedPosition.y) { Array($0) })
-            data.append(contentsOf: withUnsafeBytes(of: item.scale) { Array($0) })
-            data.append(contentsOf: withUnsafeBytes(of: item.rotation.radians) { Array($0) })
-        }
-        for id in gifStickerData.keys.sorted(by: { $0.uuidString < $1.uuidString }) {
-            data.append(id.uuidString.data(using: .utf8) ?? Data())
-            data.append(String(gifStickerData[id]?.count ?? 0).data(using: .utf8) ?? Data())
-        }
-        return data
-    }
-}
-
-private let fullImageCropRect = CGRect(x: 0, y: 0, width: 1, height: 1)
-
 @MainActor
 final class PhotoEditorViewModel: ObservableObject {
     @Published private(set) var baseImage: UIImage
@@ -116,19 +83,28 @@ final class PhotoEditorViewModel: ObservableObject {
     @Published var drawing = PKDrawing()
     @Published var textItems: [EditorTextItem] = []
     @Published var stickerItems: [EditorStickerItem] = []
-    @Published var normalizedCropRect: CGRect = fullImageCropRect
+    @Published var normalizedCropRect: CGRect = EditState.fullImageCropRect
     @Published var selectedTextID: UUID?
     @Published var selectedStickerID: UUID?
     @Published var inkColor: UIColor = .white
     @Published var inkWidth: CGFloat = 5
+    @Published var activeFilter: FilterPreset = .none
+    @Published var adjustments: ImageAdjustments = .identity
+    @Published var rotatePulse = false
+    @Published private(set) var isExporting = false
     @Published private(set) var gifStickerData: [UUID: Data] = [:]
     @Published private(set) var gifGallery: [EditorGifSample] = []
     @Published private(set) var recentEmojis: [String] = []
 
     let preparedImage: PhotoEditorImageProcessor.PreparedImage
 
-    private var undoStack: [EditorSnapshot] = []
-    private var redoStack: [EditorSnapshot] = []
+    private let originalCIImage: CIImage
+    private let renderer = MetalImageRenderer()
+    private var rotationQuarters = 0
+    private var undoStack: [EditState] = []
+    private var redoStack: [EditState] = []
+    private var previewGeneration = 0
+    private var previewTask: Task<Void, Never>?
     private(set) var lastDisplayMetrics: ImageDisplayMetrics?
     private(set) var drawingCanvasSize: CGSize = .zero
     private(set) var finalizeFlushToken = 0
@@ -142,25 +118,38 @@ final class PhotoEditorViewModel: ObservableObject {
         UIColor(red: 0.42, green: 0.85, blue: 0.55, alpha: 1),
     ]
 
-    init(sourceImage: UIImage) {
+    init(sourceImage: UIImage, initialFilter: FilterPreset = .none) {
         let prepared = PhotoEditorImageProcessor.prepareForEditing(sourceImage)
         preparedImage = prepared
         baseImage = prepared.editingImage
+        if let ciImage = CIImage(image: prepared.editingImage) {
+            originalCIImage = ciImage
+        } else if let cgImage = prepared.editingImage.cgImage {
+            originalCIImage = CIImage(cgImage: cgImage)
+        } else {
+            originalCIImage = CIImage.empty()
+        }
+        activeFilter = initialFilter
         activeTool = .draw
         pushSnapshotIfNeeded()
+        schedulePreviewRefresh()
     }
 
-    var canUndo: Bool {
-        undoStack.count > 1
-    }
+    var canUndo: Bool { undoStack.count > 1 }
+    var canRedo: Bool { !redoStack.isEmpty }
 
-    var canRedo: Bool {
-        !redoStack.isEmpty
-    }
+    var showsFullImageForCrop: Bool { activeTool == .crop }
 
     func selectTool(_ tool: EditorTool) {
         if !isChromeVisible {
             isChromeVisible = true
+        }
+
+        if tool == .rotate {
+            commitLeavingToolIfNeeded()
+            activeTool = .rotate
+            rotateClockwise()
+            return
         }
 
         if activeTool == tool {
@@ -171,17 +160,12 @@ final class PhotoEditorViewModel: ObservableObject {
         commitLeavingToolIfNeeded()
         finalizeFlushToken += 1
         activeTool = tool
-        if tool != .text {
-            selectedTextID = nil
-        }
-        if tool != .sticker {
-            selectedStickerID = nil
-        }
+        if tool != .text { selectedTextID = nil }
+        if tool != .sticker { selectedStickerID = nil }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        // Intentionally NOT baking on tool switch: baking clears `drawing` async,
-        // which removes PhotoEditorDrawingOverlay before EditorImageView can show
-        // the baked result — causing the last stroke to appear to vanish.
-        // All layers are baked together only in finalize() / prepareForFinalize().
+        if tool == .crop || tool == .filter || tool == .adjust {
+            schedulePreviewRefresh()
+        }
     }
 
     func toggleChromeFromImageTap() {
@@ -193,13 +177,12 @@ final class PhotoEditorViewModel: ObservableObject {
         }
     }
 
-    /// Image tap hides chrome only in neutral/view mode — not while a tool needs canvas interaction.
     var shouldToggleChromeOnImageTap: Bool {
         if !isChromeVisible { return true }
         switch activeTool {
         case .none:
             return true
-        case .text, .draw, .crop, .sticker:
+        case .text, .draw, .crop, .sticker, .filter, .adjust, .rotate:
             return false
         }
     }
@@ -212,7 +195,7 @@ final class PhotoEditorViewModel: ObservableObject {
         selectedStickerID = nil
         isChromeVisible = false
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        // Same reasoning as selectTool — defer baking to finalize().
+        schedulePreviewRefresh()
     }
 
     func showChrome() {
@@ -229,18 +212,17 @@ final class PhotoEditorViewModel: ObservableObject {
     func prepareForFinalize() {
         finalizeFlushToken += 1
         commitLeavingToolIfNeeded()
-        bakeAllOverlaysIntoBaseImage()
     }
 
     private func commitLeavingToolIfNeeded() {
         if activeTool == .crop {
-            applyCropIfNeeded()
+            schedulePreviewRefresh()
         }
     }
 
     func undo() {
         guard undoStack.count > 1 else { return }
-        redoStack.append(copySnapshot(undoStack.removeLast()))
+        redoStack.append(undoStack.removeLast())
         guard let snapshot = undoStack.last else { return }
         restore(snapshot)
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
@@ -248,14 +230,59 @@ final class PhotoEditorViewModel: ObservableObject {
 
     func redo() {
         guard let snapshot = redoStack.popLast() else { return }
-        undoStack.append(copySnapshot(snapshot))
+        undoStack.append(snapshot)
         restore(snapshot)
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
 
-    func addText(at normalizedPosition: CGPoint) {
+    func rotateClockwise() {
+        rotationQuarters += 1
+        normalizedCropRect = Self.rotateRectClockwise(normalizedCropRect)
+        textItems = textItems.map { item in
+            var copy = item
+            copy.normalizedPosition = Self.rotatePointClockwise(item.normalizedPosition)
+            copy.rotation += .degrees(90)
+            return copy
+        }
+        stickerItems = stickerItems.map { item in
+            var copy = item
+            copy.normalizedPosition = Self.rotatePointClockwise(item.normalizedPosition)
+            copy.rotation += .degrees(90)
+            return copy
+        }
+        drawing = drawing.transformed(using: CGAffineTransform(a: 0, b: 1, c: -1, d: 0, tx: 1, ty: 0))
+        drawingSyncRevision += 1
+        rotatePulse.toggle()
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        pushSnapshotIfNeeded()
+        schedulePreviewRefresh()
+    }
+
+    func resetCrop() {
+        normalizedCropRect = EditState.fullImageCropRect
+        pushSnapshotIfNeeded()
+        schedulePreviewRefresh()
+    }
+
+    func setFilter(_ preset: FilterPreset) {
+        guard activeFilter != preset else { return }
+        activeFilter = preset
+        pushSnapshotIfNeeded()
+        schedulePreviewRefresh()
+    }
+
+    func setAdjustments(_ value: ImageAdjustments) {
+        adjustments = value
+        schedulePreviewRefresh()
+    }
+
+    func commitAdjustments() {
+        pushSnapshotIfNeeded()
+    }
+
+    func addText(at visibleNormalized: CGPoint) {
         let item = EditorTextItem(
-            normalizedPosition: normalizedPosition,
+            normalizedPosition: storedNormalized(fromVisible: visibleNormalized),
             color: inkColor
         )
         textItems.append(item)
@@ -265,7 +292,7 @@ final class PhotoEditorViewModel: ObservableObject {
 
     func updateTextItemPosition(id: UUID, normalizedPosition: CGPoint) {
         guard let index = textItems.firstIndex(where: { $0.id == id }) else { return }
-        textItems[index].normalizedPosition = normalizedPosition
+        textItems[index].normalizedPosition = storedNormalized(fromVisible: normalizedPosition)
     }
 
     func updateTextItemScale(id: UUID, scale: CGFloat) {
@@ -291,7 +318,6 @@ final class PhotoEditorViewModel: ObservableObject {
     }
 
     func commitTextEdit() {
-        bakeAllOverlaysIntoBaseImage()
         pushSnapshotIfNeeded()
     }
 
@@ -303,7 +329,7 @@ final class PhotoEditorViewModel: ObservableObject {
         let offset = CGFloat(stickerItems.count % 5) * 0.04
         let item = EditorStickerItem(
             kind: kind,
-            normalizedPosition: CGPoint(x: 0.5 + offset, y: 0.45 + offset)
+            normalizedPosition: storedNormalized(fromVisible: CGPoint(x: 0.5 + offset, y: 0.45 + offset))
         )
         stickerItems.append(item)
         selectedStickerID = item.id
@@ -323,7 +349,7 @@ final class PhotoEditorViewModel: ObservableObject {
         let offset = CGFloat(stickerItems.count % 5) * 0.04
         let item = EditorStickerItem(
             kind: .gif(stickerID),
-            normalizedPosition: CGPoint(x: 0.5 + offset, y: 0.45 + offset)
+            normalizedPosition: storedNormalized(fromVisible: CGPoint(x: 0.5 + offset, y: 0.45 + offset))
         )
         stickerItems.append(item)
         selectedStickerID = item.id
@@ -336,7 +362,7 @@ final class PhotoEditorViewModel: ObservableObject {
         let offset = CGFloat(stickerItems.count % 5) * 0.04
         let item = EditorStickerItem(
             kind: .gif(stickerID),
-            normalizedPosition: CGPoint(x: 0.5 + offset, y: 0.45 + offset)
+            normalizedPosition: storedNormalized(fromVisible: CGPoint(x: 0.5 + offset, y: 0.45 + offset))
         )
         stickerItems.append(item)
         selectedStickerID = item.id
@@ -359,7 +385,7 @@ final class PhotoEditorViewModel: ObservableObject {
     func updateStickerPosition(id: UUID, normalizedPosition: CGPoint) {
         guard let index = stickerItems.firstIndex(where: { $0.id == id }) else { return }
         var items = stickerItems
-        items[index].normalizedPosition = normalizedPosition
+        items[index].normalizedPosition = storedNormalized(fromVisible: normalizedPosition)
         stickerItems = items
     }
 
@@ -393,35 +419,25 @@ final class PhotoEditorViewModel: ObservableObject {
     }
 
     func commitDrawing(_ newDrawing: PKDrawing) {
-        guard drawing != newDrawing else { return }
-        drawing = newDrawing
-        if let canvasSize = lastDisplayMetrics?.displayFrame.size, canvasSize.width > 0 {
-            drawingCanvasSize = canvasSize
-        }
+        let canvasSize = lastDisplayMetrics?.displayFrame.size ?? drawingCanvasSize
+        guard canvasSize.width > 0, canvasSize.height > 0 else { return }
+        drawingCanvasSize = canvasSize
+        drawing = storeDrawing(newDrawing, canvasSize: canvasSize)
         pushSnapshotIfNeeded()
     }
 
+    func drawingForDisplay(canvasSize: CGSize) -> PKDrawing {
+        displayDrawing(drawing, canvasSize: canvasSize)
+    }
+
     func commitCropRect(_ rect: CGRect) {
-        normalizedCropRect = rect
+        let clamped = Self.clampCrop(rect)
+        guard clamped != normalizedCropRect else { return }
+        normalizedCropRect = clamped
     }
 
     func applyCropIfNeeded() {
-        guard isEffectiveCrop(normalizedCropRect) else { return }
-
-        bakeDrawingIntoBaseImageIfNeeded()
-
-        let cropNormalized = normalizedCropRect
-        let imageSizeBefore = baseImage.size
-        let rect = pixelCropRect(for: imageSizeBefore)
-        guard rect.width > 1, rect.height > 1,
-              let cgImage = baseImage.cgImage?.cropping(to: rect.integral) else {
-            return
-        }
-
-        baseImage = UIImage(cgImage: cgImage, scale: baseImage.scale, orientation: baseImage.imageOrientation)
-        normalizedCropRect = fullImageCropRect
-        remapTextItemsAfterCrop(cropNormalized: cropNormalized)
-        remapStickerItemsAfterCrop(cropNormalized: cropNormalized)
+        schedulePreviewRefresh()
         pushSnapshotIfNeeded()
     }
 
@@ -434,120 +450,158 @@ final class PhotoEditorViewModel: ObservableObject {
         )
     }
 
+    func overlayDisplayPoint(_ stored: CGPoint, metrics: ImageDisplayMetrics) -> CGPoint {
+        metrics.imageNormalizedToView(visibleNormalized(fromStored: stored))
+    }
+
     func finalize(displayMetrics: ImageDisplayMetrics? = nil) -> UIImage {
-        let metrics = resolvedDisplayMetrics(displayMetrics)
-        bakeAllOverlaysIntoBaseImage(using: metrics)
-        applyCropIfNeeded()
-
-        let imageSize = baseImage.size
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = baseImage.scale
-        format.opaque = false
-
-        let renderer = UIGraphicsImageRenderer(size: imageSize, format: format)
-        let edited = renderer.image { _ in
-            baseImage.draw(in: CGRect(origin: .zero, size: imageSize))
-        }
-
-        return PhotoEditorImageProcessor.upscaleForExport(edited, prepared: preparedImage)
+        lastDisplayMetrics = displayMetrics ?? lastDisplayMetrics
+        return baseImage
     }
 
-    func bakeAllOverlaysIntoBaseImage(using metrics: ImageDisplayMetrics? = nil) {
-        let resolvedMetrics = metrics ?? resolvedDisplayMetrics(nil)
-        guard resolvedMetrics.displayFrame.width > 0 else { return }
-        bakeDrawingIntoBaseImageIfNeeded(using: resolvedMetrics)
-        bakeTextItemsIntoBaseImageIfNeeded(using: resolvedMetrics)
-        bakeStickerItemsIntoBaseImageIfNeeded(using: resolvedMetrics)
+    func finalizeAsync() async -> UIImage {
+        prepareForFinalize()
+        isExporting = true
+        let state = currentEditState()
+        let metrics = lastDisplayMetrics
+        let original = originalCIImage
+        let renderer = renderer
+        let base = await renderer.renderBase(state, from: original) ?? baseImage
+        let composited = compositeOverlays(on: base, state: state, metrics: metrics)
+        isExporting = false
+        return composited
     }
 
-    private func resolvedDisplayMetrics(_ override: ImageDisplayMetrics?) -> ImageDisplayMetrics {
-        if let override, override.displayFrame.width > 0 {
-            return override
-        }
-        if let lastDisplayMetrics, lastDisplayMetrics.displayFrame.width > 0 {
-            return lastDisplayMetrics
-        }
-
-        let screen = UIScreen.main.bounds.size
-        let canvasSize = CGSize(
-            width: screen.width,
-            height: max(screen.height - EditorLayout.topBarHeight - EditorLayout.bottomBarHeight, 1)
+    func currentEditState() -> EditState {
+        EditState(
+            cropRect: normalizedCropRect,
+            rotationQuarters: rotationQuarters,
+            drawing: drawing,
+            textItems: textItems,
+            stickerItems: stickerItems,
+            gifStickerData: gifStickerData,
+            activeFilter: activeFilter,
+            adjustments: adjustments
         )
-        return ImageDisplayMetrics.aspectFit(imageSize: baseImage.size, in: canvasSize)
     }
 
-    private func isEffectiveCrop(_ rect: CGRect) -> Bool {
-        rect.minX > 0.001
-            || rect.minY > 0.001
-            || rect.width < 0.999
-            || rect.height < 0.999
-    }
-
-    private func bakeDrawingIntoBaseImageIfNeeded(using metrics: ImageDisplayMetrics? = nil) {
-        guard !drawing.bounds.isEmpty else { return }
-
-        let resolvedMetrics = metrics ?? resolvedDisplayMetrics(nil)
-        let canvasSize = drawingCanvasSize.width > 0 ? drawingCanvasSize : resolvedMetrics.displayFrame.size
-        guard canvasSize.width > 0, canvasSize.height > 0 else { return }
-
-        let imageSize = baseImage.size
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = baseImage.scale
-        format.opaque = false
-
-        let canvasBounds = CGRect(origin: .zero, size: canvasSize)
-        let drawingImage = drawing.image(from: canvasBounds, scale: baseImage.scale)
-
-        baseImage = UIGraphicsImageRenderer(size: imageSize, format: format).image { _ in
-            baseImage.draw(in: CGRect(origin: .zero, size: imageSize))
-            drawingImage.draw(in: CGRect(origin: .zero, size: imageSize))
-        }
-        drawing = PKDrawing()
-        drawingCanvasSize = .zero
-    }
-
-    private func bakeTextItemsIntoBaseImageIfNeeded(using metrics: ImageDisplayMetrics) {
-        guard !textItems.isEmpty else { return }
-
-        let imageSize = baseImage.size
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = baseImage.scale
-        format.opaque = false
-
-        baseImage = UIGraphicsImageRenderer(size: imageSize, format: format).image { _ in
-            baseImage.draw(in: CGRect(origin: .zero, size: imageSize))
-            for item in textItems {
-                drawTextItem(item, imageSize: imageSize, displayFrame: metrics.displayFrame)
+    private func schedulePreviewRefresh() {
+        previewTask?.cancel()
+        previewGeneration += 1
+        let generation = previewGeneration
+        let state = currentEditState()
+        let ignoreCrop = showsFullImageForCrop
+        let original = originalCIImage
+        previewTask = Task { [renderer] in
+            let preview = await renderer.renderPreview(
+                state,
+                from: original,
+                maxDimension: 1600,
+                ignoreCrop: ignoreCrop
+            )
+            await MainActor.run {
+                guard generation == self.previewGeneration, let preview else { return }
+                self.baseImage = preview
             }
         }
-        textItems = []
-        selectedTextID = nil
     }
 
-    private func bakeStickerItemsIntoBaseImageIfNeeded(using metrics: ImageDisplayMetrics) {
-        guard !stickerItems.isEmpty else { return }
+    private func visibleNormalized(fromStored stored: CGPoint) -> CGPoint {
+        let crop = normalizedCropRect
+        if showsFullImageForCrop || !isEffectiveCrop(crop) { return stored }
+        return CGPoint(
+            x: (stored.x - crop.minX) / max(crop.width, 0.0001),
+            y: (stored.y - crop.minY) / max(crop.height, 0.0001)
+        )
+    }
 
-        let imageSize = baseImage.size
+    private func storedNormalized(fromVisible visible: CGPoint) -> CGPoint {
+        let crop = normalizedCropRect
+        if showsFullImageForCrop || !isEffectiveCrop(crop) { return visible }
+        return CGPoint(
+            x: crop.minX + visible.x * crop.width,
+            y: crop.minY + visible.y * crop.height
+        )
+    }
+
+    private func storeDrawing(_ canvasDrawing: PKDrawing, canvasSize: CGSize) -> PKDrawing {
+        var transform = CGAffineTransform(scaleX: 1 / canvasSize.width, y: 1 / canvasSize.height)
+        let crop = normalizedCropRect
+        if !showsFullImageForCrop, isEffectiveCrop(crop) {
+            transform = transform
+                .scaledBy(x: crop.width, y: crop.height)
+                .translatedBy(x: crop.minX, y: crop.minY)
+        }
+        return canvasDrawing.transformed(using: transform)
+    }
+
+    private func displayDrawing(_ stored: PKDrawing, canvasSize: CGSize) -> PKDrawing {
+        var transform = CGAffineTransform.identity
+        let crop = normalizedCropRect
+        if !showsFullImageForCrop, isEffectiveCrop(crop) {
+            transform = transform
+                .translatedBy(x: -crop.minX, y: -crop.minY)
+                .scaledBy(x: 1 / max(crop.width, 0.0001), y: 1 / max(crop.height, 0.0001))
+        }
+        transform = transform.scaledBy(x: canvasSize.width, y: canvasSize.height)
+        return stored.transformed(using: transform)
+    }
+
+    private func compositeOverlays(on base: UIImage, state: EditState, metrics: ImageDisplayMetrics?) -> UIImage {
+        let imageSize = base.size
+        guard imageSize.width > 1, imageSize.height > 1 else { return base }
         let format = UIGraphicsImageRendererFormat()
-        format.scale = baseImage.scale
+        format.scale = base.scale
         format.opaque = false
+        let displayFrame = metrics?.displayFrame ?? CGRect(origin: .zero, size: imageSize)
 
-        baseImage = UIGraphicsImageRenderer(size: imageSize, format: format).image { _ in
-            baseImage.draw(in: CGRect(origin: .zero, size: imageSize))
-            for item in stickerItems {
-                drawStickerItem(item, imageSize: imageSize, displayFrame: metrics.displayFrame)
+        return UIGraphicsImageRenderer(size: imageSize, format: format).image { _ in
+            base.draw(in: CGRect(origin: .zero, size: imageSize))
+
+            if !state.drawing.bounds.isEmpty {
+                var transform = CGAffineTransform.identity
+                if state.isEffectiveCrop {
+                    transform = transform
+                        .translatedBy(x: -state.cropRect.minX, y: -state.cropRect.minY)
+                        .scaledBy(
+                            x: 1 / max(state.cropRect.width, 0.0001),
+                            y: 1 / max(state.cropRect.height, 0.0001)
+                        )
+                }
+                transform = transform.scaledBy(x: imageSize.width, y: imageSize.height)
+                let mapped = state.drawing.transformed(using: transform)
+                let drawingImage = mapped.image(
+                    from: CGRect(origin: .zero, size: imageSize),
+                    scale: base.scale
+                )
+                drawingImage.draw(in: CGRect(origin: .zero, size: imageSize))
+            }
+
+            for item in state.textItems {
+                drawTextItem(item, imageSize: imageSize, crop: state.cropRect, displayFrame: displayFrame)
+            }
+            for item in state.stickerItems {
+                drawStickerItem(item, state: state, imageSize: imageSize, displayFrame: displayFrame)
             }
         }
-        stickerItems = []
-        selectedStickerID = nil
-        gifStickerData = [:]
     }
 
-    private func drawTextItem(_ item: EditorTextItem, imageSize: CGSize, displayFrame: CGRect) {
-        let imagePoint = CGPoint(
-            x: item.normalizedPosition.x * imageSize.width,
-            y: item.normalizedPosition.y * imageSize.height
+    private func overlayExportPoint(_ stored: CGPoint, crop: CGRect) -> CGPoint {
+        if !isEffectiveCrop(crop) { return stored }
+        return CGPoint(
+            x: (stored.x - crop.minX) / max(crop.width, 0.0001),
+            y: (stored.y - crop.minY) / max(crop.height, 0.0001)
         )
+    }
+
+    private func drawTextItem(
+        _ item: EditorTextItem,
+        imageSize: CGSize,
+        crop: CGRect,
+        displayFrame: CGRect
+    ) {
+        let normalized = overlayExportPoint(item.normalizedPosition, crop: crop)
+        let imagePoint = CGPoint(x: normalized.x * imageSize.width, y: normalized.y * imageSize.height)
         let fontSize = 32 * item.scale * (imageSize.width / max(displayFrame.width, 1))
 
         let shadow = NSShadow()
@@ -562,7 +616,6 @@ final class PhotoEditorViewModel: ObservableObject {
         ]
         let attributed = NSAttributedString(string: item.text, attributes: attributes)
         let textSize = attributed.size()
-
         let context = UIGraphicsGetCurrentContext()
         context?.saveGState()
         context?.translateBy(x: imagePoint.x, y: imagePoint.y)
@@ -571,34 +624,18 @@ final class PhotoEditorViewModel: ObservableObject {
         context?.restoreGState()
     }
 
-    private func remapTextItemsAfterCrop(cropNormalized: CGRect) {
-        guard cropNormalized.width > 0, cropNormalized.height > 0 else { return }
-        textItems = textItems.map { item in
-            var copy = item
-            copy.normalizedPosition = CGPoint(
-                x: (item.normalizedPosition.x - cropNormalized.minX) / cropNormalized.width,
-                y: (item.normalizedPosition.y - cropNormalized.minY) / cropNormalized.height
-            )
-            return copy
-        }
-    }
-
-    private func remapStickerItemsAfterCrop(cropNormalized: CGRect) {
-        guard cropNormalized.width > 0, cropNormalized.height > 0 else { return }
-        stickerItems = stickerItems.map { item in
-            var copy = item
-            copy.normalizedPosition = CGPoint(
-                x: (item.normalizedPosition.x - cropNormalized.minX) / cropNormalized.width,
-                y: (item.normalizedPosition.y - cropNormalized.minY) / cropNormalized.height
-            )
-            return copy
-        }
-    }
-
-    private func drawStickerItem(_ item: EditorStickerItem, imageSize: CGSize, displayFrame: CGRect) {
+    private func drawStickerItem(
+        _ item: EditorStickerItem,
+        state: EditState,
+        imageSize: CGSize,
+        displayFrame: CGRect
+    ) {
         let displayScale = imageSize.width / max(displayFrame.width, 1)
         let stickerImageScale = item.scale * displayScale
-        let gifData = gifData(for: item.kind)
+        let gifData: Data? = {
+            guard case .gif(let id) = item.kind else { return nil }
+            return state.gifStickerData[id]
+        }()
         let layoutSize = EditorStickerRenderer.baseSize(for: item.kind, gifData: gifData)
         let targetPixelSize = CGSize(
             width: layoutSize.width * stickerImageScale,
@@ -610,17 +647,14 @@ final class PhotoEditorViewModel: ObservableObject {
             gifData: gifData
         ), let cgImage = stickerImage.cgImage else { return }
 
-        let imagePoint = CGPoint(
-            x: item.normalizedPosition.x * imageSize.width,
-            y: item.normalizedPosition.y * imageSize.height
-        )
+        let normalized = overlayExportPoint(item.normalizedPosition, crop: state.cropRect)
+        let imagePoint = CGPoint(x: normalized.x * imageSize.width, y: normalized.y * imageSize.height)
         let rect = CGRect(
             x: -targetPixelSize.width / 2,
             y: -targetPixelSize.height / 2,
             width: targetPixelSize.width,
             height: targetPixelSize.height
         )
-
         let context = UIGraphicsGetCurrentContext()
         context?.saveGState()
         context?.translateBy(x: imagePoint.x, y: imagePoint.y)
@@ -630,16 +664,13 @@ final class PhotoEditorViewModel: ObservableObject {
         context?.restoreGState()
     }
 
+    private func isEffectiveCrop(_ rect: CGRect) -> Bool {
+        rect.minX > 0.001 || rect.minY > 0.001 || rect.width < 0.999 || rect.height < 0.999
+    }
+
     private func pushSnapshotIfNeeded() {
-        let snapshot = EditorSnapshot(
-            baseImage: baseImage,
-            drawing: drawing,
-            textItems: textItems,
-            stickerItems: stickerItems,
-            gifStickerData: gifStickerData,
-            normalizedCropRect: normalizedCropRect
-        )
-        if let last = undoStack.last, last.fingerprint == snapshot.fingerprint {
+        let snapshot = currentEditState()
+        if let last = undoStack.last, last == snapshot {
             return
         }
         undoStack.append(snapshot)
@@ -649,27 +680,37 @@ final class PhotoEditorViewModel: ObservableObject {
         }
     }
 
-    private func copySnapshot(_ snapshot: EditorSnapshot) -> EditorSnapshot {
-        EditorSnapshot(
-            baseImage: snapshot.baseImage,
-            drawing: snapshot.drawing,
-            textItems: snapshot.textItems,
-            stickerItems: snapshot.stickerItems,
-            gifStickerData: snapshot.gifStickerData,
-            normalizedCropRect: snapshot.normalizedCropRect
-        )
-    }
-
-    private func restore(_ snapshot: EditorSnapshot) {
-        baseImage = snapshot.baseImage
+    private func restore(_ snapshot: EditState) {
+        normalizedCropRect = snapshot.cropRect
+        rotationQuarters = snapshot.rotationQuarters
         drawing = snapshot.drawing
         textItems = snapshot.textItems
         stickerItems = snapshot.stickerItems
         gifStickerData = snapshot.gifStickerData
-        normalizedCropRect = snapshot.normalizedCropRect
+        activeFilter = snapshot.activeFilter
+        adjustments = snapshot.adjustments
         selectedTextID = nil
         selectedStickerID = nil
         drawingSyncRevision += 1
+        schedulePreviewRefresh()
+    }
+
+    private static func rotatePointClockwise(_ point: CGPoint) -> CGPoint {
+        CGPoint(x: 1 - point.y, y: point.x)
+    }
+
+    private static func rotateRectClockwise(_ rect: CGRect) -> CGRect {
+        CGRect(x: 1 - rect.maxY, y: rect.minX, width: rect.height, height: rect.width)
+    }
+
+    private static func clampCrop(_ rect: CGRect) -> CGRect {
+        var result = rect
+        let minSize: CGFloat = 0.05
+        result.size.width = max(result.size.width, minSize)
+        result.size.height = max(result.size.height, minSize)
+        result.origin.x = min(max(result.origin.x, 0), 1 - result.size.width)
+        result.origin.y = min(max(result.origin.y, 0), 1 - result.size.height)
+        return result
     }
 }
 
@@ -677,7 +718,6 @@ struct ImageDisplayMetrics: Equatable {
     let imageSize: CGSize
     let displayFrame: CGRect
 
-    /// Fits `imageSize` inside `canvasSize`, then offsets the frame within the full container.
     static func aspectFit(
         imageSize: CGSize,
         in canvasSize: CGSize,
@@ -701,7 +741,6 @@ struct ImageDisplayMetrics: Equatable {
         )
     }
 
-    /// Backward-compatible helper when canvas fills the container.
     static func aspectFit(imageSize: CGSize, in containerSize: CGSize) -> ImageDisplayMetrics {
         aspectFit(imageSize: imageSize, in: containerSize, containerOrigin: .zero)
     }

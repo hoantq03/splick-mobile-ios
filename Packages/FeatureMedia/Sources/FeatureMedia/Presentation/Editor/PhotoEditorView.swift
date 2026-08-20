@@ -26,8 +26,13 @@ struct PhotoEditorView: View {
     let onDone: (UIImage) -> Void
     let onCancel: () -> Void
 
-    init(sourceImage: UIImage, onDone: @escaping (UIImage) -> Void, onCancel: @escaping () -> Void) {
-        _viewModel = StateObject(wrappedValue: PhotoEditorViewModel(sourceImage: sourceImage))
+    init(
+        sourceImage: UIImage,
+        initialFilter: FilterPreset = .none,
+        onDone: @escaping (UIImage) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        _viewModel = StateObject(wrappedValue: PhotoEditorViewModel(sourceImage: sourceImage, initialFilter: initialFilter))
         self.onDone = onDone
         self.onCancel = onCancel
     }
@@ -46,8 +51,8 @@ struct PhotoEditorView: View {
                 viewModel: viewModel,
                 onDone: {
                     viewModel.prepareForFinalize()
-                    DispatchQueue.main.async {
-                        let image = viewModel.finalize(displayMetrics: layoutMetrics)
+                    Task {
+                        let image = await viewModel.finalizeAsync()
                         onDone(image)
                     }
                 },
@@ -64,6 +69,13 @@ struct PhotoEditorView: View {
                     textInputBar
                 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            if viewModel.isExporting {
+                Color.black.opacity(0.35).ignoresSafeArea()
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .tint(.white)
+                    .scaleEffect(1.2)
             }
         }
         .animation(.easeOut(duration: 0.2), value: viewModel.activeTool)
@@ -152,6 +164,8 @@ private struct EditorCanvasView: View {
                 EditorImageView(image: viewModel.baseImage)
                     .frame(width: metrics.displayFrame.width, height: metrics.displayFrame.height)
                     .position(x: metrics.displayFrame.midX, y: metrics.displayFrame.midY)
+                    .scaleEffect(viewModel.rotatePulse ? 1.02 : 1)
+                    .animation(.spring(response: 0.28, dampingFraction: 0.72), value: viewModel.rotatePulse)
                     .modifier(ChromeToggleTapModifier(
                         isEnabled: viewModel.shouldToggleChromeOnImageTap,
                         onTap: { viewModel.toggleChromeFromImageTap() }
@@ -161,7 +175,7 @@ private struct EditorCanvasView: View {
                 // Keeps the PKCanvasView mounted during tool switches so strokes
                 // never flash-disappear when switching to text/sticker/crop.
                 PhotoEditorDrawCanvas(
-                    drawing: viewModel.drawing,
+                    drawing: viewModel.drawingForDisplay(canvasSize: metrics.displayFrame.size),
                     isEnabled: viewModel.activeTool == .draw,
                     inkColor: viewModel.inkColor,
                     inkWidth: viewModel.inkWidth,
@@ -177,7 +191,7 @@ private struct EditorCanvasView: View {
                 // Overlay shows the frozen drawing snapshot when draw tool is inactive.
                 if !viewModel.drawing.bounds.isEmpty && viewModel.activeTool != .draw {
                     PhotoEditorDrawingOverlay(
-                        drawing: viewModel.drawing,
+                        drawing: viewModel.drawingForDisplay(canvasSize: metrics.displayFrame.size),
                         canvasSize: metrics.displayFrame.size
                     )
                     .frame(width: metrics.displayFrame.width, height: metrics.displayFrame.height)

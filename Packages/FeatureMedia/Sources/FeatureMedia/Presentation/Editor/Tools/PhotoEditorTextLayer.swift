@@ -11,7 +11,7 @@ struct PhotoEditorTextLayer: View {
             ForEach(viewModel.textItems) { item in
                 TextOverlayItemView(
                     item: item,
-                    center: displayMetrics.imageNormalizedToView(item.normalizedPosition),
+                    center: viewModel.overlayDisplayPoint(item.normalizedPosition, metrics: displayMetrics),
                     isSelected: viewModel.selectedTextID == item.id,
                     isInteractive: viewModel.activeTool == .text,
                     displayFrame: displayMetrics.displayFrame,

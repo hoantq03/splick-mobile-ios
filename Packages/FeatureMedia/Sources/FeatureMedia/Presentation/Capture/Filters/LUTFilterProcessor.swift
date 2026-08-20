@@ -63,11 +63,15 @@ enum LUTCubeError: Error, Equatable {
 }
 
 enum LUTFilterProcessor {
-    private static var cache: [String: CIFilter] = [:]
+    private static var cache: [String: LUTCube] = [:]
     private static let lock = NSLock()
 
     static func apply(_ image: CIImage, cubeName: String, intensity: Float) -> CIImage {
-        guard intensity > 0.01, let cubeFilter = colorCube(named: cubeName) else { return image }
+        guard intensity > 0.01, let cube = cube(named: cubeName),
+              let cubeFilter = CIFilter(name: "CIColorCube")
+        else { return image }
+        cubeFilter.setValue(cube.size, forKey: "inputCubeDimension")
+        cubeFilter.setValue(cube.data, forKey: "inputCubeData")
         cubeFilter.setValue(image, forKey: kCIInputImageKey)
         guard let filtered = cubeFilter.outputImage else { return image }
         return mix(original: image, filtered: filtered, intensity: intensity)
@@ -83,16 +87,12 @@ enum LUTFilterProcessor {
         return dissolve.outputImage ?? filtered
     }
 
-    private static func colorCube(named name: String) -> CIFilter? {
+    private static func cube(named name: String) -> LUTCube? {
         lock.lock()
         defer { lock.unlock() }
         if let cached = cache[name] { return cached }
-        guard let cube = try? LUTCubeLoader.load(named: name),
-              let filter = CIFilter(name: "CIColorCube")
-        else { return nil }
-        filter.setValue(cube.size, forKey: "inputCubeDimension")
-        filter.setValue(cube.data, forKey: "inputCubeData")
-        cache[name] = filter
-        return filter
+        guard let cube = try? LUTCubeLoader.load(named: name) else { return nil }
+        cache[name] = cube
+        return cube
     }
 }

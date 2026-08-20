@@ -12,14 +12,16 @@ struct PhotoEditorCropView: View {
         case topLeft, top, topRight, right, bottomRight, bottom, bottomLeft, left
     }
 
-    private let minNormalizedSize: CGFloat = 0.15
+    private let minNormalizedSize: CGFloat = 0.05
     private let handleHitSize: CGFloat = 44
 
     var body: some View {
         let cropFrame = cropFrameInView
 
         ZStack {
-            dimmedOverlay(cropFrame: cropFrame)
+            CropDimOverlayView(cropFrame: cropFrame)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .allowsHitTesting(false)
             cropGrid(cropFrame: cropFrame)
             cropBorder(cropFrame: cropFrame)
             cropMoveArea(cropFrame: cropFrame)
@@ -48,22 +50,6 @@ struct PhotoEditorCropView: View {
             width: normalized.width * frame.width,
             height: normalized.height * frame.height
         )
-    }
-
-    @ViewBuilder
-    private func dimmedOverlay(cropFrame: CGRect) -> some View {
-        Color.black.opacity(0.55)
-            .mask {
-                Rectangle()
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 2, style: .continuous)
-                            .frame(width: cropFrame.width, height: cropFrame.height)
-                            .position(x: cropFrame.midX, y: cropFrame.midY)
-                            .blendMode(.destinationOut)
-                    }
-                    .compositingGroup()
-            }
-            .allowsHitTesting(false)
     }
 
     @ViewBuilder
@@ -141,6 +127,7 @@ struct PhotoEditorCropView: View {
             .onEnded { _ in
                 if let liveCropRect {
                     viewModel.commitCropRect(liveCropRect)
+                    viewModel.applyCropIfNeeded()
                 }
                 liveCropRect = nil
                 dragStartRect = nil

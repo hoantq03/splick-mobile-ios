@@ -18,7 +18,7 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
     @Published var primaryFaceBounds: CGRect?
     @Published var lastErrorMessage: String?
 
-    let filterEngine = FilterEngine()
+    let filterEngine = CameraFilterEngine()
 
     private let session = AVCaptureSession()
     private let sessionQueue = DispatchQueue(label: "com.splick.media.capture")
@@ -26,6 +26,7 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
     private let photoOutput = AVCapturePhotoOutput()
     private var currentInput: AVCaptureDeviceInput?
     private var photoContinuation: CheckedContinuation<UIImage, Error>?
+    private var isDetectingFace = false
 
     func start() {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
@@ -167,8 +168,6 @@ enum CameraSessionError: Error {
 }
 
 extension AVCameraSessionModel: AVCaptureVideoDataOutputSampleBufferDelegate {
-    private var isDetectingFace = false
-
     func captureOutput(
         _ output: AVCaptureOutput,
         didOutput sampleBuffer: CMSampleBuffer,
@@ -225,12 +224,6 @@ extension AVCameraSessionModel: AVCapturePhotoCaptureDelegate {
             return
         }
         let normalized = PhotoEditorImageProcessor.normalizeOrientation(uiImage)
-        guard let ci = CIImage(image: normalized) else {
-            continuation?.resume(returning: normalized)
-            return
-        }
-        let filtered = filterEngine.apply(ci, preset: filterPreset, intensity: filterIntensity)
-        let rendered = filterEngine.renderUIImage(from: filtered) ?? normalized
-        continuation?.resume(returning: rendered)
+        continuation?.resume(returning: normalized)
     }
 }

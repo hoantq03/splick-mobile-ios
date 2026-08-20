@@ -6,7 +6,7 @@ import UIKit
 /// Public `Result` API matches the previous `UIImagePickerController` wrapper.
 struct CameraPickerView: View {
     enum Result: Equatable {
-        case image(UIImage)
+        case image(UIImage, initialFilter: FilterPreset = .none)
         case video(URL)
         case cancelled
         case openLibrary
@@ -142,19 +142,29 @@ struct CameraPickerView: View {
         isCapturing = true
         if session.filterPreset == .ar, faceTrackingSupported, let snapshot = arHandle.snapshot() {
             isCapturing = false
-            onResult(.image(PhotoEditorImageProcessor.normalizeOrientation(snapshot)))
+            onResult(.image(PhotoEditorImageProcessor.normalizeOrientation(snapshot), initialFilter: .none))
             return
         }
         Task {
             do {
                 let image = try await session.capturePhoto()
                 var output = image
+                var initialFilter = FilterPreset(session.filterPreset)
                 if session.filterPreset == .ar, let bounds = session.primaryFaceBounds {
                     output = VisionFaceOverlayCompositor.composite(image: image, effect: arEffect, faceRect: bounds)
+                    initialFilter = .none
+                } else if session.filterPreset == .beauty, let ci = CIImage(image: image) {
+                    let filtered = session.filterEngine.apply(
+                        ci,
+                        preset: .beauty,
+                        intensity: session.filterIntensity
+                    )
+                    output = session.filterEngine.renderUIImage(from: filtered) ?? image
+                    initialFilter = .none
                 }
                 await MainActor.run {
                     isCapturing = false
-                    onResult(.image(output))
+                    onResult(.image(output, initialFilter: initialFilter))
                 }
             } catch {
                 await MainActor.run { isCapturing = false }

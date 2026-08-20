@@ -16,6 +16,20 @@ struct EditorToolbar: View {
                 drawOptionsBar
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+            if viewModel.isChromeVisible, viewModel.activeTool == .crop {
+                cropOptionsBar
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            if viewModel.isChromeVisible, viewModel.activeTool == .filter {
+                ColorFilterStripView(preset: filterBinding)
+                    .padding(.vertical, SplickTheme.Spacing.sm)
+                    .background(.ultraThinMaterial.opacity(0.85))
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            if viewModel.isChromeVisible, viewModel.activeTool == .adjust {
+                adjustOptionsBar
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
             if viewModel.isChromeVisible, viewModel.activeTool == .sticker {
                 EditorStickerPickerBar(viewModel: viewModel)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -56,6 +70,7 @@ struct EditorToolbar: View {
                         Capsule().fill(SplickTheme.Colors.primaryGradient)
                     )
             }
+            .disabled(viewModel.isExporting)
         }
         .padding(.horizontal, SplickTheme.Spacing.md)
         .padding(.top, SplickTheme.Spacing.sm)
@@ -98,5 +113,71 @@ struct EditorToolbar: View {
             .padding(.vertical, SplickTheme.Spacing.sm)
         }
         .background(.ultraThinMaterial.opacity(0.85))
+    }
+
+    private var cropOptionsBar: some View {
+        HStack {
+            Button {
+                viewModel.resetCrop()
+            } label: {
+                Text(languageService.text(.mediaCropReset))
+                    .font(SplickTheme.Typography.callout.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, SplickTheme.Spacing.md)
+                    .padding(.vertical, SplickTheme.Spacing.xs)
+                    .background(Capsule().fill(Color.white.opacity(0.16)))
+            }
+            Spacer()
+        }
+        .padding(.horizontal, SplickTheme.Spacing.md)
+        .padding(.vertical, SplickTheme.Spacing.sm)
+        .background(.ultraThinMaterial.opacity(0.85))
+    }
+
+    private var filterBinding: Binding<FilterPreset> {
+        Binding(
+            get: { viewModel.activeFilter },
+            set: { viewModel.setFilter($0) }
+        )
+    }
+
+    private var adjustOptionsBar: some View {
+        VStack(spacing: SplickTheme.Spacing.sm) {
+            adjustRow(title: languageService.text(.mediaAdjustBrightness), range: -1...1, keyPath: \.brightness)
+            adjustRow(title: languageService.text(.mediaAdjustContrast), range: 0.5...1.5, keyPath: \.contrast)
+            adjustRow(title: languageService.text(.mediaAdjustSaturation), range: 0...2, keyPath: \.saturation)
+            adjustRow(title: languageService.text(.mediaAdjustExposure), range: -2...2, keyPath: \.exposure)
+        }
+        .padding(.horizontal, SplickTheme.Spacing.md)
+        .padding(.vertical, SplickTheme.Spacing.sm)
+        .background(.ultraThinMaterial.opacity(0.85))
+    }
+
+    private func adjustRow(
+        title: String,
+        range: ClosedRange<Double>,
+        keyPath: WritableKeyPath<ImageAdjustments, Float>
+    ) -> some View {
+        HStack(spacing: 10) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.85))
+                .frame(width: 88, alignment: .leading)
+            Slider(
+                value: Binding(
+                    get: { Double(viewModel.adjustments[keyPath: keyPath]) },
+                    set: { newValue in
+                        var next = viewModel.adjustments
+                        next[keyPath: keyPath] = Float(newValue)
+                        viewModel.setAdjustments(next)
+                    }
+                ),
+                in: range,
+                onEditingChanged: { editing in
+                    if !editing { viewModel.commitAdjustments() }
+                }
+            )
+            .tint(.white)
+        }
     }
 }

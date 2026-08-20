@@ -2,39 +2,35 @@ import Foundation
 import Localization
 
 /// Built-in capture filters. Drop additional `.cube` files into `Resources/LUTs`
-/// and register them here to ingest custom looks without a paid SDK.
+/// and register them on `FilterPreset` to ingest custom looks without a paid SDK.
 enum CameraFilterPreset: String, CaseIterable, Identifiable, Equatable {
     case none
     case cinematic
     case vintage
     case vivid
+    case fade
+    case blackAndWhite
+    case warm
+    case cool
     case beauty
     case ar
 
     var id: String { rawValue }
 
     var cubeResourceName: String? {
-        switch self {
-        case .cinematic: return "cinematic"
-        case .vintage: return "vintage"
-        case .vivid: return "vivid"
-        case .none, .beauty, .ar: return nil
-        }
+        FilterPreset(self).cubeResourceName
     }
 
     var titleKey: L10nKey {
         switch self {
-        case .none: return .mediaFilterNone
-        case .cinematic: return .mediaFilterCinematic
-        case .vintage: return .mediaFilterVintage
-        case .vivid: return .mediaFilterVivid
         case .beauty: return .mediaFilterBeauty
         case .ar: return .mediaFilterAR
+        default: return FilterPreset(self).titleKey
         }
     }
 
     var showsIntensitySlider: Bool {
-        self == .beauty || cubeResourceName != nil
+        self == .beauty || cubeResourceName != nil || self == .blackAndWhite || self == .warm || self == .cool
     }
 }
 

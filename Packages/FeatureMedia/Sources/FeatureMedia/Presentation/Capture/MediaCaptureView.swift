@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreImage
 import DesignSystem
 import Localization
 import SwiftUI
@@ -12,6 +13,7 @@ public struct MediaCaptureView: View {
 
     @State private var route: CaptureRoute = .camera
     @State private var workingImage: UIImage?
+    @State private var workingFilter: FilterPreset = .none
     @State private var cameraSessionID = UUID()
 
     private let maxLibrarySelection = 5
@@ -54,17 +56,19 @@ public struct MediaCaptureView: View {
             case .preview:
                 if let workingImage {
                     CapturePreviewView(
-                        image: workingImage,
+                        image: filteredPreview(workingImage, filter: workingFilter),
                         onRetake: {
                             self.workingImage = nil
+                            self.workingFilter = .none
                             reopenCamera()
                         },
                         onEdit: { route = .editor },
                         onUsePhoto: {
-                            onMediaCaptured(.image(workingImage))
+                            onMediaCaptured(.image(filteredPreview(workingImage, filter: workingFilter)))
                         },
                         onCancel: {
                             self.workingImage = nil
+                            self.workingFilter = .none
                             reopenCamera()
                         }
                     )
@@ -75,6 +79,7 @@ public struct MediaCaptureView: View {
                 if let workingImage {
                     PhotoEditorView(
                         sourceImage: workingImage,
+                        initialFilter: workingFilter,
                         onDone: { edited in onMediaCaptured(.image(edited)) },
                         onCancel: { route = .preview }
                     )
@@ -149,8 +154,9 @@ public struct MediaCaptureView: View {
 
     private func handleCameraResult(_ result: CameraPickerView.Result) {
         switch result {
-        case .image(let image):
+        case .image(let image, let filter):
             workingImage = image
+            workingFilter = filter
             route = .preview
         case .video(let url):
             onMediaCaptured(.video(url))
@@ -159,6 +165,12 @@ public struct MediaCaptureView: View {
         case .openLibrary:
             route = .library
         }
+    }
+
+    private func filteredPreview(_ image: UIImage, filter: FilterPreset) -> UIImage {
+        guard filter != .none, let ciImage = CIImage(image: image) else { return image }
+        let filtered = FilterEngine.apply(ciImage, preset: filter, intensity: 1)
+        return FilterEngine.renderUIImage(from: filtered) ?? image
     }
 }
 

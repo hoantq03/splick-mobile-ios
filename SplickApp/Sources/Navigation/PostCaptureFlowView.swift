@@ -68,7 +68,7 @@ struct PostCaptureFlowView: View {
 
     private func mediaPayload(_ media: CapturedMedia) -> (images: [UIImage], videoURL: URL?, mediaType: PostMediaType) {
         switch media {
-        case .image(let image):
+        case .image(let image, _):
             return ([image], nil, .image)
         case .images(let images):
             return (images, nil, .image)

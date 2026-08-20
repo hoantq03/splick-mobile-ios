@@ -2,7 +2,7 @@ import Localization
 import UIKit
 
 public enum CapturedMedia: Equatable {
-    case image(UIImage)
+    case image(UIImage, initialFilter: FilterPreset = .none)
     case images([UIImage])
     case video(URL)
 

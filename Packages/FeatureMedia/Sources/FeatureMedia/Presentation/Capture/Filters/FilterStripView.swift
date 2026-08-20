@@ -88,6 +88,14 @@ struct FilterStripView: View {
             return LinearGradient(colors: [Color(red: 0.55, green: 0.38, blue: 0.22), Color(red: 0.85, green: 0.72, blue: 0.48)], startPoint: .top, endPoint: .bottom)
         case .vivid:
             return LinearGradient(colors: [.pink, .orange, .yellow], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .fade:
+            return LinearGradient(colors: [Color(white: 0.55), Color(white: 0.9)], startPoint: .top, endPoint: .bottom)
+        case .blackAndWhite:
+            return LinearGradient(colors: [.black, .white], startPoint: .top, endPoint: .bottom)
+        case .warm:
+            return LinearGradient(colors: [.orange, .yellow], startPoint: .top, endPoint: .bottom)
+        case .cool:
+            return LinearGradient(colors: [.cyan, .blue], startPoint: .top, endPoint: .bottom)
         case .beauty:
             return LinearGradient(colors: [Color(red: 1, green: 0.75, blue: 0.78), .white], startPoint: .top, endPoint: .bottom)
         case .ar:

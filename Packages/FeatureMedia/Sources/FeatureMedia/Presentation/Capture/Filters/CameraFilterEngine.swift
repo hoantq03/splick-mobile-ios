@@ -2,36 +2,30 @@ import CoreImage
 import UIKit
 import Vision
 
-/// Applies the live capture filter chain (LUT + beauty) to each camera frame.
-final class FilterEngine {
+/// Live-camera filter applicator. Detects faces off the render path for beauty.
+final class CameraFilterEngine {
     private let visionQueue = DispatchQueue(label: "com.splick.media.vision", qos: .userInitiated)
     private var latestFaces: [VNFaceObservation] = []
     private var isDetectingFaces = false
-    private let ciContext = CIContext(options: [.useSoftwareRenderer: false])
 
     func apply(
         _ image: CIImage,
         preset: CameraFilterPreset,
         intensity: Float
     ) -> CIImage {
-        switch preset {
-        case .none, .ar:
-            return image
-        case .cinematic, .vintage, .vivid:
-            guard let name = preset.cubeResourceName else { return image }
-            return LUTFilterProcessor.apply(image, cubeName: name, intensity: intensity)
-        case .beauty:
+        if preset == .beauty {
             requestFacesIfNeeded(image)
-            return BeautyFilterGroup.apply(image, intensity: intensity, faceObservations: latestFaces)
         }
+        return FilterEngine.apply(
+            image,
+            cameraPreset: preset,
+            intensity: intensity,
+            faceObservations: latestFaces
+        )
     }
 
     func renderUIImage(from image: CIImage) -> UIImage? {
-        let extent = image.extent.integral
-        guard extent.width > 1, extent.height > 1,
-              let cg = ciContext.createCGImage(image, from: extent)
-        else { return nil }
-        return UIImage(cgImage: cg)
+        FilterEngine.renderUIImage(from: image)
     }
 
     private func requestFacesIfNeeded(_ image: CIImage) {
