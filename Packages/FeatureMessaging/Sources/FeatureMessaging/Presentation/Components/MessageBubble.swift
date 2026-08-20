@@ -266,16 +266,15 @@ struct MessageBubble: View {
 
     private var bubbleContent: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
-            if let preview = message.replyPreview {
-                replyPreviewView(preview)
-            }
-
             if !imageAttachments.isEmpty {
+                if let preview = message.replyPreview {
+                    mediaReplyPreview(preview)
+                }
                 messageMediaAttachments
                     .modifier(MessageDeliveryStatusAnchor(isActive: !hasTextBody))
             }
 
-            if hasTextBody {
+            if hasTextBody || (message.replyPreview != nil && imageAttachments.isEmpty) {
                 textBubbleBody
                     .modifier(MessageDeliveryStatusAnchor(isActive: true))
             }
@@ -302,38 +301,45 @@ struct MessageBubble: View {
         }
     }
 
-    @ViewBuilder
-    private func replyPreviewView(_ preview: MessageReplyPreview) -> some View {
-        let standalone = !hasTextBody
+    /// Quote sits above media, outside the colored text bubble, so it must not use
+    /// outgoing white text (that is invisible on the chat background).
+    private func mediaReplyPreview(_ preview: MessageReplyPreview) -> some View {
         MessageQuotedReplyView(
             preview: preview,
             isOutgoing: isOutgoing,
-            usesBubbleTextColors: !standalone
+            usesBubbleTextColors: false
         )
-        .padding(.horizontal, standalone ? SplickTheme.Spacing.xs : 0)
-        .padding(.vertical, standalone ? SplickTheme.Spacing.xxs : 1)
+        .padding(.horizontal, SplickTheme.Spacing.xs)
+        .padding(.vertical, SplickTheme.Spacing.xxs)
         .background {
-            if standalone {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(SplickTheme.Colors.secondaryBackground)
-            }
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(SplickTheme.Colors.secondaryBackground)
         }
-        .modifier(MessageDeliveryStatusAnchor(
-            isActive: !hasTextBody && imageAttachments.isEmpty
-        ))
     }
 
     private var textBubbleBody: some View {
-        // `frame(maxWidth:)` caps wrapping without `ViewThatFits` measuring two
-        // copies of every bubble on first layout (noticeable when opening a thread).
-        messageTextLabel(lineLimit: nil)
-            .frame(maxWidth: textWrapMaxWidth, alignment: .leading)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, SplickTheme.Spacing.sm + 2)
-            .padding(.vertical, SplickTheme.Spacing.xs + 2)
-            .frame(minWidth: textReactionMinWidth, alignment: .leading)
-            .background(bubbleBackground)
-            .clipShape(bubbleShape)
+        // Quote + text share one clipped bubble. Putting the quote outside used
+        // outgoing white labels on the chat background, so the original message
+        // disappeared. `frame(maxWidth:)` still avoids ViewThatFits double-measure.
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+            if imageAttachments.isEmpty, let preview = message.replyPreview {
+                MessageQuotedReplyView(
+                    preview: preview,
+                    isOutgoing: isOutgoing,
+                    usesBubbleTextColors: true
+                )
+            }
+            if hasTextBody {
+                messageTextLabel(lineLimit: nil)
+            }
+        }
+        .frame(maxWidth: textWrapMaxWidth, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.horizontal, SplickTheme.Spacing.sm + 2)
+        .padding(.vertical, SplickTheme.Spacing.xs + 2)
+        .frame(minWidth: textReactionMinWidth, alignment: .leading)
+        .background(bubbleBackground)
+        .clipShape(bubbleShape)
     }
 
     /// Grow a short text bubble to seat reaction pills without exceeding wrap max.
