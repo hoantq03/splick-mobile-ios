@@ -7,6 +7,7 @@ import SplickDomain
 public struct FriendUserProfileView: View {
     @StateObject private var viewModel: FriendUserProfileViewModel
     @State private var previewPost: Post?
+    @State private var showAvatarViewer = false
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openDirectMessage) private var openDirectMessage
@@ -28,12 +29,17 @@ public struct FriendUserProfileView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: SplickTheme.Spacing.lg) {
-                    AvatarView(
-                        imageURL: viewModel.user.avatarURL,
-                        name: viewModel.user.displayName,
-                        size: .large,
-                        userId: viewModel.user.id
-                    )
+                    Button {
+                        showAvatarViewer = true
+                    } label: {
+                        AvatarView(
+                            imageURL: viewModel.user.avatarURL,
+                            name: viewModel.user.displayName,
+                            size: .large,
+                            userId: viewModel.user.id
+                        )
+                    }
+                    .buttonStyle(.plain)
                     .padding(.top, SplickTheme.Spacing.xl)
 
                     VStack(spacing: SplickTheme.Spacing.xxs) {
@@ -163,8 +169,14 @@ public struct FriendUserProfileView: View {
             .sheet(isPresented: $viewModel.showNicknameEditor) {
                 nicknameEditorSheet
             }
-            .sheet(isPresented: $viewModel.showPaymentSheet) {
-                FriendPaymentProfileSheet(
+            .fullScreenCover(isPresented: $showAvatarViewer) {
+                AvatarFullScreenView(
+                    url: viewModel.user.avatarURL,
+                    placeholderName: viewModel.user.displayName,
+                    onDismiss: { showAvatarViewer = false }
+                )
+            }
+            .sheet(isPresented: $viewModel.showPaymentSheet) {                FriendPaymentProfileSheet(
                     user: viewModel.user,
                     paymentProfile: viewModel.paymentProfile,
                     isLoading: viewModel.isLoadingFriendPayment,

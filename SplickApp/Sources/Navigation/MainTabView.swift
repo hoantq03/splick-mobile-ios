@@ -538,8 +538,12 @@ struct ProfileSettingsView: View {
             .onChange(of: selectedPhotoItem) { _ in
                 Task { await onPhotoItemChanged() }
             }
-            .sheet(isPresented: $showAvatarViewer) {
-                avatarViewerSheet
+            .fullScreenCover(isPresented: $showAvatarViewer) {
+                AvatarFullScreenView(
+                    url: appState.currentUser?.avatarURL,
+                    placeholderName: appState.currentUser?.displayName ?? "",
+                    onDismiss: { showAvatarViewer = false }
+                )
             }
             .sheet(isPresented: $showEditDisplayName) {
                 editDisplayNameSheet
@@ -795,53 +799,6 @@ struct ProfileSettingsView: View {
                 .font(.title2)
                 .fontWeight(.semibold)
                 .foregroundStyle(.white)
-        }
-    }
-
-    private var avatarViewerSheet: some View {
-        NavigationStack {
-            Group {
-                if let avatarPreviewImage {
-                    Image(uiImage: avatarPreviewImage)
-                        .resizable()
-                        .scaledToFit()
-                } else if let url = appState.currentUser?.avatarURL {
-                    RemoteImage(
-                url: url,
-                maxPixelSize: RemoteImageMetrics.avatarMaxPixelWidth(pointSize: 96)
-            ) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image.resizable().scaledToFit()
-                        case .failure:
-                            EmptyStateView(
-                                icon: "person.crop.circle",
-                                title: languageService.text(.profileAvatarView),
-                                message: languageService.text(.profileRefreshFailed)
-                            )
-                        default:
-                            ProgressView()
-                        }
-                    }
-                } else {
-                    EmptyStateView(
-                        icon: "person.crop.circle",
-                        title: languageService.text(.profileAvatarView),
-                        message: languageService.text(.profileAvatarDelete)
-                    )
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(SplickTheme.Colors.background)
-            .navigationTitle(languageService.text(.profileAvatarView))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(languageService.text(.commonDone)) {
-                        showAvatarViewer = false
-                    }
-                }
-            }
         }
     }
 
