@@ -24,6 +24,7 @@ public struct ChatThreadView: View {
     @State private var groupConversation: Conversation?
     @State private var activeGroupSheet: GroupChatSheet?
     @State private var confirmLeaveGroup = false
+    @State private var comingSoonFeatureTitle: String?
 
     @Environment(\.chatGroupManagementActions) private var groupManagementActions
     @Environment(\.dismiss) private var dismiss
@@ -89,7 +90,7 @@ public struct ChatThreadView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 if displayConversation?.isGroup == true, repository != nil {
                     groupChatOptionsMenu
-                } else if relationshipViewModel.isActive, !relationshipViewModel.isBlocked {
+                } else {
                     directChatOptionsMenu
                 }
             }
@@ -159,6 +160,16 @@ public struct ChatThreadView: View {
                 Task { await relationshipViewModel.blockUser() }
             }
         }
+        .alert(
+            comingSoonFeatureTitle ?? languageService.text(.messagingChatMoreAccessibility),
+            isPresented: comingSoonPresented
+        ) {
+            Button(languageService.text(.commonOK), role: .cancel) {
+                comingSoonFeatureTitle = nil
+            }
+        } message: {
+            Text(languageService.text(.messagingFilterComingSoon))
+        }
         .onChange(of: relationshipViewModel.isBlocked) { isBlocked in
             guard isBlocked else { return }
             inputText = ""
@@ -184,8 +195,71 @@ public struct ChatThreadView: View {
         groupConversation ?? conversation
     }
 
+    private var comingSoonPresented: Binding<Bool> {
+        Binding(
+            get: { comingSoonFeatureTitle != nil },
+            set: { isPresented in
+                if !isPresented {
+                    comingSoonFeatureTitle = nil
+                }
+            }
+        )
+    }
+
+    private func comingSoonMenuTitle(_ key: L10nKey) -> String {
+        "\(languageService.text(key)) (\(languageService.text(.messagingFilterComingSoon)))"
+    }
+
+    private func presentComingSoon(_ key: L10nKey) {
+        comingSoonFeatureTitle = languageService.text(key)
+    }
+
+    @ViewBuilder
+    private var conversationComingSoonActions: some View {
+        Button {
+            presentComingSoon(.messagingChatSearchMessages)
+        } label: {
+            Label(
+                comingSoonMenuTitle(.messagingChatSearchMessages),
+                systemImage: "magnifyingglass"
+            )
+        }
+
+        Button {
+            presentComingSoon(.messagingChatMuteNotifications)
+        } label: {
+            Label(
+                comingSoonMenuTitle(.messagingChatMuteNotifications),
+                systemImage: "bell.slash"
+            )
+        }
+
+        Button {
+            presentComingSoon(.messagingChatNotificationSounds)
+        } label: {
+            Label(
+                comingSoonMenuTitle(.messagingChatNotificationSounds),
+                systemImage: "speaker.wave.2"
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var deleteConversationComingSoonAction: some View {
+        Button(role: .destructive) {
+            presentComingSoon(.messagingChatDeleteConversation)
+        } label: {
+            Label(
+                comingSoonMenuTitle(.messagingChatDeleteConversation),
+                systemImage: "trash"
+            )
+        }
+    }
+
     private var groupChatOptionsMenu: some View {
         Menu {
+            conversationComingSoonActions
+
             Button {
                 activeGroupSheet = .avatar
             } label: {
@@ -221,6 +295,8 @@ public struct ChatThreadView: View {
                     systemImage: "rectangle.portrait.and.arrow.right"
                 )
             }
+
+            deleteConversationComingSoonAction
         } label: {
             Image(systemName: "ellipsis")
         }
@@ -257,24 +333,30 @@ public struct ChatThreadView: View {
 
     private var directChatOptionsMenu: some View {
         Menu {
-            if relationshipViewModel.canRemoveFriend {
+            conversationComingSoonActions
+
+            if relationshipViewModel.isActive, !relationshipViewModel.isBlocked {
+                if relationshipViewModel.canRemoveFriend {
+                    Button(role: .destructive) {
+                        relationshipViewModel.showRemoveConfirm = true
+                    } label: {
+                        Label(
+                            languageService.text(.friendsRemoveFriend),
+                            systemImage: "person.badge.minus"
+                        )
+                    }
+                }
                 Button(role: .destructive) {
-                    relationshipViewModel.showRemoveConfirm = true
+                    relationshipViewModel.showBlockConfirm = true
                 } label: {
                     Label(
-                        languageService.text(.friendsRemoveFriend),
-                        systemImage: "person.badge.minus"
+                        languageService.text(.friendsBlockUser),
+                        systemImage: "hand.raised.fill"
                     )
                 }
             }
-            Button(role: .destructive) {
-                relationshipViewModel.showBlockConfirm = true
-            } label: {
-                Label(
-                    languageService.text(.friendsBlockUser),
-                    systemImage: "hand.raised.fill"
-                )
-            }
+
+            deleteConversationComingSoonAction
         } label: {
             Image(systemName: "ellipsis")
         }
