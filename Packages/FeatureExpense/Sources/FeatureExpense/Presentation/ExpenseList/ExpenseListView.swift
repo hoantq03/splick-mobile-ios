@@ -15,7 +15,7 @@ private struct ExpenseUserProfileRoute: Identifiable {
 public struct ExpenseListView: View {
     @ObservedObject private var viewModel: ExpenseListViewModel
     @StateObject private var friendSearchViewModel: ExpenseUserSearchViewModel
-    @StateObject private var expenseSegmentScrollState = FeedSegmentScrollState()
+    @StateObject private var scrollChrome = ScrollChromeStateHolder()
     @State private var showFilterPanel = false
     @State private var captionQueryDraft = ""
     @State private var friendQueryDraft = ""
@@ -88,7 +88,7 @@ public struct ExpenseListView: View {
                     if !notificationsPresented {
                         ExpenseNavPills(
                             selection: $selectedSegment,
-                            collapseProgress: expenseSegmentScrollState.collapseProgress,
+                            scrollState: scrollChrome.feedSegment,
                             historyLabel: languageService.text(.expenseModeHistory),
                             overviewLabel: languageService.text(.expenseModeOverview),
                             friendsLabel: languageService.text(.expenseModeFriends)
@@ -107,7 +107,7 @@ public struct ExpenseListView: View {
                 }
             }
         }
-        .environment(\.feedSegmentScrollState, expenseSegmentScrollState)
+        .environment(\.feedSegmentScrollState, scrollChrome.feedSegment)
         .onChange(of: selectedSegment) { _ in
             if !navigationPath.isEmpty {
                 navigationPath = NavigationPath()
@@ -115,7 +115,7 @@ public struct ExpenseListView: View {
             // Wait for segment spring to settle before chrome resets contend on main thread.
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(ExpensePagerMotion.settleMilliseconds))
-                expenseSegmentScrollState.reset()
+                scrollChrome.feedSegment.reset()
                 tabBarScrollState?.reset()
             }
         }
@@ -277,7 +277,6 @@ public struct ExpenseListView: View {
                 }
             }
             .scrollChromeTracking()
-            .tabBarHideOnScroll()
             .splickSegmentPagerScrollInsets()
             .splickScrollSoftTopEdge()
             .splickNativeRefreshable(controller: refreshController) {
@@ -331,7 +330,6 @@ public struct ExpenseListView: View {
                 }
             }
             .scrollChromeTracking()
-            .tabBarHideOnScroll()
             .splickSegmentPagerScrollInsets()
             .splickScrollSoftTopEdge()
             .splickNativeRefreshable(controller: overviewRefreshController) {
@@ -534,7 +532,7 @@ public struct ExpenseListView: View {
     }
 
     private func expensesList(_ expenses: [Expense]) -> some View {
-        VStack(spacing: 0) {
+        LazyVStack(spacing: 0) {
             ForEach(Array(expenses.enumerated()), id: \.element.id) { index, expense in
                 ExpenseRowView(
                     expense: expense,
@@ -546,18 +544,6 @@ public struct ExpenseListView: View {
                 ) {
                     openLinkedPost(for: expense)
                 }
-                .transition(
-                    .asymmetric(
-                        insertion: .opacity.combined(with: .move(edge: .bottom)),
-                        removal: .opacity.combined(with: .move(edge: .bottom))
-                    )
-                )
-                .animation(
-                    pullToRefreshActive
-                        ? nil
-                        : listFilterAnimation.delay(listRowRevealDelay(index: index, total: expenses.count)),
-                    value: viewModel.filterSignature
-                )
 
                 if index < expenses.count - 1 {
                     Divider()
@@ -565,10 +551,7 @@ public struct ExpenseListView: View {
                 }
             }
         }
-        .animation(
-            pullToRefreshActive ? nil : listFilterAnimation,
-            value: viewModel.displayedExpenses.map(\.id)
-        )
+        .animation(pullToRefreshActive ? nil : listFilterAnimation, value: viewModel.filterSignature)
         .background {
             RoundedRectangle(cornerRadius: ExpenseScreenChrome.cardRadius, style: .continuous)
                 .fill(SplickTheme.Colors.cardBackground)
@@ -607,12 +590,6 @@ public struct ExpenseListView: View {
     private func formatAmount(_ amount: Decimal) -> String {
         let symbol = Decimal.displayCurrencySymbol(for: "VND")
         return "\(SplickMoneyFormat.string(from: amount))\(symbol)"
-    }
-
-    private func listRowRevealDelay(index: Int, total: Int) -> Double {
-        guard total > 1 else { return 0 }
-        let distanceFromBottom = (total - 1) - index
-        return Double(distanceFromBottom) * 0.045
     }
 }
 

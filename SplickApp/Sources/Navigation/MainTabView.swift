@@ -26,7 +26,7 @@ struct MainTabView: View {
     @EnvironmentObject private var container: DependencyContainer
     @EnvironmentObject private var pushNotificationCoordinator: PushNotificationCoordinator
     @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var tabBarScrollState = TabBarScrollState()
+    @StateObject private var tabBarChrome = TabBarScrollStateHolder()
     @State private var badgeCounts: TabBadgeCounts = .zero
     /// Drives heavy tab work (loads, video, chrome) — updated after the pager slide settles
     /// so activation cost does not hitch the slide itself.
@@ -55,29 +55,6 @@ struct MainTabView: View {
         appState.selectedTab != .camera
             && appState.linkedPostPresentation == nil
             && (!appState.showNotifications || notificationIsDismissing)
-    }
-
-    private var tabBarChromeAnimationToken: TabBarChromeAnimationToken {
-        TabBarChromeAnimationToken(
-            isChromePresented: isTabBarChromePresented,
-            isVisible: tabBarScrollState.isVisible,
-            animated: tabBarScrollState.animatesVisibility
-        )
-    }
-
-    private var tabBarInsetHeight: CGFloat {
-        isTabBarChromePresented ? TabBarLayout.floatingClearance : 0
-    }
-
-    private var tabBarSlideOffset: CGFloat {
-        guard isTabBarChromePresented else { return TabBarLayout.tabBarSlideDistance }
-        return tabBarScrollState.isVisible ? 0 : TabBarLayout.tabBarSlideDistance
-    }
-
-    private var tabBarOpacity: Double {
-        // Fade only when chrome leaves entirely (camera / overlays).
-        // Scroll hide uses slide-down only so it doesn't look like a dissolve.
-        isTabBarChromePresented ? 1 : 0
     }
 
     var body: some View {
@@ -188,24 +165,14 @@ struct MainTabView: View {
                 return conversationId
             }
             .environment(\.currentUserSummary, currentUserSummary)
-            .environment(\.tabBarScrollState, tabBarScrollState)
+            .environment(\.tabBarScrollState, tabBarChrome.tabBar)
             .overlay(alignment: .bottom) {
-                SplickTabBar(
+                MainTabBarChrome(
                     selectedTab: $appState.selectedTab,
                     badgeCounts: badgeCounts,
-                    tabBarScrollState: tabBarScrollState
+                    isChromePresented: isTabBarChromePresented,
+                    scrollState: tabBarChrome.tabBar
                 )
-                .equatable()
-                .opacity(tabBarOpacity)
-                .offset(y: tabBarSlideOffset)
-                .allowsHitTesting(isTabBarChromePresented && tabBarScrollState.isVisible)
-                .frame(height: tabBarInsetHeight)
-                .clipped()
-                .animation(
-                    tabBarChromeAnimationToken.animated ? TabBarMotion.slide : nil,
-                    value: tabBarChromeAnimationToken
-                )
-                .ignoresSafeArea(edges: .bottom)
             }
             .onChange(of: appState.selectedTab, perform: handleSelectedTabChange)
             .onChange(of: appState.showNotifications) { isShown in
@@ -389,7 +356,7 @@ struct MainTabView: View {
     private func handleSelectedTabChange(_ tab: Tab) {
         Log.debug("Tab selected", category: .ui, metadata: ["tab": tab.rawValue])
         if tab == .camera {
-            tabBarScrollState.hide(flushToBottom: true)
+            tabBarChrome.tabBar.hide(flushToBottom: true)
             return
         }
         // Defer heavy tab activation + chrome reset until the pager slide has finished.
@@ -397,10 +364,58 @@ struct MainTabView: View {
             try? await Task.sleep(for: .milliseconds(MainTabPagerMotion.settleMilliseconds))
             guard appState.selectedTab == tab else { return }
             settledPagerTab = tab
-            tabBarScrollState.reset()
+            tabBarChrome.tabBar.reset()
         }
         // Badge counts: startup apply + 30s polling + force refresh on mutations.
         // Do not refresh on every tab select — that races and floods /badge-counts.
+    }
+}
+
+/// Isolated so scroll-driven hide/show does not invalidate `MainTabView` (all four tabs).
+private struct MainTabBarChrome: View {
+    @Binding var selectedTab: Tab
+    let badgeCounts: TabBadgeCounts
+    let isChromePresented: Bool
+    @ObservedObject var scrollState: TabBarScrollState
+
+    private var animationToken: TabBarChromeAnimationToken {
+        TabBarChromeAnimationToken(
+            isChromePresented: isChromePresented,
+            isVisible: scrollState.isVisible,
+            animated: scrollState.animatesVisibility
+        )
+    }
+
+    private var insetHeight: CGFloat {
+        isChromePresented ? TabBarLayout.floatingClearance : 0
+    }
+
+    private var slideOffset: CGFloat {
+        guard isChromePresented else { return TabBarLayout.tabBarSlideDistance }
+        return scrollState.isVisible ? 0 : TabBarLayout.tabBarSlideDistance
+    }
+
+    private var opacity: Double {
+        isChromePresented ? 1 : 0
+    }
+
+    var body: some View {
+        SplickTabBar(
+            selectedTab: $selectedTab,
+            badgeCounts: badgeCounts,
+            tabBarScrollState: scrollState
+        )
+        .equatable()
+        .opacity(opacity)
+        .offset(y: slideOffset)
+        .allowsHitTesting(isChromePresented && scrollState.isVisible)
+        .frame(height: insetHeight)
+        .clipped()
+        .animation(
+            animationToken.animated ? TabBarMotion.slide : nil,
+            value: animationToken
+        )
+        .ignoresSafeArea(edges: .bottom)
     }
 }
 

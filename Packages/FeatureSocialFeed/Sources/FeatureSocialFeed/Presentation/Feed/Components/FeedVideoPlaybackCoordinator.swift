@@ -198,28 +198,25 @@ extension View {
 struct FeedVideoVisibilityReporter: View {
     let postId: UUID
     @Environment(\.feedTabIsActive) private var feedTabIsActive
+    @Environment(\.feedVideoCoordinator) private var coordinator
 
     var body: some View {
-        GeometryReader { proxy in
-            Color.clear
-                .preference(
-                    key: FeedVideoVisibilityPreferenceKey.self,
-                    value: feedTabIsActive ? [visibilityReport(for: proxy)] : []
-                )
-        }
-        .frame(height: 0)
-        .allowsHitTesting(false)
-    }
-
-    private func visibilityReport(for proxy: GeometryProxy) -> FeedVideoVisibilityReport {
-        let frame = proxy.frame(in: .global)
-        let bounds = UIScreen.main.bounds
-        let intersection = frame.intersection(bounds)
-        guard intersection.width > 0, intersection.height > 0, frame.width > 0, frame.height > 0 else {
-            return FeedVideoVisibilityReport(postId: postId, ratio: 0)
-        }
-        let visibleArea = intersection.width * intersection.height
-        let totalArea = frame.width * frame.height
-        return FeedVideoVisibilityReport(postId: postId, ratio: visibleArea / totalArea)
+        Color.clear
+            .frame(height: 0)
+            .allowsHitTesting(false)
+            .onAppear {
+                guard feedTabIsActive else { return }
+                coordinator?.updateVisibility(postId: postId, ratio: 1)
+            }
+            .onDisappear {
+                coordinator?.clearPost(postId)
+            }
+            .onChange(of: feedTabIsActive) { isActive in
+                if isActive {
+                    coordinator?.updateVisibility(postId: postId, ratio: 1)
+                } else {
+                    coordinator?.clearPost(postId)
+                }
+            }
     }
 }

@@ -44,7 +44,6 @@ struct FeedPullToRefreshScrollView<Content: View>: View {
                         }
 
                     content()
-                        .scrollChromeOffsetTracking(coordinateSpace: FeedScrollAnchor.coordinateSpace)
                 }
             }
             .coordinateSpace(name: FeedScrollAnchor.coordinateSpace)

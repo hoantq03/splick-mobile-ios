@@ -123,38 +123,36 @@ struct PostCardView: View, Equatable {
             refreshReactionPreviewCacheIfNeeded()
         }
         .coordinateSpace(name: "postCard")
+        .environment(\.reactionAnchorTrackingEnabled, !flyingEmojis.isEmpty)
         .onPreferenceChange(ReactionTargetAnchorsKey.self) { anchors in
-            // Defer @State write off PreferenceKey layout pass.
-            guard anchors != reactionAnchors else { return }
+            guard !anchors.isEmpty, anchors != reactionAnchors else { return }
             DispatchQueue.main.async {
                 guard anchors != reactionAnchors else { return }
                 reactionAnchors = anchors
             }
         }
         .overlay {
-            GeometryReader { geo in
-                let cardOrigin = geo.frame(in: .global).origin
-                Color.clear
-                    .onAppear { cardOriginGlobal = cardOrigin }
-                    .onChange(of: flyingEmojis.count) { _ in
-                        cardOriginGlobal = cardOrigin
-                    }
+            if !flyingEmojis.isEmpty {
+                GeometryReader { geo in
+                    let cardOrigin = geo.frame(in: .global).origin
+                    Color.clear
+                        .onAppear { cardOriginGlobal = cardOrigin }
 
-                ForEach(flyingEmojis) { flight in
-                    FlyingEmojiView(
-                        flight: flight,
-                        cardOriginGlobal: cardOrigin,
-                        onComplete: {
-                            // Defer @State mutation off animation/layout coalescing.
-                            DispatchQueue.main.async {
-                                flyingEmojis.removeAll { $0.id == flight.id }
+                    ForEach(flyingEmojis) { flight in
+                        FlyingEmojiView(
+                            flight: flight,
+                            cardOriginGlobal: cardOrigin,
+                            onComplete: {
+                                DispatchQueue.main.async {
+                                    flyingEmojis.removeAll { $0.id == flight.id }
+                                }
                             }
-                        }
-                    )
-                    .frame(width: geo.size.width, height: geo.size.height)
+                        )
+                        .frame(width: geo.size.width, height: geo.size.height)
+                    }
                 }
+                .allowsHitTesting(false)
             }
-            .allowsHitTesting(false)
         }
         .alert(
             languageService.text(.friendsRelationSent),
@@ -531,7 +529,7 @@ struct PostCardView: View, Equatable {
         hasMyBadge: Bool,
         tappable: Bool
     ) -> some View {
-        let badges = HStack(spacing: 6) {
+        let badges = HStack(spacing: 8) {
             if preview.top.isEmpty && preview.otherPeopleCount == 0 {
                 Text(languageService.text(.feedReactionsNone))
                     .font(.system(size: 13, weight: .medium))

@@ -180,10 +180,15 @@ public final class MessagingWebSocketClient: ObservableObject {
     }
 
     private func handleMessage(_ message: URLSessionWebSocketTask.Message) {
-        guard case .string(let text) = message,
-              let data = text.data(using: .utf8),
-              let event = MessagingWsEventDecoder.decode(data) else { return }
-        eventSubject.send(event)
+        guard case .string(let text) = message else { return }
+        Task { [weak self] in
+            let event = await Task.detached(priority: .utility) {
+                guard let data = text.data(using: .utf8) else { return nil as MessagingWsEvent? }
+                return MessagingWsEventDecoder.decode(data)
+            }.value
+            guard let event else { return }
+            self?.eventSubject.send(event)
+        }
     }
 
     private func startPing() {

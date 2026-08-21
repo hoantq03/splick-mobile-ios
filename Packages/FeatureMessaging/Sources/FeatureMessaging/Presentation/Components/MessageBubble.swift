@@ -227,11 +227,8 @@ struct MessageBubble: View {
         }
         .simultaneousGesture(longPressGesture)
         .background {
-            GeometryReader { geo in
-                Color.clear.preference(
-                    key: MessageReactionAnchorFrameKey.self,
-                    value: presentation == .threadRow ? [message.id: geo.frame(in: .global)] : [:]
-                )
+            if presentation == .threadRow {
+                MessageBubbleAnchorProbe(messageId: message.id)
             }
         }
         .messageSendFloat(isActive: isFloatingSend && presentation == .threadRow, lateralSway: floatSway)

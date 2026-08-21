@@ -1,21 +1,36 @@
 import Foundation
 
+public enum SplickRelativeDateFormatters {
+    public static let abbreviated: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter
+    }()
+
+    static let full: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        return formatter
+    }()
+
+    public static func apply(locale: Locale) {
+        abbreviated.locale = locale
+        full.locale = locale
+    }
+}
+
 extension Date {
     public var iso8601String: String {
         ISO8601DateFormatter().string(from: self)
     }
 
     public var relativeString: String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: self, relativeTo: .now)
+        SplickRelativeDateFormatters.abbreviated.localizedString(for: self, relativeTo: .now)
     }
 
     /// Long-form relative time for expense rows, e.g. "2 hours ago" / "2 giờ trước".
     public var expenseListRelativeString: String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .full
-        return formatter.localizedString(for: self, relativeTo: .now)
+        SplickRelativeDateFormatters.full.localizedString(for: self, relativeTo: .now)
     }
 
     public var isToday: Bool {

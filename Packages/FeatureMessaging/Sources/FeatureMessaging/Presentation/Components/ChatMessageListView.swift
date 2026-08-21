@@ -26,7 +26,6 @@ struct ChatMessageListView: View {
     /// Ignore drag / dim-tap dismiss until the long-press finger has lifted.
     @State private var reactionFocusDismissArmed = false
     @State private var detailsMessage: ChatMessage?
-    @State private var reactionAnchorFrames: [UUID: CGRect] = [:]
     @State private var timestampRevealTranslation: CGFloat = 0
     /// Driven from the list pan so bubble-local DragGesture cannot steal vertical scroll.
     @State private var replySwipeMessageId: UUID?
@@ -130,19 +129,6 @@ struct ChatMessageListView: View {
                     }
                 }
                 .modifier(ChatBottomScrollAnchorModifier())
-                .onPreferenceChange(MessageReactionAnchorFrameKey.self) { frames in
-                    var next = reactionAnchorFrames
-                    var didChange = false
-                    for (id, frame) in frames where frame.width > 1 && frame.height > 1 {
-                        if next[id] != frame {
-                            next[id] = frame
-                            didChange = true
-                        }
-                    }
-                    if didChange {
-                        reactionAnchorFrames = next
-                    }
-                }
                 .onChange(of: viewModel.prependAnchorMessageId) { anchorId in
                     guard let anchorId else { return }
                     // Keep visual position after older messages are prepended.
@@ -318,7 +304,7 @@ struct ChatMessageListView: View {
     }
 
     private func messageHit(at globalPoint: CGPoint) -> MessageHit? {
-        for (id, frame) in reactionAnchorFrames where frame.insetBy(dx: -6, dy: -4).contains(globalPoint) {
+        for (id, frame) in MessageReactionAnchorStore.shared.frames where frame.insetBy(dx: -6, dy: -4).contains(globalPoint) {
             guard let message = messages.first(where: { $0.id == id }) else { continue }
             return MessageHit(
                 messageId: id,
@@ -333,7 +319,7 @@ struct ChatMessageListView: View {
         overlayOrigin: CGPoint
     ) -> MessageReactionFocusContext? {
         guard let messageId = reactionFocusMessageId,
-              let globalFrame = reactionFocusFrozenFrame ?? reactionAnchorFrames[messageId],
+              let globalFrame = reactionFocusFrozenFrame ?? MessageReactionAnchorStore.shared.frame(for: messageId),
               globalFrame.width > 1,
               globalFrame.height > 1,
               let item = displayMessages.first(where: { $0.message.id == messageId })
@@ -355,7 +341,7 @@ struct ChatMessageListView: View {
         if reactionFocusMessageId != nil {
             dismissReactionFocus(force: true)
         }
-        guard let globalFrame = reactionAnchorFrames[item.message.id],
+        guard let globalFrame = MessageReactionAnchorStore.shared.frame(for: item.message.id),
               globalFrame.width > 1,
               globalFrame.height > 1
         else { return }

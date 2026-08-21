@@ -163,7 +163,11 @@ public struct TabBarHideOnScrollModifier: ViewModifier {
                     tabBarScrollState.updateScrollOffset(offset)
                 }
             } else {
-                content
+                content.scrollChromeUIKitOffsetTracking(
+                    isEnabled: scrollChromeTrackingEnabled && !pullToRefreshActive && !notificationsPresented
+                ) { offset in
+                    tabBarScrollState.updateScrollOffset(offset)
+                }
             }
         } else {
             content

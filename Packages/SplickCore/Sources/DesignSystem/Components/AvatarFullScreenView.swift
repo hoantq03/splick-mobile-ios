@@ -25,7 +25,10 @@ public struct AvatarFullScreenView: View {
 
             if let url {
                 // maxPixelSize: nil → Nuke loads the original resolution, no downscale.
-                RemoteImage(url: url, maxPixelSize: nil) { phase in
+                RemoteImage(
+                    url: url,
+                    maxPixelSize: max(UIScreen.main.bounds.width, UIScreen.main.bounds.height) * UIScreen.main.scale
+                ) { phase in
                     switch phase {
                     case .success(let image):
                         ZoomableAvatarContainer(image: image)

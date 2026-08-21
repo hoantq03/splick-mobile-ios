@@ -216,27 +216,52 @@ enum ReactionAnchorPlacement {
     case topTrailing(xInset: CGFloat = 4, yInset: CGFloat = 4)
 }
 
+private struct ReactionAnchorTrackingEnabledKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var reactionAnchorTrackingEnabled: Bool {
+        get { self[ReactionAnchorTrackingEnabledKey.self] }
+        set { self[ReactionAnchorTrackingEnabledKey.self] = newValue }
+    }
+}
+
 extension View {
     func reactionTargetAnchor(
         id: String,
         placement: ReactionAnchorPlacement = .center
     ) -> some View {
-        background(
-            GeometryReader { proxy in
-                let frame = proxy.frame(in: .named("postCard"))
-                let point: CGPoint = {
-                    switch placement {
-                    case .center:
-                        return CGPoint(x: frame.midX, y: frame.midY)
-                    case .topTrailing(let xInset, let yInset):
-                        return CGPoint(x: frame.maxX - xInset, y: frame.minY + yInset)
-                    }
-                }()
-                Color.clear.preference(
-                    key: ReactionTargetAnchorsKey.self,
-                    value: [id: point]
-                )
-            }
-        )
+        modifier(ReactionTargetAnchorModifier(id: id, placement: placement))
+    }
+}
+
+private struct ReactionTargetAnchorModifier: ViewModifier {
+    let id: String
+    let placement: ReactionAnchorPlacement
+    @Environment(\.reactionAnchorTrackingEnabled) private var isEnabled
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.background(
+                GeometryReader { proxy in
+                    let frame = proxy.frame(in: .named("postCard"))
+                    let point: CGPoint = {
+                        switch placement {
+                        case .center:
+                            return CGPoint(x: frame.midX, y: frame.midY)
+                        case .topTrailing(let xInset, let yInset):
+                            return CGPoint(x: frame.maxX - xInset, y: frame.minY + yInset)
+                        }
+                    }()
+                    Color.clear.preference(
+                        key: ReactionTargetAnchorsKey.self,
+                        value: [id: point]
+                    )
+                }
+            )
+        } else {
+            content
+        }
     }
 }

@@ -21,6 +21,7 @@ public final class LanguageService: ObservableObject, LocaleHeaderProviding {
         } else {
             self.locale = AppLocale.fromDeviceLanguage()
         }
+        SplickRelativeDateFormatters.apply(locale: Locale(identifier: locale.rawValue))
     }
 
     public func text(_ key: L10nKey) -> String {
@@ -41,6 +42,7 @@ public final class LanguageService: ObservableObject, LocaleHeaderProviding {
 
     public func setLocale(_ newLocale: AppLocale, persist: Bool = true) {
         locale = newLocale
+        SplickRelativeDateFormatters.apply(locale: Locale(identifier: newLocale.rawValue))
         if persist {
             userDefaults.set(newLocale.rawValue, for: storageKey)
         }

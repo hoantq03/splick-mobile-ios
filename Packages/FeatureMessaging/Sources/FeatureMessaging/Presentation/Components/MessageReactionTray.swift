@@ -41,24 +41,15 @@ struct MessageReactionTray: View {
         }
         .padding(.horizontal, SplickTheme.Spacing.sm)
         .padding(.vertical, SplickTheme.Spacing.xs)
-        .background {
-            Capsule(style: .continuous)
-                .fill(.ultraThinMaterial)
-                .shadow(color: .black.opacity(0.18), radius: 16, y: 8)
-        }
+            .background {
+                Capsule(style: .continuous)
+                    .fill(SplickTheme.Colors.cardBackground)
+                    .shadow(color: .black.opacity(0.12), radius: 8, y: 4)
+            }
         .onAppear {
             Self.impactFeedback.prepare()
-            animateSlotsIn()
-        }
-    }
-
-    private func animateSlotsIn() {
-        revealedSlotCount = 0
-        for index in 0..<totalSlots {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.036 * Double(index)) {
-                withAnimation(MessageReactionTrayMotion.emojiSlot) {
-                    revealedSlotCount = index + 1
-                }
+            withAnimation(MessageReactionTrayMotion.emojiSlot) {
+                revealedSlotCount = totalSlots
             }
         }
     }

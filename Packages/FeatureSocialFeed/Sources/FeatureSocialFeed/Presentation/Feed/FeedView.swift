@@ -37,7 +37,7 @@ public struct FeedView: View {
     @State private var profileRoute: ProfileRoute?
     @State private var companionsRoute: CompanionsSheetRoute?
     @State private var selectedSegment: FeedContentSegment = .feed
-    @StateObject private var feedSegmentScrollState = FeedSegmentScrollState()
+    @StateObject private var scrollChrome = ScrollChromeStateHolder()
     @StateObject private var videoCoordinator = FeedVideoPlaybackCoordinator()
     @Namespace private var postZoomNamespace
 
@@ -107,7 +107,7 @@ public struct FeedView: View {
                     if !notificationsPresented {
                         FeedNavPills(
                             selection: $selectedSegment,
-                            collapseProgress: feedSegmentScrollState.collapseProgress,
+                            scrollState: scrollChrome.feedSegment,
                             feedLabel: languageService.text(.feedTitle),
                             albumLabel: languageService.text(.feedAlbumTitle),
                             streakLabel: languageService.text(.feedStreakTitle)
@@ -140,7 +140,7 @@ public struct FeedView: View {
                 Text(viewModel.alertMessage ?? "")
             }
         }
-        .environment(\.feedSegmentScrollState, feedSegmentScrollState)
+        .environment(\.feedSegmentScrollState, scrollChrome.feedSegment)
         .environment(\.feedPostZoomNamespace, postZoomNamespace)
         .onFirstAppear {
             viewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
@@ -173,7 +173,7 @@ public struct FeedView: View {
             }
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(280))
-                feedSegmentScrollState.reset()
+                scrollChrome.feedSegment.reset()
                 tabBarScrollState?.reset()
             }
         }
@@ -182,7 +182,7 @@ public struct FeedView: View {
             if case .loaded(let posts) = state, posts.isEmpty {
                 Task { @MainActor in
                     tabBarScrollState?.show()
-                    feedSegmentScrollState.reset()
+                    scrollChrome.feedSegment.reset()
                 }
             }
         }
@@ -233,7 +233,7 @@ public struct FeedView: View {
         } else {
             NotificationCenter.default.post(name: FeedSameTabNotification.scrollToTop, object: nil)
             tabBarScrollState?.reset()
-            feedSegmentScrollState.reset()
+            scrollChrome.feedSegment.reset()
         }
     }
 
@@ -456,7 +456,6 @@ private struct FeedPrimaryPage: View {
         }
         .scrollDisabled(feedScrollLocked)
         .environment(\.feedVideoCoordinator, videoCoordinator)
-        .feedVideoVisibilityHandling(coordinator: videoCoordinator)
     }
 
     private var feedEndReachedFooter: some View {

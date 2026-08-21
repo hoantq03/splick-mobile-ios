@@ -28,7 +28,7 @@ public struct FriendUserProfileView: View {
     public var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: SplickTheme.Spacing.lg) {
+                LazyVStack(spacing: SplickTheme.Spacing.lg) {
                     Button {
                         showAvatarViewer = true
                     } label: {

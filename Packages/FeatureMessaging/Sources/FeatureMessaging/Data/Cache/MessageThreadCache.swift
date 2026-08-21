@@ -74,7 +74,7 @@ public final class MessageThreadCache {
         storage[conversationId] = entry
         touch(conversationId)
         evictIfNeeded()
-        persistToDisk(conversationId, entry: entry)
+        schedulePersistToDisk(conversationId, entry: entry)
     }
 
     public func remove(conversationId: UUID) {
@@ -108,9 +108,30 @@ public final class MessageThreadCache {
         diskDirectory.appendingPathComponent("\(conversationId.uuidString).json")
     }
 
+    private var pendingDiskWrites: [UUID: Entry] = [:]
+    private var persistTask: Task<Void, Never>?
+
+    private func schedulePersistToDisk(_ conversationId: UUID, entry: Entry) {
+        pendingDiskWrites[conversationId] = entry
+        guard persistTask == nil else { return }
+        persistTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard let self else { return }
+            let batch = self.pendingDiskWrites
+            self.pendingDiskWrites.removeAll()
+            self.persistTask = nil
+            for (id, entry) in batch {
+                self.persistToDisk(id, entry: entry)
+            }
+        }
+    }
+
     private func persistToDisk(_ conversationId: UUID, entry: Entry) {
         guard let data = try? encoder.encode(entry) else { return }
-        try? data.write(to: diskURL(for: conversationId), options: .atomic)
+        let url = diskURL(for: conversationId)
+        Task.detached(priority: .utility) {
+            try? data.write(to: url, options: .atomic)
+        }
     }
 
     private func loadFromDisk(_ conversationId: UUID) -> Entry? {

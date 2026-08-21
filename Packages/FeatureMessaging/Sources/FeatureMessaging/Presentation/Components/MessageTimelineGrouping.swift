@@ -16,7 +16,7 @@ struct DisplayMessage: Identifiable, Equatable {
     let showsTimeSeparator: Bool
     let imageAttachments: [MessageImageAttachment]
 
-    var id: UUID { message.id }
+    var id: UUID { message.clientMessageId }
 }
 
 enum MessageTimelineGrouping {

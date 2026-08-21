@@ -4,16 +4,6 @@ import Common
 import DesignSystem
 import SplickDomain
 
-private struct ReactionBarFrameKey: PreferenceKey {
-    static var defaultValue: CGRect = .zero
-
-    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
-        let next = nextValue()
-        if next != .zero { value = next }
-    }
-}
-
-/// Always-visible emoji row. Tap or long-press to react; a swipe/scroll never drops an emoji.
 struct InlineReactionBar: View {
     @ObservedObject private var preferences = QuickReactionPreferences.shared
 
@@ -52,20 +42,13 @@ struct InlineReactionBar: View {
             plusButton
         }
         .frame(height: 40, alignment: .leading)
-        .background(
+        .background {
             GeometryReader { geo in
-                Color.clear.preference(
-                    key: ReactionBarFrameKey.self,
-                    value: geo.frame(in: .global)
-                )
-            }
-        )
-        .onPreferenceChange(ReactionBarFrameKey.self) { frame in
-            guard frame != .zero, frame != barFrame else { return }
-            // Defer @State write off PreferenceKey layout pass.
-            DispatchQueue.main.async {
-                guard frame != barFrame else { return }
-                barFrame = frame
+                Color.clear
+                    .onAppear { barFrame = geo.frame(in: .global) }
+                    .onChange(of: geo.size) { _ in
+                        barFrame = geo.frame(in: .global)
+                    }
             }
         }
         .simultaneousGesture(longPressDragGesture)

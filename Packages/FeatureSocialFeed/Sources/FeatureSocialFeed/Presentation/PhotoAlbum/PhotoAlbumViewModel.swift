@@ -13,12 +13,27 @@ public final class PhotoAlbumViewModel: ObservableObject {
     @Published private(set) var isLoadingMore = false
     @Published private(set) var isRefreshing = false
 
+    private var cachedDaySections: [AlbumPhotoDaySection] = []
+    private var cachedDaySectionsPhotoCount = -1
+    private var cachedDaySectionsLastId: UUID?
+    private var cachedDaySectionsLocale: AppLocale?
+
     func daySections(languageService: LanguageService) -> [AlbumPhotoDaySection] {
-        AlbumPhotoSectionBuilder.daySections(
+        let lastId = photos.last?.id
+        if cachedDaySectionsPhotoCount == photos.count,
+           cachedDaySectionsLastId == lastId,
+           cachedDaySectionsLocale == languageService.locale {
+            return cachedDaySections
+        }
+        cachedDaySectionsPhotoCount = photos.count
+        cachedDaySectionsLastId = lastId
+        cachedDaySectionsLocale = languageService.locale
+        cachedDaySections = AlbumPhotoSectionBuilder.daySections(
             from: photos,
             todayTitle: languageService.text(.notificationSectionToday),
             yesterdayTitle: languageService.text(.notificationSectionYesterday)
         )
+        return cachedDaySections
     }
 
     var hasActiveFilters: Bool {

@@ -423,11 +423,7 @@ public final class FriendsRootViewModel: ObservableObject {
 
     private func startBackgroundFriendsLoad() {
         backgroundFriendsLoadTask?.cancel()
-        backgroundFriendsLoadTask = Task { @MainActor in
-            while canLoadMoreFriends, !Task.isCancelled {
-                await loadMoreFriends()
-            }
-        }
+        backgroundFriendsLoadTask = nil
     }
 
     private func loadDiskCacheIfNeeded() async {
@@ -615,19 +611,20 @@ public final class FriendsRootViewModel: ObservableObject {
             return
         }
 
-        searchResults = []
-        searchPage = 0
-        canLoadMoreSearch = false
-        isSearchFetching = true
-        rebuildSearchItems()
-        if combinedSearchItems.isEmpty {
-            searchState = .loading
-        } else {
-            searchState = .loaded([])
-        }
         searchTask = Task {
             try? await Task.sleep(for: .milliseconds(350))
             guard !Task.isCancelled else { return }
+
+            searchResults = []
+            searchPage = 0
+            canLoadMoreSearch = false
+            isSearchFetching = true
+            rebuildSearchItems()
+            if combinedSearchItems.isEmpty {
+                searchState = .loading
+            } else {
+                searchState = .loaded([])
+            }
 
             do {
                 let results = try await searchUsersUseCase.execute(

@@ -47,6 +47,16 @@ struct FeedContentPager<Feed: View, Album: View, Streak: View>: View {
     @Environment(\.pullToRefreshActive) private var pullToRefreshActive
     @Environment(\.feedTabIsActive) private var feedTabIsActive
 
+    private var contentRevision: Int {
+        var hasher = Hasher()
+        hasher.combine(languageService.locale)
+        hasher.combine(feedTabIsActive)
+        hasher.combine(pullToRefreshActive)
+        hasher.combine(sameTabTapHandlingEnabled)
+        hasher.combine(selection)
+        return hasher.finalize()
+    }
+
     var body: some View {
         GeometryReader { proxy in
             let w = max(proxy.size.width, 1)
@@ -57,6 +67,7 @@ struct FeedContentPager<Feed: View, Album: View, Streak: View>: View {
                 width: w,
                 height: h,
                 activeSelection: selection,
+                contentRevision: contentRevision,
                 feed: {
                     feed().modifier(
                         pagerEnvironment(sameTabTapHandlingEnabled: sameTabTapHandlingEnabled && selection == .feed)
@@ -284,6 +295,7 @@ private struct _PagerHostRep<Feed: View, Album: View, Streak: View>: UIViewContr
     let width: CGFloat
     let height: CGFloat
     let activeSelection: FeedContentSegment
+    let contentRevision: Int
     let feed: () -> Feed
     let album: () -> Album
     let streak: () -> Streak
@@ -327,7 +339,8 @@ private struct _PagerHostRep<Feed: View, Album: View, Streak: View>: UIViewContr
             streak: streak,
             width: width,
             height: height,
-            activeSelection: activeSelection
+            activeSelection: activeSelection,
+            contentRevision: contentRevision
         )
     }
 }
@@ -357,6 +370,7 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
     private var currentWidth: CGFloat
     private var currentHeight: CGFloat
     private var activeSelection: FeedContentSegment
+    private var currentContentRevision: Int?
     /// Lazy-mount segment UI; feed (index 1) is mounted on first layout.
     private var mountedSegmentIndices: Set<Int> = []
 
@@ -553,7 +567,8 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
         streak: @escaping () -> Streak,
         width: CGFloat,
         height: CGFloat,
-        activeSelection: FeedContentSegment
+        activeSelection: FeedContentSegment,
+        contentRevision: Int
     ) {
         let geometryChanged = width != currentWidth || height != currentHeight
         currentFeed = feed
@@ -571,7 +586,10 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
         if let index = feedSegmentOrder.firstIndex(of: activeSelection) {
             ensureSegmentMounted(at: index)
         }
-        refreshMountedRoots()
+        if currentContentRevision != contentRevision {
+            currentContentRevision = contentRevision
+            refreshMountedRoots()
+        }
 
         if geometryChanged {
             applyLayout()

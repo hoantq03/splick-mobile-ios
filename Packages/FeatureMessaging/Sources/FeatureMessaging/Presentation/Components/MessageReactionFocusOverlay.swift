@@ -250,8 +250,8 @@ struct MessageReactionFocusOverlay: View {
             .padding(.vertical, SplickTheme.Spacing.sm)
             .background {
                 Capsule(style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .shadow(color: .black.opacity(0.14), radius: 12, y: 6)
+                    .fill(SplickTheme.Colors.cardBackground)
+                    .shadow(color: .black.opacity(0.10), radius: 8, y: 4)
             }
         }
         .buttonStyle(.plain)

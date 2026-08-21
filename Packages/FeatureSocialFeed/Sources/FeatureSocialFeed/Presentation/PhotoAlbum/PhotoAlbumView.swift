@@ -196,8 +196,7 @@ public struct PhotoAlbumView: View {
             .feedScrollSoftTopEdge()
             .scrollContentBackground(.hidden)
             .background(SplickTheme.Colors.background)
-            .tabBarHideOnScroll()
-            .feedSegmentHideOnScroll()
+            .scrollChromeTracking()
             .splickNativeRefreshable(controller: refreshController) {
                 await viewModel.refresh()
             }

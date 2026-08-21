@@ -104,7 +104,7 @@ public struct SplickScrollTopFadeOverlay: View {
                     endPoint: .bottom
                 )
 
-                if usesFullGradient {
+                if usesFullGradient, #available(iOS 26.0, *) {
                     Rectangle()
                         .fill(.ultraThinMaterial)
                         .mask {

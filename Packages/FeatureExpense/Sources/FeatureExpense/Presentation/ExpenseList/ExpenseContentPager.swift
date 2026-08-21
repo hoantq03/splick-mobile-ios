@@ -27,6 +27,14 @@ struct ExpenseContentPager<History: View, Overview: View, Friends: View>: View {
     @Environment(\.feedSegmentScrollState) private var feedSegmentScrollState
     @Environment(\.pullToRefreshActive) private var pullToRefreshActive
 
+    private var contentRevision: Int {
+        var hasher = Hasher()
+        hasher.combine(languageService.locale)
+        hasher.combine(pullToRefreshActive)
+        hasher.combine(selection)
+        return hasher.finalize()
+    }
+
     var body: some View {
         GeometryReader { proxy in
             let width = max(proxy.size.width, 1)
@@ -36,6 +44,7 @@ struct ExpenseContentPager<History: View, Overview: View, Friends: View>: View {
                 selection: $selection,
                 width: width,
                 height: height,
+                contentRevision: contentRevision,
                 history: {
                     history().modifier(
                         ExpensePagerEnvironmentForwarding(
@@ -219,6 +228,7 @@ private struct ExpensePagerHostRep<History: View, Overview: View, Friends: View>
     @Binding var selection: ExpenseContentSegment
     let width: CGFloat
     let height: CGFloat
+    let contentRevision: Int
     let history: () -> History
     let overview: () -> Overview
     let friends: () -> Friends
@@ -259,7 +269,8 @@ private struct ExpensePagerHostRep<History: View, Overview: View, Friends: View>
             friends: friends,
             width: width,
             height: height,
-            activeSelection: selection
+            activeSelection: selection,
+            contentRevision: contentRevision
         )
     }
 }
@@ -289,6 +300,7 @@ private final class ExpensePagerContainerVC<History: View, Overview: View, Frien
     private var currentWidth: CGFloat
     private var currentHeight: CGFloat
     private var activeSelection: ExpenseContentSegment
+    private var currentContentRevision: Int?
     private var mountedIndices: Set<Int> = []
 
     init(
@@ -366,6 +378,18 @@ private final class ExpensePagerContainerVC<History: View, Overview: View, Frien
         }
     }
 
+    private func refreshMountedRoots() {
+        if mountedIndices.contains(0), let historyHosting {
+            historyHosting.rootView = makeHistoryRoot()
+        }
+        if mountedIndices.contains(1), let overviewHosting {
+            overviewHosting.rootView = makeOverviewRoot()
+        }
+        if mountedIndices.contains(2), let friendsHosting {
+            friendsHosting.rootView = makeFriendsRoot()
+        }
+    }
+
     private func prepareHost<Content: View>(_ hosting: UIHostingController<Content>) {
         hosting.view.backgroundColor = .clear
         if #available(iOS 16.4, *) {
@@ -440,7 +464,8 @@ private final class ExpensePagerContainerVC<History: View, Overview: View, Frien
         friends: @escaping () -> Friends,
         width: CGFloat,
         height: CGFloat,
-        activeSelection: ExpenseContentSegment
+        activeSelection: ExpenseContentSegment,
+        contentRevision: Int
     ) {
         let geometryChanged = width != currentWidth || height != currentHeight
         currentHistory = history
@@ -459,14 +484,9 @@ private final class ExpensePagerContainerVC<History: View, Overview: View, Frien
         if let index = expenseSegmentStripOrder.firstIndex(of: activeSelection) {
             ensureMounted(at: index)
         }
-        if mountedIndices.contains(0), let historyHosting {
-            historyHosting.rootView = makeHistoryRoot()
-        }
-        if mountedIndices.contains(1), let overviewHosting {
-            overviewHosting.rootView = makeOverviewRoot()
-        }
-        if mountedIndices.contains(2), let friendsHosting {
-            friendsHosting.rootView = makeFriendsRoot()
+        if currentContentRevision != contentRevision {
+            currentContentRevision = contentRevision
+            refreshMountedRoots()
         }
 
         if geometryChanged {

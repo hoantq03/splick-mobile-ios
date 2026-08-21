@@ -78,7 +78,6 @@ struct FeedInlineVideoPlayer: View {
             controlsOverlay
         }
         .frame(height: displayHeight)
-        .background(FeedVideoVisibilityReporter(postId: postId))
         .onChange(of: isAutoplayActive) { active in
             syncController(active: active)
         }

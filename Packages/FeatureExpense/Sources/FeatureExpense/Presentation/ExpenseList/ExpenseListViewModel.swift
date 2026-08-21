@@ -102,37 +102,16 @@ public final class ExpenseListViewModel: ObservableObject {
         debts.filter(\.owes).reduce(Decimal.zero) { $0 + abs($1.amount) }
     }
 
-    var overviewOweUnpaidTotal: Decimal {
-        overviewTotal(for: .oweUnpaid)
-    }
+    var overviewOweUnpaidTotal: Decimal { overviewSnapshot.oweUnpaidTotal }
+    var overviewOweUnpaidCount: Int { overviewSnapshot.oweUnpaidCount }
+    var overviewOwePaidTotal: Decimal { overviewSnapshot.owePaidTotal }
+    var overviewOwePaidCount: Int { overviewSnapshot.owePaidCount }
+    var overviewOwedUnpaidTotal: Decimal { overviewSnapshot.owedUnpaidTotal }
+    var overviewOwedUnpaidCount: Int { overviewSnapshot.owedUnpaidCount }
+    var overviewOwedPaidTotal: Decimal { overviewSnapshot.owedPaidTotal }
+    var overviewOwedPaidCount: Int { overviewSnapshot.owedPaidCount }
 
-    var overviewOweUnpaidCount: Int {
-        overviewCount(for: .oweUnpaid)
-    }
-
-    var overviewOwePaidTotal: Decimal {
-        overviewTotal(for: .owePaid)
-    }
-
-    var overviewOwePaidCount: Int {
-        overviewCount(for: .owePaid)
-    }
-
-    var overviewOwedUnpaidTotal: Decimal {
-        overviewTotal(for: .owedUnpaid)
-    }
-
-    var overviewOwedUnpaidCount: Int {
-        overviewCount(for: .owedUnpaid)
-    }
-
-    var overviewOwedPaidTotal: Decimal {
-        overviewTotal(for: .owedPaid)
-    }
-
-    var overviewOwedPaidCount: Int {
-        overviewCount(for: .owedPaid)
-    }
+    private var overviewSnapshot = ExpenseOverviewSnapshot.empty
 
     var currentMonthReceived: Decimal {
         monthlySummary?.currentMonth.totalSettledReceived ?? .zero
@@ -151,13 +130,11 @@ public final class ExpenseListViewModel: ObservableObject {
     }
 
     private func overviewTotal(for state: ExpenseUserDebtState) -> Decimal {
-        overviewScopedExpenses.reduce(Decimal.zero) { partial, expense in
-            partial + expense.userDebtAmount(userId: currentUserId, state: state)
-        }
+        overviewSnapshot.total(for: state)
     }
 
     private func overviewCount(for state: ExpenseUserDebtState) -> Int {
-        overviewScopedExpenses.filter { $0.userDebtState(userId: currentUserId) == state }.count
+        overviewSnapshot.count(for: state)
     }
 
     /// Expenses that feed overview charts — same date/caption/friend scope as history,
@@ -385,6 +362,33 @@ public final class ExpenseListViewModel: ObservableObject {
 
     private func reconcileDisplayedExpenses() {
         displayedExpenses = expenses.filter(matchesFilters)
+        rebuildOverviewSnapshot()
+    }
+
+    private func rebuildOverviewSnapshot() {
+        let scoped = overviewScopedExpenses
+        var snapshot = ExpenseOverviewSnapshot.empty
+        for expense in scoped {
+            let state = expense.userDebtState(userId: currentUserId)
+            let amount = expense.userDebtAmount(userId: currentUserId, state: state)
+            switch state {
+            case .oweUnpaid:
+                snapshot.oweUnpaidTotal += amount
+                snapshot.oweUnpaidCount += 1
+            case .owePaid:
+                snapshot.owePaidTotal += amount
+                snapshot.owePaidCount += 1
+            case .owedUnpaid:
+                snapshot.owedUnpaidTotal += amount
+                snapshot.owedUnpaidCount += 1
+            case .owedPaid:
+                snapshot.owedPaidTotal += amount
+                snapshot.owedPaidCount += 1
+            case .neutral:
+                break
+            }
+        }
+        overviewSnapshot = snapshot
     }
 
     // MARK: - Filtering
@@ -438,5 +442,38 @@ public final class ExpenseListViewModel: ObservableObject {
         if let from = filters.dateFrom, expenseDay < from { return false }
         if let to = filters.dateTo, expenseDay > to { return false }
         return true
+    }
+}
+
+private struct ExpenseOverviewSnapshot {
+    static let empty = ExpenseOverviewSnapshot()
+
+    var oweUnpaidTotal: Decimal = 0
+    var oweUnpaidCount: Int = 0
+    var owePaidTotal: Decimal = 0
+    var owePaidCount: Int = 0
+    var owedUnpaidTotal: Decimal = 0
+    var owedUnpaidCount: Int = 0
+    var owedPaidTotal: Decimal = 0
+    var owedPaidCount: Int = 0
+
+    func total(for state: ExpenseUserDebtState) -> Decimal {
+        switch state {
+        case .oweUnpaid: return oweUnpaidTotal
+        case .owePaid: return owePaidTotal
+        case .owedUnpaid: return owedUnpaidTotal
+        case .owedPaid: return owedPaidTotal
+        case .neutral: return 0
+        }
+    }
+
+    func count(for state: ExpenseUserDebtState) -> Int {
+        switch state {
+        case .oweUnpaid: return oweUnpaidCount
+        case .owePaid: return owePaidCount
+        case .owedUnpaid: return owedUnpaidCount
+        case .owedPaid: return owedPaidCount
+        case .neutral: return 0
+        }
     }
 }

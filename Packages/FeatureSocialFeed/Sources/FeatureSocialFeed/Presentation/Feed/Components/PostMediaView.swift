@@ -45,15 +45,7 @@ struct PostMediaView: View {
             }
         }
         .frame(maxWidth: .infinity)
-        // Measure width without PreferenceKey → @State in the same AttributeGraph pass
-        // (that pattern causes "AttributeGraph: cycle detected" on post detail + keyboard).
-        .background {
-            GeometryReader { proxy in
-                Color.clear
-                    .onAppear { scheduleWidthUpdate(proxy.size.width) }
-                    .onChange(of: proxy.size.width) { scheduleWidthUpdate($0) }
-            }
-        }
+        .modifier(PostMediaWidthReader(containerWidth: $containerWidth))
         .modifier(PostMediaClipModifier(isPinchZooming: isPinchZooming))
         .onChange(of: post.id) { _ in
             selectedIndex = min(selectedIndex, max(items.count - 1, 0))
@@ -64,32 +56,39 @@ struct PostMediaView: View {
         }
     }
 
-    /// Defers `@State` writes off the layout pass to break AttributeGraph cycles.
-    private func scheduleWidthUpdate(_ width: CGFloat) {
-        // TabView/GeometryReader can report tiny transient widths before layout settles;
-        // accepting them squeezes media into a thin vertical strip.
-        let minimumCredibleWidth = min(FeedMediaLayout.estimatedCardContentWidth * 0.55, 180)
-        guard width >= minimumCredibleWidth, abs(width - containerWidth) > 1 else { return }
-        DispatchQueue.main.async {
-            guard width >= minimumCredibleWidth, abs(width - containerWidth) > 1 else { return }
-            containerWidth = width
-        }
-    }
-
     private var multiMediaCarousel: some View {
         let carouselHeight = carouselHeight(for: selectedIndex)
         return ZStack(alignment: .topTrailing) {
-            TabView(selection: $selectedIndex) {
-                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                    mediaItemView(item, fixedHeight: carouselHeight)
-                        .tag(index)
+            if #available(iOS 17.0, *) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(spacing: 0) {
+                        ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                            mediaItemView(item, fixedHeight: carouselHeight)
+                                .frame(width: resolvedWidth)
+                                .id(index)
+                                .onAppear { selectedIndex = index }
+                        }
+                    }
+                    .scrollTargetLayout()
                 }
+                .scrollTargetBehavior(.paging)
+                .frame(maxWidth: .infinity)
+                .frame(height: carouselHeight)
+                .contentShape(Rectangle())
+                .onTapGesture { onTap?(selectedIndex) }
+            } else {
+                TabView(selection: $selectedIndex) {
+                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                        mediaItemView(item, fixedHeight: carouselHeight)
+                            .tag(index)
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .automatic))
+                .frame(maxWidth: .infinity)
+                .frame(height: carouselHeight)
+                .contentShape(Rectangle())
+                .onTapGesture { onTap?(selectedIndex) }
             }
-            .tabViewStyle(.page(indexDisplayMode: .automatic))
-            .frame(maxWidth: .infinity)
-            .frame(height: carouselHeight)
-            .contentShape(Rectangle())
-            .onTapGesture { onTap?(selectedIndex) }
 
             Text("\(selectedIndex + 1)/\(items.count)")
                 .font(.system(size: 11, weight: .semibold))
@@ -212,5 +211,25 @@ private struct PostMediaClipModifier: ViewModifier {
                 RoundedRectangle(cornerRadius: FeedMediaLayout.cornerRadius, style: .continuous)
             )
         }
+    }
+}
+
+private struct PostMediaWidthReader: ViewModifier {
+    @Binding var containerWidth: CGFloat
+
+    func body(content: Content) -> some View {
+        content.background {
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear { apply(proxy.size.width) }
+                    .onChange(of: proxy.size.width) { apply($0) }
+            }
+        }
+    }
+
+    private func apply(_ width: CGFloat) {
+        let minimumCredibleWidth = min(FeedMediaLayout.estimatedCardContentWidth * 0.55, 180)
+        guard width >= minimumCredibleWidth, abs(width - containerWidth) > 1 else { return }
+        containerWidth = width
     }
 }

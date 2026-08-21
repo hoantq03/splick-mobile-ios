@@ -124,7 +124,13 @@ public struct FeedSegmentHideOnScrollModifier: ViewModifier {
                         }
                     }
             } else {
-                content
+                content.scrollChromeUIKitOffsetTracking(
+                    isEnabled: scrollChromeTrackingEnabled
+                ) { offset in
+                    feedSegmentScrollState.updateScrollOffset(offset)
+                } onIdle: {
+                    feedSegmentScrollState.snapCollapseProgress()
+                }
             }
         } else {
             content
@@ -185,7 +191,23 @@ public struct ScrollChromeTrackingModifier: ViewModifier {
                     }
                 }
         } else {
-            content
+            content.scrollChromeUIKitOffsetTracking(
+                isEnabled: scrollChromeTrackingEnabled
+            ) { offsetY in
+                if pullToRefreshActive {
+                    let nearTop = offsetY <= SplickTabBarMetrics.showNearTopThreshold
+                    if nearTop {
+                        feedSegmentScrollState?.updateScrollOffset(offsetY)
+                    }
+                    return
+                }
+                feedSegmentScrollState?.updateScrollOffset(offsetY)
+                tabBarScrollState?.updateScrollOffset(offsetY)
+            } onIdle: {
+                if !pullToRefreshActive {
+                    feedSegmentScrollState?.snapCollapseProgress()
+                }
+            }
         }
     }
 }

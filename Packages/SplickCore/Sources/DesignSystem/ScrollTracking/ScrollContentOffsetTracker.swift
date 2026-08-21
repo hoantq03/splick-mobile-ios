@@ -16,68 +16,36 @@ struct ScrollChromeOffsetNormalizer {
     }
 }
 
-private struct ScrollContentOffsetPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
-/// Zero-height sentinel placed at the top of `ScrollView` content.
-/// Reports vertical scroll offset on iOS 16–17 where `onScrollGeometryChange` is unavailable.
-struct ScrollContentOffsetTracker: View {
-    let coordinateSpaceName: String
-    let onOffsetChange: (CGFloat) -> Void
-
-    @State private var baselineMinY: CGFloat?
-
-    var body: some View {
-        Color.clear
-            .frame(height: 0)
-            .background(
-                GeometryReader { geometry in
-                    Color.clear.preference(
-                        key: ScrollContentOffsetPreferenceKey.self,
-                        value: geometry.frame(in: .named(coordinateSpaceName)).minY
-                    )
-                }
-            )
-            .onPreferenceChange(ScrollContentOffsetPreferenceKey.self) { minY in
-                if baselineMinY == nil {
-                    baselineMinY = minY
-                }
-                let offset = max(0, (baselineMinY ?? minY) - minY)
-                onOffsetChange(offset)
-            }
-    }
-
-    func resetBaseline() {
-        baselineMinY = nil
-    }
-
-}
-
-
-/// Wraps scroll content with a legacy offset tracker for tab bar + feed segment chrome.
+/// Legacy name kept so call sites that still wrap inner scroll content continue to compile.
+/// iOS 18+ is a no-op (geometry observers live on the `ScrollView`); iOS 16–17 uses UIKit KVO.
 struct ScrollChromeOffsetTrackingModifier: ViewModifier {
     let coordinateSpace: String
 
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.feedSegmentScrollState) private var feedSegmentScrollState
     @Environment(\.scrollChromeTrackingEnabled) private var scrollChromeTrackingEnabled
+    @Environment(\.pullToRefreshActive) private var pullToRefreshActive
 
     func body(content: Content) -> some View {
         if #available(iOS 18.0, *) {
             content
         } else {
-            VStack(spacing: 0) {
-                ScrollContentOffsetTracker(coordinateSpaceName: coordinateSpace) { offset in
-                    guard scrollChromeTrackingEnabled else { return }
-                    tabBarScrollState?.updateScrollOffset(offset)
-                    feedSegmentScrollState?.updateScrollOffset(offset)
+            content.scrollChromeUIKitOffsetTracking(
+                isEnabled: scrollChromeTrackingEnabled
+            ) { offset in
+                if pullToRefreshActive {
+                    let nearTop = offset <= SplickTabBarMetrics.showNearTopThreshold
+                    if nearTop {
+                        feedSegmentScrollState?.updateScrollOffset(offset)
+                    }
+                    return
                 }
-                content
+                tabBarScrollState?.updateScrollOffset(offset)
+                feedSegmentScrollState?.updateScrollOffset(offset)
+            } onIdle: {
+                if !pullToRefreshActive {
+                    feedSegmentScrollState?.snapCollapseProgress()
+                }
             }
         }
     }
@@ -85,7 +53,7 @@ struct ScrollChromeOffsetTrackingModifier: ViewModifier {
 
 extension View {
     /// iOS 16–17 fallback for `.tabBarHideOnScroll()` / `.feedSegmentHideOnScroll()`.
-    /// Apply to the root content inside a named `ScrollView` coordinate space.
+    /// Prefer `.scrollChromeTracking()` on the `ScrollView` itself.
     public func scrollChromeOffsetTracking(coordinateSpace: String) -> some View {
         modifier(ScrollChromeOffsetTrackingModifier(coordinateSpace: coordinateSpace))
     }

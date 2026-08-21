@@ -9,11 +9,12 @@ import Localization
 ///   active label morphs — drifts from pill position to centre and grows 14 → 17 pt.
 struct FeedNavPills: View {
     @Binding var selection: FeedContentSegment
-    let collapseProgress: CGFloat
+    @ObservedObject var scrollState: FeedSegmentScrollState
     let feedLabel: String
     let albumLabel: String
     let streakLabel: String
 
+    private var collapseProgress: CGFloat { scrollState.collapseProgress }
     private var t: CGFloat { FeedSegmentMorphLayout.smoothstep(collapseProgress) }
     private var activeLabel: String {
         switch selection {
@@ -48,7 +49,6 @@ struct FeedNavPills: View {
                 .opacity(t)
                 .allowsHitTesting(false)
         }
-        .animation(.spring(response: 0.3, dampingFraction: 0.82), value: collapseProgress)
         .animation(.spring(response: 0.28, dampingFraction: 0.80), value: selection)
     }
 
@@ -122,7 +122,11 @@ private struct MaterialPills: View {
             }
             .padding(FeedSegmentPillLayout.chromePadding)
             .frame(width: proxy.size.width, height: proxy.size.height)
-            .background(.ultraThinMaterial, in: Capsule(style: .continuous))
+            .background(SplickTheme.Colors.cardBackground, in: Capsule(style: .continuous))
+            .overlay {
+                Capsule(style: .continuous)
+                    .strokeBorder(SplickTheme.Colors.primaryGradientStart.opacity(0.10), lineWidth: 1)
+            }
             .contentShape(Capsule(style: .continuous))
             .simultaneousGesture(stripGesture(totalWidth: proxy.size.width))
         }
@@ -160,12 +164,11 @@ private struct MaterialPills: View {
                 .background {
                     if isSelected {
                         Capsule(style: .continuous)
-                            .fill(.regularMaterial)
+                            .fill(SplickTheme.Colors.background)
                             .overlay {
                                 Capsule(style: .continuous)
                                     .stroke(.white.opacity(isEmphasized ? 0.75 : 0.45), lineWidth: 0.8)
                             }
-                            .shadow(color: .black.opacity(isEmphasized ? 0.10 : 0.05), radius: isEmphasized ? 10 : 5, y: isEmphasized ? 4 : 2)
                             .scaleEffect(isEmphasized ? 1.08 : 1)
                             .matchedGeometryEffect(id: "indicator", in: ns)
                     }

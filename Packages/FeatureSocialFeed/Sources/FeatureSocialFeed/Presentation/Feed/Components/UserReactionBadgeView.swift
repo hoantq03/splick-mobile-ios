@@ -13,6 +13,10 @@ struct UserReactionBadgeView: View {
         /// Sits on the upper-right rim of the avatar (slightly above the top edge).
         static let emojiOffsetX: CGFloat = 17
         static let emojiOffsetY: CGFloat = -5
+        /// Extra right room so the emoji capsule (up to 3 overlapping emojis, ~30 pt wide
+        /// starting at emojiOffsetX=17) never bleeds into the spacing before MoreReactorsChip.
+        /// 17 + 3(pad) + 24(stack) + 3(pad) = 47 → 48 pt is safe.
+        static let frameExtraWidth: CGFloat = 20
     }
 
     var body: some View {
@@ -43,7 +47,7 @@ struct UserReactionBadgeView: View {
                 .offset(x: Metrics.emojiOffsetX, y: Metrics.emojiOffsetY)
             }
         }
-        .frame(width: Metrics.avatarSize + 10, height: Metrics.avatarSize, alignment: .topLeading)
+        .frame(width: Metrics.avatarSize + Metrics.frameExtraWidth, height: Metrics.avatarSize, alignment: .topLeading)
     }
 }
 

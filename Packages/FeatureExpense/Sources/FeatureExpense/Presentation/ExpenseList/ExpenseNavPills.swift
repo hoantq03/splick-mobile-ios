@@ -5,11 +5,12 @@ import Localization
 /// Principal toolbar pills for the expense tab — same morph/collapse UX as feed.
 struct ExpenseNavPills: View {
     @Binding var selection: ExpenseContentSegment
-    let collapseProgress: CGFloat
+    @ObservedObject var scrollState: FeedSegmentScrollState
     let historyLabel: String
     let overviewLabel: String
     let friendsLabel: String
 
+    private var collapseProgress: CGFloat { scrollState.collapseProgress }
     private var t: CGFloat { FeedSegmentMorphLayout.smoothstep(collapseProgress) }
 
     private var activeLabel: String {
@@ -46,7 +47,6 @@ struct ExpenseNavPills: View {
                 .opacity(t)
                 .allowsHitTesting(false)
         }
-        .animation(.spring(response: 0.3, dampingFraction: 0.82), value: collapseProgress)
         // Match pager spring so pill indicator and page offset share one motion feel.
         .animation(ExpensePagerMotion.slide, value: selection)
     }
@@ -116,16 +116,11 @@ private struct ExpenseMaterialPills: View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
                 Capsule(style: .continuous)
-                    .fill(.regularMaterial)
+                    .fill(SplickTheme.Colors.background)
                     .overlay {
                         Capsule(style: .continuous)
                             .stroke(.white.opacity(emphasized ? 0.75 : 0.45), lineWidth: 0.8)
                     }
-                    .shadow(
-                        color: .black.opacity(emphasized ? 0.10 : 0.05),
-                        radius: emphasized ? 10 : 5,
-                        y: emphasized ? 4 : 2
-                    )
                     .frame(
                         width: FeedSegmentPillLayout.segmentWidth,
                         height: FeedSegmentPillLayout.segmentHeight
@@ -141,7 +136,11 @@ private struct ExpenseMaterialPills: View {
             }
             .padding(FeedSegmentPillLayout.chromePadding)
             .frame(width: proxy.size.width, height: proxy.size.height)
-            .background(.ultraThinMaterial, in: Capsule(style: .continuous))
+            .background(SplickTheme.Colors.cardBackground, in: Capsule(style: .continuous))
+            .overlay {
+                Capsule(style: .continuous)
+                    .strokeBorder(SplickTheme.Colors.primaryGradientStart.opacity(0.10), lineWidth: 1)
+            }
             .contentShape(Capsule(style: .continuous))
             .simultaneousGesture(stripGesture(totalWidth: proxy.size.width))
         }
