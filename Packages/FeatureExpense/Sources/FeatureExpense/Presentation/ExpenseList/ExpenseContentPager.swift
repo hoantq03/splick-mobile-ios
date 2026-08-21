@@ -4,13 +4,9 @@ import DesignSystem
 import Localization
 
 enum ExpensePagerMotion {
-    /// Programmatic page settle — matches FeedContentPager pill taps (UIKit spring).
-    static let settleDuration: TimeInterval = 0.22
-    static let settleDamping: CGFloat = 0.92
-    /// Pill indicator follows selection (SwiftUI); page motion is UIKit.
-    static let slide = Animation.easeOut(duration: settleDuration)
-    /// Wait until the slide finishes before chrome resets.
-    static let settleMilliseconds: UInt64 = 240
+    static let settleDuration: TimeInterval = SplickPageSlideMotion.duration
+    static let slide = SplickPageSlideMotion.animation
+    static let settleMilliseconds: UInt64 = 180
 }
 
 /// Horizontal paging between expense segments — History / Overview / Friends.
@@ -18,6 +14,7 @@ enum ExpensePagerMotion {
 /// pages slide as layers instead of being re-laid out every animation frame.
 struct ExpenseContentPager<History: View, Overview: View, Friends: View>: View {
     @Binding var selection: ExpenseContentSegment
+    var contentEpoch: Int = 0
     @ViewBuilder var history: () -> History
     @ViewBuilder var overview: () -> Overview
     @ViewBuilder var friends: () -> Friends
@@ -32,6 +29,7 @@ struct ExpenseContentPager<History: View, Overview: View, Friends: View>: View {
         hasher.combine(languageService.locale)
         hasher.combine(pullToRefreshActive)
         hasher.combine(selection)
+        hasher.combine(contentEpoch)
         return hasher.finalize()
     }
 
@@ -438,8 +436,6 @@ private final class ExpensePagerContainerVC<History: View, Overview: View, Frien
         UIView.animate(
             withDuration: ExpensePagerMotion.settleDuration,
             delay: 0,
-            usingSpringWithDamping: ExpensePagerMotion.settleDamping,
-            initialSpringVelocity: 0,
             options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseOut]
         ) { [weak self] in
             self?.applyLayout()

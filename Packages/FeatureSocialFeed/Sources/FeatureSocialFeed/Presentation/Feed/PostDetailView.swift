@@ -99,7 +99,6 @@ struct PostDetailView: View {
 
                     commentsSection
                         .opacity(commentsRevealed ? 1 : 0)
-                        .offset(y: commentsRevealed ? 0 : 16)
                 }
                 .padding(.horizontal, SplickTheme.Spacing.md)
             }
@@ -170,13 +169,14 @@ struct PostDetailView: View {
         .onAppear {
             tabBarScrollState?.hide(flushToBottom: true)
             configureCardActions()
-            withAnimation(.easeOut(duration: 0.34)) {
-                commentsRevealed = true
-            }
             // Defer remaining @Published updates so we don't publish during view updates.
             Task { @MainActor in
                 feedViewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
                 enableComposerInteraction()
+                try? await Task.sleep(for: .milliseconds(280))
+                withAnimation(.easeOut(duration: 0.16)) {
+                    commentsRevealed = true
+                }
             }
         }
         .onDisappear {

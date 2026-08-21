@@ -382,17 +382,28 @@ public struct RemoteImageFullscreenPreview: View {
 
             TabView(selection: $selectedIndex) {
                 ForEach(Array(urls.enumerated()), id: \.offset) { index, url in
-                    RemoteImage(url: url, maxPixelSize: 2048) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFit()
-                        default:
-                            ProgressView()
-                                .tint(.white)
+                    Group {
+                        if url.isLikelyAnimatedImage {
+                            AnimatedRemoteImage(
+                                url: url,
+                                contentMode: .fit,
+                                maxPixelSize: 2048
+                            )
+                        } else {
+                            RemoteImage(url: url, maxPixelSize: 2048) { phase in
+                                switch phase {
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .scaledToFit()
+                                default:
+                                    ProgressView()
+                                        .tint(.white)
+                                }
+                            }
                         }
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .tag(index)
                 }
             }
@@ -408,6 +419,18 @@ public struct RemoteImageFullscreenPreview: View {
             }
             .padding(.top, 8)
             .padding(.trailing, 16)
+
+            if urls.count > 1 {
+                Text("\(selectedIndex + 1) / \(urls.count)")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(Color.black.opacity(0.55)))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .padding(.bottom, 28)
+                    .allowsHitTesting(false)
+            }
         }
         .statusBarHidden(true)
     }

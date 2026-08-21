@@ -30,6 +30,9 @@ public final class ChatThreadViewModel: ObservableObject {
     @Published public private(set) var prependAnchorMessageId: UUID?
     /// Set by the message list when the bottom anchor is visible.
     @Published public var isNearBottom = true
+    @Published public private(set) var threadSearchHits: [MessageSearchHit] = []
+    @Published public private(set) var threadSearchState: LoadingState<[MessageSearchHit]> = .idle
+    @Published public private(set) var activeThreadSearchQuery = ""
 
     private static let maxPagesForMessageLookup = 10
     private static let pageSize = 30
@@ -69,6 +72,7 @@ public final class ChatThreadViewModel: ObservableObject {
     private var lastMarkedReadMessageId: UUID?
     private var pathMonitorHandlerId: UUID?
     private var foregroundObserver: NSObjectProtocol?
+    private var threadSearchTask: Task<Void, Never>?
 
     public init(
         conversationId: UUID,
@@ -110,6 +114,10 @@ public final class ChatThreadViewModel: ObservableObject {
         return []
     }
 
+    public func clearCachedThread() {
+        messageCache?.remove(conversationId: conversationId)
+    }
+
     public func floatSway(for messageId: UUID) -> CGFloat {
         floatSwayByMessageId[messageId] ?? 0
     }
@@ -124,6 +132,62 @@ public final class ChatThreadViewModel: ObservableObject {
             return
         case .idle, .failed:
             await load()
+        }
+    }
+
+    public func onThreadSearchQueryChanged(_ query: String) {
+        threadSearchTask?.cancel()
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 2 else {
+            threadSearchHits = []
+            threadSearchState = .idle
+            activeThreadSearchQuery = ""
+            return
+        }
+        if threadSearchHits.isEmpty {
+            threadSearchState = .loading
+        }
+        threadSearchTask = Task {
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled else { return }
+            do {
+                let hits = try await repository.searchMessages(
+                    query: trimmed,
+                    page: 0,
+                    limit: 30,
+                    conversationId: conversationId
+                )
+                guard !Task.isCancelled else { return }
+                threadSearchHits = hits
+                threadSearchState = .loaded(hits)
+                activeThreadSearchQuery = trimmed
+            } catch {
+                guard !Task.isCancelled else { return }
+                threadSearchHits = []
+                threadSearchState = .failed(languageService.localizedMessage(for: error))
+                activeThreadSearchQuery = ""
+                Log.error(error, category: .network, metadata: ["action": "searchThreadMessages"])
+            }
+        }
+    }
+
+    public func clearThreadSearch() {
+        threadSearchTask?.cancel()
+        threadSearchHits = []
+        threadSearchState = .idle
+        activeThreadSearchQuery = ""
+    }
+
+    public func revealSearchedMessage(id: UUID) async {
+        if messages.contains(where: { $0.id == id }) {
+            activateHighlight(for: id)
+            requestScrollToMessage(id)
+            return
+        }
+        do {
+            try await loadUntilMessage(id: id)
+        } catch {
+            Log.error(error, category: .network, metadata: ["action": "revealSearchedMessage"])
         }
     }
 

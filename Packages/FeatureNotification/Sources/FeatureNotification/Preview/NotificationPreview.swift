@@ -7,7 +7,7 @@ import SplickDomain
 #if DEBUG
 
 final class MockFetchNotificationsUseCase: FetchNotificationsUseCaseProtocol, Sendable {
-    func execute(page: Int) async throws -> [AppNotification] {
+    func execute(page: Int, category: NotificationListCategory) async throws -> [AppNotification] {
         try await Task.sleep(for: .milliseconds(500))
         return PreviewData.sampleNotifications
     }

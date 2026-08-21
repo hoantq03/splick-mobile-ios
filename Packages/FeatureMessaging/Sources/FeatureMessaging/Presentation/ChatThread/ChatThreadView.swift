@@ -14,6 +14,9 @@ public struct ChatThreadView: View {
     @Environment(\.currentUserSummary) private var currentUserSummary
     @FocusState private var isInputFocused: Bool
     @State private var inputText: String = ""
+    @State private var isSearchingThread = false
+    @State private var threadSearchDraft = ""
+    @FocusState private var isThreadSearchFocused: Bool
 
     private let currentUserId: UUID
     private let peer: ConversationPeer?
@@ -24,7 +27,9 @@ public struct ChatThreadView: View {
     @State private var groupConversation: Conversation?
     @State private var activeGroupSheet: GroupChatSheet?
     @State private var confirmLeaveGroup = false
+    @State private var confirmDeleteConversation = false
     @State private var comingSoonFeatureTitle: String?
+    @State private var showNotificationSettings = false
 
     @Environment(\.chatGroupManagementActions) private var groupManagementActions
     @Environment(\.dismiss) private var dismiss
@@ -48,22 +53,21 @@ public struct ChatThreadView: View {
     }
 
     public var body: some View {
-        VStack(spacing: 0) {
-            if relationshipViewModel.showsAddFriendBanner {
-                ChatAddFriendBanner(
-                    message: addFriendBannerMessage,
-                    actionTitle: addFriendBannerActionTitle,
-                    actionSystemImage: addFriendBannerActionSystemImage,
-                    isProcessing: relationshipViewModel.isProcessing
-                ) {
-                    Task { await performAddFriendBannerAction() }
-                }
+        ZStack {
+            threadContent
+            if isSearchingThread {
+                ChatThreadSearchOverlay(
+                    viewModel: viewModel,
+                    query: $threadSearchDraft,
+                    isSearchFocused: $isThreadSearchFocused,
+                    onSelectHit: { hit in
+                        closeThreadSearch()
+                        Task { await viewModel.revealSearchedMessage(id: hit.messageId) }
+                    },
+                    onClose: closeThreadSearch
+                )
+                .transition(.opacity)
             }
-            messageArea
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            Divider()
-            bottomBar
-                .fixedSize(horizontal: false, vertical: true)
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -85,15 +89,20 @@ public struct ChatThreadView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(navigationTitle)
-                .disabled(!canOpenChatHeader)
+                .disabled(!canOpenChatHeader || isSearchingThread)
             }
             ToolbarItem(placement: .topBarTrailing) {
-                if displayConversation?.isGroup == true, repository != nil {
-                    groupChatOptionsMenu
-                } else {
-                    directChatOptionsMenu
+                if !isSearchingThread {
+                    if displayConversation?.isGroup == true, repository != nil {
+                        groupChatOptionsMenu
+                    } else {
+                        directChatOptionsMenu
+                    }
                 }
             }
+        }
+        .onChange(of: threadSearchDraft) { newValue in
+            viewModel.onThreadSearchQueryChanged(newValue)
         }
         .sheet(item: $activeGroupSheet) { sheet in
             if let displayConversation, let repository {
@@ -132,6 +141,24 @@ public struct ChatThreadView: View {
                 }
             }
         }
+        .sheet(isPresented: $showNotificationSettings) {
+            if let displayConversation, let repository {
+                ChatNotificationSettingsSheet(conversation: displayConversation) { enabled, sound in
+                    let updated = try await repository.updateNotificationSettings(
+                        conversationId: displayConversation.id,
+                        notificationsEnabled: enabled,
+                        notificationSound: sound
+                    )
+                    applyConversationUpdate(
+                        displayConversation.updatingNotificationSettings(
+                            enabled: updated.notificationsEnabled,
+                            sound: updated.notificationSound
+                        )
+                    )
+                }
+                .environmentObject(languageService)
+            }
+        }
         .confirmationDialog(
             languageService.text(.messagingLeaveGroupConfirmTitle),
             isPresented: $confirmLeaveGroup,
@@ -141,6 +168,18 @@ public struct ChatThreadView: View {
                 Task { await leaveGroup() }
             }
             Button(languageService.text(.commonCancel), role: .cancel) {}
+        }
+        .confirmationDialog(
+            languageService.text(.messagingChatDeleteConversationConfirmTitle),
+            isPresented: $confirmDeleteConversation,
+            titleVisibility: .visible
+        ) {
+            Button(languageService.text(.messagingChatDeleteConversation), role: .destructive) {
+                Task { await deleteConversation() }
+            }
+            Button(languageService.text(.commonCancel), role: .cancel) {}
+        } message: {
+            Text(languageService.text(.messagingChatDeleteConversationConfirmMessage))
         }
         .confirmationDialog(
             languageService.text(.friendsRemoveFriendConfirmTitle),
@@ -195,6 +234,40 @@ public struct ChatThreadView: View {
         groupConversation ?? conversation
     }
 
+    private var threadContent: some View {
+        VStack(spacing: 0) {
+            if relationshipViewModel.showsAddFriendBanner {
+                ChatAddFriendBanner(
+                    message: addFriendBannerMessage,
+                    actionTitle: addFriendBannerActionTitle,
+                    actionSystemImage: addFriendBannerActionSystemImage,
+                    isProcessing: relationshipViewModel.isProcessing
+                ) {
+                    Task { await performAddFriendBannerAction() }
+                }
+            }
+            messageArea
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Divider()
+            bottomBar
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func openThreadSearch() {
+        isSearchingThread = true
+        DispatchQueue.main.async {
+            isThreadSearchFocused = true
+        }
+    }
+
+    private func closeThreadSearch() {
+        isThreadSearchFocused = false
+        threadSearchDraft = ""
+        viewModel.clearThreadSearch()
+        isSearchingThread = false
+    }
+
     private var comingSoonPresented: Binding<Bool> {
         Binding(
             get: { comingSoonFeatureTitle != nil },
@@ -217,40 +290,32 @@ public struct ChatThreadView: View {
     @ViewBuilder
     private var conversationComingSoonActions: some View {
         Button {
-            presentComingSoon(.messagingChatSearchMessages)
+            openThreadSearch()
         } label: {
             Label(
-                comingSoonMenuTitle(.messagingChatSearchMessages),
+                languageService.text(.messagingChatSearchMessages),
                 systemImage: "magnifyingglass"
             )
         }
 
         Button {
-            presentComingSoon(.messagingChatMuteNotifications)
+            showNotificationSettings = true
         } label: {
             Label(
-                comingSoonMenuTitle(.messagingChatMuteNotifications),
-                systemImage: "bell.slash"
+                languageService.text(.messagingChatNotificationSounds),
+                systemImage: (displayConversation?.notificationsEnabled ?? true) ? "bell" : "bell.slash"
             )
         }
-
-        Button {
-            presentComingSoon(.messagingChatNotificationSounds)
-        } label: {
-            Label(
-                comingSoonMenuTitle(.messagingChatNotificationSounds),
-                systemImage: "speaker.wave.2"
-            )
-        }
+        .disabled(repository == nil)
     }
 
     @ViewBuilder
-    private var deleteConversationComingSoonAction: some View {
+    private var deleteConversationAction: some View {
         Button(role: .destructive) {
-            presentComingSoon(.messagingChatDeleteConversation)
+            confirmDeleteConversation = true
         } label: {
             Label(
-                comingSoonMenuTitle(.messagingChatDeleteConversation),
+                languageService.text(.messagingChatDeleteConversation),
                 systemImage: "trash"
             )
         }
@@ -296,7 +361,7 @@ public struct ChatThreadView: View {
                 )
             }
 
-            deleteConversationComingSoonAction
+            deleteConversationAction
         } label: {
             Image(systemName: "ellipsis")
         }
@@ -331,6 +396,17 @@ public struct ChatThreadView: View {
         }
     }
 
+    private func deleteConversation() async {
+        guard let displayConversation, let repository else { return }
+        do {
+            try await repository.deleteConversation(conversationId: displayConversation.id)
+            viewModel.clearCachedThread()
+            dismiss()
+        } catch {
+            // Delete errors surface on next navigation refresh; keep UX simple here.
+        }
+    }
+
     private var directChatOptionsMenu: some View {
         Menu {
             conversationComingSoonActions
@@ -356,7 +432,7 @@ public struct ChatThreadView: View {
                 }
             }
 
-            deleteConversationComingSoonAction
+            deleteConversationAction
         } label: {
             Image(systemName: "ellipsis")
         }

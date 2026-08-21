@@ -72,6 +72,27 @@ public final class MessagingRepository: MessagingRepositoryProtocol, Sendable {
         try await apiClient.request(MessagingEndpoint.leaveGroup(groupId: groupId))
     }
 
+    public func deleteConversation(conversationId: UUID) async throws {
+        try await apiClient.request(MessagingEndpoint.deleteConversation(conversationId: conversationId))
+    }
+
+    public func updateNotificationSettings(
+        conversationId: UUID,
+        notificationsEnabled: Bool,
+        notificationSound: String
+    ) async throws -> Conversation {
+        let dto: ConversationResponseDTO = try await apiClient.request(
+            MessagingEndpoint.updateNotificationSettings(
+                conversationId: conversationId,
+                UpdateConversationNotificationSettingsRequestDTO(
+                    notificationsEnabled: notificationsEnabled,
+                    notificationSound: notificationSound
+                )
+            )
+        )
+        return MessagingMapper.toConversation(dto)
+    }
+
     public func renameGroup(groupId: UUID, name: String) async throws -> Conversation {
         let dto: ConversationResponseDTO = try await apiClient.request(
             MessagingEndpoint.renameGroup(groupId: groupId, RenameGroupRequestDTO(name: name))
@@ -169,9 +190,19 @@ public final class MessagingRepository: MessagingRepositoryProtocol, Sendable {
         )
     }
 
-    public func searchMessages(query: String, page: Int, limit: Int) async throws -> [MessageSearchHit] {
+    public func searchMessages(
+        query: String,
+        page: Int,
+        limit: Int,
+        conversationId: UUID?
+    ) async throws -> [MessageSearchHit] {
         let dtos: [MessageSearchHitResponseDTO] = try await apiClient.request(
-            MessagingEndpoint.searchMessages(q: query, page: page, limit: limit)
+            MessagingEndpoint.searchMessages(
+                q: query,
+                page: page,
+                limit: limit,
+                conversationId: conversationId
+            )
         )
         return dtos.compactMap(MessagingMapper.toMessageSearchHit)
     }

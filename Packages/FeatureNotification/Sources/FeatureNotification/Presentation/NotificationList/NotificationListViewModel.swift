@@ -10,6 +10,7 @@ public final class NotificationListViewModel: ObservableObject {
 
     @Published var notifications: [AppNotification] = []
     @Published var state: LoadingState<[AppNotification]> = .idle
+    @Published var selectedCategory: NotificationListCategory = .all
     @Published private(set) var isRefreshing = false
     @Published private(set) var isLoadingMore = false
     @Published private(set) var hasMorePages = true
@@ -42,6 +43,13 @@ public final class NotificationListViewModel: ObservableObject {
 
     var notificationSections: [NotificationListSection] {
         NotificationListSection.grouped(from: notifications)
+    }
+
+    func selectCategory(_ category: NotificationListCategory) async {
+        guard category != selectedCategory else { return }
+        selectedCategory = category
+        notifications = []
+        await load()
     }
 
     func load(isPullToRefresh: Bool = false) async {
@@ -87,7 +95,7 @@ public final class NotificationListViewModel: ObservableObject {
         )
 
         do {
-            let batch = try await fetchNotificationsUseCase.execute(page: nextPage)
+            let batch = try await fetchNotificationsUseCase.execute(page: nextPage, category: selectedCategory)
             hasMorePages = batch.count >= Self.pageSize
             guard !batch.isEmpty else {
                 hasMorePages = false
@@ -111,7 +119,7 @@ public final class NotificationListViewModel: ObservableObject {
         )
 
         do {
-            let batch = try await fetchNotificationsUseCase.execute(page: 0)
+            let batch = try await fetchNotificationsUseCase.execute(page: 0, category: selectedCategory)
             notifications = batch
             hasMorePages = batch.count >= Self.pageSize
             state = .loaded(batch)

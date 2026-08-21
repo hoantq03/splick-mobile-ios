@@ -37,6 +37,8 @@ public struct ConversationListView: View {
     @State private var conversationRowFrames: [UUID: CGRect] = [:]
     @State private var peekFrozenFrame: CGRect?
     @State private var peekSession = UUID()
+    @State private var confirmDeletePeekedConversation = false
+    @State private var peekComingSoonTitle: String?
 
     private static let peekImpact = UIImpactFeedbackGenerator(style: .medium)
 
@@ -62,9 +64,8 @@ public struct ConversationListView: View {
     }
 
     public var body: some View {
-        ZStack {
-            NavigationStack(path: $path) {
-                VStack(spacing: 0) {
+        NavigationStack(path: $path) {
+            VStack(spacing: 0) {
                     messagingSearchBar
 
                     if !isSearching {
@@ -81,6 +82,7 @@ public struct ConversationListView: View {
                         }
                     }
                 }
+                .splickFastPageSlide()
                 .animation(
                     suppressRefreshAnimations ? nil : MessagingSearchChromeAnimation.resultsSpring,
                     value: isSearching
@@ -97,19 +99,20 @@ public struct ConversationListView: View {
                         conversation: route.conversation,
                         highlightMessageId: route.highlightMessageId
                     )
+                    .splickFastPageSlide()
                 }
                 .sheet(item: $composePresentation) { presentation in
                     NewMessageComposeView(viewModel: presentation.viewModel) { conversation in
                         composePresentation = nil
-                        path.append(ChatThreadRoute(conversation: conversation))
+                        pushThread(ChatThreadRoute(conversation: conversation))
                         Task { await viewModel.refresh() }
                     }
                     .environmentObject(languageService)
                 }
             }
-
-            conversationPeekLayer
-        }
+            .overlay {
+                conversationPeekLayer
+            }
         .onChange(of: searchDraft) { newValue in
             viewModel.onSearchQueryChanged(newValue)
         }
@@ -135,20 +138,42 @@ public struct ConversationListView: View {
         } message: {
             Text(languageService.text(.messagingFilterComingSoon))
         }
+        .alert(
+            peekComingSoonTitle ?? languageService.text(.messagingChatMoreAccessibility),
+            isPresented: peekComingSoonPresented
+        ) {
+            Button(languageService.text(.commonOK), role: .cancel) {
+                peekComingSoonTitle = nil
+            }
+        } message: {
+            Text(languageService.text(.messagingFilterComingSoon))
+        }
+        .confirmationDialog(
+            languageService.text(.messagingChatDeleteConversationConfirmTitle),
+            isPresented: $confirmDeletePeekedConversation,
+            titleVisibility: .visible
+        ) {
+            Button(languageService.text(.messagingChatDeleteConversation), role: .destructive) {
+                Task { await viewModel.deletePeekedConversation() }
+            }
+            Button(languageService.text(.commonCancel), role: .cancel) {}
+        } message: {
+            Text(languageService.text(.messagingChatDeleteConversationConfirmMessage))
+        }
         .onFirstAppear {
             guard viewModel.conversations.isEmpty else { return }
             Task { await viewModel.load() }
         }
         .onChange(of: conversationToOpen?.conversation.id) { _ in
             guard let route = conversationToOpen else { return }
-            path.append(route)
+            pushThread(route)
             conversationToOpen = nil
         }
         .onReceive(sameTabTapPublisher) { _ in
             guard sameTabTapHandlingEnabled else { return }
             // Pop into a thread first — same as Instagram home tab.
             if !path.isEmpty {
-                path = NavigationPath()
+                popToInbox()
                 return
             }
             if tabBarScrollState?.isAtTop == true {
@@ -232,6 +257,7 @@ public struct ConversationListView: View {
 
         case .loaded:
             conversationList(viewModel.conversations)
+                .allowsHitTesting(viewModel.peekConversation == nil)
 
         case .failed(let message):
             ErrorView(message: message) {
@@ -344,41 +370,49 @@ public struct ConversationListView: View {
         }
         viewModel.onSearchQueryChanged("")
         searchDraft = ""
-        path.append(route)
+        pushThread(route)
         await viewModel.refresh()
     }
 
     @ViewBuilder
     private var conversationPeekLayer: some View {
-        GeometryReader { geometry in
-            if let conversation = viewModel.peekConversation,
-               let globalFrame = peekFrozenFrame,
-               let currentUserId = currentUserSummary?.id {
-                let overlayOrigin = geometry.frame(in: .global).origin
-                let localFrame = globalFrame.offsetBy(
-                    dx: -overlayOrigin.x,
-                    dy: -overlayOrigin.y
-                )
+        if viewModel.peekConversation != nil {
+            GeometryReader { geometry in
+                if let conversation = viewModel.peekConversation,
+                   let globalFrame = peekFrozenFrame,
+                   let currentUserId = currentUserSummary?.id {
+                    let overlayOrigin = geometry.frame(in: .global).origin
+                    let localFrame = globalFrame.offsetBy(
+                        dx: -overlayOrigin.x,
+                        dy: -overlayOrigin.y
+                    )
 
-                ConversationPeekOverlay(
-                    context: ConversationPeekContext(
-                        conversation: conversation,
-                        anchorFrame: localFrame,
-                        currentUserId: currentUserId
-                    ),
-                    messages: viewModel.peekMessages,
-                    loadState: viewModel.peekLoadState,
-                    onDismiss: dismissConversationPeek,
-                    onOpen: {
-                        openConversationFromPeek(conversation)
-                    }
-                )
-                .id(peekSession)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ConversationPeekOverlay(
+                        context: ConversationPeekContext(
+                            conversation: conversation,
+                            anchorFrame: localFrame,
+                            currentUserId: currentUserId
+                        ),
+                        messages: viewModel.peekMessages,
+                        loadState: viewModel.peekLoadState,
+                        onDismiss: dismissConversationPeek,
+                        onOpen: {
+                            openConversationFromPeek(conversation)
+                        },
+                        onDelete: {
+                            confirmDeletePeekedConversation = true
+                        },
+                        onMute: {
+                            peekComingSoonTitle = languageService.text(.messagingChatMuteNotifications)
+                        }
+                    )
+                    .id(peekSession)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
+            .ignoresSafeArea()
+            .zIndex(100)
         }
-        .allowsHitTesting(viewModel.peekConversation != nil)
-        .zIndex(100)
     }
 
     private func openConversationPeek(_ conversation: Conversation) {
@@ -403,7 +437,30 @@ public struct ConversationListView: View {
 
     private func openConversationFromPeek(_ conversation: Conversation) {
         dismissConversationPeek()
-        path.append(ChatThreadRoute(conversation: conversation))
+        pushThread(ChatThreadRoute(conversation: conversation))
+    }
+
+    private func pushThread(_ route: ChatThreadRoute) {
+        withAnimation(SplickPageSlideMotion.animation) {
+            path.append(route)
+        }
+    }
+
+    private func popToInbox() {
+        withAnimation(SplickPageSlideMotion.animation) {
+            path = NavigationPath()
+        }
+    }
+
+    private var peekComingSoonPresented: Binding<Bool> {
+        Binding(
+            get: { peekComingSoonTitle != nil },
+            set: { isPresented in
+                if !isPresented {
+                    peekComingSoonTitle = nil
+                }
+            }
+        )
     }
 
     @ViewBuilder
@@ -413,25 +470,21 @@ public struct ConversationListView: View {
                 LazyVStack(spacing: 0) {
                     Color.clear.frame(height: 0).id("messagingScrollTop")
                     ForEach(items) { conversation in
-                        Button {
-                            path.append(ChatThreadRoute(conversation: conversation))
-                        } label: {
-                            ConversationRowView(conversation: conversation)
-                                .opacity(
-                                    viewModel.peekConversation?.id == conversation.id ? 0 : 1
-                                )
-                        }
-                        .buttonStyle(.plain)
-                        .allowsHitTesting(viewModel.peekConversation?.id != conversation.id)
-                        .highPriorityGesture(
-                            LongPressGesture(minimumDuration: 0.28)
-                                .onEnded { _ in
-                                    openConversationPeek(conversation)
-                                }
-                        )
-                        .onAppear {
-                            Task { await viewModel.loadMoreIfNeeded(current: conversation) }
-                        }
+                        ConversationRowView(conversation: conversation)
+                            .opacity(
+                                viewModel.peekConversation?.id == conversation.id ? 0 : 1
+                            )
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                pushThread(ChatThreadRoute(conversation: conversation))
+                            }
+                            .onLongPressGesture(minimumDuration: 0.28) {
+                                openConversationPeek(conversation)
+                            }
+                            .allowsHitTesting(viewModel.peekConversation?.id != conversation.id)
+                            .onAppear {
+                                Task { await viewModel.loadMoreIfNeeded(current: conversation) }
+                            }
                         Divider()
                             .padding(.leading, 56)
                     }

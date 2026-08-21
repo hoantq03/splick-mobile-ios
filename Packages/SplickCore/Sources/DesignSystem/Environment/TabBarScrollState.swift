@@ -13,9 +13,9 @@ public enum SplickTabBarMetrics {
 }
 
 public enum TabBarChromeMotion {
-    /// Smooth vertical slide — no spring overshoot.
-    public static let slide = Animation.easeInOut(duration: 0.30)
-    public static let show = Animation.easeInOut(duration: 0.26)
+    /// Match feed segment / main-tab pager settle.
+    public static let slide = Animation.easeOut(duration: 0.18)
+    public static let show = Animation.easeOut(duration: 0.16)
 }
 
 @MainActor

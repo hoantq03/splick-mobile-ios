@@ -100,6 +100,7 @@ public struct FeedView: View {
                 )
             }
             .background(SplickTheme.Colors.background.ignoresSafeArea())
+            .splickFastPageSlide()
             .navigationTitle("")
             .splickTabNavigationBarChrome()
             .toolbar {
@@ -152,13 +153,15 @@ public struct FeedView: View {
             guard let navigation = pendingFeedPostNavigation else { return }
             let result = await viewModel.ensurePostLoaded(id: navigation.postId)
             if result == .loaded {
-                navigationPath.append(
-                    FeedPostDestination(
-                        postId: navigation.postId,
-                        mediaIndex: 0,
-                        expandBillSplit: navigation.expandBillSplit
+                withFeedPostNavigation {
+                    navigationPath.append(
+                        FeedPostDestination(
+                            postId: navigation.postId,
+                            mediaIndex: 0,
+                            expandBillSplit: navigation.expandBillSplit
+                        )
                     )
-                )
+                }
             }
             onPendingPostHandled?()
         }
@@ -172,7 +175,7 @@ public struct FeedView: View {
                 videoCoordinator.suspendPlayback()
             }
             Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(280))
+                try? await Task.sleep(for: .milliseconds(180))
                 scrollChrome.feedSegment.reset()
                 tabBarScrollState?.reset()
             }
@@ -317,18 +320,22 @@ private struct FeedPrimaryPage: View {
         cardActions.onOpenComments = { post in
             guard viewModel.postUploadState(for: post.id) == nil else { return }
             tabBarScrollState?.hide(flushToBottom: true)
-            navigationPath.append(
-                FeedPostDestination(
-                    postId: post.id,
-                    mediaIndex: 0,
-                    focusComposerOnAppear: post.commentCount == 0
+            withFeedPostNavigation {
+                navigationPath.append(
+                    FeedPostDestination(
+                        postId: post.id,
+                        mediaIndex: 0,
+                        focusComposerOnAppear: post.commentCount == 0
+                    )
                 )
-            )
+            }
         }
         cardActions.onOpenDetail = { post, mediaIndex in
             guard viewModel.postUploadState(for: post.id) == nil else { return }
             tabBarScrollState?.hide(flushToBottom: true)
-            navigationPath.append(FeedPostDestination(postId: post.id, mediaIndex: mediaIndex))
+            withFeedPostNavigation {
+                navigationPath.append(FeedPostDestination(postId: post.id, mediaIndex: mediaIndex))
+            }
         }
         cardActions.onPresent = { presentation in
             cardPresentation = presentation

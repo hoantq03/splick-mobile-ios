@@ -2,7 +2,7 @@ import Foundation
 import SplickDomain
 
 public protocol NotificationRepositoryProtocol: Sendable {
-    func fetchNotifications(page: Int, limit: Int) async throws -> [AppNotification]
+    func fetchNotifications(page: Int, limit: Int, category: String?) async throws -> [AppNotification]
     func markAsRead(id: UUID) async throws
     func markAsClicked(id: UUID) async throws
     func markAllAsRead() async throws
@@ -14,4 +14,10 @@ public protocol NotificationRepositoryProtocol: Sendable {
         environment: String
     ) async throws
     func unregisterDeviceToken(token: String) async throws
+}
+
+public extension NotificationRepositoryProtocol {
+    func fetchNotifications(page: Int, limit: Int) async throws -> [AppNotification] {
+        try await fetchNotifications(page: page, limit: limit, category: nil)
+    }
 }

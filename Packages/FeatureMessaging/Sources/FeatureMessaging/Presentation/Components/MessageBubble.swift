@@ -391,19 +391,11 @@ struct MessageBubble: View {
     @ViewBuilder
     private func attachmentFullscreenPreview(at index: Int) -> some View {
         if imageAttachments.indices.contains(index) {
-            let attachment = imageAttachments[index]
-            if attachment.url.isLikelyAnimatedImage {
-                RemoteGifFullscreenPreview(url: attachment.url) {
-                    imageViewerRoute = nil
-                }
-            } else {
-                let urls = imageAttachments.map(\.url)
-                RemoteImageFullscreenPreview(
-                    urls: urls,
-                    initialIndex: index,
-                    onDismiss: { imageViewerRoute = nil }
-                )
-            }
+            RemoteImageFullscreenPreview(
+                urls: imageAttachments.map(\.url),
+                initialIndex: index,
+                onDismiss: { imageViewerRoute = nil }
+            )
         }
     }
 

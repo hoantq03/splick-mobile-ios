@@ -2,7 +2,7 @@ import Foundation
 import Networking
 
 enum NotificationEndpoint: APIEndpoint {
-    case list(page: Int, limit: Int)
+    case list(page: Int, limit: Int, category: String?)
     case markRead(id: UUID)
     case markClicked(id: UUID)
     case markAllRead
@@ -29,11 +29,15 @@ enum NotificationEndpoint: APIEndpoint {
 
     var queryItems: [URLQueryItem]? {
         switch self {
-        case .list(let page, let limit):
-            return [
+        case .list(let page, let limit, let category):
+            var items = [
                 URLQueryItem(name: "page", value: "\(page)"),
                 URLQueryItem(name: "limit", value: "\(limit)"),
             ]
+            if let category, !category.isEmpty {
+                items.append(URLQueryItem(name: "category", value: category))
+            }
+            return items
         default: return nil
         }
     }

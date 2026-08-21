@@ -14,6 +14,12 @@ public protocol MessagingRepositoryProtocol: Sendable {
     func addGroupMember(groupId: UUID, memberUserId: UUID) async throws
     func removeGroupMember(groupId: UUID, memberUserId: UUID) async throws
     func leaveGroup(groupId: UUID) async throws
+    func deleteConversation(conversationId: UUID) async throws
+    func updateNotificationSettings(
+        conversationId: UUID,
+        notificationsEnabled: Bool,
+        notificationSound: String
+    ) async throws -> Conversation
     func renameGroup(groupId: UUID, name: String) async throws -> Conversation
     func transferGroupAdmin(groupId: UUID, newAdminUserId: UUID) async throws
     func fetchMessages(
@@ -34,7 +40,12 @@ public protocol MessagingRepositoryProtocol: Sendable {
     func unreadCount() async throws -> Int
     func addReaction(conversationId: UUID, messageId: UUID, emoji: String) async throws -> Reaction
     func removeReaction(conversationId: UUID, messageId: UUID, reactionId: UUID) async throws
-    func searchMessages(query: String, page: Int, limit: Int) async throws -> [MessageSearchHit]
+    func searchMessages(
+        query: String,
+        page: Int,
+        limit: Int,
+        conversationId: UUID?
+    ) async throws -> [MessageSearchHit]
     func requestWsTicket() async throws -> String
 }
 
@@ -72,6 +83,19 @@ public extension MessagingRepositoryProtocol {
             clientMessageId: clientMessageId,
             imageAttachments: imageAttachments,
             replyToMessageId: nil
+        )
+    }
+
+    func searchMessages(
+        query: String,
+        page: Int = 0,
+        limit: Int = 20
+    ) async throws -> [MessageSearchHit] {
+        try await searchMessages(
+            query: query,
+            page: page,
+            limit: limit,
+            conversationId: nil
         )
     }
 }

@@ -9,7 +9,9 @@ enum MessagingEndpoint: APIEndpoint {
     case addGroupMember(groupId: UUID, AddGroupMemberRequestDTO)
     case removeGroupMember(groupId: UUID, memberUserId: UUID)
     case leaveGroup(groupId: UUID)
+    case deleteConversation(conversationId: UUID)
     case renameGroup(groupId: UUID, RenameGroupRequestDTO)
+    case updateNotificationSettings(conversationId: UUID, UpdateConversationNotificationSettingsRequestDTO)
     case transferGroupAdmin(groupId: UUID, TransferGroupAdminRequestDTO)
     case listMessages(
         conversationId: UUID,
@@ -27,7 +29,7 @@ enum MessagingEndpoint: APIEndpoint {
     )
     case markRead(conversationId: UUID, upToMessageId: UUID)
     case unreadCount
-    case searchMessages(q: String, page: Int, limit: Int)
+    case searchMessages(q: String, page: Int, limit: Int, conversationId: UUID?)
     case addReaction(conversationId: UUID, messageId: UUID, CreateReactionRequestDTO)
     case removeReaction(conversationId: UUID, messageId: UUID, reactionId: UUID)
     case wsTicket
@@ -46,8 +48,12 @@ enum MessagingEndpoint: APIEndpoint {
             return "/v1/messaging/groups/\(groupId)/members/\(memberUserId)"
         case .leaveGroup(let groupId):
             return "/v1/messaging/groups/\(groupId)/leave"
+        case .deleteConversation(let conversationId):
+            return "/v1/messaging/conversations/\(conversationId)"
         case .renameGroup(let groupId, _):
             return "/v1/messaging/groups/\(groupId)/name"
+        case .updateNotificationSettings(let conversationId, _):
+            return "/v1/messaging/conversations/\(conversationId)/notification-settings"
         case .transferGroupAdmin(let groupId, _):
             return "/v1/messaging/groups/\(groupId)/admin"
         case .listMessages(let id, _, _, _, _):
@@ -75,9 +81,9 @@ enum MessagingEndpoint: APIEndpoint {
             return .get
         case .getOrCreateConversation, .sendMessage, .markRead, .addReaction, .createGroup, .addGroupMember, .wsTicket:
             return .post
-        case .removeReaction, .removeGroupMember, .leaveGroup:
+        case .removeReaction, .removeGroupMember, .leaveGroup, .deleteConversation:
             return .delete
-        case .renameGroup:
+        case .renameGroup, .updateNotificationSettings:
             return .patch
         case .transferGroupAdmin:
             return .put
@@ -110,12 +116,16 @@ enum MessagingEndpoint: APIEndpoint {
                 items.append(URLQueryItem(name: "before", value: "\(before)"))
             }
             return items
-        case .searchMessages(let q, let page, let limit):
-            return [
+        case .searchMessages(let q, let page, let limit, let conversationId):
+            var items = [
                 URLQueryItem(name: "q", value: q),
                 URLQueryItem(name: "page", value: "\(page)"),
                 URLQueryItem(name: "limit", value: "\(limit)"),
             ]
+            if let conversationId {
+                items.append(URLQueryItem(name: "conversationId", value: conversationId.uuidString))
+            }
+            return items
         default:
             return nil
         }
@@ -130,6 +140,8 @@ enum MessagingEndpoint: APIEndpoint {
         case .addGroupMember(_, let dto):
             return dto
         case .renameGroup(_, let dto):
+            return dto
+        case .updateNotificationSettings(_, let dto):
             return dto
         case .transferGroupAdmin(_, let dto):
             return dto

@@ -87,9 +87,11 @@ public struct StreakView: View {
             let mediaIndex = post?.displayMediaItems.firstIndex(where: { $0.id == photo.id }) ?? 0
 
             viewModel.dismissDayDetail()
-            navigationPath.append(
-                FeedPostDestination(postId: photo.postId, mediaIndex: mediaIndex)
-            )
+            withFeedPostNavigation {
+                navigationPath.append(
+                    FeedPostDestination(postId: photo.postId, mediaIndex: mediaIndex)
+                )
+            }
         }
     }
 

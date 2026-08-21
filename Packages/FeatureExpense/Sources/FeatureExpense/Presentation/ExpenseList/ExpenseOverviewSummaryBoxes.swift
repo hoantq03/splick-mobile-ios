@@ -11,29 +11,69 @@ struct ExpenseOverviewSummaryBoxes: View {
     let incomeLabel: String
     let expenditureLabel: String
     let thisMonthLabel: String
+    let todayNet: Decimal
+    let todayTitle: String
+    let othersOweYouLabel: String
+    let youOweOthersLabel: String
+    let todayBalancedLabel: String
 
     var body: some View {
-        HStack(spacing: SplickTheme.Spacing.sm) {
-            summaryBox(
-                title: incomeLabel,
-                amount: received,
-                tint: SplickTheme.Colors.success,
-                icon: "arrow.down.left.circle.fill"
-            )
-            summaryBox(
-                title: expenditureLabel,
-                amount: paid,
-                tint: SplickTheme.Colors.error,
-                icon: "arrow.up.right.circle.fill"
-            )
+        VStack(spacing: SplickTheme.Spacing.sm) {
+            todayBox
+
+            HStack(spacing: SplickTheme.Spacing.sm) {
+                summaryBox(
+                    title: incomeLabel,
+                    amount: received,
+                    tint: SplickTheme.Colors.success,
+                    icon: "arrow.down.left.circle.fill",
+                    caption: thisMonthLabel
+                )
+                summaryBox(
+                    title: expenditureLabel,
+                    amount: paid,
+                    tint: SplickTheme.Colors.error,
+                    icon: "arrow.up.right.circle.fill",
+                    caption: thisMonthLabel
+                )
+            }
         }
+    }
+
+    private var todayDirectionLabel: String {
+        if todayNet > 0 { return othersOweYouLabel }
+        if todayNet < 0 { return youOweOthersLabel }
+        return todayBalancedLabel
+    }
+
+    private var todayTint: Color {
+        if todayNet > 0 { return SplickTheme.Colors.success }
+        if todayNet < 0 { return SplickTheme.Colors.error }
+        return SplickTheme.Colors.textTertiary
+    }
+
+    private var todayIcon: String {
+        if todayNet > 0 { return "arrow.down.left.circle.fill" }
+        if todayNet < 0 { return "arrow.up.right.circle.fill" }
+        return "equal.circle.fill"
+    }
+
+    private var todayBox: some View {
+        summaryBox(
+            title: todayDirectionLabel,
+            amount: abs(todayNet),
+            tint: todayTint,
+            icon: todayIcon,
+            caption: todayTitle
+        )
     }
 
     private func summaryBox(
         title: String,
         amount: Decimal,
         tint: Color,
-        icon: String
+        icon: String,
+        caption: String
     ) -> some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
             HStack(spacing: SplickTheme.Spacing.xxs) {
@@ -43,6 +83,8 @@ struct ExpenseOverviewSummaryBoxes: View {
                 Text(title)
                     .font(SplickTheme.Typography.captionBold)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
                 Spacer(minLength: 0)
             }
 
@@ -52,7 +94,7 @@ struct ExpenseOverviewSummaryBoxes: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
 
-            Text(thisMonthLabel)
+            Text(caption)
                 .font(SplickTheme.Typography.caption)
                 .foregroundStyle(SplickTheme.Colors.textTertiary)
         }
@@ -66,5 +108,7 @@ struct ExpenseOverviewSummaryBoxes: View {
             RoundedRectangle(cornerRadius: ExpenseScreenChrome.insetRadius, style: .continuous)
                 .strokeBorder(tint.opacity(0.18), lineWidth: 1)
         )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(caption), \(title), \(amount.chartAmountString(currencyCode: currency))")
     }
 }

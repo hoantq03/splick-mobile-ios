@@ -35,18 +35,20 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
     public let lastMessage: ChatMessage?
     public let createdAt: Date
     public let updatedAt: Date
-
+    public let notificationsEnabled: Bool
+    public let notificationSound: String
+    
     public var displayTitle: String {
         if type == .group {
             return groupName ?? "Group"
         }
         return peer?.displayTitle ?? String(id.uuidString.prefix(8))
     }
-
+    
     public var isGroup: Bool {
         type == .group
     }
-
+    
     public init(
         id: UUID,
         type: ConversationType = .direct,
@@ -57,7 +59,9 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
         memberCount: Int? = nil,
         lastMessage: ChatMessage?,
         createdAt: Date,
-        updatedAt: Date
+        updatedAt: Date,
+        notificationsEnabled: Bool = true,
+        notificationSound: String = ConversationNotificationSound.default.rawValue
     ) {
         self.id = id
         self.type = type
@@ -69,8 +73,10 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
         self.lastMessage = lastMessage
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.notificationsEnabled = notificationsEnabled
+        self.notificationSound = notificationSound
     }
-
+    
     public func updating(unreadCount: Int) -> Conversation {
         Conversation(
             id: id,
@@ -82,10 +88,12 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
             memberCount: memberCount,
             lastMessage: lastMessage,
             createdAt: createdAt,
-            updatedAt: updatedAt
+            updatedAt: updatedAt,
+            notificationsEnabled: notificationsEnabled,
+            notificationSound: notificationSound
         )
     }
-
+    
     public func updating(groupName: String) -> Conversation {
         Conversation(
             id: id,
@@ -97,10 +105,12 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
             memberCount: memberCount,
             lastMessage: lastMessage,
             createdAt: createdAt,
-            updatedAt: updatedAt
+            updatedAt: updatedAt,
+            notificationsEnabled: notificationsEnabled,
+            notificationSound: notificationSound
         )
     }
-
+    
     public func updating(groupAvatarUrl: String?) -> Conversation {
         Conversation(
             id: id,
@@ -112,10 +122,12 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
             memberCount: memberCount,
             lastMessage: lastMessage,
             createdAt: createdAt,
-            updatedAt: updatedAt
+            updatedAt: updatedAt,
+            notificationsEnabled: notificationsEnabled,
+            notificationSound: notificationSound
         )
     }
-
+    
     /// Local inbox patch from a live message (WebSocket) — keeps list snappy without a full REST reload.
     public func updating(
         lastMessage: ChatMessage,
@@ -132,7 +144,26 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
             memberCount: memberCount,
             lastMessage: lastMessage,
             createdAt: createdAt,
-            updatedAt: updatedAt
+            updatedAt: updatedAt,
+            notificationsEnabled: notificationsEnabled,
+            notificationSound: notificationSound
+        )
+    }
+    
+    public func updatingNotificationSettings(enabled: Bool, sound: String) -> Conversation {
+        Conversation(
+            id: id,
+            type: type,
+            unreadCount: unreadCount,
+            peer: peer,
+            groupName: groupName,
+            groupAvatarUrl: groupAvatarUrl,
+            memberCount: memberCount,
+            lastMessage: lastMessage,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            notificationsEnabled: enabled,
+            notificationSound: sound
         )
     }
 }

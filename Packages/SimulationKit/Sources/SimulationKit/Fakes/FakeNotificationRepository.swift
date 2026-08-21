@@ -53,14 +53,50 @@ public actor FakeNotificationRepository: NotificationRepositoryProtocol {
         logger.log("Seeded \(notifications.count) notifications")
     }
 
-    public func fetchNotifications(page: Int, limit: Int) async throws -> [AppNotification] {
-        logger.log("Fetch notifications: page=\(page), limit=\(limit)")
+    public func fetchNotifications(page: Int, limit: Int, category: String?) async throws -> [AppNotification] {
+        logger.log("Fetch notifications: page=\(page), limit=\(limit), category=\(category ?? "ALL")")
         try await Task.sleep(for: .milliseconds(300))
 
+        let filtered: [AppNotification]
+        switch category {
+        case "EXPENSES":
+            filtered = notifications.filter {
+                switch $0.type {
+                case .paymentEvidenceSubmitted, .paymentEvidenceApproved, .paymentEvidenceRejected,
+                     .dailyDebtReminder, .expenseSplitBill, .expenseReminder, .expenseSettled,
+                     .bulkSettlementPendingApproval, .bulkSettlementApproved, .bulkSettlementRejected:
+                    return true
+                default:
+                    return false
+                }
+            }
+        case "FRIENDS":
+            filtered = notifications.filter {
+                switch $0.type {
+                case .friendRequestSent, .friendRequestAccepted, .groupInvite:
+                    return true
+                default:
+                    return false
+                }
+            }
+        case "POSTS":
+            filtered = notifications.filter {
+                switch $0.type {
+                case .feedTaggedInPost, .feedMentionedInPost, .feedMentionedInComment,
+                     .postCommented, .postReactionMilestone, .streakReminderMidday, .streakReminderEvening:
+                    return true
+                default:
+                    return false
+                }
+            }
+        default:
+            filtered = notifications
+        }
+
         let start = page * limit
-        guard start < notifications.count else { return [] }
-        let end = min(start + limit, notifications.count)
-        let result = Array(notifications[start..<end])
+        guard start < filtered.count else { return [] }
+        let end = min(start + limit, filtered.count)
+        let result = Array(filtered[start..<end])
 
         logger.success("Loaded \(result.count) notifications (\(result.filter { !$0.isRead }.count) unread)")
         return result

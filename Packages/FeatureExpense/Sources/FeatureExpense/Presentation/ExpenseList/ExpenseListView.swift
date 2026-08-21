@@ -16,9 +16,6 @@ public struct ExpenseListView: View {
     @ObservedObject private var viewModel: ExpenseListViewModel
     @StateObject private var friendSearchViewModel: ExpenseUserSearchViewModel
     @StateObject private var scrollChrome = ScrollChromeStateHolder()
-    @State private var showFilterPanel = false
-    @State private var captionQueryDraft = ""
-    @State private var friendQueryDraft = ""
     @State private var profileRoute: ExpenseUserProfileRoute?
     @State private var selectedSegment: ExpenseContentSegment = .overview
     @State private var chartMode: ExpenseChartMode = .income
@@ -42,8 +39,6 @@ public struct ExpenseListView: View {
     private let profileDependencies: FriendUserProfileDependencies?
     private let friendListViewModel: ExpenseFriendListViewModel?
     private let makeFriendDetailViewModel: ((DebtSummary) -> ExpenseFriendDetailViewModel)?
-
-    private let listFilterAnimation = Animation.spring(response: 0.42, dampingFraction: 0.86)
 
     private var sameTabTapPublisher: AnyPublisher<Void, Never> {
         tabBarScrollState?.sameTabTapSubject.eraseToAnyPublisher()
@@ -72,7 +67,7 @@ public struct ExpenseListView: View {
 
     public var body: some View {
         NavigationStack(path: $navigationPath) {
-            ExpenseContentPager(selection: $selectedSegment) {
+            ExpenseContentPager(selection: $selectedSegment, contentEpoch: historyScrollTopSignal) {
                 historyPage
             } overview: {
                 overviewPage
@@ -80,6 +75,7 @@ public struct ExpenseListView: View {
                 friendsPage
             }
             .background(SplickTheme.Colors.background.ignoresSafeArea())
+            .splickFastPageSlide()
             .splickScrollSoftTopEdge()
             .navigationTitle("")
             .splickTabNavigationBarChrome()
@@ -193,33 +189,16 @@ public struct ExpenseListView: View {
 
     @ViewBuilder
     private var historyPage: some View {
-        Group {
-            switch viewModel.state {
-            case .idle, .loading:
-                LoadingView(message: languageService.text(.expenseLoading))
-                    .splickSegmentPagerPageTopInset(isEnabled: true)
-
-            case .loaded where viewModel.expenses.isEmpty:
-                EmptyStateView(
-                    icon: "dollarsign.circle",
-                    title: languageService.text(.expenseEmptyTitle),
-                    message: languageService.text(.expenseEmptyMessage),
-                    actionTitle: languageService.text(.expenseEmptyAction)
-                ) {
-                    openPostCapture()
-                }
-                .splickSegmentPagerPageTopInset(isEnabled: true)
-
-            case .loaded:
-                historyContent
-
-            case .failed(let message):
-                ErrorView(message: message) {
-                    Task { await viewModel.load() }
-                }
-                .splickSegmentPagerPageTopInset(isEnabled: true)
-            }
-        }
+        ExpenseHistoryPage(
+            viewModel: viewModel,
+            friendSearchViewModel: friendSearchViewModel,
+            refreshController: refreshController,
+            currentUserId: currentUserId,
+            historyScrollTopSignal: historyScrollTopSignal,
+            onOpenCapture: openPostCapture,
+            onOpenLinkedPost: openLinkedPost(for:),
+            onOpenCreator: openCreatorProfile
+        )
     }
 
     @ViewBuilder
@@ -262,39 +241,6 @@ public struct ExpenseListView: View {
         }
     }
 
-    private var historyContent: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(spacing: SplickTheme.Spacing.md) {
-                    Color.clear.frame(height: 0).id("expenseScrollTop")
-                    expenseRecordsSection
-                }
-                .padding(.horizontal, SplickTheme.Spacing.md)
-                .transaction { transaction in
-                    if pullToRefreshActive {
-                        transaction.animation = nil
-                    }
-                }
-            }
-            .scrollChromeTracking()
-            .splickSegmentPagerScrollInsets()
-            .splickScrollSoftTopEdge()
-            .splickNativeRefreshable(controller: refreshController) {
-                await viewModel.load(isPullToRefresh: true)
-            }
-            .onChange(of: historyScrollTopSignal) { _ in
-                withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
-                    proxy.scrollTo("expenseScrollTop", anchor: .top)
-                }
-            }
-            .onAppear {
-                if captionQueryDraft.isEmpty {
-                    captionQueryDraft = viewModel.filters.captionQuery
-                }
-            }
-        }
-    }
-
     private var overviewContent: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -307,7 +253,12 @@ public struct ExpenseListView: View {
                         currency: viewModel.monthlySummaryCurrency,
                         incomeLabel: languageService.text(.expenseOverviewIncome),
                         expenditureLabel: languageService.text(.expenseOverviewExpenditure),
-                        thisMonthLabel: languageService.text(.expenseOverviewThisMonth)
+                        thisMonthLabel: languageService.text(.expenseOverviewThisMonth),
+                        todayNet: viewModel.todayNetUnpaid,
+                        todayTitle: languageService.text(.expenseOverviewTodayTitle),
+                        othersOweYouLabel: languageService.text(.expenseYouAreOwed),
+                        youOweOthersLabel: languageService.text(.expenseYouOwe),
+                        todayBalancedLabel: languageService.text(.expenseOverviewTodayBalanced)
                     )
 
                     ExpenseMonthlyBarChart(
@@ -352,49 +303,6 @@ public struct ExpenseListView: View {
             padding: SplickTheme.Spacing.md,
             cornerRadius: ExpenseScreenChrome.cardRadius
         )
-    }
-
-    private var expenseRecordsSection: some View {
-        recordsSection {
-            Group {
-                if viewModel.displayedExpenses.isEmpty {
-                    filteredEmptyState
-                        .transition(
-                            .asymmetric(
-                                insertion: .opacity.combined(with: .scale(scale: 0.98)),
-                                removal: .opacity
-                            )
-                        )
-                } else {
-                    expensesList(viewModel.displayedExpenses)
-                        .transition(
-                            .asymmetric(
-                                insertion: .opacity.combined(with: .move(edge: .bottom)),
-                                removal: .opacity.combined(with: .move(edge: .bottom))
-                            )
-                        )
-                }
-            }
-            .animation(pullToRefreshActive ? nil : listFilterAnimation, value: viewModel.filterSignature)
-        }
-    }
-
-    private var filteredEmptyState: some View {
-        VStack(spacing: SplickTheme.Spacing.sm) {
-            Image(systemName: "line.3.horizontal.decrease.circle")
-                .font(.system(size: 36))
-                .foregroundStyle(SplickTheme.Colors.textTertiary)
-            Text(languageService.text(.expenseFilteredEmptyTitle))
-                .font(SplickTheme.Typography.headline)
-                .foregroundStyle(SplickTheme.Colors.textPrimary)
-            Text(languageService.text(.expenseFilteredEmptyMessage))
-                .font(SplickTheme.Typography.caption)
-                .foregroundStyle(SplickTheme.Colors.textSecondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, SplickTheme.Spacing.xl)
-        .splickCard(cornerRadius: ExpenseScreenChrome.cardRadius)
     }
 
     private func overviewDebtCharts(showsDetailedLegend: Bool) -> some View {
@@ -479,7 +387,124 @@ public struct ExpenseListView: View {
         .accessibilityValue(datePeriodSubtitle ?? "")
     }
 
-    private func recordsSection<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+    /// Shared period label shown beside overview and history section titles.
+    private var datePeriodSubtitle: String? {
+        switch viewModel.filters.activeDatePreset {
+        case .week:
+            return languageService.text(.expenseRecordsSectionThisWeek)
+        case .month:
+            return languageService.text(.expenseRecordsSectionThisMonth)
+        case .all:
+            return languageService.text(.expenseRecordsSectionAllTime)
+        }
+    }
+
+    private func openPostCapture() {
+        openPostCaptureFlow?()
+    }
+
+    private func openLinkedPost(for expense: Expense) {
+        guard let postId = expense.postId else { return }
+        openLinkedPost?(postId, true)
+    }
+
+    private func openCreatorProfile(_ user: UserSummary) {
+        guard profileDependencies != nil else { return }
+        if user.id == currentUserId {
+            openProfileSettings?()
+            return
+        }
+        profileRoute = ExpenseUserProfileRoute(user: user)
+    }
+
+    private func formatAmount(_ amount: Decimal) -> String {
+        let symbol = Decimal.displayCurrencySymbol(for: "VND")
+        return "\(SplickMoneyFormat.string(from: amount))\(symbol)"
+    }
+}
+
+private struct ExpenseHistoryPage: View {
+    @ObservedObject var viewModel: ExpenseListViewModel
+    @ObservedObject var friendSearchViewModel: ExpenseUserSearchViewModel
+    @ObservedObject var refreshController: SplickRefreshController
+    @EnvironmentObject private var languageService: LanguageService
+    @Environment(\.pullToRefreshActive) private var pullToRefreshActive
+
+    let currentUserId: UUID?
+    let historyScrollTopSignal: Int
+    let onOpenCapture: () -> Void
+    let onOpenLinkedPost: (Expense) -> Void
+    let onOpenCreator: (UserSummary) -> Void
+
+    @State private var showFilterPanel = false
+    @State private var captionQueryDraft = ""
+    @State private var friendQueryDraft = ""
+
+    private let listFilterAnimation = Animation.spring(response: 0.42, dampingFraction: 0.86)
+
+    var body: some View {
+        Group {
+            switch viewModel.state {
+            case .idle, .loading:
+                LoadingView(message: languageService.text(.expenseLoading))
+                    .splickSegmentPagerPageTopInset(isEnabled: true)
+
+            case .loaded where viewModel.expenses.isEmpty:
+                EmptyStateView(
+                    icon: "dollarsign.circle",
+                    title: languageService.text(.expenseEmptyTitle),
+                    message: languageService.text(.expenseEmptyMessage),
+                    actionTitle: languageService.text(.expenseEmptyAction),
+                    action: onOpenCapture
+                )
+                .splickSegmentPagerPageTopInset(isEnabled: true)
+
+            case .loaded:
+                historyContent
+
+            case .failed(let message):
+                ErrorView(message: message) {
+                    Task { await viewModel.load() }
+                }
+                .splickSegmentPagerPageTopInset(isEnabled: true)
+            }
+        }
+    }
+
+    private var historyContent: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: SplickTheme.Spacing.md) {
+                    Color.clear.frame(height: 0).id("expenseScrollTop")
+                    recordsSection
+                }
+                .padding(.horizontal, SplickTheme.Spacing.md)
+                .transaction { transaction in
+                    if pullToRefreshActive {
+                        transaction.animation = nil
+                    }
+                }
+            }
+            .scrollChromeTracking()
+            .splickSegmentPagerScrollInsets()
+            .splickScrollSoftTopEdge()
+            .splickNativeRefreshable(controller: refreshController) {
+                await viewModel.load(isPullToRefresh: true)
+            }
+            .onChange(of: historyScrollTopSignal) { _ in
+                withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                    proxy.scrollTo("expenseScrollTop", anchor: .top)
+                }
+            }
+            .onAppear {
+                if captionQueryDraft.isEmpty {
+                    captionQueryDraft = viewModel.filters.captionQuery
+                }
+            }
+        }
+    }
+
+    private var recordsSection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
             ExpenseListSectionHeader(
                 title: languageService.text(.expenseRecordsSectionTitle),
@@ -514,12 +539,48 @@ public struct ExpenseListView: View {
                 }
             )
 
-            content()
+            Group {
+                if viewModel.displayedExpenses.isEmpty {
+                    filteredEmptyState
+                        .transition(
+                            .asymmetric(
+                                insertion: .opacity.combined(with: .scale(scale: 0.98)),
+                                removal: .opacity
+                            )
+                        )
+                } else {
+                    expensesList(viewModel.displayedExpenses)
+                        .transition(
+                            .asymmetric(
+                                insertion: .opacity.combined(with: .move(edge: .bottom)),
+                                removal: .opacity.combined(with: .move(edge: .bottom))
+                            )
+                        )
+                }
+            }
+            .animation(pullToRefreshActive ? nil : listFilterAnimation, value: viewModel.filterSignature)
         }
         .zIndex(showFilterPanel ? 1 : 0)
     }
 
-    /// Shared period label shown beside overview and history section titles.
+    private var filteredEmptyState: some View {
+        VStack(spacing: SplickTheme.Spacing.sm) {
+            Image(systemName: "line.3.horizontal.decrease.circle")
+                .font(.system(size: 36))
+                .foregroundStyle(SplickTheme.Colors.textTertiary)
+            Text(languageService.text(.expenseFilteredEmptyTitle))
+                .font(SplickTheme.Typography.headline)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
+            Text(languageService.text(.expenseFilteredEmptyMessage))
+                .font(SplickTheme.Typography.caption)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, SplickTheme.Spacing.xl)
+        .splickCard(cornerRadius: ExpenseScreenChrome.cardRadius)
+    }
+
     private var datePeriodSubtitle: String? {
         switch viewModel.filters.activeDatePreset {
         case .week:
@@ -538,12 +599,9 @@ public struct ExpenseListView: View {
                     expense: expense,
                     currentUserId: currentUserId,
                     layout: .grouped,
-                    onCreatorTap: {
-                        openCreatorProfile(expense.paidBy)
-                    }
-                ) {
-                    openLinkedPost(for: expense)
-                }
+                    onCreatorTap: { onOpenCreator(expense.paidBy) },
+                    onTap: { onOpenLinkedPost(expense) }
+                )
 
                 if index < expenses.count - 1 {
                     Divider()
@@ -567,29 +625,6 @@ public struct ExpenseListView: View {
                 }
         }
         .clipShape(RoundedRectangle(cornerRadius: ExpenseScreenChrome.cardRadius, style: .continuous))
-    }
-
-    private func openPostCapture() {
-        openPostCaptureFlow?()
-    }
-
-    private func openLinkedPost(for expense: Expense) {
-        guard let postId = expense.postId else { return }
-        openLinkedPost?(postId, true)
-    }
-
-    private func openCreatorProfile(_ user: UserSummary) {
-        guard profileDependencies != nil else { return }
-        if user.id == currentUserId {
-            openProfileSettings?()
-            return
-        }
-        profileRoute = ExpenseUserProfileRoute(user: user)
-    }
-
-    private func formatAmount(_ amount: Decimal) -> String {
-        let symbol = Decimal.displayCurrencySymbol(for: "VND")
-        return "\(SplickMoneyFormat.string(from: amount))\(symbol)"
     }
 }
 
@@ -1061,8 +1096,7 @@ private struct ExpenseListFilterPanel: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
                 filterSectionLabel(languageService.text(.expenseFilterDateRange))
                 HStack(spacing: SplickTheme.Spacing.xs) {
@@ -1148,7 +1182,6 @@ private struct ExpenseListFilterPanel: View {
                 .clipShape(RoundedRectangle(cornerRadius: ExpenseScreenChrome.controlRadius, style: .continuous))
 
                 friendsOptionsList
-            }
             }
         }
         .onDisappear {

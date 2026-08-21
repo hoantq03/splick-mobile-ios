@@ -111,7 +111,12 @@ public final class ExpenseListViewModel: ObservableObject {
     var overviewOwedPaidTotal: Decimal { overviewSnapshot.owedPaidTotal }
     var overviewOwedPaidCount: Int { overviewSnapshot.owedPaidCount }
 
+    var todayOweUnpaidTotal: Decimal { todaySnapshot.oweUnpaidTotal }
+    var todayOwedUnpaidTotal: Decimal { todaySnapshot.owedUnpaidTotal }
+    var todayNetUnpaid: Decimal { todayOwedUnpaidTotal - todayOweUnpaidTotal }
+
     private var overviewSnapshot = ExpenseOverviewSnapshot.empty
+    private var todaySnapshot = ExpenseOverviewSnapshot.empty
 
     var currentMonthReceived: Decimal {
         monthlySummary?.currentMonth.totalSettledReceived ?? .zero
@@ -366,29 +371,45 @@ public final class ExpenseListViewModel: ObservableObject {
     }
 
     private func rebuildOverviewSnapshot() {
-        let scoped = overviewScopedExpenses
         var snapshot = ExpenseOverviewSnapshot.empty
-        for expense in scoped {
-            let state = expense.userDebtState(userId: currentUserId)
-            let amount = expense.userDebtAmount(userId: currentUserId, state: state)
-            switch state {
-            case .oweUnpaid:
-                snapshot.oweUnpaidTotal += amount
-                snapshot.oweUnpaidCount += 1
-            case .owePaid:
-                snapshot.owePaidTotal += amount
-                snapshot.owePaidCount += 1
-            case .owedUnpaid:
-                snapshot.owedUnpaidTotal += amount
-                snapshot.owedUnpaidCount += 1
-            case .owedPaid:
-                snapshot.owedPaidTotal += amount
-                snapshot.owedPaidCount += 1
-            case .neutral:
-                break
-            }
+        for expense in overviewScopedExpenses {
+            accumulate(expense, into: &snapshot)
         }
         overviewSnapshot = snapshot
+        rebuildTodaySnapshot()
+    }
+
+    private func rebuildTodaySnapshot() {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        var snapshot = ExpenseOverviewSnapshot.empty
+        for expense in expenses {
+            guard calendar.isDate(expense.createdAt, inSameDayAs: today) else { continue }
+            guard matchesCaption(expense), matchesUser(expense) else { continue }
+            accumulate(expense, into: &snapshot)
+        }
+        todaySnapshot = snapshot
+    }
+
+    private func accumulate(_ expense: Expense, into snapshot: inout ExpenseOverviewSnapshot) {
+        let state = expense.userDebtState(userId: currentUserId)
+        let amount = expense.userDebtAmount(userId: currentUserId, state: state)
+        switch state {
+        case .oweUnpaid:
+            snapshot.oweUnpaidTotal += amount
+            snapshot.oweUnpaidCount += 1
+        case .owePaid:
+            snapshot.owePaidTotal += amount
+            snapshot.owePaidCount += 1
+        case .owedUnpaid:
+            snapshot.owedUnpaidTotal += amount
+            snapshot.owedUnpaidCount += 1
+        case .owedPaid:
+            snapshot.owedPaidTotal += amount
+            snapshot.owedPaidCount += 1
+        case .neutral:
+            break
+        }
     }
 
     // MARK: - Filtering

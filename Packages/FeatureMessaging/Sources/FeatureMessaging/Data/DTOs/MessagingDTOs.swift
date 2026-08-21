@@ -22,6 +22,8 @@ struct ConversationResponseDTO: Decodable {
     let lastMessage: MessageResponseDTO?
     let createdAt: Date
     let updatedAt: Date
+    let notificationsEnabled: Bool?
+    let notificationSound: String?
 
     init(
         id: UUID,
@@ -33,7 +35,9 @@ struct ConversationResponseDTO: Decodable {
         memberCount: Int? = nil,
         lastMessage: MessageResponseDTO? = nil,
         createdAt: Date,
-        updatedAt: Date
+        updatedAt: Date,
+        notificationsEnabled: Bool? = true,
+        notificationSound: String? = "default"
     ) {
         self.id = id
         self.type = type
@@ -45,6 +49,8 @@ struct ConversationResponseDTO: Decodable {
         self.lastMessage = lastMessage
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.notificationsEnabled = notificationsEnabled
+        self.notificationSound = notificationSound
     }
 }
 
@@ -154,6 +160,11 @@ struct AddGroupMemberRequestDTO: Encodable {
 
 struct RenameGroupRequestDTO: Encodable {
     let name: String
+}
+
+struct UpdateConversationNotificationSettingsRequestDTO: Encodable {
+    let notificationsEnabled: Bool
+    let notificationSound: String
 }
 
 struct TransferGroupAdminRequestDTO: Encodable {

@@ -10,9 +10,9 @@ public final class NotificationRepository: NotificationRepositoryProtocol, Senda
         self.apiClient = apiClient
     }
 
-    public func fetchNotifications(page: Int, limit: Int) async throws -> [AppNotification] {
+    public func fetchNotifications(page: Int, limit: Int, category: String?) async throws -> [AppNotification] {
         let dtos: [NotificationResponseDTO] = try await apiClient.request(
-            NotificationEndpoint.list(page: page, limit: limit)
+            NotificationEndpoint.list(page: page, limit: limit, category: category)
         )
         return dtos.map(NotificationMapper.toNotification)
     }

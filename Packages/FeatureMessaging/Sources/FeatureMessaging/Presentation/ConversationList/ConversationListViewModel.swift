@@ -146,6 +146,21 @@ public final class ConversationListViewModel: ObservableObject {
         peekLoadState = .idle
     }
 
+    public func deletePeekedConversation() async {
+        guard let conversation = peekConversation else { return }
+        do {
+            try await repository.deleteConversation(conversationId: conversation.id)
+            removeConversationFromInbox(conversation.id)
+            dismissPeek()
+        } catch {
+            Log.error(
+                error,
+                category: .network,
+                metadata: ["action": "deletePeekedConversation", "conversationId": conversation.id.uuidString]
+            )
+        }
+    }
+
     public func toggleFilter(_ filter: InboxFilter) {
         guard filter != .closeFriends else { return }
         activeFilter = activeFilter == filter ? nil : filter
@@ -288,6 +303,22 @@ public final class ConversationListViewModel: ObservableObject {
         withTransaction(transaction) {
             state = .loaded(items)
             unreadConversationCount = max(0, unreadConversationCount - 1)
+        }
+    }
+
+    private func removeConversationFromInbox(_ conversationId: UUID) {
+        guard case .loaded(var items) = state,
+              let index = items.firstIndex(where: { $0.id == conversationId }) else { return }
+
+        let unread = items[index].unreadCount
+        items.remove(at: index)
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            state = .loaded(items)
+            if unread > 0 {
+                unreadConversationCount = max(0, unreadConversationCount - 1)
+            }
         }
     }
 

@@ -263,6 +263,7 @@ public struct FriendsRootView: View {
                     }
                 }
             }
+            .splickFastPageSlide()
             .onPreferenceChange(PullToRefreshActivePreferenceKey.self) { isPullRefreshing = $0 }
             .splickTabScreenHeader(languageService.text(.friendsTitle), showsBell: false)
             .onChange(of: viewModel.searchQuery) { newValue in

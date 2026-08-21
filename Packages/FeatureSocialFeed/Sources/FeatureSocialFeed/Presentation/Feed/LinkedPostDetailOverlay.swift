@@ -6,7 +6,7 @@ import FeatureFriends
 import FeatureStickers
 
 public enum LinkedPostMotion {
-    public static let spring = Animation.spring(response: 0.42, dampingFraction: 0.88, blendDuration: 0.1)
+    public static let spring = SplickPageSlideMotion.animation
 }
 
 /// Full-screen post detail that slides in from the trailing edge (e.g. from Expenses).
@@ -71,6 +71,7 @@ public struct LinkedPostDetailOverlay: View {
                     .accessibilityLabel(languageService.text(.commonClose))
                 }
             }
+            .splickFastPageSlide()
         }
         .environment(\.commentImageUpload, uploadCommentImage)
         .frame(maxWidth: .infinity, maxHeight: .infinity)

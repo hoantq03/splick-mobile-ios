@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import DesignSystem
 import Localization
 import SplickDomain
@@ -17,24 +18,51 @@ struct ConversationPeekOverlay: View {
     let loadState: ConversationListViewModel.PeekLoadState
     let onDismiss: () -> Void
     let onOpen: () -> Void
+    let onDelete: () -> Void
+    let onMute: () -> Void
 
     @State private var isRevealed = false
+    @State private var isOptionsRevealed = false
     @State private var isDismissing = false
     @State private var dismissIsArmed = false
+    @State private var optionsSize = CGSize(width: 188, height: 108)
+    @State private var didFreezeOptionsSize = false
 
     private static let dismissArmDelay: TimeInterval = 0.45
-    private let horizontalMargin = SplickTheme.Spacing.md
-    private let contentSpacing = SplickTheme.Spacing.sm
+    private static let actionImpact = UIImpactFeedbackGenerator(style: .light)
+    private let edgeMargin = SplickTheme.Spacing.md
+    private let contentGap = SplickTheme.Spacing.sm
+    /// Extra drop below the Dynamic Island / status bar so chips are fully visible.
+    private let extraBelowIsland = SplickTheme.Spacing.sm
 
     var body: some View {
         GeometryReader { geometry in
-            let cardHeight = min(max(geometry.size.height * 0.4, 220), 360)
-            let cardFrame = previewCardFrame(
+            let insets = geometry.safeAreaInsets
+            let chromeTop = max(insets.top, Self.windowSafeAreaTop) + extraBelowIsland
+            let destFrame = previewDestinationFrame(
                 containerSize: geometry.size,
-                cardHeight: cardHeight
+                insets: insets,
+                chromeTop: chromeTop,
+                optionsSize: optionsSize
+            )
+            let currentFrame = isRevealed ? destFrame : context.anchorFrame
+            let matchingRadius = max(
+                Self.displayCornerRadius - edgeMargin,
+                SplickTheme.CornerRadius.card
+            )
+            let previewShape = UnevenRoundedRectangle(
+                topLeadingRadius: SplickTheme.CornerRadius.card,
+                bottomLeadingRadius: matchingRadius,
+                bottomTrailingRadius: matchingRadius,
+                topTrailingRadius: SplickTheme.CornerRadius.card,
+                style: .continuous
+            )
+            let optionsOrigin = CGPoint(
+                x: insets.leading + edgeMargin,
+                y: chromeTop
             )
 
-            ZStack {
+            ZStack(alignment: .topLeading) {
                 Color.black
                     .opacity(isRevealed ? 0.52 : 0)
                     .ignoresSafeArea()
@@ -44,39 +72,57 @@ struct ConversationPeekOverlay: View {
                         dismissAnimated(completion: onDismiss)
                     }
 
-                liftedRow
-                    .frame(
-                        width: context.anchorFrame.width,
-                        height: context.anchorFrame.height
-                    )
-                    .scaleEffect(isRevealed ? 1.08 : 1)
-                    .position(
-                        x: context.anchorFrame.midX,
-                        y: context.anchorFrame.midY
-                    )
-                    .onTapGesture {
-                        dismissAnimated(completion: onOpen)
+                optionsStack
+                    .fixedSize()
+                    .background(optionsSizeReader)
+                    .onPreferenceChange(PeekOptionsSizeKey.self) { size in
+                        guard size.width > 1, size.height > 1, !didFreezeOptionsSize else { return }
+                        didFreezeOptionsSize = true
+                        var transaction = Transaction()
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) {
+                            optionsSize = size
+                        }
                     }
+                    .scaleEffect(
+                        isOptionsRevealed ? 1 : 0.72,
+                        anchor: .top
+                    )
+                    .opacity(isOptionsRevealed ? 1 : 0)
+                    .offset(y: isOptionsRevealed ? 0 : -16)
+                    .allowsHitTesting(isOptionsRevealed)
+                    .position(
+                        x: optionsOrigin.x + optionsSize.width / 2,
+                        y: optionsOrigin.y + optionsSize.height / 2
+                    )
+                    .zIndex(2)
 
-                previewCard
-                    .frame(width: cardFrame.width, height: cardFrame.height)
-                    .scaleEffect(isRevealed ? 1 : 0.92, anchor: cardFrame.minY > context.anchorFrame.maxY ? .top : .bottom)
-                    .opacity(isRevealed ? 1 : 0)
-                    .position(x: cardFrame.midX, y: cardFrame.midY)
+                previewCard(shape: previewShape)
+                    .frame(width: currentFrame.width, height: currentFrame.height)
+                    .clipShape(previewShape)
+                    .scaleEffect(isRevealed ? 1 : 0.96, anchor: .top)
+                    .position(x: currentFrame.midX, y: currentFrame.midY)
+                    .zIndex(1)
                     .onTapGesture {
+                        guard dismissIsArmed else { return }
                         dismissAnimated(completion: onOpen)
                     }
             }
         }
+        .ignoresSafeArea()
         .onAppear {
-            withAnimation(MessageReactionTrayMotion.bubblePop) {
+            withAnimation(ConversationPeekMotion.appear) {
                 isRevealed = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + MessageReactionTrayMotion.optionsChromeDelay) {
+                withAnimation(ConversationPeekMotion.appear) {
+                    isOptionsRevealed = true
+                }
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.dismissArmDelay) {
                 dismissIsArmed = true
             }
         }
-        // Keep peek bounce independent of parent list transactions (refresh / WS patch).
         .transaction { transaction in
             if !isDismissing {
                 transaction.disablesAnimations = false
@@ -86,73 +132,117 @@ struct ConversationPeekOverlay: View {
         .accessibilityLabel(languageService.text(.messagingConversationPeekA11y))
     }
 
-    private var liftedRow: some View {
-        ConversationRowView(
-            conversation: context.conversation,
-            reportsAnchorFrame: false
-        )
-        .background {
-            RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium, style: .continuous)
-                .fill(SplickTheme.Colors.background)
-                .shadow(
-                    color: .black.opacity(isRevealed ? 0.24 : 0),
-                    radius: isRevealed ? 18 : 0,
-                    y: isRevealed ? 8 : 0
-                )
+    private var optionsSizeReader: some View {
+        GeometryReader { proxy in
+            Color.clear.preference(key: PeekOptionsSizeKey.self, value: proxy.size)
         }
-        .contentShape(Rectangle())
     }
 
-    @ViewBuilder
-    private var previewCard: some View {
-        Group {
-            switch loadState {
-            case .idle, .loading:
-                VStack(spacing: SplickTheme.Spacing.sm) {
-                    ProgressView()
-                    Text(languageService.text(.messagingChatLoading))
-                        .font(SplickTheme.Typography.callout)
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+    private var optionsStack: some View {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+            optionChip(
+                titleKey: .messagingChatDeleteConversation,
+                systemImage: "trash",
+                destructive: true,
+                action: onDelete
+            )
+            optionChip(
+                titleKey: .messagingChatMuteNotifications,
+                systemImage: "bell.slash",
+                destructive: false,
+                action: onMute
+            )
+        }
+    }
 
-            case .loaded where messages.isEmpty:
-                previewStatus(
-                    systemImage: "bubble.left",
-                    message: languageService.text(.messagingConversationPeekEmpty)
-                )
-
-            case .failed:
-                previewStatus(
-                    systemImage: "wifi.exclamationmark",
-                    message: languageService.text(.messagingConversationPeekError)
-                )
-
-            case .loaded:
-                ScrollView(showsIndicators: false) {
-                    LazyVStack(spacing: SplickTheme.Spacing.xxs) {
-                        ForEach(MessageTimelineGrouping.buildDisplayMessages(from: messages)) { item in
-                            VStack(spacing: 0) {
-                                if item.showsTimeSeparator {
-                                    MessageTimeSeparatorLabel(date: item.message.createdAt)
-                                }
-                                previewBubble(item)
-                            }
-                        }
-                    }
-                    .padding(SplickTheme.Spacing.md)
-                }
+    private func optionChip(
+        titleKey: L10nKey,
+        systemImage: String,
+        destructive: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button {
+            Self.actionImpact.impactOccurred()
+            action()
+        } label: {
+            HStack(spacing: SplickTheme.Spacing.xs) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 14, weight: .semibold))
+                Text(languageService.text(titleKey))
+                    .font(SplickTheme.Typography.callout.weight(.semibold))
+            }
+            .foregroundStyle(destructive ? SplickTheme.Colors.error : SplickTheme.Colors.textPrimary)
+            .padding(.horizontal, SplickTheme.Spacing.md)
+            .padding(.vertical, SplickTheme.Spacing.sm)
+            .background {
+                Capsule(style: .continuous)
+                    .fill(SplickTheme.Colors.cardBackground)
+                    .shadow(color: .black.opacity(0.10), radius: 8, y: 4)
             }
         }
+        .buttonStyle(.plain)
+    }
+
+    private func previewCard(shape: UnevenRoundedRectangle) -> some View {
+        VStack(spacing: 0) {
+            ConversationRowView(
+                conversation: context.conversation,
+                reportsAnchorFrame: false
+            )
+            .padding(.horizontal, SplickTheme.Spacing.sm)
+
+            Divider()
+
+            previewBody
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
         .background {
-            RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.large, style: .continuous)
+            shape
                 .fill(SplickTheme.Colors.secondaryBackground)
                 .shadow(color: .black.opacity(0.2), radius: 20, y: 10)
         }
-        .clipShape(
-            RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.large, style: .continuous)
-        )
-        .contentShape(Rectangle())
+        .contentShape(shape)
+    }
+
+    @ViewBuilder
+    private var previewBody: some View {
+        switch loadState {
+        case .idle, .loading:
+            VStack(spacing: SplickTheme.Spacing.sm) {
+                ProgressView()
+                Text(languageService.text(.messagingChatLoading))
+                    .font(SplickTheme.Typography.callout)
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+        case .loaded where messages.isEmpty:
+            previewStatus(
+                systemImage: "bubble.left",
+                message: languageService.text(.messagingConversationPeekEmpty)
+            )
+
+        case .failed:
+            previewStatus(
+                systemImage: "wifi.exclamationmark",
+                message: languageService.text(.messagingConversationPeekError)
+            )
+
+        case .loaded:
+            ScrollView(showsIndicators: false) {
+                LazyVStack(spacing: SplickTheme.Spacing.xxs) {
+                    ForEach(MessageTimelineGrouping.buildDisplayMessages(from: messages)) { item in
+                        VStack(spacing: 0) {
+                            if item.showsTimeSeparator {
+                                MessageTimeSeparatorLabel(date: item.message.createdAt)
+                            }
+                            previewBubble(item)
+                        }
+                    }
+                }
+                .padding(SplickTheme.Spacing.md)
+            }
+        }
     }
 
     private func previewBubble(_ item: DisplayMessage) -> some View {
@@ -194,30 +284,67 @@ struct ConversationPeekOverlay: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func previewCardFrame(containerSize: CGSize, cardHeight: CGFloat) -> CGRect {
-        let width = containerSize.width - horizontalMargin * 2
-        let availableBelow = containerSize.height - context.anchorFrame.maxY - contentSpacing - horizontalMargin
-        let availableAbove = context.anchorFrame.minY - contentSpacing - horizontalMargin
-        let placeBelow = availableBelow >= min(cardHeight, 220) || availableBelow >= availableAbove
-        let proposedY = placeBelow
-            ? context.anchorFrame.maxY + contentSpacing
-            : context.anchorFrame.minY - contentSpacing - cardHeight
-        let clampedY = min(
-            max(proposedY, horizontalMargin),
-            containerSize.height - horizontalMargin - cardHeight
-        )
+    private func previewDestinationFrame(
+        containerSize: CGSize,
+        insets: EdgeInsets,
+        chromeTop: CGFloat,
+        optionsSize: CGSize
+    ) -> CGRect {
+        let left = insets.leading + edgeMargin
+        let right = containerSize.width - insets.trailing - edgeMargin
+        let bottom = containerSize.height - insets.bottom - edgeMargin
+        let previewTop = min(chromeTop + optionsSize.height + contentGap, bottom - 120)
+        let width = max(right - left, 160)
+        let height = max(bottom - previewTop, 120)
+        return CGRect(x: left, y: previewTop, width: width, height: height)
+    }
 
-        return CGRect(x: horizontalMargin, y: clampedY, width: width, height: cardHeight)
+    private static var displayCornerRadius: CGFloat {
+        let screen = UIScreen.main
+        if let radius = screen.value(forKey: "_displayCornerRadius") as? CGFloat, radius > 0 {
+            return radius
+        }
+        if let radius = screen.value(forKey: "displayCornerRadius") as? CGFloat, radius > 0 {
+            return radius
+        }
+        return SplickTheme.CornerRadius.extraLarge
+    }
+
+    private static var windowSafeAreaTop: CGFloat {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let window = scenes.flatMap(\.windows).first(where: \.isKeyWindow)
+            ?? scenes.first?.windows.first
+        return window?.safeAreaInsets.top ?? 59
     }
 
     private func dismissAnimated(completion: @escaping () -> Void) {
         guard !isDismissing else { return }
         isDismissing = true
-        withAnimation(MessageReactionTrayMotion.dismiss) {
+        withAnimation(ConversationPeekMotion.dismiss) {
             isRevealed = false
+            isOptionsRevealed = false
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + MessageReactionTrayMotion.dismissSettlingDelay) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + ConversationPeekMotion.dismissSettlingDelay) {
             completion()
+        }
+    }
+}
+
+private enum ConversationPeekMotion {
+    /// Drop into the stacked layout with one soft overshoot.
+    static let appear = Animation.spring(response: 0.38, dampingFraction: 0.62)
+    /// Return to the list row without oscillating past it.
+    static let dismiss = Animation.spring(response: 0.30, dampingFraction: 0.86)
+    static let dismissSettlingDelay: TimeInterval = 0.28
+}
+
+private struct PeekOptionsSizeKey: PreferenceKey {
+    static var defaultValue: CGSize = CGSize(width: 188, height: 108)
+
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
+        let next = nextValue()
+        if next.width > 1, next.height > 1, next.height < 400 {
+            value = next
         }
     }
 }

@@ -10,6 +10,11 @@ public enum SplickRevealMotion {
     public static let iconSwapOpen = Animation.spring(response: 0.40, dampingFraction: 0.88)
     /// Icon swap for closing: same response as `collapse` but critically damped — no bounce for icon transitions.
     public static let iconSwapClose = Animation.spring(response: 0.36, dampingFraction: 0.88)
+
+    /// Notification panel: snappier than generic reveal, with a bit more bounce.
+    public static let notificationExpand = Animation.spring(response: 0.28, dampingFraction: 0.46, blendDuration: 0.03)
+    public static let notificationCollapse = Animation.spring(response: 0.22, dampingFraction: 0.68, blendDuration: 0.02)
+    public static let notificationCollapseDuration: TimeInterval = 0.26
 }
 
 /// Shared root coordinate space for anchored overlays (bell, notifications) across tab pager pages.

@@ -124,6 +124,30 @@ public actor FakeMessagingRepository: MessagingRepositoryProtocol {
         logger.log("leaveGroup groupId=\(groupId)")
     }
 
+    public func deleteConversation(conversationId: UUID) async throws {
+        logger.log("deleteConversation conversationId=\(conversationId)")
+    }
+
+    public func updateNotificationSettings(
+        conversationId: UUID,
+        notificationsEnabled: Bool,
+        notificationSound: String
+    ) async throws -> Conversation {
+        logger.log(
+            "updateNotificationSettings conversationId=\(conversationId) enabled=\(notificationsEnabled) sound=\(notificationSound)"
+        )
+        return Conversation(
+            id: conversationId,
+            unreadCount: 0,
+            peer: nil,
+            lastMessage: nil,
+            createdAt: Date(),
+            updatedAt: Date(),
+            notificationsEnabled: notificationsEnabled,
+            notificationSound: notificationSound
+        )
+    }
+
     public func renameGroup(groupId: UUID, name: String) async throws -> Conversation {
         logger.log("renameGroup groupId=\(groupId) name=\(name)")
         return Conversation(
@@ -219,10 +243,15 @@ public actor FakeMessagingRepository: MessagingRepositoryProtocol {
         logger.log("removeReaction conversationId=\(conversationId) messageId=\(messageId) reactionId=\(reactionId)")
     }
 
-    public func searchMessages(query: String, page: Int, limit: Int) async throws -> [MessageSearchHit] {
+    public func searchMessages(
+        query: String,
+        page: Int,
+        limit: Int,
+        conversationId: UUID?
+    ) async throws -> [MessageSearchHit] {
         logger.log("searchMessages query=\(query)")
         guard page == 0,
-              let conv = Self.sampleConversations.first,
+              let conv = Self.sampleConversations.first(where: { conversationId == nil || $0.id == conversationId }),
               let peer = conv.peer,
               let lastMessage = conv.lastMessage else { return [] }
 

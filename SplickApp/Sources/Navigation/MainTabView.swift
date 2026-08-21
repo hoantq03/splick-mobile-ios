@@ -73,6 +73,7 @@ struct MainTabView: View {
                 camera: { cameraTabContent }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .allowsHitTesting(!appState.showNotifications)
 
             if let presentation = appState.linkedPostPresentation {
                 LinkedPostDetailOverlay(
@@ -216,7 +217,7 @@ struct MainTabView: View {
                         viewModel: container.notificationListViewModel,
                         onNavigate: { target in
                             dismiss()
-                            DispatchQueue.main.asyncAfter(deadline: .now() + SplickRevealMotion.collapseDuration) {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + SplickRevealMotion.notificationCollapseDuration) {
                                 appState.routeNotification(target: target)
                             }
                         },
@@ -1238,9 +1239,8 @@ struct ProfileSettingsView: View {
 // MARK: - Main tab pager
 
 private enum MainTabPagerMotion {
-    /// Snappy ease-out slide; keep short so settle work starts sooner.
-    static let slide = Animation.easeOut(duration: 0.22)
-    static let settleMilliseconds: UInt64 = 240
+    static let slide = SplickPageSlideMotion.animation
+    static let settleMilliseconds: UInt64 = 180
 }
 
 /// Interpolates only the X translation at the render level — avoids SwiftUI

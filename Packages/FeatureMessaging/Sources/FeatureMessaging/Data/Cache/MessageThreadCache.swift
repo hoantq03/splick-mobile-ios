@@ -78,6 +78,7 @@ public final class MessageThreadCache {
     }
 
     public func remove(conversationId: UUID) {
+        pendingDiskWrites.removeValue(forKey: conversationId)
         storage.removeValue(forKey: conversationId)
         order.removeAll { $0 == conversationId }
         let url = diskURL(for: conversationId)

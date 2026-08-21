@@ -60,19 +60,27 @@ struct ConversationRowView: View {
                             .padding(.vertical, 2)
                             .background(Color.red)
                             .clipShape(Capsule())
+                    } else if !conversation.notificationsEnabled {
+                        Image(systemName: "bell.slash")
+                            .font(.caption)
+                            .foregroundStyle(SplickTheme.Colors.textTertiary)
                     }
                 }
             }
         }
         .padding(.vertical, SplickTheme.Spacing.xs)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
         .background {
             if reportsAnchorFrame {
                 GeometryReader { geometry in
-                    Color.clear.preference(
-                        key: ConversationRowAnchorFrameKey.self,
-                        value: [conversation.id: geometry.frame(in: .global)]
-                    )
+                    Color.clear
+                        .preference(
+                            key: ConversationRowAnchorFrameKey.self,
+                            value: [conversation.id: geometry.frame(in: .global)]
+                        )
                 }
+                .allowsHitTesting(false)
             }
         }
     }

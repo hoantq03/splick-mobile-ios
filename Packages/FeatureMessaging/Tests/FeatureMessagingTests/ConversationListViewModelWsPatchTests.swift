@@ -178,6 +178,23 @@ private actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
     func addGroupMember(groupId: UUID, memberUserId: UUID) async throws {}
     func removeGroupMember(groupId: UUID, memberUserId: UUID) async throws {}
     func leaveGroup(groupId: UUID) async throws {}
+    func deleteConversation(conversationId: UUID) async throws {}
+    func updateNotificationSettings(
+        conversationId: UUID,
+        notificationsEnabled: Bool,
+        notificationSound: String
+    ) async throws -> Conversation {
+        Conversation(
+            id: conversationId,
+            unreadCount: 0,
+            peer: nil,
+            lastMessage: nil,
+            createdAt: .now,
+            updatedAt: .now,
+            notificationsEnabled: notificationsEnabled,
+            notificationSound: notificationSound
+        )
+    }
     func renameGroup(groupId: UUID, name: String) async throws -> Conversation {
         Conversation(id: groupId, unreadCount: 0, peer: nil, lastMessage: nil, createdAt: .now, updatedAt: .now)
     }
@@ -214,6 +231,6 @@ private actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
         Reaction(id: UUID(), emoji: emoji, userId: UUID(), createdAt: .now)
     }
     func removeReaction(conversationId: UUID, messageId: UUID, reactionId: UUID) async throws {}
-    func searchMessages(query: String, page: Int, limit: Int) async throws -> [MessageSearchHit] { [] }
+    func searchMessages(query: String, page: Int, limit: Int, conversationId: UUID?) async throws -> [MessageSearchHit] { [] }
     func requestWsTicket() async throws -> String { "ws-patch-ticket" }
 }

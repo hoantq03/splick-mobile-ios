@@ -101,7 +101,9 @@ public struct PhotoAlbumView: View {
                             mediaIndex: postPreview.mediaIndex
                         )
                         self.postPreview = nil
-                        navigationPath.append(destination)
+                        withFeedPostNavigation {
+                            navigationPath.append(destination)
+                        }
                     }
                 )
                 .zIndex(10)
@@ -231,9 +233,11 @@ public struct PhotoAlbumView: View {
             guard loaded == .loaded else { return }
             let post = feedViewModel.posts.first(where: { $0.id == photo.postId })
             let mediaIndex = post?.displayMediaItems.firstIndex(where: { $0.id == photo.id }) ?? 0
-            navigationPath.append(
-                FeedPostDestination(postId: photo.postId, mediaIndex: mediaIndex)
-            )
+            withFeedPostNavigation {
+                navigationPath.append(
+                    FeedPostDestination(postId: photo.postId, mediaIndex: mediaIndex)
+                )
+            }
         }
     }
 

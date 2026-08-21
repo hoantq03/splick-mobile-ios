@@ -192,3 +192,19 @@ public enum NotificationType: String, Codable, Sendable {
         }
     }
 }
+
+public enum NotificationListCategory: String, Equatable, Hashable, Sendable, CaseIterable {
+    case all
+    case expenses
+    case friends
+    case posts
+
+    public var queryValue: String? {
+        switch self {
+        case .all: return nil
+        case .expenses: return "EXPENSES"
+        case .friends: return "FRIENDS"
+        case .posts: return "POSTS"
+        }
+    }
+}

@@ -1,4 +1,14 @@
 import SwiftUI
+import DesignSystem
+
+/// Matches Android `spring(dampingRatio = 0.82, stiffness = 380)` for feed → post detail.
+enum FeedPostZoomMotion {
+    static let navigation = SplickPageSlideMotion.animation
+}
+
+func withFeedPostNavigation(_ body: () -> Void) {
+    withAnimation(FeedPostZoomMotion.navigation, body)
+}
 
 private struct FeedPostZoomNamespaceKey: EnvironmentKey {
     static let defaultValue: Namespace.ID? = nil

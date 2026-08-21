@@ -15,6 +15,7 @@ private actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
     private let messagesByConversation: [UUID: [ChatMessage]]
     private let delayMillisecondsByConversation: [UUID: Int]
     private let shouldFailFetchingConversations: Bool
+    private(set) var deletedConversationIds: [UUID] = []
 
     init(
         messagesByConversation: [UUID: [ChatMessage]] = [:],
@@ -47,6 +48,16 @@ private actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
     func addGroupMember(groupId: UUID, memberUserId: UUID) async throws {}
     func removeGroupMember(groupId: UUID, memberUserId: UUID) async throws {}
     func leaveGroup(groupId: UUID) async throws {}
+    func deleteConversation(conversationId: UUID) async throws {
+        deletedConversationIds.append(conversationId)
+    }
+    func updateNotificationSettings(
+        conversationId: UUID,
+        notificationsEnabled: Bool,
+        notificationSound: String
+    ) async throws -> Conversation {
+        makeConversation(id: conversationId)
+    }
     func renameGroup(groupId: UUID, name: String) async throws -> Conversation {
         makeConversation(id: groupId)
     }
@@ -87,7 +98,7 @@ private actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
         Reaction(id: UUID(), emoji: emoji, userId: UUID(), createdAt: .now)
     }
     func removeReaction(conversationId: UUID, messageId: UUID, reactionId: UUID) async throws {}
-    func searchMessages(query: String, page: Int, limit: Int) async throws -> [MessageSearchHit] { [] }
+    func searchMessages(query: String, page: Int, limit: Int, conversationId: UUID?) async throws -> [MessageSearchHit] { [] }
     func requestWsTicket() async throws -> String { "peek-ticket" }
 
     private func makeConversation(id: UUID) -> Conversation {
@@ -234,5 +245,20 @@ final class ConversationListViewModelPeekTests: XCTestCase {
                 traceId: "support-reference"
             ).localizedDescription.contains("support-reference")
         )
+    }
+
+    func test_deletePeekedConversation_removesFromInboxAndClearsPeek() async {
+        let conversation = makeConversation()
+        let repository = PeekMessagingRepositoryStub()
+        let viewModel = makeViewModel(repository: repository)
+        viewModel.applyStartupConversations([conversation])
+        await viewModel.beginPeek(conversation: conversation)
+
+        await viewModel.deletePeekedConversation()
+
+        XCTAssertNil(viewModel.peekConversation)
+        XCTAssertTrue(viewModel.conversations.isEmpty)
+        let deletedIds = await repository.deletedConversationIds
+        XCTAssertEqual(deletedIds, [conversation.id])
     }
 }

@@ -97,20 +97,82 @@ public struct NotificationListView: View {
 
     @ViewBuilder
     private var listContent: some View {
-        if case .failed(let message) = viewModel.state, viewModel.notifications.isEmpty {
-            ErrorView(message: message) {
-                Task { await viewModel.load() }
+        VStack(spacing: 0) {
+            categoryFilterBar
+            Group {
+                if case .failed(let message) = viewModel.state, viewModel.notifications.isEmpty {
+                    ErrorView(message: message) {
+                        Task { await viewModel.load() }
+                    }
+                } else if viewModel.showsInitialLoading {
+                    LoadingView(message: languageService.text(.notificationLoading))
+                } else if viewModel.notifications.isEmpty {
+                    EmptyStateView(
+                        icon: "bell.slash",
+                        title: languageService.text(
+                            viewModel.selectedCategory == .all
+                                ? .notificationEmptyTitle
+                                : .notificationFilterEmptyTitle
+                        ),
+                        message: languageService.text(
+                            viewModel.selectedCategory == .all
+                                ? .notificationEmptyMessage
+                                : .notificationFilterEmptyMessage
+                        )
+                    )
+                } else {
+                    notificationList
+                }
             }
-        } else if viewModel.showsInitialLoading {
-            LoadingView(message: languageService.text(.notificationLoading))
-        } else if viewModel.notifications.isEmpty {
-            EmptyStateView(
-                icon: "bell.slash",
-                title: languageService.text(.notificationEmptyTitle),
-                message: languageService.text(.notificationEmptyMessage)
-            )
-        } else {
-            notificationList
+        }
+    }
+
+    private var categoryFilterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: SplickTheme.Spacing.sm) {
+                ForEach(NotificationListCategory.allCases, id: \.self) { category in
+                    categoryChip(category)
+                }
+            }
+            .padding(.horizontal, SplickTheme.Spacing.md)
+            .padding(.vertical, SplickTheme.Spacing.sm)
+        }
+    }
+
+    private func categoryChip(_ category: NotificationListCategory) -> some View {
+        let selected = viewModel.selectedCategory == category
+        return Button {
+            Task { await viewModel.selectCategory(category) }
+        } label: {
+            Text(categoryTitle(category))
+                .font(.system(size: 13, weight: selected ? .semibold : .medium))
+                .foregroundStyle(
+                    selected
+                        ? SplickTheme.Colors.primaryGradientStart
+                        : SplickTheme.Colors.textPrimary
+                )
+                .padding(.horizontal, SplickTheme.Spacing.md)
+                .padding(.vertical, SplickTheme.Spacing.sm)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(
+                            selected
+                                ? SplickTheme.Colors.primaryGradientStart.opacity(0.12)
+                                : SplickTheme.Colors.secondaryBackground
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(categoryTitle(category))
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private func categoryTitle(_ category: NotificationListCategory) -> String {
+        switch category {
+        case .all: return languageService.text(.notificationFilterAll)
+        case .expenses: return languageService.text(.notificationFilterExpenses)
+        case .friends: return languageService.text(.notificationFilterFriends)
+        case .posts: return languageService.text(.notificationFilterPosts)
         }
     }
 

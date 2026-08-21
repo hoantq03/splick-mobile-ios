@@ -215,8 +215,8 @@ private final class _PagerGestureCoordinator: NSObject, UIGestureRecognizerDeleg
 
         let adjustedOffset = CGFloat(target - state.currentIndex) * containerWidth + state.dragOffset
         let fraction = min(1, abs(adjustedOffset) / max(containerWidth, 1))
-        let damping = 0.92 - 0.18 * fraction
-        let response = 0.24 + 0.08 * fraction
+        let damping = 1.0
+        let response = SplickPageSlideMotion.duration
 
         state.currentIndex = target
         state.dragOffset = 0
@@ -524,10 +524,8 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
 
         coordinator.state.dragOffset = 0
         UIView.animate(
-            withDuration: TimeInterval(response),
+            withDuration: SplickPageSlideMotion.duration,
             delay: 0,
-            usingSpringWithDamping: damping,
-            initialSpringVelocity: 0,
             options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseOut]
         ) { [weak self] in
             self?.applyLayout()
@@ -547,12 +545,7 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
 
         let width = max(currentWidth, view.bounds.width, 1)
         let adjustedOffset = CGFloat(index - from) * width
-        // Ease-like settle: less overshoot than swipe flings, avoids end hitch on pill taps.
-        let pageDistance = min(1, CGFloat(abs(index - from)))
-        let damping: CGFloat = 0.92
-        let response: CGFloat = 0.26 + 0.04 * pageDistance
-
-        settle(to: index, adjustedOffset: adjustedOffset, response: response, damping: damping)
+        settle(to: index, adjustedOffset: adjustedOffset, response: SplickPageSlideMotion.duration, damping: 1)
     }
 
     func jump(to index: Int) {

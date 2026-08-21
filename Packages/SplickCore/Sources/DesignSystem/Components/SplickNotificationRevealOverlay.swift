@@ -1,6 +1,9 @@
 import SwiftUI
+import UIKit
 
-/// Full-screen notification panel that scales from the bell.
+/// Full-screen notification panel. Header is a `safeAreaInset` so the list cannot
+/// collapse it, and top padding comes from the key window (overlay parents often
+/// report zero SwiftUI safe-area insets).
 public struct SplickNotificationRevealOverlay<Content: View>: View {
     @Binding var isPresented: Bool
     @Binding private var dismissRequestStorage: Bool
@@ -15,7 +18,7 @@ public struct SplickNotificationRevealOverlay<Content: View>: View {
 
     @State private var isRevealed = false
 
-    private let controlSize: CGFloat = 34
+    private let closeHitSize: CGFloat = 44
 
     public init(
         isPresented: Binding<Bool>,
@@ -42,149 +45,95 @@ public struct SplickNotificationRevealOverlay<Content: View>: View {
     }
 
     public var body: some View {
-        GeometryReader { proxy in
-            let safeTop = proxy.safeAreaInsets.top
-            let scaleAnchor = resolvedScaleAnchor(proxy: proxy)
-            let chromeBandHeight = chromeBand(safeTop: safeTop)
-            let headerTopInset = max(safeTop + 8, chromeBandHeight - controlSize - SplickTheme.Spacing.xxs)
-            let overlayFrame = proxy.frame(in: .global)
-            let closeButtonCenter: CGPoint = {
-                guard anchorFrame.width > 1, anchorFrame.height > 1 else {
-                    return CGPoint(
-                        x: proxy.size.width - SplickTheme.Spacing.md - controlSize / 2,
-                        y: safeTop + controlSize / 2 + SplickTheme.Spacing.xxs
-                    )
+        ZStack {
+            SplickTheme.Colors.background
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .accessibilityHidden(true)
+
+            content(dismissAnimated)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    headerBar
                 }
-                return CGPoint(
-                    x: anchorFrame.midX - overlayFrame.minX,
-                    y: anchorFrame.midY - overlayFrame.minY
-                )
-            }()
-
-            ZStack(alignment: .topLeading) {
-                panelBody(
-                    chromeBandHeight: chromeBandHeight,
-                    width: proxy.size.width,
-                    height: proxy.size.height
-                )
-                .scaleEffect(isRevealed ? 1 : 0.01, anchor: scaleAnchor)
-                .opacity(isRevealed ? 1 : 0)
-                .allowsHitTesting(isRevealed)
-
-                if let headerTitle {
-                    Text(headerTitle)
-                        .font(SplickTheme.Typography.title)
-                        .foregroundStyle(SplickTheme.Colors.textPrimary)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .frame(height: controlSize, alignment: .center)
-                        .padding(.horizontal, 108)
-                        .padding(.top, headerTopInset)
-                        .opacity(isRevealed ? 1 : 0)
-                        .allowsHitTesting(false)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .scaleEffect(isRevealed ? 1 : 0.94, anchor: .top)
+        .opacity(isRevealed ? 1 : 0)
+        .onAppear {
+                isRevealed = false
+                withAnimation(SplickRevealMotion.notificationExpand) { isRevealed = true }
+            }
+            .onDisappear { isRevealed = false }
+            .onChange(of: dismissRequestStorage) { requested in
+                guard requested else { return }
+                Task { @MainActor in
+                    dismissRequestStorage = false
+                    dismissAnimated()
                 }
+            }
+    }
 
+    private var headerBar: some View {
+        HStack(spacing: SplickTheme.Spacing.sm) {
+            Group {
                 if unreadCount > 0, let leadingActionTitle, let onLeadingAction {
                     Button(leadingActionTitle, action: onLeadingAction)
                         .buttonStyle(.plain)
                         .font(SplickTheme.Typography.callout)
                         .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                        .frame(height: controlSize, alignment: .center)
-                        .padding(.leading, SplickTheme.Spacing.md)
-                        .padding(.top, headerTopInset)
-                        .opacity(isRevealed ? 1 : 0)
-                        .zIndex(3)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                } else {
+                    Color.clear
+                        .frame(width: closeHitSize, height: closeHitSize)
                 }
-
-                overlayCloseButton(action: dismissAnimated)
-                    .position(closeButtonCenter)
-                    .opacity(isRevealed ? 1 : 0)
-                    .allowsHitTesting(isRevealed)
-                    .zIndex(2)
             }
-            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
-            .animation(SplickRevealMotion.expand, value: isRevealed)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .ignoresSafeArea()
-        .allowsHitTesting(isRevealed)
-        .onAppear {
-            isRevealed = false
-            withAnimation(SplickRevealMotion.expand) { isRevealed = true }
-        }
-        .onDisappear { isRevealed = false }
-        .onChange(of: dismissRequestStorage) { requested in
-            guard requested else { return }
-            Task { @MainActor in
-                dismissRequestStorage = false
-                dismissAnimated()
-            }
-        }
-    }
+            .frame(width: 104, alignment: .leading)
 
-    @ViewBuilder
-    private func panelBody(
-        chromeBandHeight: CGFloat,
-        width: CGFloat,
-        height: CGFloat
-    ) -> some View {
-        VStack(spacing: 0) {
-            SplickTheme.Colors.background
-                .frame(height: chromeBandHeight)
+            Text(headerTitle ?? "")
+                .font(SplickTheme.Typography.headline)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
+                .lineLimit(1)
                 .frame(maxWidth: .infinity)
 
-            content(dismissAnimated)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .background(SplickTheme.Colors.background)
+            Button(action: dismissAnimated) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(SplickTheme.Colors.textPrimary)
+                    .frame(width: 32, height: 32)
+                    .background(
+                        Circle().fill(SplickTheme.Colors.secondaryBackground)
+                    )
+                    .frame(width: closeHitSize, height: closeHitSize)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(closeAccessibilityLabel)
         }
-        .frame(width: width, height: height, alignment: .top)
+        .padding(.horizontal, SplickTheme.Spacing.md)
+        .padding(.bottom, SplickTheme.Spacing.sm)
+        .padding(.top, OverlayWindowMetrics.topSafeInset)
+        .frame(maxWidth: .infinity)
+        .background(SplickTheme.Colors.background)
     }
 
     private func dismissAnimated() {
         guard isPresented else { return }
-        // Signal immediately so parent chrome can begin its re-appear animation in parallel.
         onDismissStarted?()
-        withAnimation(SplickRevealMotion.collapse) { isRevealed = false }
-        // Wait for collapse spring to settle before unmounting — prevents overlay popping off mid-animation.
-        DispatchQueue.main.asyncAfter(deadline: .now() + SplickRevealMotion.collapseDuration) {
+        withAnimation(SplickRevealMotion.notificationCollapse) { isRevealed = false }
+        DispatchQueue.main.asyncAfter(deadline: .now() + SplickRevealMotion.notificationCollapseDuration) {
             isPresented = false
         }
     }
+}
 
-    private func resolvedScaleAnchor(proxy: GeometryProxy) -> UnitPoint {
-        guard anchorFrame.width > 1, anchorFrame.height > 1 else {
-            return UnitPoint(
-                x: (proxy.size.width - SplickTheme.Spacing.md - 17) / max(proxy.size.width, 1),
-                y: (proxy.safeAreaInsets.top + 20) / max(proxy.size.height, 1)
-            )
-        }
-        let overlayFrame = proxy.frame(in: .global)
-        let ax = (anchorFrame.midX - overlayFrame.minX) / max(proxy.size.width, 1)
-        let ay = (anchorFrame.midY - overlayFrame.minY) / max(proxy.size.height, 1)
-        return UnitPoint(x: min(max(ax, 0), 1), y: min(max(ay, 0), 1))
-    }
-
-    private func chromeBand(safeTop: CGFloat) -> CGFloat {
-        guard anchorFrame.height > 1 else {
-            return safeTop + controlSize + SplickTheme.Spacing.sm
-        }
-        let bellMinY = anchorFrame.minY
-        return max(bellMinY + controlSize + SplickTheme.Spacing.xxs, safeTop + controlSize + SplickTheme.Spacing.sm)
-    }
-
-    private func overlayCloseButton(action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            ZStack {
-                Circle()
-                    .fill(SplickTheme.Colors.secondaryBackground.opacity(0.85))
-                Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(SplickTheme.Colors.textPrimary)
-            }
-            .frame(width: controlSize, height: controlSize)
-            .contentShape(Rectangle().inset(by: -8))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(closeAccessibilityLabel)
+private enum OverlayWindowMetrics {
+    static var topSafeInset: CGFloat {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let window = scenes.flatMap(\.windows).first(where: \.isKeyWindow)
+            ?? scenes.flatMap(\.windows).first
+        return max(window?.safeAreaInsets.top ?? 59, 47)
     }
 }
