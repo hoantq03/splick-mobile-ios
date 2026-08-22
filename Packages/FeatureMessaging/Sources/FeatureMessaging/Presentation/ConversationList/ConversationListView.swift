@@ -427,6 +427,7 @@ public struct ConversationListView: View {
                         ),
                         messages: viewModel.peekMessages,
                         loadState: viewModel.peekLoadState,
+                        inboxTyping: inboxTyping(for: conversation),
                         onDismiss: dismissConversationPeek,
                         onOpen: {
                             openConversationFromPeek(conversation)
@@ -473,13 +474,17 @@ public struct ConversationListView: View {
     }
 
     private func pushThread(_ route: ChatThreadRoute) {
-        withAnimation(SplickPageSlideMotion.animation) {
+        var transaction = Transaction()
+        transaction.animation = SplickPageSlideMotion.animation
+        withTransaction(transaction) {
             path.append(route)
         }
     }
 
     private func popToInbox() {
-        withAnimation(SplickPageSlideMotion.animation) {
+        var transaction = Transaction()
+        transaction.animation = SplickPageSlideMotion.animation
+        withTransaction(transaction) {
             path = NavigationPath()
         }
     }
@@ -495,21 +500,21 @@ public struct ConversationListView: View {
         )
     }
 
-    private func typingPreview(for conversation: Conversation) -> String? {
+    private func inboxTyping(for conversation: Conversation) -> InboxTypingState? {
         let userIds = viewModel.typingUserIdsByConversation[conversation.id] ?? []
-        return MessagingTypingCopy.inboxPreview(
+        return MessagingTypingCopy.inboxTypingState(
+            isGroup: conversation.isGroup,
             userIds: userIds,
-            nameForUserId: { userId in
+            typing: languageService.text(.messagingChatTyping),
+            usernameForUserId: { userId in
                 if let peer = conversation.peer, peer.userId == userId {
-                    return peer.displayTitle
+                    return peer.username
                 }
                 if conversation.lastMessage?.senderId == userId {
-                    return conversation.lastMessage?.senderDisplayName
+                    return MessagingTypingCopy.givenName(from: conversation.lastMessage?.senderDisplayName)
                 }
                 return nil
-            },
-            typing: languageService.text(.messagingChatTyping),
-            fallbackName: conversation.peer?.displayTitle
+            }
         )
     }
 
@@ -519,24 +524,26 @@ public struct ConversationListView: View {
                 LazyVStack(spacing: 0) {
                     Color.clear.frame(height: 0).id("messagingScrollTop")
                     ForEach(items) { conversation in
-                        ConversationRowView(
-                            conversation: conversation,
-                            typingPreview: typingPreview(for: conversation)
-                        )
+                        NavigationLink(value: ChatThreadRoute(conversation: conversation)) {
+                            ConversationRowView(
+                                conversation: conversation,
+                                inboxTyping: inboxTyping(for: conversation)
+                            )
                             .opacity(
                                 viewModel.peekConversation?.id == conversation.id ? 0 : 1
                             )
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                pushThread(ChatThreadRoute(conversation: conversation))
-                            }
-                            .onLongPressGesture(minimumDuration: 0.28) {
-                                openConversationPeek(conversation)
-                            }
-                            .allowsHitTesting(viewModel.peekConversation?.id != conversation.id)
-                            .onAppear {
-                                Task { await viewModel.loadMoreIfNeeded(current: conversation) }
-                            }
+                        }
+                        .buttonStyle(.plain)
+                        .highPriorityGesture(
+                            LongPressGesture(minimumDuration: 0.28)
+                                .onEnded { _ in
+                                    openConversationPeek(conversation)
+                                }
+                        )
+                        .allowsHitTesting(viewModel.peekConversation?.id != conversation.id)
+                        .onAppear {
+                            Task { await viewModel.loadMoreIfNeeded(current: conversation) }
+                        }
                         Divider()
                             .padding(.leading, 56)
                     }

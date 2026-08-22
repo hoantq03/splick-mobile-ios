@@ -462,6 +462,12 @@ public final class ConversationListViewModel: ObservableObject {
                         userId: userId,
                         isTyping: isTyping
                     )
+                case .presence(let userId, let isOnline, let lastSeenAt):
+                    self.applyPeerPresence(
+                        userId: userId,
+                        isOnline: isOnline,
+                        lastSeenAt: lastSeenAt
+                    )
                 default:
                     break
                 }
@@ -546,6 +552,21 @@ public final class ConversationListViewModel: ObservableObject {
             typingUserIdsByConversation.removeValue(forKey: conversationId)
         } else {
             typingUserIdsByConversation[conversationId] = current
+        }
+    }
+
+    private func applyPeerPresence(userId: UUID, isOnline: Bool, lastSeenAt: Date?) {
+        guard case .loaded(var items) = state else { return }
+        var changed = false
+        items = items.map { conversation in
+            guard let peer = conversation.peer, peer.userId == userId else { return conversation }
+            changed = true
+            return conversation.updating(
+                peer: peer.updatingPresence(isOnline: isOnline, lastSeenAt: lastSeenAt)
+            )
+        }
+        if changed {
+            state = .loaded(items)
         }
     }
 

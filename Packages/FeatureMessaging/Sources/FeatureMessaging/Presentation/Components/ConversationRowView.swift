@@ -6,11 +6,12 @@ import SplickDomain
 
 struct ConversationRowView: View {
     @EnvironmentObject private var languageService: LanguageService
+    @EnvironmentObject private var presenceStore: PresenceStore
     @Environment(\.currentUserSummary) private var currentUserSummary
 
     let conversation: Conversation
     var reportsAnchorFrame = true
-    var typingPreview: String? = nil
+    var inboxTyping: InboxTypingState? = nil
 
     var body: some View {
         HStack(spacing: SplickTheme.Spacing.sm) {
@@ -20,11 +21,15 @@ struct ConversationRowView: View {
                     name: conversation.displayTitle,
                     size: .medium
                 )
-            } else {
-                AvatarView(
-                    imageURL: conversation.peer?.avatarUrl.flatMap(URL.init(string:)),
-                    name: conversation.peer?.displayTitle ?? "",
-                    size: .medium
+            } else if let peer = conversation.peer {
+                AvatarWithPresenceView(
+                    imageURL: peer.avatarUrl.flatMap(URL.init(string:)),
+                    name: peer.displayTitle,
+                    size: .medium,
+                    userId: peer.userId,
+                    showOnlineIndicator: PresenceDisplayPolicy.shouldShowOnlineIndicator(
+                        isOnline: resolvedPresence(for: peer).isOnline
+                    )
                 )
             }
 
@@ -47,21 +52,21 @@ struct ConversationRowView: View {
                     }
                 }
 
-                HStack {
+                HStack(spacing: SplickTheme.Spacing.xxs) {
                     Group {
-                        if let typingPreview {
-                            ConversationListTypingPreview(
-                                textPrefix: MessagingTypingCopy.stripTrailingEllipsis(typingPreview)
-                            )
-                            .font(SplickTheme.Typography.callout.italic())
-                            .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                        if let inboxTyping {
+                            inboxTypingPreview(inboxTyping)
+                        } else if let presenceText = peerPresenceSubtitle {
+                            Text(presenceText)
+                                .font(SplickTheme.Typography.callout)
+                                .foregroundStyle(SplickTheme.Colors.textTertiary)
                         } else {
                             Text(lastMessagePreview)
                                 .font(SplickTheme.Typography.callout)
                                 .foregroundStyle(SplickTheme.Colors.textSecondary)
                         }
                     }
-                    .animation(.easeInOut(duration: 0.24), value: typingPreview != nil)
+                    .animation(.easeInOut(duration: 0.24), value: inboxTyping != nil)
                     Spacer()
                     if conversation.unreadCount > 0 {
                         Text("\(conversation.unreadCount)")
@@ -122,5 +127,40 @@ struct ConversationRowView: View {
         }
 
         return "\(sender): \(content)"
+    }
+
+    @ViewBuilder
+    private func inboxTypingPreview(_ state: InboxTypingState) -> some View {
+        switch state.layout {
+        case .direct:
+            ConversationListTypingPreview(accessibilityLabel: state.typingBase)
+        case .group(let username, let avatarURL):
+            HStack(spacing: 6) {
+                AvatarView(imageURL: avatarURL, name: username, size: .small)
+                    .frame(width: 22, height: 22)
+                Text(username)
+                    .font(SplickTheme.Typography.callout.weight(.semibold))
+                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                    .lineLimit(1)
+                ConversationListTypingPreview(accessibilityLabel: state.typingBase)
+            }
+        }
+    }
+
+    private func resolvedPresence(for peer: ConversationPeer) -> (isOnline: Bool, lastSeenAt: Date?) {
+        if let state = presenceStore.state(for: peer.userId) {
+            return (state.isOnline, state.lastSeenAt)
+        }
+        return (peer.isOnline ?? false, peer.lastSeenAt)
+    }
+
+    private var peerPresenceSubtitle: String? {
+        guard !conversation.isGroup, let peer = conversation.peer else { return nil }
+        let presence = resolvedPresence(for: peer)
+        return PresenceDisplayPolicy.lastSeenText(
+            isOnline: presence.isOnline,
+            lastSeenAt: presence.lastSeenAt,
+            appLocale: languageService.locale
+        )
     }
 }
