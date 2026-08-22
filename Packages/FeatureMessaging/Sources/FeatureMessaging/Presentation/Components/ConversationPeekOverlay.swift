@@ -95,14 +95,15 @@ struct ConversationPeekOverlay: View {
                         x: optionsOrigin.x + optionsSize.width / 2,
                         y: optionsOrigin.y + optionsSize.height / 2
                     )
-                    .zIndex(2)
-
+                    .compositingGroup()
+            }
+            .overlay {
                 previewCard(shape: previewShape)
                     .frame(width: currentFrame.width, height: currentFrame.height)
                     .clipShape(previewShape)
+                    .compositingGroup()
                     .scaleEffect(isRevealed ? 1 : 0.96, anchor: .top)
                     .position(x: currentFrame.midX, y: currentFrame.midY)
-                    .zIndex(1)
                     .onTapGesture {
                         guard dismissIsArmed else { return }
                         dismissAnimated(completion: onOpen)
@@ -161,26 +162,24 @@ struct ConversationPeekOverlay: View {
         destructive: Bool,
         action: @escaping () -> Void
     ) -> some View {
-        Button {
+        HStack(spacing: SplickTheme.Spacing.xs) {
+            Image(systemName: systemImage)
+                .font(.system(size: 14, weight: .semibold))
+            Text(languageService.text(titleKey))
+                .font(SplickTheme.Typography.callout.weight(.semibold))
+        }
+        .foregroundStyle(destructive ? SplickTheme.Colors.error : SplickTheme.Colors.textPrimary)
+        .padding(.horizontal, SplickTheme.Spacing.md)
+        .padding(.vertical, SplickTheme.Spacing.sm)
+        .background {
+            Capsule(style: .continuous)
+                .fill(SplickTheme.Colors.cardBackground)
+        }
+        .contentShape(Capsule())
+        .onTapGesture {
             Self.actionImpact.impactOccurred()
             action()
-        } label: {
-            HStack(spacing: SplickTheme.Spacing.xs) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 14, weight: .semibold))
-                Text(languageService.text(titleKey))
-                    .font(SplickTheme.Typography.callout.weight(.semibold))
-            }
-            .foregroundStyle(destructive ? SplickTheme.Colors.error : SplickTheme.Colors.textPrimary)
-            .padding(.horizontal, SplickTheme.Spacing.md)
-            .padding(.vertical, SplickTheme.Spacing.sm)
-            .background {
-                Capsule(style: .continuous)
-                    .fill(SplickTheme.Colors.cardBackground)
-                    .shadow(color: .black.opacity(0.10), radius: 8, y: 4)
-            }
         }
-        .buttonStyle(.plain)
     }
 
     private func previewCard(shape: UnevenRoundedRectangle) -> some View {
@@ -229,18 +228,25 @@ struct ConversationPeekOverlay: View {
             )
 
         case .loaded:
-            ScrollView(showsIndicators: false) {
-                LazyVStack(spacing: SplickTheme.Spacing.xxs) {
-                    ForEach(MessageTimelineGrouping.buildDisplayMessages(from: messages)) { item in
-                        VStack(spacing: 0) {
-                            if item.showsTimeSeparator {
-                                MessageTimeSeparatorLabel(date: item.message.createdAt)
+            ScrollViewReader { proxy in
+                ScrollView(showsIndicators: false) {
+                    LazyVStack(spacing: SplickTheme.Spacing.xxs) {
+                        ForEach(MessageTimelineGrouping.buildDisplayMessages(from: messages)) { item in
+                            VStack(spacing: 0) {
+                                if item.showsTimeSeparator {
+                                    MessageTimeSeparatorLabel(date: item.message.createdAt)
+                                }
+                                previewBubble(item)
                             }
-                            previewBubble(item)
                         }
                     }
+                    .padding(SplickTheme.Spacing.md)
                 }
-                .padding(SplickTheme.Spacing.md)
+                .onAppear {
+                    if let lastItem = MessageTimelineGrouping.buildDisplayMessages(from: messages).last {
+                        proxy.scrollTo(lastItem.id, anchor: .bottom)
+                    }
+                }
             }
         }
     }
@@ -292,8 +298,9 @@ struct ConversationPeekOverlay: View {
     ) -> CGRect {
         let left = insets.leading + edgeMargin
         let right = containerSize.width - insets.trailing - edgeMargin
-        let bottom = containerSize.height - insets.bottom - edgeMargin
-        let previewTop = min(chromeTop + optionsSize.height + contentGap, bottom - 120)
+        let bottom = containerSize.height - insets.bottom - SplickTabBarMetrics.floatingClearance - edgeMargin
+        let overlap = optionsSize.height * 0.55
+        let previewTop = min(chromeTop + optionsSize.height + contentGap - overlap, bottom - 120)
         let width = max(right - left, 160)
         let height = max(bottom - previewTop, 120)
         return CGRect(x: left, y: previewTop, width: width, height: height)
