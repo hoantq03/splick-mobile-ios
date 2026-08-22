@@ -149,6 +149,10 @@ final class DependencyContainer: ObservableObject {
         MediaRepository(apiClient: apiClient)
     }()
 
+    lazy var filterCatalogRepository: FilterCatalogRepositoryProtocol = {
+        FilterCatalogRepository(apiClient: apiClient)
+    }()
+
     lazy var uploadMediaUseCase: UploadMediaUseCaseProtocol = {
         UploadMediaUseCase(repository: mediaRepository)
     }()

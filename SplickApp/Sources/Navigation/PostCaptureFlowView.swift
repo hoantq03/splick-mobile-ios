@@ -3,6 +3,7 @@ import AVFoundation
 import UIKit
 import FeatureMedia
 import FeatureSocialFeed
+import FeatureStickers
 import SplickDomain
 
 struct PostCaptureFlowView: View {
@@ -12,6 +13,7 @@ struct PostCaptureFlowView: View {
     let onDismiss: () -> Void
 
     @State private var capturedMedia: CapturedMedia?
+    @State private var gifPickerViewModel: GifPickerViewModel?
 
     var body: some View {
         Group {
@@ -23,7 +25,9 @@ struct PostCaptureFlowView: View {
             } else {
                 MediaCaptureView(
                     onMediaCaptured: { capturedMedia = $0 },
-                    onCancel: onDismiss
+                    onCancel: onDismiss,
+                    stickerPickerBuilder: makeStickerPicker,
+                    filterCatalogRepository: container.filterCatalogRepository
                 )
                 .ignoresSafeArea()
             }
@@ -63,6 +67,37 @@ struct PostCaptureFlowView: View {
                 onDismiss()
             },
             onCancel: { capturedMedia = nil }
+        )
+    }
+
+    private func makeStickerPicker(
+        onDismiss: @escaping () -> Void,
+        onSelectGifURL: @escaping (URL) -> Void,
+        onSelectEmoji: @escaping (String) -> Void
+    ) -> AnyView {
+        if gifPickerViewModel == nil {
+            gifPickerViewModel = container.makeGifPickerViewModel(groupId: nil)
+        }
+        guard let gifPickerViewModel else {
+            return AnyView(EmptyView())
+        }
+
+        return AnyView(
+            AttachmentPickerView(
+                viewModel: gifPickerViewModel,
+                currentUserId: appState.currentUser?.id,
+                onSelectGif: { sticker in
+                    onDismiss()
+                    onSelectGifURL(sticker.url)
+                },
+                onSelectEmoji: { emoji in
+                    onDismiss()
+                    onSelectEmoji(emoji)
+                }
+            )
+            .environmentObject(container.languageService)
+            .environmentObject(container.customEmojiStore)
+            .environment(\.customEmojiDependencies, container.customEmojiDependencies)
         )
     }
 
