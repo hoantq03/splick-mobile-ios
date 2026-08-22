@@ -26,7 +26,9 @@ enum MessagingMapper {
             userId: dto.userId,
             username: dto.username,
             displayName: dto.displayName,
-            avatarUrl: dto.avatarUrl
+            avatarUrl: dto.avatarUrl,
+            isOnline: dto.online,
+            lastSeenAt: dto.lastSeenAt
         )
     }
 

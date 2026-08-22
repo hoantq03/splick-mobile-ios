@@ -9,6 +9,8 @@ struct ConversationPeerResponseDTO: Decodable {
     let username: String
     let displayName: String?
     let avatarUrl: String?
+    let online: Bool?
+    let lastSeenAt: Date?
 }
 
 struct ConversationResponseDTO: Decodable {

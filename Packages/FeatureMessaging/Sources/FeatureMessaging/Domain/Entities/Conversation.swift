@@ -11,16 +11,38 @@ public struct ConversationPeer: Equatable, Hashable, Sendable {
     public let username: String
     public let displayName: String?
     public let avatarUrl: String?
+    public let isOnline: Bool?
+    public let lastSeenAt: Date?
 
     public var displayTitle: String {
         displayName?.isEmpty == false ? displayName! : username
     }
 
-    public init(userId: UUID, username: String, displayName: String?, avatarUrl: String?) {
+    public init(
+        userId: UUID,
+        username: String,
+        displayName: String?,
+        avatarUrl: String?,
+        isOnline: Bool? = nil,
+        lastSeenAt: Date? = nil
+    ) {
         self.userId = userId
         self.username = username
         self.displayName = displayName
         self.avatarUrl = avatarUrl
+        self.isOnline = isOnline
+        self.lastSeenAt = lastSeenAt
+    }
+
+    public func updatingPresence(isOnline: Bool?, lastSeenAt: Date?) -> ConversationPeer {
+        ConversationPeer(
+            userId: userId,
+            username: username,
+            displayName: displayName,
+            avatarUrl: avatarUrl,
+            isOnline: isOnline ?? self.isOnline,
+            lastSeenAt: lastSeenAt ?? self.lastSeenAt
+        )
     }
 }
 
@@ -164,6 +186,23 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
             updatedAt: updatedAt,
             notificationsEnabled: enabled,
             notificationSound: sound
+        )
+    }
+
+    public func updating(peer: ConversationPeer?) -> Conversation {
+        Conversation(
+            id: id,
+            type: type,
+            unreadCount: unreadCount,
+            peer: peer,
+            groupName: groupName,
+            groupAvatarUrl: groupAvatarUrl,
+            memberCount: memberCount,
+            lastMessage: lastMessage,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            notificationsEnabled: notificationsEnabled,
+            notificationSound: notificationSound
         )
     }
 }
