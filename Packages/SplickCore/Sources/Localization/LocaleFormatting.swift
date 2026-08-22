@@ -53,4 +53,19 @@ public enum LocaleFormatting {
 
         return L10n.format(key, locale: appLocale, value)
     }
+
+    /// Last-seen copy for presence subtitles. Hidden when older than 24 hours.
+    public static func presenceLastSeen(
+        from date: Date,
+        appLocale: AppLocale,
+        now: Date = .now
+    ) -> String? {
+        let elapsed = now.timeIntervalSince(date)
+        guard elapsed >= 0, elapsed <= 24 * 60 * 60 else { return nil }
+
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = locale(for: appLocale)
+        formatter.unitsStyle = .full
+        return formatter.localizedString(for: date, relativeTo: now)
+    }
 }
