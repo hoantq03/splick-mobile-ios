@@ -41,13 +41,13 @@ struct MessageBubble: View {
     @State private var imageViewerRoute: AttachmentPreviewRoute?
 
     /// Same optical width as the time slot so reply/time swap in place.
-    private static let accessorySlotWidth: CGFloat = 46
+    private static let accessorySlotWidth: CGFloat = MessageThreadRowLayout.accessorySlotWidth
     private static let replyIconSize: CGFloat = 16
     /// Fits `HH:mm` with caption + monospaced digits.
-    private static let timestampLabelWidth: CGFloat = 46
+    private static let timestampLabelWidth: CGFloat = MessageThreadRowLayout.accessorySlotWidth
     private static let mediaMaxWidth: CGFloat = 220
     private static let mediaCornerRadius: CGFloat = SplickTheme.CornerRadius.medium
-    private static let rowSideSpacer: CGFloat = 48
+    private static let rowSideSpacer: CGFloat = MessageThreadRowLayout.rowSideSpacer
 
     private static let timestampFormatter: DateFormatter = {
         let formatter = DateFormatter()

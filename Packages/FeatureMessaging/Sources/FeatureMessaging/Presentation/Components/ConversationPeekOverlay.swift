@@ -16,6 +16,7 @@ struct ConversationPeekOverlay: View {
     let context: ConversationPeekContext
     let messages: [ChatMessage]
     let loadState: ConversationListViewModel.PeekLoadState
+    var inboxTyping: InboxTypingState? = nil
     let onDismiss: () -> Void
     let onOpen: () -> Void
     let onDelete: () -> Void
@@ -160,7 +161,8 @@ struct ConversationPeekOverlay: View {
         VStack(spacing: 0) {
             ConversationRowView(
                 conversation: context.conversation,
-                reportsAnchorFrame: false
+                reportsAnchorFrame: false,
+                inboxTyping: inboxTyping
             )
             .padding(.horizontal, SplickTheme.Spacing.sm)
 
