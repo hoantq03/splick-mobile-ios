@@ -10,6 +10,8 @@ public struct MediaCaptureView: View {
     @EnvironmentObject private var languageService: LanguageService
     let onMediaCaptured: (CapturedMedia) -> Void
     let onCancel: () -> Void
+    let stickerPickerBuilder: MediaStickerPickerBuilder?
+    let filterCatalogRepository: FilterCatalogRepositoryProtocol?
 
     @State private var route: CaptureRoute = .camera
     @State private var workingImage: UIImage?
@@ -20,10 +22,14 @@ public struct MediaCaptureView: View {
 
     public init(
         onMediaCaptured: @escaping (CapturedMedia) -> Void,
-        onCancel: @escaping () -> Void
+        onCancel: @escaping () -> Void,
+        stickerPickerBuilder: MediaStickerPickerBuilder? = nil,
+        filterCatalogRepository: FilterCatalogRepositoryProtocol? = nil
     ) {
         self.onMediaCaptured = onMediaCaptured
         self.onCancel = onCancel
+        self.stickerPickerBuilder = stickerPickerBuilder
+        self.filterCatalogRepository = filterCatalogRepository
     }
 
     public var body: some View {
@@ -31,10 +37,13 @@ public struct MediaCaptureView: View {
             switch route {
             case .camera:
                 if isCameraAccessible {
-                    CameraPickerView(onResult: { handleCameraResult($0) })
-                        .id(cameraSessionID)
-                        .ignoresSafeArea()
-                        .transition(.opacity)
+                    CameraPickerView(
+                        onResult: { handleCameraResult($0) },
+                        filterCatalogRepository: filterCatalogRepository
+                    )
+                    .id(cameraSessionID)
+                    .ignoresSafeArea()
+                    .transition(.opacity)
                 } else {
                     cameraUnavailableView
                 }
@@ -49,6 +58,28 @@ public struct MediaCaptureView: View {
                         } else {
                             route = .camera
                         }
+                    }
+                )
+                .transition(.opacity)
+
+            case .textCreation:
+                TextCreationView(
+                    onBack: { reopenCamera() },
+                    onCreated: { image in
+                        workingImage = image
+                        workingFilter = .none
+                        route = .preview
+                    }
+                )
+                .transition(.opacity)
+
+            case .layoutCapture:
+                LayoutCaptureView(
+                    onBack: { reopenCamera() },
+                    onCreated: { image in
+                        workingImage = image
+                        workingFilter = .none
+                        route = .preview
                     }
                 )
                 .transition(.opacity)
@@ -80,6 +111,7 @@ public struct MediaCaptureView: View {
                     PhotoEditorView(
                         sourceImage: workingImage,
                         initialFilter: workingFilter,
+                        stickerPickerBuilder: stickerPickerBuilder,
                         onDone: { edited in onMediaCaptured(.image(edited)) },
                         onCancel: { route = .preview }
                     )
@@ -93,7 +125,6 @@ public struct MediaCaptureView: View {
         .editorStatusBarHidden(true)
     }
 
-    /// Hardware camera exists and user has not denied camera permission.
     private var isCameraAccessible: Bool {
         guard AVCaptureDevice.default(for: .video) != nil else { return false }
         switch AVCaptureDevice.authorizationStatus(for: .video) {
@@ -164,6 +195,10 @@ public struct MediaCaptureView: View {
             onCancel()
         case .openLibrary:
             route = .library
+        case .openTextCreation:
+            route = .textCreation
+        case .openLayoutCapture:
+            route = .layoutCapture
         }
     }
 
@@ -177,6 +212,8 @@ public struct MediaCaptureView: View {
 private enum CaptureRoute: Equatable {
     case camera
     case library
+    case textCreation
+    case layoutCapture
     case preview
     case editor
 }

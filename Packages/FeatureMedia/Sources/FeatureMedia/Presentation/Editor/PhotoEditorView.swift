@@ -21,18 +21,25 @@ struct PhotoEditorView: View {
     @State private var layoutMetrics = ImageDisplayMetrics(imageSize: .zero, displayFrame: .zero)
     @State private var editingText = ""
     @State private var isEditingNewItem = false
+    @State private var activeComposerTool: ComposerTool?
+    @State private var showStickerPicker = false
+    @State private var showMoreSheet = false
+    @State private var toastMessage: String?
     @FocusState private var isTextFieldFocused: Bool
 
+    let stickerPickerBuilder: MediaStickerPickerBuilder?
     let onDone: (UIImage) -> Void
     let onCancel: () -> Void
 
     init(
         sourceImage: UIImage,
         initialFilter: FilterPreset = .none,
+        stickerPickerBuilder: MediaStickerPickerBuilder? = nil,
         onDone: @escaping (UIImage) -> Void,
         onCancel: @escaping () -> Void
     ) {
         _viewModel = StateObject(wrappedValue: PhotoEditorViewModel(sourceImage: sourceImage, initialFilter: initialFilter))
+        self.stickerPickerBuilder = stickerPickerBuilder
         self.onDone = onDone
         self.onCancel = onCancel
     }
@@ -49,6 +56,8 @@ struct PhotoEditorView: View {
 
             EditorToolbar(
                 viewModel: viewModel,
+                activeComposerTool: activeComposerTool,
+                onComposerTool: handleComposerTool,
                 onDone: {
                     viewModel.prepareForFinalize()
                     Task {
@@ -62,7 +71,7 @@ struct PhotoEditorView: View {
             .allowsHitTesting(viewModel.isChromeVisible)
 
             if viewModel.isChromeVisible,
-               viewModel.activeTool == .text,
+               activeComposerTool == .text || viewModel.activeTool == .text,
                viewModel.selectedTextID != nil {
                 VStack {
                     Spacer()
@@ -70,6 +79,7 @@ struct PhotoEditorView: View {
                 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+
             if viewModel.isExporting {
                 Color.black.opacity(0.35).ignoresSafeArea()
                 ProgressView()
@@ -77,17 +87,54 @@ struct PhotoEditorView: View {
                     .tint(.white)
                     .scaleEffect(1.2)
             }
+
+            if let toastMessage {
+                VStack {
+                    Spacer()
+                    Text(toastMessage)
+                        .font(SplickTheme.Typography.captionBold)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, SplickTheme.Spacing.md)
+                        .padding(.vertical, SplickTheme.Spacing.sm)
+                        .background(Capsule().fill(Color.black.opacity(0.75)))
+                        .padding(.bottom, 120)
+                }
+                .transition(.opacity)
+            }
         }
         .animation(.easeOut(duration: 0.2), value: viewModel.activeTool)
+        .animation(.easeOut(duration: 0.2), value: activeComposerTool)
         .editorStatusBarHidden(true)
+        .sheet(isPresented: $showStickerPicker) {
+            if let stickerPickerBuilder {
+                stickerPickerBuilder(
+                    { showStickerPicker = false },
+                    { url in
+                        showStickerPicker = false
+                        Task { await importGif(from: url) }
+                    },
+                    { emoji in
+                        showStickerPicker = false
+                        viewModel.addSticker(.emoji(emoji))
+                    }
+                )
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+        }
+        .sheet(isPresented: $showMoreSheet) {
+            EditorMoreOptionsSheet(viewModel: viewModel) {
+                showMoreSheet = false
+            }
+            .environmentObject(languageService)
+            .presentationDetents([.medium])
+        }
         .onChange(of: viewModel.selectedTextID) { id in
             guard let id,
                   let item = viewModel.textItems.first(where: { $0.id == id }) else {
                 isTextFieldFocused = false
                 return
             }
-            // New items have the sentinel placeholder — start with empty field so
-            // the user types from scratch without having to clear the placeholder text first.
             let isNew = item.text == EditorTextItem.placeholderText
             isEditingNewItem = isNew
             editingText = isNew ? "" : item.text
@@ -106,8 +153,6 @@ struct PhotoEditorView: View {
                 .onSubmit(commitTextEditing)
                 .onChange(of: editingText) { newValue in
                     guard let id = viewModel.selectedTextID else { return }
-                    // Show live preview in overlay: if field is empty and this is a
-                    // new item, keep sentinel placeholder visible on canvas.
                     let displayText = newValue.isEmpty && isEditingNewItem
                         ? EditorTextItem.placeholderText
                         : newValue
@@ -121,13 +166,40 @@ struct PhotoEditorView: View {
         .background(.ultraThinMaterial)
     }
 
+    private func handleComposerTool(_ tool: ComposerTool) {
+        activeComposerTool = tool
+
+        switch tool {
+        case .text:
+            viewModel.selectTool(.text)
+        case .sticker:
+            if stickerPickerBuilder != nil {
+                showStickerPicker = true
+            } else {
+                viewModel.selectTool(.sticker)
+            }
+        case .audio:
+            showToast(languageService.text(.mediaEditorComingSoon))
+        case .effects:
+            viewModel.selectTool(.filter)
+        case .mention:
+            showToast(languageService.text(.mediaEditorComingSoon))
+        case .draw:
+            viewModel.selectTool(.draw)
+        case .download:
+            Task { await downloadEditedImage() }
+        case .more:
+            showMoreSheet = true
+        }
+    }
+
     private func handleTextTap(at normalized: CGPoint) {
+        activeComposerTool = .text
         viewModel.addText(at: normalized)
     }
 
     private func commitTextEditing() {
         guard let id = viewModel.selectedTextID else { return }
-        // If user didn't type anything, remove the item instead of leaving placeholder on canvas.
         if editingText.isEmpty && isEditingNewItem {
             viewModel.removeTextItem(id)
         } else {
@@ -138,6 +210,42 @@ struct PhotoEditorView: View {
         viewModel.selectedTextID = nil
         isTextFieldFocused = false
         isEditingNewItem = false
+    }
+
+    private func downloadEditedImage() async {
+        viewModel.prepareForFinalize()
+        let image = await viewModel.finalizeAsync()
+        let saved = await MediaGallerySaver.saveImage(image)
+        showToast(
+            saved
+                ? languageService.text(.mediaEditorSavedToGallery)
+                : languageService.text(.mediaLoadFailed)
+        )
+    }
+
+    private func importGif(from url: URL) async {
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            await MainActor.run {
+                viewModel.addGifSticker(data: data)
+                activeComposerTool = .sticker
+            }
+        } catch {
+            showToast(languageService.text(.mediaLoadFailed))
+        }
+    }
+
+    private func showToast(_ message: String) {
+        withAnimation {
+            toastMessage = message
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            withAnimation {
+                if toastMessage == message {
+                    toastMessage = nil
+                }
+            }
+        }
     }
 }
 
@@ -171,9 +279,6 @@ private struct EditorCanvasView: View {
                         onTap: { viewModel.toggleChromeFromImageTap() }
                     ))
 
-                // DrawCanvas is always in the tree; opacity controls visibility.
-                // Keeps the PKCanvasView mounted during tool switches so strokes
-                // never flash-disappear when switching to text/sticker/crop.
                 PhotoEditorDrawCanvas(
                     drawing: viewModel.drawingForDisplay(canvasSize: metrics.displayFrame.size),
                     isEnabled: viewModel.activeTool == .draw,
@@ -188,7 +293,6 @@ private struct EditorCanvasView: View {
                 .opacity(viewModel.activeTool == .draw ? 1 : 0)
                 .allowsHitTesting(viewModel.activeTool == .draw)
 
-                // Overlay shows the frozen drawing snapshot when draw tool is inactive.
                 if !viewModel.drawing.bounds.isEmpty && viewModel.activeTool != .draw {
                     PhotoEditorDrawingOverlay(
                         drawing: viewModel.drawingForDisplay(canvasSize: metrics.displayFrame.size),

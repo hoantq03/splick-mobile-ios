@@ -130,7 +130,7 @@ final class PhotoEditorViewModel: ObservableObject {
             originalCIImage = CIImage.empty()
         }
         activeFilter = initialFilter
-        activeTool = .draw
+        activeTool = nil
         pushSnapshotIfNeeded()
         schedulePreviewRefresh()
     }

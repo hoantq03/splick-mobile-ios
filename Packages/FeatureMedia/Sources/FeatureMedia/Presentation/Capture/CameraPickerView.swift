@@ -1,24 +1,32 @@
 import ARKit
+import Localization
 import SwiftUI
 import UIKit
 
 /// Custom camera UI backed by `AVCaptureSession` + Metal preview.
-/// Public `Result` API matches the previous `UIImagePickerController` wrapper.
 struct CameraPickerView: View {
     enum Result: Equatable {
         case image(UIImage, initialFilter: FilterPreset = .none)
         case video(URL)
         case cancelled
         case openLibrary
+        case openTextCreation
+        case openLayoutCapture
     }
 
     let onResult: (Result) -> Void
     var accumulatedCount: Int = 0
+    var filterCatalogRepository: FilterCatalogRepositoryProtocol?
 
+    @EnvironmentObject private var languageService: LanguageService
     @StateObject private var session = AVCameraSessionModel()
     @StateObject private var arHandle = ARCaptureHandle()
     @State private var arEffect: ARFaceEffect = .glasses
     @State private var isCapturing = false
+    @State private var publishMode: CameraPublishMode = .post
+    @State private var catalogItems: [FilterCatalogItem] = []
+    @State private var toastMessage: String?
+    @State private var handsFreeSeconds = 0
 
     private var faceTrackingSupported: Bool {
         ARFaceTrackingConfiguration.isSupported
@@ -34,23 +42,72 @@ struct CameraPickerView: View {
             VStack(spacing: 0) {
                 topBar
                 Spacer()
-                FilterStripView(
-                    preset: $session.filterPreset,
-                    intensity: $session.filterIntensity,
-                    arEffect: $arEffect,
-                    faceTrackingSupported: faceTrackingSupported
-                )
-                .padding(.bottom, 8)
-                bottomBar
+                HStack(alignment: .bottom, spacing: 0) {
+                    CameraLeftToolbar(
+                        onTextMode: { onResult(.openTextCreation) },
+                        onBoomerang: { showComingSoon() },
+                        onLayout: { onResult(.openLayoutCapture) },
+                        onHandsFree: cycleHandsFree
+                    )
+                    .padding(.bottom, 24)
+
+                    Spacer()
+
+                    VStack(spacing: 12) {
+                        CameraModeStrip(
+                            selected: publishMode,
+                            onSelect: { publishMode = $0 },
+                            onComingSoon: showComingSoon
+                        )
+                        bottomBar
+                    }
+
+                    Spacer(minLength: 56)
+                }
+            }
+
+            if handsFreeSeconds > 0 {
+                Text(String(format: languageService.text(.mediaCameraTimerSeconds), handsFreeSeconds))
+                    .font(.system(size: 48, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+
+            if let toastMessage {
+                VStack {
+                    Spacer()
+                    Text(toastMessage)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(Capsule().fill(Color.black.opacity(0.75)))
+                        .padding(.bottom, 140)
+                }
             }
         }
-        .onAppear { session.start() }
+        .onAppear {
+            session.start()
+            Task { await loadFilterCatalog() }
+        }
         .onDisappear { session.stop() }
         .onChange(of: session.filterPreset) { preset in
             if preset == .ar && faceTrackingSupported {
                 session.stop()
             } else if !session.isRunning {
                 session.start()
+            }
+        }
+        .task(id: handsFreeSeconds) {
+            guard handsFreeSeconds > 0 else { return }
+            try? await Task.sleep(for: .seconds(1))
+            await MainActor.run {
+                guard handsFreeSeconds > 0 else { return }
+                if handsFreeSeconds == 1 {
+                    handsFreeSeconds = 0
+                    capture()
+                } else {
+                    handsFreeSeconds -= 1
+                }
             }
         }
     }
@@ -74,8 +131,6 @@ struct CameraPickerView: View {
             circleButton(systemName: "xmark") { onResult(.cancelled) }
             Spacer()
             circleButton(systemName: flashSymbol) { session.cycleFlash() }
-            Spacer()
-            circleButton(systemName: "arrow.triangle.2.circlepath") { session.flipCamera() }
         }
         .padding(.horizontal, 16)
         .padding(.top, 10)
@@ -88,9 +143,13 @@ struct CameraPickerView: View {
     }
 
     private var bottomBar: some View {
-        HStack {
+        HStack(alignment: .bottom, spacing: 16) {
             ZStack(alignment: .topTrailing) {
-                circleButton(systemName: "photo.on.rectangle", size: 50) { onResult(.openLibrary) }
+                circleButton(
+                    systemName: "photo.on.rectangle",
+                    size: CameraBottomBarMetrics.galleryDiameter
+                ) { onResult(.openLibrary) }
+                .padding(.bottom, shutterVerticalInset(for: CameraBottomBarMetrics.galleryDiameter))
                 if accumulatedCount > 0 {
                     Text("\(accumulatedCount)")
                         .font(.system(size: 12, weight: .bold))
@@ -100,24 +159,56 @@ struct CameraPickerView: View {
                         .offset(x: 8, y: -8)
                 }
             }
-            Spacer()
-            Button(action: capture) {
-                Circle()
-                    .fill(Color.white)
-                    .frame(width: 72, height: 72)
-                    .overlay(Circle().stroke(Color.black.opacity(0.15), lineWidth: 3).padding(6))
-                    .scaleEffect(isCapturing ? 0.9 : 1)
+
+            VStack(spacing: 10) {
+                CameraFilterNameBadge(title: activeFilterTitle)
+                    .animation(.easeInOut(duration: 0.18), value: session.filterPreset)
+
+                Button(action: capture) {
+                    Circle()
+                        .fill(Color.white)
+                        .frame(
+                            width: CameraBottomBarMetrics.shutterDiameter,
+                            height: CameraBottomBarMetrics.shutterDiameter
+                        )
+                        .overlay(
+                            Circle()
+                                .stroke(Color.black.opacity(0.15), lineWidth: 3)
+                                .padding(6)
+                        )
+                        .scaleEffect(isCapturing ? 0.9 : 1)
+                }
+                .disabled(isCapturing)
             }
-            .disabled(isCapturing)
-            Spacer()
-            Color.clear.frame(width: 50, height: 50)
+
+            FilterCarouselBar(
+                preset: $session.filterPreset,
+                catalogItems: catalogItems
+            )
+
+            circleButton(systemName: "arrow.triangle.2.circlepath") { session.flipCamera() }
+                .padding(.bottom, shutterVerticalInset(for: CameraBottomBarMetrics.sideControlDiameter))
         }
-        .padding(.horizontal, 28)
+        .padding(.horizontal, 12)
         .padding(.bottom, 20)
         .background(
             LinearGradient(colors: [.clear, .black.opacity(0.55)], startPoint: .top, endPoint: .bottom)
                 .allowsHitTesting(false)
         )
+    }
+
+    private var activeFilterTitle: String {
+        if let catalogMatch = catalogItems.first(where: {
+            $0.slug.replacingOccurrences(of: "-", with: "") == session.filterPreset.rawValue
+                || $0.slug == session.filterPreset.rawValue
+        }) {
+            return catalogMatch.name
+        }
+        return languageService.text(session.filterPreset.titleKey)
+    }
+
+    private func shutterVerticalInset(for controlDiameter: CGFloat) -> CGFloat {
+        max((CameraBottomBarMetrics.shutterDiameter - controlDiameter) / 2, 0)
     }
 
     private var flashSymbol: String {
@@ -135,6 +226,31 @@ struct CameraPickerView: View {
                 .foregroundStyle(.white)
                 .frame(width: size, height: size)
                 .background(Circle().fill(Color.black.opacity(0.3)))
+        }
+    }
+
+    private func showComingSoon() {
+        toastMessage = languageService.text(.mediaEditorComingSoon)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            toastMessage = nil
+        }
+    }
+
+    private func cycleHandsFree() {
+        switch handsFreeSeconds {
+        case 0: handsFreeSeconds = 3
+        case 3: handsFreeSeconds = 10
+        default: handsFreeSeconds = 0
+        }
+    }
+
+    private func loadFilterCatalog() async {
+        guard let filterCatalogRepository else { return }
+        do {
+            let items = try await filterCatalogRepository.listFilters()
+            await MainActor.run { catalogItems = items }
+        } catch {
+            // Fall back to bundled presets only.
         }
     }
 

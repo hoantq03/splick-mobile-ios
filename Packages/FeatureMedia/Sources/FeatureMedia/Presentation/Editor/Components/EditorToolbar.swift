@@ -5,40 +5,26 @@ import SwiftUI
 struct EditorToolbar: View {
     @EnvironmentObject private var languageService: LanguageService
     @ObservedObject var viewModel: PhotoEditorViewModel
+    let activeComposerTool: ComposerTool?
+    let onComposerTool: (ComposerTool) -> Void
     let onDone: () -> Void
     let onCancel: () -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            topBar
-            Spacer()
-            if viewModel.isChromeVisible, viewModel.activeTool == .draw {
-                drawOptionsBar
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+        ZStack {
+            VStack(spacing: 0) {
+                topBar
+                Spacer()
+                bottomPanels
             }
-            if viewModel.isChromeVisible, viewModel.activeTool == .crop {
-                cropOptionsBar
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+
+            HStack {
+                Spacer()
+                if viewModel.isChromeVisible {
+                    EditorVerticalToolBar(activeTool: activeComposerTool, onSelect: onComposerTool)
+                        .transition(.opacity)
+                }
             }
-            if viewModel.isChromeVisible, viewModel.activeTool == .filter {
-                ColorFilterStripView(preset: filterBinding)
-                    .padding(.vertical, SplickTheme.Spacing.sm)
-                    .background(.ultraThinMaterial.opacity(0.85))
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-            if viewModel.isChromeVisible, viewModel.activeTool == .adjust {
-                adjustOptionsBar
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-            if viewModel.isChromeVisible, viewModel.activeTool == .sticker {
-                EditorStickerPickerBar(viewModel: viewModel)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-            EditorToolScrollBar(
-                viewModel: viewModel,
-                onUndo: viewModel.undo,
-                onRedo: viewModel.redo
-            )
         }
     }
 
@@ -54,27 +40,42 @@ struct EditorToolbar: View {
 
             Spacer()
 
-            Text(languageService.text(.mediaEdit))
-                .font(SplickTheme.Typography.headline)
-                .foregroundStyle(.white)
-
-            Spacer()
-
             Button(action: onDone) {
                 Text(languageService.text(.commonDone))
                     .font(SplickTheme.Typography.callout.weight(.bold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, SplickTheme.Spacing.md)
                     .padding(.vertical, SplickTheme.Spacing.xs)
-                    .background(
-                        Capsule().fill(SplickTheme.Colors.primaryGradient)
-                    )
+                    .background(Capsule().fill(SplickTheme.Colors.primaryGradient))
             }
             .disabled(viewModel.isExporting)
         }
         .padding(.horizontal, SplickTheme.Spacing.md)
         .padding(.top, SplickTheme.Spacing.sm)
         .padding(.bottom, SplickTheme.Spacing.xs)
+        .opacity(viewModel.isChromeVisible ? 1 : 0)
+    }
+
+    @ViewBuilder
+    private var bottomPanels: some View {
+        if viewModel.isChromeVisible, viewModel.activeTool == .draw {
+            drawOptionsBar
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+        if viewModel.isChromeVisible, viewModel.activeTool == .crop {
+            cropOptionsBar
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+        if viewModel.isChromeVisible, activeComposerTool == .effects || viewModel.activeTool == .filter {
+            ColorFilterStripView(preset: filterBinding)
+                .padding(.vertical, SplickTheme.Spacing.sm)
+                .background(.ultraThinMaterial.opacity(0.85))
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+        if viewModel.isChromeVisible, viewModel.activeTool == .adjust {
+            adjustOptionsBar
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
     }
 
     private var drawOptionsBar: some View {
@@ -178,6 +179,38 @@ struct EditorToolbar: View {
                 }
             )
             .tint(.white)
+        }
+    }
+}
+
+struct EditorMoreOptionsSheet: View {
+    @EnvironmentObject private var languageService: LanguageService
+    @ObservedObject var viewModel: PhotoEditorViewModel
+    let onDismiss: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Button(languageService.text(.mediaToolCrop)) {
+                    onDismiss()
+                    viewModel.selectTool(.crop)
+                }
+                Button(languageService.text(.mediaToolRotate)) {
+                    onDismiss()
+                    viewModel.selectTool(.rotate)
+                }
+                Button(languageService.text(.mediaToolAdjust)) {
+                    onDismiss()
+                    viewModel.selectTool(.adjust)
+                }
+            }
+            .navigationTitle(languageService.text(.mediaToolMore))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(languageService.text(.commonClose), action: onDismiss)
+                }
+            }
         }
     }
 }
