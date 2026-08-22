@@ -106,11 +106,32 @@ private struct DismissKeyboardTapInstaller: UIViewRepresentable {
         }()
 
         func attach(to markerView: UIView) {
-            guard let host = markerView.superview else { return }
+            guard let host = Self.resolveHost(from: markerView) else { return }
             if hostView === host, recognizer.view === host { return }
             detach()
             host.addGestureRecognizer(recognizer)
             hostView = host
+        }
+
+        private static func resolveHost(from markerView: UIView) -> UIView? {
+            var responder: UIResponder? = markerView
+            while let current = responder {
+                if let viewController = current as? UIViewController, viewController.isViewLoaded {
+                    return viewController.view
+                }
+                responder = current.next
+            }
+
+            var node: UIView? = markerView.superview
+            var best: UIView?
+            while let current = node {
+                if current is UIWindow { break }
+                if current.bounds.width >= 64, current.bounds.height >= 64 {
+                    best = current
+                }
+                node = current.superview
+            }
+            return best ?? markerView.superview
         }
 
         func detach() {

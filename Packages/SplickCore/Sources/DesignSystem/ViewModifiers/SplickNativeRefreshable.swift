@@ -299,3 +299,97 @@ public struct SplickScrollViewRefreshAnchor: UIViewRepresentable {
         }
     }
 }
+
+/// Prepares the SwiftUI `ScrollView` so the first pull can trigger `.refreshable`.
+/// Without this, UIKit often leaves `alwaysBounceVertical` off (or a nested media
+/// pager eats the pan) until the user has scrolled once.
+public struct SplickRefreshableScrollBootstrap: UIViewRepresentable {
+    public init() {}
+
+    public func makeUIView(context: Context) -> UIView {
+        let view = BootstrapView()
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+        view.isAccessibilityElement = false
+        return view
+    }
+
+    public func updateUIView(_ uiView: UIView, context: Context) {
+        (uiView as? BootstrapView)?.schedulePrepare()
+    }
+
+    private final class BootstrapView: UIView {
+        private var scheduled = false
+
+        func schedulePrepare() {
+            guard !scheduled else {
+                prepare()
+                return
+            }
+            scheduled = true
+            prepare()
+            DispatchQueue.main.async { [weak self] in self?.prepare() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                self?.prepare()
+            }
+        }
+
+        private func prepare() {
+            guard let scrollView = Self.findVerticalScrollView(near: self) else { return }
+            scrollView.alwaysBounceVertical = true
+            scrollView.bounces = true
+            scrollView.delaysContentTouches = false
+            Self.lockNestedHorizontalPagers(in: scrollView)
+
+            let top = scrollView.adjustedContentInset.top
+            let restingY = -top
+            // LazyVStack / safeAreaInset can leave a small positive offset so
+            // UIRefreshControl thinks we are not at the top until the user scrolls.
+            if scrollView.contentOffset.y > restingY, scrollView.contentOffset.y < restingY + 64 {
+                scrollView.setContentOffset(
+                    CGPoint(x: scrollView.contentOffset.x, y: restingY),
+                    animated: false
+                )
+            }
+        }
+
+        private static func findVerticalScrollView(near view: UIView) -> UIScrollView? {
+            var ancestor: UIView? = view
+            while let current = ancestor {
+                if let scrollView = current as? UIScrollView,
+                   Self.isVerticalContentScrollView(scrollView) {
+                    return scrollView
+                }
+                ancestor = current.superview
+            }
+            return nil
+        }
+
+        private static func isVerticalContentScrollView(_ scrollView: UIScrollView) -> Bool {
+            if scrollView.isPagingEnabled,
+               scrollView.contentSize.width > scrollView.bounds.width * 1.2 {
+                return false
+            }
+            return true
+        }
+
+        private static func lockNestedHorizontalPagers(in root: UIScrollView) {
+            func walk(_ view: UIView) {
+                if let nested = view as? UIScrollView, nested !== root {
+                    let isHorizontalPager = nested.isPagingEnabled
+                        || nested.contentSize.width > nested.bounds.width + 8
+                    let isMostlyHorizontal = nested.contentSize.height <= nested.bounds.height + 8
+                    if isHorizontalPager && isMostlyHorizontal {
+                        nested.isDirectionalLockEnabled = true
+                        nested.alwaysBounceVertical = false
+                        nested.bounces = nested.contentSize.width > nested.bounds.width
+                    }
+                }
+                for subview in view.subviews {
+                    walk(subview)
+                }
+            }
+            walk(root)
+        }
+    }
+}

@@ -14,6 +14,23 @@ extension View {
     public func splickFastPageSlide() -> some View {
         background(SplickFastPageSlideInstaller())
     }
+
+    /// Keeps UIKit edge swipe-back enabled inside custom-gesture screens (e.g. chat thread).
+    public func splickInteractivePopEnabled() -> some View {
+        background(SplickInteractivePopEnabler())
+    }
+}
+
+private struct SplickInteractivePopEnabler: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> UIViewController {
+        UIViewController()
+    }
+
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
+        DispatchQueue.main.async {
+            uiViewController.navigationController?.interactivePopGestureRecognizer?.isEnabled = true
+        }
+    }
 }
 
 private struct SplickFastPageSlideInstaller: UIViewRepresentable {
