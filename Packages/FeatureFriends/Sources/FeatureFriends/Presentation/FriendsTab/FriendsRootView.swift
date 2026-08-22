@@ -275,6 +275,7 @@ public struct FriendsRootView: View {
                         }
                     }
             }
+            .dismissKeyboardOnTap()
             .onPreferenceChange(FriendsSearchChromeHeightKey.self) { searchChromeHeight = $0 }
             .splickFastPageSlide()
             .onPreferenceChange(PullToRefreshActivePreferenceKey.self) { isPullRefreshing = $0 }
@@ -636,6 +637,9 @@ public struct FriendsRootView: View {
                 .textInputAutocapitalization(.never)
                 .focused($isSearchFieldFocused)
                 .submitLabel(.search)
+                .onSubmit {
+                    isSearchFieldFocused = false
+                }
 
             if hasSearchText {
                 Button(action: clearSearch) {
@@ -783,6 +787,7 @@ public struct FriendsRootView: View {
             }
             .id("friendsSearchScroll")
             .friendsSearchScrollTopInset(friendsListTopInset)
+            .scrollDismissesKeyboard(.immediately)
             .tabBarHideOnScroll()
             .dismissKeyboardOnTap()
             .splickNativeRefreshable(controller: searchRefreshController) {
@@ -930,6 +935,7 @@ public struct FriendsRootView: View {
                 }
                 .id("friendsDirectoryScroll")
                 .friendsSearchScrollTopInset(friendsListTopInset)
+                .scrollDismissesKeyboard(.immediately)
                 .tabBarHideOnScroll()
                 .dismissKeyboardOnTap()
                 .splickNativeRefreshable(controller: directoryRefreshController) {
