@@ -46,8 +46,12 @@ final class PostDetailViewModel: ObservableObject {
         await fetchPages(reset: false, ensureVisibleId: nil)
     }
 
-    func reload(ensureVisibleId: UUID? = nil) async {
-        await fetchPages(reset: true, ensureVisibleId: ensureVisibleId)
+    func reload(ensureVisibleId: UUID? = nil, loadThroughEnd: Bool = false) async {
+        await fetchPages(
+            reset: true,
+            ensureVisibleId: ensureVisibleId,
+            loadThroughEnd: loadThroughEnd
+        )
     }
 
     func upsertOptimistic(_ comment: PostComment) {
@@ -80,7 +84,18 @@ final class PostDetailViewModel: ObservableObject {
         }
     }
 
-    private func fetchPages(reset: Bool, ensureVisibleId: UUID?) async {
+    /// Newest matching comment after a reload, when the create API does not return an id.
+    func latestMatchingCommentId(authorId: UUID?, parentCommentId: UUID?) -> UUID? {
+        allComments
+            .filter { comment in
+                comment.parentCommentId == parentCommentId
+                    && (authorId == nil || comment.author.id == authorId)
+            }
+            .max(by: { $0.createdAt < $1.createdAt })?
+            .id
+    }
+
+    private func fetchPages(reset: Bool, ensureVisibleId: UUID?, loadThroughEnd: Bool = false) async {
         requestID += 1
         let currentRequest = requestID
         if reset { nextPage = 0 }
@@ -111,7 +126,11 @@ final class PostDetailViewModel: ObservableObject {
                 page += 1
                 nextPage = page
                 let found = ensureVisibleId == nil || merged.contains(where: { $0.id == ensureVisibleId })
-                if found || !more { break }
+                if loadThroughEnd {
+                    if !more { break }
+                } else if found || !more {
+                    break
+                }
             } while page < 50
 
             allComments = merged

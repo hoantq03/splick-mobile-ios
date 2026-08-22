@@ -26,8 +26,7 @@ struct PostDetailView: View {
     @State private var profileRoute: ProfileRoute?
     @State private var companionsRoute: CompanionsSheetRoute?
     @State private var replyTarget: PostComment?
-    @State private var scrollToCommentId: UUID?
-    @State private var scrollToCommentExpectsMedia = false
+    @State private var commentScrollRequest: CommentScrollRequest?
     @State private var showEmojiPicker = false
     @State private var mediaViewerRoute: MediaViewerRoute?
     @State private var composerFocused = false
@@ -83,7 +82,9 @@ struct PostDetailView: View {
     var body: some View {
         ScrollViewReader { scrollProxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+                // VStack (not LazyVStack) so comment `.id`s stay in the hierarchy and
+                // ScrollViewReader can jump to a newly sent row below the fold.
+                VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
                     Color.clear
                         .frame(height: 0)
                         .id(PostDetailScrollAnchor.top)
@@ -121,13 +122,9 @@ struct PostDetailView: View {
             .onReceive(NotificationCenter.default.publisher(for: FeedScrollLock.notification)) { notification in
                 detailScrollLocked = notification.userInfo?["locked"] as? Bool ?? false
             }
-            .onChange(of: scrollToCommentId) { commentId in
-                guard let commentId else { return }
-                scrollToComment(
-                    commentId,
-                    expectsMedia: scrollToCommentExpectsMedia,
-                    proxy: scrollProxy
-                )
+            .onChange(of: commentScrollRequest) { request in
+                guard let request else { return }
+                scrollToComment(request, proxy: scrollProxy)
             }
             .onChange(of: feedViewModel.pendingCommentIds) { pendingIds in
                 let newlyPending = pendingIds.subtracting(observedPendingCommentIds)
@@ -141,8 +138,7 @@ struct PostDetailView: View {
                 if let parentId = pending.parentCommentId {
                     commentPager.expandReplies(for: parentId)
                 }
-                scrollToCommentExpectsMedia = expectsMedia
-                scrollToCommentId = pendingId
+                requestScroll(to: pendingId, expectsMedia: expectsMedia)
             }
             .onChange(of: replyTarget) { target in
                 guard let target else { return }
@@ -379,15 +375,30 @@ struct PostDetailView: View {
         composerFocused = false
 
         // Sync pager from the comments API — don't wait for embedded GET post comments.
-        await commentPager.reload(ensureVisibleId: result.createdCommentId)
+        await commentPager.reload(
+            ensureVisibleId: result.createdCommentId,
+            loadThroughEnd: result.createdCommentId == nil
+        )
         if let parentId {
             commentPager.expandReplies(for: parentId)
         }
-        if let createdId = result.createdCommentId {
-            commentPager.ensureCommentVisible(createdId)
-            scrollToCommentExpectsMedia = expectsMedia
-            scrollToCommentId = createdId
+        let targetId = result.createdCommentId
+            ?? commentPager.latestMatchingCommentId(
+                authorId: feedViewModel.currentUser?.id,
+                parentCommentId: parentId
+            )
+        if let targetId {
+            commentPager.ensureCommentVisible(targetId)
+            requestScroll(to: targetId, expectsMedia: expectsMedia)
         }
+    }
+
+    private func requestScroll(to commentId: UUID, expectsMedia: Bool) {
+        commentScrollRequest = CommentScrollRequest(
+            commentId: commentId,
+            nonce: UUID(),
+            expectsMedia: expectsMedia
+        )
     }
 
     private func scrollReplyParent(_ commentId: UUID, proxy: ScrollViewProxy) {
@@ -407,32 +418,34 @@ struct PostDetailView: View {
     }
 
     private func scrollToComment(
-        _ commentId: UUID,
-        expectsMedia: Bool,
+        _ request: CommentScrollRequest,
         proxy: ScrollViewProxy
     ) {
+        let commentId = request.commentId
         Task { @MainActor in
             commentPager.ensureCommentVisible(commentId)
-            // Image/GIF rows need more time for LazyVStack + remote media layout.
-            let initialDelay: UInt64 = expectsMedia ? 320_000_000 : 160_000_000
-            let retryDelay: UInt64 = expectsMedia ? 380_000_000 : 220_000_000
+            // Wait for thread insert + keyboard collapse so the row has a real frame.
+            let initialDelay: UInt64 = request.expectsMedia ? 280_000_000 : 120_000_000
+            let retryDelay: UInt64 = request.expectsMedia ? 360_000_000 : 200_000_000
             try? await Task.sleep(nanoseconds: initialDelay)
+            guard commentScrollRequest == request else { return }
             withAnimation(.easeInOut(duration: 0.35)) {
-                proxy.scrollTo(commentId, anchor: UnitPoint(x: 0.5, y: 0.28))
+                proxy.scrollTo(commentId, anchor: UnitPoint(x: 0.5, y: 0.62))
             }
             try? await Task.sleep(nanoseconds: retryDelay)
+            guard commentScrollRequest == request else { return }
             withAnimation(.easeInOut(duration: 0.28)) {
-                proxy.scrollTo(commentId, anchor: UnitPoint(x: 0.5, y: 0.28))
+                proxy.scrollTo(commentId, anchor: UnitPoint(x: 0.5, y: 0.62))
             }
-            if expectsMedia {
-                try? await Task.sleep(nanoseconds: 420_000_000)
+            if request.expectsMedia {
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                guard commentScrollRequest == request else { return }
                 withAnimation(.easeInOut(duration: 0.25)) {
-                    proxy.scrollTo(commentId, anchor: UnitPoint(x: 0.5, y: 0.28))
+                    proxy.scrollTo(commentId, anchor: UnitPoint(x: 0.5, y: 0.62))
                 }
             }
-            if scrollToCommentId == commentId {
-                scrollToCommentId = nil
-                scrollToCommentExpectsMedia = false
+            if commentScrollRequest == request {
+                commentScrollRequest = nil
             }
         }
     }
@@ -554,6 +567,9 @@ struct PostDetailView: View {
         cardActions.onDelete = { postId in
             Task { await feedViewModel.deletePost(id: postId) }
         }
+        cardActions.onHide = { postId in
+            Task { await feedViewModel.hidePost(id: postId) }
+        }
         cardActions.onUserTap = { openProfile(for: $0) }
         cardActions.onOpenComments = { _ in }
         cardActions.onShowCompanions = { post in
@@ -610,6 +626,12 @@ struct PostDetailView: View {
 
 private enum PostDetailScrollAnchor {
     static let top = "postDetailTop"
+}
+
+private struct CommentScrollRequest: Equatable {
+    let commentId: UUID
+    let nonce: UUID
+    let expectsMedia: Bool
 }
 
 private struct CommentThreadFilterBar: View {

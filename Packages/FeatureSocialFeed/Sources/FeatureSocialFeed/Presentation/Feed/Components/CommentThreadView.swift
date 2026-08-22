@@ -322,7 +322,6 @@ private struct CommentBranchView: View {
                 onApproveEvidence: { onApproveEvidence(comment) },
                 onRejectEvidence: { onRejectEvidence(comment) }
             )
-            .id(comment.id)
 
             if !children.isEmpty {
                 VStack(alignment: .leading, spacing: 0) {
@@ -376,6 +375,7 @@ private struct CommentBranchView: View {
                 )
             }
         }
+        .id(comment.id)
     }
 }
 
