@@ -200,32 +200,18 @@ struct MainTabView: View {
         }
         .overlay {
             if appState.showNotifications {
-                DesignSystem.SplickNotificationRevealOverlay(
+                NotificationRevealHost(
+                    viewModel: container.notificationListViewModel,
+                    languageService: container.languageService,
                     isPresented: $appState.showNotifications,
-                    anchorFrame: appState.notificationAnchorFrame,
-                    unreadCount: badgeCounts.notifications,
-                    headerTitle: container.languageService.text(.notificationTitle),
-                    leadingActionTitle: container.languageService.text(.notificationReadAll),
-                    onLeadingAction: {
-                        Task { await container.notificationListViewModel.markAllAsRead() }
-                    },
-                    closeAccessibilityLabel: container.languageService.text(.notificationBellAccessibility),
                     dismissRequest: $notificationDismissRequest,
-                    onDismissStarted: { notificationIsDismissing = true }
-                ) { dismiss in
-                    NotificationListView(
-                        viewModel: container.notificationListViewModel,
-                        onNavigate: { target in
-                            dismiss()
-                            DispatchQueue.main.asyncAfter(deadline: .now() + SplickRevealMotion.notificationCollapseDuration) {
-                                appState.routeNotification(target: target)
-                            }
-                        },
-                        onDismiss: dismiss,
-                        presentedAsSheet: true
-                    )
-                    .environmentObject(container.languageService)
-                }
+                    notificationIsDismissing: $notificationIsDismissing,
+                    anchorFrame: appState.notificationAnchorFrame,
+                    badgeUnreadCount: badgeCounts.notifications,
+                    onNavigate: { target in
+                        appState.routeNotification(target: target)
+                    }
+                )
                 .zIndex(100)
             }
         }
@@ -1406,6 +1392,46 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
         .frame(maxHeight: .infinity)
         // Keep hit-testing on the selected tab immediately; heavy activation is deferred.
         .allowsHitTesting(selectedTab == tab)
+    }
+}
+
+private struct NotificationRevealHost: View {
+    @ObservedObject var viewModel: NotificationListViewModel
+    @ObservedObject var languageService: LanguageService
+    @Binding var isPresented: Bool
+    @Binding var dismissRequest: Bool
+    @Binding var notificationIsDismissing: Bool
+    let anchorFrame: CGRect
+    let badgeUnreadCount: Int
+    let onNavigate: (NotificationNavigationTarget) -> Void
+
+    var body: some View {
+        DesignSystem.SplickNotificationRevealOverlay(
+            isPresented: $isPresented,
+            anchorFrame: anchorFrame,
+            unreadCount: max(viewModel.unreadCount, badgeUnreadCount),
+            headerTitle: languageService.text(.notificationTitle),
+            leadingActionTitle: languageService.text(.notificationReadAll),
+            onLeadingAction: {
+                Task { await viewModel.markAllAsRead() }
+            },
+            closeAccessibilityLabel: languageService.text(.notificationBellAccessibility),
+            dismissRequest: $dismissRequest,
+            onDismissStarted: { notificationIsDismissing = true }
+        ) { dismiss in
+            NotificationListView(
+                viewModel: viewModel,
+                onNavigate: { target in
+                    dismiss()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + SplickRevealMotion.notificationCollapseDuration) {
+                        onNavigate(target)
+                    }
+                },
+                onDismiss: dismiss,
+                presentedAsSheet: true
+            )
+            .environmentObject(languageService)
+        }
     }
 }
 

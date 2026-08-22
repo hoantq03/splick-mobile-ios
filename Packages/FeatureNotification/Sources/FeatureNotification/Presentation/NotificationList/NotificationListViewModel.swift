@@ -196,7 +196,7 @@ public final class NotificationListViewModel: ObservableObject {
         }
     }
 
-    var unreadCount: Int {
+    public var unreadCount: Int {
         notifications.filter { !$0.isRead }.count
     }
 

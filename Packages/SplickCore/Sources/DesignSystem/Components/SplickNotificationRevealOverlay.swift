@@ -76,9 +76,18 @@ public struct SplickNotificationRevealOverlay<Content: View>: View {
     }
 
     private var headerBar: some View {
-        HStack(spacing: SplickTheme.Spacing.sm) {
-            Group {
-                if unreadCount > 0, let leadingActionTitle, let onLeadingAction {
+        ZStack {
+            if let headerTitle {
+                Text(headerTitle)
+                    .font(SplickTheme.Typography.headline)
+                    .foregroundStyle(SplickTheme.Colors.textPrimary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 112)
+            }
+
+            HStack(spacing: SplickTheme.Spacing.sm) {
+                if let leadingActionTitle, let onLeadingAction, unreadCount > 0 {
                     Button(leadingActionTitle, action: onLeadingAction)
                         .buttonStyle(.plain)
                         .font(SplickTheme.Typography.callout)
@@ -89,28 +98,23 @@ public struct SplickNotificationRevealOverlay<Content: View>: View {
                     Color.clear
                         .frame(width: closeHitSize, height: closeHitSize)
                 }
-            }
-            .frame(width: 104, alignment: .leading)
 
-            Text(headerTitle ?? "")
-                .font(SplickTheme.Typography.headline)
-                .foregroundStyle(SplickTheme.Colors.textPrimary)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity)
+                Spacer(minLength: 0)
 
-            Button(action: dismissAnimated) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(SplickTheme.Colors.textPrimary)
-                    .frame(width: 32, height: 32)
-                    .background(
-                        Circle().fill(SplickTheme.Colors.secondaryBackground)
-                    )
-                    .frame(width: closeHitSize, height: closeHitSize)
-                    .contentShape(Rectangle())
+                Button(action: dismissAnimated) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(SplickTheme.Colors.textPrimary)
+                        .frame(width: 32, height: 32)
+                        .background(
+                            Circle().fill(SplickTheme.Colors.secondaryBackground)
+                        )
+                        .frame(width: closeHitSize, height: closeHitSize)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(closeAccessibilityLabel)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(closeAccessibilityLabel)
         }
         .padding(.horizontal, SplickTheme.Spacing.md)
         .padding(.bottom, SplickTheme.Spacing.sm)
