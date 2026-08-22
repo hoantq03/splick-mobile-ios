@@ -85,19 +85,28 @@ struct MessageReactionFocusOverlay: View {
                     .contentShape(Rectangle())
                     .onTapGesture { dismissAnimated() }
 
-                // Bubble stays glued to the long-press frame; only `messagePopScale` animates.
-                liftedMessage(
-                    maxContentWidth: max(anchorFrame.width, 1),
-                    maxLayoutHeight: max(anchorFrame.height, 1),
-                    isCapped: isMessageCapped
-                )
-                .frame(width: anchorFrame.width, height: anchorFrame.height, alignment: .top)
-                .scaleEffect(
-                    messagePopScale,
-                    anchor: UnitPoint(x: horizontalScaleAnchorX, y: 0.5)
-                )
-                .position(x: anchorFrame.midX, y: anchorFrame.midY)
-                .allowsHitTesting(isMessageCapped)
+                HStack(alignment: .top, spacing: 0) {
+                    if context.isOutgoing {
+                        Spacer(minLength: 0)
+                    }
+                    liftedMessage(
+                        maxContentWidth: min(columnWidth, 268),
+                        maxLayoutHeight: min(geo.size.height * 0.55, 420),
+                        isCapped: isMessageCapped
+                    )
+                    .scaleEffect(
+                        messagePopScale,
+                        anchor: UnitPoint(x: horizontalScaleAnchorX, y: 0.5)
+                    )
+                    .allowsHitTesting(isMessageCapped)
+                    if !context.isOutgoing {
+                        Spacer(minLength: 0)
+                    }
+                }
+                .padding(.top, max(anchorFrame.minY, 0))
+                .padding(.leading, context.isOutgoing ? horizontalMargin : max(anchorFrame.minX, 0))
+                .padding(.trailing, context.isOutgoing ? max(geo.size.width - anchorFrame.maxX, 0) : horizontalMargin)
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
                 .zIndex(1)
 
                 focusColumn(width: columnWidth) {
@@ -275,23 +284,22 @@ struct MessageReactionFocusOverlay: View {
             onLongPress: nil,
             onReply: nil
         )
-        .fixedSize(horizontal: false, vertical: true)
-        .frame(maxWidth: maxContentWidth, alignment: contentAlignment)
+        .fixedSize(horizontal: true, vertical: true)
 
         Group {
             if isCapped {
                 ScrollView(showsIndicators: false) {
                     bubble
-                        .frame(maxWidth: maxContentWidth, alignment: contentAlignment)
                 }
-                .frame(maxWidth: .infinity, maxHeight: maxLayoutHeight, alignment: .top)
+                .frame(maxWidth: maxContentWidth, maxHeight: maxLayoutHeight, alignment: .top)
+                .fixedSize(horizontal: true, vertical: false)
                 .clipped()
                 .contentShape(Rectangle())
             } else {
                 bubble
+                    .frame(maxWidth: maxContentWidth, alignment: contentAlignment)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: maxLayoutHeight, alignment: .top)
         .shadow(
             color: .black.opacity(isRevealed ? 0.22 : 0.08),
             radius: isRevealed ? 18 : 6,

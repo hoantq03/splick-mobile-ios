@@ -29,6 +29,12 @@ struct MessageBubbleAnchorProbe: UIViewRepresentable {
         uiView.messageId = messageId
     }
 
+    static func dismantleUIView(_ uiView: ProbeView, coordinator: ()) {
+        if let messageId = uiView.messageId {
+            MessageReactionAnchorStore.shared.frames.removeValue(forKey: messageId)
+        }
+    }
+
     final class ProbeView: UIView {
         var messageId: UUID?
 

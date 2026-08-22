@@ -10,6 +10,7 @@ struct ConversationRowView: View {
 
     let conversation: Conversation
     var reportsAnchorFrame = true
+    var typingPreview: String? = nil
 
     var body: some View {
         HStack(spacing: SplickTheme.Spacing.sm) {
@@ -47,10 +48,20 @@ struct ConversationRowView: View {
                 }
 
                 HStack {
-                    Text(lastMessagePreview)
-                        .font(SplickTheme.Typography.callout)
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
-                        .lineLimit(1)
+                    Group {
+                        if let typingPreview {
+                            ConversationListTypingPreview(
+                                textPrefix: MessagingTypingCopy.stripTrailingEllipsis(typingPreview)
+                            )
+                            .font(SplickTheme.Typography.callout.italic())
+                            .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                        } else {
+                            Text(lastMessagePreview)
+                                .font(SplickTheme.Typography.callout)
+                                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                        }
+                    }
+                    .animation(.easeInOut(duration: 0.24), value: typingPreview != nil)
                     Spacer()
                     if conversation.unreadCount > 0 {
                         Text("\(conversation.unreadCount)")

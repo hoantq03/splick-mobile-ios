@@ -43,6 +43,7 @@ public final class ConversationListViewModel: ObservableObject {
     @Published public private(set) var peekConversation: Conversation?
     @Published public private(set) var peekMessages: [ChatMessage] = []
     @Published public private(set) var peekLoadState: PeekLoadState = .idle
+    @Published public private(set) var typingUserIdsByConversation: [UUID: [UUID]] = [:]
 
     /// Used to decide whether an incoming WS message should bump unread.
     public var currentUserId: UUID?
@@ -64,6 +65,7 @@ public final class ConversationListViewModel: ObservableObject {
     private var loadMoreTask: Task<Void, Never>?
     private var peekTask: Task<MessagingPage<ChatMessage>, Error>?
     private var debouncedRefreshTask: Task<Void, Never>?
+    private var remoteTypingTimeouts: [String: Task<Void, Never>] = [:]
     private var currentPage = 0
 
     public init(
@@ -88,6 +90,14 @@ public final class ConversationListViewModel: ObservableObject {
     /// Applies a WS inbox patch without going through the live event subject (tests).
     public func handleIncomingWsMessageForTesting(conversationId: UUID, message: ChatMessage) {
         applyIncomingMessage(conversationId: conversationId, message: message)
+    }
+
+    public func handleIncomingTypingForTesting(
+        conversationId: UUID,
+        userId: UUID,
+        isTyping: Bool
+    ) {
+        applyRemoteTyping(conversationId: conversationId, userId: userId, isTyping: isTyping)
     }
 
     public var conversations: [Conversation] {
@@ -446,6 +456,12 @@ public final class ConversationListViewModel: ObservableObject {
                     Task { await self.refresh() }
                 case .newMessage(let conversationId, let message):
                     self.applyIncomingMessage(conversationId: conversationId, message: message)
+                case .typing(let conversationId, let userId, let isTyping):
+                    self.applyRemoteTyping(
+                        conversationId: conversationId,
+                        userId: userId,
+                        isTyping: isTyping
+                    )
                 default:
                     break
                 }
@@ -498,6 +514,39 @@ public final class ConversationListViewModel: ObservableObject {
 
         // Periodic reconcile in case local patch drifts from server ordering / filters.
         scheduleDebouncedRefresh()
+    }
+
+    private func applyRemoteTyping(conversationId: UUID, userId: UUID, isTyping: Bool) {
+        if let currentUserId, userId == currentUserId { return }
+        let timeoutKey = "\(conversationId.uuidString)-\(userId.uuidString)"
+        remoteTypingTimeouts[timeoutKey]?.cancel()
+        var current = typingUserIdsByConversation[conversationId] ?? []
+        if isTyping {
+            if !current.contains(userId) {
+                current.append(userId)
+            }
+            typingUserIdsByConversation[conversationId] = current
+            remoteTypingTimeouts[timeoutKey] = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(MessagingTypingTiming.displayTimeout))
+                guard !Task.isCancelled else { return }
+                self?.removeRemoteTyping(conversationId: conversationId, userId: userId)
+            }
+        } else {
+            removeRemoteTyping(conversationId: conversationId, userId: userId)
+        }
+    }
+
+    private func removeRemoteTyping(conversationId: UUID, userId: UUID) {
+        let timeoutKey = "\(conversationId.uuidString)-\(userId.uuidString)"
+        remoteTypingTimeouts[timeoutKey]?.cancel()
+        remoteTypingTimeouts[timeoutKey] = nil
+        var current = typingUserIdsByConversation[conversationId] ?? []
+        current.removeAll { $0 == userId }
+        if current.isEmpty {
+            typingUserIdsByConversation.removeValue(forKey: conversationId)
+        } else {
+            typingUserIdsByConversation[conversationId] = current
+        }
     }
 
     private func scheduleDebouncedRefresh() {

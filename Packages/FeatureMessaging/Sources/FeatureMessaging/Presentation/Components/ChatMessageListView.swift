@@ -13,12 +13,13 @@ struct ChatMessageListView: View {
     let senderDisplayName: (ChatMessage) -> String
     let userDisplayName: (UUID) -> String
     let onRequestComposerFocus: () -> Void
+    var onDismissKeyboard: () -> Void = {}
     var peerAvatarURL: URL? = nil
     var peerDisplayName: String = ""
+    var showsPeerReadAvatar: Bool = false
     var conversationId: UUID? = nil
     var bottomOverlayInset: CGFloat = 64
 
-    @Namespace private var readReceiptAvatarNamespace
     @State private var reactionFocusMessageId: UUID?
     /// Fresh identity each open so `@State isRevealed` cannot stick across odd/even mounts.
     @State private var reactionFocusSession = UUID()
@@ -33,6 +34,8 @@ struct ChatMessageListView: View {
     @State private var replySwipeTranslation: CGFloat = 0
     /// Once a drag is classified (scroll / reply / timestamp), stick with it.
     @State private var listPanSession: ListPanSession = .undecided
+    @State private var hasCompletedInitialBottomScroll = false
+    @State private var lastHandledScrollToBottomToken = 0
 
     private static let longPressImpact = UIImpactFeedbackGenerator(style: .medium)
     private static let replySwipeImpact = UIImpactFeedbackGenerator(style: .light)
@@ -40,6 +43,10 @@ struct ChatMessageListView: View {
     private static let replySwipeThreshold: CGFloat = 56
     /// Past the icon slot (46) so threshold is reachable while reveal stays 1:1.
     private static let replySwipeMaxOffset: CGFloat = 72
+    /// Leading screen edge reserved for UIKit interactive pop (swipe back).
+    private static let navigationBackEdgeWidth: CGFloat = 24
+    /// Band just inward from the edge — horizontal pans here reveal timestamps (not reply).
+    private static let timestampEdgeBandWidth: CGFloat = 52
 
     private var latestReadOutgoingMessageId: UUID? {
         MessageReadReceiptPresentation.latestReadOutgoingMessageId(
@@ -100,9 +107,8 @@ struct ChatMessageListView: View {
                                     },
                                     readReceiptPeerAvatarURL: peerAvatarURL,
                                     readReceiptPeerName: peerDisplayName,
-                                    showsReadReceiptAvatar: item.message.id == latestReadOutgoingMessageId,
-                                    readReceiptNamespace: readReceiptAvatarNamespace,
-                                    conversationId: conversationId ?? item.message.conversationId
+                                    showsReadReceiptAvatar: showsPeerReadAvatar
+                                        && item.message.id == latestReadOutgoingMessageId,
                                 )
                                 .opacity(reactionFocusMessageId == item.message.id ? 0 : 1)
                                 .allowsHitTesting(reactionFocusMessageId != item.message.id)
@@ -113,6 +119,12 @@ struct ChatMessageListView: View {
                                 guard item.message.id == messages.first?.id else { return }
                                 Task { await viewModel.loadOlderMessagesIfNeeded(current: item.message) }
                             }
+                        }
+
+                        if !viewModel.typingUserIds.isEmpty {
+                            MessageTypingIndicatorBubble()
+                                .id("typing-indicator")
+                                .transition(ChatScrollAnimation.messageInsert)
                         }
 
                         Color.clear
@@ -130,6 +142,7 @@ struct ChatMessageListView: View {
                         prefetchRecentThreadMedia()
                     }
                 }
+                .scrollDismissesKeyboard(.immediately)
                 .modifier(ChatBottomScrollAnchorModifier())
                 .onChange(of: viewModel.prependAnchorMessageId) { anchorId in
                     guard let anchorId else { return }
@@ -143,6 +156,13 @@ struct ChatMessageListView: View {
                     listPanGesture,
                     // Keep list pan off while focus is open — it steals vertical pans from
                     // the capped-message ScrollView inside the overlay.
+                    including: reactionFocusMessageId == nil ? .all : .none
+                )
+                .simultaneousGesture(
+                    TapGesture().onEnded {
+                        hideKeyboard()
+                        onDismissKeyboard()
+                    },
                     including: reactionFocusMessageId == nil ? .all : .none
                 )
 
@@ -187,14 +207,34 @@ struct ChatMessageListView: View {
                 }
                 .allowsHitTesting(reactionFocusMessageId != nil)
             }
-            .onAppear {
-                if viewModel.scrollToMessageToken == 0 {
-                    scrollToBottom(proxy: proxy, animated: false)
+            .task(id: bottomScrollTaskKey) {
+                guard viewModel.scrollToMessageToken == 0 else { return }
+                guard viewModel.highlightedMessageId == nil else { return }
+                guard viewModel.prependAnchorMessageId == nil else { return }
+                guard !viewModel.messages.isEmpty || !viewModel.typingUserIds.isEmpty else { return }
+
+                let tokenIncreased = viewModel.scrollToBottomToken > lastHandledScrollToBottomToken
+                let isInitial = !hasCompletedInitialBottomScroll
+                if !isInitial, !tokenIncreased, !viewModel.isNearBottom { return }
+
+                if tokenIncreased {
+                    lastHandledScrollToBottomToken = viewModel.scrollToBottomToken
                 }
+
+                scrollToBottom(
+                    proxy: proxy,
+                    animated: !isInitial && tokenIncreased
+                )
+                hasCompletedInitialBottomScroll = true
             }
-            .onChange(of: viewModel.scrollToBottomToken) { token in
-                guard token > 0 else { return }
-                scrollToBottom(proxy: proxy, animated: token > 1)
+            .onChange(of: viewModel.typingUserIds) { ids in
+                guard !ids.isEmpty else { return }
+                guard viewModel.isNearBottom || !hasCompletedInitialBottomScroll else { return }
+                scrollToBottom(proxy: proxy, animated: true)
+            }
+            .onChange(of: conversationId) { _ in
+                hasCompletedInitialBottomScroll = false
+                lastHandledScrollToBottomToken = 0
             }
             .onChange(of: viewModel.scrollToMessageToken) { token in
                 guard token > 0, let targetId = viewModel.highlightedMessageId else { return }
@@ -207,6 +247,11 @@ struct ChatMessageListView: View {
                 )
             }
         }
+    }
+
+    private var bottomScrollTaskKey: String {
+        let last = viewModel.messages.last?.clientMessageId.uuidString ?? "none"
+        return "\(last)-\(viewModel.scrollToBottomToken)-\(viewModel.typingUserIds.count)"
     }
 
     private var listPanGesture: some Gesture {
@@ -227,15 +272,41 @@ struct ChatMessageListView: View {
                     }
                     guard abs(horizontal) > vertical * 0.85 else { return }
 
-                    if let hit = messageHit(at: value.startLocation) {
-                        listPanSession = .replySwiping(
-                            messageId: hit.messageId,
-                            isOutgoing: hit.isOutgoing
-                        )
-                        replySwipeMessageId = hit.messageId
-                    } else {
-                        listPanSession = .revealingTimestamps
+                    let start = value.startLocation
+                    // Leading edge: UIKit interactive pop owns this band — never classify list pans here.
+                    if start.x < Self.navigationBackEdgeWidth {
+                        return
                     }
+
+                    let inLeadingTimestampBand = start.x < Self.navigationBackEdgeWidth + Self.timestampEdgeBandWidth
+                    let screenWidth = UIScreen.main.bounds.width
+                    let inTrailingTimestampBand = start.x > screenWidth - Self.navigationBackEdgeWidth - Self.timestampEdgeBandWidth
+
+                    if let hit = messageHit(at: start) {
+                        let inReplyDirection = hit.isOutgoing
+                            ? horizontal < -4
+                            : horizontal > 4
+                        let inTimestampDirection = hit.isOutgoing
+                            ? horizontal > 4
+                            : horizontal < -4
+                        if inReplyDirection {
+                            listPanSession = .replySwiping(
+                                messageId: hit.messageId,
+                                isOutgoing: hit.isOutgoing
+                            )
+                            replySwipeMessageId = hit.messageId
+                        } else if inTimestampDirection, inLeadingTimestampBand || inTrailingTimestampBand {
+                            listPanSession = .revealingTimestamps
+                        } else {
+                            return
+                        }
+                    } else if inLeadingTimestampBand || inTrailingTimestampBand {
+                        listPanSession = .revealingTimestamps
+                    } else {
+                        return
+                    }
+                    hideKeyboard()
+                    onDismissKeyboard()
                 case .revealingTimestamps, .replySwiping:
                     break
                 }
@@ -257,7 +328,7 @@ struct ChatMessageListView: View {
                     if distance <= Self.replySwipeMaxOffset {
                         eased = distance
                     } else {
-                        eased = Self.replySwipeMaxOffset + (distance - Self.replySwipeMaxOffset) * 0.2
+                        eased = Self.replySwipeMaxOffset + (distance - Self.replySwipeMaxOffset) * 0.28
                     }
                     let signed = eased * (raw < 0 ? -1 : 1)
                     withTransaction(transaction) {
@@ -273,7 +344,7 @@ struct ChatMessageListView: View {
 
                 switch endedSession {
                 case .revealingTimestamps:
-                    withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.86)) {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.62)) {
                         timestampRevealTranslation = 0
                     }
                 case .replySwiping(let messageId, let isOutgoing):
@@ -289,10 +360,15 @@ struct ChatMessageListView: View {
                         Self.replySwipeImpact.impactOccurred()
                         beginReply(to: item)
                     }
-                    withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.86)) {
+                    let finishingId = messageId
+                    withAnimation(.spring(response: 0.42, dampingFraction: 0.58)) {
                         replySwipeTranslation = 0
                     }
-                    replySwipeMessageId = nil
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.48) {
+                        if replySwipeMessageId == finishingId, abs(replySwipeTranslation) < 0.5 {
+                            replySwipeMessageId = nil
+                        }
+                    }
                 case .undecided, .scrolling:
                     replySwipeMessageId = nil
                     replySwipeTranslation = 0
@@ -306,14 +382,33 @@ struct ChatMessageListView: View {
     }
 
     private func messageHit(at globalPoint: CGPoint) -> MessageHit? {
-        for (id, frame) in MessageReactionAnchorStore.shared.frames where frame.insetBy(dx: -6, dy: -4).contains(globalPoint) {
+        let visibleIds = Set(messages.map(\.id))
+        MessageReactionAnchorStore.shared.frames = MessageReactionAnchorStore.shared.frames.filter {
+            visibleIds.contains($0.key)
+        }
+
+        var best: (hit: MessageHit, distance: CGFloat)?
+
+        for (id, frame) in MessageReactionAnchorStore.shared.frames {
+            guard frame.width > 1, frame.height > 1 else { continue }
+            guard frame.contains(globalPoint) else { continue }
             guard let message = messages.first(where: { $0.id == id }) else { continue }
-            return MessageHit(
+
+            let distance = abs(globalPoint.y - frame.midY)
+            let hit = MessageHit(
                 messageId: id,
                 isOutgoing: message.senderId == currentUserId
             )
+            if let current = best {
+                if distance < current.distance {
+                    best = (hit, distance)
+                }
+            } else {
+                best = (hit, distance)
+            }
         }
-        return nil
+
+        return best?.hit
     }
 
     private func reactionFocusContext(
@@ -407,22 +502,36 @@ struct ChatMessageListView: View {
     }
 
     private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
-        guard viewModel.messages.last != nil else { return }
+        let hasMessages = viewModel.messages.last != nil
+        let hasTyping = !viewModel.typingUserIds.isEmpty
+        guard hasMessages || hasTyping else { return }
 
         func performScroll(useAnimation: Bool) {
-            if useAnimation {
-                withAnimation(ChatScrollAnimation.spring) {
-                    proxy.scrollTo(ChatScrollAnimation.bottomAnchor, anchor: .bottom)
+            let scroll = { (id: AnyHashable, anchor: UnitPoint) in
+                if useAnimation {
+                    withAnimation(ChatScrollAnimation.spring) {
+                        proxy.scrollTo(id, anchor: anchor)
+                    }
+                } else {
+                    proxy.scrollTo(id, anchor: anchor)
                 }
-            } else {
-                proxy.scrollTo(ChatScrollAnimation.bottomAnchor, anchor: .bottom)
             }
+
+            if hasTyping {
+                scroll("typing-indicator", .bottom)
+            }
+            if let lastClientId = viewModel.messages.last?.clientMessageId {
+                scroll(lastClientId, .bottom)
+            }
+            scroll(ChatScrollAnimation.bottomAnchor, .bottom)
         }
 
-        // Immediate + one layout-settled retry (LazyVStack / keyboard timing).
+        // LazyVStack may not have laid out the bottom rows yet — retry after layout passes.
         performScroll(useAnimation: false)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            performScroll(useAnimation: animated)
+        for delay in [0.05, 0.12, 0.25, 0.45, 0.7] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                performScroll(useAnimation: animated && delay >= 0.25)
+            }
         }
     }
 

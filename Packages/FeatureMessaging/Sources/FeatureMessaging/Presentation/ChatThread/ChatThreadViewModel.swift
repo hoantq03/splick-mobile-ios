@@ -33,6 +33,7 @@ public final class ChatThreadViewModel: ObservableObject {
     @Published public private(set) var threadSearchHits: [MessageSearchHit] = []
     @Published public private(set) var threadSearchState: LoadingState<[MessageSearchHit]> = .idle
     @Published public private(set) var activeThreadSearchQuery = ""
+    @Published public private(set) var typingUserIds: [UUID] = []
 
     private static let maxPagesForMessageLookup = 10
     private static let pageSize = 30
@@ -73,6 +74,10 @@ public final class ChatThreadViewModel: ObservableObject {
     private var pathMonitorHandlerId: UUID?
     private var foregroundObserver: NSObjectProtocol?
     private var threadSearchTask: Task<Void, Never>?
+    private var remoteTypingTimeouts: [UUID: Task<Void, Never>] = [:]
+    private var localTypingIdleTask: Task<Void, Never>?
+    private var lastTypingStartSentAt: Date?
+    private var isLocallyTyping = false
 
     public init(
         conversationId: UUID,
@@ -133,6 +138,38 @@ public final class ChatThreadViewModel: ObservableObject {
         case .idle, .failed:
             await load()
         }
+    }
+
+    public func onComposerTextChanged(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            stopLocalTyping()
+            return
+        }
+        let now = Date()
+        let shouldSendStart = !isLocallyTyping
+            || now.timeIntervalSince(lastTypingStartSentAt ?? .distantPast)
+            >= MessagingTypingTiming.startRefresh
+        if shouldSendStart {
+            wsClient.sendTyping(conversationId: conversationId, isTyping: true)
+            lastTypingStartSentAt = now
+            isLocallyTyping = true
+        }
+        localTypingIdleTask?.cancel()
+        localTypingIdleTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(MessagingTypingTiming.idleStop))
+            guard !Task.isCancelled else { return }
+            self?.stopLocalTyping()
+        }
+    }
+
+    public func stopLocalTyping() {
+        localTypingIdleTask?.cancel()
+        localTypingIdleTask = nil
+        guard isLocallyTyping else { return }
+        isLocallyTyping = false
+        lastTypingStartSentAt = nil
+        wsClient.sendTyping(conversationId: conversationId, isTyping: false)
     }
 
     public func onThreadSearchQueryChanged(_ query: String) {
@@ -296,6 +333,7 @@ public final class ChatThreadViewModel: ObservableObject {
     }
 
     public func send(body: String, submissions: [CommentSubmissionAttachment]) async {
+        stopLocalTyping()
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty || !submissions.isEmpty else { return }
 
@@ -836,8 +874,12 @@ public final class ChatThreadViewModel: ObservableObject {
                         self.clearPending(clientMessageId: msg.clientMessageId)
                     }
 
-                case .readReceipt(let convId, _, let upToMessageId, let upToSequence) where convId == self.conversationId:
-                    self.applyReadReceipt(upToMessageId: upToMessageId, upToSequence: upToSequence)
+                case .readReceipt(let convId, let readerId, let upToMessageId, let upToSequence) where convId == self.conversationId:
+                    self.applyReadReceipt(
+                        readerId: readerId,
+                        upToMessageId: upToMessageId,
+                        upToSequence: upToSequence
+                    )
 
                 case .deliveryAck(let convId, let messageId) where convId == self.conversationId:
                     self.applyDeliveryAck(messageId: messageId)
@@ -848,11 +890,37 @@ public final class ChatThreadViewModel: ObservableObject {
                 case .messageRecalled(let convId, let messageId, _) where convId == self.conversationId:
                     self.applyRecalledMessage(messageId: messageId)
 
+                case .typing(let convId, let userId, let isTyping) where convId == self.conversationId:
+                    self.applyRemoteTyping(userId: userId, isTyping: isTyping)
+
                 default:
                     break
                 }
             }
             .store(in: &cancellables)
+    }
+
+    private func applyRemoteTyping(userId: UUID, isTyping: Bool) {
+        guard userId != currentUserId else { return }
+        remoteTypingTimeouts[userId]?.cancel()
+        if isTyping {
+            if !typingUserIds.contains(userId) {
+                typingUserIds.append(userId)
+            }
+            remoteTypingTimeouts[userId] = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(MessagingTypingTiming.displayTimeout))
+                guard !Task.isCancelled else { return }
+                self?.removeRemoteTypingUser(userId)
+            }
+        } else {
+            removeRemoteTypingUser(userId)
+        }
+    }
+
+    private func removeRemoteTypingUser(_ userId: UUID) {
+        remoteTypingTimeouts[userId]?.cancel()
+        remoteTypingTimeouts[userId] = nil
+        typingUserIds.removeAll { $0 == userId }
     }
 
     private func bindNetworkRetry() {
@@ -878,77 +946,33 @@ public final class ChatThreadViewModel: ObservableObject {
     }
 
     private func applyDeliveryAck(messageId: UUID) {
-        guard case .loaded(var messages) = state else { return }
-        guard let ackIndex = messages.firstIndex(where: { $0.id == messageId }) else { return }
-        let ackMessage = messages[ackIndex]
-        let ackSequence = ackMessage.sequenceNo
-        let ackCreatedAt = ackMessage.createdAt
-
-        var changed = false
-        for index in messages.indices {
-            let message = messages[index]
-            guard message.senderId == currentUserId,
-                  message.deliveryStatus == .sent || message.deliveryStatus == .sending
-            else { continue }
-
-            let covers: Bool
-            if ackSequence > 0, message.sequenceNo > 0 {
-                covers = message.sequenceNo <= ackSequence
-            } else {
-                covers = message.createdAt <= ackCreatedAt
-            }
-            guard covers else { continue }
-
-            messages[index] = message.updating(deliveryStatus: .delivered)
-            changed = true
+        guard case .loaded(let messages) = state,
+              let next = MessageReadReceiptPresentation.applyingDeliveryAck(
+                to: messages,
+                currentUserId: currentUserId,
+                messageId: messageId
+              ) else { return }
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            state = .loaded(next)
         }
-        if changed {
-            var transaction = Transaction()
-            transaction.animation = nil
-            withTransaction(transaction) {
-                state = .loaded(messages)
-            }
-            persistCache()
-        }
+        persistCache()
     }
 
-    private func applyReadReceipt(upToMessageId: UUID, upToSequence: Int64?) {
-        guard case .loaded(var messages) = state else { return }
-
-        let upToIndex = messages.firstIndex(where: { $0.id == upToMessageId })
-        var changed = false
-
-        if let upToIndex {
-            for index in 0...upToIndex {
-                let message = messages[index]
-                guard message.senderId == currentUserId,
-                      message.deliveryStatus != .read,
-                      message.deliveryStatus != .failed else { continue }
-                messages[index] = message.updating(deliveryStatus: .read)
-                changed = true
-            }
-        } else if let upToSequence, upToSequence > 0 {
-            // Message not in the loaded window — mark own messages by sequence.
-            for index in messages.indices {
-                let message = messages[index]
-                guard message.senderId == currentUserId,
-                      message.sequenceNo > 0,
-                      message.sequenceNo <= upToSequence,
-                      message.deliveryStatus != .read,
-                      message.deliveryStatus != .failed else { continue }
-                messages[index] = message.updating(deliveryStatus: .read)
-                changed = true
-            }
-        } else {
-            return
+    private func applyReadReceipt(readerId: UUID, upToMessageId: UUID, upToSequence: Int64?) {
+        guard case .loaded(let messages) = state,
+              let next = MessageReadReceiptPresentation.applyingReadReceipt(
+                to: messages,
+                currentUserId: currentUserId,
+                readerId: readerId,
+                upToMessageId: upToMessageId,
+                upToSequence: upToSequence
+              ) else { return }
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+            state = .loaded(next)
         }
-
-        if changed {
-            withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
-                state = .loaded(messages)
-            }
-            persistCache()
-        }
+        persistCache()
     }
 
     private func applyEditedMessage(messageId: UUID, body: String) {

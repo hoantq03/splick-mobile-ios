@@ -7,10 +7,8 @@ struct MessageStatusIndicator: View {
     var showsReadAvatar: Bool = false
     var readAvatarURL: URL? = nil
     var readAvatarName: String = ""
-    var readAvatarNamespace: Namespace.ID? = nil
-    var conversationId: UUID? = nil
 
-    static let tickSize: CGFloat = 14
+    static let tickSize: CGFloat = 18
 
     var body: some View {
         switch status {
@@ -24,7 +22,7 @@ struct MessageStatusIndicator: View {
                 Circle()
                     .stroke(SplickTheme.Colors.primaryGradientStart, lineWidth: 1.5)
                 Image(systemName: "checkmark")
-                    .font(.system(size: 7, weight: .bold))
+                    .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
             }
             .frame(width: Self.tickSize, height: Self.tickSize)
@@ -34,7 +32,7 @@ struct MessageStatusIndicator: View {
                 Circle()
                     .fill(SplickTheme.Colors.primaryGradientStart)
                 Image(systemName: "checkmark")
-                    .font(.system(size: 7, weight: .bold))
+                    .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(SplickTheme.Colors.background)
                     .blendMode(.destinationOut)
             }
@@ -44,6 +42,8 @@ struct MessageStatusIndicator: View {
         case .read:
             if showsReadAvatar {
                 readAvatar
+                    .frame(width: Self.tickSize, height: Self.tickSize)
+                    .clipShape(Circle())
             } else {
                 Color.clear
                     .frame(width: Self.tickSize, height: Self.tickSize)
@@ -56,19 +56,7 @@ struct MessageStatusIndicator: View {
 
     @ViewBuilder
     private var readAvatar: some View {
-        let avatar = readAvatarContent
-            .frame(width: Self.tickSize, height: Self.tickSize)
-            .clipShape(Circle())
-
-        if let readAvatarNamespace, let conversationId {
-            avatar
-                .matchedGeometryEffect(
-                    id: "readReceiptAvatar-\(conversationId.uuidString)",
-                    in: readAvatarNamespace
-                )
-        } else {
-            avatar
-        }
+        readAvatarContent
     }
 
     @ViewBuilder
@@ -94,7 +82,7 @@ struct MessageStatusIndicator: View {
             .fill(SplickTheme.Colors.primaryGradientStart.opacity(0.35))
             .overlay {
                 Text(initials)
-                    .font(.system(size: 6, weight: .bold))
+                    .font(.system(size: 8, weight: .bold))
                     .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
             }
     }

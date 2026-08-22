@@ -9,6 +9,8 @@ struct MessageQuotedReplyView: View {
     let preview: MessageReplyPreview
     let isOutgoing: Bool
     var usesBubbleTextColors: Bool = true
+    /// Caps quote width so long replies wrap instead of stretching the bubble.
+    var maxContentWidth: CGFloat? = nil
 
     var body: some View {
         HStack(spacing: SplickTheme.Spacing.xs) {
@@ -27,13 +29,14 @@ struct MessageQuotedReplyView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(textColor)
                     .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(maxWidth: maxContentWidth, alignment: .leading)
         .padding(.leading, 6)
         .padding(.vertical, 5)
         .padding(.trailing, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             if let cardFill {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)

@@ -246,22 +246,34 @@ public struct ConversationListView: View {
             LoadingView(message: languageService.text(.messagingLoading))
 
         case .loaded(let items) where items.isEmpty && viewModel.activeFilter == nil:
-            EmptyStateView(
-                icon: "bubble.left.and.bubble.right",
-                title: languageService.text(.messagingEmptyTitle),
-                message: languageService.text(.messagingEmptyMessage)
-            )
+            inboxRefreshScroll(controller: refreshController) {
+                await viewModel.refresh()
+            } content: {
+                EmptyStateView(
+                    icon: "bubble.left.and.bubble.right",
+                    title: languageService.text(.messagingEmptyTitle),
+                    message: languageService.text(.messagingEmptyMessage)
+                )
+            }
 
         case .loaded where viewModel.conversations.isEmpty:
-            filterEmptyState
+            inboxRefreshScroll(controller: refreshController) {
+                await viewModel.refresh()
+            } content: {
+                filterEmptyState
+            }
 
         case .loaded:
             conversationList(viewModel.conversations)
                 .allowsHitTesting(viewModel.peekConversation == nil)
 
         case .failed(let message):
-            ErrorView(message: message) {
-                Task { await viewModel.load() }
+            inboxRefreshScroll(controller: refreshController) {
+                await viewModel.refresh()
+            } content: {
+                ErrorView(message: message) {
+                    Task { await viewModel.load() }
+                }
             }
         }
     }
@@ -281,14 +293,34 @@ public struct ConversationListView: View {
             }
 
         case .loaded(let results) where results.isEmpty:
-            EmptyStateView(
-                icon: "magnifyingglass",
-                title: languageService.text(.messagingSearchEmptyTitle),
-                message: languageService.text(.messagingSearchEmptyMessage)
-            )
+            inboxRefreshScroll(controller: searchRefreshController) {
+                await viewModel.refreshSearch(query: searchDraft)
+            } content: {
+                EmptyStateView(
+                    icon: "magnifyingglass",
+                    title: languageService.text(.messagingSearchEmptyTitle),
+                    message: languageService.text(.messagingSearchEmptyMessage)
+                )
+            }
 
         case .idle, .loading, .loaded:
             searchResultsList(viewModel.searchResults)
+        }
+    }
+
+    private func inboxRefreshScroll<Content: View>(
+        controller: SplickRefreshController,
+        action: @escaping () async -> Void,
+        @ViewBuilder content: @escaping () -> Content
+    ) -> some View {
+        GeometryReader { geo in
+            ScrollView {
+                content()
+                    .frame(width: geo.size.width, height: max(geo.size.height, 1))
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .tabBarHideOnScroll()
+            .splickNativeRefreshable(controller: controller, action: action)
         }
     }
 
@@ -463,14 +495,34 @@ public struct ConversationListView: View {
         )
     }
 
-    @ViewBuilder
+    private func typingPreview(for conversation: Conversation) -> String? {
+        let userIds = viewModel.typingUserIdsByConversation[conversation.id] ?? []
+        return MessagingTypingCopy.inboxPreview(
+            userIds: userIds,
+            nameForUserId: { userId in
+                if let peer = conversation.peer, peer.userId == userId {
+                    return peer.displayTitle
+                }
+                if conversation.lastMessage?.senderId == userId {
+                    return conversation.lastMessage?.senderDisplayName
+                }
+                return nil
+            },
+            typing: languageService.text(.messagingChatTyping),
+            fallbackName: conversation.peer?.displayTitle
+        )
+    }
+
     private func conversationList(_ items: [Conversation]) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 0) {
                     Color.clear.frame(height: 0).id("messagingScrollTop")
                     ForEach(items) { conversation in
-                        ConversationRowView(conversation: conversation)
+                        ConversationRowView(
+                            conversation: conversation,
+                            typingPreview: typingPreview(for: conversation)
+                        )
                             .opacity(
                                 viewModel.peekConversation?.id == conversation.id ? 0 : 1
                             )

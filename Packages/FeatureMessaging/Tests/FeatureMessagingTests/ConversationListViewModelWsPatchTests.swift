@@ -152,6 +152,36 @@ final class ConversationListViewModelWsPatchTests: XCTestCase {
         XCTAssertEqual(viewModel.unreadConversationCount, 0)
         XCTAssertEqual(viewModel.conversations.first?.lastMessage?.body, "Sent by me")
     }
+
+    func test_typingEvent_tracksPeerForConversationPreview() async {
+        let conversationId = UUID()
+        let wsClient = MessagingWebSocketClient(
+            ticketProvider: { "ticket" },
+            deviceIdProvider: { "device" }
+        )
+        let viewModel = makeViewModel(wsClient: wsClient)
+
+        viewModel.handleIncomingTypingForTesting(
+            conversationId: conversationId,
+            userId: peerUserId,
+            isTyping: true
+        )
+        XCTAssertEqual(viewModel.typingUserIdsByConversation[conversationId], [peerUserId])
+
+        viewModel.handleIncomingTypingForTesting(
+            conversationId: conversationId,
+            userId: currentUserId,
+            isTyping: true
+        )
+        XCTAssertEqual(viewModel.typingUserIdsByConversation[conversationId], [peerUserId])
+
+        viewModel.handleIncomingTypingForTesting(
+            conversationId: conversationId,
+            userId: peerUserId,
+            isTyping: false
+        )
+        XCTAssertNil(viewModel.typingUserIdsByConversation[conversationId])
+    }
 }
 
 // Reuse peek stubs from the same test module.

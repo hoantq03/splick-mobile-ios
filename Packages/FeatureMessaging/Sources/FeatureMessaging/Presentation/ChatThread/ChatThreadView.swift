@@ -55,6 +55,7 @@ public struct ChatThreadView: View {
     public var body: some View {
         ZStack {
             threadContent
+                .dismissKeyboardOnTap()
             if isSearchingThread {
                 ChatThreadSearchOverlay(
                     viewModel: viewModel,
@@ -70,6 +71,7 @@ public struct ChatThreadView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .splickInteractivePopEnabled()
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Button(action: openChatHeader) {
@@ -81,10 +83,12 @@ public struct ChatThreadView: View {
                             name: navigationTitle,
                             size: .small
                         )
-                        Text(displayConversation?.displayTitle ?? navigationTitle)
-                            .font(SplickTheme.Typography.headline)
-                            .foregroundStyle(SplickTheme.Colors.textPrimary)
-                            .lineLimit(1)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(displayConversation?.displayTitle ?? navigationTitle)
+                                .font(SplickTheme.Typography.headline)
+                                .foregroundStyle(SplickTheme.Colors.textPrimary)
+                                .lineLimit(1)
+                        }
                     }
                 }
                 .buttonStyle(.plain)
@@ -222,7 +226,13 @@ public struct ChatThreadView: View {
                 groupConversation = conversation
             }
         }
-        .onDisappear { tabBarScrollState?.show() }
+        .onDisappear {
+            viewModel.stopLocalTyping()
+            tabBarScrollState?.show()
+        }
+        .onChange(of: inputText) { newValue in
+            viewModel.onComposerTextChanged(newValue)
+        }
         .task {
             async let messages: Void = viewModel.loadIfNeeded()
             async let relationship: Void = relationshipViewModel.loadIfNeeded()
@@ -548,7 +558,7 @@ public struct ChatThreadView: View {
         switch viewModel.state {
         case .idle, .loading:
             LoadingView(message: languageService.text(.messagingChatLoading))
-        case .loaded(let messages) where messages.isEmpty:
+        case .loaded(let messages) where messages.isEmpty && viewModel.typingUserIds.isEmpty:
             EmptyStateView(
                 icon: "bubble.left",
                 title: languageService.text(.messagingChatEmptyTitle),
@@ -562,8 +572,10 @@ public struct ChatThreadView: View {
                 senderDisplayName: senderDisplayName(for:),
                 userDisplayName: userDisplayName(for:),
                 onRequestComposerFocus: { isInputFocused = true },
+                onDismissKeyboard: { isInputFocused = false },
                 peerAvatarURL: peer?.avatarUrl.flatMap(URL.init(string:)),
                 peerDisplayName: peer?.displayTitle ?? "",
+                showsPeerReadAvatar: displayConversation?.isGroup != true,
                 conversationId: viewModel.conversationId,
                 bottomOverlayInset: viewModel.replyDraft == nil ? 64 : 118
             )
@@ -586,6 +598,7 @@ public struct ChatThreadView: View {
                 isSending: viewModel.isSending,
                 errorMessage: nil,
                 onSend: { text, submissions in
+                    viewModel.stopLocalTyping()
                     inputText = ""
                     Task { await viewModel.send(body: text, submissions: submissions) }
                 },

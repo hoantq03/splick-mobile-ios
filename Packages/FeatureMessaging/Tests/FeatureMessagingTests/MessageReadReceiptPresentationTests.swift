@@ -3,43 +3,52 @@ import XCTest
 import SplickDomain
 
 final class MessageReadReceiptPresentationTests: XCTestCase {
-    func test_latestReadOutgoingMessageId_returnsNewestReadOnly() {
-        let currentUserId = UUID()
-        let peerId = UUID()
-        let messages = [
-            ChatMessage(
-                id: UUID(),
-                conversationId: UUID(),
-                senderId: currentUserId,
-                body: "a",
-                clientMessageId: UUID(),
-                createdAt: Date(timeIntervalSince1970: 1),
-                deliveryStatus: .read
-            ),
-            ChatMessage(
-                id: UUID(),
-                conversationId: UUID(),
-                senderId: peerId,
-                body: "b",
-                clientMessageId: UUID(),
-                createdAt: Date(timeIntervalSince1970: 2),
-                deliveryStatus: .sent
-            ),
-            ChatMessage(
-                id: UUID(),
-                conversationId: UUID(),
-                senderId: currentUserId,
-                body: "c",
-                clientMessageId: UUID(),
-                createdAt: Date(timeIntervalSince1970: 3),
-                deliveryStatus: .read
-            ),
-        ]
+    private let me = UUID()
+    private let peer = UUID()
+    private let conversationId = UUID()
 
-        let latest = MessageReadReceiptPresentation.latestReadOutgoingMessageId(
-            in: messages,
-            currentUserId: currentUserId
+    func test_selfReceiptDoesNotMarkRead() {
+        let message = makeOutgoing(id: UUID(), sequence: 1, status: .delivered)
+        let next = MessageReadReceiptPresentation.applyingReadReceipt(
+            to: [message],
+            currentUserId: me,
+            readerId: me,
+            upToMessageId: message.id,
+            upToSequence: 1
         )
-        XCTAssertEqual(latest, messages[2].id)
+        XCTAssertNil(next)
+    }
+
+    func test_peerReceiptMarksOutgoingUpToCursor() {
+        let first = makeOutgoing(id: UUID(), sequence: 1, status: .delivered)
+        let second = makeOutgoing(id: UUID(), sequence: 2, status: .sent)
+        let third = makeOutgoing(id: UUID(), sequence: 3, status: .sent)
+        let next = MessageReadReceiptPresentation.applyingReadReceipt(
+            to: [first, second, third],
+            currentUserId: me,
+            readerId: peer,
+            upToMessageId: second.id,
+            upToSequence: 2
+        )
+        XCTAssertEqual(next?[0].deliveryStatus, .read)
+        XCTAssertEqual(next?[1].deliveryStatus, .read)
+        XCTAssertEqual(next?[2].deliveryStatus, .sent)
+        XCTAssertEqual(
+            MessageReadReceiptPresentation.latestReadOutgoingMessageId(in: next ?? [], currentUserId: me),
+            second.id
+        )
+    }
+
+    private func makeOutgoing(id: UUID, sequence: Int64, status: MessageDeliveryStatus) -> ChatMessage {
+        ChatMessage(
+            id: id,
+            conversationId: conversationId,
+            senderId: me,
+            body: "hi",
+            clientMessageId: id,
+            createdAt: Date(timeIntervalSince1970: TimeInterval(sequence)),
+            sequenceNo: sequence,
+            deliveryStatus: status
+        )
     }
 }

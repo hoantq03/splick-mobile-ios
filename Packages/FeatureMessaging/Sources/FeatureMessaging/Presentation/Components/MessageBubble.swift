@@ -37,8 +37,6 @@ struct MessageBubble: View {
     var readReceiptPeerAvatarURL: URL? = nil
     var readReceiptPeerName: String = ""
     var showsReadReceiptAvatar: Bool = false
-    var readReceiptNamespace: Namespace.ID? = nil
-    var conversationId: UUID? = nil
 
     @State private var imageViewerRoute: AttachmentPreviewRoute?
 
@@ -79,9 +77,10 @@ struct MessageBubble: View {
         return min(dragged, Self.timestampLabelWidth)
     }
 
-    /// Reply icon opens in the same slot as time, 1:1 with the finger — springs shut on release.
-    private var revealedReplyIconWidth: CGFloat {
-        min(abs(replySwipeTranslation), Self.accessorySlotWidth)
+    private var replyIconOpacity: Double {
+        let travel = abs(replySwipeTranslation)
+        guard travel >= 4 else { return 0 }
+        return Double(min(travel / 22, 1))
     }
 
     private var formattedTimestamp: String {
@@ -99,8 +98,8 @@ struct MessageBubble: View {
 
     private var focusLiftedBubble: some View {
         bubbleCluster
-            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: resolvedContentMaxWidth, alignment: isOutgoing ? .trailing : .leading)
+            .fixedSize(horizontal: true, vertical: true)
     }
 
     private var threadRow: some View {
@@ -112,7 +111,12 @@ struct MessageBubble: View {
                 incomingLeadingMeta
             }
 
-            bubbleCluster
+            slidingBubbleContent
+                .fixedSize(horizontal: true, vertical: false)
+                .offset(x: replySwipeTranslation)
+                .overlay(alignment: isOutgoing ? .trailing : .leading) {
+                    replyIconBadge
+                }
 
             if isOutgoing {
                 outgoingTrailingMeta
@@ -124,55 +128,53 @@ struct MessageBubble: View {
         .padding(.top, topSpacing)
     }
 
-    @ViewBuilder
-    private var incomingLeadingMeta: some View {
-        HStack(alignment: .center, spacing: SplickTheme.Spacing.xxs) {
-            replyRevealIcon
-            timestampRevealLabel
-        }
-        .fixedSize(horizontal: true, vertical: true)
-        .alignmentGuide(.messageDeliveryStatus) { dimensions in
-            dimensions[VerticalAlignment.center]
-        }
-        .allowsHitTesting(false)
-    }
-
-    @ViewBuilder
-    private var outgoingTrailingMeta: some View {
-        HStack(alignment: .center, spacing: SplickTheme.Spacing.xxs) {
-            if message.deliveryStatus != .failed {
+    private var slidingBubbleContent: some View {
+        HStack(alignment: .messageDeliveryStatus, spacing: SplickTheme.Spacing.xxs) {
+            bubbleCluster
+            if isOutgoing, message.deliveryStatus != .failed {
                 MessageStatusIndicator(
                     status: message.deliveryStatus,
                     showsReadAvatar: showsReadReceiptAvatar,
                     readAvatarURL: readReceiptPeerAvatarURL,
-                    readAvatarName: readReceiptPeerName,
-                    readAvatarNamespace: readReceiptNamespace,
-                    conversationId: conversationId
+                    readAvatarName: readReceiptPeerName
                 )
+                .alignmentGuide(.messageDeliveryStatus) { dimensions in
+                    dimensions[VerticalAlignment.center]
+                }
+                .allowsHitTesting(false)
             }
-            replyRevealIcon
-            timestampRevealLabel
         }
-        .fixedSize(horizontal: true, vertical: true)
-        .alignmentGuide(.messageDeliveryStatus) { dimensions in
-            dimensions[VerticalAlignment.center]
-        }
-        .allowsHitTesting(false)
     }
 
-    /// Reply affordance in the time slot — width tracks the finger 1:1, then snaps closed.
-    private var replyRevealIcon: some View {
+    @ViewBuilder
+    private var incomingLeadingMeta: some View {
+        timestampRevealLabel
+            .fixedSize(horizontal: true, vertical: true)
+            .alignmentGuide(.messageDeliveryStatus) { dimensions in
+                dimensions[VerticalAlignment.center]
+            }
+            .allowsHitTesting(false)
+    }
+
+    @ViewBuilder
+    private var outgoingTrailingMeta: some View {
+        timestampRevealLabel
+            .fixedSize(horizontal: true, vertical: true)
+            .alignmentGuide(.messageDeliveryStatus) { dimensions in
+                dimensions[VerticalAlignment.center]
+            }
+            .allowsHitTesting(false)
+    }
+
+    /// Stays in the original bubble gap while the bubble slides, then springs back.
+    private var replyIconBadge: some View {
         Image(systemName: "arrowshape.turn.up.left.fill")
             .font(.system(size: Self.replyIconSize, weight: .semibold))
             .foregroundStyle(SplickTheme.Colors.textSecondary)
             .frame(width: Self.accessorySlotWidth, height: Self.accessorySlotWidth)
-            .frame(
-                width: revealedReplyIconWidth,
-                alignment: isOutgoing ? .leading : .trailing
-            )
-            .clipped()
-            .opacity(revealedReplyIconWidth < 4 ? 0 : Double(min(revealedReplyIconWidth / 14, 1)))
-            .accessibilityHidden(revealedReplyIconWidth < 8)
+            .scaleEffect(replyIconOpacity == 0 ? 0.82 : min(0.86 + abs(replySwipeTranslation) / 160, 1.08))
+            .opacity(replyIconOpacity)
+            .accessibilityHidden(replyIconOpacity < 0.35)
             .allowsHitTesting(false)
     }
 
@@ -208,6 +210,7 @@ struct MessageBubble: View {
             bubbleContent
                 .frame(
                     minWidth: reactionStripMinWidth,
+                    maxWidth: resolvedContentMaxWidth,
                     alignment: isOutgoing ? .trailing : .leading
                 )
                 .overlay(alignment: isOutgoing ? .bottomLeading : .bottomTrailing) {
@@ -315,26 +318,36 @@ struct MessageBubble: View {
     }
 
     private var textBubbleBody: some View {
-        // Quote + text share one clipped bubble. Putting the quote outside used
-        // outgoing white labels on the chat background, so the original message
-        // disappeared. `frame(maxWidth:)` still avoids ViewThatFits double-measure.
-        VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+        // Quote + text share one clipped bubble. ViewThatFits hugs short lines;
+        // long text wraps at textWrapMaxWidth.
+        let core = VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
             if imageAttachments.isEmpty, let preview = message.replyPreview {
                 MessageQuotedReplyView(
                     preview: preview,
                     isOutgoing: isOutgoing,
-                    usesBubbleTextColors: true
+                    usesBubbleTextColors: true,
+                    maxContentWidth: textWrapMaxWidth
                 )
             }
             if hasTextBody {
                 messageTextLabel(lineLimit: nil)
             }
         }
+
+        return ViewThatFits(in: .horizontal) {
+            core.fixedSize(horizontal: true, vertical: true)
+            core
+                .frame(maxWidth: textWrapMaxWidth, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
         .frame(maxWidth: textWrapMaxWidth, alignment: .leading)
-        .fixedSize(horizontal: false, vertical: true)
         .padding(.horizontal, SplickTheme.Spacing.sm + 2)
         .padding(.vertical, SplickTheme.Spacing.xs + 2)
-        .frame(minWidth: textReactionMinWidth, alignment: .leading)
+        .frame(
+            minWidth: textReactionMinWidth,
+            maxWidth: resolvedContentMaxWidth,
+            alignment: .leading
+        )
         .background(bubbleBackground)
         .clipShape(bubbleShape)
     }

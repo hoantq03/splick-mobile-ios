@@ -369,6 +369,71 @@ final class ChatThreadViewModelTests: XCTestCase {
         XCTAssertEqual(vm.messages.first(where: { $0.id == newerId })?.deliveryStatus, .delivered)
     }
 
+    func test_readReceipt_fromPeer_marksOutgoingAndIgnoresSelf() async {
+        let olderId = UUID()
+        let newerId = UUID()
+        let older = ChatMessage(
+            id: olderId,
+            conversationId: ChatThreadViewModelTestFixtures.conversationId,
+            senderId: ChatThreadViewModelTestFixtures.currentUserId,
+            body: "Older",
+            clientMessageId: olderId,
+            createdAt: Date(timeIntervalSince1970: 1),
+            sequenceNo: 1,
+            deliveryStatus: .delivered
+        )
+        let newer = ChatMessage(
+            id: newerId,
+            conversationId: ChatThreadViewModelTestFixtures.conversationId,
+            senderId: ChatThreadViewModelTestFixtures.currentUserId,
+            body: "Newer",
+            clientMessageId: newerId,
+            createdAt: Date(timeIntervalSince1970: 2),
+            sequenceNo: 2,
+            deliveryStatus: .delivered
+        )
+        let repo = StubMessagingRepository(messages: [newer, older])
+        let wsClient = makeTestWsClient()
+        let vm = makeViewModel(repo: repo, wsClient: wsClient)
+        await vm.load()
+
+        wsClient.eventSubject.send(
+            .readReceipt(
+                conversationId: ChatThreadViewModelTestFixtures.conversationId,
+                readerId: ChatThreadViewModelTestFixtures.currentUserId,
+                upToMessageId: newerId,
+                upToSequence: 2
+            )
+        )
+        await Task.yield()
+        XCTAssertEqual(vm.messages.first(where: { $0.id == newerId })?.deliveryStatus, .delivered)
+        XCTAssertNil(
+            MessageReadReceiptPresentation.latestReadOutgoingMessageId(
+                in: vm.messages,
+                currentUserId: ChatThreadViewModelTestFixtures.currentUserId
+            )
+        )
+
+        wsClient.eventSubject.send(
+            .readReceipt(
+                conversationId: ChatThreadViewModelTestFixtures.conversationId,
+                readerId: ChatThreadViewModelTestFixtures.senderId,
+                upToMessageId: newerId,
+                upToSequence: 2
+            )
+        )
+        await Task.yield()
+        XCTAssertEqual(vm.messages.first(where: { $0.id == olderId })?.deliveryStatus, .read)
+        XCTAssertEqual(vm.messages.first(where: { $0.id == newerId })?.deliveryStatus, .read)
+        XCTAssertEqual(
+            MessageReadReceiptPresentation.latestReadOutgoingMessageId(
+                in: vm.messages,
+                currentUserId: ChatThreadViewModelTestFixtures.currentUserId
+            ),
+            newerId
+        )
+    }
+
     // MARK: WS event from different conversation is ignored
 
     func test_wsEvent_fromDifferentConversation_isIgnored() async {
@@ -505,5 +570,42 @@ final class ChatThreadViewModelTests: XCTestCase {
         XCTAssertEqual(vm.messages.count, 1)
         XCTAssertEqual(vm.messages.first?.body, "Fresh")
         XCTAssertEqual(cache.entry(for: ChatThreadViewModelTestFixtures.conversationId)?.messages.first?.body, "Fresh")
+    }
+
+    func test_typingEvent_recordsPeerAndIgnoresSelf() async {
+        let repo = StubMessagingRepository(messages: [])
+        let wsClient = makeTestWsClient()
+        let vm = makeViewModel(repo: repo, wsClient: wsClient)
+        let peerId = ChatThreadViewModelTestFixtures.senderId
+
+        wsClient.eventSubject.send(
+            .typing(
+                conversationId: ChatThreadViewModelTestFixtures.conversationId,
+                userId: peerId,
+                isTyping: true
+            )
+        )
+        await Task.yield()
+        XCTAssertEqual(vm.typingUserIds, [peerId])
+
+        wsClient.eventSubject.send(
+            .typing(
+                conversationId: ChatThreadViewModelTestFixtures.conversationId,
+                userId: ChatThreadViewModelTestFixtures.currentUserId,
+                isTyping: true
+            )
+        )
+        await Task.yield()
+        XCTAssertEqual(vm.typingUserIds, [peerId])
+
+        wsClient.eventSubject.send(
+            .typing(
+                conversationId: ChatThreadViewModelTestFixtures.conversationId,
+                userId: peerId,
+                isTyping: false
+            )
+        )
+        await Task.yield()
+        XCTAssertTrue(vm.typingUserIds.isEmpty)
     }
 }

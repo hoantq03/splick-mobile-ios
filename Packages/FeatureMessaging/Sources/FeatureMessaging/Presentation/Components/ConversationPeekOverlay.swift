@@ -25,8 +25,6 @@ struct ConversationPeekOverlay: View {
     @State private var isOptionsRevealed = false
     @State private var isDismissing = false
     @State private var dismissIsArmed = false
-    @State private var optionsSize = CGSize(width: 188, height: 108)
-    @State private var didFreezeOptionsSize = false
 
     private static let dismissArmDelay: TimeInterval = 0.45
     private static let actionImpact = UIImpactFeedbackGenerator(style: .light)
@@ -38,14 +36,10 @@ struct ConversationPeekOverlay: View {
     var body: some View {
         GeometryReader { geometry in
             let insets = geometry.safeAreaInsets
-            let chromeTop = max(insets.top, Self.windowSafeAreaTop) + extraBelowIsland
-            let destFrame = previewDestinationFrame(
-                containerSize: geometry.size,
-                insets: insets,
-                chromeTop: chromeTop,
-                optionsSize: optionsSize
-            )
-            let currentFrame = isRevealed ? destFrame : context.anchorFrame
+            let topInset = max(insets.top, Self.windowSafeAreaTop)
+            let bottomInset = max(insets.bottom, Self.windowSafeAreaBottom)
+            let chromeTop = topInset + extraBelowIsland
+            let bottomPad = bottomInset + SplickTabBarMetrics.floatingClearance + edgeMargin
             let matchingRadius = max(
                 Self.displayCornerRadius - edgeMargin,
                 SplickTheme.CornerRadius.card
@@ -56,10 +50,6 @@ struct ConversationPeekOverlay: View {
                 bottomTrailingRadius: matchingRadius,
                 topTrailingRadius: SplickTheme.CornerRadius.card,
                 style: .continuous
-            )
-            let optionsOrigin = CGPoint(
-                x: insets.leading + edgeMargin,
-                y: chromeTop
             )
 
             ZStack(alignment: .topLeading) {
@@ -72,42 +62,32 @@ struct ConversationPeekOverlay: View {
                         dismissAnimated(completion: onDismiss)
                     }
 
-                optionsStack
-                    .fixedSize()
-                    .background(optionsSizeReader)
-                    .onPreferenceChange(PeekOptionsSizeKey.self) { size in
-                        guard size.width > 1, size.height > 1, !didFreezeOptionsSize else { return }
-                        didFreezeOptionsSize = true
-                        var transaction = Transaction()
-                        transaction.disablesAnimations = true
-                        withTransaction(transaction) {
-                            optionsSize = size
+                VStack(alignment: .leading, spacing: contentGap) {
+                    optionsStack
+                        .scaleEffect(
+                            isOptionsRevealed ? 1 : 0.72,
+                            anchor: .top
+                        )
+                        .opacity(isOptionsRevealed ? 1 : 0)
+                        .offset(y: isOptionsRevealed ? 0 : -16)
+                        .allowsHitTesting(isOptionsRevealed)
+
+                    previewCard(shape: previewShape)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .clipShape(previewShape)
+                        .compositingGroup()
+                        .onTapGesture {
+                            guard dismissIsArmed else { return }
+                            dismissAnimated(completion: onOpen)
                         }
-                    }
-                    .scaleEffect(
-                        isOptionsRevealed ? 1 : 0.72,
-                        anchor: .top
-                    )
-                    .opacity(isOptionsRevealed ? 1 : 0)
-                    .offset(y: isOptionsRevealed ? 0 : -16)
-                    .allowsHitTesting(isOptionsRevealed)
-                    .position(
-                        x: optionsOrigin.x + optionsSize.width / 2,
-                        y: optionsOrigin.y + optionsSize.height / 2
-                    )
-                    .compositingGroup()
-            }
-            .overlay {
-                previewCard(shape: previewShape)
-                    .frame(width: currentFrame.width, height: currentFrame.height)
-                    .clipShape(previewShape)
-                    .compositingGroup()
-                    .scaleEffect(isRevealed ? 1 : 0.96, anchor: .top)
-                    .position(x: currentFrame.midX, y: currentFrame.midY)
-                    .onTapGesture {
-                        guard dismissIsArmed else { return }
-                        dismissAnimated(completion: onOpen)
-                    }
+                }
+                .padding(.top, chromeTop)
+                .padding(.leading, insets.leading + edgeMargin)
+                .padding(.trailing, insets.trailing + edgeMargin)
+                .padding(.bottom, bottomPad)
+                .scaleEffect(isRevealed ? 1 : 0.96, anchor: .top)
+                .opacity(isRevealed ? 1 : 0)
+                .allowsHitTesting(isRevealed)
             }
         }
         .ignoresSafeArea()
@@ -131,12 +111,6 @@ struct ConversationPeekOverlay: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(languageService.text(.messagingConversationPeekA11y))
-    }
-
-    private var optionsSizeReader: some View {
-        GeometryReader { proxy in
-            Color.clear.preference(key: PeekOptionsSizeKey.self, value: proxy.size)
-        }
     }
 
     private var optionsStack: some View {
@@ -290,22 +264,6 @@ struct ConversationPeekOverlay: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func previewDestinationFrame(
-        containerSize: CGSize,
-        insets: EdgeInsets,
-        chromeTop: CGFloat,
-        optionsSize: CGSize
-    ) -> CGRect {
-        let left = insets.leading + edgeMargin
-        let right = containerSize.width - insets.trailing - edgeMargin
-        let bottom = containerSize.height - insets.bottom - SplickTabBarMetrics.floatingClearance - edgeMargin
-        let overlap = optionsSize.height * 0.55
-        let previewTop = min(chromeTop + optionsSize.height + contentGap - overlap, bottom - 120)
-        let width = max(right - left, 160)
-        let height = max(bottom - previewTop, 120)
-        return CGRect(x: left, y: previewTop, width: width, height: height)
-    }
-
     private static var displayCornerRadius: CGFloat {
         let screen = UIScreen.main
         if let radius = screen.value(forKey: "_displayCornerRadius") as? CGFloat, radius > 0 {
@@ -318,10 +276,18 @@ struct ConversationPeekOverlay: View {
     }
 
     private static var windowSafeAreaTop: CGFloat {
+        windowSafeAreaInsets.top
+    }
+
+    private static var windowSafeAreaBottom: CGFloat {
+        windowSafeAreaInsets.bottom
+    }
+
+    private static var windowSafeAreaInsets: UIEdgeInsets {
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
         let window = scenes.flatMap(\.windows).first(where: \.isKeyWindow)
             ?? scenes.first?.windows.first
-        return window?.safeAreaInsets.top ?? 59
+        return window?.safeAreaInsets ?? UIEdgeInsets(top: 59, left: 0, bottom: 34, right: 0)
     }
 
     private func dismissAnimated(completion: @escaping () -> Void) {
@@ -343,15 +309,4 @@ private enum ConversationPeekMotion {
     /// Return to the list row without oscillating past it.
     static let dismiss = Animation.spring(response: 0.30, dampingFraction: 0.86)
     static let dismissSettlingDelay: TimeInterval = 0.28
-}
-
-private struct PeekOptionsSizeKey: PreferenceKey {
-    static var defaultValue: CGSize = CGSize(width: 188, height: 108)
-
-    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
-        let next = nextValue()
-        if next.width > 1, next.height > 1, next.height < 400 {
-            value = next
-        }
-    }
 }
