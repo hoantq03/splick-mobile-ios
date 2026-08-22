@@ -1,5 +1,4 @@
 import SwiftUI
-import PhotosUI
 import UIKit
 import DesignSystem
 import Common
@@ -38,7 +37,6 @@ struct PostDetailView: View {
     @State private var gifPickerViewModel: GifPickerViewModel?
     @State private var detailScrollLocked = false
     @State private var cardPresentation: PostCardPresentation?
-    @State private var paymentEvidencePhotoPickerItems: [PhotosPickerItem] = []
     @State private var observedPendingCommentIds = Set<UUID>()
     @State private var commentsListMinHeight: CGFloat = 0
     @StateObject private var cardActions = PostCardActions()
@@ -204,9 +202,7 @@ struct PostDetailView: View {
                 )
                 await reloadEvidenceComments()
             },
-            customEmojiDependencies: customEmojiDependencies,
-            paymentEvidencePhotoPickerItems: $paymentEvidencePhotoPickerItems,
-            onPaymentEvidencePhotosPicked: preparePaymentEvidenceAttachments
+            customEmojiDependencies: customEmojiDependencies
         )
         .sheet(item: $profileRoute) { route in
             if let profileDependencies {
@@ -576,39 +572,6 @@ struct PostDetailView: View {
             await reloadEvidenceComments()
         }
         cardActions.makeGifPickerViewModel = makeGifPickerViewModel
-    }
-
-    @MainActor
-    private func preparePaymentEvidenceAttachments(from items: [PhotosPickerItem]) async {
-        guard !items.isEmpty else { return }
-        guard case .paymentEvidencePhotoPicker(let evidencePost) = cardPresentation else { return }
-
-        var attachments: [CommentSubmissionAttachment] = []
-        for (index, item) in items.prefix(3).enumerated() {
-            guard let data = try? await item.loadTransferable(type: Data.self),
-                  let image = UIImage(data: data),
-                  let jpegData = image.jpegData(compressionQuality: 0.92) else { continue }
-            attachments.append(
-                CommentSubmissionAttachment(
-                    kind: .image,
-                    data: jpegData,
-                    mimeType: "image/jpeg",
-                    fileName: "payment-proof-\(index + 1).jpg"
-                )
-            )
-        }
-
-        paymentEvidencePhotoPickerItems = []
-        guard !attachments.isEmpty,
-              let split = evidencePost.billSplitLine(for: feedViewModel.currentUser?.id ?? UUID()) else {
-            cardPresentation = nil
-            return
-        }
-        cardPresentation = .paymentEvidence(
-            evidencePost,
-            splitId: split.id,
-            attachments: attachments
-        )
     }
 
     /// Prevents the feed comment-row tap from passing through to the docked composer after push.

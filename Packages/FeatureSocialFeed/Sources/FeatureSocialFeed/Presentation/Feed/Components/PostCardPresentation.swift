@@ -1,6 +1,5 @@
 import Foundation
 import SwiftUI
-import PhotosUI
 import DesignSystem
 import Localization
 import SplickDomain
@@ -14,7 +13,6 @@ enum PostCardPresentation: Identifiable {
     case share(Post)
     case customEmojiUpload
     case paymentEvidence(Post, splitId: UUID, attachments: [CommentSubmissionAttachment])
-    case paymentEvidencePhotoPicker(Post)
 
     var id: String {
         switch self {
@@ -25,8 +23,6 @@ enum PostCardPresentation: Identifiable {
         case .customEmojiUpload: return "customEmojiUpload"
         case .paymentEvidence(let post, let splitId, _):
             return "paymentEvidence-\(post.id)-\(splitId)"
-        case .paymentEvidencePhotoPicker(let post):
-            return "paymentEvidencePicker-\(post.id)"
         }
     }
 
@@ -36,8 +32,7 @@ enum PostCardPresentation: Identifiable {
              .emojiPicker(let post),
              .viewers(let post),
              .share(let post),
-             .paymentEvidence(let post, _, _),
-             .paymentEvidencePhotoPicker(let post):
+             .paymentEvidence(let post, _, _):
             return post
         case .customEmojiUpload:
             return nil
@@ -75,32 +70,11 @@ struct PostCardPresentationHost: ViewModifier {
     let loadReactions: ((UUID) async throws -> [UserReactionSummary])?
     let onSubmitPaymentEvidence: ((UUID, UUID, String?, [CommentSubmissionAttachment]) async throws -> Void)?
     let customEmojiDependencies: CustomEmojiDependencies?
-    @Binding var paymentEvidencePhotoPickerItems: [PhotosPickerItem]
-    let onPaymentEvidencePhotosPicked: ([PhotosPickerItem]) async -> Void
 
     func body(content: Content) -> some View {
         content
             .sheet(item: $presentation) { item in
                 sheetContent(for: item)
-            }
-            .photosPicker(
-                isPresented: Binding(
-                    get: {
-                        if case .paymentEvidencePhotoPicker = presentation { return true }
-                        return false
-                    },
-                    set: { presented in
-                        if !presented, case .paymentEvidencePhotoPicker = presentation {
-                            presentation = nil
-                        }
-                    }
-                ),
-                selection: $paymentEvidencePhotoPickerItems,
-                maxSelectionCount: 3,
-                matching: .images
-            )
-            .onChange(of: paymentEvidencePhotoPickerItems) { items in
-                Task { await onPaymentEvidencePhotosPicked(items) }
             }
     }
 
@@ -158,21 +132,18 @@ struct PostCardPresentationHost: ViewModifier {
                     deleteEmojiUseCase: deps.deleteEmojiUseCase
                 )
             }
-        case .paymentEvidence(let post, _, let attachments):
+        case .paymentEvidence(let post, let splitId, let attachments):
             PaymentEvidenceSheet(
                 postAuthorName: post.author.displayName,
                 initialAttachments: attachments
             ) { message, submissionAttachments in
-                guard let split = post.billSplitLine(for: currentUser?.id ?? UUID()) else { return }
                 try await onSubmitPaymentEvidence?(
                     post.id,
-                    split.id,
+                    splitId,
                     message,
                     submissionAttachments
                 )
             }
-        case .paymentEvidencePhotoPicker:
-            EmptyView()
         }
     }
 }
@@ -188,9 +159,7 @@ extension View {
         onSubmitPaymentEvidence: (
             (UUID, UUID, String?, [CommentSubmissionAttachment]) async throws -> Void
         )?,
-        customEmojiDependencies: CustomEmojiDependencies?,
-        paymentEvidencePhotoPickerItems: Binding<[PhotosPickerItem]>,
-        onPaymentEvidencePhotosPicked: @escaping ([PhotosPickerItem]) async -> Void
+        customEmojiDependencies: CustomEmojiDependencies?
     ) -> some View {
         modifier(
             PostCardPresentationHost(
@@ -201,9 +170,7 @@ extension View {
                 onReact: onReact,
                 loadReactions: loadReactions,
                 onSubmitPaymentEvidence: onSubmitPaymentEvidence,
-                customEmojiDependencies: customEmojiDependencies,
-                paymentEvidencePhotoPickerItems: paymentEvidencePhotoPickerItems,
-                onPaymentEvidencePhotosPicked: onPaymentEvidencePhotosPicked
+                customEmojiDependencies: customEmojiDependencies
             )
         )
     }

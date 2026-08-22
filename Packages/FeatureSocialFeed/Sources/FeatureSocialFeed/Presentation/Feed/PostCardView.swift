@@ -370,7 +370,10 @@ struct PostCardView: View, Equatable {
                     evidenceWasRejected: currentUserSplitLine?.paymentStatus == .unpaid
                         && currentUserSplitLine?.lastRejectedAt != nil,
                     onPaymentTap: shouldShowPaymentEvidenceAction
-                        ? { actions.onPresent(.paymentEvidencePhotoPicker(post)) }
+                        ? {
+                            guard let splitId = currentUserSplitLine?.id else { return }
+                            actions.onPresent(.paymentEvidence(post, splitId: splitId, attachments: []))
+                        }
                         : nil
                 )
             }
