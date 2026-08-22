@@ -35,7 +35,10 @@ struct ChatMessageListView: View {
     /// Once a drag is classified (scroll / reply / timestamp), stick with it.
     @State private var listPanSession: ListPanSession = .undecided
     @State private var hasCompletedInitialBottomScroll = false
+    @State private var initialOpenBottomScrollPending = true
     @State private var lastHandledScrollToBottomToken = 0
+    @State private var lastAnchoredMessageClientId: UUID?
+    @State private var bottomScrollPosition: AnyHashable?
 
     private static let longPressImpact = UIImpactFeedbackGenerator(style: .medium)
     private static let replySwipeImpact = UIImpactFeedbackGenerator(style: .light)
@@ -114,7 +117,11 @@ struct ChatMessageListView: View {
                                 .allowsHitTesting(reactionFocusMessageId != item.message.id)
                             }
                             .id(item.message.clientMessageId)
-                            .transition(ChatScrollAnimation.messageInsert)
+                            .transition(
+                                hasCompletedInitialBottomScroll
+                                    ? ChatScrollAnimation.messageInsert
+                                    : .identity
+                            )
                             .onAppear {
                                 guard item.message.id == messages.first?.id else { return }
                                 Task { await viewModel.loadOlderMessagesIfNeeded(current: item.message) }
@@ -124,13 +131,24 @@ struct ChatMessageListView: View {
                         if !viewModel.typingUserIds.isEmpty {
                             MessageTypingIndicatorBubble()
                                 .id("typing-indicator")
-                                .transition(ChatScrollAnimation.messageInsert)
+                                .transition(
+                                    hasCompletedInitialBottomScroll
+                                        ? ChatScrollAnimation.messageInsert
+                                        : .identity
+                                )
                         }
 
                         Color.clear
                             .frame(height: 1)
                             .id(ChatScrollAnimation.bottomAnchor)
-                            .onAppear { viewModel.isNearBottom = true }
+                            .onAppear {
+                                viewModel.isNearBottom = true
+                                if initialOpenBottomScrollPending {
+                                    markInitialBottomScrollComplete()
+                                } else {
+                                    hasCompletedInitialBottomScroll = true
+                                }
+                            }
                             .onDisappear { viewModel.isNearBottom = false }
                     }
                     .padding(.horizontal, SplickTheme.Spacing.md)
@@ -143,7 +161,17 @@ struct ChatMessageListView: View {
                     }
                 }
                 .scrollDismissesKeyboard(.immediately)
-                .modifier(ChatBottomScrollAnchorModifier())
+                .modifier(
+                    ChatThreadScrollPositionModifier(
+                        scrollPosition: $bottomScrollPosition,
+                        bindsScrollPosition: initialOpenBottomScrollPending
+                    )
+                )
+                .opacity(hasCompletedInitialBottomScroll ? 1 : 0)
+                .animation(
+                    hasCompletedInitialBottomScroll ? .easeOut(duration: 0.12) : nil,
+                    value: hasCompletedInitialBottomScroll
+                )
                 .onChange(of: viewModel.prependAnchorMessageId) { anchorId in
                     guard let anchorId else { return }
                     // Keep visual position after older messages are prepended.
@@ -214,27 +242,69 @@ struct ChatMessageListView: View {
                 guard !viewModel.messages.isEmpty || !viewModel.typingUserIds.isEmpty else { return }
 
                 let tokenIncreased = viewModel.scrollToBottomToken > lastHandledScrollToBottomToken
-                let isInitial = !hasCompletedInitialBottomScroll
-                if !isInitial, !tokenIncreased, !viewModel.isNearBottom { return }
+                let isInitial = !hasCompletedInitialBottomScroll || initialOpenBottomScrollPending
+                if !isInitial,
+                   !tokenIncreased,
+                   !viewModel.isNearBottom,
+                   viewModel.typingUserIds.isEmpty { return }
 
                 if tokenIncreased {
                     lastHandledScrollToBottomToken = viewModel.scrollToBottomToken
                 }
 
-                scrollToBottom(
-                    proxy: proxy,
-                    animated: !isInitial && tokenIncreased
-                )
-                hasCompletedInitialBottomScroll = true
+                if !viewModel.typingUserIds.isEmpty {
+                    await scrollToTypingIndicatorUntilVisible(
+                        proxy: proxy,
+                        animated: tokenIncreased && !isInitial
+                    )
+                } else {
+                    await scrollToBottomUntilVisible(
+                        proxy: proxy,
+                        animated: false
+                    )
+                }
             }
-            .onChange(of: viewModel.typingUserIds) { ids in
-                guard !ids.isEmpty else { return }
-                guard viewModel.isNearBottom || !hasCompletedInitialBottomScroll else { return }
-                scrollToBottom(proxy: proxy, animated: true)
+            .task(id: typingScrollTaskKey) {
+                guard !viewModel.typingUserIds.isEmpty else { return }
+                guard viewModel.scrollToMessageToken == 0 else { return }
+                guard viewModel.highlightedMessageId == nil else { return }
+                await scrollToTypingIndicatorUntilVisible(
+                    proxy: proxy,
+                    animated: hasCompletedInitialBottomScroll && !initialOpenBottomScrollPending
+                )
+            }
+            .onChange(of: viewModel.messages.last?.clientMessageId) { newLast in
+                guard initialOpenBottomScrollPending, let newLast else { return }
+                guard newLast != lastAnchoredMessageClientId else { return }
+                lastAnchoredMessageClientId = newLast
+                syncBottomScrollPosition()
+                Task {
+                    await scrollToBottomUntilVisible(
+                        proxy: proxy,
+                        animated: false
+                    )
+                }
+            }
+            .onChange(of: viewModel.scrollToBottomToken) { token in
+                guard token > lastHandledScrollToBottomToken else { return }
+                guard viewModel.scrollToMessageToken == 0 else { return }
+                guard viewModel.highlightedMessageId == nil else { return }
+                lastHandledScrollToBottomToken = token
+                guard hasCompletedInitialBottomScroll else { return }
+                if !viewModel.typingUserIds.isEmpty {
+                    Task {
+                        await scrollToTypingIndicatorUntilVisible(proxy: proxy, animated: true)
+                    }
+                } else if !initialOpenBottomScrollPending {
+                    scrollToBottom(proxy: proxy, animated: true)
+                }
             }
             .onChange(of: conversationId) { _ in
                 hasCompletedInitialBottomScroll = false
+                initialOpenBottomScrollPending = true
                 lastHandledScrollToBottomToken = 0
+                lastAnchoredMessageClientId = nil
+                bottomScrollPosition = nil
             }
             .onChange(of: viewModel.scrollToMessageToken) { token in
                 guard token > 0, let targetId = viewModel.highlightedMessageId else { return }
@@ -249,9 +319,34 @@ struct ChatMessageListView: View {
         }
     }
 
-    private var bottomScrollTaskKey: String {
+    private var typingScrollTaskKey: String {
+        let ids = viewModel.typingUserIds.map(\.uuidString).sorted().joined(separator: ",")
         let last = viewModel.messages.last?.clientMessageId.uuidString ?? "none"
-        return "\(last)-\(viewModel.scrollToBottomToken)-\(viewModel.typingUserIds.count)"
+        return "\(conversationId?.uuidString ?? "none")-\(ids)-\(last)-\(viewModel.messages.count)"
+    }
+
+    private var bottomScrollTaskKey: String {
+        let conversation = conversationId?.uuidString ?? "none"
+        let last = viewModel.messages.last?.clientMessageId.uuidString ?? "none"
+        let count = viewModel.messages.count
+        return "\(conversation)-\(last)-\(count)-\(viewModel.scrollToBottomToken)-\(viewModel.typingUserIds.count)"
+    }
+
+    private func resolvedBottomScrollTarget() -> AnyHashable? {
+        if !viewModel.typingUserIds.isEmpty { return "typing-indicator" }
+        if let last = viewModel.messages.last?.clientMessageId { return last }
+        return ChatScrollAnimation.bottomAnchor
+    }
+
+    private func syncBottomScrollPosition() {
+        guard initialOpenBottomScrollPending else { return }
+        bottomScrollPosition = resolvedBottomScrollTarget()
+    }
+
+    private func markInitialBottomScrollComplete() {
+        hasCompletedInitialBottomScroll = true
+        initialOpenBottomScrollPending = false
+        lastAnchoredMessageClientId = viewModel.messages.last?.clientMessageId
     }
 
     private var listPanGesture: some Gesture {
@@ -501,37 +596,86 @@ struct ChatMessageListView: View {
         InteractionScrollLock.forceUnlock()
     }
 
+    private func scrollToTypingIndicatorUntilVisible(proxy: ScrollViewProxy, animated: Bool) async {
+        guard !viewModel.typingUserIds.isEmpty else { return }
+        let retryDelaysMs: [UInt64] = [0, 16, 48, 96, 160, 280, 450]
+        for (index, delayMs) in retryDelaysMs.enumerated() {
+            if delayMs > 0 {
+                try? await Task.sleep(for: .milliseconds(delayMs))
+            }
+            scrollToTypingIndicator(
+                proxy: proxy,
+                animated: animated && index == 0
+            )
+            if viewModel.isNearBottom { return }
+        }
+        scrollToTypingIndicator(proxy: proxy, animated: false)
+    }
+
+    private func scrollToTypingIndicator(proxy: ScrollViewProxy, animated: Bool) {
+        guard !viewModel.typingUserIds.isEmpty else { return }
+
+        let performScroll = {
+            proxy.scrollTo("typing-indicator", anchor: .bottom)
+            proxy.scrollTo(AnyHashable(ChatScrollAnimation.bottomAnchor), anchor: .bottom)
+        }
+
+        if animated {
+            withAnimation(ChatScrollAnimation.spring) {
+                performScroll()
+            }
+        } else {
+            performScroll()
+        }
+    }
+
+    private func scrollToBottomUntilVisible(proxy: ScrollViewProxy, animated: Bool) async {
+        let retryDelaysMs: [UInt64] = animated
+            ? [0, 50, 120]
+            : [0, 16, 48, 96, 160, 280, 450, 650, 900, 1_200]
+        syncBottomScrollPosition()
+        for delayMs in retryDelaysMs {
+            if delayMs > 0 {
+                try? await Task.sleep(for: .milliseconds(delayMs))
+            }
+            scrollToBottom(proxy: proxy, animated: false)
+            if viewModel.isNearBottom {
+                markInitialBottomScrollComplete()
+                return
+            }
+        }
+        // LazyVStack can miss the bottom anchor on the first pass — reveal anyway after
+        // the last programmatic scroll so the thread is never stuck invisible.
+        scrollToBottom(proxy: proxy, animated: false)
+        markInitialBottomScrollComplete()
+    }
+
     private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
         let hasMessages = viewModel.messages.last != nil
         let hasTyping = !viewModel.typingUserIds.isEmpty
         guard hasMessages || hasTyping else { return }
 
-        func performScroll(useAnimation: Bool) {
-            let scroll = { (id: AnyHashable, anchor: UnitPoint) in
-                if useAnimation {
-                    withAnimation(ChatScrollAnimation.spring) {
-                        proxy.scrollTo(id, anchor: anchor)
-                    }
-                } else {
-                    proxy.scrollTo(id, anchor: anchor)
-                }
-            }
-
-            if hasTyping {
-                scroll("typing-indicator", .bottom)
-            }
-            if let lastClientId = viewModel.messages.last?.clientMessageId {
-                scroll(lastClientId, .bottom)
-            }
-            scroll(ChatScrollAnimation.bottomAnchor, .bottom)
+        if hasTyping {
+            scrollToTypingIndicator(proxy: proxy, animated: animated)
+            return
         }
 
-        // LazyVStack may not have laid out the bottom rows yet — retry after layout passes.
-        performScroll(useAnimation: false)
-        for delay in [0.05, 0.12, 0.25, 0.45, 0.7] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                performScroll(useAnimation: animated && delay >= 0.25)
+        syncBottomScrollPosition()
+        let target = resolvedBottomScrollTarget() ?? AnyHashable(ChatScrollAnimation.bottomAnchor)
+
+        let performScroll = {
+            if let lastId = self.viewModel.messages.last?.clientMessageId {
+                proxy.scrollTo(lastId, anchor: .bottom)
             }
+            proxy.scrollTo(target, anchor: .bottom)
+        }
+
+        if animated {
+            withAnimation(ChatScrollAnimation.spring) {
+                performScroll()
+            }
+        } else {
+            performScroll()
         }
     }
 
@@ -547,10 +691,19 @@ struct ChatMessageListView: View {
     }
 }
 
-private struct ChatBottomScrollAnchorModifier: ViewModifier {
+private struct ChatThreadScrollPositionModifier: ViewModifier {
+    @Binding var scrollPosition: AnyHashable?
+    var bindsScrollPosition: Bool
+
     func body(content: Content) -> some View {
         if #available(iOS 17.0, *) {
-            content.defaultScrollAnchor(.bottom)
+            if bindsScrollPosition {
+                content
+                    .defaultScrollAnchor(.bottom)
+                    .scrollPosition(id: $scrollPosition, anchor: .bottom)
+            } else {
+                content
+            }
         } else {
             content
         }
