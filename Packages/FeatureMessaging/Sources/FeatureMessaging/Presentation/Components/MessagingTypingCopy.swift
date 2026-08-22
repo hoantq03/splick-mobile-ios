@@ -6,29 +6,52 @@ enum MessagingTypingTiming {
     static let displayTimeout: TimeInterval = 5
 }
 
-enum MessagingTypingCopy {
-    /// Inbox / conversation-list preview: "{display name}: Composing..."
-    /// For multiple typers, names are comma-separated before the colon.
-    static func inboxPreview(
-        userIds: [UUID],
-        nameForUserId: (UUID) -> String?,
-        typing: String,
-        fallbackName: String? = nil
-    ) -> String? {
-        guard !userIds.isEmpty else { return nil }
-        let names = userIds.compactMap(nameForUserId)
-        let namePrefix: String? = if !names.isEmpty {
-            Self.formatNamePrefix(names)
-        } else if let fallbackName, !fallbackName.isEmpty {
-            fallbackName
-        } else {
-            nil
-        }
-        guard let namePrefix else { return typing }
-        return "\(namePrefix): \(typing)"
+struct InboxTypingState: Equatable {
+    enum Layout: Equatable {
+        case direct
+        case group(username: String, avatarURL: URL?)
     }
 
-    /// Removes trailing ellipsis from inbox typing copy so animated dots can append in the UI.
+    let layout: Layout
+    /// Localized typing label without trailing ellipsis (animated in the row UI).
+    let typingBase: String
+}
+
+enum MessagingTypingCopy {
+    /// Direct chats: typing label only. Groups: first typer's given name / username + optional avatar.
+    static func inboxTypingState(
+        isGroup: Bool,
+        userIds: [UUID],
+        typing: String,
+        usernameForUserId: (UUID) -> String?
+    ) -> InboxTypingState? {
+        guard !userIds.isEmpty else { return nil }
+        let base = stripTrailingEllipsis(typing)
+        guard isGroup else {
+            return InboxTypingState(layout: .direct, typingBase: base)
+        }
+        let firstId = userIds[0]
+        let username = usernameForUserId(firstId)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let username, !username.isEmpty else {
+            return InboxTypingState(layout: .direct, typingBase: base)
+        }
+        return InboxTypingState(
+            layout: .group(username: username, avatarURL: nil),
+            typingBase: base
+        )
+    }
+
+    /// Prefer username; otherwise use the given name (last token of a full name).
+    static func givenName(from displayName: String?) -> String? {
+        guard var trimmed = displayName?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
+            return nil
+        }
+        if !trimmed.contains(" ") { return trimmed }
+        if trimmed.hasPrefix("@") { return String(trimmed.dropFirst()) }
+        return trimmed.split(separator: " ").last.map(String.init)
+    }
+
+    /// Removes trailing ellipsis so animated dots can append in the UI.
     static func stripTrailingEllipsis(_ text: String) -> String {
         var trimmed = text.trimmingCharacters(in: .whitespaces)
         if trimmed.hasSuffix("...") {
@@ -37,16 +60,5 @@ enum MessagingTypingCopy {
             trimmed = String(trimmed.dropLast())
         }
         return trimmed.trimmingCharacters(in: .whitespaces)
-    }
-
-    private static func formatNamePrefix(_ names: [String]) -> String {
-        switch names.count {
-        case 1:
-            return names[0]
-        case 2:
-            return "\(names[0]), \(names[1])"
-        default:
-            return "\(names[0]), \(names[1])"
-        }
     }
 }

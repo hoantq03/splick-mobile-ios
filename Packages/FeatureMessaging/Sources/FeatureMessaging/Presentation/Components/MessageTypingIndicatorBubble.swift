@@ -2,52 +2,61 @@ import SwiftUI
 import DesignSystem
 import Localization
 
-/// Inline peer typing row — incoming bubble with three dots cycling 1 → 2 → 3 (no bounce).
+/// Inline peer typing row — incoming bubble with three bouncing dots.
 struct MessageTypingIndicatorBubble: View {
     @EnvironmentObject private var languageService: LanguageService
 
     private static let bubbleCornerRadius: CGFloat = 24
-    private static let rowSideSpacer: CGFloat = 48
-    private static let timestampSlotWidth: CGFloat = 46
+    fileprivate static let dotSize: CGFloat = 7
+    private static let dotSpacing: CGFloat = 3
+    fileprivate static let bounceHeight: CGFloat = 4
+    fileprivate static let cycleDuration: TimeInterval = 0.48
+    fileprivate static let stagger: TimeInterval = 0.14
 
     var body: some View {
-        HStack(alignment: .center, spacing: SplickTheme.Spacing.xxs) {
-            Color.clear
-                .frame(width: Self.timestampSlotWidth)
-
-            CyclingTypingDotsView()
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: Self.bubbleCornerRadius, style: .continuous)
-                        .fill(SplickTheme.Colors.secondaryBackground)
-                )
-
-            Spacer(minLength: Self.rowSideSpacer)
+        MessageThreadIncomingRow(topSpacing: SplickTheme.Spacing.sm) {
+            HStack(spacing: Self.dotSpacing) {
+                ForEach(0..<3, id: \.self) { index in
+                    TypingDot(index: index)
+                }
+            }
+            .padding(.top, Self.bounceHeight)
+            .frame(minHeight: MessageThreadRowLayout.bubbleMinContentHeight)
+            .frame(maxHeight: .infinity)
+            .padding(.horizontal, MessageThreadRowLayout.bubbleHorizontalPadding)
+            .padding(.vertical, MessageThreadRowLayout.bubbleVerticalPadding)
+            .background(
+                RoundedRectangle(cornerRadius: Self.bubbleCornerRadius, style: .continuous)
+                    .fill(SplickTheme.Colors.secondaryBackground)
+            )
+            .frame(minHeight: MessageThreadRowLayout.typingBubbleMinHeight)
         }
-        .padding(.top, SplickTheme.Spacing.sm)
         .accessibilityLabel(languageService.text(.messagingChatTyping))
     }
 }
 
-/// Three dots; active count cycles 1 → 2 → 3 without vertical motion.
-struct CyclingTypingDotsView: View {
-    var dotSize: CGFloat = 8
-    var dotSpacing: CGFloat = 4
-    var activeColor: Color = SplickTheme.Colors.textSecondary.opacity(0.85)
-    var inactiveColor: Color = SplickTheme.Colors.textSecondary.opacity(0.28)
-    var stepDuration: TimeInterval = 0.45
+private struct TypingDot: View {
+    let index: Int
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: stepDuration)) { context in
-            let activeCount = Int(context.date.timeIntervalSinceReferenceDate / stepDuration) % 3 + 1
-            HStack(spacing: dotSpacing) {
-                ForEach(0..<3, id: \.self) { index in
-                    Circle()
-                        .fill(index < activeCount ? activeColor : inactiveColor)
-                        .frame(width: dotSize, height: dotSize)
-                }
-            }
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
+            let elapsed = context.date.timeIntervalSinceReferenceDate
+            let loop = MessageTypingIndicatorBubble.cycleDuration * 2
+            let phase = elapsed.truncatingRemainder(dividingBy: loop)
+            let local = (phase + MessageTypingIndicatorBubble.stagger * Double(index))
+                .truncatingRemainder(dividingBy: loop)
+            let normalized = local / MessageTypingIndicatorBubble.cycleDuration
+            let offsetY: CGFloat = normalized <= 1
+                ? -MessageTypingIndicatorBubble.bounceHeight * CGFloat(sin(normalized * .pi))
+                : 0
+
+            Circle()
+                .fill(SplickTheme.Colors.textSecondary.opacity(0.72))
+                .frame(
+                    width: MessageTypingIndicatorBubble.dotSize,
+                    height: MessageTypingIndicatorBubble.dotSize
+                )
+                .offset(y: offsetY)
         }
     }
 }

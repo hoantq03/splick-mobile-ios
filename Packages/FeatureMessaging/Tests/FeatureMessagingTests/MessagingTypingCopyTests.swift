@@ -2,37 +2,47 @@ import XCTest
 @testable import FeatureMessaging
 
 final class MessagingTypingCopyTests: XCTestCase {
-    func test_directUsesDisplayNameWithColon() {
+    func test_directShowsTypingLabelOnly() {
         let peer = UUID()
-        let label = MessagingTypingCopy.inboxPreview(
+        let state = MessagingTypingCopy.inboxTypingState(
+            isGroup: false,
             userIds: [peer],
-            nameForUserId: { _ in "Nam" },
-            typing: "Composing..."
-        )
-        XCTAssertEqual(label, "Nam: Composing...")
-    }
-
-    func test_directFallsBackToPeerNameWhenLookupMisses() {
-        let peer = UUID()
-        let label = MessagingTypingCopy.inboxPreview(
-            userIds: [peer],
-            nameForUserId: { _ in nil },
             typing: "Composing...",
-            fallbackName: "Peer"
+            usernameForUserId: { _ in "nam_user" }
         )
-        XCTAssertEqual(label, "Peer: Composing...")
+        XCTAssertEqual(state?.layout, .direct)
+        XCTAssertEqual(state?.typingBase, "Composing")
     }
 
-    func test_groupUsesCommaSeparatedNames() {
+    func test_groupShowsUsernameLayout() {
         let first = UUID()
-        let second = UUID()
-        let names = [first: "Nam", second: "Lan"]
-        let label = MessagingTypingCopy.inboxPreview(
-            userIds: [first, second],
-            nameForUserId: { names[$0] },
-            typing: "Composing..."
+        let state = MessagingTypingCopy.inboxTypingState(
+            isGroup: true,
+            userIds: [first],
+            typing: "Composing...",
+            usernameForUserId: { _ in "nam_user" }
         )
-        XCTAssertEqual(label, "Nam, Lan: Composing...")
+        guard case .group(let username, _) = state?.layout else {
+            return XCTFail("Expected group layout")
+        }
+        XCTAssertEqual(username, "nam_user")
+        XCTAssertEqual(state?.typingBase, "Composing")
+    }
+
+    func test_groupFallsBackToDirectWhenUsernameMissing() {
+        let first = UUID()
+        let state = MessagingTypingCopy.inboxTypingState(
+            isGroup: true,
+            userIds: [first],
+            typing: "Composing...",
+            usernameForUserId: { _ in nil }
+        )
+        XCTAssertEqual(state?.layout, .direct)
+    }
+
+    func test_givenName_prefersLastToken() {
+        XCTAssertEqual(MessagingTypingCopy.givenName(from: "Nguyen Van Nam"), "Nam")
+        XCTAssertEqual(MessagingTypingCopy.givenName(from: "nam_user"), "nam_user")
     }
 
     func test_stripTrailingEllipsis_removesDots() {
