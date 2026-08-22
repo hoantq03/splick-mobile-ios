@@ -60,6 +60,7 @@ public struct FriendsRootView: View {
     @State private var searchScrollTopSignal = 0
     @State private var directoryRefreshController = SplickRefreshController()
     @State private var searchRefreshController = SplickRefreshController()
+    @State private var searchChromeHeight: CGFloat = 60
 
     private let fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol
     private let searchUsersUseCase: SearchUsersUseCaseProtocol
@@ -252,9 +253,7 @@ public struct FriendsRootView: View {
 
     public var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                directoryTopBar
-
+            ZStack(alignment: .top) {
                 Group {
                     if viewModel.isSearching {
                         searchResultsContent
@@ -262,7 +261,21 @@ public struct FriendsRootView: View {
                         combinedDirectoryContent
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                friendsSearchTopFade
+
+                directoryTopBar
+                    .background {
+                        GeometryReader { proxy in
+                            Color.clear.preference(
+                                key: FriendsSearchChromeHeightKey.self,
+                                value: proxy.size.height
+                            )
+                        }
+                    }
             }
+            .onPreferenceChange(FriendsSearchChromeHeightKey.self) { searchChromeHeight = $0 }
             .splickFastPageSlide()
             .onPreferenceChange(PullToRefreshActivePreferenceKey.self) { isPullRefreshing = $0 }
             .splickTabScreenHeader(languageService.text(.friendsTitle), showsBell: false)
@@ -588,6 +601,22 @@ public struct FriendsRootView: View {
         }
     }
 
+    private var friendsListTopInset: CGFloat {
+        searchChromeHeight + SplickTheme.Spacing.sm
+    }
+
+    private var friendsSearchTopFade: some View {
+        LinearGradient(
+            stops: SplickScrollChromeFadeMetrics.backgroundStops,
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(height: searchChromeHeight + SplickScrollChromeFadeMetrics.fadeTail)
+        .frame(maxWidth: .infinity, alignment: .top)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
     private var directoryTopBar: some View {
         friendsSearchField
             .padding(.horizontal, SplickTheme.Spacing.md)
@@ -753,6 +782,7 @@ public struct FriendsRootView: View {
                 }
             }
             .id("friendsSearchScroll")
+            .friendsSearchScrollTopInset(friendsListTopInset)
             .tabBarHideOnScroll()
             .dismissKeyboardOnTap()
             .splickNativeRefreshable(controller: searchRefreshController) {
@@ -854,6 +884,7 @@ public struct FriendsRootView: View {
         switch true {
         case isInitialLoading:
             LoadingView(message: languageService.text(.commonLoading))
+                .padding(.top, friendsListTopInset)
         case items.isEmpty && directoryLoadFailed:
             ErrorView(message: directoryErrorMessage) {
                 Task {
@@ -861,6 +892,7 @@ public struct FriendsRootView: View {
                     await viewModel.loadGroups(isPullToRefresh: false)
                 }
             }
+            .padding(.top, friendsListTopInset)
         default:
             ScrollViewReader { proxy in
                 ScrollView {
@@ -897,6 +929,7 @@ public struct FriendsRootView: View {
                     }
                 }
                 .id("friendsDirectoryScroll")
+                .friendsSearchScrollTopInset(friendsListTopInset)
                 .tabBarHideOnScroll()
                 .dismissKeyboardOnTap()
                 .splickNativeRefreshable(controller: directoryRefreshController) {
@@ -966,6 +999,26 @@ public struct FriendsRootView: View {
                 GroupRowView(group: group)
             }
             .buttonStyle(.plain)
+        }
+    }
+}
+
+private struct FriendsSearchChromeHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 60
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func friendsSearchScrollTopInset(_ inset: CGFloat) -> some View {
+        if #available(iOS 17.0, *) {
+            contentMargins(.top, inset, for: .scrollContent)
+                .splickScrollSoftTopEdge()
+        } else {
+            padding(.top, inset)
         }
     }
 }
