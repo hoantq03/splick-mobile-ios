@@ -235,16 +235,29 @@ struct NotificationRowView: View {
         !notification.title.isEmpty && !titleMatchesActorName
     }
 
+    private var timestampText: some View {
+        Text(notification.createdAt.relativeString)
+            .font(SplickTheme.Typography.caption)
+            .foregroundColor(SplickTheme.Colors.textTertiary)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
     var body: some View {
         HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
             NotificationAvatarBadgeView(notification: notification)
 
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
                 if showsCategoryTitle {
-                    Text(notification.title)
-                        .font(SplickTheme.Typography.headline)
-                        .foregroundColor(SplickTheme.Colors.textPrimary)
-                        .lineLimit(1)
+                    HStack(alignment: .center, spacing: SplickTheme.Spacing.xs) {
+                        Text(notification.title)
+                            .font(SplickTheme.Typography.headline)
+                            .foregroundColor(SplickTheme.Colors.textPrimary)
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        timestampText
+                    }
                 }
 
                 HStack(alignment: .center, spacing: SplickTheme.Spacing.xxs) {
@@ -253,16 +266,16 @@ struct NotificationRowView: View {
                         .truncationMode(.tail)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
+                    if !showsCategoryTitle {
+                        timestampText
+                    }
+
                     if !notification.isRead {
                         Circle()
                             .fill(SplickTheme.Colors.primaryGradientStart)
                             .frame(width: 8, height: 8)
                     }
                 }
-
-                Text(notification.createdAt.relativeString)
-                    .font(SplickTheme.Typography.caption)
-                    .foregroundColor(SplickTheme.Colors.textTertiary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -281,34 +294,27 @@ struct NotificationRowView: View {
 private struct NotificationAvatarBadgeView: View {
     let notification: AppNotification
 
-    private let avatarSize: CGFloat = 48
-    private let badgeSize: CGFloat = 28
-
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             avatarContent
-                .frame(width: avatarSize, height: avatarSize)
+                .frame(width: NotificationTypeBadge.avatarSize, height: NotificationTypeBadge.avatarSize)
                 .clipShape(Circle())
 
             Image(systemName: notification.type.icon)
-                .font(.system(size: 14, weight: .bold))
-                .foregroundColor(.white)
-                .frame(width: badgeSize, height: badgeSize)
-                .background(
+                .font(.system(size: NotificationTypeBadge.iconPointSize, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: NotificationTypeBadge.badgeSize, height: NotificationTypeBadge.badgeSize)
+                .background {
                     Circle()
-                        .fill(
-                            notification.isRead
-                                ? SplickTheme.Colors.textTertiary
-                                : SplickTheme.Colors.primaryGradientStart
-                        )
-                )
+                        .fill(NotificationTypeBadge.fill(for: notification.type, isRead: notification.isRead))
+                }
                 .overlay {
                     Circle()
-                        .strokeBorder(Color.white, lineWidth: 2)
+                        .strokeBorder(SplickTheme.Colors.background, lineWidth: NotificationTypeBadge.ringWidth)
                 }
-                .offset(x: 2, y: 2)
+                .offset(x: NotificationTypeBadge.overhang, y: NotificationTypeBadge.overhang)
         }
-        .frame(width: avatarSize + 4, height: avatarSize + 4)
+        .frame(width: NotificationTypeBadge.canvasSize, height: NotificationTypeBadge.canvasSize)
         .accessibilityHidden(true)
     }
 

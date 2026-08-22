@@ -159,6 +159,7 @@ public enum NotificationType: String, Codable, Sendable {
         }
     }
 
+    /// Compact glyph for the avatar type chip — no nested-circle symbols.
     public var icon: String {
         switch self {
         case .feedTaggedInPost, .postCommented:
@@ -169,26 +170,24 @@ public enum NotificationType: String, Codable, Sendable {
             return "at"
         case .paymentEvidenceSubmitted, .expenseSplitBill, .dailyDebtReminder,
              .bulkSettlementPendingApproval:
-            return "dollarsign.circle.fill"
+            return "banknote.fill"
         case .paymentEvidenceApproved, .expenseSettled, .bulkSettlementApproved:
-            return "checkmark.circle.fill"
+            return "checkmark"
         case .paymentEvidenceRejected, .bulkSettlementRejected:
-            return "xmark.circle.fill"
+            return "xmark"
         case .expenseReminder:
             return "bell.fill"
         case .streakReminderMidday, .streakReminderEvening:
             return "flame.fill"
         case .friendRequestSent, .friendRequestAccepted:
-            return "person.badge.plus"
-        case .groupInvite:
+            return "person.fill.badge.plus"
+        case .groupInvite, .groupMessage, .groupCreated, .groupMemberAdded,
+             .groupMemberRemoved, .groupRenamed, .groupAdminTransferred:
             return "person.3.fill"
         case .directMessage:
-            return "message.fill"
-        case .groupMessage, .groupCreated, .groupMemberAdded, .groupMemberRemoved,
-             .groupRenamed, .groupAdminTransferred:
-            return "person.3.fill"
+            return "bubble.left.fill"
         case .system:
-            return "gear"
+            return "gearshape.fill"
         }
     }
 }
