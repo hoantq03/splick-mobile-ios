@@ -29,7 +29,7 @@ public final class ChatThreadViewModel: ObservableObject {
     /// After older messages are prepended, the list scrolls to this client id to avoid jump.
     @Published public private(set) var prependAnchorMessageId: UUID?
     /// Set by the message list when the bottom anchor is visible.
-    @Published public var isNearBottom = true
+    @Published public var isNearBottom = false
     @Published public private(set) var threadSearchHits: [MessageSearchHit] = []
     @Published public private(set) var threadSearchState: LoadingState<[MessageSearchHit]> = .idle
     @Published public private(set) var activeThreadSearchQuery = ""
@@ -112,11 +112,17 @@ public final class ChatThreadViewModel: ObservableObject {
         bindWsEvents()
         bindNetworkRetry()
         bindForegroundGapFill()
+        _ = applyCachedThreadIfAvailable()
     }
 
     public var messages: [ChatMessage] {
         if case .loaded(let msgs) = state { return msgs }
         return []
+    }
+
+    public var isInitialLoading: Bool {
+        if case .loading = state { return true }
+        return false
     }
 
     public func clearCachedThread() {
@@ -132,12 +138,8 @@ public final class ChatThreadViewModel: ObservableObject {
     }
 
     public func loadIfNeeded() async {
-        switch state {
-        case .loaded, .loading:
-            return
-        case .idle, .failed:
-            await load()
-        }
+        guard !isLoading else { return }
+        await load()
     }
 
     public func onComposerTextChanged(_ text: String) {
@@ -232,15 +234,11 @@ public final class ChatThreadViewModel: ObservableObject {
         guard !isLoading else { return }
 
         // Paint cached thread immediately, then reconcile with the network.
-        if highlightMessageId == nil,
-           let cached = messageCache?.entry(for: conversationId),
-           !cached.messages.isEmpty {
-            highestLoadedPage = cached.highestLoadedPage
-            hasMoreMessages = cached.hasMoreMessages
-            state = .loaded(cached.messages)
-            recomputeMaxSequenceNo()
-            restorePendingMessages()
+        let paintedFromCache = applyCachedThreadIfAvailable()
+        if paintedFromCache {
             requestScrollToBottom()
+        } else if case .loaded(let existing) = state, !existing.isEmpty {
+            // Keep the visible thread while refreshing — avoids a loading flash on push.
         } else {
             state = .loading
         }
@@ -254,7 +252,7 @@ public final class ChatThreadViewModel: ObservableObject {
                     page: 0,
                     limit: Self.pageSize
                 )
-                let sorted = page.items.reversed() as [ChatMessage]
+                let sorted = MessageTimelineOrdering.sortedChronologically(Array(page.items.reversed()))
                 highestLoadedPage = 0
                 hasMoreMessages = page.hasMore
                 state = .loaded(sorted)
@@ -320,7 +318,7 @@ public final class ChatThreadViewModel: ObservableObject {
             var transaction = Transaction()
             transaction.disablesAnimations = true
             withTransaction(transaction) {
-                state = .loaded(uniqueOlder + messages)
+                state = .loaded(MessageTimelineOrdering.sortedChronologically(uniqueOlder + messages))
                 highestLoadedPage = nextPage
                 hasMoreMessages = page.hasMore
                 prependAnchorMessageId = anchorClientId
@@ -537,6 +535,22 @@ public final class ChatThreadViewModel: ObservableObject {
         }
     }
 
+    @discardableResult
+    private func applyCachedThreadIfAvailable() -> Bool {
+        guard highlightMessageId == nil,
+              let cached = messageCache?.entry(for: conversationId),
+              !cached.messages.isEmpty else {
+            return false
+        }
+
+        highestLoadedPage = cached.highestLoadedPage
+        hasMoreMessages = cached.hasMoreMessages
+        state = .loaded(MessageTimelineOrdering.sortedChronologically(cached.messages))
+        recomputeMaxSequenceNo()
+        restorePendingMessages()
+        return true
+    }
+
     // MARK: - Pending outbound
 
     private func restorePendingMessages() {
@@ -688,7 +702,6 @@ public final class ChatThreadViewModel: ObservableObject {
             requestScrollToBottom()
         }
 
-        isNearBottom = highlightMessageId == nil
         if let lastId = sorted.last?.id {
             scheduleMarkRead(upToMessageId: lastId, requireNearBottom: false)
             sendDeliveryAck(for: lastId)
@@ -728,6 +741,7 @@ public final class ChatThreadViewModel: ObservableObject {
             messages[index] = message
         } else {
             messages.append(message)
+            messages = MessageTimelineOrdering.sortedChronologically(messages)
         }
         var transaction = Transaction()
         transaction.animation = nil
@@ -803,6 +817,7 @@ public final class ChatThreadViewModel: ObservableObject {
             }
         } else {
             msgs.append(message)
+            msgs = MessageTimelineOrdering.sortedChronologically(msgs)
             if animate {
                 withAnimation(ChatScrollAnimation.spring) {
                     state = .loaded(msgs)
@@ -904,8 +919,12 @@ public final class ChatThreadViewModel: ObservableObject {
         guard userId != currentUserId else { return }
         remoteTypingTimeouts[userId]?.cancel()
         if isTyping {
+            let wasTyping = typingUserIds.contains(userId)
             if !typingUserIds.contains(userId) {
                 typingUserIds.append(userId)
+            }
+            if !wasTyping {
+                requestScrollToBottom()
             }
             remoteTypingTimeouts[userId] = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(MessagingTypingTiming.displayTimeout))

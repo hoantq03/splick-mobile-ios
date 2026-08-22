@@ -9,6 +9,7 @@ public struct ChatThreadView: View {
     @ObservedObject private var viewModel: ChatThreadViewModel
     @ObservedObject private var relationshipViewModel: ChatPeerRelationshipViewModel
     @EnvironmentObject private var languageService: LanguageService
+    @EnvironmentObject private var presenceStore: PresenceStore
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.openUserProfile) private var openUserProfile
     @Environment(\.currentUserSummary) private var currentUserSummary
@@ -70,24 +71,43 @@ public struct ChatThreadView: View {
                 .transition(.opacity)
             }
         }
+        .background(SplickTheme.Colors.background.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .splickInteractivePopEnabled()
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Button(action: openChatHeader) {
                     HStack(spacing: SplickTheme.Spacing.xs) {
-                        AvatarView(
-                            imageURL: (displayConversation?.isGroup == true
-                                ? displayConversation?.groupAvatarUrl
-                                : peer?.avatarUrl)?.flatMap(URL.init(string:)),
-                            name: navigationTitle,
-                            size: .small
-                        )
+                        if displayConversation?.isGroup != true, let peer {
+                            AvatarWithPresenceView(
+                                imageURL: peer.avatarUrl.flatMap(URL.init(string:)),
+                                name: navigationTitle,
+                                size: .small,
+                                userId: peer.userId,
+                                showOnlineIndicator: PresenceDisplayPolicy.shouldShowOnlineIndicator(
+                                    isOnline: resolvedPresence(for: peer).isOnline
+                                )
+                            )
+                        } else {
+                            AvatarView(
+                                imageURL: (displayConversation?.isGroup == true
+                                    ? displayConversation?.groupAvatarUrl
+                                    : peer?.avatarUrl)?.flatMap(URL.init(string:)),
+                                name: navigationTitle,
+                                size: .small
+                            )
+                        }
                         VStack(alignment: .leading, spacing: 1) {
                             Text(displayConversation?.displayTitle ?? navigationTitle)
                                 .font(SplickTheme.Typography.headline)
                                 .foregroundStyle(SplickTheme.Colors.textPrimary)
                                 .lineLimit(1)
+                            if let subtitle = headerPresenceSubtitle {
+                                Text(subtitle)
+                                    .font(SplickTheme.Typography.caption)
+                                    .foregroundStyle(SplickTheme.Colors.textTertiary)
+                                    .lineLimit(1)
+                            }
                         }
                     }
                 }
@@ -556,18 +576,24 @@ public struct ChatThreadView: View {
     @ViewBuilder
     private var messageArea: some View {
         switch viewModel.state {
-        case .idle, .loading:
-            LoadingView(message: languageService.text(.messagingChatLoading))
+        case .failed(let error):
+            ErrorView(message: error) {
+                Task { await viewModel.load() }
+            }
         case .loaded(let messages) where messages.isEmpty && viewModel.typingUserIds.isEmpty:
-            EmptyStateView(
-                icon: "bubble.left",
-                title: languageService.text(.messagingChatEmptyTitle),
-                message: languageService.text(.messagingChatEmptyMessage)
-            )
-        case .loaded(let messages):
+            if viewModel.isInitialLoading {
+                Color.clear
+            } else {
+                EmptyStateView(
+                    icon: "bubble.left",
+                    title: languageService.text(.messagingChatEmptyTitle),
+                    message: languageService.text(.messagingChatEmptyMessage)
+                )
+            }
+        default:
             ChatMessageListView(
                 viewModel: viewModel,
-                messages: messages,
+                messages: viewModel.messages,
                 currentUserId: currentUserId,
                 senderDisplayName: senderDisplayName(for:),
                 userDisplayName: userDisplayName(for:),
@@ -579,10 +605,6 @@ public struct ChatThreadView: View {
                 conversationId: viewModel.conversationId,
                 bottomOverlayInset: viewModel.replyDraft == nil ? 64 : 118
             )
-        case .failed(let error):
-            ErrorView(message: error) {
-                Task { await viewModel.load() }
-            }
         }
     }
 
@@ -658,5 +680,22 @@ public struct ChatThreadView: View {
             return nil
         }
         return trimmed
+    }
+
+    private func resolvedPresence(for peer: ConversationPeer) -> (isOnline: Bool, lastSeenAt: Date?) {
+        if let state = presenceStore.state(for: peer.userId) {
+            return (state.isOnline, state.lastSeenAt)
+        }
+        return (peer.isOnline ?? false, peer.lastSeenAt)
+    }
+
+    private var headerPresenceSubtitle: String? {
+        guard let peer, displayConversation?.isGroup != true else { return nil }
+        let presence = resolvedPresence(for: peer)
+        return PresenceDisplayPolicy.lastSeenText(
+            isOnline: presence.isOnline,
+            lastSeenAt: presence.lastSeenAt,
+            appLocale: languageService.locale
+        )
     }
 }
