@@ -248,9 +248,10 @@ public struct ChatThreadView: View {
             }
             messageArea
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            Divider()
-            bottomBar
-                .fixedSize(horizontal: false, vertical: true)
+                .overlay(alignment: .bottom) {
+                    bottomBar
+                        .fixedSize(horizontal: false, vertical: true)
+                }
         }
     }
 
@@ -563,7 +564,8 @@ public struct ChatThreadView: View {
                 onRequestComposerFocus: { isInputFocused = true },
                 peerAvatarURL: peer?.avatarUrl.flatMap(URL.init(string:)),
                 peerDisplayName: peer?.displayTitle ?? "",
-                conversationId: viewModel.conversationId
+                conversationId: viewModel.conversationId,
+                bottomOverlayInset: viewModel.replyDraft == nil ? 64 : 118
             )
         case .failed(let error):
             ErrorView(message: error) {

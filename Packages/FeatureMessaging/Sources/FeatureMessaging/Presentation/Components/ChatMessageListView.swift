@@ -16,6 +16,7 @@ struct ChatMessageListView: View {
     var peerAvatarURL: URL? = nil
     var peerDisplayName: String = ""
     var conversationId: UUID? = nil
+    var bottomOverlayInset: CGFloat = 64
 
     @Namespace private var readReceiptAvatarNamespace
     @State private var reactionFocusMessageId: UUID?
@@ -121,7 +122,8 @@ struct ChatMessageListView: View {
                             .onDisappear { viewModel.isNearBottom = false }
                     }
                     .padding(.horizontal, SplickTheme.Spacing.md)
-                    .padding(.vertical, SplickTheme.Spacing.sm)
+                    .padding(.top, SplickTheme.Spacing.sm)
+                    .padding(.bottom, SplickTheme.Spacing.sm + bottomOverlayInset)
                     .frame(maxWidth: .infinity)
                     .onAppear { prefetchRecentThreadMedia() }
                     .onChange(of: messages.suffix(12).map(\.id)) { _ in
@@ -219,11 +221,11 @@ struct ChatMessageListView: View {
                 case .undecided:
                     // Wait until axis is clear; do not claim vertical pans (ScrollView owns them).
                     guard abs(horizontal) > 8 || vertical > 8 else { return }
-                    if vertical >= abs(horizontal) * 0.95 {
+                    if vertical >= abs(horizontal) * 1.4 {
                         listPanSession = .scrolling
                         return
                     }
-                    guard abs(horizontal) > vertical * 1.15 else { return }
+                    guard abs(horizontal) > vertical * 0.85 else { return }
 
                     if let hit = messageHit(at: value.startLocation) {
                         listPanSession = .replySwiping(

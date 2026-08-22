@@ -52,8 +52,15 @@ struct MessageComposerInputBar: View {
         blendDuration: 0.05
     )
 
+    private static let fadeTail: CGFloat = 40
+
     var body: some View {
         VStack(spacing: 0) {
+            Color.clear
+                .frame(height: Self.fadeTail)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+
             if let replyDraft, let onCancelReply {
                 MessageReplyBanner(draft: replyDraft, onCancel: onCancelReply)
                     .transition(.replyIsland)
@@ -97,8 +104,15 @@ struct MessageComposerInputBar: View {
             .padding(.horizontal, SplickTheme.Spacing.md)
             .padding(.vertical, SplickTheme.Spacing.sm)
             }
+            .background(SplickTheme.Colors.background)
         }
-        .background(SplickTheme.Colors.background)
+        .background {
+            LinearGradient(
+                stops: SplickScrollChromeFadeMetrics.backgroundStops,
+                startPoint: .bottom,
+                endPoint: .top
+            )
+        }
         .animation(MessageReplyIslandMotion.present, value: replyDraft?.messageId)
         .sheet(isPresented: $showEmojiInsertPicker) {
             EmojiPickerSheet(
