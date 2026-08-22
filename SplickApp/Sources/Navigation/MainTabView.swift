@@ -134,8 +134,17 @@ struct MainTabView: View {
                 }
             }
             .onReceive(container.messagingWebSocketClient.eventSubject) { event in
-                if case .newMessage = event {
+                switch event {
+                case .newMessage:
                     Task { await container.badgeCountService.refresh(force: true) }
+                case .presence(let userId, let isOnline, let lastSeenAt):
+                    container.presenceStore.apply(
+                        userId: userId,
+                        isOnline: isOnline,
+                        lastSeenAt: lastSeenAt
+                    )
+                default:
+                    break
                 }
             }
             .environment(\.openProfileSettings) {

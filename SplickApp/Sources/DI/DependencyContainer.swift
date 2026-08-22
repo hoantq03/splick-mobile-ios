@@ -25,6 +25,7 @@ final class DependencyContainer: ObservableObject {
     let keychainService: KeychainServiceProtocol
     let userDefaultsService: UserDefaultsServiceProtocol
     let languageService: LanguageService
+    let presenceStore: PresenceStore
 
     let apiClient: APIClientProtocol
     let sessionManager: SessionManagerProtocol
@@ -345,7 +346,7 @@ final class DependencyContainer: ObservableObject {
     }()
 
     private lazy var friendsManagementRepository: FriendsManagementRepositoryProtocol = {
-        FriendsManagementRepository(apiClient: apiClient)
+        FriendsManagementRepository(apiClient: apiClient, presenceStore: presenceStore)
     }()
 
     private lazy var friendsRepository: FriendsRepositoryProtocol = {
@@ -985,6 +986,7 @@ final class DependencyContainer: ObservableObject {
         self.keychainService = KeychainService()
         self.userDefaultsService = UserDefaultsService()
         self.languageService = LanguageService(userDefaults: userDefaultsService)
+        self.presenceStore = PresenceStore()
         self.sessionManager = SessionManager()
 
         let refreshCoordinator = TokenRefreshCoordinator()

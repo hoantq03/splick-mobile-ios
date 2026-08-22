@@ -30,6 +30,7 @@ struct SplickApp: App {
                 .environmentObject(container)
                 .environmentObject(pushNotificationCoordinator)
                 .environmentObject(container.languageService)
+                .environmentObject(container.presenceStore)
                 .languageService(container.languageService)
                 .onOpenURL { url in
                     if !appState.handleDeepLink(url) {
