@@ -33,38 +33,43 @@ private struct SplickInteractivePopEnabler: UIViewControllerRepresentable {
     }
 }
 
-private struct SplickFastPageSlideInstaller: UIViewRepresentable {
-    func makeUIView(context: Context) -> SplickFastPageSlideProbe {
-        SplickFastPageSlideProbe()
+/// Attaches to the hosting `UINavigationController` via an embedded child controller.
+/// More reliable than walking the UIView responder chain inside `NavigationStack`.
+private struct SplickFastPageSlideInstaller: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> SplickFastPageSlideHostController {
+        SplickFastPageSlideHostController()
     }
 
-    func updateUIView(_ uiView: SplickFastPageSlideProbe, context: Context) {
-        uiView.installIfNeeded()
+    func updateUIViewController(_ uiViewController: SplickFastPageSlideHostController, context: Context) {
+        uiViewController.installIfNeeded()
     }
 }
 
-final class SplickFastPageSlideProbe: UIView {
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        isUserInteractionEnabled = false
-        backgroundColor = .clear
+private final class SplickFastPageSlideHostController: UIViewController {
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
     }
 
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { nil }
-
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
         installIfNeeded()
     }
 
-    override func layoutSubviews() {
-        super.layoutSubviews()
+    override func didMove(toParent parent: UIViewController?) {
+        super.didMove(toParent: parent)
         installIfNeeded()
     }
 
     func installIfNeeded() {
-        var responder: UIResponder? = self
+        if let nav = navigationController {
+            SplickNavigationDelegateProxy.install(on: nav)
+            return
+        }
+
+        // Fallback for older SwiftUI hosting layouts.
+        var responder: UIResponder? = view
         while let current = responder {
             if let nav = current as? UINavigationController {
                 SplickNavigationDelegateProxy.install(on: nav)
@@ -117,23 +122,20 @@ private final class SplickNavigationDelegateProxy: NSObject, UINavigationControl
         from fromVC: UIViewController,
         to toVC: UIViewController
     ) -> UIViewControllerAnimatedTransitioning? {
-        if let provided = original?.navigationController?(
-            navigationController,
-            animationControllerFor: operation,
-            from: fromVC,
-            to: toVC
-        ) {
-            return provided
-        }
-
         if #available(iOS 18.0, *), usesSystemZoom(from: fromVC, to: toVC) {
-            return nil
+            return original?.navigationController?(
+                navigationController,
+                animationControllerFor: operation,
+                from: fromVC,
+                to: toVC
+            )
         }
 
         if operation == .pop, isInteractivePop(navigationController) {
             return nil
         }
 
+        // Prefer Splick horizontal slide over SwiftUI's internal push (often instant with path.append).
         return SplickSlideAnimator(operation: operation)
     }
 
@@ -152,6 +154,8 @@ private final class SplickNavigationDelegateProxy: NSObject, UINavigationControl
         willShow viewController: UIViewController,
         animated: Bool
     ) {
+        attach(to: navigationController)
+
         guard !isForwardingWillShow, original !== self else { return }
         isForwardingWillShow = true
         defer { isForwardingWillShow = false }
@@ -213,6 +217,8 @@ private final class SplickSlideAnimator: NSObject, UIViewControllerAnimatedTrans
             container.addSubview(toView)
             toView.frame = container.bounds.offsetBy(dx: width, dy: 0)
             fromView.frame = container.bounds
+            toView.layoutIfNeeded()
+            fromView.layoutIfNeeded()
             UIView.animate(
                 withDuration: SplickPageSlideMotion.duration,
                 delay: 0,
