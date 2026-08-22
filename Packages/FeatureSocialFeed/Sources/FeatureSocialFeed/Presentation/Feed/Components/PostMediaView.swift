@@ -72,6 +72,7 @@ struct PostMediaView: View {
                     .scrollTargetLayout()
                 }
                 .scrollTargetBehavior(.paging)
+                .scrollBounceBehavior(.basedOnSize, axes: .vertical)
                 .frame(maxWidth: .infinity)
                 .frame(height: carouselHeight)
                 .contentShape(Rectangle())

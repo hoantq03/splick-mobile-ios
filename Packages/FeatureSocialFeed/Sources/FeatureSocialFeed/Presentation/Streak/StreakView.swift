@@ -99,9 +99,9 @@ public struct StreakView: View {
 
     private var streakHeader: some View {
         VStack(spacing: 4) {
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 Image(systemName: viewModel.currentStreak > 0 ? "flame.fill" : "flame")
-                    .font(.system(size: 32))
+                    .font(.system(size: 48))
                     .foregroundStyle(
                         viewModel.currentStreak > 0
                             ? Color.orange
@@ -116,7 +116,7 @@ public struct StreakView: View {
                         Text("\(viewModel.currentStreak)")
                     }
                 }
-                .font(.system(size: 42, weight: .bold, design: .rounded))
+                .font(.system(size: 56, weight: .bold, design: .rounded))
                 .foregroundStyle(SplickTheme.Colors.textPrimary)
             }
 

@@ -97,7 +97,7 @@ public final class AppStartupRepository: AppStartupRepositoryProtocol, Sendable 
         guard let url = URL(string: dto.mediaUrl) else { return nil }
         return CustomEmoji(
             id: dto.id,
-            ownerId: dto.ownerId ?? UUID(),
+            ownerId: dto.ownerId,
             shortcode: dto.shortcode,
             mediaUrl: url,
             createdAt: dto.createdAt

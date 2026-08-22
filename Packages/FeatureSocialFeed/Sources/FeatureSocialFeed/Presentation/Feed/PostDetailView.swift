@@ -84,6 +84,13 @@ struct PostDetailView: View {
         ScrollViewReader { scrollProxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+                    Color.clear
+                        .frame(height: 0)
+                        .id(PostDetailScrollAnchor.top)
+                        .background {
+                            SplickRefreshableScrollBootstrap()
+                        }
+
                     PostCardView(
                         post: livePost,
                         currentUser: feedViewModel.currentUser ?? currentUserSummary,
@@ -99,16 +106,20 @@ struct PostDetailView: View {
                         .opacity(commentsRevealed ? 1 : 0)
                 }
                 .padding(.horizontal, SplickTheme.Spacing.md)
-            }
-            .scrollDisabled(detailScrollLocked)
-            .splickDetailScrollInsets()
-            .splickScrollSoftTopEdge()
-            .onReceive(NotificationCenter.default.publisher(for: FeedScrollLock.notification)) { notification in
-                detailScrollLocked = notification.userInfo?["locked"] as? Bool ?? false
+                .splickDetailScrollContentTopPadding()
             }
             .refreshable {
                 await feedViewModel.refreshPost(id: post.id, allowingConcurrentFeedRefresh: true)
                 await commentPager.reload()
+            }
+            .scrollDisabled(detailScrollLocked)
+            .splickDetailScrollInsets()
+            .splickScrollSoftTopEdge()
+            .onAppear {
+                scrollProxy.scrollTo(PostDetailScrollAnchor.top, anchor: .top)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: FeedScrollLock.notification)) { notification in
+                detailScrollLocked = notification.userInfo?["locked"] as? Bool ?? false
             }
             .onChange(of: scrollToCommentId) { commentId in
                 guard let commentId else { return }
@@ -165,6 +176,8 @@ struct PostDetailView: View {
             await commentPager.loadInitial()
         }
         .onAppear {
+            FeedScrollLock.forceUnlock()
+            detailScrollLocked = false
             tabBarScrollState?.hide(flushToBottom: true)
             configureCardActions()
             // Defer remaining @Published updates so we don't publish during view updates.
@@ -593,6 +606,10 @@ struct PostDetailView: View {
             await commentPager.reload()
         }
     }
+}
+
+private enum PostDetailScrollAnchor {
+    static let top = "postDetailTop"
 }
 
 private struct CommentThreadFilterBar: View {

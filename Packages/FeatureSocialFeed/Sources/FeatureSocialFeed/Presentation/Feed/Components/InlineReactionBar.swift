@@ -16,6 +16,9 @@ struct InlineReactionBar: View {
     @State private var cancelledForScroll = false
     @State private var barFrame: CGRect = .zero
     @State private var bounceIndex: Int?
+    @State private var fingerLocation: CGPoint?
+    @State private var longPressWorkItem: DispatchWorkItem?
+    @State private var suppressTapAfterLongPress = false
 
     private let slotSize: CGFloat = 36
     private let slotSpacing: CGFloat = 4
@@ -44,12 +47,15 @@ struct InlineReactionBar: View {
         .frame(height: 40, alignment: .leading)
         .background {
             GeometryReader { geo in
-                Color.clear
-                    .onAppear { barFrame = geo.frame(in: .global) }
-                    .onChange(of: geo.size) { _ in
-                        barFrame = geo.frame(in: .global)
-                    }
+                Color.clear.preference(
+                    key: ReactionBarGlobalFrameKey.self,
+                    value: geo.frame(in: .global)
+                )
             }
+        }
+        .onPreferenceChange(ReactionBarGlobalFrameKey.self) { frame in
+            guard frame != .zero, frame != barFrame else { return }
+            barFrame = frame
         }
         .simultaneousGesture(longPressDragGesture)
         .onAppear {
@@ -71,7 +77,7 @@ struct InlineReactionBar: View {
             .animation(.spring(response: 0.24, dampingFraction: 0.72), value: isBouncing)
             .contentShape(Rectangle())
             .onTapGesture {
-                guard !isDragSelecting, !cancelledForScroll else { return }
+                guard !isDragSelecting, !cancelledForScroll, !suppressTapAfterLongPress else { return }
                 commitReaction(emoji: emoji, index: index)
             }
             .accessibilityAddTraits(.isButton)
@@ -92,50 +98,68 @@ struct InlineReactionBar: View {
             .animation(.spring(response: 0.18, dampingFraction: 0.78), value: isHighlighted)
             .contentShape(Rectangle())
             .onTapGesture {
-                guard !isDragSelecting, !cancelledForScroll else { return }
+                guard !isDragSelecting, !cancelledForScroll, !suppressTapAfterLongPress else { return }
                 onCustomEmoji()
             }
             .accessibilityAddTraits(.isButton)
     }
 
     private var longPressDragGesture: some Gesture {
-        LongPressGesture(minimumDuration: longPressDuration, maximumDistance: scrollCancelDistance)
-            .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .global))
+        DragGesture(minimumDistance: 0, coordinateSpace: .global)
             .onChanged { value in
-                switch value {
-                case .first(_):
+                fingerLocation = value.location
+                if longPressWorkItem == nil {
                     cancelledForScroll = false
-                case .second(true, let drag?):
-                    guard !cancelledForScroll else { return }
-                    if isVerticalScroll(drag) {
-                        cancelSelectionForScroll()
-                        return
-                    }
-                    if !isDragSelecting {
-                        isDragSelecting = true
-                        FeedScrollLock.setLocked(true)
-                    }
-                    updateHighlight(at: drag.location)
-                default:
-                    break
+                    suppressTapAfterLongPress = false
+                    armLongPress()
+                }
+                guard !cancelledForScroll else { return }
+                if isVerticalScroll(value) {
+                    cancelSelectionForScroll()
+                    return
+                }
+                if isDragSelecting {
+                    updateHighlight(at: value.location)
                 }
             }
             .onEnded { value in
+                disarmLongPress()
                 let shouldCommit = isDragSelecting && !cancelledForScroll
-                let location: CGPoint? = {
-                    if case .second(true, let drag?) = value { return drag.location }
-                    return nil
-                }()
+                let location = fingerLocation ?? value.location
                 let keepCancelled = cancelledForScroll
                 highlightedIndex = nil
                 isDragSelecting = false
+                fingerLocation = nil
                 FeedScrollLock.setLocked(false)
                 if !keepCancelled {
                     cancelledForScroll = false
                 }
-                guard shouldCommit, let location else { return }
-                commitDragSelection(at: location)
+                if shouldCommit {
+                    suppressTapAfterLongPress = true
+                    commitDragSelection(at: location)
+                }
             }
+    }
+
+    private func armLongPress() {
+        disarmLongPress()
+        let work = DispatchWorkItem {
+            guard !cancelledForScroll else { return }
+            isDragSelecting = true
+            FeedScrollLock.setLocked(true)
+            if let fingerLocation {
+                updateHighlight(at: fingerLocation)
+            }
+            Self.impactFeedback.impactOccurred()
+            Self.impactFeedback.prepare()
+        }
+        longPressWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + longPressDuration, execute: work)
+    }
+
+    private func disarmLongPress() {
+        longPressWorkItem?.cancel()
+        longPressWorkItem = nil
     }
 
     private func isVerticalScroll(_ drag: DragGesture.Value) -> Bool {
@@ -147,6 +171,7 @@ struct InlineReactionBar: View {
     private func cancelSelectionForScroll() {
         cancelledForScroll = true
         highlightedIndex = nil
+        disarmLongPress()
         if isDragSelecting {
             isDragSelecting = false
             FeedScrollLock.setLocked(false)
@@ -210,6 +235,17 @@ struct InlineReactionBar: View {
             withTransaction(transaction) {
                 onReact(emoji)
             }
+        }
+    }
+}
+
+private struct ReactionBarGlobalFrameKey: PreferenceKey {
+    static var defaultValue: CGRect = .zero
+
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        let next = nextValue()
+        if next != .zero {
+            value = next
         }
     }
 }

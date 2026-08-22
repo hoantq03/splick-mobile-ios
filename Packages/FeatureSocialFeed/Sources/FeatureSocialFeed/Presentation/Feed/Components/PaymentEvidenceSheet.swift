@@ -21,7 +21,6 @@ struct PaymentEvidenceSheet: View {
     @State private var fullScreenPreviewRoute: AttachmentPreviewRoute?
 
     private let maxPhotos = 3
-    private let thumbSize: CGFloat = 96
 
     init(
         postAuthorName: String,
@@ -36,43 +35,40 @@ struct PaymentEvidenceSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
-                    Text(languageService.format(.feedPaymentEvidenceHint, postAuthorName))
-                        .font(SplickTheme.Typography.callout)
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+                VStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
+                    header
 
                     if let validationMessage {
                         Text(validationMessage)
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(SplickTheme.Colors.error)
+                            .padding(.horizontal, SplickTheme.Spacing.sm)
+                            .padding(.vertical, SplickTheme.Spacing.xs)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.inset, style: .continuous)
+                                    .fill(SplickTheme.Colors.error.opacity(0.10))
+                            )
                     }
 
                     photoSection
-
                     messageField
                 }
-                .padding(SplickTheme.Spacing.md)
+                .padding(.horizontal, SplickTheme.Spacing.md)
+                .padding(.top, SplickTheme.Spacing.sm)
+                .padding(.bottom, SplickTheme.Spacing.md)
             }
             .scrollDismissesKeyboard(.interactively)
             .background(SplickTheme.Colors.background)
-            .navigationTitle(languageService.text(.feedPaymentEvidenceTitle))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(languageService.text(.commonCancel)) { dismiss() }
                         .disabled(isSubmitting)
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    if isSubmitting {
-                        ProgressView()
-                    } else {
-                        Button(languageService.text(.feedPaymentEvidenceSubmit)) {
-                            Task { await submit() }
-                        }
-                        .fontWeight(.semibold)
-                        .disabled(pendingAttachments.isEmpty || isImportingPhotos)
-                    }
-                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                submitBar
             }
             .fullScreenCover(item: $fullScreenPreviewRoute) { route in
                 let previewImages = LocalImagePreviewSupport.decodeImages(from: pendingAttachments)
@@ -92,25 +88,104 @@ struct PaymentEvidenceSheet: View {
         }
     }
 
+    private var header: some View {
+        HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
+            ZStack {
+                RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.tile, style: .continuous)
+                    .fill(SplickTheme.Colors.primaryGradientStart.opacity(0.12))
+                Image(systemName: "doc.text.image")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+            }
+            .frame(width: 52, height: 52)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(languageService.text(.feedPaymentEvidenceTitle))
+                    .font(SplickTheme.Typography.headline)
+                    .foregroundStyle(SplickTheme.Colors.textPrimary)
+                Text(languageService.format(.feedPaymentEvidenceHint, postAuthorName))
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
     private var photoSection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-            Text(languageService.text(.feedPaymentEvidencePhotosLabel))
-                .font(.system(size: 13, weight: .semibold))
+            HStack {
+                Text(languageService.text(.feedPaymentEvidencePhotosLabel))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(SplickTheme.Colors.textPrimary)
+                Spacer()
+                Text("\(pendingAttachments.count)/\(maxPhotos)")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(SplickTheme.Colors.primaryGradientStart.opacity(0.10)))
+            }
+
+            if pendingAttachments.isEmpty {
+                PhotosPicker(
+                    selection: $pickerItems,
+                    maxSelectionCount: maxPhotos,
+                    matching: .images
+                ) {
+                    emptyDropZone
+                }
+                .disabled(isSubmitting || isImportingPhotos)
+                .buttonStyle(.plain)
+            } else {
+                photoGrid
+            }
+        }
+    }
+
+    private var emptyDropZone: some View {
+        VStack(spacing: SplickTheme.Spacing.sm) {
+            if isImportingPhotos {
+                ProgressView()
+            } else {
+                ZStack {
+                    Circle()
+                        .fill(SplickTheme.Colors.primaryGradientStart.opacity(0.14))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: "plus")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                }
+            }
+            Text(languageService.text(.feedPaymentEvidencePickPhoto))
+                .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(SplickTheme.Colors.textPrimary)
+                .multilineTextAlignment(.center)
+            Text(languageService.text(.feedPaymentEvidenceAddPhoto))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 168)
+        .background {
+            RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous)
+                .fill(SplickTheme.Colors.primaryGradientStart.opacity(0.07))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous)
+                .strokeBorder(
+                    SplickTheme.Colors.primaryGradientStart.opacity(0.40),
+                    style: StrokeStyle(lineWidth: 1.5, dash: [7, 5])
+                )
+        }
+    }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: SplickTheme.Spacing.sm) {
-                    ForEach(Array(pendingAttachments.enumerated()), id: \.offset) { index, _ in
+    private var photoGrid: some View {
+        HStack(spacing: SplickTheme.Spacing.sm) {
+            ForEach(0..<maxPhotos, id: \.self) { index in
+                Group {
+                    if pendingAttachments.indices.contains(index) {
                         photoThumb(at: index)
-                            .transition(
-                                .asymmetric(
-                                    insertion: .scale(scale: 0.82).combined(with: .opacity),
-                                    removal: .scale(scale: 0.9).combined(with: .opacity)
-                                )
-                            )
-                    }
-
-                    if pendingAttachments.count < maxPhotos {
+                    } else if index == pendingAttachments.count {
                         PhotosPicker(
                             selection: $pickerItems,
                             maxSelectionCount: maxPhotos - pendingAttachments.count,
@@ -120,15 +195,18 @@ struct PaymentEvidenceSheet: View {
                         }
                         .disabled(isSubmitting || isImportingPhotos)
                         .buttonStyle(.plain)
+                    } else {
+                        placeholderSlot
                     }
                 }
-                .animation(
-                    .spring(response: 0.32, dampingFraction: 0.78),
-                    value: pendingAttachments.count
-                )
-                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity)
+                .aspectRatio(0.72, contentMode: .fit)
             }
         }
+        .animation(
+            .spring(response: 0.32, dampingFraction: 0.78),
+            value: pendingAttachments.count
+        )
     }
 
     private func photoThumb(at index: Int) -> some View {
@@ -145,8 +223,8 @@ struct PaymentEvidenceSheet: View {
                         SplickTheme.Colors.tertiaryBackground
                     }
                 }
-                .frame(width: thumbSize, height: thumbSize)
-                .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium, style: .continuous))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.large, style: .continuous))
             }
             .buttonStyle(.plain)
 
@@ -160,9 +238,15 @@ struct PaymentEvidenceSheet: View {
                     .background(Circle().fill(.black.opacity(0.55)))
             }
             .buttonStyle(.plain)
-            .padding(6)
+            .padding(7)
             .disabled(isSubmitting)
         }
+        .transition(
+            .asymmetric(
+                insertion: .scale(scale: 0.82).combined(with: .opacity),
+                removal: .scale(scale: 0.9).combined(with: .opacity)
+            )
+        )
     }
 
     private var addPhotoTile: some View {
@@ -170,29 +254,35 @@ struct PaymentEvidenceSheet: View {
             if isImportingPhotos {
                 ProgressView()
             } else {
-                Image(systemName: "photo.on.rectangle.angled")
-                    .font(.system(size: 22, weight: .semibold))
+                Image(systemName: "plus")
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
             }
-            Text(languageService.text(.feedPaymentEvidencePickPhoto))
+            Text(languageService.text(.feedPaymentEvidenceAddPhoto))
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
         }
-        .frame(width: thumbSize, height: thumbSize)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background {
-            RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium, style: .continuous)
-                .fill(SplickTheme.Colors.primaryGradientStart.opacity(0.08))
+            RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.large, style: .continuous)
+                .fill(SplickTheme.Colors.primaryGradientStart.opacity(0.07))
         }
         .overlay {
-            RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium, style: .continuous)
+            RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.large, style: .continuous)
                 .strokeBorder(
-                    SplickTheme.Colors.primaryGradientStart.opacity(0.45),
+                    SplickTheme.Colors.primaryGradientStart.opacity(0.40),
                     style: StrokeStyle(lineWidth: 1.5, dash: [7, 5])
                 )
         }
+    }
+
+    private var placeholderSlot: some View {
+        RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.large, style: .continuous)
+            .fill(SplickTheme.Colors.tertiaryBackground.opacity(0.7))
+            .overlay {
+                RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.large, style: .continuous)
+                    .strokeBorder(SplickTheme.Colors.divider.opacity(0.35), lineWidth: 1)
+            }
     }
 
     private var messageField: some View {
@@ -207,11 +297,43 @@ struct PaymentEvidenceSheet: View {
             RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.inset, style: .continuous)
                 .fill(SplickTheme.Colors.tertiaryBackground)
         }
-        .overlay {
-            RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.inset, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5)
-        }
         .disabled(isSubmitting)
+    }
+
+    private var submitBar: some View {
+        VStack(spacing: 0) {
+            Divider().opacity(0.35)
+            Button {
+                Task { await submit() }
+            } label: {
+                Group {
+                    if isSubmitting {
+                        ProgressView()
+                            .tint(.white)
+                    } else {
+                        Text(languageService.text(.feedPaymentEvidenceSubmit))
+                            .fontWeight(.semibold)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.white)
+            .background {
+                Capsule(style: .continuous)
+                    .fill(
+                        pendingAttachments.isEmpty || isImportingPhotos || isSubmitting
+                            ? SplickTheme.Colors.primaryGradientStart.opacity(0.38)
+                            : SplickTheme.Colors.primaryGradientStart
+                    )
+            }
+            .disabled(pendingAttachments.isEmpty || isImportingPhotos || isSubmitting)
+            .padding(.horizontal, SplickTheme.Spacing.md)
+            .padding(.top, SplickTheme.Spacing.sm)
+            .padding(.bottom, SplickTheme.Spacing.sm)
+            .background(SplickTheme.Colors.background)
+        }
     }
 
     private func removeAttachment(at index: Int) {

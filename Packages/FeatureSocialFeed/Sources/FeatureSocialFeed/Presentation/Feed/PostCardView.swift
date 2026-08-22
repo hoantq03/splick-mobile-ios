@@ -137,6 +137,7 @@ struct PostCardView: View, Equatable {
                     let cardOrigin = geo.frame(in: .global).origin
                     Color.clear
                         .onAppear { cardOriginGlobal = cardOrigin }
+                        .onChange(of: cardOrigin) { cardOriginGlobal = $0 }
 
                     ForEach(flyingEmojis) { flight in
                         FlyingEmojiView(
