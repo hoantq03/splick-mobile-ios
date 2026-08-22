@@ -55,6 +55,12 @@ struct WsMessageRecalledEvent: Decodable {
     let senderId: UUID
 }
 
+struct WsPresenceEvent: Decodable {
+    let userId: UUID
+    let online: Bool
+    let lastSeenAt: Date?
+}
+
 /// Pure decoding helpers — unit-testable without a live WebSocket.
 enum MessagingWsEventDecoder {
     static func decode(_ data: Data, using decoder: JSONDecoder = .apiDecoder) -> MessagingWsEvent? {
@@ -125,6 +131,14 @@ enum MessagingWsEventDecoder {
                 conversationId: event.conversationId,
                 messageId: event.messageId,
                 senderId: event.senderId
+            )
+
+        case "presence":
+            guard let event = try? decoder.decode(WsPresenceEvent.self, from: data) else { return nil }
+            return .presence(
+                userId: event.userId,
+                isOnline: event.online,
+                lastSeenAt: event.lastSeenAt
             )
 
         default:
