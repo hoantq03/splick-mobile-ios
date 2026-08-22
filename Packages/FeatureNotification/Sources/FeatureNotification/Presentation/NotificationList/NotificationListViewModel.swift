@@ -118,7 +118,10 @@ public final class NotificationListViewModel: ObservableObject {
         Log.info(
             "Loading notifications",
             category: .notification,
-            metadata: ["pullToRefresh": String(isPullToRefresh)]
+            metadata: [
+                "pullToRefresh": String(isPullToRefresh),
+                "filter": selectedCategory.queryValue ?? "ALL",
+            ]
         )
 
         do {
