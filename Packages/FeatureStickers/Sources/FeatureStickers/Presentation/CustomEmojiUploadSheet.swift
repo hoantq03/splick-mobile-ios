@@ -139,7 +139,7 @@ public struct CustomEmojiUploadSheet: View {
             Text(languageService.text(.stickersYourEmoji))
                 .font(SplickTheme.Typography.headline)
 
-            let emojis = currentUserId.map { emojiStore.emojis(ownedBy: $0) } ?? []
+            let emojis = currentUserId.map { emojiStore.emojis(ownedBy: $0) } ?? emojiStore.allEmojis
             if emojis.isEmpty {
                 Text(languageService.text(.stickersPersonalEmojiEmpty))
                     .font(SplickTheme.Typography.caption)
@@ -204,9 +204,16 @@ public struct CustomEmojiUploadSheet: View {
                 purpose: MediaUploadPurpose.userCustomEmoji,
                 groupId: nil
             )
-            let emoji = try await addEmojiUseCase.execute(
+            let uploaded = try await addEmojiUseCase.execute(
                 alias: resolvedAlias.isEmpty ? nil : resolvedAlias,
                 mediaId: upload.id
+            )
+            let emoji = CustomEmoji(
+                id: uploaded.id,
+                ownerId: uploaded.ownerId ?? currentUserId,
+                shortcode: uploaded.shortcode,
+                mediaUrl: uploaded.mediaUrl,
+                createdAt: uploaded.createdAt
             )
             emojiStore.upsert(emoji)
             alias = ""

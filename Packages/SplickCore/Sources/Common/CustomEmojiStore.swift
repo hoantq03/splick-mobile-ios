@@ -9,7 +9,9 @@ public final class CustomEmojiStore: ObservableObject {
     public init() {}
 
     public func emojis(ownedBy userId: UUID) -> [CustomEmoji] {
-        allEmojis.filter { $0.ownerId == userId }
+        allEmojis.filter { emoji in
+            emoji.ownerId == nil || emoji.ownerId == userId
+        }
     }
 
     public func resolve(shortcode: String) -> URL? {
@@ -18,7 +20,7 @@ public final class CustomEmojiStore: ObservableObject {
 
     @MainActor
     public func applyStartupEmojis(_ emojis: [CustomEmoji]) {
-        allEmojis = emojis.sorted { $0.shortcode < $1.shortcode }
+        mergeRemote(emojis)
     }
 
     @MainActor
@@ -32,7 +34,7 @@ public final class CustomEmojiStore: ObservableObject {
             defer { loadTask = nil }
             do {
                 let emojis = try await fetcher.fetchAllEmojis()
-                allEmojis = emojis.sorted { $0.shortcode < $1.shortcode }
+                mergeRemote(emojis)
             } catch {
                 // Keep cached values on failure.
             }
@@ -61,5 +63,13 @@ public final class CustomEmojiStore: ObservableObject {
     @MainActor
     public func remove(emojiId: UUID) {
         allEmojis.removeAll { $0.id == emojiId }
+    }
+
+    /// Keep locally upserted emojis that a stale fetch has not returned yet.
+    @MainActor
+    private func mergeRemote(_ emojis: [CustomEmoji]) {
+        let remoteById = Dictionary(emojis.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
+        let localOnly = allEmojis.filter { remoteById[$0.id] == nil }
+        allEmojis = (emojis + localOnly).sorted { $0.shortcode < $1.shortcode }
     }
 }

@@ -74,7 +74,10 @@ public struct EmojiPickerSheet: View {
     private let customColumns = Array(repeating: GridItem(.flexible(), spacing: 5), count: 5)
 
     private var myEmojis: [CustomEmoji] {
-        currentUserId.map { emojiStore.emojis(ownedBy: $0) } ?? []
+        if let currentUserId {
+            return emojiStore.emojis(ownedBy: currentUserId)
+        }
+        return emojiStore.allEmojis
     }
 
     private var allEmojiEntries: [AllEmojiEntry] {
@@ -158,12 +161,17 @@ public struct EmojiPickerSheet: View {
             if let uploadSourceImage, let customEmojiDependencies {
                 CustomEmojiComposerSheet(
                     sourceImage: uploadSourceImage,
+                    currentUserId: currentUserId,
                     uploadMediaUseCase: customEmojiDependencies.uploadMediaUseCase,
                     addEmojiUseCase: customEmojiDependencies.addEmojiUseCase,
                     onUploaded: { _ in
                         selectedTab = .custom
+                        let fetcher = customEmojiDependencies.fetcher
+                        Task { await emojiStore.reload(fetcher: fetcher) }
                     }
                 )
+                .environmentObject(languageService)
+                .environmentObject(emojiStore)
             }
         }
     }
@@ -258,6 +266,7 @@ public struct EmojiPickerSheet: View {
                             .accessibilityAddTraits(.isButton)
                     }
                 }
+                .id(filteredMyEmojis.map(\.id))
             }
         }
     }
