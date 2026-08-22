@@ -1,7 +1,6 @@
 import SwiftUI
 import Combine
 import UIKit
-import PhotosUI
 import DesignSystem
 import Common
 import Localization
@@ -262,7 +261,6 @@ private struct FeedPrimaryPage: View {
 
     @State private var feedScrollLocked = false
     @State private var cardPresentation: PostCardPresentation?
-    @State private var paymentEvidencePhotoPickerItems: [PhotosPickerItem] = []
     @StateObject private var cardActions = PostCardActions()
 
     var body: some View {
@@ -298,9 +296,7 @@ private struct FeedPrimaryPage: View {
                         submissionAttachments: attachments
                     )
                 },
-                customEmojiDependencies: customEmojiDependencies,
-                paymentEvidencePhotoPickerItems: $paymentEvidencePhotoPickerItems,
-                onPaymentEvidencePhotosPicked: preparePaymentEvidenceAttachments
+                customEmojiDependencies: customEmojiDependencies
             )
     }
 
@@ -359,35 +355,6 @@ private struct FeedPrimaryPage: View {
         cardActions.makeGifPickerViewModel = makeGifPickerViewModel
     }
 
-    @MainActor
-    private func preparePaymentEvidenceAttachments(from items: [PhotosPickerItem]) async {
-        guard !items.isEmpty else { return }
-        guard case .paymentEvidencePhotoPicker(let post) = cardPresentation else { return }
-
-        var attachments: [CommentSubmissionAttachment] = []
-        for (index, item) in items.prefix(3).enumerated() {
-            guard let data = try? await item.loadTransferable(type: Data.self),
-                  let image = UIImage(data: data),
-                  let jpegData = image.jpegData(compressionQuality: 0.92) else { continue }
-            attachments.append(
-                CommentSubmissionAttachment(
-                    kind: .image,
-                    data: jpegData,
-                    mimeType: "image/jpeg",
-                    fileName: "payment-proof-\(index + 1).jpg"
-                )
-            )
-        }
-
-        paymentEvidencePhotoPickerItems = []
-        guard !attachments.isEmpty,
-              let split = post.billSplitLine(for: viewModel.currentUser?.id ?? UUID()) else {
-            cardPresentation = nil
-            return
-        }
-        cardPresentation = .paymentEvidence(post, splitId: split.id, attachments: attachments)
-    }
-
     @ViewBuilder
     private var feedPane: some View {
         switch viewModel.state {
@@ -396,28 +363,40 @@ private struct FeedPrimaryPage: View {
                 .feedPagerPageTopInset(isEnabled: true)
 
         case .loaded(let posts) where posts.isEmpty:
-            EmptyStateView(
-                icon: "photo.on.rectangle.angled",
-                title: languageService.text(.feedEmptyTitle),
-                message: languageService.text(.feedEmptyMessage),
-                actionTitle: languageService.text(.feedEmptyAction)
-            ) {
-                openPostCaptureFlow?()
+            feedRefreshScroll {
+                GeometryReader { geo in
+                    EmptyStateView(
+                        icon: "photo.on.rectangle.angled",
+                        title: languageService.text(.feedEmptyTitle),
+                        message: languageService.text(.feedEmptyMessage),
+                        actionTitle: languageService.text(.feedEmptyAction)
+                    ) {
+                        openPostCaptureFlow?()
+                    }
+                    .frame(width: geo.size.width, height: max(geo.size.height, 1))
+                }
+                .frame(minHeight: 480)
             }
-            .feedPagerPageTopInset(isEnabled: true)
 
         case .loaded:
             feedList
 
         case .failed(let message):
-            ErrorView(message: message) {
-                Task { await viewModel.loadFeed() }
+            feedRefreshScroll {
+                GeometryReader { geo in
+                    ErrorView(message: message) {
+                        Task { await viewModel.loadFeed() }
+                    }
+                    .frame(width: geo.size.width, height: max(geo.size.height, 1))
+                }
+                .frame(minHeight: 480)
             }
-            .feedPagerPageTopInset(isEnabled: true)
         }
     }
 
-    private var feedList: some View {
+    private func feedRefreshScroll<Content: View>(
+        @ViewBuilder content: @escaping () -> Content
+    ) -> some View {
         FeedPullToRefreshScrollView {
             FeedScrollLock.forceUnlock()
             feedScrollLocked = false
@@ -428,6 +407,12 @@ private struct FeedPrimaryPage: View {
             }
             return await viewModel.loadFeed(isPullToRefresh: true)
         } content: {
+            content()
+        }
+    }
+
+    private var feedList: some View {
+        feedRefreshScroll {
             LazyVStack(spacing: SplickTheme.Spacing.md) {
                 ForEach(viewModel.posts) { post in
                     PostCardView(
