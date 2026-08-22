@@ -60,7 +60,8 @@ enum AuthMapper {
     static func toAuthSession(_ dto: AuthResponseDTO) -> AuthSession {
         AuthSession(
             user: toUser(dto.user),
-            token: toAuthToken(dto)
+            token: toAuthToken(dto),
+            isNewUser: dto.newUser == true
         )
     }
 

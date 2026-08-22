@@ -9,7 +9,7 @@ public struct LoginView: View {
     @EnvironmentObject private var languageService: LanguageService
     @StateObject private var viewModel: LoginViewModel
     @StateObject private var forgotPasswordViewModel: ForgotPasswordViewModel
-    private let onAuthenticated: ((User) -> Void)?
+    private let onAuthenticated: ((User, Bool) -> Void)?
     @State private var showForgotPassword = false
     @State private var showDateOfBirthPicker = false
     @State private var presentedLegalDocument: LegalDocumentType?
@@ -26,7 +26,7 @@ public struct LoginView: View {
     public init(
         viewModel: @autoclosure @escaping () -> LoginViewModel,
         forgotPasswordViewModelFactory: @escaping () -> ForgotPasswordViewModel,
-        onAuthenticated: ((User) -> Void)? = nil
+        onAuthenticated: ((User, Bool) -> Void)? = nil
     ) {
         _viewModel = StateObject(wrappedValue: viewModel())
         _forgotPasswordViewModel = StateObject(wrappedValue: forgotPasswordViewModelFactory())
@@ -44,7 +44,7 @@ public struct LoginView: View {
                     presentation: .inline,
                     fieldCornerRadius: Self.fieldCornerRadius,
                     onBack: { closeForgotPassword() },
-                    onAuthenticated: onAuthenticated
+                    onAuthenticated: { user in onAuthenticated?(user, false) }
                 )
                 .frame(width: geometry.size.width)
                 .clipped()
@@ -67,7 +67,7 @@ public struct LoginView: View {
         }
         .onChange(of: viewModel.state) { state in
             if case .loaded(let session) = state {
-                onAuthenticated?(session.user)
+                onAuthenticated?(session.user, viewModel.consumeShouldCompleteOAuthProfile())
             }
         }
         .alert(

@@ -25,9 +25,11 @@ public struct AuthToken: Codable, Equatable, Sendable {
 public struct AuthSession: Equatable, Sendable {
     public let user: User
     public let token: AuthToken
+    public let isNewUser: Bool
 
-    public init(user: User, token: AuthToken) {
+    public init(user: User, token: AuthToken, isNewUser: Bool = false) {
         self.user = user
         self.token = token
+        self.isNewUser = isNewUser
     }
 }

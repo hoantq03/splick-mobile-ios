@@ -17,6 +17,7 @@ final class AppState: ObservableObject {
     @Published var selectedTab: Tab = .feed
     @Published var showProfileSettings = false
     @Published var showNotifications = false
+    @Published var needsOAuthProfileSetup = false
     @Published var notificationAnchorFrame: CGRect = .zero
     @Published var feedNavigationPath = NavigationPath()
     @Published var pendingFeedPostNavigation: PendingFeedPostNavigation?
@@ -48,11 +49,16 @@ final class AppState: ObservableObject {
         return nil
     }
 
-    func setAuthenticated(user: User) {
+    func setAuthenticated(user: User, needsOAuthProfileSetup: Bool = false) {
         authState = .authenticated(user)
+        self.needsOAuthProfileSetup = needsOAuthProfileSetup
         isLaunchSplashComplete = true
         Log.info("User authenticated: \(user.username)", category: .lifecycle)
         Log.debug("Navigate to main tabs", category: .ui)
+    }
+
+    func completeOAuthProfileSetup() {
+        needsOAuthProfileSetup = false
     }
 
     func updateAuthenticatedUser(_ user: User) {
@@ -66,6 +72,7 @@ final class AppState: ObservableObject {
         authState = .unauthenticated
         hasPassedOnboardingThisSession = false
         isLaunchSplashComplete = true
+        needsOAuthProfileSetup = false
         selectedTab = .feed
         showNotifications = false
         feedNavigationPath = NavigationPath()

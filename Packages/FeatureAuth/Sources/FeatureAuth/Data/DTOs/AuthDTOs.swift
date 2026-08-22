@@ -86,6 +86,7 @@ struct AuthResponseDTO: Decodable {
     let tokenType: String
     let sessionId: UUID?
     let user: UserDTO
+    let newUser: Bool?
 }
 
 struct UserDTO: Decodable {

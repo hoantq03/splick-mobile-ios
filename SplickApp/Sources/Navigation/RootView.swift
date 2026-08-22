@@ -2,6 +2,7 @@ import SwiftUI
 import DesignSystem
 import Common
 import FeatureAuth
+import FeatureMedia
 
 struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
@@ -69,9 +70,28 @@ struct RootView: View {
         case .unauthenticated, .authenticated:
             ZStack {
                 if appState.isAuthenticated {
-                    MainTabView()
+                    if appState.needsOAuthProfileSetup, let user = appState.currentUser {
+                        CompleteOAuthProfileView(
+                            viewModel: CompleteOAuthProfileViewModel(
+                                user: user,
+                                updateProfileUseCase: container.updateProfileUseCase,
+                                languageService: container.languageService,
+                                uploadAvatar: { image in
+                                    try await container.uploadUserAvatarUseCase.execute(image: image).url
+                                }
+                            ),
+                            onFinished: { updated in
+                                appState.updateAuthenticatedUser(updated)
+                                appState.completeOAuthProfileSetup()
+                            }
+                        )
                         .transition(SplashMotion.authenticatedTransition)
                         .zIndex(1)
+                    } else {
+                        MainTabView()
+                            .transition(SplashMotion.authenticatedTransition)
+                            .zIndex(1)
+                    }
                 } else {
                     unauthenticatedContent
                         .transition(SplashMotion.unauthenticatedTransition)
@@ -79,6 +99,7 @@ struct RootView: View {
                 }
             }
             .animation(SplashMotion.authStateSlide, value: appState.isAuthenticated)
+            .animation(SplashMotion.authStateSlide, value: appState.needsOAuthProfileSetup)
         }
     }
 
@@ -131,9 +152,9 @@ struct RootView: View {
                         languageService: container.languageService
                     )
                 },
-                onAuthenticated: { user in
+                onAuthenticated: { user, needsOAuthProfileSetup in
                     container.languageService.applyFromServer(user.preferredLocale)
-                    appState.setAuthenticated(user: user)
+                    appState.setAuthenticated(user: user, needsOAuthProfileSetup: needsOAuthProfileSetup)
                     Task {
                         await pushNotificationCoordinator.ensureDeviceTokenRegistered()
                     }

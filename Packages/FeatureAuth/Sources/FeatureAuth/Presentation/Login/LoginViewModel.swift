@@ -57,6 +57,8 @@ public final class LoginViewModel: ObservableObject {
     @Published private(set) var passwordStatus: FieldValidationStatus = .neutral
     @Published private(set) var confirmPasswordStatus: FieldValidationStatus = .neutral
 
+    private(set) var shouldCompleteOAuthProfile = false
+
     private let checkIdentifierUseCase: CheckIdentifierUseCaseProtocol
     private let loginUseCase: LoginUseCaseProtocol
     private let registerUseCase: RegisterUseCaseProtocol
@@ -501,6 +503,7 @@ public final class LoginViewModel: ObservableObject {
         do {
             let idToken = try await googleSignInPresenter.fetchIdToken()
             let session = try await googleSignInUseCase.execute(idToken: idToken)
+            shouldCompleteOAuthProfile = session.isNewUser
             setState(.loaded(session))
             Log.info("Google sign-in successful for \(session.user.username)", category: .auth)
         } catch let error as NetworkError where error.isConnectivityIssue {
@@ -529,6 +532,7 @@ public final class LoginViewModel: ObservableObject {
         do {
             let idToken = try await appleSignInPresenter.fetchIdToken()
             let session = try await appleSignInUseCase.execute(idToken: idToken)
+            shouldCompleteOAuthProfile = session.isNewUser
             setState(.loaded(session))
             Log.info("Apple sign-in successful for \(session.user.username)", category: .auth)
         } catch AppleSignInError.cancelled {
@@ -542,6 +546,12 @@ public final class LoginViewModel: ObservableObject {
         } catch {
             setState(.failed(error.localizedDescription))
         }
+    }
+
+    func consumeShouldCompleteOAuthProfile() -> Bool {
+        let value = shouldCompleteOAuthProfile
+        shouldCompleteOAuthProfile = false
+        return value
     }
 
     var credentialsSubmitDisabled: Bool {
