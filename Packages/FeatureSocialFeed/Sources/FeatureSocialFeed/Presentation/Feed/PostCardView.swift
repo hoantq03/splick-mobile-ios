@@ -9,6 +9,7 @@ import FeatureStickers
 struct PostCardView: View, Equatable {
     @EnvironmentObject private var languageService: LanguageService
     @EnvironmentObject private var emojiStore: CustomEmojiStore
+    @EnvironmentObject private var presenceStore: PresenceStore
     let post: Post
     let currentUser: UserSummary?
     let actions: PostCardActions
@@ -173,11 +174,14 @@ struct PostCardView: View, Equatable {
     private var authorHeader: some View {
         HStack(spacing: SplickTheme.Spacing.xs) {
             Button { actions.onUserTap(post.author) } label: {
-                AvatarView(
+                AvatarWithPresenceView(
                     imageURL: post.author.avatarURL,
                     name: post.author.displayName,
                     size: .small,
-                    userId: post.author.id
+                    userId: post.author.id,
+                    showOnlineIndicator: PresenceDisplayPolicy.shouldShowOnlineIndicator(
+                        isOnline: resolvedAuthorPresence.isOnline
+                    )
                 )
             }
             .buttonStyle(.plain)
@@ -199,6 +203,13 @@ struct PostCardView: View, Equatable {
 
             postOptionsMenu
         }
+    }
+
+    private var resolvedAuthorPresence: (isOnline: Bool, lastSeenAt: Date?) {
+        if let state = presenceStore.state(for: post.author.id) {
+            return (state.isOnline, state.lastSeenAt)
+        }
+        return (false, nil)
     }
 
     @ViewBuilder
