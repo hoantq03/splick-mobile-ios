@@ -2,9 +2,11 @@ import SwiftUI
 import DesignSystem
 import Localization
 import SplickDomain
+import Common
 
 struct FriendRowView: View {
     @EnvironmentObject private var languageService: LanguageService
+    @EnvironmentObject private var presenceStore: PresenceStore
     let user: UserSummary
     var friendStatus: FriendRelationStatus?
     var isProcessing: Bool = false
@@ -52,7 +54,15 @@ struct FriendRowView: View {
 
     private var profileContent: some View {
         HStack(spacing: SplickTheme.Spacing.sm) {
-            AvatarView(imageURL: user.avatarURL, name: user.displayName, size: .medium)
+            AvatarWithPresenceView(
+                imageURL: user.avatarURL,
+                name: user.displayName,
+                size: .medium,
+                userId: user.id,
+                showOnlineIndicator: PresenceDisplayPolicy.shouldShowOnlineIndicator(
+                    isOnline: resolvedPresence.isOnline
+                )
+            )
 
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
                 Text(user.displayName)
@@ -63,11 +73,31 @@ struct FriendRowView: View {
                         .font(SplickTheme.Typography.caption)
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
                 }
+                if let presenceText = presenceSubtitle {
+                    Text(presenceText)
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.textTertiary)
+                }
                 Text("@\(user.username)")
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
             }
         }
+    }
+
+    private var resolvedPresence: (isOnline: Bool, lastSeenAt: Date?) {
+        if let state = presenceStore.state(for: user.id) {
+            return (state.isOnline, state.lastSeenAt)
+        }
+        return (false, nil)
+    }
+
+    private var presenceSubtitle: String? {
+        PresenceDisplayPolicy.lastSeenText(
+            isOnline: resolvedPresence.isOnline,
+            lastSeenAt: resolvedPresence.lastSeenAt,
+            appLocale: languageService.locale
+        )
     }
 
     @ViewBuilder

@@ -1,5 +1,6 @@
 import Foundation
 import SplickDomain
+import Common
 
 enum FriendsMapper {
     static func toPublicUserProfile(_ dto: UserProfileResponseDTO) -> PublicUserProfile {
@@ -35,6 +36,24 @@ enum FriendsMapper {
         UserSearchResult(
             user: toUserSummary(dto),
             friendStatus: mapFriendStatus(dto.friendStatus)
+        )
+    }
+
+    static func presenceState(from dto: FriendResponseDTO) -> UserPresenceState? {
+        guard dto.online != nil || dto.lastSeenAt != nil else { return nil }
+        return UserPresenceState(
+            userId: dto.friendId,
+            isOnline: dto.online ?? false,
+            lastSeenAt: dto.lastSeenAt
+        )
+    }
+
+    static func presenceState(from dto: UserProfileResponseDTO) -> UserPresenceState? {
+        guard dto.online != nil || dto.lastSeenAt != nil else { return nil }
+        return UserPresenceState(
+            userId: dto.userId,
+            isOnline: dto.online ?? false,
+            lastSeenAt: dto.lastSeenAt
         )
     }
 

@@ -15,6 +15,8 @@ struct UserProfileResponseDTO: Decodable {
     let subtitle: String?
     let friendStatus: String?
     let stats: UserProfileStatsResponseDTO
+    let online: Bool?
+    let lastSeenAt: Date?
 }
 
 struct PaymentProfileResponseDTO: Decodable {
@@ -129,6 +131,8 @@ struct FriendResponseDTO: Decodable {
     let avatarUrl: String?
     let nickname: String?
     let friendsSince: Date
+    let online: Bool?
+    let lastSeenAt: Date?
 }
 
 struct SocialPageFriendResponseDTO: Decodable {

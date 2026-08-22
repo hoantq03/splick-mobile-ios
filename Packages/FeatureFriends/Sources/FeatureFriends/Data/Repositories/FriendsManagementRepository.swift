@@ -2,13 +2,16 @@ import Foundation
 import Networking
 import SplickDomain
 import Storage
+import Common
 
 public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
     private let apiClient: APIClientProtocol
+    private let presenceStore: PresenceStore?
     private static let maxCachedFriends = 200
 
-    public init(apiClient: APIClientProtocol) {
+    public init(apiClient: APIClientProtocol, presenceStore: PresenceStore? = nil) {
         self.apiClient = apiClient
+        self.presenceStore = presenceStore
     }
 
     public func fetchMyFriends() async throws -> [UserSummary] {
@@ -18,6 +21,7 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
             )
             return (response.content, response.page)
         }
+        await syncPresence(from: friends)
         return friends.map(FriendsMapper.toUserSummary)
     }
 
@@ -25,6 +29,7 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
         let response: SocialPageFriendResponseDTO = try await apiClient.request(
             SocialEndpoint.listFriends(page: page, size: size)
         )
+        await syncPresence(from: response.content)
         let friends = response.content.map(FriendsMapper.toUserSummary)
         let hasMore = page + 1 < max(response.page.totalPages, 1) && !response.content.isEmpty
         return FriendsPageResult(friends: friends, page: page, hasMore: hasMore)
@@ -51,6 +56,9 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
         let response: UserProfileResponseDTO = try await apiClient.request(
             SocialEndpoint.getUserProfile(userId: userId)
         )
+        if let state = FriendsMapper.presenceState(from: response), let presenceStore {
+            await presenceStore.apply(state)
+        }
         return FriendsMapper.toPublicUserProfile(response)
     }
 
@@ -237,6 +245,13 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
 
     public func revokeMyQr() async throws {
         try await apiClient.request(SocialEndpoint.revokeMyQr)
+    }
+
+    private func syncPresence(from friends: [FriendResponseDTO]) async {
+        guard let presenceStore else { return }
+        let states = friends.compactMap(FriendsMapper.presenceState(from:))
+        guard !states.isEmpty else { return }
+        await presenceStore.applyBulk(states)
     }
 }
 

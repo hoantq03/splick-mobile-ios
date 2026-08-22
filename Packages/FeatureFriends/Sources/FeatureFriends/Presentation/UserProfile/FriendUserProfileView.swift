@@ -9,6 +9,7 @@ public struct FriendUserProfileView: View {
     @State private var previewPost: Post?
     @State private var showAvatarViewer = false
     @EnvironmentObject private var languageService: LanguageService
+    @EnvironmentObject private var presenceStore: PresenceStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openDirectMessage) private var openDirectMessage
     @Environment(\.openLinkedPost) private var openLinkedPost
@@ -32,11 +33,14 @@ public struct FriendUserProfileView: View {
                     Button {
                         showAvatarViewer = true
                     } label: {
-                        AvatarView(
+                        AvatarWithPresenceView(
                             imageURL: viewModel.user.avatarURL,
                             name: viewModel.user.displayName,
                             size: .large,
-                            userId: viewModel.user.id
+                            userId: viewModel.user.id,
+                            showOnlineIndicator: PresenceDisplayPolicy.shouldShowOnlineIndicator(
+                                isOnline: resolvedPresence.isOnline
+                            )
                         )
                     }
                     .buttonStyle(.plain)
@@ -58,6 +62,11 @@ public struct FriendUserProfileView: View {
                         Text("@\(viewModel.user.username)")
                             .font(SplickTheme.Typography.callout)
                             .foregroundStyle(SplickTheme.Colors.textSecondary)
+                        if let presenceText = profilePresenceSubtitle {
+                            Text(presenceText)
+                                .font(SplickTheme.Typography.caption)
+                                .foregroundStyle(SplickTheme.Colors.textTertiary)
+                        }
                     }
 
                     if viewModel.isBotProfile {
@@ -514,5 +523,21 @@ public struct FriendUserProfileView: View {
             }
         }
         .presentationDetents([.medium])
+    }
+
+    private var resolvedPresence: (isOnline: Bool, lastSeenAt: Date?) {
+        if let state = presenceStore.state(for: viewModel.user.id) {
+            return (state.isOnline, state.lastSeenAt)
+        }
+        return (false, nil)
+    }
+
+    private var profilePresenceSubtitle: String? {
+        guard !viewModel.isBotProfile else { return nil }
+        return PresenceDisplayPolicy.lastSeenText(
+            isOnline: resolvedPresence.isOnline,
+            lastSeenAt: resolvedPresence.lastSeenAt,
+            appLocale: languageService.locale
+        )
     }
 }
