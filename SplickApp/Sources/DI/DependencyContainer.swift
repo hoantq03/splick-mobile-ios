@@ -26,6 +26,7 @@ final class DependencyContainer: ObservableObject {
     let userDefaultsService: UserDefaultsServiceProtocol
     let languageService: LanguageService
     let presenceStore: PresenceStore
+    let friendDisplayNameStore: FriendDisplayNameStore
 
     let apiClient: APIClientProtocol
     let sessionManager: SessionManagerProtocol
@@ -280,7 +281,11 @@ final class DependencyContainer: ObservableObject {
     // MARK: - Feed
 
     private lazy var feedRepository: FeedRepositoryProtocol = {
-        FeedRepository(apiClient: apiClient, mediaRepository: mediaRepository)
+        FeedRepository(
+            apiClient: apiClient,
+            mediaRepository: mediaRepository,
+            friendDisplayNameStore: friendDisplayNameStore
+        )
     }()
 
     var composeFeedRepository: FeedRepositoryProtocol { feedRepository }
@@ -321,6 +326,18 @@ final class DependencyContainer: ObservableObject {
         DeletePostUseCase(repository: feedRepository)
     }()
 
+    lazy var hidePostUseCase: HidePostUseCaseProtocol = {
+        HidePostUseCase(repository: feedRepository)
+    }()
+
+    lazy var updatePostUseCase: UpdatePostUseCaseProtocol = {
+        UpdatePostUseCase(repository: feedRepository)
+    }()
+
+    lazy var fetchPostEditHistoryUseCase: FetchPostEditHistoryUseCaseProtocol = {
+        FetchPostEditHistoryUseCase(repository: feedRepository)
+    }()
+
     lazy var createPostUseCase: CreatePostUseCaseProtocol = {
         CreatePostUseCase(repository: feedRepository)
     }()
@@ -346,7 +363,11 @@ final class DependencyContainer: ObservableObject {
     }()
 
     private lazy var friendsManagementRepository: FriendsManagementRepositoryProtocol = {
-        FriendsManagementRepository(apiClient: apiClient, presenceStore: presenceStore)
+        FriendsManagementRepository(
+            apiClient: apiClient,
+            presenceStore: presenceStore,
+            friendDisplayNameStore: friendDisplayNameStore
+        )
     }()
 
     private lazy var friendsRepository: FriendsRepositoryProtocol = {
@@ -354,7 +375,7 @@ final class DependencyContainer: ObservableObject {
     }()
 
     private lazy var groupsRepository: GroupsRepositoryProtocol = {
-        GroupsRepository(apiClient: apiClient)
+        GroupsRepository(apiClient: apiClient, friendDisplayNameStore: friendDisplayNameStore)
     }()
 
     lazy var fetchFriendsUseCase: FetchFriendsUseCaseProtocol = {
@@ -521,7 +542,7 @@ final class DependencyContainer: ObservableObject {
     // MARK: - Expense
 
     private lazy var expenseRepository: ExpenseRepositoryProtocol = {
-        ExpenseRepository(apiClient: apiClient)
+        ExpenseRepository(apiClient: apiClient, friendDisplayNameStore: friendDisplayNameStore)
     }()
 
     lazy var fetchExpensesUseCase: FetchExpensesUseCaseProtocol = {
@@ -603,6 +624,10 @@ final class DependencyContainer: ObservableObject {
         MarkNotificationClickedUseCase(repository: notificationRepository)
     }()
 
+    lazy var markInboxSeenUseCase: MarkInboxSeenUseCaseProtocol = {
+        MarkInboxSeenUseCase(repository: notificationRepository)
+    }()
+
     lazy var fetchBadgeCountsUseCase: FetchBadgeCountsUseCaseProtocol = {
         FetchBadgeCountsUseCase(repository: notificationRepository)
     }()
@@ -636,7 +661,7 @@ final class DependencyContainer: ObservableObject {
     }()
 
     lazy var appStartupRepository: AppStartupRepositoryProtocol = {
-        AppStartupRepository(apiClient: apiClient)
+        AppStartupRepository(apiClient: apiClient, friendDisplayNameStore: friendDisplayNameStore)
     }()
 
     lazy var fetchAppStartupUseCase: FetchAppStartupUseCaseProtocol = {
@@ -673,7 +698,7 @@ final class DependencyContainer: ObservableObject {
     let networkPathMonitor = NetworkPathMonitor()
 
     private lazy var messagingRepository: MessagingRepositoryProtocol = {
-        MessagingRepository(apiClient: apiClient)
+        MessagingRepository(apiClient: apiClient, friendDisplayNameStore: friendDisplayNameStore)
     }()
 
     private lazy var fetchConversationsUseCase: FetchConversationsUseCase = {
@@ -882,6 +907,7 @@ final class DependencyContainer: ObservableObject {
     func resetTabViewModels() {
         messagingWebSocketClient.disconnect()
         messageThreadCache.removeAll()
+        Task { await friendDisplayNameStore.clearAll() }
         feedViewModel = makeFeedViewModel()
         photoAlbumViewModel = makePhotoAlbumViewModel()
         streakViewModel = makeStreakViewModel()
@@ -913,6 +939,9 @@ final class DependencyContainer: ObservableObject {
             fetchPostUseCase: fetchPostUseCase,
             reactToPostUseCase: reactToPostUseCase,
             deletePostUseCase: deletePostUseCase,
+            hidePostUseCase: hidePostUseCase,
+            updatePostUseCase: updatePostUseCase,
+            fetchPostEditHistoryUseCase: fetchPostEditHistoryUseCase,
             addCommentUseCase: addCommentUseCase,
             sendBillReminderUseCase: sendBillReminderUseCase,
             submitPaymentEvidenceUseCase: submitPaymentEvidenceUseCase,
@@ -923,6 +952,7 @@ final class DependencyContainer: ObservableObject {
             recordPostViewsUseCase: recordPostViewsUseCase,
             listPostReactionsUseCase: listPostReactionsUseCase,
             feedRepository: feedRepository,
+            friendDisplayNameStore: friendDisplayNameStore,
             onFeedLoaded: { [weak self] posts, userId in
                 await self?.widgetSyncBridge.syncFeed(posts: posts, currentUserId: userId)
             }
@@ -971,6 +1001,7 @@ final class DependencyContainer: ObservableObject {
             fetchNotificationsUseCase: fetchNotificationsUseCase,
             markReadUseCase: markNotificationReadUseCase,
             markClickedUseCase: markNotificationClickedUseCase,
+            markInboxSeenUseCase: markInboxSeenUseCase,
             languageService: languageService,
             onBadgeCountsChanged: { [weak self] in
                 await self?.badgeCountService.refresh(force: true)
@@ -987,6 +1018,7 @@ final class DependencyContainer: ObservableObject {
         self.userDefaultsService = UserDefaultsService()
         self.languageService = LanguageService(userDefaults: userDefaultsService)
         self.presenceStore = PresenceStore()
+        self.friendDisplayNameStore = FriendDisplayNameStore()
         self.sessionManager = SessionManager()
 
         let refreshCoordinator = TokenRefreshCoordinator()
