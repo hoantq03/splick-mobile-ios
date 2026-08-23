@@ -18,7 +18,8 @@ struct ChatMessageListView: View {
     var peerDisplayName: String = ""
     var showsPeerReadAvatar: Bool = false
     var conversationId: UUID? = nil
-    var bottomOverlayInset: CGFloat = 64
+    var isComposerFocused: Bool = false
+    var bottomOverlayInset: CGFloat = 8
 
     @State private var reactionFocusMessageId: UUID?
     /// Fresh identity each open so `@State isRevealed` cannot stick across odd/even mounts.
@@ -108,6 +109,9 @@ struct ChatMessageListView: View {
                                     onReply: {
                                         beginReply(to: item.message)
                                     },
+                                    onQuotedReply: { originId in
+                                        Task { await viewModel.revealSearchedMessage(id: originId) }
+                                    },
                                     readReceiptPeerAvatarURL: peerAvatarURL,
                                     readReceiptPeerName: peerDisplayName,
                                     showsReadReceiptAvatar: showsPeerReadAvatar
@@ -155,22 +159,18 @@ struct ChatMessageListView: View {
                     .padding(.top, SplickTheme.Spacing.sm)
                     .padding(.bottom, SplickTheme.Spacing.sm + bottomOverlayInset)
                     .frame(maxWidth: .infinity)
+                    .modifier(ChatThreadScrollTargetLayoutModifier())
                     .onAppear { prefetchRecentThreadMedia() }
                     .onChange(of: messages.suffix(12).map(\.id)) { _ in
                         prefetchRecentThreadMedia()
                     }
                 }
-                .scrollDismissesKeyboard(.immediately)
+                .scrollDismissesKeyboard(.interactively)
                 .modifier(
                     ChatThreadScrollPositionModifier(
                         scrollPosition: $bottomScrollPosition,
                         bindsScrollPosition: initialOpenBottomScrollPending
                     )
-                )
-                .opacity(hasCompletedInitialBottomScroll ? 1 : 0)
-                .animation(
-                    hasCompletedInitialBottomScroll ? .easeOut(duration: 0.12) : nil,
-                    value: hasCompletedInitialBottomScroll
                 )
                 .onChange(of: viewModel.prependAnchorMessageId) { anchorId in
                     guard let anchorId else { return }
@@ -235,6 +235,11 @@ struct ChatMessageListView: View {
                 }
                 .allowsHitTesting(reactionFocusMessageId != nil)
             }
+            .onAppear {
+                syncBottomScrollPosition()
+                scrollToBottom(proxy: proxy, animated: false)
+                revealThreadIfNeeded()
+            }
             .task(id: bottomScrollTaskKey) {
                 guard viewModel.scrollToMessageToken == 0 else { return }
                 guard viewModel.highlightedMessageId == nil else { return }
@@ -252,16 +257,19 @@ struct ChatMessageListView: View {
                     lastHandledScrollToBottomToken = viewModel.scrollToBottomToken
                 }
 
-                if !viewModel.typingUserIds.isEmpty {
-                    await scrollToTypingIndicatorUntilVisible(
-                        proxy: proxy,
-                        animated: tokenIncreased && !isInitial
-                    )
-                } else {
+                if isInitial {
                     await scrollToBottomUntilVisible(
                         proxy: proxy,
                         animated: false
                     )
+                } else {
+                    scrollToBottom(proxy: proxy, animated: tokenIncreased)
+                    try? await Task.sleep(for: .milliseconds(50))
+                    scrollToBottom(proxy: proxy, animated: false)
+                    if !viewModel.typingUserIds.isEmpty {
+                        try? await Task.sleep(for: .milliseconds(40))
+                        scrollToTypingIndicator(proxy: proxy, animated: false)
+                    }
                 }
             }
             .task(id: typingScrollTaskKey) {
@@ -290,13 +298,25 @@ struct ChatMessageListView: View {
                 guard viewModel.scrollToMessageToken == 0 else { return }
                 guard viewModel.highlightedMessageId == nil else { return }
                 lastHandledScrollToBottomToken = token
-                guard hasCompletedInitialBottomScroll else { return }
-                if !viewModel.typingUserIds.isEmpty {
-                    Task {
-                        await scrollToTypingIndicatorUntilVisible(proxy: proxy, animated: true)
-                    }
-                } else if !initialOpenBottomScrollPending {
-                    scrollToBottom(proxy: proxy, animated: true)
+                scrollToBottom(proxy: proxy, animated: hasCompletedInitialBottomScroll)
+            }
+            .onChange(of: isComposerFocused) { focused in
+                guard focused else { return }
+                guard viewModel.scrollToMessageToken == 0 else { return }
+                guard viewModel.highlightedMessageId == nil else { return }
+                scrollToBottom(proxy: proxy, animated: true)
+            }
+            .onReceive(
+                NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)
+            ) { notification in
+                guard viewModel.scrollToMessageToken == 0 else { return }
+                guard viewModel.highlightedMessageId == nil else { return }
+                guard isComposerFocused || viewModel.isNearBottom || initialOpenBottomScrollPending else { return }
+                scrollToBottom(proxy: proxy, animated: false)
+                let duration = (notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? NSNumber)?
+                    .doubleValue ?? 0.25
+                DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
+                    scrollToBottom(proxy: proxy, animated: false)
                 }
             }
             .onChange(of: conversationId) { _ in
@@ -341,6 +361,12 @@ struct ChatMessageListView: View {
     private func syncBottomScrollPosition() {
         guard initialOpenBottomScrollPending else { return }
         bottomScrollPosition = resolvedBottomScrollTarget()
+    }
+
+    private func revealThreadIfNeeded() {
+        if !hasCompletedInitialBottomScroll {
+            hasCompletedInitialBottomScroll = true
+        }
     }
 
     private func markInitialBottomScrollComplete() {
@@ -632,13 +658,16 @@ struct ChatMessageListView: View {
     private func scrollToBottomUntilVisible(proxy: ScrollViewProxy, animated: Bool) async {
         let retryDelaysMs: [UInt64] = animated
             ? [0, 50, 120]
-            : [0, 16, 48, 96, 160, 280, 450, 650, 900, 1_200]
+            : [0, 16, 48, 96, 160, 280]
         syncBottomScrollPosition()
-        for delayMs in retryDelaysMs {
+        for (index, delayMs) in retryDelaysMs.enumerated() {
             if delayMs > 0 {
                 try? await Task.sleep(for: .milliseconds(delayMs))
             }
             scrollToBottom(proxy: proxy, animated: false)
+            if index == 0 {
+                revealThreadIfNeeded()
+            }
             if viewModel.isNearBottom {
                 markInitialBottomScrollComplete()
                 return
@@ -691,6 +720,16 @@ struct ChatMessageListView: View {
     }
 }
 
+private struct ChatThreadScrollTargetLayoutModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 17.0, *) {
+            content.scrollTargetLayout()
+        } else {
+            content
+        }
+    }
+}
+
 private struct ChatThreadScrollPositionModifier: ViewModifier {
     @Binding var scrollPosition: AnyHashable?
     var bindsScrollPosition: Bool
@@ -703,6 +742,7 @@ private struct ChatThreadScrollPositionModifier: ViewModifier {
                     .scrollPosition(id: $scrollPosition, anchor: .bottom)
             } else {
                 content
+                    .defaultScrollAnchor(.bottom)
             }
         } else {
             content

@@ -11,8 +11,20 @@ struct MessageQuotedReplyView: View {
     var usesBubbleTextColors: Bool = true
     /// Caps quote width so long replies wrap instead of stretching the bubble.
     var maxContentWidth: CGFloat? = nil
+    var onTap: (() -> Void)? = nil
 
     var body: some View {
+        if let onTap {
+            quotedContent
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onTap)
+                .accessibilityAddTraits(.isButton)
+        } else {
+            quotedContent
+        }
+    }
+
+    private var quotedContent: some View {
         HStack(spacing: SplickTheme.Spacing.xs) {
             RoundedRectangle(cornerRadius: 2, style: .continuous)
                 .fill(accentColor)

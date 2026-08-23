@@ -841,6 +841,11 @@ public final class ChatThreadViewModel: ObservableObject {
         scrollToBottomToken += 1
     }
 
+    /// Keeps the latest message (or typing indicator) on screen — open, send, keyboard, typing.
+    public func pinToLatest() {
+        requestScrollToBottom()
+    }
+
     private func registerFloatAnimation(for clientMessageId: UUID) {
         newlySentMessageIds.insert(clientMessageId)
         floatSwayByMessageId[clientMessageId] = CGFloat.random(in: -4...4)

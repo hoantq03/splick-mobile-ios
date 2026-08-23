@@ -233,6 +233,10 @@ public struct ChatThreadView: View {
         } message: {
             Text(languageService.text(.messagingFilterComingSoon))
         }
+        .onChange(of: isInputFocused) { focused in
+            guard focused else { return }
+            viewModel.pinToLatest()
+        }
         .onChange(of: relationshipViewModel.isBlocked) { isBlocked in
             guard isBlocked else { return }
             inputText = ""
@@ -278,9 +282,8 @@ public struct ChatThreadView: View {
             }
             messageArea
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .overlay(alignment: .bottom) {
+                .safeAreaInset(edge: .bottom, spacing: 0) {
                     bottomBar
-                        .fixedSize(horizontal: false, vertical: true)
                 }
         }
     }
@@ -603,7 +606,8 @@ public struct ChatThreadView: View {
                 peerDisplayName: peer?.displayTitle ?? "",
                 showsPeerReadAvatar: displayConversation?.isGroup != true,
                 conversationId: viewModel.conversationId,
-                bottomOverlayInset: viewModel.replyDraft == nil ? 64 : 118
+                isComposerFocused: isInputFocused,
+                bottomOverlayInset: SplickTheme.Spacing.sm
             )
         }
     }
@@ -616,6 +620,10 @@ public struct ChatThreadView: View {
                 attachmentDrafts: $viewModel.attachmentDrafts,
                 replyDraft: viewModel.replyDraft,
                 onCancelReply: { viewModel.cancelReply() },
+                onRevealReplyOriginal: {
+                    guard let originId = viewModel.replyDraft?.messageId else { return }
+                    Task { await viewModel.revealSearchedMessage(id: originId) }
+                },
                 placeholder: languageService.text(.messagingInputPlaceholder),
                 isSending: viewModel.isSending,
                 errorMessage: nil,

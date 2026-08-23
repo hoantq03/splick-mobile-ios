@@ -17,6 +17,7 @@ struct MessageComposerInputBar: View {
     @Binding var attachmentDrafts: [CommentAttachmentDraft]
     var replyDraft: MessageReplyDraft?
     var onCancelReply: (() -> Void)?
+    var onRevealReplyOriginal: (() -> Void)? = nil
     var placeholder: String
     var isSending: Bool
     var errorMessage: String?
@@ -52,7 +53,7 @@ struct MessageComposerInputBar: View {
         blendDuration: 0.05
     )
 
-    private static let fadeTail: CGFloat = 40
+    private static let fadeTail: CGFloat = 12
 
     var body: some View {
         VStack(spacing: 0) {
@@ -62,7 +63,11 @@ struct MessageComposerInputBar: View {
                 .accessibilityHidden(true)
 
             if let replyDraft, let onCancelReply {
-                MessageReplyBanner(draft: replyDraft, onCancel: onCancelReply)
+                MessageReplyBanner(
+                    draft: replyDraft,
+                    onCancel: onCancelReply,
+                    onRevealOriginal: onRevealReplyOriginal
+                )
                     .transition(.replyIsland)
                     .zIndex(1)
             }

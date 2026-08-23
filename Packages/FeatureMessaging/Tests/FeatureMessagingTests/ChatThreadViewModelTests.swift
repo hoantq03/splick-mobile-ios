@@ -471,6 +471,33 @@ final class ChatThreadViewModelTests: XCTestCase {
         XCTAssertGreaterThan(vm.scrollToMessageToken, 0)
     }
 
+    func test_revealSearchedMessage_highlightsLoadedOriginal() async {
+        let originalId = UUID()
+        let original = makeMessage(id: originalId, body: "Original")
+        let reply = makeMessage(body: "Reply")
+        let repo = StubMessagingRepository(messages: [original, reply])
+        let wsClient = makeTestWsClient()
+        let vm = makeViewModel(repo: repo, wsClient: wsClient)
+
+        await vm.load()
+        await vm.revealSearchedMessage(id: originalId)
+
+        XCTAssertEqual(vm.highlightedMessageId, originalId)
+        XCTAssertGreaterThan(vm.scrollToMessageToken, 0)
+    }
+
+    func test_pinToLatest_incrementsScrollToken() async {
+        let repo = StubMessagingRepository(messages: [makeMessage(body: "Hi")])
+        let wsClient = makeTestWsClient()
+        let vm = makeViewModel(repo: repo, wsClient: wsClient)
+
+        await vm.load()
+        let before = vm.scrollToBottomToken
+        vm.pinToLatest()
+
+        XCTAssertEqual(vm.scrollToBottomToken, before + 1)
+    }
+
     // MARK: Pagination
 
     func test_loadOlderMessages_prependsUniqueOlderPage() async {

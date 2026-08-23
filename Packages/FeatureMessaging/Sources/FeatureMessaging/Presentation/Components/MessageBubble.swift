@@ -33,6 +33,8 @@ struct MessageBubble: View {
     let onRetry: (() -> Void)?
     let onLongPress: (() -> Void)?
     let onReply: (() -> Void)?
+    /// Jump to the quoted original in the thread.
+    var onQuotedReply: ((UUID) -> Void)? = nil
     /// Peer avatar for the latest `.read` outgoing receipt (DIRECT).
     var readReceiptPeerAvatarURL: URL? = nil
     var readReceiptPeerName: String = ""
@@ -301,13 +303,21 @@ struct MessageBubble: View {
         }
     }
 
+    private var quotedReplyTap: (() -> Void)? {
+        guard presentation == .threadRow,
+              let onQuotedReply,
+              let preview = message.replyPreview else { return nil }
+        return { onQuotedReply(preview.messageId) }
+    }
+
     /// Quote sits above media, outside the colored text bubble, so it must not use
     /// outgoing white text (that is invisible on the chat background).
     private func mediaReplyPreview(_ preview: MessageReplyPreview) -> some View {
         MessageQuotedReplyView(
             preview: preview,
             isOutgoing: isOutgoing,
-            usesBubbleTextColors: false
+            usesBubbleTextColors: false,
+            onTap: quotedReplyTap
         )
         .padding(.horizontal, SplickTheme.Spacing.xs)
         .padding(.vertical, SplickTheme.Spacing.xxs)
@@ -326,7 +336,8 @@ struct MessageBubble: View {
                     preview: preview,
                     isOutgoing: isOutgoing,
                     usesBubbleTextColors: true,
-                    maxContentWidth: textWrapMaxWidth
+                    maxContentWidth: textWrapMaxWidth,
+                    onTap: quotedReplyTap
                 )
             }
             if hasTextBody {

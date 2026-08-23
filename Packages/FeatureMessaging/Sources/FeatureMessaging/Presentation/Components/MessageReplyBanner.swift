@@ -13,31 +13,37 @@ struct MessageReplyBanner: View {
 
     let draft: MessageReplyDraft
     let onCancel: () -> Void
+    var onRevealOriginal: (() -> Void)? = nil
 
     var body: some View {
         HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
-            Image(systemName: "arrowshape.turn.up.left.fill")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color.white.opacity(0.92))
-                .frame(width: 28, height: 28)
-                .background {
-                    Circle()
-                        .fill(Color.white.opacity(0.14))
+            HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
+                Image(systemName: "arrowshape.turn.up.left.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.92))
+                    .frame(width: 28, height: 28)
+                    .background {
+                        Circle()
+                            .fill(Color.white.opacity(0.14))
+                    }
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("\(languageService.text(.messagingReplyingTo)) \(draft.senderDisplayName)")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color.white)
+                        .lineLimit(1)
+
+                    Text(previewText)
+                        .font(.system(size: 12, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(0.72))
+                        .lineLimit(1)
                 }
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text("\(languageService.text(.messagingReplyingTo)) \(draft.senderDisplayName)")
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Color.white)
-                    .lineLimit(1)
-
-                Text(previewText)
-                    .font(.system(size: 12, design: .rounded))
-                    .foregroundStyle(Color.white.opacity(0.72))
-                    .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-
-            Spacer(minLength: SplickTheme.Spacing.xs)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                onRevealOriginal?()
+            }
 
             Button {
                 withAnimation(MessageReplyIslandMotion.dismiss) {
