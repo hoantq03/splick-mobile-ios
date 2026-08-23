@@ -12,7 +12,7 @@ struct PhotoEditorCropView: View {
         case topLeft, top, topRight, right, bottomRight, bottom, bottomLeft, left
     }
 
-    private let minNormalizedSize: CGFloat = 0.05
+    private let minNormalizedSize: CGFloat = CropGeometry.minNormalizedSize
     private let handleHitSize: CGFloat = 44
 
     var body: some View {
@@ -29,6 +29,7 @@ struct PhotoEditorCropView: View {
             ForEach(CropHandle.allCases.filter { $0 != .move }, id: \.self) { handle in
                 handleView(handle, cropFrame: cropFrame)
             }
+            cropCorners(cropFrame: cropFrame)
         }
         .onDisappear {
             if let liveCropRect {
@@ -72,6 +73,38 @@ struct PhotoEditorCropView: View {
     }
 
     @ViewBuilder
+    private func cropCorners(cropFrame: CGRect) -> some View {
+        let arm: CGFloat = min(22, min(cropFrame.width, cropFrame.height) * 0.18)
+        let thickness: CGFloat = 3
+        ZStack {
+            cornerL(x: cropFrame.minX, y: cropFrame.minY, arm: arm, thickness: thickness, hSign: 1, vSign: 1)
+            cornerL(x: cropFrame.maxX, y: cropFrame.minY, arm: arm, thickness: thickness, hSign: -1, vSign: 1)
+            cornerL(x: cropFrame.minX, y: cropFrame.maxY, arm: arm, thickness: thickness, hSign: 1, vSign: -1)
+            cornerL(x: cropFrame.maxX, y: cropFrame.maxY, arm: arm, thickness: thickness, hSign: -1, vSign: -1)
+        }
+        .allowsHitTesting(false)
+    }
+
+    @ViewBuilder
+    private func cornerL(
+        x: CGFloat,
+        y: CGFloat,
+        arm: CGFloat,
+        thickness: CGFloat,
+        hSign: CGFloat,
+        vSign: CGFloat
+    ) -> some View {
+        Rectangle()
+            .fill(Color.white)
+            .frame(width: arm, height: thickness)
+            .position(x: x + hSign * arm / 2, y: y)
+        Rectangle()
+            .fill(Color.white)
+            .frame(width: thickness, height: arm)
+            .position(x: x, y: y + vSign * arm / 2)
+    }
+
+    @ViewBuilder
     private func cropBorder(cropFrame: CGRect) -> some View {
         RoundedRectangle(cornerRadius: 2, style: .continuous)
             .strokeBorder(Color.white, lineWidth: 1.5)
@@ -102,10 +135,12 @@ struct PhotoEditorCropView: View {
             .frame(width: handleHitSize, height: handleHitSize)
             .contentShape(Rectangle())
             .overlay {
-                RoundedRectangle(cornerRadius: 3, style: .continuous)
-                    .fill(Color.white)
-                    .frame(width: visual.width, height: visual.height)
-                    .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
+                if handle == .top || handle == .bottom || handle == .left || handle == .right {
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(Color.white)
+                        .frame(width: visual.width, height: visual.height)
+                        .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
+                }
             }
             .position(point)
             .highPriorityGesture(cropDragGesture(for: handle))
@@ -116,6 +151,9 @@ struct PhotoEditorCropView: View {
             .onChanged { value in
                 if dragStartRect == nil {
                     dragStartRect = activeNormalizedRect
+                    if handle != .move {
+                        viewModel.markCropAspectFreeIfNeeded()
+                    }
                 }
                 guard let start = dragStartRect else { return }
                 liveCropRect = computeCrop(
@@ -197,6 +235,14 @@ struct PhotoEditorCropView: View {
             rect.size.width -= dx
         }
 
+        if handle != .move, let pixelAspect = viewModel.selectedCropAspect.pixelAspect {
+            let normalizedAspect = CropGeometry.normalizedAspect(
+                pixelAspect: pixelAspect,
+                imageSize: displayMetrics.imageSize
+            )
+            return CropGeometry.clampLocked(rect, normalizedAspect: normalizedAspect)
+        }
+
         if handle != .move {
             if rect.size.width < minNormalizedSize {
                 if handle == .left || handle == .topLeft || handle == .bottomLeft {
@@ -212,8 +258,6 @@ struct PhotoEditorCropView: View {
             }
         }
 
-        rect.origin.x = min(max(rect.origin.x, 0), 1 - rect.size.width)
-        rect.origin.y = min(max(rect.origin.y, 0), 1 - rect.size.height)
-        return rect
+        return CropGeometry.clamp(rect)
     }
 }

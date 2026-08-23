@@ -117,21 +117,31 @@ struct EditorToolbar: View {
     }
 
     private var cropOptionsBar: some View {
-        HStack {
-            Button {
-                viewModel.resetCrop()
-            } label: {
-                Text(languageService.text(.mediaCropReset))
-                    .font(SplickTheme.Typography.callout.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, SplickTheme.Spacing.md)
-                    .padding(.vertical, SplickTheme.Spacing.xs)
-                    .background(Capsule().fill(Color.white.opacity(0.16)))
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: SplickTheme.Spacing.sm) {
+                ForEach(CropAspectPreset.allCases) { preset in
+                    let selected = viewModel.selectedCropAspect == preset
+                    Button {
+                        viewModel.applyCropAspect(preset)
+                    } label: {
+                        Text(preset.title(using: languageService))
+                            .font(.system(size: 13, weight: selected ? .bold : .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(
+                                Capsule().fill(selected ? Color.white.opacity(0.28) : Color.white.opacity(0.14))
+                            )
+                            .overlay {
+                                Capsule().strokeBorder(Color.white.opacity(selected ? 0.9 : 0.2), lineWidth: 1)
+                            }
+                    }
+                    .buttonStyle(.plain)
+                }
             }
-            Spacer()
+            .padding(.horizontal, SplickTheme.Spacing.md)
+            .padding(.vertical, SplickTheme.Spacing.sm)
         }
-        .padding(.horizontal, SplickTheme.Spacing.md)
-        .padding(.vertical, SplickTheme.Spacing.sm)
         .background(.ultraThinMaterial.opacity(0.85))
     }
 

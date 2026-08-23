@@ -84,6 +84,7 @@ final class PhotoEditorViewModel: ObservableObject {
     @Published var textItems: [EditorTextItem] = []
     @Published var stickerItems: [EditorStickerItem] = []
     @Published var normalizedCropRect: CGRect = EditState.fullImageCropRect
+    @Published var selectedCropAspect: CropAspectPreset = .original
     @Published var selectedTextID: UUID?
     @Published var selectedStickerID: UUID?
     @Published var inkColor: UIColor = .white
@@ -259,9 +260,37 @@ final class PhotoEditorViewModel: ObservableObject {
     }
 
     func resetCrop() {
+        selectedCropAspect = .original
         normalizedCropRect = EditState.fullImageCropRect
         pushSnapshotIfNeeded()
         schedulePreviewRefresh()
+    }
+
+    func applyCropAspect(_ preset: CropAspectPreset) {
+        selectedCropAspect = preset
+        if preset == .original {
+            normalizedCropRect = EditState.fullImageCropRect
+        } else if let pixelAspect = preset.pixelAspect {
+            let imageSize = baseImage.size
+            let normalizedAspect = CropGeometry.normalizedAspect(
+                pixelAspect: pixelAspect,
+                imageSize: imageSize
+            )
+            let center = CGPoint(x: normalizedCropRect.midX, y: normalizedCropRect.midY)
+            normalizedCropRect = CropGeometry.fittedRect(
+                normalizedAspect: normalizedAspect,
+                center: center
+            )
+        }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        pushSnapshotIfNeeded()
+        schedulePreviewRefresh()
+    }
+
+    func markCropAspectFreeIfNeeded() {
+        if selectedCropAspect == .original {
+            selectedCropAspect = .free
+        }
     }
 
     func setFilter(_ preset: FilterPreset) {
@@ -431,7 +460,16 @@ final class PhotoEditorViewModel: ObservableObject {
     }
 
     func commitCropRect(_ rect: CGRect) {
-        let clamped = Self.clampCrop(rect)
+        let clamped: CGRect
+        if let pixelAspect = selectedCropAspect.pixelAspect {
+            let normalizedAspect = CropGeometry.normalizedAspect(
+                pixelAspect: pixelAspect,
+                imageSize: baseImage.size
+            )
+            clamped = CropGeometry.clampLocked(rect, normalizedAspect: normalizedAspect)
+        } else {
+            clamped = CropGeometry.clamp(rect)
+        }
         guard clamped != normalizedCropRect else { return }
         normalizedCropRect = clamped
     }
@@ -701,16 +739,6 @@ final class PhotoEditorViewModel: ObservableObject {
 
     private static func rotateRectClockwise(_ rect: CGRect) -> CGRect {
         CGRect(x: 1 - rect.maxY, y: rect.minX, width: rect.height, height: rect.width)
-    }
-
-    private static func clampCrop(_ rect: CGRect) -> CGRect {
-        var result = rect
-        let minSize: CGFloat = 0.05
-        result.size.width = max(result.size.width, minSize)
-        result.size.height = max(result.size.height, minSize)
-        result.origin.x = min(max(result.origin.x, 0), 1 - result.size.width)
-        result.origin.y = min(max(result.origin.y, 0), 1 - result.size.height)
-        return result
     }
 }
 
