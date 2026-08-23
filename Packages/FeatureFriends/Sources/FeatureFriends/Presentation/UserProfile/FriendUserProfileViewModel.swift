@@ -45,6 +45,7 @@ public final class FriendUserProfileViewModel: ObservableObject {
     private let blockUserUseCase: BlockUserUseCaseProtocol?
     private let unblockUserUseCase: UnblockUserUseCaseProtocol?
     private let onRelationshipChanged: (UUID, FriendRelationStatus) -> Void
+    private let onFriendSummaryUpdated: (UserSummary) -> Void
     private var postsPage = 0
     private var hasMorePosts = true
 
@@ -64,7 +65,8 @@ public final class FriendUserProfileViewModel: ObservableObject {
         setNicknameUseCase: SetFriendNicknameUseCaseProtocol? = nil,
         blockUserUseCase: BlockUserUseCaseProtocol? = nil,
         unblockUserUseCase: UnblockUserUseCaseProtocol? = nil,
-        onRelationshipChanged: @escaping (UUID, FriendRelationStatus) -> Void = { _, _ in }
+        onRelationshipChanged: @escaping (UUID, FriendRelationStatus) -> Void = { _, _ in },
+        onFriendSummaryUpdated: @escaping (UserSummary) -> Void = { _ in }
     ) {
         self.user = user
         self.currentUserId = currentUserId
@@ -82,6 +84,7 @@ public final class FriendUserProfileViewModel: ObservableObject {
         self.blockUserUseCase = blockUserUseCase
         self.unblockUserUseCase = unblockUserUseCase
         self.onRelationshipChanged = onRelationshipChanged
+        self.onFriendSummaryUpdated = onFriendSummaryUpdated
         self.nicknameDraft = user.displayName
     }
 
@@ -275,6 +278,7 @@ public final class FriendUserProfileViewModel: ObservableObject {
             user = try await setNicknameUseCase.execute(friendUserId: user.id, nickname: nickname)
             nicknameDraft = user.displayName
             showNicknameEditor = false
+            onFriendSummaryUpdated(user)
             onRelationshipChanged(user.id, friendStatus)
             await loadProfile()
         } catch {

@@ -48,7 +48,8 @@ public struct FriendUserProfileDependencies {
         user: UserSummary,
         currentUserId: UUID? = nil,
         initialFriendStatus: FriendRelationStatus = .none,
-        onRelationshipChanged: @escaping (UUID, FriendRelationStatus) -> Void = { _, _ in }
+        onRelationshipChanged: @escaping (UUID, FriendRelationStatus) -> Void = { _, _ in },
+        onFriendSummaryUpdated: @escaping (UserSummary) -> Void = { _ in }
     ) -> FriendUserProfileViewModel {
         FriendUserProfileViewModel(
             user: user,
@@ -66,7 +67,8 @@ public struct FriendUserProfileDependencies {
             setNicknameUseCase: setFriendNicknameUseCase,
             blockUserUseCase: blockUserUseCase,
             unblockUserUseCase: unblockUserUseCase,
-            onRelationshipChanged: onRelationshipChanged
+            onRelationshipChanged: onRelationshipChanged,
+            onFriendSummaryUpdated: onFriendSummaryUpdated
         )
     }
 }

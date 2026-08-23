@@ -1,20 +1,27 @@
 import Foundation
 import Networking
 import SplickDomain
+import Common
 
 public final class MessagingRepository: MessagingRepositoryProtocol, Sendable {
     private let apiClient: APIClientProtocol
+    private let friendDisplayNameStore: FriendDisplayNameStore?
 
-    public init(apiClient: APIClientProtocol) {
+    public init(
+        apiClient: APIClientProtocol,
+        friendDisplayNameStore: FriendDisplayNameStore? = nil
+    ) {
         self.apiClient = apiClient
+        self.friendDisplayNameStore = friendDisplayNameStore
     }
 
     public func fetchConversations(query: ConversationInboxQuery) async throws -> MessagingPage<Conversation> {
         let page: PageResponseDTO<ConversationResponseDTO> = try await apiClient.request(
             MessagingEndpoint.listConversations(query)
         )
+        let conversations = page.items.map(MessagingMapper.toConversation)
         return MessagingPage(
-            items: page.items.map(MessagingMapper.toConversation),
+            items: await resolveConversations(conversations),
             nextCursor: page.nextCursor,
             hasMore: page.hasMore
         )
@@ -31,7 +38,7 @@ public final class MessagingRepository: MessagingRepositoryProtocol, Sendable {
         let dto: ConversationResponseDTO = try await apiClient.request(
             MessagingEndpoint.getOrCreateConversation(friendUserId: friendUserId)
         )
-        return MessagingMapper.toConversation(dto)
+        return await resolveConversation(MessagingMapper.toConversation(dto))
     }
 
     public func createGroup(
@@ -50,7 +57,7 @@ public final class MessagingRepository: MessagingRepositoryProtocol, Sendable {
                 )
             )
         )
-        return MessagingMapper.toConversation(dto)
+        return await resolveConversation(MessagingMapper.toConversation(dto))
     }
 
     public func addGroupMember(groupId: UUID, memberUserId: UUID) async throws {
@@ -90,14 +97,14 @@ public final class MessagingRepository: MessagingRepositoryProtocol, Sendable {
                 )
             )
         )
-        return MessagingMapper.toConversation(dto)
+        return await resolveConversation(MessagingMapper.toConversation(dto))
     }
 
     public func renameGroup(groupId: UUID, name: String) async throws -> Conversation {
         let dto: ConversationResponseDTO = try await apiClient.request(
             MessagingEndpoint.renameGroup(groupId: groupId, RenameGroupRequestDTO(name: name))
         )
-        return MessagingMapper.toConversation(dto)
+        return await resolveConversation(MessagingMapper.toConversation(dto))
     }
 
     public func transferGroupAdmin(groupId: UUID, newAdminUserId: UUID) async throws {
@@ -210,5 +217,15 @@ public final class MessagingRepository: MessagingRepositoryProtocol, Sendable {
     public func requestWsTicket() async throws -> String {
         let dto: WsTicketResponseDTO = try await apiClient.request(MessagingEndpoint.wsTicket)
         return dto.ticket
+    }
+
+    private func resolveConversations(_ conversations: [Conversation]) async -> [Conversation] {
+        guard let friendDisplayNameStore else { return conversations }
+        return await friendDisplayNameStore.resolve(conversations)
+    }
+
+    private func resolveConversation(_ conversation: Conversation) async -> Conversation {
+        guard let friendDisplayNameStore else { return conversation }
+        return await friendDisplayNameStore.resolve(conversation)
     }
 }

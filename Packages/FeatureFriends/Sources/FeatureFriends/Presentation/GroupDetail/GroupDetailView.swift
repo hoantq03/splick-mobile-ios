@@ -92,6 +92,7 @@ struct GroupDetailView: View {
         .background(SplickTheme.Colors.background)
         .navigationTitle(viewModel.group.name)
         .navigationBarTitleDisplayMode(.inline)
+        .splickInteractivePopEnabled()
         .sheet(isPresented: $showGroupQR) {
             GroupInviteQRSheet(
                 groupName: viewModel.group.name,

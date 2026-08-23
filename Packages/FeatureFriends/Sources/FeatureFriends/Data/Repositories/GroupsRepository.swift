@@ -5,9 +5,14 @@ import SplickDomain
 
 public struct GroupsRepository: GroupsRepositoryProtocol {
     private let apiClient: APIClientProtocol
+    private let friendDisplayNameStore: FriendDisplayNameStore?
 
-    public init(apiClient: APIClientProtocol) {
+    public init(
+        apiClient: APIClientProtocol,
+        friendDisplayNameStore: FriendDisplayNameStore? = nil
+    ) {
         self.apiClient = apiClient
+        self.friendDisplayNameStore = friendDisplayNameStore
     }
 
     public func fetchMyGroups() async throws -> [Group] {
@@ -28,7 +33,9 @@ public struct GroupsRepository: GroupsRepositoryProtocol {
         let response: SocialPageMemberResponseDTO = try await apiClient.request(
             SocialEndpoint.listGroupMembers(groupId: groupId, status: status, page: 0, size: 100)
         )
-        return response.content.map(FriendsMapper.toGroupMemberItem)
+        let members = response.content.map(FriendsMapper.toGroupMemberItem)
+        guard let friendDisplayNameStore else { return members }
+        return await friendDisplayNameStore.resolve(members)
     }
 
     public func createGroup(name: String, description: String?) async throws -> Group {

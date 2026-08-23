@@ -324,6 +324,9 @@ public struct FriendsRootView: View {
                         initialFriendStatus: route.initialFriendStatus,
                         onRelationshipChanged: { userId, status in
                             viewModel.handleRelationshipChanged(userId: userId, status: status)
+                        },
+                        onFriendSummaryUpdated: { user in
+                            viewModel.updateFriendSummary(user)
                         }
                     )
                 )

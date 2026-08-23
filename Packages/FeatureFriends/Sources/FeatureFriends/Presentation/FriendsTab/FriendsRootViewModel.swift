@@ -804,6 +804,15 @@ public final class FriendsRootViewModel: ObservableObject {
         rebuildSearchItems()
     }
 
+    func updateFriendSummary(_ user: UserSummary) {
+        guard let index = friends.firstIndex(where: { $0.id == user.id }) else { return }
+        friends[index] = user
+        friendsState = .loaded(friends)
+        rebuildDirectoryItems()
+        rebuildSearchItems()
+        persistFriendsCache()
+    }
+
     func handleRelationshipChanged(userId: UUID, status: FriendRelationStatus) {
         updateUserRelationStatus(userId: userId, status: status)
         switch status {

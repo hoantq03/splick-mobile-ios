@@ -212,6 +212,7 @@ public struct ExpenseFriendDetailView: View {
     }
     .navigationTitle(viewModel.counterparty.displayName)
     .navigationBarTitleDisplayMode(.inline)
+    .splickInteractivePopEnabled()
     .task {
       if case .idle = viewModel.state {
         await viewModel.load()

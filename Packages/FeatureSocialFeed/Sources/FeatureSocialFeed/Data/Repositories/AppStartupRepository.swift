@@ -4,6 +4,7 @@ import FeatureNotification
 import Networking
 import SplickDomain
 import Storage
+import Common
 
 public protocol AppStartupRepositoryProtocol: Sendable {
     func fetchStartupData() async throws -> AppStartupData
@@ -13,14 +14,19 @@ public protocol AppStartupRepositoryProtocol: Sendable {
 
 public final class AppStartupRepository: AppStartupRepositoryProtocol, Sendable {
     private let apiClient: APIClientProtocol
+    private let friendDisplayNameStore: FriendDisplayNameStore?
 
-    public init(apiClient: APIClientProtocol) {
+    public init(
+        apiClient: APIClientProtocol,
+        friendDisplayNameStore: FriendDisplayNameStore? = nil
+    ) {
         self.apiClient = apiClient
+        self.friendDisplayNameStore = friendDisplayNameStore
     }
 
     public func fetchStartupData() async throws -> AppStartupData {
         let dto: StartupDataResponseDTO = try await apiClient.request(AppStartupEndpoint.startup)
-        return map(dto)
+        return await resolveStartupData(map(dto))
     }
 
     public func loadCached(userId: UUID) async -> AppStartupData? {
@@ -28,7 +34,7 @@ public final class AppStartupRepository: AppStartupRepositoryProtocol, Sendable 
         guard let payload = await DiskCache.shared.read(StartupCachePayload.self, key: key) else {
             return nil
         }
-        return StartupCacheMapper.fromPayload(payload)
+        return await resolveStartupData(StartupCacheMapper.fromPayload(payload))
     }
 
     public func saveCached(_ data: AppStartupData, userId: UUID) async {
@@ -101,6 +107,20 @@ public final class AppStartupRepository: AppStartupRepositoryProtocol, Sendable 
             shortcode: dto.shortcode,
             mediaUrl: url,
             createdAt: dto.createdAt
+        )
+    }
+
+    private func resolveStartupData(_ data: AppStartupData) async -> AppStartupData {
+        guard let friendDisplayNameStore else { return data }
+        let posts = await friendDisplayNameStore.resolve(data.posts)
+        let conversations = await friendDisplayNameStore.resolve(data.conversations)
+        return AppStartupData(
+            badgeCounts: data.badgeCounts,
+            posts: posts,
+            conversations: conversations,
+            emojis: data.emojis,
+            currentStreak: data.currentStreak,
+            hasTodayPhoto: data.hasTodayPhoto
         )
     }
 }

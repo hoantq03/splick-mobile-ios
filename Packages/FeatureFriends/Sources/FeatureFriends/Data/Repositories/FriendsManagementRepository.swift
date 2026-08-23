@@ -7,11 +7,17 @@ import Common
 public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
     private let apiClient: APIClientProtocol
     private let presenceStore: PresenceStore?
+    private let friendDisplayNameStore: FriendDisplayNameStore?
     private static let maxCachedFriends = 200
 
-    public init(apiClient: APIClientProtocol, presenceStore: PresenceStore? = nil) {
+    public init(
+        apiClient: APIClientProtocol,
+        presenceStore: PresenceStore? = nil,
+        friendDisplayNameStore: FriendDisplayNameStore? = nil
+    ) {
         self.apiClient = apiClient
         self.presenceStore = presenceStore
+        self.friendDisplayNameStore = friendDisplayNameStore
     }
 
     public func fetchMyFriends() async throws -> [UserSummary] {
@@ -22,7 +28,9 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
             return (response.content, response.page)
         }
         await syncPresence(from: friends)
-        return friends.map(FriendsMapper.toUserSummary)
+        let mapped = friends.map(FriendsMapper.toUserSummary)
+        await syncFriendDisplayNames(mapped)
+        return mapped
     }
 
     public func fetchMyFriendsPage(page: Int, size: Int) async throws -> FriendsPageResult {
@@ -31,12 +39,17 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
         )
         await syncPresence(from: response.content)
         let friends = response.content.map(FriendsMapper.toUserSummary)
+        await syncFriendDisplayNames(friends)
         let hasMore = page + 1 < max(response.page.totalPages, 1) && !response.content.isEmpty
         return FriendsPageResult(friends: friends, page: page, hasMore: hasMore)
     }
 
     public func loadCachedFriends(userId: UUID) async -> [UserSummary]? {
-        await DiskCache.shared.read(FriendsCachePayload.self, key: Self.cacheKey(for: userId))?.friends
+        let friends = await DiskCache.shared.read(FriendsCachePayload.self, key: Self.cacheKey(for: userId))?.friends
+        if let friends {
+            await syncFriendDisplayNames(friends)
+        }
+        return friends
     }
 
     public func saveCachedFriends(_ friends: [UserSummary], userId: UUID) async {
@@ -59,7 +72,11 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
         if let state = FriendsMapper.presenceState(from: response), let presenceStore {
             await presenceStore.apply(state)
         }
-        return FriendsMapper.toPublicUserProfile(response)
+        let profile = FriendsMapper.toPublicUserProfile(response)
+        if profile.friendStatus == .friends, let friendDisplayNameStore {
+            await friendDisplayNameStore.upsert(from: profile.user)
+        }
+        return profile
     }
 
     public func fetchFriendPaymentProfile(userId: UUID) async throws -> PaymentProfile {
@@ -78,18 +95,19 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
             let response: SocialPageFriendResponseDTO = try await apiClient.request(
                 SocialEndpoint.listFriends(page: page, size: size)
             )
-            return response.content
+            let results = response.content
                 .map { UserSearchResult(user: FriendsMapper.toUserSummary($0), friendStatus: .friends) }
                 .sorted {
                     $0.user.displayName.localizedCaseInsensitiveCompare($1.user.displayName)
                         == .orderedAscending
                 }
+            return await resolveSearchResults(results)
         }
 
         let response: SocialPageUserSearchResponseDTO = try await apiClient.request(
             SocialEndpoint.searchUsers(query: normalized, page: page, size: size)
         )
-        return response.content.map(FriendsMapper.toUserSearchResult)
+        return await resolveSearchResults(response.content.map(FriendsMapper.toUserSearchResult))
     }
 
     public func searchUser(username: String) async throws -> UserSummary? {
@@ -175,13 +193,20 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
 
     public func removeFriend(friendUserId: UUID) async throws {
         try await apiClient.request(SocialEndpoint.removeFriend(friendUserId: friendUserId))
+        if let friendDisplayNameStore {
+            await friendDisplayNameStore.remove(userId: friendUserId)
+        }
     }
 
     public func setFriendNickname(friendUserId: UUID, nickname: String?) async throws -> UserSummary {
         let response: FriendResponseDTO = try await apiClient.request(
             SocialEndpoint.setFriendNickname(friendUserId: friendUserId, nickname: nickname)
         )
-        return FriendsMapper.toUserSummary(response)
+        let user = FriendsMapper.toUserSummary(response)
+        if let friendDisplayNameStore {
+            await friendDisplayNameStore.upsert(from: user)
+        }
+        return user
     }
 
     public func fetchBlockedUsers(page: Int, size: Int) async throws -> [BlockedUser] {
@@ -252,6 +277,16 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
         let states = friends.compactMap(FriendsMapper.presenceState(from:))
         guard !states.isEmpty else { return }
         await presenceStore.applyBulk(states)
+    }
+
+    private func syncFriendDisplayNames(_ friends: [UserSummary]) async {
+        guard let friendDisplayNameStore else { return }
+        await friendDisplayNameStore.sync(from: friends)
+    }
+
+    private func resolveSearchResults(_ results: [UserSearchResult]) async -> [UserSearchResult] {
+        guard let friendDisplayNameStore else { return results }
+        return await friendDisplayNameStore.resolve(results)
     }
 }
 
