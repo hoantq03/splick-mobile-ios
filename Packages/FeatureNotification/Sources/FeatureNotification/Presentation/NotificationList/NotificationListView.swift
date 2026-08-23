@@ -209,13 +209,17 @@ public struct NotificationListView: View {
                                 onAcceptFriendRequest: notification.canRespondToFriendRequest
                                     && viewModel.friendRequestOutcome(for: notification) == nil
                                     ? {
-                                        Task { await viewModel.acceptFriendRequest(notification) }
+                                        Task<Void, Never> {
+                                            await viewModel.acceptFriendRequest(notification)
+                                        }
                                     }
                                     : nil,
                                 onRejectFriendRequest: notification.canRespondToFriendRequest
                                     && viewModel.friendRequestOutcome(for: notification) == nil
                                     ? {
-                                        Task { await viewModel.rejectFriendRequest(notification) }
+                                        Task<Void, Never> {
+                                            await viewModel.rejectFriendRequest(notification)
+                                        }
                                     }
                                     : nil
                             )
