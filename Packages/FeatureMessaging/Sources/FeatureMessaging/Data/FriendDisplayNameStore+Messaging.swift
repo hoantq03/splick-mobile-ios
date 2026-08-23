@@ -1,14 +1,15 @@
+import Foundation
 import Common
 import SplickDomain
 
 extension FriendDisplayNameStore {
-    func resolvePeer(_ peer: ConversationPeer) -> ConversationPeer {
+    public func resolvePeer(_ peer: ConversationPeer) -> ConversationPeer {
         let resolved = resolve(
             UserSummary(
                 id: peer.userId,
                 username: peer.username,
                 displayName: peer.displayName ?? peer.username,
-                avatarURL: peer.avatarUrl.flatMap(URL.init(string:))
+                avatarURL: peer.avatarUrl.flatMap { URL(string: $0) }
             )
         )
         return ConversationPeer(
@@ -21,12 +22,12 @@ extension FriendDisplayNameStore {
         )
     }
 
-    func resolve(_ conversation: Conversation) -> Conversation {
+    public func resolve(_ conversation: Conversation) -> Conversation {
         guard let peer = conversation.peer else { return conversation }
         return conversation.updating(peer: resolvePeer(peer))
     }
 
-    func resolve(_ conversations: [Conversation]) -> [Conversation] {
+    public func resolve(_ conversations: [Conversation]) -> [Conversation] {
         conversations.map(resolve)
     }
 }
