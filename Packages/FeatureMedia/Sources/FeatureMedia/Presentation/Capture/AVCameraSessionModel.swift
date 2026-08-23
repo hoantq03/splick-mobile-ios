@@ -213,7 +213,7 @@ extension AVCameraSessionModel: AVCaptureVideoDataOutputSampleBufferDelegate {
 private extension AVCameraSessionModel {
     func previewExifOrientation(for connection: AVCaptureConnection?) -> CGImagePropertyOrientation {
         guard let connection else { return .right }
-        let mirrored = connection.isVideoMirroringEnabled && connection.isVideoMirrored
+        let mirrored = connection.isVideoMirrored
         switch connection.videoOrientation {
         case .portrait:
             return mirrored ? .leftMirrored : .right
