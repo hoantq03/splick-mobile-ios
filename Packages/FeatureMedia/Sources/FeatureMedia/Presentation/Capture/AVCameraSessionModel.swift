@@ -175,6 +175,7 @@ extension AVCameraSessionModel: AVCaptureVideoDataOutputSampleBufferDelegate {
     ) {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         let raw = CIImage(cvPixelBuffer: pixelBuffer)
+            .oriented(previewExifOrientation(for: connection))
         let preset = filterPreset
         let intensity = filterIntensity
         let filtered = filterEngine.apply(raw, preset: preset, intensity: intensity)
@@ -198,9 +199,32 @@ extension AVCameraSessionModel: AVCaptureVideoDataOutputSampleBufferDelegate {
                 self?.isDetectingFace = false
             }
         }
-        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .right, options: [:])
+        let handler = VNImageRequestHandler(
+            cvPixelBuffer: pixelBuffer,
+            orientation: previewExifOrientation(for: videoOutput.connection(with: .video)),
+            options: [:]
+        )
         sessionQueue.async {
             try? handler.perform([request])
+        }
+    }
+}
+
+private extension AVCameraSessionModel {
+    func previewExifOrientation(for connection: AVCaptureConnection?) -> CGImagePropertyOrientation {
+        guard let connection else { return .right }
+        let mirrored = connection.isVideoMirroringEnabled && connection.isVideoMirrored
+        switch connection.videoOrientation {
+        case .portrait:
+            return mirrored ? .leftMirrored : .right
+        case .portraitUpsideDown:
+            return mirrored ? .rightMirrored : .left
+        case .landscapeRight:
+            return mirrored ? .downMirrored : .up
+        case .landscapeLeft:
+            return mirrored ? .upMirrored : .down
+        @unknown default:
+            return .right
         }
     }
 }
