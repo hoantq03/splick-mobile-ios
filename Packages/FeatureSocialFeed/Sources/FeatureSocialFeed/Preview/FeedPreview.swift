@@ -32,6 +32,23 @@ final class MockDeletePostUseCase: DeletePostUseCaseProtocol, Sendable {
     func execute(postId: UUID) async throws {}
 }
 
+final class MockHidePostUseCase: HidePostUseCaseProtocol, Sendable {
+    func execute(postId: UUID) async throws {}
+}
+
+final class MockUpdatePostUseCase: UpdatePostUseCaseProtocol, Sendable {
+    func execute(_ input: UpdatePostInput) async throws -> Post {
+        PreviewData.samplePosts.first(where: { $0.id == input.postId }) ?? PreviewData.samplePost
+    }
+}
+
+final class MockFetchPostEditHistoryUseCase: FetchPostEditHistoryUseCaseProtocol, Sendable {
+    func execute(postId: UUID) async throws -> [PostEditRevision] {
+        _ = postId
+        return []
+    }
+}
+
 final class MockAddCommentUseCase: AddCommentUseCaseProtocol, Sendable {
     func execute(
         postId: UUID,
@@ -170,6 +187,9 @@ final class MockFetchPhotoAlbumUseCase: FetchPhotoAlbumUseCaseProtocol, Sendable
                 fetchPostUseCase: MockFetchPostUseCase(),
                 reactToPostUseCase: MockReactToPostUseCase(),
                 deletePostUseCase: MockDeletePostUseCase(),
+                hidePostUseCase: MockHidePostUseCase(),
+                updatePostUseCase: MockUpdatePostUseCase(),
+                fetchPostEditHistoryUseCase: MockFetchPostEditHistoryUseCase(),
                 addCommentUseCase: MockAddCommentUseCase(),
                 sendBillReminderUseCase: MockSendBillReminderUseCase(),
                 submitPaymentEvidenceUseCase: MockSubmitPaymentEvidenceUseCase(),

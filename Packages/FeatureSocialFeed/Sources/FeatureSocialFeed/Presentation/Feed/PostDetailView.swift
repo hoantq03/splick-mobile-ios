@@ -36,6 +36,7 @@ struct PostDetailView: View {
     @State private var gifPickerViewModel: GifPickerViewModel?
     @State private var detailScrollLocked = false
     @State private var cardPresentation: PostCardPresentation?
+    @State private var editingPost: Post?
     @State private var observedPendingCommentIds = Set<UUID>()
     @State private var commentsListMinHeight: CGFloat = 0
     @StateObject private var cardActions = PostCardActions()
@@ -149,6 +150,7 @@ struct PostDetailView: View {
         .navigationTitle(languageService.text(.feedPostCommentsTitle))
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
+        .splickInteractivePopEnabled()
         .overlay(alignment: .top) {
             SplickScrollTopFadeOverlay(mode: .detailScreen)
         }
@@ -211,8 +213,20 @@ struct PostDetailView: View {
                 )
                 await reloadEvidenceComments()
             },
+            loadPostEdits: { postId in
+                try await feedViewModel.fetchPostEdits(postId: postId)
+            },
             customEmojiDependencies: customEmojiDependencies
         )
+        .fullScreenCover(item: $editingPost) { post in
+            EditPostComposeView(
+                post: post,
+                updatePost: { try await feedViewModel.updatePost($0) },
+                onSaved: { _ in editingPost = nil },
+                onCancel: { editingPost = nil }
+            )
+            .environmentObject(languageService)
+        }
         .sheet(item: $profileRoute) { route in
             if let profileDependencies {
                 FriendUserProfileView(
@@ -569,6 +583,9 @@ struct PostDetailView: View {
         }
         cardActions.onHide = { postId in
             Task { await feedViewModel.hidePost(id: postId) }
+        }
+        cardActions.onEdit = { post in
+            editingPost = post
         }
         cardActions.onUserTap = { openProfile(for: $0) }
         cardActions.onOpenComments = { _ in }

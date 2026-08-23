@@ -261,6 +261,7 @@ private struct FeedPrimaryPage: View {
 
     @State private var feedScrollLocked = false
     @State private var cardPresentation: PostCardPresentation?
+    @State private var editingPost: Post?
     @StateObject private var cardActions = PostCardActions()
 
     var body: some View {
@@ -296,8 +297,20 @@ private struct FeedPrimaryPage: View {
                         submissionAttachments: attachments
                     )
                 },
+                loadPostEdits: { postId in
+                    try await viewModel.fetchPostEdits(postId: postId)
+                },
                 customEmojiDependencies: customEmojiDependencies
             )
+            .fullScreenCover(item: $editingPost) { post in
+                EditPostComposeView(
+                    post: post,
+                    updatePost: { try await viewModel.updatePost($0) },
+                    onSaved: { _ in editingPost = nil },
+                    onCancel: { editingPost = nil }
+                )
+                .environmentObject(languageService)
+            }
     }
 
     private func configureCardActions() {
@@ -308,6 +321,12 @@ private struct FeedPrimaryPage: View {
         }
         cardActions.onDelete = { postId in
             Task { await viewModel.deletePost(id: postId) }
+        }
+        cardActions.onHide = { postId in
+            Task { await viewModel.hidePost(id: postId) }
+        }
+        cardActions.onEdit = { post in
+            editingPost = post
         }
         cardActions.onUserTap = onOpenProfile
         cardActions.onShowCompanions = { post in

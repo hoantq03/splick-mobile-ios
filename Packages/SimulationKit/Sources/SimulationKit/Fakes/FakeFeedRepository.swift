@@ -5,6 +5,7 @@ import FeatureSocialFeed
 
 public actor FakeFeedRepository: FeedRepositoryProtocol {
     private var posts: [Post] = []
+    private var revisions: [UUID: [PostEditRevision]] = [:]
     private let logger: StateLogger
 
     private static let sampleVideoURL = URL(
@@ -504,6 +505,65 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
         logger.log("Add comment to post \(postId): \(body ?? "<attachment-only>")")
         try await Task.sleep(for: .milliseconds(200))
         logger.success("Comment added")
+    }
+
+    public func hidePost(id: UUID) async throws {
+        logger.log("Hide post: \(id)")
+        try await Task.sleep(for: .milliseconds(200))
+        posts.removeAll { $0.id == id }
+        logger.success("Post hidden")
+    }
+
+    public func updatePost(_ input: UpdatePostInput) async throws -> Post {
+        logger.log("Update post: \(input.postId)")
+        try await Task.sleep(for: .milliseconds(200))
+        guard let index = posts.firstIndex(where: { $0.id == input.postId }) else {
+            throw NetworkError.notFound
+        }
+        let existing = posts[index]
+        revisions[input.postId, default: []].insert(
+            PostEditRevision(
+                editedAt: Date(),
+                caption: existing.caption,
+                mediaItems: existing.displayMediaItems
+            ),
+            at: 0
+        )
+        let nextMedia: [PostMediaItem] = input.mediaItems.enumerated().compactMap { offset, item in
+            switch item {
+            case .existing(let media):
+                return PostMediaItem(
+                    id: media.id,
+                    mediaURL: media.mediaURL,
+                    thumbnailURL: media.thumbnailURL,
+                    mediaType: media.mediaType,
+                    durationSeconds: media.durationSeconds,
+                    widthPx: media.widthPx,
+                    heightPx: media.heightPx,
+                    sortOrder: offset
+                )
+            case .uploaded(_, _, let mediaType, let duration):
+                return PostMediaItem(
+                    mediaURL: existing.imageURL,
+                    thumbnailURL: existing.thumbnailURL,
+                    mediaType: mediaType,
+                    durationSeconds: duration,
+                    sortOrder: offset
+                )
+            }
+        }
+        let updated = existing.updating(
+            mediaItems: nextMedia,
+            caption: input.caption,
+            editedAt: Date()
+        )
+        posts[index] = updated
+        logger.success("Post updated")
+        return updated
+    }
+
+    public func fetchPostEdits(postId: UUID) async throws -> [PostEditRevision] {
+        revisions[postId] ?? []
     }
 
     public func deletePost(id: UUID) async throws {

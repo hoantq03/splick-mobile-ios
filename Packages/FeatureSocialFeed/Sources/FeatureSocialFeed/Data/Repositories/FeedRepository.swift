@@ -8,14 +8,17 @@ import Storage
 public final class FeedRepository: FeedRepositoryProtocol, Sendable {
     private let apiClient: APIClientProtocol
     private let mediaRepository: MediaRepositoryProtocol
+    private let friendDisplayNameStore: FriendDisplayNameStore?
     private static let maxCachedPosts = 40
 
     public init(
         apiClient: APIClientProtocol,
-        mediaRepository: MediaRepositoryProtocol
+        mediaRepository: MediaRepositoryProtocol,
+        friendDisplayNameStore: FriendDisplayNameStore? = nil
     ) {
         self.apiClient = apiClient
         self.mediaRepository = mediaRepository
+        self.friendDisplayNameStore = friendDisplayNameStore
     }
 
     public func fetchFeed(
@@ -26,7 +29,7 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
         let dtos: [PostDTO] = try await apiClient.request(
             FeedEndpoint.feed(page: page, limit: limit, authorId: authorId)
         )
-        return dtos.map(FeedMapper.toPost)
+        return await resolvePosts(dtos.map(FeedMapper.toPost))
     }
 
     public func recordPostViews(postIds: [UUID]) async throws -> [Post] {
@@ -34,11 +37,14 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
         let dtos: [PostDTO] = try await apiClient.request(
             FeedEndpoint.batchViewed(BatchViewPostsRequestDTO(postIds: Array(postIds.prefix(20))))
         )
-        return dtos.map(FeedMapper.toPost)
+        return await resolvePosts(dtos.map(FeedMapper.toPost))
     }
 
     public func loadCachedFeed(userId: UUID) async -> [Post]? {
-        await DiskCache.shared.read(FeedCachePayload.self, key: Self.cacheKey(for: userId))?.posts
+        guard let posts = await DiskCache.shared.read(FeedCachePayload.self, key: Self.cacheKey(for: userId))?.posts else {
+            return nil
+        }
+        return await resolvePosts(posts)
     }
 
     public func saveCachedFeed(_ posts: [Post], userId: UUID) async {
@@ -58,8 +64,9 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
             FeedEndpoint.photoAlbumFirstPage(limit: limit, filters: filters)
         )
         let photos = dtos.compactMap(FeedMapper.toAlbumPhoto)
-        let nextCursor = makeNextCursor(from: photos, limit: limit)
-        return AlbumPhotoPage(photos: photos, nextCursor: nextCursor)
+        let resolvedPhotos = await resolveAlbumPhotos(photos)
+        let nextCursor = makeNextCursor(from: resolvedPhotos, limit: limit)
+        return AlbumPhotoPage(photos: resolvedPhotos, nextCursor: nextCursor)
     }
 
     public func fetchPhotoAlbumNextPage(
@@ -71,7 +78,8 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
             FeedEndpoint.photoAlbumCursor(cursor: cursor, limit: limit, filters: filters)
         )
         let photos = pageDTO.items.compactMap(FeedMapper.toAlbumPhoto)
-        return AlbumPhotoPage(photos: photos, nextCursor: pageDTO.nextCursor)
+        let resolvedPhotos = await resolveAlbumPhotos(photos)
+        return AlbumPhotoPage(photos: resolvedPhotos, nextCursor: pageDTO.nextCursor)
     }
 
     private func makeNextCursor(from photos: [AlbumPhoto], limit: Int) -> String? {
@@ -81,7 +89,7 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
 
     public func fetchPost(id: UUID) async throws -> Post {
         let dto: PostDTO = try await apiClient.request(FeedEndpoint.post(id: id))
-        return FeedMapper.toPost(dto)
+        return await resolvePost(FeedMapper.toPost(dto))
     }
 
     public func fetchPostComments(
@@ -93,12 +101,12 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
         let dto: CommentThreadPageDTO = try await apiClient.request(
             FeedEndpoint.postComments(postId: postId, page: page, limit: limit, filter: filter)
         )
-        return FeedMapper.toCommentThreadPage(dto)
+        return await resolveCommentThreadPage(FeedMapper.toCommentThreadPage(dto))
     }
 
     public func fetchPostReactions(postId: UUID) async throws -> [UserReactionSummary] {
         let dto: PostReactionsDTO = try await apiClient.request(FeedEndpoint.postReactions(postId: postId))
-        return FeedMapper.toPostReactions(dto).items
+        return await resolveReactions(FeedMapper.toPostReactions(dto).items)
     }
 
     public func addReaction(postId: UUID, emoji: String) async throws -> Reaction {
@@ -170,7 +178,7 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
         )
 
         let dto: PostDTO = try await apiClient.request(FeedEndpoint.createPost(request))
-        return FeedMapper.toPost(dto)
+        return await resolvePost(FeedMapper.toPost(dto))
     }
 
     public func addComment(
@@ -193,6 +201,59 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
 
     public func deletePost(id: UUID) async throws {
         try await apiClient.request(FeedEndpoint.deletePost(id: id))
+    }
+
+    public func hidePost(id: UUID) async throws {
+        try await apiClient.request(FeedEndpoint.hidePost(id: id))
+    }
+
+    public func updatePost(_ input: UpdatePostInput) async throws -> Post {
+        guard !input.mediaItems.isEmpty else {
+            throw NetworkError.unknown("Missing media items")
+        }
+        var requestMediaItems: [CreatePostMediaItemRequestDTO] = []
+        for (index, item) in input.mediaItems.enumerated() {
+            switch item {
+            case .existing(let media):
+                requestMediaItems.append(
+                    CreatePostMediaItemRequestDTO(
+                        mediaUrl: media.mediaURL.absoluteString,
+                        thumbnailUrl: media.thumbnailURL?.absoluteString,
+                        mediaType: media.mediaType.rawValue,
+                        durationSecs: media.durationSeconds,
+                        sortOrder: index
+                    )
+                )
+            case .uploaded(let data, let mimeType, let mediaType, let duration):
+                let upload = try await mediaRepository.uploadImage(
+                    data: data,
+                    mimeType: mimeType,
+                    purpose: .postImage,
+                    groupId: nil
+                )
+                requestMediaItems.append(
+                    CreatePostMediaItemRequestDTO(
+                        mediaUrl: upload.url.absoluteString,
+                        thumbnailUrl: upload.thumbnailURL?.absoluteString,
+                        mediaType: mediaType.rawValue,
+                        durationSecs: duration,
+                        sortOrder: index
+                    )
+                )
+            }
+        }
+        let dto: PostDTO = try await apiClient.request(
+            FeedEndpoint.updatePost(
+                id: input.postId,
+                UpdatePostRequestDTO(caption: input.caption, mediaItems: requestMediaItems)
+            )
+        )
+        return await resolvePosts([FeedMapper.toPost(dto)]).first ?? FeedMapper.toPost(dto)
+    }
+
+    public func fetchPostEdits(postId: UUID) async throws -> [PostEditRevision] {
+        let dto: PostEditsResponseDTO = try await apiClient.request(FeedEndpoint.postEdits(id: postId))
+        return dto.items.map(FeedMapper.toEditRevision)
     }
 
     private func buildBillSplitRequest(from input: CreatePostInput) -> CreatePostBillSplitRequestDTO? {
@@ -362,7 +423,7 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
         let dtos: [AlbumPhotoDTO] = try await apiClient.request(
             FeedEndpoint.streakDayPhotos(date: date)
         )
-        return dtos.compactMap(FeedMapper.toAlbumPhoto)
+        return await resolveAlbumPhotos(dtos.compactMap(FeedMapper.toAlbumPhoto))
     }
 
     public func searchLocations(query: String, lat: Double?, lon: Double?) async throws -> [PostPlace] {
@@ -377,5 +438,30 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
             FeedEndpoint.nearbyLocations(lat: lat, lon: lon, radius: radiusMeters, limit: 10)
         )
         return dto.locations.compactMap(FeedMapper.toPlace)
+    }
+
+    private func resolvePosts(_ posts: [Post]) async -> [Post] {
+        guard let friendDisplayNameStore else { return posts }
+        return await friendDisplayNameStore.resolve(posts)
+    }
+
+    private func resolvePost(_ post: Post) async -> Post {
+        guard let friendDisplayNameStore else { return post }
+        return await friendDisplayNameStore.resolve(post)
+    }
+
+    private func resolveCommentThreadPage(_ page: CommentThreadPage) async -> CommentThreadPage {
+        guard let friendDisplayNameStore else { return page }
+        return await friendDisplayNameStore.resolve(page)
+    }
+
+    private func resolveReactions(_ reactions: [UserReactionSummary]) async -> [UserReactionSummary] {
+        guard let friendDisplayNameStore else { return reactions }
+        return await friendDisplayNameStore.resolve(reactions)
+    }
+
+    private func resolveAlbumPhotos(_ photos: [AlbumPhoto]) async -> [AlbumPhoto] {
+        guard let friendDisplayNameStore else { return photos }
+        return await friendDisplayNameStore.resolve(photos)
     }
 }

@@ -94,6 +94,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
     public let groupId: UUID?
     public let companionGroupName: String?
     public let createdAt: Date
+    public let editedAt: Date?
 
     /// Monotonic revision for O(1) `Equatable` — bumps on every `updating()` / explicit stamp.
     public let version: UInt64
@@ -132,7 +133,8 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         viewCount: Int = 0,
         viewers: [UserSummary] = [],
         audience: PostAudience = .friends,
-        version: UInt64 = 0
+        version: UInt64 = 0,
+        editedAt: Date? = nil
     ) {
         self.id = id
         self.author = author
@@ -158,6 +160,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         self.groupId = groupId
         self.companionGroupName = companionGroupName
         self.createdAt = createdAt
+        self.editedAt = editedAt
         self.version = version
         self.displayMediaItems = Self.makeDisplayMediaItems(
             id: id,
@@ -173,6 +176,8 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         }
         self.commentCount = commentCount ?? derivedCommentCount
     }
+
+    public var isEdited: Bool { editedAt != nil }
 
     /// O(1) equality for SwiftUI `.equatable()` diffs — relies on `version` stamps from `updating()` / feed merge.
     public static func == (lhs: Post, rhs: Post) -> Bool {
@@ -205,7 +210,9 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         viewers: [UserSummary]? = nil,
         mediaItems: [PostMediaItem]? = nil,
         billSplit: PostBillSplit? = nil,
-        companionGroupName: String? = nil
+        companionGroupName: String? = nil,
+        caption: String? = nil,
+        editedAt: Date? = nil
     ) -> Post {
         let nextReactions = reactions ?? self.reactions
         let nextComments = comments ?? self.comments
@@ -224,7 +231,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
             author: author,
             imageURL: imageURL,
             thumbnailURL: thumbnailURL,
-            caption: caption,
+            caption: caption ?? self.caption,
             reactions: nextReactions,
             reactionCount: reactionCount ?? self.reactionCount,
             reactorCount: reactorCount ?? self.reactorCount,
@@ -245,7 +252,8 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
             viewCount: viewCount ?? self.viewCount,
             viewers: viewers ?? self.viewers,
             audience: audience,
-            version: version &+ 1
+            version: version &+ 1,
+            editedAt: editedAt ?? self.editedAt
         )
     }
 
@@ -278,7 +286,8 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
             viewCount: viewCount,
             viewers: viewers,
             audience: audience,
-            version: version
+            version: version,
+            editedAt: editedAt
         )
     }
 
@@ -307,6 +316,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
             && checkInPlace == other.checkInPlace
             && audience == other.audience
             && groupId == other.groupId
+            && editedAt == other.editedAt
     }
 
     /// Preserves local version when content is unchanged; otherwise bumps so Equatable detects the change.

@@ -53,7 +53,16 @@ enum FeedMapper {
             billSplit: billSplit,
             viewCount: viewCount,
             viewers: viewers,
-            audience: audience
+            audience: audience,
+            editedAt: dto.editedAt
+        )
+    }
+
+    static func toEditRevision(_ dto: PostEditRevisionDTO) -> PostEditRevision {
+        PostEditRevision(
+            editedAt: dto.editedAt,
+            caption: dto.caption,
+            mediaItems: dto.mediaItems.compactMap(toMediaItem)
         )
     }
 

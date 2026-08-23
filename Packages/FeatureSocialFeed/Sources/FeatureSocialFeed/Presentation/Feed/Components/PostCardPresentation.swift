@@ -11,6 +11,7 @@ enum PostCardPresentation: Identifiable {
     case emojiPicker(Post)
     case viewers(Post)
     case share(Post)
+    case editHistory(Post)
     case customEmojiUpload
     case paymentEvidence(Post, splitId: UUID, attachments: [CommentSubmissionAttachment])
 
@@ -20,6 +21,7 @@ enum PostCardPresentation: Identifiable {
         case .emojiPicker(let post): return "emojiPicker-\(post.id)"
         case .viewers(let post): return "viewers-\(post.id)"
         case .share(let post): return "share-\(post.id)"
+        case .editHistory(let post): return "editHistory-\(post.id)"
         case .customEmojiUpload: return "customEmojiUpload"
         case .paymentEvidence(let post, let splitId, _):
             return "paymentEvidence-\(post.id)-\(splitId)"
@@ -32,6 +34,7 @@ enum PostCardPresentation: Identifiable {
              .emojiPicker(let post),
              .viewers(let post),
              .share(let post),
+             .editHistory(let post),
              .paymentEvidence(let post, _, _):
             return post
         case .customEmojiUpload:
@@ -45,6 +48,8 @@ enum PostCardPresentation: Identifiable {
 final class PostCardActions: ObservableObject {
     var onReact: (UUID, String) -> Void = { _, _ in }
     var onDelete: (UUID) -> Void = { _ in }
+    var onHide: (UUID) -> Void = { _ in }
+    var onEdit: (Post) -> Void = { _ in }
     var onUserTap: (UserSummary) -> Void = { _ in }
     var onOpenComments: (Post) -> Void = { _ in }
     var onShowCompanions: (Post) -> Void = { _ in }
@@ -69,6 +74,7 @@ struct PostCardPresentationHost: ViewModifier {
     let onReact: (UUID, String) -> Void
     let loadReactions: ((UUID) async throws -> [UserReactionSummary])?
     let onSubmitPaymentEvidence: ((UUID, UUID, String?, [CommentSubmissionAttachment]) async throws -> Void)?
+    let loadPostEdits: ((UUID) async throws -> [PostEditRevision])?
     let customEmojiDependencies: CustomEmojiDependencies?
 
     func body(content: Content) -> some View {
@@ -122,6 +128,10 @@ struct PostCardPresentationHost: ViewModifier {
                 post: post,
                 fallbackCaption: languageService.text(.feedShareFallbackCaption)
             )
+        case .editHistory(let post):
+            PostEditHistorySheet(postId: post.id) {
+                try await loadPostEdits?(post.id) ?? []
+            }
         case .customEmojiUpload:
             if let deps = customEmojiDependencies {
                 CustomEmojiUploadSheet(
@@ -159,6 +169,7 @@ extension View {
         onSubmitPaymentEvidence: (
             (UUID, UUID, String?, [CommentSubmissionAttachment]) async throws -> Void
         )?,
+        loadPostEdits: ((UUID) async throws -> [PostEditRevision])? = nil,
         customEmojiDependencies: CustomEmojiDependencies?
     ) -> some View {
         modifier(
@@ -170,6 +181,7 @@ extension View {
                 onReact: onReact,
                 loadReactions: loadReactions,
                 onSubmitPaymentEvidence: onSubmitPaymentEvidence,
+                loadPostEdits: loadPostEdits,
                 customEmojiDependencies: customEmojiDependencies
             )
         )

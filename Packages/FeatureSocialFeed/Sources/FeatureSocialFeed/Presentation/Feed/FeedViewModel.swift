@@ -22,6 +22,9 @@ public final class FeedViewModel: ObservableObject {
     private let reactToPostUseCase: ReactToPostUseCaseProtocol
     private let listPostReactionsUseCase: ListPostReactionsUseCaseProtocol?
     private let deletePostUseCase: DeletePostUseCaseProtocol
+    private let hidePostUseCase: HidePostUseCaseProtocol
+    private let updatePostUseCase: UpdatePostUseCaseProtocol
+    private let fetchPostEditHistoryUseCase: FetchPostEditHistoryUseCaseProtocol
     private let addCommentUseCase: AddCommentUseCaseProtocol
     private let sendBillReminderUseCase: SendBillReminderUseCaseProtocol
     private let submitPaymentEvidenceUseCase: SubmitPaymentEvidenceUseCaseProtocol
@@ -29,8 +32,10 @@ public final class FeedViewModel: ObservableObject {
     private let rejectPaymentEvidenceUseCase: RejectPaymentEvidenceUseCaseProtocol
     private let createPostUseCase: CreatePostUseCaseProtocol
     private let feedRepository: FeedRepositoryProtocol?
+    private let friendDisplayNameStore: FriendDisplayNameStore?
     private let languageService: LanguageService
     private let onFeedLoaded: (([Post], UUID?) async -> Void)?
+    private var friendDisplayNameObserver: NSObjectProtocol?
     private var currentPage = 0
     private var canLoadMore = true
     private var trackedViewPostIds = Set<UUID>()
@@ -75,6 +80,9 @@ public final class FeedViewModel: ObservableObject {
         fetchPostUseCase: FetchPostUseCaseProtocol,
         reactToPostUseCase: ReactToPostUseCaseProtocol,
         deletePostUseCase: DeletePostUseCaseProtocol,
+        hidePostUseCase: HidePostUseCaseProtocol,
+        updatePostUseCase: UpdatePostUseCaseProtocol,
+        fetchPostEditHistoryUseCase: FetchPostEditHistoryUseCaseProtocol,
         addCommentUseCase: AddCommentUseCaseProtocol,
         sendBillReminderUseCase: SendBillReminderUseCaseProtocol,
         submitPaymentEvidenceUseCase: SubmitPaymentEvidenceUseCaseProtocol,
@@ -85,6 +93,7 @@ public final class FeedViewModel: ObservableObject {
         recordPostViewsUseCase: RecordPostViewsUseCaseProtocol? = nil,
         listPostReactionsUseCase: ListPostReactionsUseCaseProtocol? = nil,
         feedRepository: FeedRepositoryProtocol? = nil,
+        friendDisplayNameStore: FriendDisplayNameStore? = nil,
         currentUserId: UUID? = nil,
         currentUser: UserSummary? = nil,
         onFeedLoaded: (([Post], UUID?) async -> Void)? = nil
@@ -95,6 +104,9 @@ public final class FeedViewModel: ObservableObject {
         self.reactToPostUseCase = reactToPostUseCase
         self.listPostReactionsUseCase = listPostReactionsUseCase
         self.deletePostUseCase = deletePostUseCase
+        self.hidePostUseCase = hidePostUseCase
+        self.updatePostUseCase = updatePostUseCase
+        self.fetchPostEditHistoryUseCase = fetchPostEditHistoryUseCase
         self.addCommentUseCase = addCommentUseCase
         self.sendBillReminderUseCase = sendBillReminderUseCase
         self.submitPaymentEvidenceUseCase = submitPaymentEvidenceUseCase
@@ -102,10 +114,29 @@ public final class FeedViewModel: ObservableObject {
         self.rejectPaymentEvidenceUseCase = rejectPaymentEvidenceUseCase
         self.createPostUseCase = createPostUseCase
         self.feedRepository = feedRepository
+        self.friendDisplayNameStore = friendDisplayNameStore
         self.languageService = languageService
         self.onFeedLoaded = onFeedLoaded
         self.currentUserId = currentUserId
         self.currentUserSummary = currentUser
+
+        if friendDisplayNameStore != nil {
+            friendDisplayNameObserver = NotificationCenter.default.addObserver(
+                forName: FriendDisplayNameStore.didChangeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in
+                    await self?.reapplyFriendDisplayNames()
+                }
+            }
+        }
+    }
+
+    deinit {
+        if let friendDisplayNameObserver {
+            NotificationCenter.default.removeObserver(friendDisplayNameObserver)
+        }
     }
 
     public func postUploadState(for postId: UUID) -> PostUploadState? {
@@ -726,6 +757,33 @@ public final class FeedViewModel: ObservableObject {
         }
     }
 
+    func hidePost(id: UUID) async {
+        guard indexOfPost(id: id) != nil else { return }
+
+        do {
+            try await hidePostUseCase.execute(postId: id)
+            if let currentIndex = indexOfPost(id: id) {
+                posts.remove(at: currentIndex)
+                rebuildPostIndex()
+                cachedCompanionGroupNames.removeValue(forKey: id)
+            }
+            markPostsLoaded()
+        } catch {
+            alertMessage = languageService.localizedMessage(for: error)
+            Log.error(error, category: .feed)
+        }
+    }
+
+    func updatePost(_ input: UpdatePostInput) async throws -> Post {
+        let updated = try await updatePostUseCase.execute(input)
+        replacePost(updated)
+        return updated
+    }
+
+    func fetchPostEdits(postId: UUID) async throws -> [PostEditRevision] {
+        try await fetchPostEditHistoryUseCase.execute(postId: postId)
+    }
+
     /// Inserts a newly created post at the top of the feed (optimistic UI after create).
     public func prependCreatedPost(_ post: Post) {
         guard postIndexById[post.id] == nil else { return }
@@ -855,6 +913,18 @@ public final class FeedViewModel: ObservableObject {
         rebuildPostIndex()
         companionIndexDirty = true
         _ = companionGroupNameIndex()
+    }
+
+    private func reapplyFriendDisplayNames() async {
+        guard let friendDisplayNameStore, !posts.isEmpty else { return }
+        let resolved = await friendDisplayNameStore.resolve(posts)
+        let updated = zip(posts, resolved).map { current, resolvedPost in
+            current.hasSameCardContent(as: resolvedPost)
+                ? current
+                : resolvedPost.withVersion(current.version &+ 1)
+        }
+        guard updated != posts else { return }
+        assignPosts(updated, preserveVersionsFrom: nil)
     }
 
     private func rebuildPostIndex() {

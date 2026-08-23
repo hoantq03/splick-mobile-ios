@@ -89,6 +89,8 @@ struct PostCardView: View, Equatable {
 
             if let caption = post.caption, !caption.isEmpty {
                 captionSection(caption)
+            } else if post.isEdited {
+                editedBadge
             }
 
             companionsSection
@@ -222,6 +224,9 @@ struct PostCardView: View, Equatable {
             }
 
             if isAuthor {
+                Button(languageService.text(.feedPostEdit), systemImage: "pencil") {
+                    actions.onEdit(post)
+                }
                 if post.canDelete {
                     Button(languageService.text(.feedPostDelete), systemImage: "trash", role: .destructive) {
                         actions.onDelete(post.id)
@@ -237,7 +242,9 @@ struct PostCardView: View, Equatable {
                 }
             }
             Button(languageService.text(.feedPostReport), systemImage: "flag") {}
-            Button(languageService.text(.feedPostHide), systemImage: "eye.slash") {}
+            Button(languageService.text(.feedPostHide), systemImage: "eye.slash") {
+                actions.onHide(post.id)
+            }
         } label: {
             Image(systemName: "ellipsis")
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
@@ -246,14 +253,30 @@ struct PostCardView: View, Equatable {
     }
 
     private func captionSection(_ caption: String) -> some View {
-        MentionText(
-            caption,
-            fontSize: 16,
-            displayNamesByUsername: post.mentionDisplayNamesByUsername
-        )
+        VStack(alignment: .leading, spacing: 4) {
+            MentionText(
+                caption,
+                fontSize: 16,
+                displayNamesByUsername: post.mentionDisplayNamesByUsername
+            )
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .onTapGesture { actions.onOpenDetail?(post, mediaPageIndex) }
+            if post.isEdited {
+                editedBadge
+            }
+        }
+    }
+
+    private var editedBadge: some View {
+        Button {
+            actions.onPresent(.editHistory(post))
+        } label: {
+            Text(languageService.text(.feedPostEdited))
+                .font(.caption)
+                .foregroundStyle(SplickTheme.Colors.textTertiary)
+        }
+        .buttonStyle(.plain)
     }
 
     private var resolvedMediaTap: ((Int) -> Void)? {

@@ -58,6 +58,7 @@ struct PostDTO: Decodable {
     let viewCount: Int?
     let viewers: [AuthorDTO]?
     let audience: PostAudienceDTO?
+    let editedAt: Date?
 }
 
 struct PostLocationDTO: Decodable {
@@ -259,3 +260,19 @@ struct StreakDayDTO: Decodable {
     let firstThumbnailUrl: String?
     let photoCount: Int
 }
+
+struct UpdatePostRequestDTO: Encodable {
+    let caption: String?
+    let mediaItems: [CreatePostMediaItemRequestDTO]
+}
+
+struct PostEditsResponseDTO: Decodable {
+    let items: [PostEditRevisionDTO]
+}
+
+struct PostEditRevisionDTO: Decodable {
+    let editedAt: Date
+    let caption: String?
+    let mediaItems: [PostMediaItemDTO]
+}
+
