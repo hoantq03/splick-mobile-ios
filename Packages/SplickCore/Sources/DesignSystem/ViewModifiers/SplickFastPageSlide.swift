@@ -22,14 +22,12 @@ extension View {
 }
 
 private struct SplickInteractivePopEnabler: UIViewControllerRepresentable {
-    func makeUIViewController(context: Context) -> UIViewController {
-        UIViewController()
+    func makeUIViewController(context: Context) -> SplickFastPageSlideHostController {
+        SplickFastPageSlideHostController()
     }
 
-    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
-        DispatchQueue.main.async {
-            uiViewController.navigationController?.interactivePopGestureRecognizer?.isEnabled = true
-        }
+    func updateUIViewController(_ uiViewController: SplickFastPageSlideHostController, context: Context) {
+        uiViewController.installIfNeeded()
     }
 }
 
@@ -80,9 +78,10 @@ private final class SplickFastPageSlideHostController: UIViewController {
     }
 }
 
-private final class SplickNavigationDelegateProxy: NSObject, UINavigationControllerDelegate {
+private final class SplickNavigationDelegateProxy: NSObject, UINavigationControllerDelegate, UIGestureRecognizerDelegate {
     private static var associatedKey: UInt8 = 0
 
+    private weak var navigationController: UINavigationController?
     private weak var original: UINavigationControllerDelegate?
     private var isForwardingDidShow = false
     private var isForwardingWillShow = false
@@ -104,16 +103,21 @@ private final class SplickNavigationDelegateProxy: NSObject, UINavigationControl
     }
 
     private func attach(to nav: UINavigationController) {
-        if nav.delegate === self { return }
-
-        let current = nav.delegate
-        if current is SplickNavigationDelegateProxy {
+        navigationController = nav
+        if nav.delegate !== self {
+            let current = nav.delegate
+            if !(current is SplickNavigationDelegateProxy) {
+                original = current
+            }
             nav.delegate = self
-            return
         }
+        enableInteractivePop(on: nav)
+    }
 
-        original = current
-        nav.delegate = self
+    private func enableInteractivePop(on nav: UINavigationController) {
+        guard let pop = nav.interactivePopGestureRecognizer else { return }
+        pop.isEnabled = nav.viewControllers.count > 1
+        pop.delegate = self
     }
 
     func navigationController(
@@ -131,12 +135,22 @@ private final class SplickNavigationDelegateProxy: NSObject, UINavigationControl
             )
         }
 
-        if operation == .pop, isInteractivePop(navigationController) {
+        // Custom pop animators suppress UIKit's percent-driven edge swipe. Keep
+        // the system interactive pop; only accelerate programmatic pushes.
+        if operation == .pop {
             return nil
         }
 
-        // Prefer Splick horizontal slide over SwiftUI's internal push (often instant with path.append).
-        return SplickSlideAnimator(operation: operation)
+        if operation == .push {
+            return SplickSlideAnimator(operation: .push)
+        }
+
+        return original?.navigationController?(
+            navigationController,
+            animationControllerFor: operation,
+            from: fromVC,
+            to: toVC
+        )
     }
 
     func navigationController(
@@ -155,6 +169,7 @@ private final class SplickNavigationDelegateProxy: NSObject, UINavigationControl
         animated: Bool
     ) {
         attach(to: navigationController)
+        enableInteractivePop(on: navigationController)
 
         guard !isForwardingWillShow, original !== self else { return }
         isForwardingWillShow = true
@@ -167,10 +182,37 @@ private final class SplickNavigationDelegateProxy: NSObject, UINavigationControl
         didShow viewController: UIViewController,
         animated: Bool
     ) {
+        enableInteractivePop(on: navigationController)
         guard !isForwardingDidShow, original !== self else { return }
         isForwardingDidShow = true
         defer { isForwardingDidShow = false }
         original?.navigationController?(navigationController, didShow: viewController, animated: animated)
+    }
+
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard let nav = navigationController,
+              gestureRecognizer === nav.interactivePopGestureRecognizer else {
+            return true
+        }
+        return nav.viewControllers.count > 1
+    }
+
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        guard let nav = navigationController,
+              gestureRecognizer === nav.interactivePopGestureRecognizer else {
+            return false
+        }
+        return otherGestureRecognizer is UIPanGestureRecognizer
+    }
+
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        false
     }
 
     func navigationControllerSupportedInterfaceOrientations(
@@ -182,11 +224,6 @@ private final class SplickNavigationDelegateProxy: NSObject, UINavigationControl
     @available(iOS 18.0, *)
     private func usesSystemZoom(from fromVC: UIViewController, to toVC: UIViewController) -> Bool {
         fromVC.preferredTransition != nil || toVC.preferredTransition != nil
-    }
-
-    private func isInteractivePop(_ navigationController: UINavigationController) -> Bool {
-        let state = navigationController.interactivePopGestureRecognizer?.state
-        return state == .began || state == .changed
     }
 }
 
