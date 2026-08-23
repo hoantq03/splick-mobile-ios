@@ -8,6 +8,21 @@ public enum SplickPageSlideMotion {
     public static let animation = Animation.easeOut(duration: duration)
 }
 
+/// Marks a programmatic push that should keep iOS 18 `navigationTransition(.zoom)`.
+/// The custom slide animator must not steal that push — otherwise detail only morphs on pop.
+/// Main-thread only (UIKit navigation callbacks).
+public enum SplickZoomNavigation {
+    public static var isPushPending = false
+
+    public static func preparePush() {
+        isPushPending = true
+    }
+
+    public static func clearPending() {
+        isPushPending = false
+    }
+}
+
 extension View {
     /// Speeds `NavigationStack` push/pop (non-zoom) to [SplickPageSlideMotion.duration].
     /// System zoom transitions (iOS 18 feed → post) and interactive swipe-back stay native.
@@ -15,19 +30,56 @@ extension View {
         background(SplickFastPageSlideInstaller())
     }
 
-    /// Keeps UIKit edge swipe-back enabled inside custom-gesture screens (e.g. chat thread).
+    /// Keeps UIKit edge swipe-back enabled inside custom-gesture screens (e.g. chat thread)
+    /// without replacing `UINavigationController.delegate` (that steals iOS 18 zoom).
     public func splickInteractivePopEnabled() -> some View {
         background(SplickInteractivePopEnabler())
     }
 }
 
 private struct SplickInteractivePopEnabler: UIViewControllerRepresentable {
-    func makeUIViewController(context: Context) -> SplickFastPageSlideHostController {
-        SplickFastPageSlideHostController()
+    func makeUIViewController(context: Context) -> SplickInteractivePopHostController {
+        SplickInteractivePopHostController()
     }
 
-    func updateUIViewController(_ uiViewController: SplickFastPageSlideHostController, context: Context) {
-        uiViewController.installIfNeeded()
+    func updateUIViewController(_ uiViewController: SplickInteractivePopHostController, context: Context) {
+        uiViewController.enableIfNeeded()
+    }
+}
+
+/// Enables the system edge-swipe pop without installing a custom push/pop animator.
+private final class SplickInteractivePopHostController: UIViewController {
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        enableIfNeeded()
+    }
+
+    override func didMove(toParent parent: UIViewController?) {
+        super.didMove(toParent: parent)
+        enableIfNeeded()
+    }
+
+    func enableIfNeeded() {
+        guard let nav = navigationController ?? ancestorNavigationController() else { return }
+        guard let pop = nav.interactivePopGestureRecognizer else { return }
+        pop.isEnabled = nav.viewControllers.count > 1
+    }
+
+    private func ancestorNavigationController() -> UINavigationController? {
+        var responder: UIResponder? = view
+        while let current = responder {
+            if let nav = current as? UINavigationController {
+                return nav
+            }
+            responder = current.next
+        }
+        return nil
     }
 }
 
@@ -117,6 +169,16 @@ private final class SplickNavigationDelegateProxy: NSObject, UINavigationControl
     private func enableInteractivePop(on nav: UINavigationController) {
         guard let pop = nav.interactivePopGestureRecognizer else { return }
         pop.isEnabled = nav.viewControllers.count > 1
+
+        // Zoom (iOS 18) owns interactive dismiss. Hijacking the pop delegate
+        // or returning a nil interaction controller disables edge swipe-back.
+        if #available(iOS 18.0, *), topViewUsesZoom(nav) {
+            if pop.delegate === self {
+                pop.delegate = nil
+            }
+            return
+        }
+
         pop.delegate = self
     }
 
@@ -126,7 +188,7 @@ private final class SplickNavigationDelegateProxy: NSObject, UINavigationControl
         from fromVC: UIViewController,
         to toVC: UIViewController
     ) -> UIViewControllerAnimatedTransitioning? {
-        if #available(iOS 18.0, *), usesSystemZoom(from: fromVC, to: toVC) {
+        if #available(iOS 18.0, *), usesSystemZoom(operation: operation, from: fromVC, to: toVC) {
             return original?.navigationController?(
                 navigationController,
                 animationControllerFor: operation,
@@ -155,16 +217,6 @@ private final class SplickNavigationDelegateProxy: NSObject, UINavigationControl
 
     func navigationController(
         _ navigationController: UINavigationController,
-        interactionControllerFor animationController: UIViewControllerAnimatedTransitioning
-    ) -> UIViewControllerInteractiveTransitioning? {
-        original?.navigationController?(
-            navigationController,
-            interactionControllerFor: animationController
-        )
-    }
-
-    func navigationController(
-        _ navigationController: UINavigationController,
         willShow viewController: UIViewController,
         animated: Bool
     ) {
@@ -183,6 +235,7 @@ private final class SplickNavigationDelegateProxy: NSObject, UINavigationControl
         animated: Bool
     ) {
         enableInteractivePop(on: navigationController)
+        SplickZoomNavigation.clearPending()
         guard !isForwardingDidShow, original !== self else { return }
         isForwardingDidShow = true
         defer { isForwardingDidShow = false }
@@ -222,8 +275,29 @@ private final class SplickNavigationDelegateProxy: NSObject, UINavigationControl
     }
 
     @available(iOS 18.0, *)
-    private func usesSystemZoom(from fromVC: UIViewController, to toVC: UIViewController) -> Bool {
-        fromVC.preferredTransition != nil || toVC.preferredTransition != nil
+    private func usesSystemZoom(
+        operation: UINavigationController.Operation,
+        from fromVC: UIViewController,
+        to toVC: UIViewController
+    ) -> Bool {
+        if operation == .push, SplickZoomNavigation.isPushPending {
+            return true
+        }
+        return hasPreferredTransition(fromVC) || hasPreferredTransition(toVC)
+    }
+
+    @available(iOS 18.0, *)
+    private func hasPreferredTransition(_ viewController: UIViewController) -> Bool {
+        if viewController.preferredTransition != nil {
+            return true
+        }
+        return viewController.children.contains { hasPreferredTransition($0) }
+    }
+
+    @available(iOS 18.0, *)
+    private func topViewUsesZoom(_ navigationController: UINavigationController) -> Bool {
+        guard let top = navigationController.topViewController else { return false }
+        return hasPreferredTransition(top)
     }
 }
 

@@ -1,13 +1,18 @@
 import SwiftUI
 import DesignSystem
 
-/// Matches Android `spring(dampingRatio = 0.82, stiffness = 380)` for feed → post detail.
-enum FeedPostZoomMotion {
-    static let navigation = SplickPageSlideMotion.animation
-}
-
+/// Feed → post detail uses iOS 18 zoom, not the 160ms page slide.
+/// Wrapping `NavigationPath.append` in `withAnimation` fights `navigationTransition(.zoom)`
+/// and makes the push look like a flash (pop still morphs).
 func withFeedPostNavigation(_ body: () -> Void) {
-    withAnimation(FeedPostZoomMotion.navigation, body)
+    if #available(iOS 18.0, *) {
+        SplickZoomNavigation.preparePush()
+        var transaction = Transaction()
+        transaction.disablesAnimations = false
+        withTransaction(transaction, body)
+    } else {
+        withAnimation(SplickPageSlideMotion.animation, body)
+    }
 }
 
 private struct FeedPostZoomNamespaceKey: EnvironmentKey {
@@ -37,7 +42,10 @@ struct FeedPostZoomSourceModifier: ViewModifier {
 
 struct FeedPostZoomDestinationModifier: ViewModifier {
     let postId: UUID
-    @Environment(\.feedPostZoomNamespace) private var namespace
+    var namespaceOverride: Namespace.ID?
+    @Environment(\.feedPostZoomNamespace) private var environmentNamespace
+
+    private var namespace: Namespace.ID? { namespaceOverride ?? environmentNamespace }
 
     func body(content: Content) -> some View {
         if #available(iOS 18.0, *), let namespace {
@@ -53,7 +61,7 @@ extension View {
         modifier(FeedPostZoomSourceModifier(postId: postId))
     }
 
-    func feedPostZoomDestination(postId: UUID) -> some View {
-        modifier(FeedPostZoomDestinationModifier(postId: postId))
+    func feedPostZoomDestination(postId: UUID, namespace: Namespace.ID? = nil) -> some View {
+        modifier(FeedPostZoomDestinationModifier(postId: postId, namespaceOverride: namespace))
     }
 }

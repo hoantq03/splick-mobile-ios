@@ -99,7 +99,7 @@ public struct FeedView: View {
                 )
             }
             .background(SplickTheme.Colors.background.ignoresSafeArea())
-            .splickFastPageSlide()
+            .splickInteractivePopEnabled()
             .navigationTitle("")
             .splickTabNavigationBarChrome()
             .toolbar {
@@ -126,7 +126,7 @@ public struct FeedView: View {
                     profileDependencies: profileDependencies,
                     makeGifPickerViewModel: makeGifPickerViewModel
                 )
-                .feedPostZoomDestination(postId: destination.postId)
+                .feedPostZoomDestination(postId: destination.postId, namespace: postZoomNamespace)
             }
             .alert(
                 languageService.text(.commonError),
@@ -142,6 +142,11 @@ public struct FeedView: View {
         }
         .environment(\.feedSegmentScrollState, scrollChrome.feedSegment)
         .environment(\.feedPostZoomNamespace, postZoomNamespace)
+        .onChange(of: navigationPath.isEmpty) { isEmpty in
+            if isEmpty {
+                tabBarScrollState?.show()
+            }
+        }
         .onFirstAppear {
             viewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
         }
@@ -334,7 +339,6 @@ private struct FeedPrimaryPage: View {
         }
         cardActions.onOpenComments = { post in
             guard viewModel.postUploadState(for: post.id) == nil else { return }
-            tabBarScrollState?.hide(flushToBottom: true)
             withFeedPostNavigation {
                 navigationPath.append(
                     FeedPostDestination(
@@ -347,7 +351,6 @@ private struct FeedPrimaryPage: View {
         }
         cardActions.onOpenDetail = { post, mediaIndex in
             guard viewModel.postUploadState(for: post.id) == nil else { return }
-            tabBarScrollState?.hide(flushToBottom: true)
             withFeedPostNavigation {
                 navigationPath.append(FeedPostDestination(postId: post.id, mediaIndex: mediaIndex))
             }

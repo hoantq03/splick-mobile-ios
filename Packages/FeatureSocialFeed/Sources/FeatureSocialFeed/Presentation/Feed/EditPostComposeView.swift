@@ -174,7 +174,7 @@ struct EditPostComposeView: View {
                             .frame(width: 96, height: 96)
                             .background(SplickTheme.Colors.tertiaryBackground, in: RoundedRectangle(cornerRadius: 10))
                     }
-                    .onChange(of: pickerItems) { _, newItems in
+                    .onChange(of: pickerItems) { newItems in
                         Task { await loadPickerItems(newItems) }
                     }
                 }

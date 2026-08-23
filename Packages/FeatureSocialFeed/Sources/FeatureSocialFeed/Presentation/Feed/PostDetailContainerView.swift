@@ -9,7 +9,6 @@ import FeatureStickers
 /// Fetches only when the post is not already in the feed (notifications, deep links).
 struct PostDetailContainerView: View {
     @EnvironmentObject private var languageService: LanguageService
-    @Environment(\.tabBarScrollState) private var tabBarScrollState
     let destination: FeedPostDestination
     @ObservedObject var feedViewModel: FeedViewModel
     let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
@@ -54,10 +53,9 @@ struct PostDetailContainerView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear {
-            tabBarScrollState?.hide(flushToBottom: true)
+        .task {
+            await loadPost()
         }
-        .task { await loadPost() }
     }
 
     private var unavailableView: some View {

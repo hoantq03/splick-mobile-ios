@@ -171,22 +171,19 @@ struct PostDetailView: View {
         .task {
             // Keep the feed card as-is; only append comments. Pull-to-refresh still
             // reloads the post when the user asks.
-            await commentPager.loadInitial()
-        }
-        .onAppear {
             FeedScrollLock.forceUnlock()
             detailScrollLocked = false
-            tabBarScrollState?.hide(flushToBottom: true)
             configureCardActions()
-            // Defer remaining @Published updates so we don't publish during view updates.
-            Task { @MainActor in
-                feedViewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
-                enableComposerInteraction()
-                try? await Task.sleep(for: .milliseconds(280))
-                withAnimation(.easeOut(duration: 0.16)) {
-                    commentsRevealed = true
-                }
+            feedViewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
+            enableComposerInteraction()
+            async let comments: Void = commentPager.loadInitial()
+            try? await Task.sleep(for: .milliseconds(380))
+            guard !Task.isCancelled else { return }
+            tabBarScrollState?.hide(flushToBottom: true)
+            withAnimation(.easeOut(duration: 0.16)) {
+                commentsRevealed = true
             }
+            await comments
         }
         .onDisappear {
             tabBarScrollState?.show()
