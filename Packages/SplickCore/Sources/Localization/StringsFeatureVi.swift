@@ -394,6 +394,8 @@ enum StringsFeatureVi {
         .notificationFilterEmptyTitle: "Không có thông báo phù hợp",
         .notificationFilterEmptyMessage: "Thử bộ lọc khác hoặc quay lại sau.",
         .notificationReadAll: "Đọc tất cả",
+        .notificationFriendRequestAccepted: "Đã chấp nhận",
+        .notificationFriendRequestRejected: "Đã từ chối",
         .notificationSectionToday: "Hôm nay",
         .notificationSectionYesterday: "Hôm qua",
         .notificationSectionPastWeek: "Tuần vừa qua",

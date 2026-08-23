@@ -623,6 +623,7 @@ struct ProfileSettingsView: View {
                             changePasswordUseCase: container.changePasswordUseCase,
                             verifyPasswordChangeUseCase: container.verifyPasswordChangeUseCase,
                             requestEmailOtpUseCase: container.requestEmailOtpUseCase,
+                            getConnectedAccountsUseCase: container.getConnectedAccountsUseCase,
                             languageService: languageService
                         ),
                         onPasswordChanged: { user in

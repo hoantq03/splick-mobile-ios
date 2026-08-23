@@ -133,6 +133,11 @@ enum StringsEn {
         .profileAvatarChangeHint: "Choose a new profile photo.",
 
         .changePasswordTitle: "Change password",
+        .createPasswordTitle: "Create password",
+        .createPasswordHint:
+            "This account does not have a password yet. Verify your email with an OTP, then create a password so you can sign in with email.",
+        .createPasswordSubmit: "Create password",
+        .createPasswordVerifiedHint: "Verified. Create your password below.",
         .changePasswordVerifyWith: "Verify with",
         .changePasswordMethodCurrent: "Current password",
         .changePasswordMethodEmail: "Email code",

@@ -394,6 +394,8 @@ enum StringsFeatureEn {
         .notificationFilterEmptyTitle: "No matching notifications",
         .notificationFilterEmptyMessage: "Try another filter or check back later.",
         .notificationReadAll: "Read All",
+        .notificationFriendRequestAccepted: "Accepted",
+        .notificationFriendRequestRejected: "Declined",
         .notificationSectionToday: "Today",
         .notificationSectionYesterday: "Yesterday",
         .notificationSectionPastWeek: "Past week",

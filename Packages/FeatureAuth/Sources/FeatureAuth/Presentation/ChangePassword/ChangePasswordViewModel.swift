@@ -31,12 +31,15 @@ public final class ChangePasswordViewModel: ObservableObject {
     @Published private(set) var hasSentEmailCode = false
     @Published private(set) var isRequestingEmailCode = false
     @Published private(set) var otpResendSecondsRemaining = 0
+    @Published private(set) var hasPasswordLogin = true
+    @Published private(set) var isResolvingPasswordLogin = true
 
     let accountEmail: String
 
     private let changePasswordUseCase: ChangePasswordUseCaseProtocol
     private let verifyPasswordChangeUseCase: VerifyPasswordChangeUseCaseProtocol
     private let requestEmailOtpUseCase: RequestEmailOtpUseCaseProtocol
+    private let getConnectedAccountsUseCase: GetConnectedAccountsUseCaseProtocol
     private let languageService: LanguageService
     private var resendCountdownTask: Task<Void, Never>?
 
@@ -47,13 +50,33 @@ public final class ChangePasswordViewModel: ObservableObject {
         changePasswordUseCase: ChangePasswordUseCaseProtocol,
         verifyPasswordChangeUseCase: VerifyPasswordChangeUseCaseProtocol,
         requestEmailOtpUseCase: RequestEmailOtpUseCaseProtocol,
+        getConnectedAccountsUseCase: GetConnectedAccountsUseCaseProtocol,
         languageService: LanguageService
     ) {
         self.accountEmail = accountEmail
         self.changePasswordUseCase = changePasswordUseCase
         self.verifyPasswordChangeUseCase = verifyPasswordChangeUseCase
         self.requestEmailOtpUseCase = requestEmailOtpUseCase
+        self.getConnectedAccountsUseCase = getConnectedAccountsUseCase
         self.languageService = languageService
+    }
+
+    func loadPasswordLoginState() async {
+        isResolvingPasswordLogin = true
+        defer { isResolvingPasswordLogin = false }
+        do {
+            let accounts = try await getConnectedAccountsUseCase.execute()
+            applyHasPasswordLogin(accounts.emailPassword.isLinked)
+        } catch {
+            applyHasPasswordLogin(true)
+        }
+    }
+
+    private func applyHasPasswordLogin(_ hasPassword: Bool) {
+        hasPasswordLogin = hasPassword
+        if !hasPassword {
+            method = .emailCode
+        }
     }
 
     func onMethodChanged() {

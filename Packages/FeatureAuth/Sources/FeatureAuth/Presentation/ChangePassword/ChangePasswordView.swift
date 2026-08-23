@@ -25,24 +25,47 @@ public struct ChangePasswordView: View {
     }
 
     public var body: some View {
-        VStack(spacing: SplickTheme.Spacing.lg) {
-            verificationPicker
-                .padding(.horizontal, SplickTheme.Spacing.lg)
-                .padding(.top, SplickTheme.Spacing.lg)
+        Group {
+            if viewModel.isResolvingPasswordLogin {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                VStack(spacing: SplickTheme.Spacing.lg) {
+                    if viewModel.hasPasswordLogin {
+                        verificationPicker
+                            .padding(.horizontal, SplickTheme.Spacing.lg)
+                            .padding(.top, SplickTheme.Spacing.lg)
+                    } else {
+                        Text(languageService.text(.createPasswordHint))
+                            .font(SplickTheme.Typography.callout)
+                            .foregroundStyle(SplickTheme.Colors.textSecondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, SplickTheme.Spacing.lg)
+                            .padding(.top, SplickTheme.Spacing.lg)
+                    }
 
-            TabView(selection: $viewModel.method) {
-                pageScroll(currentPasswordPage)
-                    .tag(ChangePasswordViewModel.VerificationMethod.currentPassword)
+                    if viewModel.hasPasswordLogin {
+                        TabView(selection: $viewModel.method) {
+                            pageScroll(currentPasswordPage)
+                                .tag(ChangePasswordViewModel.VerificationMethod.currentPassword)
 
-                pageScroll(emailCodePage)
-                    .tag(ChangePasswordViewModel.VerificationMethod.emailCode)
+                            pageScroll(emailCodePage)
+                                .tag(ChangePasswordViewModel.VerificationMethod.emailCode)
+                        }
+                        .tabViewStyle(.page(indexDisplayMode: .never))
+                        .animation(.easeInOut(duration: 0.25), value: viewModel.method)
+                    } else {
+                        pageScroll(emailCodePage)
+                    }
+                }
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .animation(.easeInOut(duration: 0.25), value: viewModel.method)
         }
         .background(SplickTheme.Colors.background)
-        .navigationTitle(languageService.text(.changePasswordTitle))
+        .navigationTitle(
+            languageService.text(viewModel.hasPasswordLogin ? .changePasswordTitle : .createPasswordTitle)
+        )
         .navigationBarTitleDisplayMode(.inline)
+        .task { await viewModel.loadPasswordLoginState() }
         .onChange(of: viewModel.method) { _ in
             viewModel.onMethodChanged()
             verifiedRevealStep = 0
@@ -263,7 +286,13 @@ public struct ChangePasswordView: View {
     private func verifiedNewPasswordSection(showMascot: Bool = true) -> some View {
         VStack(spacing: SplickTheme.Spacing.lg) {
             if verifiedRevealStep >= 1 {
-                Text(languageService.text(.changePasswordVerifiedHint))
+                Text(
+                    languageService.text(
+                        viewModel.hasPasswordLogin
+                            ? .changePasswordVerifiedHint
+                            : .createPasswordVerifiedHint
+                    )
+                )
                     .font(SplickTheme.Typography.callout)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
                     .multilineTextAlignment(.center)
@@ -326,7 +355,9 @@ public struct ChangePasswordView: View {
 
             if verifiedRevealStep >= (showMascot ? 5 : 4) {
                 SplickButton(
-                    languageService.text(.changePasswordUpdate),
+                    languageService.text(
+                        viewModel.hasPasswordLogin ? .changePasswordUpdate : .createPasswordSubmit
+                    ),
                     isLoading: viewModel.state.isLoading,
                     isDisabled: submitDisabled
                 ) {

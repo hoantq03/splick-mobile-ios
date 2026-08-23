@@ -133,6 +133,11 @@ enum StringsVi {
         .profileAvatarChangeHint: "Chọn ảnh đại diện mới.",
 
         .changePasswordTitle: "Đổi mật khẩu",
+        .createPasswordTitle: "Tạo mật khẩu",
+        .createPasswordHint:
+            "Tài khoản của bạn chưa có mật khẩu. Xác minh email bằng mã OTP rồi tạo mật khẩu để đăng nhập bằng email.",
+        .createPasswordSubmit: "Tạo mật khẩu",
+        .createPasswordVerifiedHint: "Đã xác minh. Tạo mật khẩu bên dưới.",
         .changePasswordVerifyWith: "Xác minh bằng",
         .changePasswordMethodCurrent: "Mật khẩu hiện tại",
         .changePasswordMethodEmail: "Mã email",
