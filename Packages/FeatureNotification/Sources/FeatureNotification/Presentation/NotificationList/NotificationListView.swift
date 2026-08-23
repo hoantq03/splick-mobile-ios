@@ -72,7 +72,21 @@ public struct NotificationListView: View {
                 }
             }
         }
+        .alert(
+            languageService.text(.friendsIncomingTitle),
+            isPresented: Binding(
+                get: { viewModel.friendRequestAlertMessage != nil },
+                set: { if !$0 { viewModel.friendRequestAlertMessage = nil } }
+            )
+        ) {
+            Button(languageService.text(.commonOK), role: .cancel) {
+                viewModel.friendRequestAlertMessage = nil
+            }
+        } message: {
+            Text(viewModel.friendRequestAlertMessage ?? "")
+        }
         .onFirstAppear {
+            viewModel.reloadFriendRequestOutcomes()
             if presentedAsSheet {
                 Task {
                     // Defer fetch until panel reveal starts — avoids jank without changing layout.
@@ -188,13 +202,29 @@ public struct NotificationListView: View {
                             .padding(.top, SplickTheme.Spacing.xxs)
 
                         ForEach(section.notifications) { notification in
-                            NotificationRowView(notification: notification)
-                                .onTapGesture {
-                                    Task {
-                                        let target = await viewModel.handleTap(notification)
-                                        onNavigate?(target)
+                            NotificationRowView(
+                                notification: notification,
+                                friendRequestOutcome: viewModel.friendRequestOutcome(for: notification),
+                                isProcessingFriendRequest: viewModel.isProcessingFriendRequest(notification),
+                                onAcceptFriendRequest: notification.canRespondToFriendRequest
+                                    && viewModel.friendRequestOutcome(for: notification) == nil
+                                    ? {
+                                        Task { await viewModel.acceptFriendRequest(notification) }
                                     }
+                                    : nil,
+                                onRejectFriendRequest: notification.canRespondToFriendRequest
+                                    && viewModel.friendRequestOutcome(for: notification) == nil
+                                    ? {
+                                        Task { await viewModel.rejectFriendRequest(notification) }
+                                    }
+                                    : nil
+                            )
+                            .onTapGesture {
+                                Task {
+                                    let target = await viewModel.handleTap(notification)
+                                    onNavigate?(target)
                                 }
+                            }
                                 .onAppear {
                                     Task { await viewModel.loadMoreIfNeeded(current: notification) }
                                 }
@@ -220,6 +250,11 @@ public struct NotificationListView: View {
 
 struct NotificationRowView: View {
     let notification: AppNotification
+    var friendRequestOutcome: FriendRequestInboxOutcome? = nil
+    var isProcessingFriendRequest: Bool = false
+    var onAcceptFriendRequest: (() -> Void)? = nil
+    var onRejectFriendRequest: (() -> Void)? = nil
+    @EnvironmentObject private var languageService: LanguageService
 
     private var bodySegments: (actorName: String?, remainder: String) {
         NotificationActorPresentation.bodySegments(for: notification)
@@ -278,6 +313,8 @@ struct NotificationRowView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+
+            friendRequestActions
         }
         .padding(SplickTheme.Spacing.sm)
         .background {
@@ -288,6 +325,69 @@ struct NotificationRowView: View {
                         : SplickTheme.Colors.primaryGradientStart.opacity(0.08)
                 )
         }
+    }
+}
+
+private extension NotificationRowView {
+    @ViewBuilder
+    var friendRequestActions: some View {
+        if let friendRequestOutcome {
+            Text(
+                languageService.text(
+                    friendRequestOutcome == .accepted
+                        ? .notificationFriendRequestAccepted
+                        : .notificationFriendRequestRejected
+                )
+            )
+            .font(SplickTheme.Typography.caption.weight(.semibold))
+            .foregroundStyle(
+                friendRequestOutcome == .accepted
+                    ? SplickTheme.Colors.success
+                    : SplickTheme.Colors.textSecondary
+            )
+            .lineLimit(1)
+        } else if isProcessingFriendRequest {
+            ProgressView()
+                .controlSize(.regular)
+                .frame(width: 36, height: 36)
+        } else if onAcceptFriendRequest != nil || onRejectFriendRequest != nil {
+            HStack(spacing: SplickTheme.Spacing.sm) {
+                if let onAcceptFriendRequest {
+                    friendRequestActionButton(
+                        systemImage: "checkmark",
+                        accessibilityLabel: languageService.text(.friendsAccept),
+                        tint: SplickTheme.Colors.success,
+                        action: onAcceptFriendRequest
+                    )
+                }
+                if let onRejectFriendRequest {
+                    friendRequestActionButton(
+                        systemImage: "xmark",
+                        accessibilityLabel: languageService.text(.friendsReject),
+                        tint: SplickTheme.Colors.error,
+                        action: onRejectFriendRequest
+                    )
+                }
+            }
+        }
+    }
+
+    func friendRequestActionButton(
+        systemImage: String,
+        accessibilityLabel: String,
+        tint: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 36, height: 36)
+                .background(tint.opacity(0.14))
+                .clipShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 

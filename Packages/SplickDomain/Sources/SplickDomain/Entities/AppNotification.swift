@@ -84,7 +84,7 @@ public struct AppNotification: Identifiable, Codable, Equatable, Sendable {
             return .expenses
         case .streakReminderMidday, .streakReminderEvening:
             return .feed
-        case .friendRequestAccepted:
+        case .friendRequestAccepted, .friendNicknameChanged:
             if let actorUserId {
                 return .userProfile(actorUserId)
             }
@@ -100,6 +100,10 @@ public struct AppNotification: Identifiable, Codable, Equatable, Sendable {
         case .system:
             return .none
         }
+    }
+
+    public var canRespondToFriendRequest: Bool {
+        type == .friendRequestSent && referenceId != nil
     }
 
     public func markingAsRead() -> AppNotification {
@@ -138,6 +142,7 @@ public enum NotificationType: String, Codable, Sendable {
     case bulkSettlementRejected = "BULK_SETTLEMENT_REJECTED"
     case friendRequestSent = "FRIEND_REQUEST_SENT"
     case friendRequestAccepted = "FRIEND_REQUEST_ACCEPTED"
+    case friendNicknameChanged = "FRIEND_NICKNAME_CHANGED"
     case groupInvite = "GROUP_INVITE"
     case directMessage = "DIRECT_MESSAGE"
     case groupMessage = "GROUP_MESSAGE"
@@ -181,6 +186,8 @@ public enum NotificationType: String, Codable, Sendable {
             return "flame.fill"
         case .friendRequestSent, .friendRequestAccepted:
             return "person.fill.badge.plus"
+        case .friendNicknameChanged:
+            return "tag.fill"
         case .groupInvite, .groupMessage, .groupCreated, .groupMemberAdded,
              .groupMemberRemoved, .groupRenamed, .groupAdminTransferred:
             return "person.3.fill"

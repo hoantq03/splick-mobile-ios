@@ -63,9 +63,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        PushNotificationCoordinator.shared.handleRemoteNotification(
-            userInfo: response.notification.request.content.userInfo
-        )
-        completionHandler()
+        Task { @MainActor in
+            await PushNotificationCoordinator.shared.handleNotificationResponse(response)
+            completionHandler()
+        }
     }
 }

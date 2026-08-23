@@ -991,7 +991,18 @@ final class DependencyContainer: ObservableObject {
             wsClient: messagingWebSocketClient,
             languageService: languageService,
             onInboxLoaded: { [weak self] conversations, unreadCount in
-                self?.widgetSyncBridge.syncConversations(conversations, totalUnreadCount: unreadCount)
+                guard let self else { return }
+                self.widgetSyncBridge.syncConversations(conversations, totalUnreadCount: unreadCount)
+                let snapshots = conversations.compactMap { conversation -> UserPresenceState? in
+                    guard let peer = conversation.peer else { return nil }
+                    guard peer.isOnline != nil || peer.lastSeenAt != nil else { return nil }
+                    return UserPresenceState(
+                        userId: peer.userId,
+                        isOnline: peer.isOnline ?? false,
+                        lastSeenAt: peer.lastSeenAt
+                    )
+                }
+                await self.presenceStore.applyBulk(snapshots)
             }
         )
     }
@@ -1003,6 +1014,11 @@ final class DependencyContainer: ObservableObject {
             markClickedUseCase: markNotificationClickedUseCase,
             markInboxSeenUseCase: markInboxSeenUseCase,
             languageService: languageService,
+            friendRequestInbox: FriendRequestInboxAdapter(
+                acceptUseCase: acceptFriendRequestUseCase,
+                rejectUseCase: rejectFriendRequestUseCase
+            ),
+            userDefaultsService: userDefaultsService,
             onBadgeCountsChanged: { [weak self] in
                 await self?.badgeCountService.refresh(force: true)
             }

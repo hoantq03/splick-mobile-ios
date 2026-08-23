@@ -3,6 +3,7 @@ import SwiftUI
 import Common
 import Localization
 import SplickDomain
+import Storage
 
 @MainActor
 public final class NotificationListViewModel: ObservableObject {
@@ -19,10 +20,16 @@ public final class NotificationListViewModel: ObservableObject {
     private let markReadUseCase: MarkNotificationReadUseCaseProtocol
     private let markClickedUseCase: MarkNotificationClickedUseCaseProtocol
     private let markInboxSeenUseCase: MarkInboxSeenUseCaseProtocol
+    private let friendRequestInbox: FriendRequestInboxResponding?
+    private let userDefaultsService: UserDefaultsServiceProtocol?
     private let languageService: LanguageService
     private let onBadgeCountsChanged: (() async -> Void)?
     private var currentPage = 0
     private var pullToRefreshTask: Task<Void, Never>?
+
+    @Published private(set) var friendRequestOutcomes: [UUID: FriendRequestInboxOutcome] = [:]
+    @Published private(set) var processingFriendRequestIds: Set<UUID> = []
+    @Published var friendRequestAlertMessage: String?
 
     public init(
         fetchNotificationsUseCase: FetchNotificationsUseCaseProtocol,
@@ -30,14 +37,19 @@ public final class NotificationListViewModel: ObservableObject {
         markClickedUseCase: MarkNotificationClickedUseCaseProtocol,
         markInboxSeenUseCase: MarkInboxSeenUseCaseProtocol,
         languageService: LanguageService,
+        friendRequestInbox: FriendRequestInboxResponding? = nil,
+        userDefaultsService: UserDefaultsServiceProtocol? = nil,
         onBadgeCountsChanged: (() async -> Void)? = nil
     ) {
         self.fetchNotificationsUseCase = fetchNotificationsUseCase
         self.markReadUseCase = markReadUseCase
         self.markClickedUseCase = markClickedUseCase
         self.markInboxSeenUseCase = markInboxSeenUseCase
+        self.friendRequestInbox = friendRequestInbox
+        self.userDefaultsService = userDefaultsService
         self.languageService = languageService
         self.onBadgeCountsChanged = onBadgeCountsChanged
+        friendRequestOutcomes = FriendRequestInboxOutcomePersistence.load(from: userDefaultsService)
     }
 
     var showsInitialLoading: Bool {
@@ -233,5 +245,62 @@ public final class NotificationListViewModel: ObservableObject {
         } catch {
             Log.error(error, category: .notification)
         }
+    }
+
+    func reloadFriendRequestOutcomes() {
+        let stored = FriendRequestInboxOutcomePersistence.load(from: userDefaultsService)
+        friendRequestOutcomes.merge(stored) { _, current in current }
+    }
+
+    func friendRequestOutcome(for notification: AppNotification) -> FriendRequestInboxOutcome? {
+        guard let requestId = notification.referenceId else { return nil }
+        return friendRequestOutcomes[requestId]
+    }
+
+    func isProcessingFriendRequest(_ notification: AppNotification) -> Bool {
+        guard let requestId = notification.referenceId else { return false }
+        return processingFriendRequestIds.contains(requestId)
+    }
+
+    func acceptFriendRequest(_ notification: AppNotification) async {
+        await respondToFriendRequest(notification, accept: true)
+    }
+
+    func rejectFriendRequest(_ notification: AppNotification) async {
+        await respondToFriendRequest(notification, accept: false)
+    }
+
+    private func respondToFriendRequest(_ notification: AppNotification, accept: Bool) async {
+        guard notification.canRespondToFriendRequest,
+              let requestId = notification.referenceId,
+              friendRequestInbox != nil,
+              friendRequestOutcomes[requestId] == nil,
+              !processingFriendRequestIds.contains(requestId)
+        else { return }
+
+        processingFriendRequestIds.insert(requestId)
+        defer { processingFriendRequestIds.remove(requestId) }
+
+        do {
+            if accept {
+                try await friendRequestInbox?.acceptIncomingRequest(requestId: requestId)
+            } else {
+                try await friendRequestInbox?.rejectIncomingRequest(requestId: requestId)
+            }
+            persistOutcome(requestId, accept ? .accepted : .rejected)
+            if !notification.isRead {
+                markLocalAsRead(notification)
+                try? await markReadUseCase.execute(id: notification.id)
+                await onBadgeCountsChanged?()
+            }
+        } catch {
+            Log.error(error, category: .notification)
+            friendRequestAlertMessage = languageService.localizedMessage(for: error)
+        }
+    }
+
+    private func persistOutcome(_ requestId: UUID, _ outcome: FriendRequestInboxOutcome) {
+        friendRequestOutcomes[requestId] = outcome
+        FriendRequestInboxOutcomePersistence.save(friendRequestOutcomes, to: userDefaultsService)
     }
 }

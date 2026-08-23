@@ -44,6 +44,7 @@ final class AppNotificationNavigationTests: XCTestCase {
         XCTAssertEqual(NotificationType(rawValue: "FEED_MENTIONED_IN_POST"), .feedMentionedInPost)
         XCTAssertEqual(NotificationType(rawValue: "FEED_MENTIONED_IN_COMMENT"), .feedMentionedInComment)
         XCTAssertEqual(NotificationType(rawValue: "FRIEND_REQUEST_ACCEPTED"), .friendRequestAccepted)
+        XCTAssertEqual(NotificationType(rawValue: "FRIEND_NICKNAME_CHANGED"), .friendNicknameChanged)
         XCTAssertEqual(
             NotificationType(rawValue: "BULK_SETTLEMENT_PENDING_APPROVAL"),
             .bulkSettlementPendingApproval
@@ -76,6 +77,20 @@ final class AppNotificationNavigationTests: XCTestCase {
             type: .friendRequestAccepted,
             title: "Kết bạn thành công",
             body: "Alice",
+            destination: NotificationDestination(screen: .userProfile, postId: actorId),
+            actorUserId: actorId
+        )
+
+        XCTAssertEqual(notification.navigationTarget, .userProfile(actorId))
+    }
+
+    func testNavigationTargetOpensUserProfileFromFriendNicknameChanged() {
+        let actorId = UUID()
+        let notification = AppNotification(
+            id: UUID(),
+            type: .friendNicknameChanged,
+            title: "Biệt danh",
+            body: "Alice đã đặt biệt danh cho bạn: Minh",
             destination: NotificationDestination(screen: .userProfile, postId: actorId),
             actorUserId: actorId
         )

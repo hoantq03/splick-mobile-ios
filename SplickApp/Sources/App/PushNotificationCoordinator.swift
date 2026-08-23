@@ -4,6 +4,8 @@ import UIKit
 import UserNotifications
 import Common
 import FeatureMessaging
+import FeatureNotification
+import Localization
 import Networking
 import SplickDomain
 import Storage
@@ -20,6 +22,8 @@ final class PushNotificationCoordinator: ObservableObject {
     private var deviceTokenService: DeviceTokenServiceProtocol?
     private var userDefaultsService: UserDefaultsServiceProtocol?
     private var hasAccessToken: (@Sendable () async -> Bool)?
+    private var friendRequestInbox: FriendRequestInboxResponding?
+    private var languageService: LanguageService?
     private var serverSyncInFlight = false
     private var lastSyncedToken: String?
 
@@ -28,12 +32,17 @@ final class PushNotificationCoordinator: ObservableObject {
     func configure(
         deviceTokenService: DeviceTokenServiceProtocol,
         userDefaultsService: UserDefaultsServiceProtocol,
-        hasAccessToken: @escaping @Sendable () async -> Bool
+        hasAccessToken: @escaping @Sendable () async -> Bool,
+        friendRequestInbox: FriendRequestInboxResponding? = nil,
+        languageService: LanguageService? = nil
     ) {
         self.deviceTokenService = deviceTokenService
         self.userDefaultsService = userDefaultsService
         self.hasAccessToken = hasAccessToken
+        self.friendRequestInbox = friendRequestInbox
+        self.languageService = languageService
         localDeviceToken = userDefaultsService.get(for: AppConstants.UserDefaults.pushNotificationDeviceToken)
+        registerNotificationCategories()
 
         Log.info(
             "Push notification coordinator configured",
@@ -152,6 +161,18 @@ final class PushNotificationCoordinator: ObservableObject {
         )
     }
 
+    func handleNotificationResponse(_ response: UNNotificationResponse) async {
+        let userInfo = response.notification.request.content.userInfo
+        switch response.actionIdentifier {
+        case PushNotificationAction.accept:
+            await respondToFriendRequest(accept: true, userInfo: userInfo)
+        case PushNotificationAction.reject:
+            await respondToFriendRequest(accept: false, userInfo: userInfo)
+        default:
+            handleRemoteNotification(userInfo: userInfo)
+        }
+    }
+
     func handleRemoteNotification(userInfo: [AnyHashable: Any]) {
         if let badge = ((userInfo["aps"] as? [String: Any])?["badge"] as? Int) {
             syncAppIconBadge(count: badge)
@@ -264,6 +285,7 @@ final class PushNotificationCoordinator: ObservableObject {
             )
 
             guard granted else { return }
+            registerNotificationCategories()
             await registerForRemoteNotifications()
         } catch {
             Log.error(
@@ -358,6 +380,62 @@ final class PushNotificationCoordinator: ObservableObject {
         #if DEBUG
         print("[SplickPush] \(message)")
         #endif
+    }
+
+    private func registerNotificationCategories() {
+        let acceptTitle = languageService?.text(.friendsAccept) ?? "Accept"
+        let rejectTitle = languageService?.text(.friendsReject) ?? "Reject"
+        let accept = UNNotificationAction(
+            identifier: PushNotificationAction.accept,
+            title: acceptTitle,
+            options: []
+        )
+        let reject = UNNotificationAction(
+            identifier: PushNotificationAction.reject,
+            title: rejectTitle,
+            options: [.destructive]
+        )
+        let friendRequest = UNNotificationCategory(
+            identifier: PushNotificationAction.friendRequestCategory,
+            actions: [accept, reject],
+            intentIdentifiers: [],
+            options: []
+        )
+        UNUserNotificationCenter.current().setNotificationCategories([friendRequest])
+    }
+
+    private func respondToFriendRequest(accept: Bool, userInfo: [AnyHashable: Any]) async {
+        guard let requestId = parseUUID(userInfo["requestId"]) ?? parseUUID(userInfo["referenceId"])
+        else {
+            Log.warning("Friend request push action missing requestId", category: .notification)
+            return
+        }
+        guard let friendRequestInbox else { return }
+
+        do {
+            if accept {
+                try await friendRequestInbox.acceptIncomingRequest(requestId: requestId)
+            } else {
+                try await friendRequestInbox.rejectIncomingRequest(requestId: requestId)
+            }
+            persistFriendRequestOutcome(requestId, accept ? .accepted : .rejected)
+        } catch {
+            Log.error(
+                error,
+                category: .notification,
+                metadata: ["action": accept ? "accept" : "reject"]
+            )
+        }
+    }
+
+    private func persistFriendRequestOutcome(_ requestId: UUID, _ outcome: FriendRequestInboxOutcome) {
+        var stored = FriendRequestInboxOutcomePersistence.load(from: userDefaultsService)
+        stored[requestId] = outcome
+        FriendRequestInboxOutcomePersistence.save(stored, to: userDefaultsService)
+    }
+
+    private func parseUUID(_ rawValue: Any?) -> UUID? {
+        (rawValue as? String).flatMap(UUID.init(uuidString:))
     }
 
     private func parseDestination(from userInfo: [AnyHashable: Any]) -> NotificationDestination? {

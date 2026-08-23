@@ -39,7 +39,8 @@ public actor FakeNotificationRepository: NotificationRepositoryProtocol {
                 id: UUID(), type: .friendRequestSent,
                 title: "Friend Request",
                 body: "Minh Thu wants to connect with you",
-                isRead: true,
+                isRead: false,
+                referenceId: UUID(),
                 createdAt: Date().addingTimeInterval(-172800)
             ),
             AppNotification(
@@ -74,7 +75,7 @@ public actor FakeNotificationRepository: NotificationRepositoryProtocol {
         case "FRIENDS":
             filtered = notifications.filter {
                 switch $0.type {
-                case .friendRequestSent, .friendRequestAccepted, .groupInvite:
+                case .friendRequestSent, .friendRequestAccepted, .friendNicknameChanged, .groupInvite:
                     return true
                 default:
                     return false
@@ -149,7 +150,7 @@ public actor FakeNotificationRepository: NotificationRepositoryProtocol {
         var expenses = 0
         for item in inboxSource {
             switch item.type {
-            case .friendRequestSent, .friendRequestAccepted, .groupInvite:
+            case .friendRequestSent, .friendRequestAccepted, .friendNicknameChanged, .groupInvite:
                 friends += 1
             case .expenseSplitBill, .expenseReminder, .expenseSettled,
                  .paymentEvidenceSubmitted, .paymentEvidenceApproved, .paymentEvidenceRejected,

@@ -1,6 +1,8 @@
 import SwiftUI
 import GoogleSignIn
 import DesignSystem
+import FeatureFriends
+import FeatureNotification
 import Localization
 
 @main
@@ -19,7 +21,12 @@ struct SplickApp: App {
             userDefaultsService: container.userDefaultsService,
             hasAccessToken: {
                 await container.tokenProvider.accessToken() != nil
-            }
+            },
+            friendRequestInbox: FriendRequestInboxAdapter(
+                acceptUseCase: container.acceptFriendRequestUseCase,
+                rejectUseCase: container.rejectFriendRequestUseCase
+            ),
+            languageService: container.languageService
         )
     }
 

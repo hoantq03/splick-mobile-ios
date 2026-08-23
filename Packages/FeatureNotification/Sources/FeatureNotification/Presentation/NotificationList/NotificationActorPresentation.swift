@@ -46,9 +46,10 @@ enum NotificationActorPresentation {
             " and ", " sent you", " accepted your", " tagged you", " mentioned you",
             " commented on", " reacted", " submitted ", " approved ", " rejected ",
             " reminds you", " wants to connect", " added ",
+            " set your nickname", " removed your nickname",
             " và ", " đã gửi", " đã chấp nhận", " đã gắn thẻ", " đã nhắc",
             " đã bình luận", " đã gửi bằng chứng", " đã duyệt", " đã từ chối",
-            " nhắc bạn", " bày tỏ",
+            " nhắc bạn", " bày tỏ", " đã đặt biệt danh", " đã xóa biệt danh",
         ]
 
         let lowercased = trimmed.lowercased()

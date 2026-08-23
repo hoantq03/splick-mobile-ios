@@ -35,6 +35,7 @@ public enum AppConstants {
         public static let pushNotificationsEnabled = "pushNotificationsEnabled"
         public static let pushNotificationDeviceToken = "pushNotificationDeviceToken"
         public static let pushNotificationPermissionRequested = "pushNotificationPermissionRequested"
+        public static let processedFriendRequestOutcomes = "processedFriendRequestOutcomes"
         public static let preferredLocale = "preferredLocale"
     }
 
