@@ -8,6 +8,7 @@ enum NotificationEndpoint: APIEndpoint {
     case markAllRead
     case unreadCount
     case badgeCounts
+    case markInboxSeen
 
     var path: String {
         switch self {
@@ -17,13 +18,14 @@ enum NotificationEndpoint: APIEndpoint {
         case .markAllRead: return "/v1/notifications/read-all"
         case .unreadCount: return "/v1/notifications/unread-count"
         case .badgeCounts: return "/v1/notifications/badge-counts"
+        case .markInboxSeen: return "/v1/notifications/seen"
         }
     }
 
     var method: HTTPMethod {
         switch self {
         case .list, .unreadCount, .badgeCounts: return .get
-        case .markRead, .markAllRead, .markClicked: return .post
+        case .markRead, .markAllRead, .markClicked, .markInboxSeen: return .post
         }
     }
 

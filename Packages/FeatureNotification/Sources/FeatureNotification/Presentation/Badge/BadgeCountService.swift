@@ -77,4 +77,9 @@ public final class BadgeCountService: ObservableObject {
         counts = newCounts
         lastFreshAt = Date()
     }
+
+    public func clearUnseenInboxBadges() {
+        counts = counts.clearingUnseenInboxBadges()
+        lastFreshAt = Date()
+    }
 }

@@ -5,6 +5,7 @@ import FeatureNotification
 public actor FakeNotificationRepository: NotificationRepositoryProtocol {
     private var notifications: [AppNotification] = []
     private var registeredTokens: Set<String> = []
+    private var inboxLastSeenAt: Date?
     private let logger: StateLogger
 
     public init(logger: StateLogger) {
@@ -124,6 +125,11 @@ public actor FakeNotificationRepository: NotificationRepositoryProtocol {
         logger.success("All \(notifications.count) notifications marked as read")
     }
 
+    public func markInboxSeen() async throws {
+        inboxLastSeenAt = Date()
+        logger.success("Notification inbox marked as seen")
+    }
+
     public func unreadCount() async throws -> Int {
         let count = notifications.filter { !$0.isRead }.count
         logger.log("Unread count: \(count)")
@@ -132,10 +138,16 @@ public actor FakeNotificationRepository: NotificationRepositoryProtocol {
 
     public func fetchBadgeCounts() async throws -> TabBadgeCounts {
         let unread = notifications.filter { !$0.isRead }
+        let inboxSource: [AppNotification]
+        if let inboxLastSeenAt {
+            inboxSource = notifications.filter { $0.createdAt > inboxLastSeenAt }
+        } else {
+            inboxSource = unread
+        }
         var notificationsCount = 0
         var friends = 0
         var expenses = 0
-        for item in unread {
+        for item in inboxSource {
             switch item.type {
             case .friendRequestSent, .friendRequestAccepted, .groupInvite:
                 friends += 1
@@ -145,14 +157,17 @@ public actor FakeNotificationRepository: NotificationRepositoryProtocol {
                  .bulkSettlementRejected:
                 expenses += 1
             default:
-                notificationsCount += 1
+                if !item.type.isMessagingNotification {
+                    notificationsCount += 1
+                }
             }
         }
+        let messages = unread.filter(\.type.isMessagingNotification).count
         return TabBadgeCounts(
             notifications: notificationsCount,
             friends: friends,
             expenses: expenses,
-            messages: 0
+            messages: messages
         )
     }
 

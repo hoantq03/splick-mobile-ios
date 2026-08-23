@@ -29,6 +29,10 @@ public final class NotificationRepository: NotificationRepositoryProtocol, Senda
         try await apiClient.request(NotificationEndpoint.markAllRead)
     }
 
+    public func markInboxSeen() async throws {
+        try await apiClient.request(NotificationEndpoint.markInboxSeen)
+    }
+
     public func unreadCount() async throws -> Int {
         let dto: UnreadCountDTO = try await apiClient.request(NotificationEndpoint.unreadCount)
         return dto.count

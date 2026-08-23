@@ -22,6 +22,10 @@ final class MockMarkNotificationClickedUseCase: MarkNotificationClickedUseCasePr
     func execute(id: UUID) async throws {}
 }
 
+final class MockMarkInboxSeenUseCase: MarkInboxSeenUseCaseProtocol, Sendable {
+    func execute() async throws {}
+}
+
 #Preview("Notifications") {
     let previewLanguageService = LanguageService(userDefaults: UserDefaultsService())
     return NotificationListView(
@@ -29,6 +33,7 @@ final class MockMarkNotificationClickedUseCase: MarkNotificationClickedUseCasePr
             fetchNotificationsUseCase: MockFetchNotificationsUseCase(),
             markReadUseCase: MockMarkNotificationReadUseCase(),
             markClickedUseCase: MockMarkNotificationClickedUseCase(),
+            markInboxSeenUseCase: MockMarkInboxSeenUseCase(),
             languageService: previewLanguageService
         )
     )

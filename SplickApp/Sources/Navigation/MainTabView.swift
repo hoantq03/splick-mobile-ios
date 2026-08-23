@@ -156,6 +156,8 @@ struct MainTabView: View {
                         notificationDismissRequest = true
                     } else {
                         appState.presentNotifications(from: bellFrame)
+                        container.badgeCountService.clearUnseenInboxBadges()
+                        Task { await container.notificationListViewModel.markInboxSeen() }
                     }
                 }
             }
@@ -216,7 +218,6 @@ struct MainTabView: View {
                     dismissRequest: $notificationDismissRequest,
                     notificationIsDismissing: $notificationIsDismissing,
                     anchorFrame: appState.notificationAnchorFrame,
-                    badgeUnreadCount: badgeCounts.notifications,
                     onNavigate: { target in
                         appState.routeNotification(target: target)
                     }
@@ -1411,14 +1412,13 @@ private struct NotificationRevealHost: View {
     @Binding var dismissRequest: Bool
     @Binding var notificationIsDismissing: Bool
     let anchorFrame: CGRect
-    let badgeUnreadCount: Int
     let onNavigate: (NotificationNavigationTarget) -> Void
 
     var body: some View {
         DesignSystem.SplickNotificationRevealOverlay(
             isPresented: $isPresented,
             anchorFrame: anchorFrame,
-            unreadCount: max(viewModel.unreadCount, badgeUnreadCount),
+            unreadCount: viewModel.unreadCount,
             headerTitle: languageService.text(.notificationTitle),
             leadingActionTitle: languageService.text(.notificationReadAll),
             onLeadingAction: {

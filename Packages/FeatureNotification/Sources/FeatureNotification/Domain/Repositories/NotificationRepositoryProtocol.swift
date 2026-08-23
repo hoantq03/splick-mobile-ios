@@ -6,6 +6,7 @@ public protocol NotificationRepositoryProtocol: Sendable {
     func markAsRead(id: UUID) async throws
     func markAsClicked(id: UUID) async throws
     func markAllAsRead() async throws
+    func markInboxSeen() async throws
     func unreadCount() async throws -> Int
     func fetchBadgeCounts() async throws -> TabBadgeCounts
     func registerDeviceToken(

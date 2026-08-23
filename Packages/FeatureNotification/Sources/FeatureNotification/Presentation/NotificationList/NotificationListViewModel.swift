@@ -18,6 +18,7 @@ public final class NotificationListViewModel: ObservableObject {
     private let fetchNotificationsUseCase: FetchNotificationsUseCaseProtocol
     private let markReadUseCase: MarkNotificationReadUseCaseProtocol
     private let markClickedUseCase: MarkNotificationClickedUseCaseProtocol
+    private let markInboxSeenUseCase: MarkInboxSeenUseCaseProtocol
     private let languageService: LanguageService
     private let onBadgeCountsChanged: (() async -> Void)?
     private var currentPage = 0
@@ -27,12 +28,14 @@ public final class NotificationListViewModel: ObservableObject {
         fetchNotificationsUseCase: FetchNotificationsUseCaseProtocol,
         markReadUseCase: MarkNotificationReadUseCaseProtocol,
         markClickedUseCase: MarkNotificationClickedUseCaseProtocol,
+        markInboxSeenUseCase: MarkInboxSeenUseCaseProtocol,
         languageService: LanguageService,
         onBadgeCountsChanged: (() async -> Void)? = nil
     ) {
         self.fetchNotificationsUseCase = fetchNotificationsUseCase
         self.markReadUseCase = markReadUseCase
         self.markClickedUseCase = markClickedUseCase
+        self.markInboxSeenUseCase = markInboxSeenUseCase
         self.languageService = languageService
         self.onBadgeCountsChanged = onBadgeCountsChanged
     }
@@ -191,6 +194,16 @@ public final class NotificationListViewModel: ObservableObject {
         }
 
         await onBadgeCountsChanged?()
+    }
+
+    public func markInboxSeen() async {
+        do {
+            try await markInboxSeenUseCase.execute()
+            await onBadgeCountsChanged?()
+        } catch {
+            Log.error(error, category: .notification, metadata: ["action": "markInboxSeen"])
+            await onBadgeCountsChanged?()
+        }
     }
 
     public func markAllAsRead() async {
