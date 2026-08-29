@@ -257,15 +257,20 @@ struct PostCardView: View, Equatable {
             MentionText(
                 caption,
                 fontSize: 16,
-                displayNamesByUsername: post.mentionDisplayNamesByUsername
+                displayNamesByUsername: post.mentionDisplayNamesByUsername,
+                onMentionTap: openMentionedUser,
+                isSelectable: true
             )
             .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-            .onTapGesture { actions.onOpenDetail?(post, mediaPageIndex) }
             if post.isEdited {
                 editedBadge
             }
         }
+    }
+
+    private func openMentionedUser(_ username: String) {
+        guard let user = post.userForMentionUsername(username) else { return }
+        actions.onUserTap(user)
     }
 
     private var editedBadge: some View {

@@ -151,6 +151,7 @@ struct PostDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
         .splickInteractivePopEnabled()
+        .splickWideInteractivePop()
         .overlay(alignment: .top) {
             SplickScrollTopFadeOverlay(mode: .detailScreen)
         }
