@@ -8,15 +8,18 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
     private let apiClient: APIClientProtocol
     private let keychainService: KeychainServiceProtocol
     private let tokenProvider: TokenProvider
+    private let userDefaultsService: UserDefaultsServiceProtocol
 
     public init(
         apiClient: APIClientProtocol,
         keychainService: KeychainServiceProtocol,
-        tokenProvider: TokenProvider
+        tokenProvider: TokenProvider,
+        userDefaultsService: UserDefaultsServiceProtocol
     ) {
         self.apiClient = apiClient
         self.keychainService = keychainService
         self.tokenProvider = tokenProvider
+        self.userDefaultsService = userDefaultsService
     }
 
     public func checkIdentifier(email: String?, phoneNumber: String?) async throws -> Bool {
@@ -225,7 +228,9 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
 
     public func getCurrentUser() async throws -> User {
         let dto: UserDTO = try await apiClient.request(AuthEndpoint.me)
-        return AuthMapper.toUser(dto)
+        let user = AuthMapper.toUser(dto)
+        cacheCurrentUser(user)
+        return user
     }
 
     public func updateProfile(
@@ -262,7 +267,9 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
                 dateOfBirth: resolvedDateOfBirth
             ))
         )
-        return AuthMapper.toUser(dto)
+        let user = AuthMapper.toUser(dto)
+        cacheCurrentUser(user)
+        return user
     }
 
     public func listSessions() async throws -> [UserSession] {
@@ -357,6 +364,7 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
         try? keychainService.delete(for: AppConstants.Keychain.refreshTokenKey)
         try? keychainService.delete(for: AppConstants.Keychain.userIdKey)
         try? keychainService.delete(for: AppConstants.Keychain.sessionIdKey)
+        userDefaultsService.remove(for: AppConstants.UserDefaults.cachedCurrentUser)
         await tokenProvider.clearTokens()
     }
 
@@ -367,9 +375,14 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
         if let sessionId = response.sessionId {
             try keychainService.saveString(sessionId.uuidString, for: AppConstants.Keychain.sessionIdKey)
         }
+        cacheCurrentUser(AuthMapper.toUser(response.user))
         await tokenProvider.updateTokens(
             access: response.accessToken,
             refresh: response.refreshToken
         )
+    }
+
+    private func cacheCurrentUser(_ user: User) {
+        userDefaultsService.set(user, for: AppConstants.UserDefaults.cachedCurrentUser)
     }
 }
