@@ -37,10 +37,10 @@ extension View {
     }
 
     /// Widens interactive pop to the leading quarter of the screen (same as Android post detail).
-    /// The system edge gesture stays in place so iOS 18 zoom still tracks the finger; a second
-    /// pan on the navigation view covers the rest of the band and drives the same transition.
-    public func splickWideInteractivePop(fraction: CGFloat = 0.25) -> some View {
-        background(SplickWideInteractivePopInstaller(fraction: fraction))
+    /// On iOS 18 zoom destinations (feed → post) the extra pan is disabled — zoom dismiss is
+    /// bound to the system edge gesture, and a second pan only pops after the finger lifts.
+    public func splickWideInteractivePop(fraction: CGFloat = 0.25, minimumWidth: CGFloat = 0) -> some View {
+        background(SplickWideInteractivePopInstaller(fraction: fraction, minimumWidth: minimumWidth))
     }
 }
 
@@ -74,8 +74,7 @@ private final class SplickInteractivePopHostController: UIViewController {
 
     func enableIfNeeded() {
         guard let nav = navigationController ?? ancestorNavigationController() else { return }
-        guard let pop = nav.interactivePopGestureRecognizer else { return }
-        pop.isEnabled = nav.viewControllers.count > 1
+        SplickInteractivePopConfigurator.apply(to: nav)
     }
 
     private func ancestorNavigationController() -> UINavigationController? {
@@ -94,21 +93,25 @@ private final class SplickInteractivePopHostController: UIViewController {
 /// The overlay approach blocked `interactivePopGestureRecognizer`, so zoom only popped on lift.
 private struct SplickWideInteractivePopInstaller: UIViewControllerRepresentable {
     var fraction: CGFloat
+    var minimumWidth: CGFloat
 
     func makeUIViewController(context: Context) -> SplickWideInteractivePopHostController {
         let host = SplickWideInteractivePopHostController()
         host.fraction = fraction
+        host.minimumWidth = minimumWidth
         return host
     }
 
     func updateUIViewController(_ uiViewController: SplickWideInteractivePopHostController, context: Context) {
         uiViewController.fraction = fraction
+        uiViewController.minimumWidth = minimumWidth
         uiViewController.installIfNeeded()
     }
 }
 
 private final class SplickWideInteractivePopHostController: UIViewController {
     var fraction: CGFloat = 0.25
+    var minimumWidth: CGFloat = 0
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -128,7 +131,7 @@ private final class SplickWideInteractivePopHostController: UIViewController {
 
     func installIfNeeded() {
         guard let nav = navigationController ?? ancestorNavigationController() else { return }
-        SplickWidePopGesture.install(on: nav, fraction: fraction)
+        SplickWidePopGesture.install(on: nav, fraction: fraction, minimumWidth: minimumWidth)
     }
 
     private func ancestorNavigationController() -> UINavigationController? {
@@ -151,8 +154,9 @@ private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate 
     private weak var navigationController: UINavigationController?
     private var pan: UIPanGestureRecognizer?
     var fraction: CGFloat = 0.25
+    var minimumWidth: CGFloat = 0
 
-    static func install(on nav: UINavigationController, fraction: CGFloat) {
+    static func install(on nav: UINavigationController, fraction: CGFloat, minimumWidth: CGFloat = 0) {
         let owner: SplickWidePopGesture
         if let existing = objc_getAssociatedObject(nav, &associatedKey) as? SplickWidePopGesture {
             owner = existing
@@ -161,7 +165,12 @@ private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate 
             objc_setAssociatedObject(nav, &associatedKey, owner, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
         owner.fraction = fraction
+        owner.minimumWidth = minimumWidth
         owner.attach(to: nav)
+    }
+
+    private func leadingPopBand(in view: UIView) -> CGFloat {
+        max(view.bounds.width * fraction, minimumWidth)
     }
 
     private func attach(to nav: UINavigationController) {
@@ -172,21 +181,37 @@ private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate 
             let gesture = UIPanGestureRecognizer()
             gesture.maximumNumberOfTouches = 1
             gesture.delegate = self
-            if let targets = systemPop.value(forKey: "targets") {
-                gesture.setValue(targets, forKey: "targets")
-            } else {
-                let selector = NSSelectorFromString("handleNavigationTransition:")
-                if let transition = systemPop.delegate, transition.responds(to: selector) {
-                    gesture.addTarget(transition, action: selector)
-                }
-            }
             nav.view.addGestureRecognizer(gesture)
             pan = gesture
         }
 
+        bindTargets(from: systemPop, onto: pan)
+
         let canPop = nav.viewControllers.count > 1
+        let usesZoom = splickNavigationUsesZoom(nav)
         systemPop.isEnabled = canPop
-        pan?.isEnabled = canPop
+        // Zoom interactive dismiss is bound to the system edge recognizer.
+        // A second pan with copied targets pops on lift instead of tracking the finger.
+        pan?.isEnabled = canPop && !usesZoom
+    }
+
+    static func refresh(on nav: UINavigationController) {
+        guard let existing = objc_getAssociatedObject(nav, &associatedKey) as? SplickWidePopGesture else {
+            return
+        }
+        existing.attach(to: nav)
+    }
+
+    private func bindTargets(from systemPop: UIGestureRecognizer, onto pan: UIPanGestureRecognizer?) {
+        guard let pan else { return }
+        if let targets = systemPop.value(forKey: "targets") {
+            pan.setValue(targets, forKey: "targets")
+            return
+        }
+        let selector = NSSelectorFromString("handleNavigationTransition:")
+        if let transition = systemPop.delegate, transition.responds(to: selector) {
+            pan.addTarget(transition, action: selector)
+        }
     }
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
@@ -197,7 +222,7 @@ private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate 
         if point.y < view.safeAreaInsets.top + 44 {
             return false
         }
-        let band = view.bounds.width * fraction
+        let band = leadingPopBand(in: view)
         if view.effectiveUserInterfaceLayoutDirection == .rightToLeft {
             return point.x >= view.bounds.width - band
         }
@@ -316,19 +341,7 @@ private final class SplickNavigationDelegateProxy: NSObject, UINavigationControl
     }
 
     private func enableInteractivePop(on nav: UINavigationController) {
-        guard let pop = nav.interactivePopGestureRecognizer else { return }
-        pop.isEnabled = nav.viewControllers.count > 1
-
-        // Zoom (iOS 18) owns interactive dismiss. Hijacking the pop delegate
-        // or returning a nil interaction controller disables edge swipe-back.
-        if #available(iOS 18.0, *), topViewUsesZoom(nav) {
-            if pop.delegate === self {
-                pop.delegate = nil
-            }
-            return
-        }
-
-        pop.delegate = self
+        SplickInteractivePopConfigurator.apply(to: nav, gestureDelegate: self)
     }
 
     func navigationController(
@@ -437,17 +450,79 @@ private final class SplickNavigationDelegateProxy: NSObject, UINavigationControl
 
     @available(iOS 18.0, *)
     private func hasPreferredTransition(_ viewController: UIViewController) -> Bool {
-        if viewController.preferredTransition != nil {
+        splickViewControllerUsesZoom(viewController)
+    }
+}
+
+/// Shared pop-gesture setup so zoom screens never race a second pan / custom pop delegate.
+private enum SplickInteractivePopConfigurator {
+    static func apply(
+        to nav: UINavigationController,
+        gestureDelegate: UIGestureRecognizerDelegate? = nil,
+        retryZoomDetection: Bool = true
+    ) {
+        guard let pop = nav.interactivePopGestureRecognizer else { return }
+        pop.isEnabled = nav.viewControllers.count > 1
+
+        let usesZoom = splickNavigationUsesZoom(nav)
+        if usesZoom {
+            if pop.delegate is SplickNavigationDelegateProxy {
+                pop.delegate = nil
+            }
+        } else if let gestureDelegate {
+            let waitForZoomCheck = retryZoomDetection && nav.viewControllers.count > 1
+            if #available(iOS 18.0, *), waitForZoomCheck {
+                if pop.delegate is SplickNavigationDelegateProxy {
+                    pop.delegate = nil
+                }
+            } else {
+                pop.delegate = gestureDelegate
+            }
+        }
+
+        SplickWidePopGesture.refresh(on: nav)
+
+        // `preferredTransition` is often applied one run-loop after `didShow`.
+        if #available(iOS 18.0, *), !usesZoom, retryZoomDetection {
+            DispatchQueue.main.async { [weak nav, weak gestureDelegate] in
+                guard let nav else { return }
+                apply(to: nav, gestureDelegate: gestureDelegate, retryZoomDetection: false)
+            }
+        }
+    }
+}
+
+private func splickNavigationUsesZoom(_ nav: UINavigationController) -> Bool {
+    if SplickZoomNavigation.isPushPending {
+        return true
+    }
+    if #available(iOS 18.0, *) {
+        if let top = nav.topViewController, splickViewControllerUsesZoom(top) {
             return true
         }
-        return viewController.children.contains { hasPreferredTransition($0) }
+        if let visible = nav.visibleViewController,
+           visible !== nav.topViewController,
+           splickViewControllerUsesZoom(visible) {
+            return true
+        }
     }
+    return false
+}
 
-    @available(iOS 18.0, *)
-    private func topViewUsesZoom(_ navigationController: UINavigationController) -> Bool {
-        guard let top = navigationController.topViewController else { return false }
-        return hasPreferredTransition(top)
+@available(iOS 18.0, *)
+private func splickViewControllerUsesZoom(_ viewController: UIViewController) -> Bool {
+    var seen = Set<ObjectIdentifier>()
+    var stack = [viewController]
+    while let vc = stack.popLast() {
+        let id = ObjectIdentifier(vc)
+        if seen.contains(id) { continue }
+        seen.insert(id)
+        if vc.preferredTransition != nil {
+            return true
+        }
+        stack.append(contentsOf: vc.children)
     }
+    return false
 }
 
 private final class SplickSlideAnimator: NSObject, UIViewControllerAnimatedTransitioning {
