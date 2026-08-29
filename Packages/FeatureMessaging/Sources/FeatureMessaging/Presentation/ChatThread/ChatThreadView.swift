@@ -24,6 +24,8 @@ public struct ChatThreadView: View {
     private let navigationTitle: String
     private let conversation: Conversation?
     private let repository: MessagingRepositoryProtocol?
+    private let onConversationUpdated: ((Conversation) -> Void)?
+    private let onConversationDeleted: ((UUID) -> Void)?
 
     @State private var groupConversation: Conversation?
     @State private var activeGroupSheet: GroupChatSheet?
@@ -45,7 +47,9 @@ public struct ChatThreadView: View {
         peer: ConversationPeer? = nil,
         navigationTitle: String = "",
         conversation: Conversation? = nil,
-        repository: MessagingRepositoryProtocol? = nil
+        repository: MessagingRepositoryProtocol? = nil,
+        onConversationUpdated: ((Conversation) -> Void)? = nil,
+        onConversationDeleted: ((UUID) -> Void)? = nil
     ) {
         self._viewModel = ObservedObject(wrappedValue: viewModel)
         self._relationshipViewModel = ObservedObject(wrappedValue: relationshipViewModel)
@@ -54,6 +58,8 @@ public struct ChatThreadView: View {
         self.navigationTitle = navigationTitle
         self.conversation = conversation
         self.repository = repository
+        self.onConversationUpdated = onConversationUpdated
+        self.onConversationDeleted = onConversationDeleted
     }
 
     public var body: some View {
@@ -71,6 +77,7 @@ public struct ChatThreadView: View {
                     },
                     onClose: closeThreadSearch
                 )
+                .zIndex(20)
                 .transition(.opacity)
             }
             NavigationLink(
@@ -116,6 +123,7 @@ public struct ChatThreadView: View {
                                 .font(SplickTheme.Typography.headline)
                                 .foregroundStyle(SplickTheme.Colors.textPrimary)
                                 .lineLimit(1)
+                                .id(displayConversation?.groupName ?? navigationTitle)
                             if let subtitle = headerPresenceSubtitle {
                                 Text(subtitle)
                                     .font(SplickTheme.Typography.caption)
@@ -148,7 +156,10 @@ public struct ChatThreadView: View {
                 case .rename:
                     GroupRenameSheet(groupName: displayConversation.groupName ?? "") { name in
                         let updated = try await repository.renameGroup(groupId: displayConversation.id, name: name)
-                        applyConversationUpdate(updated)
+                        applyConversationUpdate(updated.updating(groupName: name))
+                        if let notice = updated.lastMessage, notice.isSystemNotice {
+                            viewModel.upsertIncomingMessage(notice, animate: true, scrollToBottom: true)
+                        }
                     }
                 case .avatar:
                     GroupAvatarSheet(
@@ -356,13 +367,14 @@ public struct ChatThreadView: View {
     @ViewBuilder
     private var deleteConversationAction: some View {
         Button(role: .destructive) {
-            confirmDeleteConversation = true
+            presentCenteredConfirm { confirmDeleteConversation = true }
         } label: {
             Label(
                 languageService.text(.messagingChatDeleteConversation),
                 systemImage: "trash"
             )
         }
+        .disabled(repository == nil)
     }
 
     private var groupChatOptionsMenu: some View {
@@ -433,6 +445,7 @@ public struct ChatThreadView: View {
 
     private func applyConversationUpdate(_ updated: Conversation) {
         groupConversation = updated
+        onConversationUpdated?(updated)
     }
 
     /// Wait for the overflow `Menu` to dismiss so the confirm alert anchors to the
@@ -492,6 +505,7 @@ public struct ChatThreadView: View {
         do {
             try await repository.deleteConversation(conversationId: displayConversation.id)
             viewModel.clearCachedThread()
+            onConversationDeleted?(displayConversation.id)
             dismiss()
         } catch {
             // Delete errors surface on next navigation refresh; keep UX simple here.

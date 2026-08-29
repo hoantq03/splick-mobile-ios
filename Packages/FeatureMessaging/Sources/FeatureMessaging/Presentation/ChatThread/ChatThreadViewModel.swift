@@ -800,7 +800,7 @@ public final class ChatThreadViewModel: ObservableObject {
         upsertIncomingMessage(message, animate: true, scrollToBottom: true)
     }
 
-    private func upsertIncomingMessage(
+    func upsertIncomingMessage(
         _ message: ChatMessage,
         animate: Bool = false,
         scrollToBottom: Bool = false
