@@ -34,7 +34,7 @@ final class MessageReactionAnchorStore {
     private func liveFrame(from view: MessageBubbleAnchorProbe.ProbeView?) -> CGRect? {
         guard let view, view.window != nil else { return nil }
         let bounds = view.bounds
-        guard bounds.width > 1, bounds.height > 1 else { return nil }
+        guard bounds.width > 0.5, bounds.height > 0.5 else { return nil }
         return view.convert(bounds, to: nil)
     }
 

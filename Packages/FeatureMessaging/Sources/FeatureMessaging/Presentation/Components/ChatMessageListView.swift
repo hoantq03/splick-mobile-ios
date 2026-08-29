@@ -51,9 +51,8 @@ struct ChatMessageListView: View {
     /// Past the icon slot (46) so threshold is reachable while reveal stays 1:1.
     private static let replySwipeMaxOffset: CGFloat = 72
     /// Leading screen edge reserved for UIKit interactive pop (swipe back).
-    private static let navigationBackEdgeWidth: CGFloat = 44
-    /// Band just inward from the edge — horizontal pans here reveal timestamps (not reply).
-    private static let timestampEdgeBandWidth: CGFloat = 52
+    /// Keep this at the system edge so incoming bubbles can still swipe-to-reply.
+    private static let navigationBackEdgeWidth: CGFloat = 20
 
     private var latestReadOutgoingMessageId: UUID? {
         MessageReadReceiptPresentation.latestReadOutgoingMessageId(
@@ -193,13 +192,14 @@ struct ChatMessageListView: View {
                     }
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .background {
+                .overlay {
                     ChatListHorizontalPanInstaller(
                         isEnabled: reactionFocusMessageId == nil,
                         edgeExclusionWidth: Self.navigationBackEdgeWidth,
                         onChanged: handleListPanChanged,
                         onEnded: handleListPanEnded
                     )
+                    .allowsHitTesting(false)
                 }
                 .modifier(
                     ChatThreadScrollPositionModifier(
@@ -429,31 +429,23 @@ struct ChatMessageListView: View {
                 return
             }
 
-            let inLeadingTimestampBand = localStart.x < Self.navigationBackEdgeWidth + Self.timestampEdgeBandWidth
-            let inTrailingTimestampBand = localStart.x > listWidth - Self.navigationBackEdgeWidth - Self.timestampEdgeBandWidth
-
+            // Reply only when the finger started on the bubble. Empty row space
+            // (spacers, gaps) keeps the list-wide timestamp reveal.
             if let hit = messageHit(at: globalStart) {
                 let inReplyDirection = hit.isOutgoing
                     ? horizontal < -4
                     : horizontal > 4
-                let inTimestampDirection = hit.isOutgoing
-                    ? horizontal > 4
-                    : horizontal < -4
                 if inReplyDirection {
                     listPanSession = .replySwiping(
                         messageId: hit.messageId,
                         isOutgoing: hit.isOutgoing
                     )
                     replySwipeMessageId = hit.messageId
-                } else if inTimestampDirection, inLeadingTimestampBand || inTrailingTimestampBand {
-                    listPanSession = .revealingTimestamps
                 } else {
-                    return
+                    listPanSession = .revealingTimestamps
                 }
-            } else if inLeadingTimestampBand || inTrailingTimestampBand {
-                listPanSession = .revealingTimestamps
             } else {
-                return
+                listPanSession = .revealingTimestamps
             }
             hideKeyboard()
             onDismissKeyboard()
@@ -534,38 +526,20 @@ struct ChatMessageListView: View {
     private func messageHit(at globalPoint: CGPoint) -> MessageHit? {
         let visibleIds = Set(messages.map(\.id))
         let frames = MessageReactionAnchorStore.shared.liveFrames(visibleIds: visibleIds)
-        guard !frames.isEmpty else { return nil }
-
-        var best: (hit: MessageHit, distance: CGFloat)?
-
-        for (id, frame) in frames {
-            let distance: CGFloat
-            if globalPoint.y >= frame.minY, globalPoint.y < frame.maxY {
-                distance = abs(globalPoint.y - frame.midY) * 0.01
-            } else if globalPoint.y < frame.minY {
-                distance = frame.minY - globalPoint.y
-            } else {
-                distance = globalPoint.y - frame.maxY
-            }
-            // Ignore rows that are clearly not the finger's row (stale / far).
-            guard distance < 80 else { continue }
-            guard let message = messages.first(where: { $0.id == id }) else { continue }
-            guard !message.isSystemNotice else { continue }
-
-            let hit = MessageHit(
-                messageId: id,
-                isOutgoing: message.senderId == currentUserId
-            )
-            if let current = best {
-                if distance < current.distance {
-                    best = (hit, distance)
-                }
-            } else {
-                best = (hit, distance)
-            }
+        let containing = frames.filter { _, frame in
+            frame.insetBy(dx: -8, dy: -6).contains(globalPoint)
         }
+        guard let tightest = containing.min(by: { lhs, rhs in
+            lhs.frame.width * lhs.frame.height < rhs.frame.width * rhs.frame.height
+        }) else { return nil }
+        guard let message = messages.first(where: { $0.id == tightest.id }),
+              !message.isSystemNotice
+        else { return nil }
 
-        return best?.hit
+        return MessageHit(
+            messageId: tightest.id,
+            isOutgoing: message.senderId == currentUserId
+        )
     }
 
     private func reactionFocusContext(
@@ -773,29 +747,47 @@ private struct ChatListHorizontalPanInstaller: UIViewRepresentable {
         Coordinator()
     }
 
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView()
+    func makeUIView(context: Context) -> MarkerView {
+        let view = MarkerView()
         view.isUserInteractionEnabled = false
         view.backgroundColor = .clear
+        view.attachHandler = { [weak coordinator = context.coordinator] marker in
+            coordinator?.attach(from: marker)
+        }
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {
+    func updateUIView(_ uiView: MarkerView, context: Context) {
         context.coordinator.edgeExclusionWidth = edgeExclusionWidth
         context.coordinator.isEnabled = isEnabled
         context.coordinator.onChanged = onChanged
         context.coordinator.onEnded = onEnded
-        DispatchQueue.main.async {
-            context.coordinator.attach(from: uiView)
+        uiView.attachHandler = { [weak coordinator = context.coordinator] marker in
+            coordinator?.attach(from: marker)
         }
+        context.coordinator.attach(from: uiView)
     }
 
-    static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) {
+    static func dismantleUIView(_ uiView: MarkerView, coordinator: Coordinator) {
         coordinator.detach()
     }
 
+    final class MarkerView: UIView {
+        var attachHandler: ((UIView) -> Void)?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            attachHandler?(self)
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            attachHandler?(self)
+        }
+    }
+
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
-        var edgeExclusionWidth: CGFloat = 44
+        var edgeExclusionWidth: CGFloat = 20
         var isEnabled = true
         var onChanged: ((_ globalStart: CGPoint, _ localStart: CGPoint, _ listWidth: CGFloat, _ translation: CGSize) -> Void)?
         var onEnded: ((CGSize) -> Void)?
@@ -812,10 +804,11 @@ private struct ChatListHorizontalPanInstaller: UIViewRepresentable {
         }()
 
         func attach(from markerView: UIView) {
-            guard let scrollView = nearestScrollView(from: markerView) else { return }
+            guard markerView.window != nil, let scrollView = chatListScrollView(from: markerView) else { return }
             if hostScrollView === scrollView, pan.view === scrollView { return }
             detach()
             scrollView.addGestureRecognizer(pan)
+            scrollView.panGestureRecognizer.require(toFail: pan)
             hostScrollView = scrollView
         }
 
@@ -833,8 +826,6 @@ private struct ChatListHorizontalPanInstaller: UIViewRepresentable {
 
             switch gesture.state {
             case .began:
-                startLocation = gesture.location(in: nil)
-                startLocal = gesture.location(in: view)
                 onChanged?(startLocation, startLocal, view.bounds.width, size)
             case .changed:
                 onChanged?(startLocation, startLocal, view.bounds.width, size)
@@ -849,10 +840,17 @@ private struct ChatListHorizontalPanInstaller: UIViewRepresentable {
             guard isEnabled, let view = gestureRecognizer.view else { return false }
             let point = touch.location(in: view)
             let rtl = view.effectiveUserInterfaceLayoutDirection == .rightToLeft
+            let inContentBand: Bool
             if rtl {
-                return point.x < view.bounds.width - edgeExclusionWidth
+                inContentBand = point.x < view.bounds.width - edgeExclusionWidth
+            } else {
+                inContentBand = point.x > edgeExclusionWidth
             }
-            return point.x > edgeExclusionWidth
+            guard inContentBand else { return false }
+            // Hit-test the row the finger went down on, not where the pan begins after 8pt.
+            startLocation = touch.location(in: nil)
+            startLocal = point
+            return true
         }
 
         func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
@@ -860,31 +858,57 @@ private struct ChatListHorizontalPanInstaller: UIViewRepresentable {
                 return false
             }
             let translation = pan.translation(in: view)
-            if translation == .zero {
-                return true
-            }
-            return abs(translation.x) >= abs(translation.y)
+            return abs(translation.x) > abs(translation.y) && abs(translation.x) > 8
         }
 
         func gestureRecognizer(
             _ gestureRecognizer: UIGestureRecognizer,
             shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
         ) -> Bool {
-            otherGestureRecognizer === hostScrollView?.panGestureRecognizer
+            false
         }
 
-        private func nearestScrollView(from view: UIView) -> UIScrollView? {
-            var node: UIView? = view.superview
-            while let current = node {
-                if let scroll = current as? UIScrollView {
-                    return scroll
+        private func chatListScrollView(from marker: UIView) -> UIScrollView? {
+            var ancestor: UIView? = marker.superview
+            while let current = ancestor {
+                if let match = preferredScrollView(in: current, relativeTo: marker) {
+                    return match
                 }
-                if let found = current.subviews.compactMap({ $0 as? UIScrollView }).first {
-                    return found
-                }
-                node = current.superview
+                ancestor = current.superview
             }
             return nil
+        }
+
+        private func preferredScrollView(in root: UIView, relativeTo marker: UIView) -> UIScrollView? {
+            var found: [UIScrollView] = []
+            collectScrollViews(from: root, into: &found)
+            guard !found.isEmpty else { return nil }
+
+            let markerCenter = marker.convert(
+                CGPoint(x: marker.bounds.midX, y: marker.bounds.midY),
+                to: root
+            )
+            let containing = found.filter { scroll in
+                scroll.convert(scroll.bounds, to: root).insetBy(dx: -12, dy: -12).contains(markerCenter)
+            }
+            let candidates = containing.isEmpty ? found : containing
+            let vertical = candidates.filter { scroll in
+                scroll.contentSize.width <= scroll.bounds.width + 24
+            }
+            let pool = vertical.isEmpty ? candidates : vertical
+            // Tightest fit — avoid attaching to a full-screen tab pager.
+            return pool.min { lhs, rhs in
+                lhs.bounds.width * lhs.bounds.height < rhs.bounds.width * rhs.bounds.height
+            }
+        }
+
+        private func collectScrollViews(from root: UIView, into found: inout [UIScrollView]) {
+            if let scroll = root as? UIScrollView {
+                found.append(scroll)
+            }
+            for child in root.subviews {
+                collectScrollViews(from: child, into: &found)
+            }
         }
     }
 }
