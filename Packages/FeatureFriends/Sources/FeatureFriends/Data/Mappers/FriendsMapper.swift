@@ -4,12 +4,16 @@ import Common
 
 enum FriendsMapper {
     static func toPublicUserProfile(_ dto: UserProfileResponseDTO) -> PublicUserProfile {
-        PublicUserProfile(
+        let legalName = dto.displayName
+        let nickname = (dto.nickname?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { nick in
+            nick.isEmpty ? nil : nick
+        }
+        return PublicUserProfile(
             user: UserSummary(
                 id: dto.userId,
                 username: dto.username,
-                displayName: dto.displayName,
-                subtitle: dto.subtitle,
+                displayName: nickname ?? legalName,
+                subtitle: nickname != nil ? legalName : nil,
                 avatarURL: dto.avatarUrl.flatMap { URL(string: $0) }
             ),
             friendStatus: mapFriendStatus(dto.friendStatus),

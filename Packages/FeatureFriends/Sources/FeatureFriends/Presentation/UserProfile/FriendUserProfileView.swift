@@ -35,7 +35,7 @@ public struct FriendUserProfileView: View {
                     } label: {
                         AvatarWithPresenceView(
                             imageURL: viewModel.user.avatarURL,
-                            name: viewModel.user.displayName,
+                            name: viewModel.user.preferredName,
                             size: .large,
                             userId: viewModel.user.id,
                             showOnlineIndicator: PresenceDisplayPolicy.shouldShowOnlineIndicator(
@@ -47,17 +47,13 @@ public struct FriendUserProfileView: View {
                     .padding(.top, SplickTheme.Spacing.xl)
 
                     VStack(spacing: SplickTheme.Spacing.xxs) {
-                        Text(viewModel.user.displayName)
+                        Text(viewModel.user.dualDisplayName)
                             .font(SplickTheme.Typography.largeTitle)
                         if viewModel.isBotProfile {
                             Text(languageService.text(.splickBotProfileTagline))
                                 .font(SplickTheme.Typography.callout)
                                 .foregroundStyle(SplickTheme.Colors.textSecondary)
                                 .multilineTextAlignment(.center)
-                        } else if let subtitle = viewModel.user.subtitle {
-                            Text(subtitle)
-                                .font(SplickTheme.Typography.callout)
-                                .foregroundStyle(SplickTheme.Colors.textSecondary)
                         }
                         Text("@\(viewModel.user.username)")
                             .font(SplickTheme.Typography.callout)
@@ -151,29 +147,33 @@ public struct FriendUserProfileView: View {
             } message: {
                 Text(viewModel.alertMessage ?? "")
             }
-            .confirmationDialog(
-                languageService.text(.friendsRemoveFriendConfirmTitle),
-                isPresented: $viewModel.showRemoveConfirm,
-                titleVisibility: .visible
-            ) {
-                Button(languageService.text(.friendsRemoveFriendConfirmAction), role: .destructive) {
-                    Task {
-                        await viewModel.removeFriend()
-                        dismiss()
+            .overlay(alignment: .center) {
+                Color.clear
+                    .frame(width: 1, height: 1)
+                    .alert(
+                        languageService.text(.friendsRemoveFriendConfirmTitle),
+                        isPresented: $viewModel.showRemoveConfirm
+                    ) {
+                        Button(languageService.text(.commonCancel), role: .cancel) {}
+                        Button(languageService.text(.friendsRemoveFriendConfirmAction), role: .destructive) {
+                            Task {
+                                await viewModel.removeFriend()
+                                dismiss()
+                            }
+                        }
                     }
-                }
-            }
-            .confirmationDialog(
-                languageService.text(.friendsBlockConfirmTitle),
-                isPresented: $viewModel.showBlockConfirm,
-                titleVisibility: .visible
-            ) {
-                Button(languageService.text(.friendsBlockConfirmAction), role: .destructive) {
-                    Task {
-                        await viewModel.blockUser()
-                        dismiss()
+                    .alert(
+                        languageService.text(.friendsBlockConfirmTitle),
+                        isPresented: $viewModel.showBlockConfirm
+                    ) {
+                        Button(languageService.text(.commonCancel), role: .cancel) {}
+                        Button(languageService.text(.friendsBlockConfirmAction), role: .destructive) {
+                            Task {
+                                await viewModel.blockUser()
+                                dismiss()
+                            }
+                        }
                     }
-                }
             }
             .sheet(isPresented: $viewModel.showNicknameEditor) {
                 nicknameEditorSheet
@@ -181,7 +181,7 @@ public struct FriendUserProfileView: View {
             .fullScreenCover(isPresented: $showAvatarViewer) {
                 AvatarFullScreenView(
                     url: viewModel.user.avatarURL,
-                    placeholderName: viewModel.user.displayName,
+                    placeholderName: viewModel.user.preferredName,
                     onDismiss: { showAvatarViewer = false }
                 )
             }

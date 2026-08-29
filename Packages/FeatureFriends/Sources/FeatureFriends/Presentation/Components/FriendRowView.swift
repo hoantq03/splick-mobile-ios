@@ -56,7 +56,7 @@ struct FriendRowView: View {
         HStack(spacing: SplickTheme.Spacing.sm) {
             AvatarWithPresenceView(
                 imageURL: user.avatarURL,
-                name: user.displayName,
+                name: user.preferredName,
                 size: .medium,
                 userId: user.id,
                 showOnlineIndicator: PresenceDisplayPolicy.shouldShowOnlineIndicator(
@@ -65,14 +65,9 @@ struct FriendRowView: View {
             )
 
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
-                Text(user.displayName)
+                Text(user.dualDisplayName)
                     .font(SplickTheme.Typography.headline)
                     .foregroundStyle(SplickTheme.Colors.textPrimary)
-                if let subtitle = user.subtitle {
-                    Text(subtitle)
-                        .font(SplickTheme.Typography.caption)
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
-                }
                 if let presenceText = presenceSubtitle {
                     Text(presenceText)
                         .font(SplickTheme.Typography.caption)
