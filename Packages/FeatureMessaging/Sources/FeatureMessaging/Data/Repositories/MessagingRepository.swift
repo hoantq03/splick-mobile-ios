@@ -69,6 +69,13 @@ public final class MessagingRepository: MessagingRepositoryProtocol, Sendable {
         )
     }
 
+    public func listGroupMembers(groupId: UUID) async throws -> [GroupChatMember] {
+        let dtos: [GroupConversationMemberResponseDTO] = try await apiClient.request(
+            MessagingEndpoint.listGroupMembers(groupId: groupId)
+        )
+        return dtos.map(MessagingMapper.toGroupChatMember)
+    }
+
     public func removeGroupMember(groupId: UUID, memberUserId: UUID) async throws {
         try await apiClient.request(
             MessagingEndpoint.removeGroupMember(groupId: groupId, memberUserId: memberUserId)
@@ -104,7 +111,19 @@ public final class MessagingRepository: MessagingRepositoryProtocol, Sendable {
         let dto: ConversationResponseDTO = try await apiClient.request(
             MessagingEndpoint.renameGroup(groupId: groupId, RenameGroupRequestDTO(name: name))
         )
-        return await resolveConversation(MessagingMapper.toConversation(dto))
+        return await resolveConversation(MessagingMapper.toConversation(dto).updating(groupName: name))
+    }
+
+    public func updateGroupAvatar(groupId: UUID, avatarUrl: String) async throws -> Conversation {
+        let dto: ConversationResponseDTO = try await apiClient.request(
+            MessagingEndpoint.updateGroupAvatar(
+                groupId: groupId,
+                UpdateGroupAvatarRequestDTO(avatarUrl: avatarUrl)
+            )
+        )
+        return await resolveConversation(
+            MessagingMapper.toConversation(dto).updating(groupAvatarUrl: avatarUrl)
+        )
     }
 
     public func transferGroupAdmin(groupId: UUID, newAdminUserId: UUID) async throws {
@@ -211,7 +230,7 @@ public final class MessagingRepository: MessagingRepositoryProtocol, Sendable {
                 conversationId: conversationId
             )
         )
-        return dtos.compactMap(MessagingMapper.toMessageSearchHit)
+        return dtos.map(MessagingMapper.toMessageSearchHit)
     }
 
     public func requestWsTicket() async throws -> String {

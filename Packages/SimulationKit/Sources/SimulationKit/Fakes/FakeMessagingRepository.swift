@@ -116,6 +116,11 @@ public actor FakeMessagingRepository: MessagingRepositoryProtocol {
         logger.log("addGroupMember groupId=\(groupId) memberUserId=\(memberUserId)")
     }
 
+    public func listGroupMembers(groupId: UUID) async throws -> [GroupChatMember] {
+        logger.log("listGroupMembers groupId=\(groupId)")
+        return []
+    }
+
     public func removeGroupMember(groupId: UUID, memberUserId: UUID) async throws {
         logger.log("removeGroupMember groupId=\(groupId) memberUserId=\(memberUserId)")
     }
@@ -156,6 +161,20 @@ public actor FakeMessagingRepository: MessagingRepositoryProtocol {
             unreadCount: 0,
             peer: nil,
             groupName: name,
+            lastMessage: nil,
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+    }
+
+    public func updateGroupAvatar(groupId: UUID, avatarUrl: String) async throws -> Conversation {
+        logger.log("updateGroupAvatar groupId=\(groupId)")
+        return Conversation(
+            id: groupId,
+            type: .group,
+            unreadCount: 0,
+            peer: nil,
+            groupAvatarUrl: avatarUrl,
             lastMessage: nil,
             createdAt: Date(),
             updatedAt: Date()

@@ -50,7 +50,8 @@ final class GroupMembersSheetViewModel: ObservableObject {
     }
 
     func canRemove(_ member: GroupChatMember) -> Bool {
-        member.userId != currentUserId && !member.isOwner
+        let currentIsAdmin = members.contains { $0.userId == currentUserId && $0.isOwner }
+        return currentIsAdmin && member.userId != currentUserId && !member.isOwner
     }
 
     private func sorted(_ members: [GroupChatMember]) -> [GroupChatMember] {

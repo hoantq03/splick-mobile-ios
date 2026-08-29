@@ -84,6 +84,7 @@ struct MessageResponseDTO: Decodable {
     let status: String?
     let attachments: [MessageAttachmentResponseDTO]?
     let replyPreview: MessageReplyPreviewResponseDTO?
+    let type: String?
 
     init(
         id: UUID,
@@ -97,7 +98,8 @@ struct MessageResponseDTO: Decodable {
         reactions: [ReactionResponseDTO]? = nil,
         status: String? = nil,
         attachments: [MessageAttachmentResponseDTO]? = nil,
-        replyPreview: MessageReplyPreviewResponseDTO? = nil
+        replyPreview: MessageReplyPreviewResponseDTO? = nil,
+        type: String? = nil
     ) {
         self.id = id
         self.conversationId = conversationId
@@ -111,6 +113,7 @@ struct MessageResponseDTO: Decodable {
         self.status = status
         self.attachments = attachments
         self.replyPreview = replyPreview
+        self.type = type
     }
 
     init(from decoder: Decoder) throws {
@@ -127,11 +130,12 @@ struct MessageResponseDTO: Decodable {
         status = try container.decodeIfPresent(String.self, forKey: .status)
         attachments = try container.decodeIfPresent([MessageAttachmentResponseDTO].self, forKey: .attachments)
         replyPreview = try container.decodeIfPresent(MessageReplyPreviewResponseDTO.self, forKey: .replyPreview)
+        type = try container.decodeIfPresent(String.self, forKey: .type)
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, conversationId, senderId, senderDisplayName, body, clientMessageId
-        case createdAt, sequenceNo, reactions, status, attachments, replyPreview
+        case createdAt, sequenceNo, reactions, status, attachments, replyPreview, type
     }
 }
 
@@ -179,6 +183,10 @@ struct RenameGroupRequestDTO: Encodable {
     let name: String
 }
 
+struct UpdateGroupAvatarRequestDTO: Encodable {
+    let avatarUrl: String
+}
+
 struct UpdateConversationNotificationSettingsRequestDTO: Encodable {
     let notificationsEnabled: Bool
     let notificationSound: String
@@ -219,4 +227,14 @@ struct MessageSearchHitResponseDTO: Decodable {
 
 struct WsTicketResponseDTO: Decodable {
     let ticket: String
+}
+
+struct GroupConversationMemberResponseDTO: Decodable {
+    let id: UUID
+    let userId: UUID
+    let username: String
+    let displayName: String
+    let avatarUrl: String?
+    let role: String?
+    let status: String?
 }

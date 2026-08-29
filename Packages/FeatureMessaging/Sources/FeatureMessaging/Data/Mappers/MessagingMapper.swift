@@ -45,7 +45,8 @@ enum MessagingMapper {
             reactions: (dto.reactions ?? []).map(toReaction),
             deliveryStatus: mapDeliveryStatus(dto.status),
             imageAttachments: (dto.attachments ?? []).compactMap(toImageAttachment),
-            replyPreview: dto.replyPreview.map(toReplyPreview)
+            replyPreview: dto.replyPreview.map(toReplyPreview),
+            type: ChatMessageType(rawValue: dto.type ?? "") ?? .user
         )
     }
 
@@ -82,14 +83,30 @@ enum MessagingMapper {
         Reaction(id: dto.id, emoji: dto.emoji, userId: dto.userId, createdAt: dto.createdAt)
     }
 
-    static func toMessageSearchHit(_ dto: MessageSearchHitResponseDTO) -> MessageSearchHit? {
-        guard let peerDTO = dto.peer else { return nil }
-        return MessageSearchHit(
+    static func toMessageSearchHit(_ dto: MessageSearchHitResponseDTO) -> MessageSearchHit {
+        MessageSearchHit(
             messageId: dto.messageId,
             conversationId: dto.conversationId,
             body: dto.body,
             createdAt: dto.createdAt,
-            peer: toPeer(peerDTO)
+            peer: dto.peer.map(toPeer) ?? ConversationPeer(
+                userId: dto.conversationId,
+                username: "",
+                displayName: nil,
+                avatarUrl: nil
+            )
+        )
+    }
+
+    static func toGroupChatMember(_ dto: GroupConversationMemberResponseDTO) -> GroupChatMember {
+        let role = dto.role?.uppercased() ?? "MEMBER"
+        return GroupChatMember(
+            id: dto.id,
+            userId: dto.userId,
+            username: dto.username,
+            displayName: dto.displayName,
+            avatarURL: dto.avatarUrl.flatMap(URL.init(string:)),
+            isOwner: role == "ADMIN" || role == "OWNER"
         )
     }
 }
