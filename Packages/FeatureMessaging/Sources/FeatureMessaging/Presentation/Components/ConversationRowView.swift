@@ -16,23 +16,20 @@ struct ConversationRowView: View {
     var body: some View {
         HStack(spacing: SplickTheme.Spacing.sm) {
             if conversation.isGroup {
-                AvatarView(
+                ConversationListAvatar(
                     imageURL: conversation.groupAvatarUrl.flatMap(URL.init(string:)),
-                    name: conversation.displayTitle,
-                    size: .medium
+                    name: conversation.displayTitle
                 )
             } else if let peer = conversation.peer {
-                AvatarWithPresenceView(
+                let presence = resolvedPresence(for: peer)
+                ConversationListAvatar(
                     imageURL: peer.avatarUrl.flatMap(URL.init(string:)),
                     name: peer.displayTitle,
-                    size: .medium,
                     userId: peer.userId,
-                    showOnlineIndicator: PresenceDisplayPolicy.shouldShowOnlineIndicator(
-                        isOnline: resolvedPresence(for: peer).isOnline
-                    ),
+                    isOnline: PresenceDisplayPolicy.shouldShowOnlineIndicator(isOnline: presence.isOnline),
                     lastSeenLabel: PresenceDisplayPolicy.compactLastSeenLabel(
-                        isOnline: resolvedPresence(for: peer).isOnline,
-                        lastSeenAt: resolvedPresence(for: peer).lastSeenAt,
+                        isOnline: presence.isOnline,
+                        lastSeenAt: presence.lastSeenAt,
                         appLocale: languageService.locale
                     )
                 )
