@@ -11,6 +11,21 @@ struct ConversationPeerResponseDTO: Decodable {
     let avatarUrl: String?
     let online: Bool?
     let lastSeenAt: Date?
+
+    private enum CodingKeys: String, CodingKey {
+        case userId, username, displayName, avatarUrl, online, isOnline, lastSeenAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        userId = try container.decode(UUID.self, forKey: .userId)
+        username = try container.decode(String.self, forKey: .username)
+        displayName = try container.decodeIfPresent(String.self, forKey: .displayName)
+        avatarUrl = try container.decodeIfPresent(String.self, forKey: .avatarUrl)
+        online = try container.decodeIfPresent(Bool.self, forKey: .online)
+            ?? container.decodeIfPresent(Bool.self, forKey: .isOnline)
+        lastSeenAt = try? container.decode(Date.self, forKey: .lastSeenAt)
+    }
 }
 
 struct ConversationResponseDTO: Decodable {

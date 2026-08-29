@@ -59,6 +59,38 @@ struct WsPresenceEvent: Decodable {
     let userId: UUID
     let online: Bool
     let lastSeenAt: Date?
+
+    private enum CodingKeys: String, CodingKey {
+        case userId
+        case online
+        case isOnline
+        case lastSeenAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        userId = try container.decode(UUID.self, forKey: .userId)
+        online = try container.decodeIfPresent(Bool.self, forKey: .online)
+            ?? container.decodeIfPresent(Bool.self, forKey: .isOnline)
+            ?? false
+        if let instant = try container.decodeIfPresent(String.self, forKey: .lastSeenAt) {
+            lastSeenAt = Self.parseInstant(instant)
+        } else {
+            lastSeenAt = try? container.decode(Date.self, forKey: .lastSeenAt)
+        }
+    }
+
+    private static func parseInstant(_ raw: String) -> Date? {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractional.date(from: raw) { return date }
+        if let date = ISO8601DateFormatter().date(from: raw) { return date }
+        if raw.count > 24 {
+            let trimmed = String(raw.prefix(23)) + "Z"
+            return fractional.date(from: trimmed)
+        }
+        return nil
+    }
 }
 
 /// Pure decoding helpers — unit-testable without a live WebSocket.
