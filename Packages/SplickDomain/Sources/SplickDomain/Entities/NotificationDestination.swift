@@ -11,7 +11,10 @@ public struct NotificationDestination: Codable, Equatable, Sendable {
     }
 
     public init(screen: String, postId: UUID? = nil) {
-        self.init(screen: NotificationScreen(rawValue: screen) ?? .unknown, postId: postId)
+        self.init(
+            screen: NotificationScreen(rawValue: screen.uppercased()) ?? .unknown,
+            postId: postId
+        )
     }
 
     public var postDetailId: UUID? {
@@ -27,6 +30,92 @@ public struct NotificationDestination: Codable, Equatable, Sendable {
     public var userProfileId: UUID? {
         guard screen == .userProfile else { return nil }
         return postId
+    }
+
+    /// Parses FCM/APNs `userInfo` into a navigation destination.
+    public static func fromPushUserInfo(_ userInfo: [AnyHashable: Any]) -> NotificationDestination? {
+        if let nested = fromNestedValue(userInfo["destination"]) ?? fromNestedValue(userInfo["payload"]) {
+            return nested
+        }
+
+        let screenRaw = stringValue(userInfo["screen"])
+            ?? stringValue(userInfo["destinationScreen"])
+            ?? stringValue(userInfo["targetScreen"])
+            ?? screenRaw(fromType: stringValue(userInfo["type"]))
+
+        let entityId = uuidValue(userInfo["conversationId"])
+            ?? uuidValue(userInfo["conversation_id"])
+            ?? uuidValue(userInfo["postId"])
+            ?? uuidValue(userInfo["post_id"])
+            ?? uuidValue(userInfo["destinationPostId"])
+            ?? uuidValue(userInfo["referenceId"])
+            ?? uuidValue(userInfo["userId"])
+
+        guard let screenRaw else { return nil }
+        return NotificationDestination(screen: screenRaw, postId: entityId)
+    }
+
+    private static func fromNestedValue(_ rawValue: Any?) -> NotificationDestination? {
+        guard let rawValue else { return nil }
+
+        if let dictionary = rawValue as? [String: Any] {
+            return fromDictionary(dictionary)
+        }
+        if let dictionary = rawValue as? [AnyHashable: Any] {
+            var stringKeyed: [String: Any] = [:]
+            for (key, value) in dictionary {
+                if let key = key as? String {
+                    stringKeyed[key] = value
+                }
+            }
+            return fromDictionary(stringKeyed)
+        }
+        if let data = stringValue(rawValue)?.data(using: .utf8),
+           let dictionary = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            return fromDictionary(dictionary)
+        }
+        return nil
+    }
+
+    private static func fromDictionary(_ dictionary: [String: Any]) -> NotificationDestination? {
+        let screenRaw = stringValue(dictionary["screen"])
+            ?? stringValue(dictionary["destinationScreen"])
+            ?? screenRaw(fromType: stringValue(dictionary["type"]))
+        let entityId = uuidValue(dictionary["conversationId"])
+            ?? uuidValue(dictionary["conversation_id"])
+            ?? uuidValue(dictionary["postId"])
+            ?? uuidValue(dictionary["post_id"])
+            ?? uuidValue(dictionary["destinationPostId"])
+            ?? uuidValue(dictionary["userId"])
+        guard let screenRaw else { return nil }
+        return NotificationDestination(screen: screenRaw, postId: entityId)
+    }
+
+    private static func screenRaw(fromType type: String?) -> String? {
+        guard let type else { return nil }
+        switch type.uppercased() {
+        case "DIRECT_MESSAGE", "GROUP_MESSAGE", "MESSAGE_NEW",
+             "GROUP_CREATED", "GROUP_MEMBER_ADDED", "GROUP_MEMBER_REMOVED",
+             "GROUP_RENAMED", "GROUP_ADMIN_TRANSFERRED":
+            return NotificationScreen.messages.rawValue
+        default:
+            return nil
+        }
+    }
+
+    private static func stringValue(_ rawValue: Any?) -> String? {
+        if let value = rawValue as? String {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        return nil
+    }
+
+    private static func uuidValue(_ rawValue: Any?) -> UUID? {
+        if let uuid = rawValue as? UUID {
+            return uuid
+        }
+        return stringValue(rawValue).flatMap(UUID.init(uuidString:))
     }
 }
 

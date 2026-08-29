@@ -173,14 +173,16 @@ final class PushNotificationCoordinator: ObservableObject {
         }
     }
 
-    func handleRemoteNotification(userInfo: [AnyHashable: Any]) {
+    func handleRemoteNotification(userInfo: [AnyHashable: Any], queueDestination: Bool = true) {
         if let badge = ((userInfo["aps"] as? [String: Any])?["badge"] as? Int) {
             syncAppIconBadge(count: badge)
         }
 
         acknowledgeMessagingDeliveryIfNeeded(userInfo: userInfo)
 
-        guard let destination = parseDestination(from: userInfo) else {
+        guard queueDestination else { return }
+
+        guard let destination = NotificationDestination.fromPushUserInfo(userInfo) else {
             Log.debug("Remote notification had no destination", category: .notification)
             return
         }
@@ -195,7 +197,7 @@ final class PushNotificationCoordinator: ObservableObject {
 
     /// When a messaging push is presented/received, ACK delivery so the sender sees "đã nhận".
     private func acknowledgeMessagingDeliveryIfNeeded(userInfo: [AnyHashable: Any]) {
-        guard let destination = parseDestination(from: userInfo),
+        guard let destination = NotificationDestination.fromPushUserInfo(userInfo),
               destination.screen == .messages,
               let conversationId = destination.conversationId ?? destination.postId
         else { return }
@@ -436,62 +438,5 @@ final class PushNotificationCoordinator: ObservableObject {
 
     private func parseUUID(_ rawValue: Any?) -> UUID? {
         (rawValue as? String).flatMap(UUID.init(uuidString:))
-    }
-
-    private func parseDestination(from userInfo: [AnyHashable: Any]) -> NotificationDestination? {
-        if let destination = parseNestedDestination(userInfo["destination"]) {
-            return destination
-        }
-
-        if let payload = parseNestedDestination(userInfo["payload"]) {
-            return payload
-        }
-
-        let screen =
-            (userInfo["screen"] as? String)
-            ?? (userInfo["destinationScreen"] as? String)
-            ?? (userInfo["targetScreen"] as? String)
-
-        let postIdString =
-            (userInfo["postId"] as? String)
-            ?? (userInfo["post_id"] as? String)
-            ?? (userInfo["destinationPostId"] as? String)
-            ?? (userInfo["conversationId"] as? String)
-            ?? (userInfo["conversation_id"] as? String)
-            ?? (userInfo["referenceId"] as? String)
-
-        guard let screen else { return nil }
-        return NotificationDestination(
-            screen: screen,
-            postId: postIdString.flatMap(UUID.init(uuidString:))
-        )
-    }
-
-    private func parseNestedDestination(_ rawValue: Any?) -> NotificationDestination? {
-        guard let rawValue else { return nil }
-
-        if let dictionary = rawValue as? [String: Any] {
-            let screen =
-                (dictionary["screen"] as? String)
-                ?? (dictionary["destinationScreen"] as? String)
-            let postIdString =
-                (dictionary["postId"] as? String)
-                ?? (dictionary["post_id"] as? String)
-                ?? (dictionary["destinationPostId"] as? String)
-                ?? (dictionary["conversationId"] as? String)
-                ?? (dictionary["conversation_id"] as? String)
-            guard let screen else { return nil }
-            return NotificationDestination(
-                screen: screen,
-                postId: postIdString.flatMap(UUID.init(uuidString:))
-            )
-        }
-
-        if let data = (rawValue as? String)?.data(using: .utf8),
-           let dictionary = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            return parseNestedDestination(dictionary)
-        }
-
-        return nil
     }
 }

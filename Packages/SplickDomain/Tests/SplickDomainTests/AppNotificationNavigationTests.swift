@@ -70,6 +70,32 @@ final class AppNotificationNavigationTests: XCTestCase {
         )
     }
 
+    func testPushUserInfoOpensConversationFromNestedDestination() {
+        let conversationId = UUID()
+        let destination = NotificationDestination.fromPushUserInfo([
+            "destination": [
+                "screen": "MESSAGES",
+                "postId": conversationId.uuidString,
+                "conversationId": conversationId.uuidString,
+            ],
+            "type": "DIRECT_MESSAGE",
+        ])
+
+        XCTAssertEqual(destination?.screen, .messages)
+        XCTAssertEqual(destination?.conversationId, conversationId)
+    }
+
+    func testPushUserInfoOpensConversationFromTypeAndConversationId() {
+        let conversationId = UUID()
+        let destination = NotificationDestination.fromPushUserInfo([
+            "type": "GROUP_MESSAGE",
+            "conversationId": conversationId.uuidString,
+        ])
+
+        XCTAssertEqual(destination?.screen, .messages)
+        XCTAssertEqual(destination?.conversationId, conversationId)
+    }
+
     func testNavigationTargetOpensUserProfileFromFriendAccepted() {
         let actorId = UUID()
         let notification = AppNotification(

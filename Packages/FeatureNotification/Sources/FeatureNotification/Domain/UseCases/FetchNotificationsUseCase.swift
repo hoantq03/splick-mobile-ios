@@ -26,5 +26,6 @@ public final class FetchNotificationsUseCase: FetchNotificationsUseCaseProtocol,
             limit: pageSize,
             category: category.queryValue
         )
+        .filter { !$0.type.isMessagingNotification }
     }
 }

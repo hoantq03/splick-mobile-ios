@@ -42,9 +42,15 @@ struct RootView: View {
             guard !appState.isAuthenticated else { return }
             appState.resetGuestSplashSession()
         }
-        .onReceive(pushNotificationCoordinator.$pendingDestination.compactMap { $0 }) { destination in
-            appState.routeRemoteNotification(destination)
-            pushNotificationCoordinator.clearPendingDestination()
+        .onReceive(pushNotificationCoordinator.$pendingDestination.compactMap { $0 }) { _ in
+            consumePendingNotificationDestination()
+        }
+        .onChange(of: appState.isAuthenticated) { isAuthenticated in
+            guard isAuthenticated else { return }
+            consumePendingNotificationDestination()
+        }
+        .onAppear {
+            consumePendingNotificationDestination()
         }
         .task(id: appState.splashSessionID) {
             await bootstrapSession()
@@ -164,6 +170,13 @@ struct RootView: View {
 
     // MARK: - Session restore
 
+    private func consumePendingNotificationDestination() {
+        guard appState.isAuthenticated else { return }
+        guard let destination = pushNotificationCoordinator.pendingDestination else { return }
+        appState.routeRemoteNotification(destination)
+        pushNotificationCoordinator.clearPendingDestination()
+    }
+
     private func bootstrapSession() async {
         if case .unknown = appState.authState {
             await restoreSessionLocalFirst()
@@ -181,6 +194,7 @@ struct RootView: View {
         if let session = await container.restoreSessionUseCase.restoreLocal() {
             container.languageService.applyFromServer(session.user.preferredLocale)
             appState.setAuthenticated(user: session.user)
+            consumePendingNotificationDestination()
             Task {
                 await confirmRemoteSession()
                 await pushNotificationCoordinator.ensureDeviceTokenRegistered()

@@ -43,7 +43,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didReceiveRemoteNotification userInfo: [AnyHashable: Any],
         fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
     ) {
-        PushNotificationCoordinator.shared.handleRemoteNotification(userInfo: userInfo)
+        PushNotificationCoordinator.shared.handleRemoteNotification(
+            userInfo: userInfo,
+            queueDestination: false
+        )
         completionHandler(.newData)
     }
 
@@ -53,7 +56,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         PushNotificationCoordinator.shared.handleRemoteNotification(
-            userInfo: notification.request.content.userInfo
+            userInfo: notification.request.content.userInfo,
+            queueDestination: false
         )
         completionHandler([.banner, .badge, .sound])
     }
