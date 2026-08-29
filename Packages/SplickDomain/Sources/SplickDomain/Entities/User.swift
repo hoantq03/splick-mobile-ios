@@ -58,4 +58,18 @@ public struct UserSummary: Identifiable, Codable, Equatable, Sendable {
         self.avatarURL = avatarURL
         self.viewedAt = viewedAt
     }
+
+    /// Nickname when set, otherwise the legal/profile name.
+    public var preferredName: String { displayName }
+
+    /// `Legal (Nickname)` when both exist; otherwise `preferredName`.
+    public var dualDisplayName: String {
+        let legal = subtitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !legal.isEmpty else { return displayName }
+        let nick = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if nick.isEmpty || legal.caseInsensitiveCompare(nick) == .orderedSame {
+            return displayName
+        }
+        return "\(legal) (\(nick))"
+    }
 }
