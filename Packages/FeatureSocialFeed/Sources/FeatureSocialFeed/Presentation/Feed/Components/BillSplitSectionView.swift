@@ -538,9 +538,9 @@ struct BillSplitSectionView: View {
         case .upload:
             return SplickTheme.Colors.primaryGradientStart
         case .rejected:
-            return Color(red: 0.79, green: 0.56, blue: 0.08)
+            return SplickTheme.Colors.warning
         case .pendingApproval:
-            return Color(red: 0.79, green: 0.56, blue: 0.08)
+            return SplickTheme.Colors.warning
         case .paid:
             return SplickTheme.Colors.success
         }
@@ -551,7 +551,7 @@ struct BillSplitSectionView: View {
         case .upload:
             return SplickTheme.Colors.primaryGradientStart.opacity(0.08)
         case .rejected, .pendingApproval:
-            return Color(red: 1.0, green: 0.96, blue: 0.84)
+            return SplickTheme.Colors.warning.opacity(0.14)
         case .paid:
             return SplickTheme.Colors.success.opacity(0.1)
         }
@@ -570,7 +570,7 @@ struct BillSplitSectionView: View {
         Text(settlementBadgeTitle)
             .font(.system(size: 12, weight: .semibold))
             .monospacedDigit()
-            .foregroundStyle(isFullySettled ? SplickTheme.Colors.success : Color(red: 0.72, green: 0.47, blue: 0.04))
+            .foregroundStyle(isFullySettled ? SplickTheme.Colors.success : SplickTheme.Colors.warning)
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
             .background {
@@ -578,7 +578,7 @@ struct BillSplitSectionView: View {
                     .fill(
                         isFullySettled
                             ? SplickTheme.Colors.success.opacity(0.12)
-                            : Color(red: 0.98, green: 0.93, blue: 0.76)
+                            : SplickTheme.Colors.warning.opacity(0.16)
                     )
             }
     }
