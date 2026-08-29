@@ -219,14 +219,14 @@ public struct NotificationListView: View {
                                             await viewModel.rejectFriendRequest(notification)
                                         }
                                     }
-                                    : nil
-                            )
-                            .onTapGesture {
-                                Task {
-                                    let target = await viewModel.handleTap(notification)
-                                    onNavigate?(target)
+                                    : nil,
+                                onRowTap: {
+                                    Task {
+                                        let target = await viewModel.handleTap(notification)
+                                        onNavigate?(target)
+                                    }
                                 }
-                            }
+                            )
                                 .onAppear {
                                     Task { await viewModel.loadMoreIfNeeded(current: notification) }
                                 }
@@ -256,6 +256,7 @@ struct NotificationRowView: View {
     var isProcessingFriendRequest: Bool = false
     var onAcceptFriendRequest: (() -> Void)? = nil
     var onRejectFriendRequest: (() -> Void)? = nil
+    var onRowTap: (() -> Void)? = nil
     @EnvironmentObject private var languageService: LanguageService
 
     private var bodySegments: (actorName: String?, remainder: String) {
@@ -278,45 +279,65 @@ struct NotificationRowView: View {
             .foregroundColor(SplickTheme.Colors.textTertiary)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
+            .layoutPriority(1)
+    }
+
+    private var showsFriendRequestActions: Bool {
+        friendRequestOutcome != nil
+            || isProcessingFriendRequest
+            || onAcceptFriendRequest != nil
+            || onRejectFriendRequest != nil
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
-            NotificationAvatarBadgeView(notification: notification)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top, spacing: SplickTheme.Spacing.sm) {
+                NotificationAvatarBadgeView(notification: notification)
 
-            VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
-                if showsCategoryTitle {
-                    HStack(alignment: .center, spacing: SplickTheme.Spacing.xs) {
-                        Text(notification.title)
-                            .font(SplickTheme.Typography.headline)
-                            .foregroundColor(SplickTheme.Colors.textPrimary)
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
+                    if showsCategoryTitle {
+                        HStack(alignment: .firstTextBaseline, spacing: SplickTheme.Spacing.xs) {
+                            Text(notification.title)
+                                .font(SplickTheme.Typography.headline)
+                                .foregroundColor(SplickTheme.Colors.textPrimary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
 
-                        timestampText
+                            timestampText
+                        }
+                    }
+
+                    HStack(alignment: .firstTextBaseline, spacing: SplickTheme.Spacing.xxs) {
+                        NotificationInlineBodyText(notification: notification)
+                            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+
+                        if !showsCategoryTitle {
+                            timestampText
+                        }
+
+                        if !notification.isRead {
+                            Circle()
+                                .fill(SplickTheme.Colors.primaryGradientStart)
+                                .frame(width: 8, height: 8)
+                                .alignmentGuide(.firstTextBaseline) { dimensions in
+                                    dimensions[VerticalAlignment.center]
+                                }
+                        }
                     }
                 }
-
-                HStack(alignment: .center, spacing: SplickTheme.Spacing.xxs) {
-                    NotificationInlineBodyText(notification: notification)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    if !showsCategoryTitle {
-                        timestampText
-                    }
-
-                    if !notification.isRead {
-                        Circle()
-                            .fill(SplickTheme.Colors.primaryGradientStart)
-                            .frame(width: 8, height: 8)
-                    }
-                }
+                .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                onRowTap?()
+            }
 
-            friendRequestActions
+            if showsFriendRequestActions {
+                friendRequestActions
+                    .padding(.top, 10)
+                    .padding(.leading, NotificationTypeBadge.canvasSize + SplickTheme.Spacing.sm)
+            }
         }
         .padding(SplickTheme.Spacing.sm)
         .background {
@@ -351,22 +372,22 @@ private extension NotificationRowView {
         } else if isProcessingFriendRequest {
             ProgressView()
                 .controlSize(.regular)
-                .frame(width: 36, height: 36)
+                .frame(width: 22, height: 22)
         } else if onAcceptFriendRequest != nil || onRejectFriendRequest != nil {
-            HStack(spacing: SplickTheme.Spacing.sm) {
+            HStack(spacing: SplickTheme.Spacing.xs) {
                 if let onAcceptFriendRequest {
                     friendRequestActionButton(
-                        systemImage: "checkmark",
-                        accessibilityLabel: languageService.text(.friendsAccept),
-                        tint: SplickTheme.Colors.success,
+                        title: languageService.text(.friendsAccept),
+                        foreground: .white,
+                        background: SplickTheme.Colors.success,
                         action: onAcceptFriendRequest
                     )
                 }
                 if let onRejectFriendRequest {
                     friendRequestActionButton(
-                        systemImage: "xmark",
-                        accessibilityLabel: languageService.text(.friendsReject),
-                        tint: SplickTheme.Colors.error,
+                        title: languageService.text(.friendsReject),
+                        foreground: SplickTheme.Colors.textPrimary,
+                        background: SplickTheme.Colors.secondaryBackground,
                         action: onRejectFriendRequest
                     )
                 }
@@ -375,21 +396,22 @@ private extension NotificationRowView {
     }
 
     func friendRequestActionButton(
-        systemImage: String,
-        accessibilityLabel: String,
-        tint: Color,
+        title: String,
+        foreground: Color,
+        background: Color,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(tint)
-                .frame(width: 36, height: 36)
-                .background(tint.opacity(0.14))
-                .clipShape(Circle())
+            Text(title)
+                .font(SplickTheme.Typography.caption.weight(.semibold))
+                .foregroundStyle(foreground)
+                .padding(.horizontal, SplickTheme.Spacing.md)
+                .padding(.vertical, 6)
+                .background(background)
+                .clipShape(Capsule(style: .continuous))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(accessibilityLabel)
+        .accessibilityLabel(title)
     }
 }
 
@@ -446,34 +468,36 @@ private struct NotificationInlineBodyText: View {
     }
 
     var body: some View {
+        wrappingBody
+            .lineLimit(3)
+            .truncationMode(.tail)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder
+    private var wrappingBody: some View {
         if let actorName = segments.actorName, !actorName.isEmpty {
             inlineActorMessage(actorName: actorName, remainder: segments.remainder)
         } else {
-            MentionText(
-                notification.body,
-                fontSize: 13,
-                plainColor: SplickTheme.Colors.textSecondary
-            )
+            Text(notification.body)
+                .font(.system(size: 13))
+                .foregroundColor(SplickTheme.Colors.textSecondary)
         }
     }
 
-    private func inlineActorMessage(actorName: String, remainder: String) -> some View {
-        Group {
-            if remainder.isEmpty {
-                Text(actorName)
-                    .font(SplickTheme.Typography.headline)
-                    .foregroundColor(SplickTheme.Colors.textPrimary)
-            } else {
-                (Text(actorName)
-                    .font(SplickTheme.Typography.headline)
-                    .foregroundColor(SplickTheme.Colors.textPrimary)
-                + Text(" \(remainder)")
-                    .font(.system(size: 13))
-                    .foregroundColor(SplickTheme.Colors.textSecondary)
-                )
-            }
+    private func inlineActorMessage(actorName: String, remainder: String) -> Text {
+        if remainder.isEmpty {
+            Text(actorName)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(SplickTheme.Colors.textPrimary)
+        } else {
+            Text(actorName)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(SplickTheme.Colors.textPrimary)
+            + Text(" \(remainder)")
+                .font(.system(size: 13))
+                .foregroundColor(SplickTheme.Colors.textSecondary)
         }
-        .lineLimit(1)
-        .truncationMode(.tail)
     }
 }
