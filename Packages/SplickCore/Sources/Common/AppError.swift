@@ -51,6 +51,16 @@ public enum NetworkError: Error, Equatable {
         }
     }
 
+    /// True when this error must not be treated as a signed-out session (keep Keychain tokens).
+    public var shouldKeepLocalSession: Bool {
+        switch self {
+        case .unauthorized:
+            return false
+        default:
+            return true
+        }
+    }
+
     public var userMessage: String {
         switch self {
         case .noConnection: return "Looks like you're offline. Check your wifi or data and try again."

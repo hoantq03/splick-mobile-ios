@@ -37,6 +37,7 @@ public enum AppConstants {
         public static let pushNotificationPermissionRequested = "pushNotificationPermissionRequested"
         public static let processedFriendRequestOutcomes = "processedFriendRequestOutcomes"
         public static let preferredLocale = "preferredLocale"
+        public static let cachedCurrentUser = "com.splick.cachedCurrentUser"
     }
 
     public enum Media {
