@@ -3,7 +3,7 @@ import Foundation
 
 @MainActor
 public final class PresenceStore: ObservableObject {
-    @Published private(set) var states: [UUID: UserPresenceState] = [:]
+    @Published public private(set) var states: [UUID: UserPresenceState] = [:]
 
     public init() {}
 
@@ -35,7 +35,7 @@ public final class PresenceStore: ObservableObject {
         let existing = states[userId]
         states[userId] = UserPresenceState(
             userId: userId,
-            isOnline: isOnline ?? existing?.isOnline ?? false,
+            isOnline: (isOnline == true) || (existing?.isOnline == true),
             lastSeenAt: lastSeenAt ?? existing?.lastSeenAt
         )
     }

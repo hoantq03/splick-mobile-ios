@@ -31,7 +31,7 @@ struct PresenceDisplayPolicyTests {
             appLocale: .en,
             now: Date()
         )
-        #expect(text != nil)
+        #expect(text == "2h")
     }
 
     @Test
@@ -42,6 +42,18 @@ struct PresenceDisplayPolicyTests {
             appLocale: .vi,
             now: Date()
         )
-        #expect(text != nil)
+        #expect(text == "45 phút")
+    }
+
+    @Test
+    func compactLastSeenUsesVietnameseHoursWithoutAgo() {
+        let now = Date()
+        let text = PresenceDisplayPolicy.compactLastSeenLabel(
+            isOnline: false,
+            lastSeenAt: now.addingTimeInterval(-(2 * 60 * 60)),
+            appLocale: .vi,
+            now: now
+        )
+        #expect(text == "2 giờ")
     }
 }

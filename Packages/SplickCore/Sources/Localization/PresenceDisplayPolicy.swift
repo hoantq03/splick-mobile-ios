@@ -19,4 +19,13 @@ public enum PresenceDisplayPolicy {
         guard elapsed >= 0, elapsed <= maxLastSeenInterval else { return nil }
         return LocaleFormatting.presenceLastSeen(from: lastSeenAt, appLocale: appLocale, now: now)
     }
+
+    public static func compactLastSeenLabel(
+        isOnline: Bool,
+        lastSeenAt: Date?,
+        appLocale: AppLocale,
+        now: Date = .now
+    ) -> String? {
+        lastSeenText(isOnline: isOnline, lastSeenAt: lastSeenAt, appLocale: appLocale, now: now)
+    }
 }

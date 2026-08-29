@@ -60,12 +60,20 @@ public enum LocaleFormatting {
         appLocale: AppLocale,
         now: Date = .now
     ) -> String? {
-        let elapsed = now.timeIntervalSince(date)
-        guard elapsed >= 0, elapsed <= 24 * 60 * 60 else { return nil }
+        presenceLastSeenBadge(from: date, appLocale: appLocale, now: now)
+    }
 
-        let formatter = RelativeDateTimeFormatter()
-        formatter.locale = locale(for: appLocale)
-        formatter.unitsStyle = .full
-        return formatter.localizedString(for: date, relativeTo: now)
+    /// Avatar badge copy: `5 phút` / `2 giờ`. No seconds, no "ago".
+    public static func presenceLastSeenBadge(
+        from date: Date,
+        appLocale: AppLocale,
+        now: Date = .now
+    ) -> String? {
+        let elapsed = max(0, Int(now.timeIntervalSince(date)))
+        guard elapsed <= 24 * 60 * 60 else { return nil }
+        if elapsed < 60 * 60 {
+            return L10n.format(.timeCompactMinutes, locale: appLocale, max(1, elapsed / 60))
+        }
+        return L10n.format(.timeCompactHours, locale: appLocale, max(1, elapsed / (60 * 60)))
     }
 }

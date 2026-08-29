@@ -3,13 +3,14 @@ import Common
 
 public struct AvatarView: View {
     public enum Size {
-        case small, medium, large
+        case small, medium, large, profile
 
         var dimension: CGFloat {
             switch self {
             case .small: return 32
             case .medium: return 48
             case .large: return 72
+            case .profile: return 96
             }
         }
 
@@ -17,7 +18,7 @@ public struct AvatarView: View {
             switch self {
             case .small: return .caption
             case .medium: return .body
-            case .large: return .title2
+            case .large, .profile: return .title2
             }
         }
     }
@@ -73,7 +74,7 @@ public struct AvatarView: View {
         switch size {
         case .small: return .mini
         case .medium: return .small
-        case .large: return .regular
+        case .large, .profile: return .regular
         }
     }
 
