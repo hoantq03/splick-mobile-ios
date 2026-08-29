@@ -47,8 +47,7 @@ struct RootView: View {
             pushNotificationCoordinator.clearPendingDestination()
         }
         .task(id: appState.splashSessionID) {
-            guard appState.needsSplash else { return }
-            await runSplashSequence()
+            await bootstrapSession()
         }
         .onChange(of: appState.needsSplash) { needsSplash in
             guard needsSplash else { return }
@@ -165,29 +164,42 @@ struct RootView: View {
 
     // MARK: - Session restore
 
-    private func runSplashSequence() async {
-        async let minimumDisplay: Void = {
-            try? await Task.sleep(for: AppConstants.Splash.minimumDisplayDuration)
-        }()
-
+    private func bootstrapSession() async {
         if case .unknown = appState.authState {
-            await resolveInitialSession()
+            await restoreSessionLocalFirst()
         }
 
-        await minimumDisplay
+        guard appState.needsSplash else { return }
 
+        try? await Task.sleep(for: AppConstants.Splash.minimumDisplayDuration)
         guard !Task.isCancelled else { return }
         guard appState.needsSplash else { return }
         appState.completeLaunchSplash()
     }
 
-    private func resolveInitialSession() async {
-        if let session = await container.restoreSessionUseCase.execute() {
+    private func restoreSessionLocalFirst() async {
+        if let session = await container.restoreSessionUseCase.restoreLocal() {
             container.languageService.applyFromServer(session.user.preferredLocale)
             appState.setAuthenticated(user: session.user)
-            await pushNotificationCoordinator.ensureDeviceTokenRegistered()
-        } else {
-            appState.markUnauthenticated(container: container)
+            Task {
+                await confirmRemoteSession()
+                await pushNotificationCoordinator.ensureDeviceTokenRegistered()
+            }
+            return
+        }
+
+        appState.markUnauthenticated(container: container)
+    }
+
+    private func confirmRemoteSession() async {
+        switch await container.restoreSessionUseCase.confirmRemote() {
+        case .updated(let session):
+            container.languageService.applyFromServer(session.user.preferredLocale)
+            appState.updateAuthenticatedUser(session.user)
+        case .unchanged:
+            break
+        case .signedOut:
+            appState.setUnauthenticated(container: container)
         }
     }
 }

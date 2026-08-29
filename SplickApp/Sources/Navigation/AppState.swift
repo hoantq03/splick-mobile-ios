@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import SplickDomain
 import Common
+import Storage
 import Localization
 import FeatureSocialFeed
 
@@ -35,8 +36,17 @@ final class AppState: ObservableObject {
     @Published private(set) var isLaunchSplashComplete = false
     @Published private(set) var splashSessionID = UUID()
 
+    /// Returning users skip the blocking splash and hydrate from cache immediately.
+    private let hadStoredCredentialsAtLaunch: Bool = {
+        guard let token = try? KeychainService().loadString(for: AppConstants.Keychain.accessTokenKey) else {
+            return false
+        }
+        return !token.isEmpty
+    }()
+
     var needsSplash: Bool {
-        !isAuthenticated && !isLaunchSplashComplete
+        if isAuthenticated || hadStoredCredentialsAtLaunch { return false }
+        return !isLaunchSplashComplete
     }
 
     var isAuthenticated: Bool {

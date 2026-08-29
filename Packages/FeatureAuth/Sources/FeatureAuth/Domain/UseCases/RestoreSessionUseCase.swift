@@ -4,8 +4,23 @@ import Networking
 import Common
 import SplickDomain
 
+public enum SessionConfirmation: Sendable {
+    /// Server returned a fresh profile.
+    case updated(AuthSession)
+    /// Network/transient failure — keep the local session.
+    case unchanged
+    /// Refresh token is invalid or the account cannot sign in.
+    case signedOut
+}
+
 public protocol RestoreSessionUseCaseProtocol: Sendable {
-    /// Returns a session when Keychain tokens are valid; otherwise `nil`.
+    /// True when Keychain still holds an access token from a previous login.
+    func hasStoredCredentials() -> Bool
+    /// Restores tokens + cached profile without hitting the network.
+    func restoreLocal() async -> AuthSession?
+    /// Revalidates with `/v1/auth/me`. Never clears tokens on connectivity errors.
+    func confirmRemote() async -> SessionConfirmation
+    /// Local restore, then optional remote confirm (blocking). Prefer `restoreLocal` at launch.
     func execute() async -> AuthSession?
 }
 
@@ -33,63 +48,77 @@ public final class RestoreSessionUseCase: RestoreSessionUseCaseProtocol, Sendabl
         self.userDefaultsService = userDefaultsService
     }
 
-    public func execute() async -> AuthSession? {
-        guard
-            let accessToken = try? keychainService.loadString(for: AppConstants.Keychain.accessTokenKey),
-            let refreshToken = try? keychainService.loadString(for: AppConstants.Keychain.refreshTokenKey),
-            !accessToken.isEmpty,
-            !refreshToken.isEmpty
-        else {
+    public func hasStoredCredentials() -> Bool {
+        storedTokens() != nil
+    }
+
+    public func restoreLocal() async -> AuthSession? {
+        guard let tokens = storedTokens() else { return nil }
+        await tokenProvider.updateTokens(access: tokens.access, refresh: tokens.refresh)
+        guard let session = localSession(accessToken: tokens.access, refreshToken: tokens.refresh) else {
             return nil
         }
+        persistUserIdIfNeeded(session.user.id)
+        await sessionManager.setSession(session)
+        Log.info("Restored local session without waiting for network", category: .auth)
+        return session
+    }
 
-        await tokenProvider.updateTokens(access: accessToken, refresh: refreshToken)
+    public func confirmRemote() async -> SessionConfirmation {
+        guard storedTokens() != nil else { return .signedOut }
 
         do {
             let user = try await repository.getCurrentUser()
-            return await activateSession(
+            let access = await tokenProvider.accessToken() ?? storedTokens()?.access
+            let refresh = await tokenProvider.refreshToken() ?? storedTokens()?.refresh
+            guard let access, let refresh, !access.isEmpty, !refresh.isEmpty else {
+                return .signedOut
+            }
+            guard let session = await activateSession(
                 user: user,
-                accessToken: accessToken,
-                refreshToken: refreshToken
-            )
+                accessToken: access,
+                refreshToken: refresh
+            ) else {
+                return .signedOut
+            }
+            return .updated(session)
         } catch NetworkError.unauthorized {
             do {
                 try await refreshTokenUseCase.refreshSession()
-                return await sessionManager.currentSession()
+                if let session = await sessionManager.currentSession() {
+                    return .updated(session)
+                }
+                return .unchanged
             } catch {
-                return await recoverOrSignOut(
-                    error: error,
-                    accessToken: accessToken,
-                    refreshToken: refreshToken
-                )
+                return await confirmationAfterRemoteFailure(error)
             }
         } catch {
-            return await recoverOrSignOut(
-                error: error,
-                accessToken: accessToken,
-                refreshToken: refreshToken
-            )
+            return await confirmationAfterRemoteFailure(error)
         }
     }
 
-    private func recoverOrSignOut(
-        error: Error,
-        accessToken: String,
-        refreshToken: String
-    ) async -> AuthSession? {
+    public func execute() async -> AuthSession? {
+        guard let local = await restoreLocal() else { return nil }
+        switch await confirmRemote() {
+        case .updated(let session):
+            return session
+        case .unchanged:
+            return local
+        case .signedOut:
+            return nil
+        }
+    }
+
+    // MARK: - Private
+
+    private func confirmationAfterRemoteFailure(_ error: Error) async -> SessionConfirmation {
         if shouldInvalidateSession(error) {
             await clearStoredSession()
-            return nil
+            Log.info("Remote session confirmation signed the user out", category: .auth)
+            return .signedOut
         }
-
-        guard let session = await offlineSession(accessToken: accessToken, refreshToken: refreshToken) else {
-            Log.error("Offline session restore failed: no cached user", category: .auth)
-            return nil
-        }
-
-        Log.info("Restored local session while offline", category: .auth)
-        await sessionManager.setSession(session)
-        return session
+        Log.info("Keeping local session after remote confirmation failed", category: .auth)
+        return .unchanged
     }
 
     private func activateSession(
@@ -110,38 +139,35 @@ public final class RestoreSessionUseCase: RestoreSessionUseCaseProtocol, Sendabl
                 tokenType: "Bearer"
             )
         )
+        persistUserIdIfNeeded(user.id)
         await sessionManager.setSession(session)
         return session
     }
 
-    private func offlineSession(accessToken: String, refreshToken: String) async -> AuthSession? {
+    private func localSession(accessToken: String, refreshToken: String) -> AuthSession? {
         if let cached: User = userDefaultsService.get(for: AppConstants.UserDefaults.cachedCurrentUser),
            cached.status.allowsSignIn {
-            return AuthSession(
-                user: cached,
-                token: AuthToken(
-                    accessToken: accessToken,
-                    refreshToken: refreshToken,
-                    expiresIn: 0,
-                    tokenType: "Bearer"
-                )
-            )
+            return makeSession(user: cached, accessToken: accessToken, refreshToken: refreshToken)
         }
 
-        guard
-            let userIdString = try? keychainService.loadString(for: AppConstants.Keychain.userIdKey),
-            let userId = UUID(uuidString: userIdString)
-        else {
-            return nil
-        }
+        let userId = storedUserId() ?? userIdFromAccessToken(accessToken)
+        guard let userId else { return nil }
 
-        return AuthSession(
+        return makeSession(
             user: User(
                 id: userId,
                 email: "",
                 username: "",
                 displayName: ""
             ),
+            accessToken: accessToken,
+            refreshToken: refreshToken
+        )
+    }
+
+    private func makeSession(user: User, accessToken: String, refreshToken: String) -> AuthSession {
+        AuthSession(
+            user: user,
             token: AuthToken(
                 accessToken: accessToken,
                 refreshToken: refreshToken,
@@ -151,13 +177,65 @@ public final class RestoreSessionUseCase: RestoreSessionUseCaseProtocol, Sendabl
         )
     }
 
+    private func storedTokens() -> (access: String, refresh: String)? {
+        guard
+            let accessToken = try? keychainService.loadString(for: AppConstants.Keychain.accessTokenKey),
+            let refreshToken = try? keychainService.loadString(for: AppConstants.Keychain.refreshTokenKey),
+            !accessToken.isEmpty,
+            !refreshToken.isEmpty
+        else {
+            return nil
+        }
+        return (accessToken, refreshToken)
+    }
+
+    private func storedUserId() -> UUID? {
+        guard
+            let userIdString = try? keychainService.loadString(for: AppConstants.Keychain.userIdKey),
+            let userId = UUID(uuidString: userIdString)
+        else {
+            return nil
+        }
+        return userId
+    }
+
+    private func persistUserIdIfNeeded(_ userId: UUID) {
+        let existing = try? keychainService.loadString(for: AppConstants.Keychain.userIdKey)
+        guard existing != userId.uuidString else { return }
+        try? keychainService.saveString(userId.uuidString, for: AppConstants.Keychain.userIdKey)
+    }
+
+    private func userIdFromAccessToken(_ token: String) -> UUID? {
+        let segments = token.split(separator: ".")
+        guard segments.count >= 2 else { return nil }
+
+        var payload = String(segments[1])
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        while payload.count % 4 != 0 {
+            payload.append("=")
+        }
+
+        guard
+            let data = Data(base64Encoded: payload),
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            return nil
+        }
+
+        if let sub = json["sub"] as? String, let userId = UUID(uuidString: sub) {
+            return userId
+        }
+        return nil
+    }
+
     private func shouldInvalidateSession(_ error: Error) -> Bool {
         if let networkError = error as? NetworkError {
             return !networkError.shouldKeepLocalSession
         }
         if let authError = error as? AuthError {
             switch authError {
-            case .accountLocked, .accountInactive, .refreshFailed:
+            case .accountLocked, .accountInactive:
                 return true
             default:
                 return false
