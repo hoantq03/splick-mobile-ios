@@ -41,6 +41,7 @@ struct PostDetailView: View {
     @State private var commentsListMinHeight: CGFloat = 0
     @StateObject private var cardActions = PostCardActions()
     @State private var commentsRevealed = false
+    @State private var mediaTapReady = false
 
     init(
         post: Post,
@@ -101,8 +102,7 @@ struct PostDetailView: View {
                         initiallyExpandedBillSplit: expandBillSplitInitially,
                         initialMediaIndex: initialMediaIndex
                     )
-                    .equatable()
-                    .id(post.id)
+                    .id("\(post.id.uuidString)-\(mediaTapReady)")
 
                     commentsSection
                         .opacity(commentsRevealed ? 1 : 0)
@@ -118,6 +118,8 @@ struct PostDetailView: View {
             .splickDetailScrollInsets()
             .splickScrollSoftTopEdge()
             .onAppear {
+                configureCardActions()
+                mediaTapReady = true
                 scrollProxy.scrollTo(PostDetailScrollAnchor.top, anchor: .top)
             }
             .onReceive(NotificationCenter.default.publisher(for: FeedScrollLock.notification)) { notification in

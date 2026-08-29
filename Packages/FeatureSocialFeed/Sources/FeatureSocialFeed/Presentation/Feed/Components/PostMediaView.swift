@@ -37,9 +37,9 @@ struct PostMediaView: View {
             if items.isEmpty {
                 EmptyView()
             } else if items.count == 1 {
-                mediaItemView(items[0], fixedHeight: nil)
-                    .contentShape(Rectangle())
-                    .onTapGesture { onTap?(0) }
+                tappableMedia(index: 0) {
+                    mediaItemView(items[0], fixedHeight: nil)
+                }
             } else {
                 multiMediaCarousel
             }
@@ -63,10 +63,12 @@ struct PostMediaView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: 0) {
                         ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                            mediaItemView(item, fixedHeight: carouselHeight)
-                                .frame(width: resolvedWidth)
-                                .id(index)
-                                .onAppear { selectedIndex = index }
+                            tappableMedia(index: index) {
+                                mediaItemView(item, fixedHeight: carouselHeight)
+                            }
+                            .frame(width: resolvedWidth)
+                            .id(index)
+                            .onAppear { selectedIndex = index }
                         }
                     }
                     .scrollTargetLayout()
@@ -75,20 +77,18 @@ struct PostMediaView: View {
                 .scrollBounceBehavior(.basedOnSize, axes: .vertical)
                 .frame(maxWidth: .infinity)
                 .frame(height: carouselHeight)
-                .contentShape(Rectangle())
-                .onTapGesture { onTap?(selectedIndex) }
             } else {
                 TabView(selection: $selectedIndex) {
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                        mediaItemView(item, fixedHeight: carouselHeight)
-                            .tag(index)
+                        tappableMedia(index: index) {
+                            mediaItemView(item, fixedHeight: carouselHeight)
+                        }
+                        .tag(index)
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .automatic))
                 .frame(maxWidth: .infinity)
                 .frame(height: carouselHeight)
-                .contentShape(Rectangle())
-                .onTapGesture { onTap?(selectedIndex) }
             }
 
             Text("\(selectedIndex + 1)/\(items.count)")
@@ -100,6 +100,19 @@ struct PostMediaView: View {
                 .padding(10)
                 .opacity(isPinchZooming ? 0 : 1)
                 .allowsHitTesting(false)
+        }
+    }
+
+    @ViewBuilder
+    private func tappableMedia<Content: View>(index: Int, @ViewBuilder content: () -> Content) -> some View {
+        if let onTap {
+            content()
+                .contentShape(Rectangle())
+                .highPriorityGesture(
+                    TapGesture().onEnded { onTap(index) }
+                )
+        } else {
+            content()
         }
     }
 
