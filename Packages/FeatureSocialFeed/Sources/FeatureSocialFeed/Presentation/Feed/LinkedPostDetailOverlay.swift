@@ -78,13 +78,18 @@ public struct LinkedPostDetailOverlay: View {
         .background(SplickTheme.Colors.background.ignoresSafeArea())
         .shadow(color: .black.opacity(0.14), radius: 16, x: -6, y: 0)
         .offset(x: max(0, dragOffset))
-        // Edge-only swipe so the toolbar back button and scroll stay tappable.
-        .overlay(alignment: .leading) {
-            Color.clear
-                .frame(width: 20)
-                .frame(maxHeight: .infinity)
-                .contentShape(Rectangle())
-                .gesture(interactiveDismissGesture)
+        .overlay {
+            GeometryReader { geo in
+                HStack(spacing: 0) {
+                    Color.clear
+                        .frame(width: geo.size.width * 0.25)
+                        .padding(.top, 44)
+                        .contentShape(Rectangle())
+                        .gesture(interactiveDismissGesture)
+                    Color.clear
+                        .allowsHitTesting(false)
+                }
+            }
         }
         .onAppear {
             Task { @MainActor in
