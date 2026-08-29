@@ -1,6 +1,7 @@
 import PhotosUI
 import SwiftUI
 import UIKit
+import Common
 import DesignSystem
 import Localization
 
@@ -31,6 +32,7 @@ public struct PaymentProfileManageView: View {
                     isLoading: viewModel.isSaving,
                     isDisabled: viewModel.isSaving || viewModel.isDeleting
                 ) {
+                    hideKeyboard()
                     Task {
                         if await viewModel.save() {
                             dismiss()
@@ -45,13 +47,26 @@ public struct PaymentProfileManageView: View {
                         isLoading: viewModel.isDeleting,
                         isDisabled: viewModel.isSaving || viewModel.isDeleting
                     ) {
+                        hideKeyboard()
                         viewModel.showDeleteConfirm = true
                     }
                 }
             }
             .padding(SplickTheme.Spacing.lg)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
         }
+        .scrollDismissesKeyboard(.interactively)
         .background(SplickTheme.Colors.background)
+        .dismissKeyboardOnTap()
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button(languageService.text(.commonDone)) {
+                    hideKeyboard()
+                }
+            }
+        }
         .navigationTitle(languageService.text(.profilePaymentTitle))
         .navigationBarTitleDisplayMode(.inline)
         .overlay {
@@ -63,6 +78,7 @@ public struct PaymentProfileManageView: View {
             await viewModel.load()
         }
         .onChange(of: selectedPhotoItem) { newItem in
+            hideKeyboard()
             guard let newItem else { return }
             Task {
                 if let data = try? await newItem.loadTransferable(type: Data.self),
