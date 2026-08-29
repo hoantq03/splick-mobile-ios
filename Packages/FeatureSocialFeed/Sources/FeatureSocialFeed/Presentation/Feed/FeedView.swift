@@ -381,8 +381,12 @@ private struct FeedPrimaryPage: View {
     private var feedPane: some View {
         switch viewModel.state {
         case .idle, .loading:
-            FeedSkeletonLoadingView()
-                .feedPagerPageTopInset(isEnabled: true)
+            if !viewModel.posts.isEmpty {
+                feedList
+            } else {
+                FeedSkeletonLoadingView()
+                    .feedPagerPageTopInset(isEnabled: true)
+            }
 
         case .loaded(let posts) where posts.isEmpty:
             feedRefreshScroll {
@@ -404,14 +408,18 @@ private struct FeedPrimaryPage: View {
             feedList
 
         case .failed(let message):
-            feedRefreshScroll {
-                GeometryReader { geo in
-                    ErrorView(message: message) {
-                        Task { await viewModel.loadFeed() }
+            if !viewModel.posts.isEmpty {
+                feedList
+            } else {
+                feedRefreshScroll {
+                    GeometryReader { geo in
+                        ErrorView(message: message) {
+                            Task { await viewModel.loadFeed() }
+                        }
+                        .frame(width: geo.size.width, height: max(geo.size.height, 1))
                     }
-                    .frame(width: geo.size.width, height: max(geo.size.height, 1))
+                    .frame(minHeight: 480)
                 }
-                .frame(minHeight: 480)
             }
         }
     }

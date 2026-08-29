@@ -181,10 +181,19 @@ public final class FeedViewModel: ObservableObject {
 
     /// Loads feed disk cache when posts are still empty (before/alongside startup).
     public func loadDiskCacheIfNeeded() async {
-        guard posts.isEmpty, let userId = currentUserId, let feedRepository else { return }
-        if let cached = await feedRepository.loadCachedFeed(userId: userId) {
+        guard posts.isEmpty else { return }
+        let userId = currentUserId
+        if let userId, let feedRepository, let cached = await feedRepository.loadCachedFeed(userId: userId) {
             applyCachedPostsIfEmpty(cached)
+            return
         }
+    }
+
+    /// Loads cached posts first so offline launches never flash an empty error screen.
+    public func loadFeedIfNeeded() async {
+        await loadDiskCacheIfNeeded()
+        guard posts.isEmpty else { return }
+        await loadFeed()
     }
 
     @discardableResult
@@ -273,27 +282,22 @@ public final class FeedViewModel: ObservableObject {
                 return false
             }
             Log.error(error, category: .feed)
-            if isPullToRefresh {
-                if posts.isEmpty {
-                    state = .failed(languageService.localizedMessage(for: error))
-                } else {
-                    state = .loaded(posts)
-                }
-                alertMessage = languageService.text(.feedRefreshFailed)
-            } else if posts.isEmpty {
-                state = .failed(languageService.localizedMessage(for: error))
-            } else {
+            await loadDiskCacheIfNeeded()
+            if !posts.isEmpty {
                 state = .loaded(posts)
+                if isPullToRefresh {
+                    alertMessage = languageService.text(.feedRefreshFailed)
+                }
+                return false
+            }
+            if isPullToRefresh {
+                state = .failed(languageService.localizedMessage(for: error))
+                alertMessage = languageService.text(.feedRefreshFailed)
+            } else {
+                state = .failed(languageService.localizedMessage(for: error))
             }
             return false
         }
-    }
-
-    /// Loads the first page when the feed is still empty (idle / stuck loading after cancel).
-    public func loadFeedIfNeeded() async {
-        guard posts.isEmpty else { return }
-        if case .failed = state { return }
-        await loadFeed()
     }
 
     /// Show the new post immediately, then sync the first page from the server.

@@ -9,7 +9,7 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
     private let apiClient: APIClientProtocol
     private let mediaRepository: MediaRepositoryProtocol
     private let friendDisplayNameStore: FriendDisplayNameStore?
-    private static let maxCachedPosts = 40
+    private static let maxCachedPosts = 80
 
     public init(
         apiClient: APIClientProtocol,
