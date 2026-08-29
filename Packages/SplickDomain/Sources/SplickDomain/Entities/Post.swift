@@ -404,6 +404,18 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         return map
     }
 
+    /// Resolves a caption `@mention` to a known post participant (author, companions, comments, …).
+    public func userForMentionUsername(_ rawUsername: String) -> UserSummary? {
+        let key = rawUsername
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
+            .lowercased()
+        guard !key.isEmpty else { return nil }
+        return knownUsers.values.first {
+            $0.username.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == key
+        }
+    }
+
     private static func makeDisplayMediaItems(
         id: UUID,
         mediaItems: [PostMediaItem],
