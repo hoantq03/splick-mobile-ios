@@ -3,6 +3,7 @@ import SwiftUI
 import Common
 import Localization
 import SplickDomain
+import Storage
 
 @MainActor
 public final class ExpenseListViewModel: ObservableObject {
@@ -34,6 +35,11 @@ public final class ExpenseListViewModel: ObservableObject {
     /// Single in-flight load for both cold load and pull-to-refresh.
     private var inFlightLoadTask: Task<Void, Never>?
     private var lastSuccessfulLoadAt: Date?
+
+    private struct ExpenseListCachePayload: Codable {
+        let expenses: [Expense]
+        let debts: [DebtSummary]
+    }
 
     public init(
         fetchExpensesUseCase: FetchExpensesUseCaseProtocol,
@@ -154,6 +160,7 @@ public final class ExpenseListViewModel: ObservableObject {
 
     /// Loads expenses when idle/failed, or when data is older than the freshness window.
     public func loadIfNeeded() async {
+        await loadDiskCacheIfNeeded()
         if case .loaded = state,
            let lastSuccessfulLoadAt,
            Date().timeIntervalSince(lastSuccessfulLoadAt) < Self.freshLoadInterval {
@@ -229,6 +236,7 @@ public final class ExpenseListViewModel: ObservableObject {
 
             state = .loaded(fetchedExpenses)
             lastSuccessfulLoadAt = Date()
+            persistDiskCache()
             Log.info(
                 "Loaded expenses",
                 category: .expense,
@@ -252,6 +260,42 @@ public final class ExpenseListViewModel: ObservableObject {
         }
     }
 
+    private func loadDiskCacheIfNeeded() async {
+        guard expenses.isEmpty, let userId = currentUserId else { return }
+        let key = Self.cacheKey(userId: userId, groupId: groupId)
+        guard let cached = await DiskCache.shared.read(ExpenseListCachePayload.self, key: key) else {
+            return
+        }
+        expenses = cached.expenses
+        debts = cached.debts
+        if let last = cached.expenses.last {
+            nextCursor = ExpenseListCursor.encode(createdAt: last.createdAt, expenseId: last.id)
+            hasMorePages = cached.expenses.count >= 20
+        }
+        state = .loaded(cached.expenses)
+        Log.info(
+            "Loaded expenses from disk cache",
+            category: .expense,
+            metadata: ["count": String(cached.expenses.count)]
+        )
+    }
+
+    private func persistDiskCache() {
+        guard let userId = currentUserId else { return }
+        let payload = ExpenseListCachePayload(expenses: expenses, debts: debts)
+        let key = Self.cacheKey(userId: userId, groupId: groupId)
+        Task {
+            await DiskCache.shared.write(payload, key: key)
+        }
+    }
+
+    private static func cacheKey(userId: UUID, groupId: UUID?) -> String {
+        if let groupId {
+            return "expenses.list.\(userId.uuidString).\(groupId.uuidString)"
+        }
+        return "expenses.list.\(userId.uuidString)"
+    }
+
     func loadMore() async {
         guard hasMorePages, let cursor = nextCursor else { return }
         do {
@@ -265,6 +309,7 @@ public final class ExpenseListViewModel: ObservableObject {
                 nextCursor = nil
                 hasMorePages = false
             }
+            persistDiskCache()
             state = .loaded(expenses)
         } catch {
             Log.error(error, category: .expense)
