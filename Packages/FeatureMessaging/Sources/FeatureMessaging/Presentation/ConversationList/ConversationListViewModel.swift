@@ -190,8 +190,7 @@ public final class ConversationListViewModel: ObservableObject {
 
     public func load() async {
         if case .loaded = state { return }
-        state = .loading
-        await reloadInbox(showLoadingState: false)
+        await reloadInbox(showLoadingState: conversations.isEmpty)
     }
 
     public func refresh() async {
