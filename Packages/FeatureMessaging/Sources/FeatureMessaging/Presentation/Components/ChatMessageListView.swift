@@ -48,7 +48,7 @@ struct ChatMessageListView: View {
     /// Past the icon slot (46) so threshold is reachable while reveal stays 1:1.
     private static let replySwipeMaxOffset: CGFloat = 72
     /// Leading screen edge reserved for UIKit interactive pop (swipe back).
-    private static let navigationBackEdgeWidth: CGFloat = 24
+    private static let navigationBackEdgeWidth: CGFloat = 44
     /// Band just inward from the edge — horizontal pans here reveal timestamps (not reply).
     private static let timestampEdgeBandWidth: CGFloat = 52
 
@@ -167,6 +167,14 @@ struct ChatMessageListView: View {
                     }
                 }
                 .scrollDismissesKeyboard(.interactively)
+                .background {
+                    ChatListHorizontalPanInstaller(
+                        isEnabled: reactionFocusMessageId == nil,
+                        edgeExclusionWidth: Self.navigationBackEdgeWidth,
+                        onChanged: handleListPanChanged,
+                        onEnded: handleListPanEnded
+                    )
+                }
                 .modifier(
                     ChatThreadScrollPositionModifier(
                         scrollPosition: $bottomScrollPosition,
@@ -181,12 +189,6 @@ struct ChatMessageListView: View {
                         viewModel.clearPrependAnchor()
                     }
                 }
-                .simultaneousGesture(
-                    listPanGesture,
-                    // Keep list pan off while focus is open — it steals vertical pans from
-                    // the capped-message ScrollView inside the overlay.
-                    including: reactionFocusMessageId == nil ? .all : .none
-                )
                 .simultaneousGesture(
                     TapGesture().onEnded {
                         hideKeyboard()
@@ -380,126 +382,123 @@ struct ChatMessageListView: View {
         lastAnchoredMessageClientId = viewModel.messages.last?.clientMessageId
     }
 
-    private var listPanGesture: some Gesture {
-        DragGesture(minimumDistance: 8, coordinateSpace: .global)
-            .onChanged { value in
-                let horizontal = value.translation.width
-                let vertical = abs(value.translation.height)
+    private func handleListPanChanged(start: CGPoint, translation: CGSize) {
+        let horizontal = translation.width
+        let vertical = abs(translation.height)
 
-                switch listPanSession {
-                case .scrolling:
-                    return
-                case .undecided:
-                    // Wait until axis is clear; do not claim vertical pans (ScrollView owns them).
-                    guard abs(horizontal) > 8 || vertical > 8 else { return }
-                    if vertical >= abs(horizontal) * 1.4 {
-                        listPanSession = .scrolling
-                        return
-                    }
-                    guard abs(horizontal) > vertical * 0.85 else { return }
-
-                    let start = value.startLocation
-                    // Leading edge: UIKit interactive pop owns this band — never classify list pans here.
-                    if start.x < Self.navigationBackEdgeWidth {
-                        return
-                    }
-
-                    let inLeadingTimestampBand = start.x < Self.navigationBackEdgeWidth + Self.timestampEdgeBandWidth
-                    let screenWidth = UIScreen.main.bounds.width
-                    let inTrailingTimestampBand = start.x > screenWidth - Self.navigationBackEdgeWidth - Self.timestampEdgeBandWidth
-
-                    if let hit = messageHit(at: start) {
-                        let inReplyDirection = hit.isOutgoing
-                            ? horizontal < -4
-                            : horizontal > 4
-                        let inTimestampDirection = hit.isOutgoing
-                            ? horizontal > 4
-                            : horizontal < -4
-                        if inReplyDirection {
-                            listPanSession = .replySwiping(
-                                messageId: hit.messageId,
-                                isOutgoing: hit.isOutgoing
-                            )
-                            replySwipeMessageId = hit.messageId
-                        } else if inTimestampDirection, inLeadingTimestampBand || inTrailingTimestampBand {
-                            listPanSession = .revealingTimestamps
-                        } else {
-                            return
-                        }
-                    } else if inLeadingTimestampBand || inTrailingTimestampBand {
-                        listPanSession = .revealingTimestamps
-                    } else {
-                        return
-                    }
-                    hideKeyboard()
-                    onDismissKeyboard()
-                case .revealingTimestamps, .replySwiping:
-                    break
-                }
-
-                var transaction = Transaction()
-                transaction.disablesAnimations = true
-
-                switch listPanSession {
-                case .revealingTimestamps:
-                    let signed = horizontal < 0 ? -abs(horizontal) : abs(horizontal)
-                    withTransaction(transaction) {
-                        timestampRevealTranslation = signed
-                    }
-                case .replySwiping(_, let isOutgoing):
-                    // 1:1 with the finger; soft-stop after max so the icon slot never rubber-bands wildly.
-                    let raw: CGFloat = isOutgoing ? min(0, horizontal) : max(0, horizontal)
-                    let distance = abs(raw)
-                    let eased: CGFloat
-                    if distance <= Self.replySwipeMaxOffset {
-                        eased = distance
-                    } else {
-                        eased = Self.replySwipeMaxOffset + (distance - Self.replySwipeMaxOffset) * 0.28
-                    }
-                    let signed = eased * (raw < 0 ? -1 : 1)
-                    withTransaction(transaction) {
-                        replySwipeTranslation = signed
-                    }
-                case .undecided, .scrolling:
-                    break
-                }
+        switch listPanSession {
+        case .scrolling:
+            return
+        case .undecided:
+            // Wait until axis is clear; do not claim vertical pans (ScrollView owns them).
+            guard abs(horizontal) > 8 || vertical > 8 else { return }
+            if vertical >= abs(horizontal) * 1.4 {
+                listPanSession = .scrolling
+                return
             }
-            .onEnded { value in
-                let endedSession = listPanSession
-                listPanSession = .undecided
+            guard abs(horizontal) > vertical * 0.85 else { return }
 
-                switch endedSession {
-                case .revealingTimestamps:
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.62)) {
-                        timestampRevealTranslation = 0
-                    }
-                case .replySwiping(let messageId, let isOutgoing):
-                    let horizontal = value.translation.width
-                    let vertical = abs(value.translation.height)
-                    let triggered = abs(horizontal) > vertical && (
-                        isOutgoing
-                            ? horizontal <= -Self.replySwipeThreshold
-                            : horizontal >= Self.replySwipeThreshold
+            // Leading edge: UIKit interactive pop owns this band — never classify list pans here.
+            if start.x < Self.navigationBackEdgeWidth {
+                return
+            }
+
+            let inLeadingTimestampBand = start.x < Self.navigationBackEdgeWidth + Self.timestampEdgeBandWidth
+            let screenWidth = UIScreen.main.bounds.width
+            let inTrailingTimestampBand = start.x > screenWidth - Self.navigationBackEdgeWidth - Self.timestampEdgeBandWidth
+
+            if let hit = messageHit(at: start) {
+                let inReplyDirection = hit.isOutgoing
+                    ? horizontal < -4
+                    : horizontal > 4
+                let inTimestampDirection = hit.isOutgoing
+                    ? horizontal > 4
+                    : horizontal < -4
+                if inReplyDirection {
+                    listPanSession = .replySwiping(
+                        messageId: hit.messageId,
+                        isOutgoing: hit.isOutgoing
                     )
-                    if triggered,
-                       let item = messages.first(where: { $0.id == messageId }) {
-                        Self.replySwipeImpact.impactOccurred()
-                        beginReply(to: item)
-                    }
-                    let finishingId = messageId
-                    withAnimation(.spring(response: 0.42, dampingFraction: 0.58)) {
-                        replySwipeTranslation = 0
-                    }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.48) {
-                        if replySwipeMessageId == finishingId, abs(replySwipeTranslation) < 0.5 {
-                            replySwipeMessageId = nil
-                        }
-                    }
-                case .undecided, .scrolling:
+                    replySwipeMessageId = hit.messageId
+                } else if inTimestampDirection, inLeadingTimestampBand || inTrailingTimestampBand {
+                    listPanSession = .revealingTimestamps
+                } else {
+                    return
+                }
+            } else if inLeadingTimestampBand || inTrailingTimestampBand {
+                listPanSession = .revealingTimestamps
+            } else {
+                return
+            }
+            hideKeyboard()
+            onDismissKeyboard()
+        case .revealingTimestamps, .replySwiping:
+            break
+        }
+
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+
+        switch listPanSession {
+        case .revealingTimestamps:
+            let signed = horizontal < 0 ? -abs(horizontal) : abs(horizontal)
+            withTransaction(transaction) {
+                timestampRevealTranslation = signed
+            }
+        case .replySwiping(_, let isOutgoing):
+            // 1:1 with the finger; soft-stop after max so the icon slot never rubber-bands wildly.
+            let raw: CGFloat = isOutgoing ? min(0, horizontal) : max(0, horizontal)
+            let distance = abs(raw)
+            let eased: CGFloat
+            if distance <= Self.replySwipeMaxOffset {
+                eased = distance
+            } else {
+                eased = Self.replySwipeMaxOffset + (distance - Self.replySwipeMaxOffset) * 0.28
+            }
+            let signed = eased * (raw < 0 ? -1 : 1)
+            withTransaction(transaction) {
+                replySwipeTranslation = signed
+            }
+        case .undecided, .scrolling:
+            break
+        }
+    }
+
+    private func handleListPanEnded(translation: CGSize) {
+        let endedSession = listPanSession
+        listPanSession = .undecided
+
+        switch endedSession {
+        case .revealingTimestamps:
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.62)) {
+                timestampRevealTranslation = 0
+            }
+        case .replySwiping(let messageId, let isOutgoing):
+            let horizontal = translation.width
+            let vertical = abs(translation.height)
+            let triggered = abs(horizontal) > vertical && (
+                isOutgoing
+                    ? horizontal <= -Self.replySwipeThreshold
+                    : horizontal >= Self.replySwipeThreshold
+            )
+            if triggered,
+               let item = messages.first(where: { $0.id == messageId }) {
+                Self.replySwipeImpact.impactOccurred()
+                beginReply(to: item)
+            }
+            let finishingId = messageId
+            withAnimation(.spring(response: 0.42, dampingFraction: 0.58)) {
+                replySwipeTranslation = 0
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.48) {
+                if replySwipeMessageId == finishingId, abs(replySwipeTranslation) < 0.5 {
                     replySwipeMessageId = nil
-                    replySwipeTranslation = 0
                 }
             }
+        case .undecided, .scrolling:
+            replySwipeMessageId = nil
+            replySwipeTranslation = 0
+        }
     }
 
     private struct MessageHit {
@@ -724,6 +723,131 @@ struct ChatMessageListView: View {
         let scrollId = messages.first(where: { $0.id == messageId })?.clientMessageId ?? messageId
         withAnimation(ChatScrollAnimation.jumpToMessage) {
             proxy.scrollTo(scrollId, anchor: .center)
+        }
+    }
+}
+
+/// Horizontal reply / timestamp pan that never claims the leading interactive-pop strip.
+private struct ChatListHorizontalPanInstaller: UIViewRepresentable {
+    var isEnabled: Bool
+    var edgeExclusionWidth: CGFloat
+    var onChanged: (CGPoint, CGSize) -> Void
+    var onEnded: (CGSize) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        context.coordinator.edgeExclusionWidth = edgeExclusionWidth
+        context.coordinator.isEnabled = isEnabled
+        context.coordinator.onChanged = onChanged
+        context.coordinator.onEnded = onEnded
+        DispatchQueue.main.async {
+            context.coordinator.attach(from: uiView)
+        }
+    }
+
+    static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) {
+        coordinator.detach()
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var edgeExclusionWidth: CGFloat = 44
+        var isEnabled = true
+        var onChanged: ((CGPoint, CGSize) -> Void)?
+        var onEnded: ((CGSize) -> Void)?
+
+        private weak var hostScrollView: UIScrollView?
+        private var startLocation: CGPoint = .zero
+        private lazy var pan: UIPanGestureRecognizer = {
+            let gesture = UIPanGestureRecognizer(target: self, action: #selector(handlePan))
+            gesture.maximumNumberOfTouches = 1
+            gesture.cancelsTouchesInView = false
+            gesture.delegate = self
+            return gesture
+        }()
+
+        func attach(from markerView: UIView) {
+            guard let scrollView = nearestScrollView(from: markerView) else { return }
+            if hostScrollView === scrollView, pan.view === scrollView { return }
+            detach()
+            scrollView.addGestureRecognizer(pan)
+            hostScrollView = scrollView
+        }
+
+        func detach() {
+            if let view = pan.view {
+                view.removeGestureRecognizer(pan)
+            }
+            hostScrollView = nil
+        }
+
+        @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
+            guard isEnabled, let view = gesture.view else { return }
+            let translation = gesture.translation(in: view)
+            let size = CGSize(width: translation.x, height: translation.y)
+
+            switch gesture.state {
+            case .began:
+                startLocation = gesture.location(in: nil)
+                onChanged?(startLocation, size)
+            case .changed:
+                onChanged?(startLocation, size)
+            case .ended, .cancelled, .failed:
+                onEnded?(size)
+            default:
+                break
+            }
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            guard isEnabled, let view = gestureRecognizer.view else { return false }
+            let point = touch.location(in: view)
+            let rtl = view.effectiveUserInterfaceLayoutDirection == .rightToLeft
+            if rtl {
+                return point.x < view.bounds.width - edgeExclusionWidth
+            }
+            return point.x > edgeExclusionWidth
+        }
+
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard isEnabled, let pan = gestureRecognizer as? UIPanGestureRecognizer, let view = pan.view else {
+                return false
+            }
+            let translation = pan.translation(in: view)
+            if translation == .zero {
+                return true
+            }
+            return abs(translation.x) >= abs(translation.y)
+        }
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            otherGestureRecognizer === hostScrollView?.panGestureRecognizer
+        }
+
+        private func nearestScrollView(from view: UIView) -> UIScrollView? {
+            var node: UIView? = view.superview
+            while let current = node {
+                if let scroll = current as? UIScrollView {
+                    return scroll
+                }
+                if let found = current.subviews.compactMap({ $0 as? UIScrollView }).first {
+                    return found
+                }
+                node = current.superview
+            }
+            return nil
         }
     }
 }
