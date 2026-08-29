@@ -1016,7 +1016,8 @@ final class DependencyContainer: ObservableObject {
             languageService: languageService,
             friendRequestInbox: FriendRequestInboxAdapter(
                 acceptUseCase: acceptFriendRequestUseCase,
-                rejectUseCase: rejectFriendRequestUseCase
+                rejectUseCase: rejectFriendRequestUseCase,
+                fetchIncomingUseCase: fetchIncomingFriendRequestsUseCase
             ),
             userDefaultsService: userDefaultsService,
             onBadgeCountsChanged: { [weak self] in
@@ -1046,7 +1047,8 @@ final class DependencyContainer: ObservableObject {
         let authRepository = AuthRepository(
             apiClient: apiClient,
             keychainService: keychainService,
-            tokenProvider: tokenProvider
+            tokenProvider: tokenProvider,
+            userDefaultsService: userDefaultsService
         )
         let refreshTokenUseCase = RefreshTokenUseCase(
             repository: authRepository,
@@ -1065,7 +1067,8 @@ final class DependencyContainer: ObservableObject {
             sessionManager: sessionManager,
             keychainService: keychainService,
             tokenProvider: tokenProvider,
-            refreshTokenUseCase: refreshTokenUseCase
+            refreshTokenUseCase: refreshTokenUseCase,
+            userDefaultsService: userDefaultsService
         )
     }
 }
