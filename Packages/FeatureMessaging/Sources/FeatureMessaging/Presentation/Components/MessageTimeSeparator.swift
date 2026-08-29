@@ -94,3 +94,17 @@ struct MessageTimeSeparatorLabel: View {
         .accessibilityAddTraits(.isHeader)
     }
 }
+
+struct GroupSystemNoticeLabel: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(SplickTheme.Typography.caption.weight(.medium))
+            .foregroundStyle(SplickTheme.Colors.textTertiary)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, SplickTheme.Spacing.lg)
+            .padding(.vertical, SplickTheme.Spacing.sm)
+    }
+}

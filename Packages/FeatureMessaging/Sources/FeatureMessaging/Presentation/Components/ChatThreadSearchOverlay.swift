@@ -20,6 +20,7 @@ struct ChatThreadSearchOverlay: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(SplickTheme.Colors.background)
+        .contentShape(Rectangle())
     }
 
     private var searchBar: some View {

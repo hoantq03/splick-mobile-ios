@@ -71,7 +71,9 @@ private struct ChatThreadScreen: View {
             peer: conversation.peer,
             navigationTitle: conversation.displayTitle,
             conversation: conversation,
-            repository: factory.repository
+            repository: factory.repository,
+            onConversationUpdated: factory.onConversationUpdated,
+            onConversationDeleted: factory.onConversationDeleted
         )
     }
 }
@@ -91,6 +93,8 @@ public final class ChatThreadViewModelFactory: ObservableObject {
     private let pendingMessageStore: PendingMessageStore
     private let networkPathMonitor: NetworkPathMonitor
     private let onConversationRead: ((UUID) async -> Void)?
+    public let onConversationUpdated: ((Conversation) -> Void)?
+    public let onConversationDeleted: ((UUID) -> Void)?
 
     public init(
         currentUserId: UUID,
@@ -104,7 +108,9 @@ public final class ChatThreadViewModelFactory: ObservableObject {
         messageCache: MessageThreadCache? = nil,
         pendingMessageStore: PendingMessageStore? = nil,
         networkPathMonitor: NetworkPathMonitor? = nil,
-        onConversationRead: ((UUID) async -> Void)? = nil
+        onConversationRead: ((UUID) async -> Void)? = nil,
+        onConversationUpdated: ((Conversation) -> Void)? = nil,
+        onConversationDeleted: ((UUID) -> Void)? = nil
     ) {
         self.currentUserId = currentUserId
         self.fetchMessagesUseCase = fetchMessagesUseCase
@@ -118,6 +124,8 @@ public final class ChatThreadViewModelFactory: ObservableObject {
         self.pendingMessageStore = pendingMessageStore ?? PendingMessageStore()
         self.networkPathMonitor = networkPathMonitor ?? NetworkPathMonitor()
         self.onConversationRead = onConversationRead
+        self.onConversationUpdated = onConversationUpdated
+        self.onConversationDeleted = onConversationDeleted
     }
 
     public func make(conversationId: UUID, highlightMessageId: UUID? = nil) -> ChatThreadViewModel {
