@@ -507,13 +507,6 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
         logger.success("Comment added")
     }
 
-    public func hidePost(id: UUID) async throws {
-        logger.log("Hide post: \(id)")
-        try await Task.sleep(for: .milliseconds(200))
-        posts.removeAll { $0.id == id }
-        logger.success("Post hidden")
-    }
-
     public func updatePost(_ input: UpdatePostInput) async throws -> Post {
         logger.log("Update post: \(input.postId)")
         try await Task.sleep(for: .milliseconds(200))

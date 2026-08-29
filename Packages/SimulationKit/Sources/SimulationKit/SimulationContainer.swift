@@ -25,7 +25,6 @@ public final class SimulationContainer: @unchecked Sendable {
     public let fetchFeedUseCase: FetchFeedUseCase
     public let reactToPostUseCase: ReactToPostUseCase
     public let deletePostUseCase: DeletePostUseCase
-    public let hidePostUseCase: HidePostUseCase
     public let createPostUseCase: CreatePostUseCase
     public let fetchFriendsUseCase: FetchFriendsUseCase
 
@@ -63,7 +62,6 @@ public final class SimulationContainer: @unchecked Sendable {
         self.fetchFeedUseCase = FetchFeedUseCase(repository: feedRepository)
         self.reactToPostUseCase = ReactToPostUseCase(repository: feedRepository)
         self.deletePostUseCase = DeletePostUseCase(repository: feedRepository)
-        self.hidePostUseCase = HidePostUseCase(repository: feedRepository)
         self.createPostUseCase = CreatePostUseCase(repository: feedRepository)
         self.fetchFriendsUseCase = FetchFriendsUseCase(repository: friendsRepository)
         self.fetchMyFriendsUseCase = FetchMyFriendsUseCase(repository: friendsRepository)

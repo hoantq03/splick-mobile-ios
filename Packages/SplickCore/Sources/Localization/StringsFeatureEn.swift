@@ -579,7 +579,6 @@ enum StringsFeatureEn {
         .feedPostDeleteBlockedViews: "Can't delete (already has %d views)",
         .feedPostDeleteBlockedEvidence: "Can't delete (payment proof already submitted)",
         .feedPostReport: "Report",
-        .feedPostHide: "Hide",
         .feedPostEdit: "Edit",
         .feedPostEdited: "Edited",
         .feedPostEditHistory: "Edit history",

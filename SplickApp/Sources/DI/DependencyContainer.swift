@@ -326,10 +326,6 @@ final class DependencyContainer: ObservableObject {
         DeletePostUseCase(repository: feedRepository)
     }()
 
-    lazy var hidePostUseCase: HidePostUseCaseProtocol = {
-        HidePostUseCase(repository: feedRepository)
-    }()
-
     lazy var updatePostUseCase: UpdatePostUseCaseProtocol = {
         UpdatePostUseCase(repository: feedRepository)
     }()
@@ -939,7 +935,6 @@ final class DependencyContainer: ObservableObject {
             fetchPostUseCase: fetchPostUseCase,
             reactToPostUseCase: reactToPostUseCase,
             deletePostUseCase: deletePostUseCase,
-            hidePostUseCase: hidePostUseCase,
             updatePostUseCase: updatePostUseCase,
             fetchPostEditHistoryUseCase: fetchPostEditHistoryUseCase,
             addCommentUseCase: addCommentUseCase,

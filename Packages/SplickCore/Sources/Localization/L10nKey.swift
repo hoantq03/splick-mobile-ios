@@ -822,7 +822,6 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case feedPostDeleteBlockedViews = "feed.post.delete_blocked_views"
     case feedPostDeleteBlockedEvidence = "feed.post.delete_blocked_evidence"
     case feedPostReport = "feed.post.report"
-    case feedPostHide = "feed.post.hide"
     case feedPostEdit = "feed.post.edit"
     case feedPostEdited = "feed.post.edited"
     case feedPostEditHistory = "feed.post.edit_history"

@@ -15,7 +15,6 @@ enum FeedEndpoint: APIEndpoint {
     case removeReaction(postId: UUID, reactionId: UUID)
     case addComment(postId: UUID, CreateCommentRequestDTO)
     case deletePost(id: UUID)
-    case hidePost(id: UUID)
     case updatePost(id: UUID, UpdatePostRequestDTO)
     case postEdits(id: UUID)
     case sendBillReminder(postId: UUID, SendPostBillReminderRequestDTO)
@@ -33,7 +32,6 @@ enum FeedEndpoint: APIEndpoint {
         case .feed: return "/v1/feed"
         case .photoAlbumFirstPage, .photoAlbumCursor: return "/v1/feed/photos"
         case .post(let id), .deletePost(let id), .updatePost(let id, _): return "/v1/feed/posts/\(id)"
-        case .hidePost(let id): return "/v1/feed/posts/\(id)/hide"
         case .postEdits(let id): return "/v1/feed/posts/\(id)/edits"
         case .postReactions(let postId): return "/v1/feed/posts/\(postId)/reactions"
         case .postComments(let postId, _, _, _): return "/v1/feed/posts/\(postId)/comments"
@@ -65,7 +63,7 @@ enum FeedEndpoint: APIEndpoint {
             return .get
         case .createPost, .addReaction, .addComment, .sendBillReminder,
              .submitPaymentEvidence, .approvePaymentEvidence, .rejectPaymentEvidence,
-             .batchViewed, .hidePost:
+             .batchViewed:
             return .post
         case .updatePost: return .patch
         case .removeReaction, .deletePost: return .delete

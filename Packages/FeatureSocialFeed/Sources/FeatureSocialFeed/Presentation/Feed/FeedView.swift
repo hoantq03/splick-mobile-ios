@@ -327,9 +327,6 @@ private struct FeedPrimaryPage: View {
         cardActions.onDelete = { postId in
             Task { await viewModel.deletePost(id: postId) }
         }
-        cardActions.onHide = { postId in
-            Task { await viewModel.hidePost(id: postId) }
-        }
         cardActions.onEdit = { post in
             editingPost = post
         }

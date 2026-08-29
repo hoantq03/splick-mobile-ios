@@ -579,7 +579,6 @@ enum StringsFeatureVi {
         .feedPostDeleteBlockedViews: "Không thể xóa (đã có %d lượt xem)",
         .feedPostDeleteBlockedEvidence: "Không thể xóa (đã có chứng từ thanh toán)",
         .feedPostReport: "Báo cáo",
-        .feedPostHide: "Ẩn",
         .feedPostEdit: "Chỉnh sửa",
         .feedPostEdited: "Đã chỉnh sửa",
         .feedPostEditHistory: "Lịch sử chỉnh sửa",

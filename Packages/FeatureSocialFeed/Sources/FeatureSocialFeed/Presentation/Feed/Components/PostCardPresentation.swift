@@ -48,7 +48,6 @@ enum PostCardPresentation: Identifiable {
 final class PostCardActions: ObservableObject {
     var onReact: (UUID, String) -> Void = { _, _ in }
     var onDelete: (UUID) -> Void = { _ in }
-    var onHide: (UUID) -> Void = { _ in }
     var onEdit: (Post) -> Void = { _ in }
     var onUserTap: (UserSummary) -> Void = { _ in }
     var onOpenComments: (Post) -> Void = { _ in }

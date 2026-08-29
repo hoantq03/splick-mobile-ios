@@ -579,9 +579,6 @@ struct PostDetailView: View {
         cardActions.onDelete = { postId in
             Task { await feedViewModel.deletePost(id: postId) }
         }
-        cardActions.onHide = { postId in
-            Task { await feedViewModel.hidePost(id: postId) }
-        }
         cardActions.onEdit = { post in
             editingPost = post
         }

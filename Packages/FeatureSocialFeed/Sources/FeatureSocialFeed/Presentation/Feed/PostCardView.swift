@@ -242,9 +242,6 @@ struct PostCardView: View, Equatable {
                 }
             }
             Button(languageService.text(.feedPostReport), systemImage: "flag") {}
-            Button(languageService.text(.feedPostHide), systemImage: "eye.slash") {
-                actions.onHide(post.id)
-            }
         } label: {
             Image(systemName: "ellipsis")
                 .foregroundStyle(SplickTheme.Colors.textSecondary)

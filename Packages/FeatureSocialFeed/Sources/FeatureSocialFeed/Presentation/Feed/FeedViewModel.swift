@@ -22,7 +22,6 @@ public final class FeedViewModel: ObservableObject {
     private let reactToPostUseCase: ReactToPostUseCaseProtocol
     private let listPostReactionsUseCase: ListPostReactionsUseCaseProtocol?
     private let deletePostUseCase: DeletePostUseCaseProtocol
-    private let hidePostUseCase: HidePostUseCaseProtocol
     private let updatePostUseCase: UpdatePostUseCaseProtocol
     private let fetchPostEditHistoryUseCase: FetchPostEditHistoryUseCaseProtocol
     private let addCommentUseCase: AddCommentUseCaseProtocol
@@ -80,7 +79,6 @@ public final class FeedViewModel: ObservableObject {
         fetchPostUseCase: FetchPostUseCaseProtocol,
         reactToPostUseCase: ReactToPostUseCaseProtocol,
         deletePostUseCase: DeletePostUseCaseProtocol,
-        hidePostUseCase: HidePostUseCaseProtocol,
         updatePostUseCase: UpdatePostUseCaseProtocol,
         fetchPostEditHistoryUseCase: FetchPostEditHistoryUseCaseProtocol,
         addCommentUseCase: AddCommentUseCaseProtocol,
@@ -104,7 +102,6 @@ public final class FeedViewModel: ObservableObject {
         self.reactToPostUseCase = reactToPostUseCase
         self.listPostReactionsUseCase = listPostReactionsUseCase
         self.deletePostUseCase = deletePostUseCase
-        self.hidePostUseCase = hidePostUseCase
         self.updatePostUseCase = updatePostUseCase
         self.fetchPostEditHistoryUseCase = fetchPostEditHistoryUseCase
         self.addCommentUseCase = addCommentUseCase
@@ -749,23 +746,6 @@ public final class FeedViewModel: ObservableObject {
 
         do {
             try await deletePostUseCase.execute(postId: id)
-            if let currentIndex = indexOfPost(id: id) {
-                posts.remove(at: currentIndex)
-                rebuildPostIndex()
-                cachedCompanionGroupNames.removeValue(forKey: id)
-            }
-            markPostsLoaded()
-        } catch {
-            alertMessage = languageService.localizedMessage(for: error)
-            Log.error(error, category: .feed)
-        }
-    }
-
-    func hidePost(id: UUID) async {
-        guard indexOfPost(id: id) != nil else { return }
-
-        do {
-            try await hidePostUseCase.execute(postId: id)
             if let currentIndex = indexOfPost(id: id) {
                 posts.remove(at: currentIndex)
                 rebuildPostIndex()

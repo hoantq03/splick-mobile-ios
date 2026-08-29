@@ -30,7 +30,6 @@ public protocol FeedRepositoryProtocol: Sendable {
         submissionAttachments: [CommentSubmissionAttachment]
     ) async throws
     func deletePost(id: UUID) async throws
-    func hidePost(id: UUID) async throws
     func updatePost(_ input: UpdatePostInput) async throws -> Post
     func fetchPostEdits(postId: UUID) async throws -> [PostEditRevision]
     func sendBillReminder(

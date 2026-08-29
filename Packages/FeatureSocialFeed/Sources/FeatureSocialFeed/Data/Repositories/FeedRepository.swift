@@ -203,10 +203,6 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
         try await apiClient.request(FeedEndpoint.deletePost(id: id))
     }
 
-    public func hidePost(id: UUID) async throws {
-        try await apiClient.request(FeedEndpoint.hidePost(id: id))
-    }
-
     public func updatePost(_ input: UpdatePostInput) async throws -> Post {
         guard !input.mediaItems.isEmpty else {
             throw NetworkError.unknown("Missing media items")
