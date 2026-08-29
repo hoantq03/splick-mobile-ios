@@ -21,10 +21,6 @@ public final class AppStartupCoordinator {
         customEmojiFetcher: any CustomEmojiFetching,
         streakViewModel: StreakViewModel
     ) async {
-        // Emoji metadata lives only in memory; reload it independently so a failed
-        // startup batch (badges, conversations, etc.) does not leave reactions broken.
-        await customEmojiStore.load(fetcher: customEmojiFetcher)
-
         feedViewModel.updateSession(user: nil, userId: userId)
 
         if let cached = await repository.loadCached(userId: userId) {
@@ -41,8 +37,12 @@ public final class AppStartupCoordinator {
         // Feed-only disk cache covers cold starts when startup payload is missing/empty.
         await feedViewModel.loadDiskCacheIfNeeded()
 
+        async let emojiLoad: Void = customEmojiStore.load(fetcher: customEmojiFetcher)
+
+        var startupSucceeded = false
         do {
             let fresh = try await fetchAppStartupUseCase.execute()
+            startupSucceeded = true
             apply(
                 fresh,
                 badgeCountService: badgeCountService,
@@ -56,8 +56,10 @@ public final class AppStartupCoordinator {
             Log.error(error, category: .network, metadata: ["action": "fetchStartupData"])
         }
 
-        // Fallback when startup failed or returned an empty feed page.
-        if feedViewModel.posts.isEmpty {
+        await emojiLoad
+
+        // Only hit GET /v1/feed when startup succeeded with an empty page — not when offline.
+        if feedViewModel.posts.isEmpty, startupSucceeded {
             await feedViewModel.loadFeed()
         }
     }
