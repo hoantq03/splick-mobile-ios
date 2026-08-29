@@ -8,17 +8,24 @@ public struct MentionText: View {
     var plainColor: Color = SplickTheme.Colors.textPrimary
     /// Lowercased username → display name. Missing keys fall back to `@username`.
     var displayNamesByUsername: [String: String] = [:]
+    var onMentionTap: ((String) -> Void)?
+    /// Enables native text selection / copy. Prefer for captions and comments.
+    var isSelectable: Bool
 
     public init(
         _ text: String,
         fontSize: CGFloat = 12,
         plainColor: Color = SplickTheme.Colors.textPrimary,
-        displayNamesByUsername: [String: String] = [:]
+        displayNamesByUsername: [String: String] = [:],
+        onMentionTap: ((String) -> Void)? = nil,
+        isSelectable: Bool = false
     ) {
         self.text = text
         self.fontSize = fontSize
         self.plainColor = plainColor
         self.displayNamesByUsername = displayNamesByUsername
+        self.onMentionTap = onMentionTap
+        self.isSelectable = isSelectable
     }
 
     public var body: some View {
@@ -26,7 +33,9 @@ public struct MentionText: View {
             text,
             fontSize: fontSize,
             plainColor: plainColor,
-            displayNamesByUsername: displayNamesByUsername
+            displayNamesByUsername: displayNamesByUsername,
+            onMentionTap: onMentionTap,
+            isSelectable: isSelectable
         )
     }
 }

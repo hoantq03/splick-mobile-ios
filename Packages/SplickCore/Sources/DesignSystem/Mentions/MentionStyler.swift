@@ -48,6 +48,11 @@ public enum MentionStyler {
         return result
     }
 
+    public static func username(fromMentionToken token: String) -> String {
+        token.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
+    }
+
     public static func attributedString(
         text: String,
         fontSize: CGFloat,
