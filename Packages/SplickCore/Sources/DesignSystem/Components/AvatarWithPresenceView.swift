@@ -42,7 +42,8 @@ public struct AvatarWithPresenceView: View {
                         .font(.system(size: lastSeenFontSize, weight: .semibold))
                         .foregroundStyle(.white)
                         .lineLimit(1)
-                        .padding(.horizontal, 5)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .padding(.horizontal, size == .compact ? 6 : 5)
                         .frame(minWidth: badgeSize, minHeight: badgeSize)
                         .background(SplickTheme.Colors.success, in: Capsule())
                         .overlay {
@@ -53,12 +54,13 @@ public struct AvatarWithPresenceView: View {
                 }
             }
             .frame(width: size.dimension, height: size.dimension)
-            .padding(6)
+            .padding(size == .compact ? 4 : 6)
     }
 
     private var badgeSize: CGFloat {
         switch size {
         case .small: return 12
+        case .compact: return 16
         case .medium: return 15
         case .large: return 18
         case .profile: return 20
@@ -68,6 +70,7 @@ public struct AvatarWithPresenceView: View {
     private var lastSeenFontSize: CGFloat {
         switch size {
         case .small: return 7
+        case .compact: return 10
         case .medium: return 8
         case .large: return 9
         case .profile: return 10
