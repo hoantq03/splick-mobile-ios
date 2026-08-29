@@ -87,6 +87,7 @@ public struct ChatThreadView: View {
         .background(SplickTheme.Colors.background.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .splickInteractivePopEnabled()
+        .splickWideInteractivePop(fraction: 0.12, minimumWidth: 44)
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Button(action: openChatHeader) {
