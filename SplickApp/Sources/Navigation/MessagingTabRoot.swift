@@ -33,7 +33,10 @@ struct MessagingTabRoot: View {
                     currentUserId: appState.currentUser?.id ?? UUID()
                 )
             },
-            conversationToOpen: $conversationRouteToOpen
+            conversationToOpen: $conversationRouteToOpen,
+            onThreadPresentedChange: { presented in
+                appState.isMessagingThreadPresented = presented
+            }
         )
         .environmentObject(container.customEmojiStore)
         .environment(\.customEmojiDependencies, container.customEmojiDependencies)

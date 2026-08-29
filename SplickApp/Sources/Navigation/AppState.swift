@@ -26,6 +26,9 @@ final class AppState: ObservableObject {
     @Published var linkedPostPresentation: PendingFeedPostNavigation?
 
     @Published var pendingMessagingNavigation: PendingMessagingNavigation?
+    /// True while Messages has a pushed chat thread. Drives tab-bar chrome so a
+    /// notification/deep-link open cannot leave the floating menu over the composer.
+    @Published var isMessagingThreadPresented = false
     @Published var pendingUserProfileNavigation: UUID?
 
     /// In-memory only — `false` every cold launch and after logout.
@@ -89,6 +92,7 @@ final class AppState: ObservableObject {
         pendingFeedPostNavigation = nil
         linkedPostPresentation = nil
         pendingMessagingNavigation = nil
+        isMessagingThreadPresented = false
         pendingUserProfileNavigation = nil
         PushNotificationCoordinator.shared.syncAppIconBadge(count: 0)
         Log.info("User signed out", category: .lifecycle)
@@ -106,6 +110,7 @@ final class AppState: ObservableObject {
         pendingFeedPostNavigation = nil
         linkedPostPresentation = nil
         pendingMessagingNavigation = nil
+        isMessagingThreadPresented = false
         pendingUserProfileNavigation = nil
         PushNotificationCoordinator.shared.syncAppIconBadge(count: 0)
     }
@@ -120,6 +125,9 @@ final class AppState: ObservableObject {
             conversationId: conversationId,
             highlightMessageId: highlightMessageId
         )
+        // Hide chrome before the pager settles — otherwise `reset()` after the
+        // tab slide puts the menu on top of the composer.
+        isMessagingThreadPresented = true
         withAnimation(.easeInOut(duration: 0.35)) {
             selectedTab = .messages
         }
@@ -154,6 +162,19 @@ final class AppState: ObservableObject {
             }
             return true
         case "messages":
+            if let conversationId = uuidPathComponent(url) {
+                openConversation(conversationId)
+            } else {
+                withAnimation(.easeInOut(duration: 0.35)) {
+                    selectedTab = .messages
+                }
+            }
+            return true
+        case "chat":
+            if let conversationId = uuidPathComponent(url) {
+                openConversation(conversationId)
+                return true
+            }
             withAnimation(.easeInOut(duration: 0.35)) {
                 selectedTab = .messages
             }
@@ -166,6 +187,13 @@ final class AppState: ObservableObject {
         default:
             return false
         }
+    }
+
+    private func uuidPathComponent(_ url: URL) -> UUID? {
+        url.pathComponents
+            .filter { $0 != "/" }
+            .compactMap(UUID.init(uuidString:))
+            .first
     }
 
     func openPostFromNotification(_ postId: UUID) {

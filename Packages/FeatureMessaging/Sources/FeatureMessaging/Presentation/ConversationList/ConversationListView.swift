@@ -21,6 +21,7 @@ public struct ConversationListView: View {
     @State private var composePresentation: NewMessageComposePresentation?
     private let onCreateGroup: () -> Void
     private let makeComposeViewModel: () -> NewMessageComposeViewModel
+    private let onThreadPresentedChange: ((Bool) -> Void)?
     @Binding private var conversationToOpen: ChatThreadRoute?
 
     private var suppressRefreshAnimations: Bool {
@@ -55,12 +56,14 @@ public struct ConversationListView: View {
         viewModel: ConversationListViewModel,
         onCreateGroup: @escaping () -> Void = {},
         makeComposeViewModel: @escaping () -> NewMessageComposeViewModel,
-        conversationToOpen: Binding<ChatThreadRoute?> = .constant(nil)
+        conversationToOpen: Binding<ChatThreadRoute?> = .constant(nil),
+        onThreadPresentedChange: ((Bool) -> Void)? = nil
     ) {
         self._viewModel = ObservedObject(wrappedValue: viewModel)
         self.onCreateGroup = onCreateGroup
         self.makeComposeViewModel = makeComposeViewModel
         self._conversationToOpen = conversationToOpen
+        self.onThreadPresentedChange = onThreadPresentedChange
     }
 
     public var body: some View {
@@ -83,6 +86,7 @@ public struct ConversationListView: View {
                     }
                 }
                 .splickFastPageSlide()
+                .environment(\.scrollChromeTrackingEnabled, path.isEmpty)
                 .animation(
                     suppressRefreshAnimations ? nil : MessagingSearchChromeAnimation.resultsSpring,
                     value: isSearching
@@ -166,10 +170,19 @@ public struct ConversationListView: View {
             guard viewModel.conversations.isEmpty else { return }
             Task { await viewModel.load() }
         }
+        .onAppear {
+            consumeConversationToOpen()
+            // Do not report `false` here — a notification may have already marked a
+            // thread as presenting before this stack has been pushed.
+            if !path.isEmpty {
+                syncThreadPresentation(isPresented: true)
+            }
+        }
+        .onChange(of: path.isEmpty) { isEmpty in
+            syncThreadPresentation(isPresented: !isEmpty)
+        }
         .onChange(of: conversationToOpen?.conversation.id) { _ in
-            guard let route = conversationToOpen else { return }
-            pushThread(route)
-            conversationToOpen = nil
+            consumeConversationToOpen()
         }
         .onReceive(sameTabTapPublisher) { _ in
             guard sameTabTapHandlingEnabled else { return }
@@ -477,6 +490,21 @@ public struct ConversationListView: View {
     private func openConversationFromPeek(_ conversation: Conversation) {
         dismissConversationPeek()
         pushThread(ChatThreadRoute(conversation: conversation))
+    }
+
+    private func consumeConversationToOpen() {
+        guard let route = conversationToOpen else { return }
+        conversationToOpen = nil
+        pushThread(route)
+    }
+
+    private func syncThreadPresentation(isPresented: Bool) {
+        onThreadPresentedChange?(isPresented)
+        if isPresented {
+            tabBarScrollState?.hide(flushToBottom: true)
+        } else {
+            tabBarScrollState?.show()
+        }
     }
 
     private func pushThread(_ route: ChatThreadRoute) {
