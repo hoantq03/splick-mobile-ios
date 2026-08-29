@@ -647,7 +647,13 @@ struct CommentRowView: View {
             MentionText(
                 text,
                 fontSize: style.bodyFontSize,
-                displayNamesByUsername: post.mentionDisplayNamesByUsername
+                displayNamesByUsername: post.mentionDisplayNamesByUsername,
+                onMentionTap: { username in
+                    if let user = post.userForMentionUsername(username) {
+                        onUserTap(user)
+                    }
+                },
+                isSelectable: true
             )
         }
     }
