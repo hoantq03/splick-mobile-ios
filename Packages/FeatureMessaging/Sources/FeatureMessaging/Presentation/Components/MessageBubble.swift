@@ -19,6 +19,7 @@ struct MessageBubble: View {
     let isOutgoing: Bool
     let currentUserId: UUID
     var isHighlighted: Bool = false
+    var highlightPulseToken: Int = 0
     var isFloatingSend: Bool = false
     var floatSway: CGFloat = 0
     var presentation: Presentation = .threadRow
@@ -138,7 +139,8 @@ struct MessageBubble: View {
                     status: message.deliveryStatus,
                     showsReadAvatar: showsReadReceiptAvatar,
                     readAvatarURL: readReceiptPeerAvatarURL,
-                    readAvatarName: readReceiptPeerName
+                    readAvatarName: readReceiptPeerName,
+                    readReceiptMessageId: message.id
                 )
                 .alignmentGuide(.messageDeliveryStatus) { dimensions in
                     dimensions[VerticalAlignment.center]
@@ -237,6 +239,13 @@ struct MessageBubble: View {
             }
         }
         .messageSendFloat(isActive: isFloatingSend && presentation == .threadRow, lateralSway: floatSway)
+        .modifier(
+            MessageHighlightBounceModifier(
+                pulseToken: (isHighlighted && presentation == .threadRow)
+                    ? highlightPulseToken
+                    : 0
+            )
+        )
     }
 
     private var showsReactionAccessory: Bool {
@@ -279,16 +288,6 @@ struct MessageBubble: View {
             if hasTextBody || (message.replyPreview != nil && imageAttachments.isEmpty) {
                 textBubbleBody
                     .modifier(MessageDeliveryStatusAnchor(isActive: true))
-            }
-        }
-        .overlay {
-            if isHighlighted {
-                RoundedRectangle(cornerRadius: Self.mediaCornerRadius, style: .continuous)
-                    .stroke(SplickTheme.Colors.primaryGradientStart.opacity(0.85), lineWidth: 2)
-                    .background(
-                        RoundedRectangle(cornerRadius: Self.mediaCornerRadius, style: .continuous)
-                            .fill(SplickTheme.Colors.primaryGradientStart.opacity(0.15))
-                    )
             }
         }
         .overlay {
@@ -692,6 +691,60 @@ private struct MessageReactionStrip: View {
             withTransaction(transaction) {
                 onReact(emoji)
             }
+        }
+    }
+}
+
+/// Hop after jump-to-quote. `.task(id:)` runs when the row appears already highlighted
+/// (off-screen originals). Bounce is sequenced outside the list scroll transaction.
+private struct MessageHighlightBounceModifier: ViewModifier {
+    let pulseToken: Int
+    @State private var scale: CGFloat = 1
+    @State private var lift: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(scale)
+            .offset(y: lift)
+            .zIndex(pulseToken > 0 ? 2 : 0)
+            .onChange(of: pulseToken) { token in
+                guard token <= 0 else { return }
+                scale = 1
+                lift = 0
+            }
+            .task(id: pulseToken) {
+                guard pulseToken > 0 else { return }
+                await playBounce()
+            }
+    }
+
+    @MainActor
+    private func playBounce() async {
+        var reset = Transaction()
+        reset.disablesAnimations = true
+        withTransaction(reset) {
+            scale = 1
+            lift = 0
+        }
+        // Jump-to-message uses withAnimation on the list; wait it out or the peak is merged away.
+        try? await Task.sleep(for: .milliseconds(240))
+        guard !Task.isCancelled, pulseToken > 0 else { return }
+
+        var pop = Transaction()
+        pop.animation = ChatScrollAnimation.highlightPop
+        withTransaction(pop) {
+            scale = ChatScrollAnimation.highlightPeakScale
+            lift = ChatScrollAnimation.highlightLift
+        }
+
+        try? await Task.sleep(for: .milliseconds(200))
+        guard !Task.isCancelled, pulseToken > 0 else { return }
+
+        var settle = Transaction()
+        settle.animation = ChatScrollAnimation.highlightSettle
+        withTransaction(settle) {
+            scale = 1
+            lift = 0
         }
     }
 }

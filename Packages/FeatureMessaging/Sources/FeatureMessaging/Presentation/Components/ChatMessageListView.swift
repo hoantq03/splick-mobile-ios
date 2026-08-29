@@ -20,6 +20,7 @@ struct ChatMessageListView: View {
     var conversationId: UUID? = nil
     var isComposerFocused: Bool = false
     var bottomOverlayInset: CGFloat = 8
+    var onOpenDetails: (ChatMessage) -> Void = { _ in }
 
     @State private var reactionFocusMessageId: UUID?
     /// Fresh identity each open so `@State isRevealed` cannot stick across odd/even mounts.
@@ -28,7 +29,6 @@ struct ChatMessageListView: View {
     @State private var reactionFocusFrozenFrame: CGRect?
     /// Ignore drag / dim-tap dismiss until the long-press finger has lifted.
     @State private var reactionFocusDismissArmed = false
-    @State private var detailsMessage: ChatMessage?
     @State private var timestampRevealTranslation: CGFloat = 0
     /// Driven from the list pan so bubble-local DragGesture cannot steal vertical scroll.
     @State private var replySwipeMessageId: UUID?
@@ -91,6 +91,7 @@ struct ChatMessageListView: View {
                                     isOutgoing: item.message.senderId == currentUserId,
                                     currentUserId: currentUserId,
                                     isHighlighted: viewModel.highlightedMessageId == item.message.id,
+                                    highlightPulseToken: viewModel.scrollToMessageToken,
                                     isFloatingSend: viewModel.newlySentMessageIds.contains(item.message.clientMessageId),
                                     floatSway: viewModel.floatSway(for: item.message.clientMessageId),
                                     timestampRevealTranslation: timestampRevealTranslation,
@@ -218,7 +219,9 @@ struct ChatMessageListView: View {
                                 UIPasteboard.general.string = body
                             },
                             onDetails: {
-                                detailsMessage = focusContext.displayMessage.message
+                                let message = focusContext.displayMessage.message
+                                dismissReactionFocus(force: true)
+                                onOpenDetails(message)
                             },
                             onOpenFullPicker: {
                                 reactionPicker.present { emoji in
@@ -234,6 +237,14 @@ struct ChatMessageListView: View {
                     }
                 }
                 .allowsHitTesting(reactionFocusMessageId != nil)
+            }
+            .overlayPreferenceValue(ChatReadReceiptAnchorKey.self) { anchor in
+                ChatReadReceiptAvatarOverlay(
+                    anchor: anchor,
+                    avatarURL: peerAvatarURL,
+                    avatarName: peerDisplayName,
+                    isVisible: showsPeerReadAvatar && latestReadOutgoingMessageId != nil
+                )
             }
             .onAppear {
                 syncBottomScrollPosition()
@@ -329,12 +340,6 @@ struct ChatMessageListView: View {
             .onChange(of: viewModel.scrollToMessageToken) { token in
                 guard token > 0, let targetId = viewModel.highlightedMessageId else { return }
                 scrollToMessage(targetId, proxy: proxy)
-            }
-            .sheet(item: $detailsMessage) { message in
-                MessageDetailsSheet(
-                    message: message,
-                    displayNameForUserId: userDisplayName
-                )
             }
         }
     }
@@ -504,18 +509,24 @@ struct ChatMessageListView: View {
 
     private func messageHit(at globalPoint: CGPoint) -> MessageHit? {
         let visibleIds = Set(messages.map(\.id))
-        MessageReactionAnchorStore.shared.frames = MessageReactionAnchorStore.shared.frames.filter {
-            visibleIds.contains($0.key)
-        }
+        let frames = MessageReactionAnchorStore.shared.liveFrames(visibleIds: visibleIds)
+        guard !frames.isEmpty else { return nil }
 
         var best: (hit: MessageHit, distance: CGFloat)?
 
-        for (id, frame) in MessageReactionAnchorStore.shared.frames {
-            guard frame.width > 1, frame.height > 1 else { continue }
-            guard frame.contains(globalPoint) else { continue }
+        for (id, frame) in frames {
+            let distance: CGFloat
+            if globalPoint.y >= frame.minY, globalPoint.y < frame.maxY {
+                distance = abs(globalPoint.y - frame.midY) * 0.01
+            } else if globalPoint.y < frame.minY {
+                distance = frame.minY - globalPoint.y
+            } else {
+                distance = globalPoint.y - frame.maxY
+            }
+            // Ignore rows that are clearly not the finger's row (stale / far).
+            guard distance < 80 else { continue }
             guard let message = messages.first(where: { $0.id == id }) else { continue }
 
-            let distance = abs(globalPoint.y - frame.midY)
             let hit = MessageHit(
                 messageId: id,
                 isOutgoing: message.senderId == currentUserId
@@ -711,11 +722,8 @@ struct ChatMessageListView: View {
     private func scrollToMessage(_ messageId: UUID, proxy: ScrollViewProxy) {
         // Bubbles use clientMessageId as ScrollViewReader id (stable across optimistic→server replace).
         let scrollId = messages.first(where: { $0.id == messageId })?.clientMessageId ?? messageId
-        proxy.scrollTo(scrollId, anchor: .center)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            withAnimation(ChatScrollAnimation.spring) {
-                proxy.scrollTo(scrollId, anchor: .center)
-            }
+        withAnimation(ChatScrollAnimation.jumpToMessage) {
+            proxy.scrollTo(scrollId, anchor: .center)
         }
     }
 }

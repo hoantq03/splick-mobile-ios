@@ -31,6 +31,9 @@ public struct ChatThreadView: View {
     @State private var confirmDeleteConversation = false
     @State private var comingSoonFeatureTitle: String?
     @State private var showNotificationSettings = false
+    @State private var pendingPeerConfirm: PendingPeerConfirm?
+    @State private var detailsMessage: ChatMessage?
+    @State private var isDetailsPresented = false
 
     @Environment(\.chatGroupManagementActions) private var groupManagementActions
     @Environment(\.dismiss) private var dismiss
@@ -70,6 +73,16 @@ public struct ChatThreadView: View {
                 )
                 .transition(.opacity)
             }
+            NavigationLink(
+                destination: messageDetailsDestination,
+                isActive: $isDetailsPresented
+            ) {
+                EmptyView()
+            }
+            .frame(width: 0, height: 0)
+            .opacity(0)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
         }
         .background(SplickTheme.Colors.background.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
@@ -205,22 +218,18 @@ public struct ChatThreadView: View {
         } message: {
             Text(languageService.text(.messagingChatDeleteConversationConfirmMessage))
         }
-        .confirmationDialog(
-            languageService.text(.friendsRemoveFriendConfirmTitle),
-            isPresented: $relationshipViewModel.showRemoveConfirm,
-            titleVisibility: .visible
+        .alert(
+            pendingPeerConfirmTitle,
+            isPresented: Binding(
+                get: { pendingPeerConfirm != nil },
+                set: { if !$0 { pendingPeerConfirm = nil } }
+            )
         ) {
-            Button(languageService.text(.friendsRemoveFriendConfirmAction), role: .destructive) {
-                Task { await relationshipViewModel.removeFriend() }
+            Button(languageService.text(.commonCancel), role: .cancel) {
+                pendingPeerConfirm = nil
             }
-        }
-        .confirmationDialog(
-            languageService.text(.friendsBlockConfirmTitle),
-            isPresented: $relationshipViewModel.showBlockConfirm,
-            titleVisibility: .visible
-        ) {
-            Button(languageService.text(.friendsBlockConfirmAction), role: .destructive) {
-                Task { await relationshipViewModel.blockUser() }
+            Button(pendingPeerConfirmActionTitle, role: .destructive) {
+                confirmPendingPeerAction()
             }
         }
         .alert(
@@ -416,8 +425,55 @@ public struct ChatThreadView: View {
         }
     }
 
+    private enum PendingPeerConfirm {
+        case removeFriend
+        case blockUser
+    }
+
     private func applyConversationUpdate(_ updated: Conversation) {
         groupConversation = updated
+    }
+
+    /// Wait for the overflow `Menu` to dismiss so the confirm alert anchors to the
+    /// full screen (center) instead of the disappearing menu popover.
+    private func presentCenteredConfirm(_ present: @escaping () -> Void) {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            present()
+        }
+    }
+
+    private var pendingPeerConfirmTitle: String {
+        switch pendingPeerConfirm {
+        case .blockUser:
+            return languageService.text(.friendsBlockConfirmTitle)
+        case .removeFriend, nil:
+            return languageService.text(.friendsRemoveFriendConfirmTitle)
+        }
+    }
+
+    private var pendingPeerConfirmActionTitle: String {
+        switch pendingPeerConfirm {
+        case .blockUser:
+            return languageService.text(.friendsBlockConfirmAction)
+        case .removeFriend, nil:
+            return languageService.text(.friendsRemoveFriendConfirmAction)
+        }
+    }
+
+    private func confirmPendingPeerAction() {
+        let confirm = pendingPeerConfirm
+        pendingPeerConfirm = nil
+        Task {
+            switch confirm {
+            case .removeFriend:
+                await relationshipViewModel.removeFriend()
+            case .blockUser:
+                await relationshipViewModel.blockUser()
+            case nil:
+                break
+            }
+        }
     }
 
     private func leaveGroup() async {
@@ -448,7 +504,7 @@ public struct ChatThreadView: View {
             if relationshipViewModel.isActive, !relationshipViewModel.isBlocked {
                 if relationshipViewModel.canRemoveFriend {
                     Button(role: .destructive) {
-                        relationshipViewModel.showRemoveConfirm = true
+                        presentCenteredConfirm { pendingPeerConfirm = .removeFriend }
                     } label: {
                         Label(
                             languageService.text(.friendsRemoveFriend),
@@ -457,7 +513,7 @@ public struct ChatThreadView: View {
                     }
                 }
                 Button(role: .destructive) {
-                    relationshipViewModel.showBlockConfirm = true
+                    presentCenteredConfirm { pendingPeerConfirm = .blockUser }
                 } label: {
                     Label(
                         languageService.text(.friendsBlockUser),
@@ -564,6 +620,26 @@ public struct ChatThreadView: View {
         return peer != nil && openUserProfile != nil
     }
 
+    private func openMessageDetails(_ message: ChatMessage) {
+        isInputFocused = false
+        detailsMessage = message
+        isDetailsPresented = true
+    }
+
+    @ViewBuilder
+    private var messageDetailsDestination: some View {
+        if let detailsMessage {
+            MessageDetailsSheet(
+                message: detailsMessage,
+                displayNameForUserId: userDisplayName(for:)
+            )
+            .splickInteractivePopEnabled()
+            .splickWideInteractivePop()
+        } else {
+            Color.clear
+        }
+    }
+
     private func openChatHeader() {
         guard let peer, let openUserProfile else { return }
         let user = UserSummary(
@@ -607,7 +683,8 @@ public struct ChatThreadView: View {
                 showsPeerReadAvatar: displayConversation?.isGroup != true,
                 conversationId: viewModel.conversationId,
                 isComposerFocused: isInputFocused,
-                bottomOverlayInset: SplickTheme.Spacing.sm
+                bottomOverlayInset: SplickTheme.Spacing.sm,
+                onOpenDetails: openMessageDetails
             )
         }
     }
@@ -691,10 +768,10 @@ public struct ChatThreadView: View {
     }
 
     private func resolvedPresence(for peer: ConversationPeer) -> (isOnline: Bool, lastSeenAt: Date?) {
-        if let state = presenceStore.state(for: peer.userId) {
-            return (state.isOnline, state.lastSeenAt)
-        }
-        return (peer.isOnline ?? false, peer.lastSeenAt)
+        let stored = presenceStore.state(for: peer.userId)
+        let isOnline = (stored?.isOnline ?? false) || (peer.isOnline ?? false)
+        let lastSeenAt = stored?.lastSeenAt ?? peer.lastSeenAt
+        return (isOnline, lastSeenAt)
     }
 
     private var headerPresenceSubtitle: String? {

@@ -148,10 +148,10 @@ struct ConversationRowView: View {
     }
 
     private func resolvedPresence(for peer: ConversationPeer) -> (isOnline: Bool, lastSeenAt: Date?) {
-        if let state = presenceStore.state(for: peer.userId) {
-            return (state.isOnline, state.lastSeenAt)
-        }
-        return (peer.isOnline ?? false, peer.lastSeenAt)
+        let stored = presenceStore.state(for: peer.userId)
+        let isOnline = (stored?.isOnline ?? false) || (peer.isOnline ?? false)
+        let lastSeenAt = stored?.lastSeenAt ?? peer.lastSeenAt
+        return (isOnline, lastSeenAt)
     }
 
     private var peerPresenceSubtitle: String? {

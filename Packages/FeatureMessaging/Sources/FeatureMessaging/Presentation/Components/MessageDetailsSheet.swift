@@ -5,7 +5,6 @@ import SplickDomain
 
 struct MessageDetailsSheet: View {
     @EnvironmentObject private var languageService: LanguageService
-    @Environment(\.dismiss) private var dismiss
 
     let message: ChatMessage
     let displayNameForUserId: (UUID) -> String
@@ -41,8 +40,7 @@ struct MessageDetailsSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
+        ScrollView {
                 VStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
                     messageSection
                     sentAtSection
@@ -51,15 +49,11 @@ struct MessageDetailsSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(SplickTheme.Spacing.md)
             }
-            .background(SplickTheme.Colors.background)
+            .background(SplickTheme.Colors.background.ignoresSafeArea())
             .navigationTitle(languageService.text(.messagingMessageDetailsTitle))
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(languageService.text(.commonDone)) { dismiss() }
-                }
-            }
-        }
+            .splickInteractivePopEnabled()
+            .splickWideInteractivePop()
     }
 
     private var messageSection: some View {
