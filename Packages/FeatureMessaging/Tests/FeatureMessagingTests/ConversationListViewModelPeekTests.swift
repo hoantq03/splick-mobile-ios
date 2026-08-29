@@ -46,6 +46,7 @@ private actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
         makeConversation(id: groupId ?? UUID())
     }
     func addGroupMember(groupId: UUID, memberUserId: UUID) async throws {}
+    func listGroupMembers(groupId: UUID) async throws -> [GroupChatMember] { [] }
     func removeGroupMember(groupId: UUID, memberUserId: UUID) async throws {}
     func leaveGroup(groupId: UUID) async throws {}
     func deleteConversation(conversationId: UUID) async throws {
@@ -59,6 +60,9 @@ private actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
         makeConversation(id: conversationId)
     }
     func renameGroup(groupId: UUID, name: String) async throws -> Conversation {
+        makeConversation(id: groupId)
+    }
+    func updateGroupAvatar(groupId: UUID, avatarUrl: String) async throws -> Conversation {
         makeConversation(id: groupId)
     }
     func transferGroupAdmin(groupId: UUID, newAdminUserId: UUID) async throws {}

@@ -81,6 +81,32 @@ final class ConversationListViewModelWsPatchTests: XCTestCase {
         XCTAssertEqual(viewModel.conversations.count, 2, "Must not wipe list via full refresh")
     }
 
+    func test_upsertConversation_updatesGroupNameInPlace() async {
+        let conversationId = UUID()
+        let existing = Conversation(
+            id: conversationId,
+            type: .group,
+            unreadCount: 0,
+            peer: nil,
+            groupName: "Old name",
+            lastMessage: nil,
+            createdAt: Date(timeIntervalSince1970: 1),
+            updatedAt: Date(timeIntervalSince1970: 1)
+        )
+        let wsClient = MessagingWebSocketClient(
+            ticketProvider: { "ticket" },
+            deviceIdProvider: { "device" }
+        )
+        let viewModel = makeViewModel(wsClient: wsClient)
+        viewModel.applyStartupConversations([existing])
+
+        viewModel.upsertConversation(existing.updating(groupName: "New name"))
+
+        XCTAssertEqual(viewModel.conversations.first?.groupName, "New name")
+        XCTAssertEqual(viewModel.conversations.first?.displayTitle, "New name")
+        XCTAssertEqual(viewModel.conversations.count, 1)
+    }
+
     func test_wsNewMessage_fromPeer_acknowledgesDelivery() async {
         MessageDeliveryAckService.shared.resetAckTrackingForTests()
         let conversationId = UUID()
@@ -206,6 +232,7 @@ private actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
         Conversation(id: groupId ?? UUID(), type: .group, unreadCount: 0, peer: nil, groupName: name, lastMessage: nil, createdAt: .now, updatedAt: .now)
     }
     func addGroupMember(groupId: UUID, memberUserId: UUID) async throws {}
+    func listGroupMembers(groupId: UUID) async throws -> [GroupChatMember] { [] }
     func removeGroupMember(groupId: UUID, memberUserId: UUID) async throws {}
     func leaveGroup(groupId: UUID) async throws {}
     func deleteConversation(conversationId: UUID) async throws {}
@@ -227,6 +254,9 @@ private actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
     }
     func renameGroup(groupId: UUID, name: String) async throws -> Conversation {
         Conversation(id: groupId, unreadCount: 0, peer: nil, lastMessage: nil, createdAt: .now, updatedAt: .now)
+    }
+    func updateGroupAvatar(groupId: UUID, avatarUrl: String) async throws -> Conversation {
+        Conversation(id: groupId, unreadCount: 0, peer: nil, groupAvatarUrl: avatarUrl, lastMessage: nil, createdAt: .now, updatedAt: .now)
     }
     func transferGroupAdmin(groupId: UUID, newAdminUserId: UUID) async throws {}
     func fetchMessages(

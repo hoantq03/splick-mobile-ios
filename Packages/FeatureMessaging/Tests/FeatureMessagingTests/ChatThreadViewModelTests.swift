@@ -43,6 +43,7 @@ private actor StubMessagingRepository: MessagingRepositoryProtocol {
         )
     }
     func addGroupMember(groupId: UUID, memberUserId: UUID) async throws {}
+    func listGroupMembers(groupId: UUID) async throws -> [GroupChatMember] { [] }
     func removeGroupMember(groupId: UUID, memberUserId: UUID) async throws {}
     func leaveGroup(groupId: UUID) async throws {}
     func deleteConversation(conversationId: UUID) async throws {}
@@ -64,6 +65,9 @@ private actor StubMessagingRepository: MessagingRepositoryProtocol {
     }
     func renameGroup(groupId: UUID, name: String) async throws -> Conversation {
         Conversation(id: groupId, unreadCount: 0, peer: nil, lastMessage: nil, createdAt: .now, updatedAt: .now)
+    }
+    func updateGroupAvatar(groupId: UUID, avatarUrl: String) async throws -> Conversation {
+        Conversation(id: groupId, unreadCount: 0, peer: nil, groupAvatarUrl: avatarUrl, lastMessage: nil, createdAt: .now, updatedAt: .now)
     }
     func transferGroupAdmin(groupId: UUID, newAdminUserId: UUID) async throws {}
     func fetchMessages(
