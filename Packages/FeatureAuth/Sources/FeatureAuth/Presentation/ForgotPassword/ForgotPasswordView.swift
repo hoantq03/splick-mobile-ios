@@ -54,6 +54,7 @@ public struct ForgotPasswordView: View {
             }
         }
         .clipped()
+        .dismissKeyboardOnTap()
         .onChange(of: viewModel.state) { state in
             if case .loaded(let session) = state {
                 onAuthenticated?(session.user)

@@ -1,7 +1,9 @@
 import SwiftUI
+import UIKit
 import Common
 
-/// Six-digit OTP entry with individual boxes and hidden `TextField` for keyboard / SMS autofill.
+/// Six-digit OTP entry with individual boxes. The real `TextField` sits on top so taps
+/// can show the keyboard again after dismiss, and tap-outside can resign first responder.
 public struct SplickOtpField: View {
     public static let defaultLength = 6
 
@@ -14,6 +16,7 @@ public struct SplickOtpField: View {
 
     @FocusState private var isFocused: Bool
     @Environment(\.suppressKeyboardAutoFocus) private var suppressKeyboardAutoFocus
+    @State private var ignoreKeyboardHideUntil: Date = .distantPast
 
     private let boxHeight: CGFloat = 56
     private let boxSpacing: CGFloat = 10
@@ -40,24 +43,29 @@ public struct SplickOtpField: View {
                 let boxWidth = boxWidth(for: geometry.size.width)
 
                 ZStack {
-                    TextField("", text: $code)
-                        .keyboardType(.numberPad)
-                        .textContentType(.oneTimeCode)
-                        .focused($isFocused)
-                        .opacity(0.02)
-                        .frame(maxWidth: .infinity, minHeight: boxHeight)
-                        .accessibilityLabel("Verification code, \(length) digits")
-
                     HStack(spacing: boxSpacing) {
                         ForEach(0..<length, id: \.self) { index in
                             otpBox(at: index, width: boxWidth)
                         }
                     }
                     .frame(maxWidth: .infinity)
+                    .allowsHitTesting(false)
+
+                    TextField("", text: $code)
+                        .keyboardType(.numberPad)
+                        .textContentType(.oneTimeCode)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .focused($isFocused)
+                        .font(.system(size: 1))
+                        .foregroundStyle(.clear)
+                        .tint(.clear)
+                        .textFieldStyle(.plain)
+                        .frame(maxWidth: .infinity, minHeight: boxHeight, maxHeight: boxHeight)
+                        .contentShape(Rectangle())
+                        .accessibilityLabel("Verification code, \(length) digits")
                 }
                 .frame(height: boxHeight)
-                .contentShape(Rectangle())
-                .onTapGesture { isFocused = true }
             }
             .frame(height: boxHeight)
 
@@ -95,6 +103,10 @@ public struct SplickOtpField: View {
             if trimmed.count == length {
                 onComplete?(trimmed)
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) { _ in
+            guard Date() >= ignoreKeyboardHideUntil else { return }
+            isFocused = false
         }
     }
 
@@ -171,6 +183,7 @@ public struct SplickOtpField: View {
         guard autoFocus, !suppressKeyboardAutoFocus else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             guard autoFocus, !suppressKeyboardAutoFocus else { return }
+            ignoreKeyboardHideUntil = Date().addingTimeInterval(0.8)
             isFocused = true
         }
     }

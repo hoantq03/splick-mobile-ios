@@ -61,6 +61,7 @@ public struct ChangePasswordView: View {
             }
         }
         .background(SplickTheme.Colors.background)
+        .dismissKeyboardOnTap()
         .navigationTitle(
             languageService.text(viewModel.hasPasswordLogin ? .changePasswordTitle : .createPasswordTitle)
         )
