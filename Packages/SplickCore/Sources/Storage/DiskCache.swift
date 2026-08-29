@@ -17,6 +17,7 @@ public actor DiskCache {
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
     private let directoryURL: URL
+    private let legacyDirectoryURL: URL
 
     public init(subdirectory: String = "DiskCache") {
         encoder = JSONEncoder()
@@ -24,9 +25,12 @@ public actor DiskCache {
         decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        let base = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
+        let support = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? fileManager.temporaryDirectory
-        directoryURL = base.appendingPathComponent(subdirectory, isDirectory: true)
+        let caches = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
+            ?? fileManager.temporaryDirectory
+        directoryURL = support.appendingPathComponent(subdirectory, isDirectory: true)
+        legacyDirectoryURL = caches.appendingPathComponent(subdirectory, isDirectory: true)
         try? fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
     }
 
@@ -36,8 +40,17 @@ public actor DiskCache {
 
     public func readEntry<T: Codable>(_ type: T.Type, key: String) -> DiskCacheEntry<T>? {
         let url = fileURL(for: key)
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return try? decoder.decode(DiskCacheEntry<T>.self, from: data)
+        if let data = try? Data(contentsOf: url),
+           let entry = try? decoder.decode(DiskCacheEntry<T>.self, from: data) {
+            return entry
+        }
+        let legacyURL = legacyDirectoryURL.appendingPathComponent(url.lastPathComponent)
+        guard let data = try? Data(contentsOf: legacyURL),
+              let entry = try? decoder.decode(DiskCacheEntry<T>.self, from: data) else {
+            return nil
+        }
+        try? data.write(to: url, options: .atomic)
+        return entry
     }
 
     public func write<T: Codable>(_ value: T, key: String) {
