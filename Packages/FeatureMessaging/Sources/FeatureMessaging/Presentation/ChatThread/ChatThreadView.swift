@@ -87,7 +87,7 @@ public struct ChatThreadView: View {
         .background(SplickTheme.Colors.background.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .splickInteractivePopEnabled()
-        .splickWideInteractivePop(fraction: 0.12, minimumWidth: 44)
+        .splickWideInteractivePop(fraction: 0.06, minimumWidth: 20)
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Button(action: openChatHeader) {
@@ -96,7 +96,7 @@ public struct ChatThreadView: View {
                             AvatarWithPresenceView(
                                 imageURL: peer.avatarUrl.flatMap(URL.init(string:)),
                                 name: navigationTitle,
-                                size: .small,
+                                size: .compact,
                                 userId: peer.userId,
                                 showOnlineIndicator: PresenceDisplayPolicy.shouldShowOnlineIndicator(
                                     isOnline: resolvedPresence(for: peer).isOnline
@@ -113,12 +113,12 @@ public struct ChatThreadView: View {
                                     ? displayConversation?.groupAvatarUrl
                                     : peer?.avatarUrl)?.flatMap(URL.init(string:)),
                                 name: navigationTitle,
-                                size: .small
+                                size: .compact
                             )
                         }
                         VStack(alignment: .leading, spacing: 1) {
                             Text(displayConversation?.displayTitle ?? navigationTitle)
-                                .font(SplickTheme.Typography.headline)
+                                .font(.system(size: 18, weight: .semibold, design: .rounded))
                                 .foregroundStyle(SplickTheme.Colors.textPrimary)
                                 .lineLimit(1)
                                 .id(displayConversation?.groupName ?? navigationTitle)
