@@ -2,10 +2,12 @@ import SwiftUI
 import UIKit
 import Common
 import DesignSystem
+import Localization
 import SplickDomain
 
 struct ChatMessageListView: View {
     @Environment(\.messagingReactionPicker) private var reactionPicker
+    @EnvironmentObject private var languageService: LanguageService
 
     @ObservedObject var viewModel: ChatThreadViewModel
     let messages: [ChatMessage]
@@ -86,40 +88,51 @@ struct ChatMessageListView: View {
                                     MessageTimeSeparatorLabel(date: item.message.createdAt)
                                 }
 
-                                MessageBubble(
-                                    displayMessage: item,
-                                    isOutgoing: item.message.senderId == currentUserId,
-                                    currentUserId: currentUserId,
-                                    isHighlighted: viewModel.highlightedMessageId == item.message.id,
-                                    highlightPulseToken: viewModel.scrollToMessageToken,
-                                    isFloatingSend: viewModel.newlySentMessageIds.contains(item.message.clientMessageId),
-                                    floatSway: viewModel.floatSway(for: item.message.clientMessageId),
-                                    timestampRevealTranslation: timestampRevealTranslation,
-                                    replySwipeTranslation: replySwipeMessageId == item.message.id
-                                        ? replySwipeTranslation
-                                        : 0,
-                                    onReact: { emoji in
-                                        _ = viewModel.react(to: item.message.id, emoji: emoji)
-                                    },
-                                    onRetry: {
-                                        Task { await viewModel.retrySend(messageId: item.message.id) }
-                                    },
-                                    onLongPress: {
-                                        openReactionFocus(for: item)
-                                    },
-                                    onReply: {
-                                        beginReply(to: item.message)
-                                    },
-                                    onQuotedReply: { originId in
-                                        Task { await viewModel.revealSearchedMessage(id: originId) }
-                                    },
-                                    readReceiptPeerAvatarURL: peerAvatarURL,
-                                    readReceiptPeerName: peerDisplayName,
-                                    showsReadReceiptAvatar: showsPeerReadAvatar
-                                        && item.message.id == latestReadOutgoingMessageId,
-                                )
-                                .opacity(reactionFocusMessageId == item.message.id ? 0 : 1)
-                                .allowsHitTesting(reactionFocusMessageId != item.message.id)
+                                if item.message.isSystemNotice {
+                                    GroupSystemNoticeLabel(
+                                        text: GroupSystemNoticeCopy.text(
+                                            message: item.message,
+                                            currentUserId: currentUserId,
+                                            actorName: userDisplayName(item.message.senderId),
+                                            languageService: languageService
+                                        )
+                                    )
+                                } else {
+                                    MessageBubble(
+                                        displayMessage: item,
+                                        isOutgoing: item.message.senderId == currentUserId,
+                                        currentUserId: currentUserId,
+                                        isHighlighted: viewModel.highlightedMessageId == item.message.id,
+                                        highlightPulseToken: viewModel.scrollToMessageToken,
+                                        isFloatingSend: viewModel.newlySentMessageIds.contains(item.message.clientMessageId),
+                                        floatSway: viewModel.floatSway(for: item.message.clientMessageId),
+                                        timestampRevealTranslation: timestampRevealTranslation,
+                                        replySwipeTranslation: replySwipeMessageId == item.message.id
+                                            ? replySwipeTranslation
+                                            : 0,
+                                        onReact: { emoji in
+                                            _ = viewModel.react(to: item.message.id, emoji: emoji)
+                                        },
+                                        onRetry: {
+                                            Task { await viewModel.retrySend(messageId: item.message.id) }
+                                        },
+                                        onLongPress: {
+                                            openReactionFocus(for: item)
+                                        },
+                                        onReply: {
+                                            beginReply(to: item.message)
+                                        },
+                                        onQuotedReply: { originId in
+                                            Task { await viewModel.revealSearchedMessage(id: originId) }
+                                        },
+                                        readReceiptPeerAvatarURL: peerAvatarURL,
+                                        readReceiptPeerName: peerDisplayName,
+                                        showsReadReceiptAvatar: showsPeerReadAvatar
+                                            && item.message.id == latestReadOutgoingMessageId,
+                                    )
+                                    .opacity(reactionFocusMessageId == item.message.id ? 0 : 1)
+                                    .allowsHitTesting(reactionFocusMessageId != item.message.id)
+                                }
                             }
                             .id(item.message.clientMessageId)
                             .transition(
@@ -525,6 +538,7 @@ struct ChatMessageListView: View {
             // Ignore rows that are clearly not the finger's row (stale / far).
             guard distance < 80 else { continue }
             guard let message = messages.first(where: { $0.id == id }) else { continue }
+            guard !message.isSystemNotice else { continue }
 
             let hit = MessageHit(
                 messageId: id,
@@ -565,6 +579,7 @@ struct ChatMessageListView: View {
     }
 
     private func openReactionFocus(for item: DisplayMessage) {
+        guard !item.message.isSystemNotice else { return }
         // Recover from a stuck focus id (overlay never mounted / never armed dismiss).
         if reactionFocusMessageId != nil {
             dismissReactionFocus(force: true)
@@ -616,6 +631,7 @@ struct ChatMessageListView: View {
     }
 
     private func beginReply(to message: ChatMessage) {
+        guard !message.isSystemNotice else { return }
         dismissReactionFocus(force: true)
         viewModel.beginReply(to: message, senderDisplayName: senderDisplayName(message))
         onRequestComposerFocus()

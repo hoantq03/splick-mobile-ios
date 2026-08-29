@@ -14,6 +14,8 @@ struct WsNewMessageEvent: Decodable {
         let sequenceNo: Int64?
         let clientMessageId: UUID?
         let attachments: [MessageAttachmentPayload]?
+        let type: String?
+        let senderDisplayName: String?
     }
 
     struct MessageAttachmentPayload: Decodable {
@@ -115,12 +117,14 @@ enum MessagingWsEventDecoder {
                 id: event.message.id,
                 conversationId: event.conversationId,
                 senderId: event.message.senderId,
+                senderDisplayName: event.message.senderDisplayName,
                 body: event.message.body,
                 clientMessageId: event.message.clientMessageId ?? UUID(),
                 createdAt: event.message.createdAt,
                 sequenceNo: event.message.sequenceNo ?? 0,
                 deliveryStatus: .sent,
-                imageAttachments: imageAttachments
+                imageAttachments: imageAttachments,
+                type: ChatMessageType(rawValue: event.message.type ?? "") ?? .user
             )
             return .newMessage(conversationId: event.conversationId, message: msg)
 

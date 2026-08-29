@@ -65,7 +65,8 @@ enum MessageTimelineGrouping {
     }
 
     static func isSameGroup(_ earlier: ChatMessage, _ later: ChatMessage) -> Bool {
-        earlier.senderId == later.senderId
+        guard !earlier.isSystemNotice, !later.isSystemNotice else { return false }
+        return earlier.senderId == later.senderId
             && later.createdAt.timeIntervalSince(earlier.createdAt) <= groupWindow
     }
 

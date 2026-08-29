@@ -1,5 +1,10 @@
 import Foundation
 
+public enum ChatMessageType: String, Equatable, Hashable, Sendable, Codable {
+    case user = "USER"
+    case groupRenamed = "GROUP_RENAMED"
+}
+
 public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable, Codable {
     public let id: UUID
     public let conversationId: UUID
@@ -14,6 +19,11 @@ public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable, Codable 
     public let deliveryStatus: MessageDeliveryStatus
     public let imageAttachments: [MessageImageAttachment]
     public let replyPreview: MessageReplyPreview?
+    public let type: ChatMessageType?
+
+    public var isSystemNotice: Bool {
+        type == .groupRenamed
+    }
 
     public init(
         id: UUID,
@@ -27,7 +37,8 @@ public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable, Codable 
         reactions: [Reaction] = [],
         deliveryStatus: MessageDeliveryStatus = .sent,
         imageAttachments: [MessageImageAttachment] = [],
-        replyPreview: MessageReplyPreview? = nil
+        replyPreview: MessageReplyPreview? = nil,
+        type: ChatMessageType? = nil
     ) {
         self.id = id
         self.conversationId = conversationId
@@ -41,6 +52,7 @@ public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable, Codable 
         self.deliveryStatus = deliveryStatus
         self.imageAttachments = imageAttachments
         self.replyPreview = replyPreview
+        self.type = type
     }
 
     public func updating(reactions: [Reaction]) -> ChatMessage {
@@ -56,7 +68,8 @@ public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable, Codable 
             reactions: reactions,
             deliveryStatus: deliveryStatus,
             imageAttachments: imageAttachments,
-            replyPreview: replyPreview
+            replyPreview: replyPreview,
+            type: type
         )
     }
 
@@ -73,7 +86,8 @@ public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable, Codable 
             reactions: reactions,
             deliveryStatus: deliveryStatus,
             imageAttachments: imageAttachments,
-            replyPreview: replyPreview
+            replyPreview: replyPreview,
+            type: type
         )
     }
 
@@ -90,7 +104,8 @@ public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable, Codable 
             reactions: reactions,
             deliveryStatus: deliveryStatus,
             imageAttachments: imageAttachments,
-            replyPreview: replyPreview
+            replyPreview: replyPreview,
+            type: type
         )
     }
 
