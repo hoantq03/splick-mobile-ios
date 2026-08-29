@@ -50,6 +50,8 @@ struct MessageBubble: View {
     private static let replyIconSize: CGFloat = 16
     /// Fits `HH:mm` with caption + monospaced digits.
     private static let timestampLabelWidth: CGFloat = MessageThreadRowLayout.accessorySlotWidth
+    /// Gap between the revealed time and the bubble (inside the slot so rest layout does not shift).
+    private static let timestampBubbleGap: CGFloat = 6
     private static let mediaCornerRadius: CGFloat = SplickTheme.CornerRadius.medium
     private static let rowSideSpacer: CGFloat = MessageThreadRowLayout.rowSideSpacer
 
@@ -107,7 +109,7 @@ struct MessageBubble: View {
     }
 
     private var threadRow: some View {
-        HStack(alignment: .messageDeliveryStatus, spacing: 0) {
+        HStack(alignment: .center, spacing: 0) {
             if isOutgoing {
                 Spacer(minLength: Self.rowSideSpacer)
                     .allowsHitTesting(false)
@@ -144,7 +146,7 @@ struct MessageBubble: View {
                     readReceiptMessageId: message.id
                 )
                 .alignmentGuide(.messageDeliveryStatus) { dimensions in
-                    dimensions[VerticalAlignment.center]
+                    dimensions[VerticalAlignment.bottom]
                 }
                 .allowsHitTesting(false)
             }
@@ -155,9 +157,6 @@ struct MessageBubble: View {
     private var incomingLeadingMeta: some View {
         timestampRevealLabel
             .fixedSize(horizontal: true, vertical: true)
-            .alignmentGuide(.messageDeliveryStatus) { dimensions in
-                dimensions[VerticalAlignment.center]
-            }
             .allowsHitTesting(false)
     }
 
@@ -165,9 +164,6 @@ struct MessageBubble: View {
     private var outgoingTrailingMeta: some View {
         timestampRevealLabel
             .fixedSize(horizontal: true, vertical: true)
-            .alignmentGuide(.messageDeliveryStatus) { dimensions in
-                dimensions[VerticalAlignment.center]
-            }
             .allowsHitTesting(false)
     }
 
@@ -190,6 +186,7 @@ struct MessageBubble: View {
             .foregroundStyle(SplickTheme.Colors.textSecondary)
             .monospacedDigit()
             .lineLimit(1)
+            .padding(isOutgoing ? .leading : .trailing, Self.timestampBubbleGap)
             .frame(
                 width: Self.timestampLabelWidth,
                 alignment: isOutgoing ? .leading : .trailing
@@ -199,9 +196,6 @@ struct MessageBubble: View {
                 alignment: isOutgoing ? .leading : .trailing
             )
             .clipped()
-            .alignmentGuide(.messageDeliveryStatus) { dimensions in
-                dimensions[VerticalAlignment.center]
-            }
             .accessibilityHidden(revealedTimestampWidth < 8)
             .allowsHitTesting(false)
     }
@@ -234,9 +228,10 @@ struct MessageBubble: View {
                 .padding(.bottom, showsReactionAccessory ? Self.reactionAccessoryOverlap : 0)
         }
         .simultaneousGesture(longPressGesture)
-        .background {
+        .overlay {
             if presentation == .threadRow {
                 MessageBubbleAnchorProbe(messageId: message.id)
+                    .allowsHitTesting(false)
             }
         }
         .messageSendFloat(isActive: isFloatingSend && presentation == .threadRow, lateralSway: floatSway)
@@ -495,7 +490,7 @@ private struct FailedMessageRetryTap: ViewModifier {
 private extension VerticalAlignment {
     struct MessageDeliveryStatusAlignment: AlignmentID {
         static func defaultValue(in context: ViewDimensions) -> CGFloat {
-            context[VerticalAlignment.center]
+            context[VerticalAlignment.bottom]
         }
     }
 
@@ -508,7 +503,7 @@ private struct MessageDeliveryStatusAnchor: ViewModifier {
     func body(content: Content) -> some View {
         if isActive {
             content.alignmentGuide(.messageDeliveryStatus) { dimensions in
-                dimensions[VerticalAlignment.center]
+                dimensions[VerticalAlignment.bottom]
             }
         } else {
             content
