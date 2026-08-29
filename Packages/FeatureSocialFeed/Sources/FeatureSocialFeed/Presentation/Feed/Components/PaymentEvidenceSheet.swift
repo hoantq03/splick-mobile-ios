@@ -2,6 +2,7 @@ import SwiftUI
 import PhotosUI
 import UIKit
 import DesignSystem
+import FeatureMedia
 import Localization
 import SplickDomain
 
@@ -361,7 +362,7 @@ struct PaymentEvidenceSheet: View {
             guard pendingAttachments.count + imported.count < maxPhotos else { break }
             guard let data = try? await item.loadTransferable(type: Data.self),
                   let image = UIImage(data: data),
-                  let jpegData = image.jpegData(compressionQuality: 0.92) else { continue }
+                  let jpegData = try? MediaImagePayload.jpegUploadData(from: image) else { continue }
             imported.append(
                 CommentSubmissionAttachment(
                     kind: .image,
