@@ -30,6 +30,8 @@ public final class NotificationListViewModel: ObservableObject {
     @Published private(set) var friendRequestOutcomes: [UUID: FriendRequestInboxOutcome] = [:]
     @Published private(set) var processingFriendRequestIds: Set<UUID> = []
     @Published var friendRequestAlertMessage: String?
+    @Published private var pendingIncomingFriendRequests: PendingIncomingFriendRequests?
+    @Published private var staleFriendRequestIds: Set<UUID> = []
 
     public init(
         fetchNotificationsUseCase: FetchNotificationsUseCaseProtocol,
@@ -121,6 +123,7 @@ public final class NotificationListViewModel: ObservableObject {
             currentPage = nextPage
             notifications.append(contentsOf: batch)
             state = .loaded(notifications)
+            await refreshPendingIncomingFriendRequests()
         } catch {
             Log.error(error, category: .notification)
         }
@@ -145,6 +148,7 @@ public final class NotificationListViewModel: ObservableObject {
             notifications = batch
             hasMorePages = batch.count >= Self.pageSize
             state = .loaded(batch)
+            await refreshPendingIncomingFriendRequests()
             Log.info(
                 "Loaded notifications",
                 category: .notification,
@@ -257,6 +261,15 @@ public final class NotificationListViewModel: ObservableObject {
         return friendRequestOutcomes[requestId]
     }
 
+    func showsFriendRequestActions(for notification: AppNotification) -> Bool {
+        FriendRequestInboxActionPolicy.shouldShowRespondActions(
+            for: notification,
+            hasStoredOutcome: friendRequestOutcome(for: notification) != nil,
+            pendingIncoming: pendingIncomingFriendRequests,
+            staleRequestIds: staleFriendRequestIds
+        )
+    }
+
     func isProcessingFriendRequest(_ notification: AppNotification) -> Bool {
         guard let requestId = notification.referenceId else { return false }
         return processingFriendRequestIds.contains(requestId)
@@ -271,10 +284,9 @@ public final class NotificationListViewModel: ObservableObject {
     }
 
     private func respondToFriendRequest(_ notification: AppNotification, accept: Bool) async {
-        guard notification.canRespondToFriendRequest,
-              let requestId = notification.referenceId,
+        guard showsFriendRequestActions(for: notification),
+              let requestId = friendRequestId(for: notification),
               friendRequestInbox != nil,
-              friendRequestOutcomes[requestId] == nil,
               !processingFriendRequestIds.contains(requestId)
         else { return }
 
@@ -288,6 +300,7 @@ public final class NotificationListViewModel: ObservableObject {
                 try await friendRequestInbox?.rejectIncomingRequest(requestId: requestId)
             }
             persistOutcome(requestId, accept ? .accepted : .rejected)
+            await refreshPendingIncomingFriendRequests()
             if !notification.isRead {
                 markLocalAsRead(notification)
                 try? await markReadUseCase.execute(id: notification.id)
@@ -295,8 +308,58 @@ public final class NotificationListViewModel: ObservableObject {
             }
         } catch {
             Log.error(error, category: .notification)
+            if isStaleFriendRequestError(error) {
+                staleFriendRequestIds.insert(requestId)
+                staleFriendRequestIds.insert(notification.id)
+                return
+            }
             friendRequestAlertMessage = languageService.localizedMessage(for: error)
         }
+    }
+
+    private func friendRequestId(for notification: AppNotification) -> UUID? {
+        if let requestId = notification.referenceId { return requestId }
+        if let actorId = notification.actorUserId {
+            return pendingIncomingFriendRequests?.requestIdByRequester[actorId]
+        }
+        return nil
+    }
+
+    private func refreshPendingIncomingFriendRequests() async {
+        guard let friendRequestInbox else { return }
+        do {
+            let pending = try await friendRequestInbox.pendingIncomingRequests()
+            pendingIncomingFriendRequests = pending
+            staleFriendRequestIds.subtract(pending.requestIds)
+        } catch {
+            Log.error(error, category: .notification)
+        }
+    }
+
+    private func isStaleFriendRequestError(_ error: Error) -> Bool {
+        let network = (error as? AppError).flatMap { appError -> NetworkError? in
+            if case .network(let networkError) = appError { return networkError }
+            return nil
+        } ?? error as? NetworkError
+
+        switch network {
+        case .notFound:
+            return true
+        case .apiError(let code, let message, _):
+            return isStaleFriendRequestText(code) || isStaleFriendRequestText(message)
+        case .unknown(let message, _):
+            return isStaleFriendRequestText(message)
+        default:
+            return isStaleFriendRequestText(error.localizedDescription)
+        }
+    }
+
+    private func isStaleFriendRequestText(_ value: String) -> Bool {
+        let normalized = value.lowercased()
+        return normalized.contains("not_found")
+            || normalized.contains("not found")
+            || normalized.contains("conflict")
+            || normalized.contains("already")
     }
 
     private func persistOutcome(_ requestId: UUID, _ outcome: FriendRequestInboxOutcome) {

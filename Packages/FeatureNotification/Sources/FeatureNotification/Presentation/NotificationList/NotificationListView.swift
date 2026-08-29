@@ -206,16 +206,14 @@ public struct NotificationListView: View {
                                 notification: notification,
                                 friendRequestOutcome: viewModel.friendRequestOutcome(for: notification),
                                 isProcessingFriendRequest: viewModel.isProcessingFriendRequest(notification),
-                                onAcceptFriendRequest: notification.canRespondToFriendRequest
-                                    && viewModel.friendRequestOutcome(for: notification) == nil
+                                onAcceptFriendRequest: viewModel.showsFriendRequestActions(for: notification)
                                     ? {
                                         Task<Void, Never> {
                                             await viewModel.acceptFriendRequest(notification)
                                         }
                                     }
                                     : nil,
-                                onRejectFriendRequest: notification.canRespondToFriendRequest
-                                    && viewModel.friendRequestOutcome(for: notification) == nil
+                                onRejectFriendRequest: viewModel.showsFriendRequestActions(for: notification)
                                     ? {
                                         Task<Void, Never> {
                                             await viewModel.rejectFriendRequest(notification)

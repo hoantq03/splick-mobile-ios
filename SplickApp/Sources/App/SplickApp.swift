@@ -24,7 +24,8 @@ struct SplickApp: App {
             },
             friendRequestInbox: FriendRequestInboxAdapter(
                 acceptUseCase: container.acceptFriendRequestUseCase,
-                rejectUseCase: container.rejectFriendRequestUseCase
+                rejectUseCase: container.rejectFriendRequestUseCase,
+                fetchIncomingUseCase: container.fetchIncomingFriendRequestsUseCase
             ),
             languageService: container.languageService
         )

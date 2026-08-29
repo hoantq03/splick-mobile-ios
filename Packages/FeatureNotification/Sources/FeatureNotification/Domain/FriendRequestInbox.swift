@@ -1,10 +1,12 @@
 import Foundation
 import Common
+import SplickDomain
 import Storage
 
 public protocol FriendRequestInboxResponding: Sendable {
     func acceptIncomingRequest(requestId: UUID) async throws
     func rejectIncomingRequest(requestId: UUID) async throws
+    func pendingIncomingRequests() async throws -> PendingIncomingFriendRequests
 }
 
 public enum FriendRequestInboxOutcome: String, Codable, Sendable {
