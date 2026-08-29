@@ -25,6 +25,8 @@ struct MessageBubble: View {
     var presentation: Presentation = .threadRow
     /// When lifting into reaction focus, cap bubble width so text reflows instead of overflowing.
     var focusMaxContentWidth: CGFloat? = nil
+    /// Measured thread row width (inside list padding). Scales bubbles with the screen.
+    var contentMaxWidth: CGFloat = MessageThreadRowLayout.mediaFallbackMaxWidth
     /// Shared list drag: negative (swipe left) reveals right/outgoing times;
     /// positive (swipe right) reveals left/incoming times.
     var timestampRevealTranslation: CGFloat = 0
@@ -48,7 +50,6 @@ struct MessageBubble: View {
     private static let replyIconSize: CGFloat = 16
     /// Fits `HH:mm` with caption + monospaced digits.
     private static let timestampLabelWidth: CGFloat = MessageThreadRowLayout.accessorySlotWidth
-    private static let mediaMaxWidth: CGFloat = 220
     private static let mediaCornerRadius: CGFloat = SplickTheme.CornerRadius.medium
     private static let rowSideSpacer: CGFloat = MessageThreadRowLayout.rowSideSpacer
 
@@ -66,7 +67,7 @@ struct MessageBubble: View {
         if presentation == .reactionFocusLift, let focusMaxContentWidth {
             return focusMaxContentWidth
         }
-        return Self.mediaMaxWidth
+        return contentMaxWidth
     }
 
     /// 1:1 with finger travel; capped once the full time label is visible.
@@ -106,7 +107,7 @@ struct MessageBubble: View {
     }
 
     private var threadRow: some View {
-        HStack(alignment: .messageDeliveryStatus, spacing: SplickTheme.Spacing.xxs) {
+        HStack(alignment: .messageDeliveryStatus, spacing: 0) {
             if isOutgoing {
                 Spacer(minLength: Self.rowSideSpacer)
                     .allowsHitTesting(false)
@@ -132,7 +133,7 @@ struct MessageBubble: View {
     }
 
     private var slidingBubbleContent: some View {
-        HStack(alignment: .messageDeliveryStatus, spacing: SplickTheme.Spacing.xxs) {
+        HStack(alignment: .messageDeliveryStatus, spacing: MessageThreadRowLayout.statusBubbleGap) {
             bubbleCluster
             if isOutgoing, message.deliveryStatus != .failed {
                 MessageStatusIndicator(
@@ -385,13 +386,13 @@ struct MessageBubble: View {
 
     @ViewBuilder
     private var messageMediaAttachments: some View {
-        let mediaWidth = min(resolvedContentMaxWidth, Self.mediaMaxWidth)
+        let mediaWidth = resolvedContentMaxWidth
         if imageAttachments.count == 1,
            let attachment = imageAttachments.first,
            attachment.url.isLikelyAnimatedImage {
             InlineGifAttachmentView(
                 url: attachment.url,
-                widthFraction: mediaWidth / max(UIScreen.main.bounds.width, 1),
+                maxWidth: mediaWidth,
                 cornerRadius: Self.mediaCornerRadius,
                 showsLoadingPlaceholder: true
             )

@@ -204,30 +204,35 @@ struct ConversationPeekOverlay: View {
             )
 
         case .loaded:
-            ScrollViewReader { proxy in
-                ScrollView(showsIndicators: false) {
-                    LazyVStack(spacing: SplickTheme.Spacing.xxs) {
-                        ForEach(MessageTimelineGrouping.buildDisplayMessages(from: messages)) { item in
-                            VStack(spacing: 0) {
-                                if item.showsTimeSeparator {
-                                    MessageTimeSeparatorLabel(date: item.message.createdAt)
+            GeometryReader { geo in
+                let rowWidth = max(geo.size.width - SplickTheme.Spacing.md * 2, 1)
+                let bubbleMax = MessageThreadRowLayout.contentMaxWidth(forRowWidth: rowWidth)
+                ScrollViewReader { proxy in
+                    ScrollView(showsIndicators: false) {
+                        LazyVStack(spacing: SplickTheme.Spacing.xxs) {
+                            ForEach(MessageTimelineGrouping.buildDisplayMessages(from: messages)) { item in
+                                VStack(spacing: 0) {
+                                    if item.showsTimeSeparator {
+                                        MessageTimeSeparatorLabel(date: item.message.createdAt)
+                                    }
+                                    previewBubble(item, contentMaxWidth: bubbleMax)
                                 }
-                                previewBubble(item)
                             }
                         }
+                        .padding(SplickTheme.Spacing.md)
                     }
-                    .padding(SplickTheme.Spacing.md)
-                }
-                .onAppear {
-                    if let lastItem = MessageTimelineGrouping.buildDisplayMessages(from: messages).last {
-                        proxy.scrollTo(lastItem.id, anchor: .bottom)
+                    .onAppear {
+                        if let lastItem = MessageTimelineGrouping.buildDisplayMessages(from: messages).last {
+                            proxy.scrollTo(lastItem.id, anchor: .bottom)
+                        }
                     }
                 }
             }
+
         }
     }
 
-    private func previewBubble(_ item: DisplayMessage) -> some View {
+    private func previewBubble(_ item: DisplayMessage, contentMaxWidth: CGFloat) -> some View {
         let isOutgoing = item.message.senderId == context.currentUserId
 
         return HStack {
@@ -240,6 +245,8 @@ struct ConversationPeekOverlay: View {
                 isOutgoing: isOutgoing,
                 currentUserId: context.currentUserId,
                 presentation: .reactionFocusLift,
+                focusMaxContentWidth: contentMaxWidth,
+                contentMaxWidth: contentMaxWidth,
                 onReact: { _ in },
                 onRetry: nil,
                 onLongPress: nil,

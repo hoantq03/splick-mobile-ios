@@ -5,6 +5,7 @@ import SplickDomain
 
 struct MessageDetailsSheet: View {
     @EnvironmentObject private var languageService: LanguageService
+    @Environment(\.tabBarScrollState) private var tabBarScrollState
 
     let message: ChatMessage
     let displayNameForUserId: (UUID) -> String
@@ -54,6 +55,9 @@ struct MessageDetailsSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .splickInteractivePopEnabled()
             .splickWideInteractivePop()
+            .onAppear {
+                tabBarScrollState?.hide(flushToBottom: true)
+            }
     }
 
     private var messageSection: some View {

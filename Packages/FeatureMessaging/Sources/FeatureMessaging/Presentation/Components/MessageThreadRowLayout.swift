@@ -5,6 +5,24 @@ import DesignSystem
 enum MessageThreadRowLayout {
     static let rowSideSpacer: CGFloat = 48
     static let accessorySlotWidth: CGFloat = 46
+    /// Matches Android `STATUS_TICK_SIZE` + `STATUS_BUBBLE_GAP`.
+    static let statusGutter: CGFloat = 24
+    static let listHorizontalPadding: CGFloat = 8
+    static let statusBubbleGap: CGFloat = 6
+    static let bubbleWidthFraction: CGFloat = 0.72
+    static let bubbleAbsoluteMaxWidth: CGFloat = 360
+    static let bubbleAbsoluteMinWidth: CGFloat = 160
+    /// Fallback when the list has not measured yet.
+    static let mediaFallbackMaxWidth: CGFloat = 220
+
+    /// Max bubble/media width for a thread **row** (already inside list padding).
+    static func contentMaxWidth(forRowWidth rowWidth: CGFloat) -> CGFloat {
+        guard rowWidth > 1 else { return mediaFallbackMaxWidth }
+        let fraction = rowWidth * bubbleWidthFraction
+        let afterGutter = rowWidth - rowSideSpacer - statusGutter
+        let floor = min(bubbleAbsoluteMinWidth, rowWidth * 0.55)
+        return max(min(min(fraction, afterGutter), bubbleAbsoluteMaxWidth), floor)
+    }
     /// Matches `MessageBubble` text bubble padding (`Spacing.sm + 2`, `Spacing.xs + 2`).
     static let bubbleHorizontalPadding: CGFloat = 14
     static let bubbleVerticalPadding: CGFloat = 10

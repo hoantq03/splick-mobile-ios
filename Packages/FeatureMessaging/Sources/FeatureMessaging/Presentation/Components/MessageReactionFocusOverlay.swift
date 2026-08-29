@@ -90,7 +90,9 @@ struct MessageReactionFocusOverlay: View {
                         Spacer(minLength: 0)
                     }
                     liftedMessage(
-                        maxContentWidth: min(columnWidth, 268),
+                        maxContentWidth: MessageThreadRowLayout.contentMaxWidth(
+                            forRowWidth: max(geo.size.width - MessageThreadRowLayout.listHorizontalPadding * 2, 120)
+                        ),
                         maxLayoutHeight: min(geo.size.height * 0.55, 420),
                         isCapped: isMessageCapped
                     )
@@ -224,7 +226,7 @@ struct MessageReactionFocusOverlay: View {
                 titleKey: .messagingDetailsAction,
                 systemImage: "info.circle"
             ) {
-                dismissCommitted(then: onDetails)
+                onDetails()
             }
         }
     }

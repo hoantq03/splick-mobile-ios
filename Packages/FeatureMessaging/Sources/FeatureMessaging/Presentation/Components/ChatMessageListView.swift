@@ -37,6 +37,7 @@ struct ChatMessageListView: View {
     @State private var replySwipeTranslation: CGFloat = 0
     /// Once a drag is classified (scroll / reply / timestamp), stick with it.
     @State private var listPanSession: ListPanSession = .undecided
+    @State private var listRowWidth: CGFloat = 0
     @State private var hasCompletedInitialBottomScroll = false
     @State private var initialOpenBottomScrollPending = true
     @State private var lastHandledScrollToBottomToken = 0
@@ -106,6 +107,7 @@ struct ChatMessageListView: View {
                                         highlightPulseToken: viewModel.scrollToMessageToken,
                                         isFloatingSend: viewModel.newlySentMessageIds.contains(item.message.clientMessageId),
                                         floatSway: viewModel.floatSway(for: item.message.clientMessageId),
+                                        contentMaxWidth: MessageThreadRowLayout.contentMaxWidth(forRowWidth: listRowWidth),
                                         timestampRevealTranslation: timestampRevealTranslation,
                                         replySwipeTranslation: replySwipeMessageId == item.message.id
                                             ? replySwipeTranslation
@@ -169,10 +171,21 @@ struct ChatMessageListView: View {
                             }
                             .onDisappear { viewModel.isNearBottom = false }
                     }
-                    .padding(.horizontal, SplickTheme.Spacing.md)
+                    .padding(.horizontal, MessageThreadRowLayout.listHorizontalPadding)
                     .padding(.top, SplickTheme.Spacing.sm)
                     .padding(.bottom, SplickTheme.Spacing.sm + bottomOverlayInset)
                     .frame(maxWidth: .infinity)
+                    .background {
+                        GeometryReader { geo in
+                            Color.clear.preference(key: ChatListRowWidthKey.self, value: geo.size.width)
+                        }
+                    }
+                    .onPreferenceChange(ChatListRowWidthKey.self) { width in
+                        let rowWidth = max(width - MessageThreadRowLayout.listHorizontalPadding * 2, 1)
+                        if abs(rowWidth - listRowWidth) > 0.5 {
+                            listRowWidth = rowWidth
+                        }
+                    }
                     .modifier(ChatThreadScrollTargetLayoutModifier())
                     .onAppear { prefetchRecentThreadMedia() }
                     .onChange(of: messages.suffix(12).map(\.id)) { _ in
@@ -395,7 +408,7 @@ struct ChatMessageListView: View {
         lastAnchoredMessageClientId = viewModel.messages.last?.clientMessageId
     }
 
-    private func handleListPanChanged(start: CGPoint, translation: CGSize) {
+    private func handleListPanChanged(globalStart: CGPoint, localStart: CGPoint, listWidth: CGFloat, translation: CGSize) {
         let horizontal = translation.width
         let vertical = abs(translation.height)
 
@@ -412,15 +425,14 @@ struct ChatMessageListView: View {
             guard abs(horizontal) > vertical * 0.85 else { return }
 
             // Leading edge: UIKit interactive pop owns this band — never classify list pans here.
-            if start.x < Self.navigationBackEdgeWidth {
+            if localStart.x < Self.navigationBackEdgeWidth {
                 return
             }
 
-            let inLeadingTimestampBand = start.x < Self.navigationBackEdgeWidth + Self.timestampEdgeBandWidth
-            let screenWidth = UIScreen.main.bounds.width
-            let inTrailingTimestampBand = start.x > screenWidth - Self.navigationBackEdgeWidth - Self.timestampEdgeBandWidth
+            let inLeadingTimestampBand = localStart.x < Self.navigationBackEdgeWidth + Self.timestampEdgeBandWidth
+            let inTrailingTimestampBand = localStart.x > listWidth - Self.navigationBackEdgeWidth - Self.timestampEdgeBandWidth
 
-            if let hit = messageHit(at: start) {
+            if let hit = messageHit(at: globalStart) {
                 let inReplyDirection = hit.isOutgoing
                     ? horizontal < -4
                     : horizontal > 4
@@ -743,11 +755,18 @@ struct ChatMessageListView: View {
     }
 }
 
+private struct ChatListRowWidthKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 /// Horizontal reply / timestamp pan that never claims the leading interactive-pop strip.
 private struct ChatListHorizontalPanInstaller: UIViewRepresentable {
     var isEnabled: Bool
     var edgeExclusionWidth: CGFloat
-    var onChanged: (CGPoint, CGSize) -> Void
+    var onChanged: (_ globalStart: CGPoint, _ localStart: CGPoint, _ listWidth: CGFloat, _ translation: CGSize) -> Void
     var onEnded: (CGSize) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -778,11 +797,12 @@ private struct ChatListHorizontalPanInstaller: UIViewRepresentable {
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         var edgeExclusionWidth: CGFloat = 44
         var isEnabled = true
-        var onChanged: ((CGPoint, CGSize) -> Void)?
+        var onChanged: ((_ globalStart: CGPoint, _ localStart: CGPoint, _ listWidth: CGFloat, _ translation: CGSize) -> Void)?
         var onEnded: ((CGSize) -> Void)?
 
         private weak var hostScrollView: UIScrollView?
         private var startLocation: CGPoint = .zero
+        private var startLocal: CGPoint = .zero
         private lazy var pan: UIPanGestureRecognizer = {
             let gesture = UIPanGestureRecognizer(target: self, action: #selector(handlePan))
             gesture.maximumNumberOfTouches = 1
@@ -814,9 +834,10 @@ private struct ChatListHorizontalPanInstaller: UIViewRepresentable {
             switch gesture.state {
             case .began:
                 startLocation = gesture.location(in: nil)
-                onChanged?(startLocation, size)
+                startLocal = gesture.location(in: view)
+                onChanged?(startLocation, startLocal, view.bounds.width, size)
             case .changed:
-                onChanged?(startLocation, size)
+                onChanged?(startLocation, startLocal, view.bounds.width, size)
             case .ended, .cancelled, .failed:
                 onEnded?(size)
             default:
