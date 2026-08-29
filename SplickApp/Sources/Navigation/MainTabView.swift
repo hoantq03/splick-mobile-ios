@@ -55,6 +55,7 @@ struct MainTabView: View {
         appState.selectedTab != .camera
             && appState.linkedPostPresentation == nil
             && (!appState.showNotifications || notificationIsDismissing)
+            && !(appState.selectedTab == .messages && appState.isMessagingThreadPresented)
     }
 
     var body: some View {
@@ -361,7 +362,12 @@ struct MainTabView: View {
             try? await Task.sleep(for: .milliseconds(MainTabPagerMotion.settleMilliseconds))
             guard appState.selectedTab == tab else { return }
             settledPagerTab = tab
-            tabBarChrome.tabBar.reset()
+            if tab == .messages,
+               appState.isMessagingThreadPresented || appState.pendingMessagingNavigation != nil {
+                tabBarChrome.tabBar.hide(flushToBottom: true)
+            } else {
+                tabBarChrome.tabBar.reset()
+            }
         }
         // Badge counts: startup apply + 30s polling + force refresh on mutations.
         // Do not refresh on every tab select — that races and floods /badge-counts.
@@ -726,6 +732,18 @@ struct ProfileSettingsView: View {
                                     .fill(Color.black.opacity(0.4))
                                 ProgressView()
                                     .tint(.white)
+                            }
+                        }
+                        .overlay(alignment: .bottomTrailing) {
+                            if !isUpdatingAvatar {
+                                Circle()
+                                    .fill(SplickTheme.Colors.success)
+                                    .frame(width: 18, height: 18)
+                                    .overlay {
+                                        Circle()
+                                            .strokeBorder(SplickTheme.Colors.background, lineWidth: 2)
+                                    }
+                                    .offset(x: 2, y: 2)
                             }
                         }
                 }

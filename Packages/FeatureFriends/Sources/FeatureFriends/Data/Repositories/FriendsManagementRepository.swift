@@ -70,7 +70,11 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
             SocialEndpoint.getUserProfile(userId: userId)
         )
         if let state = FriendsMapper.presenceState(from: response), let presenceStore {
-            await presenceStore.apply(state)
+            await presenceStore.mergeFromPeer(
+                userId: state.userId,
+                isOnline: state.isOnline,
+                lastSeenAt: state.lastSeenAt
+            )
         }
         let profile = FriendsMapper.toPublicUserProfile(response)
         if profile.friendStatus == .friends, let friendDisplayNameStore {
@@ -275,8 +279,13 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
     private func syncPresence(from friends: [FriendResponseDTO]) async {
         guard let presenceStore else { return }
         let states = friends.compactMap(FriendsMapper.presenceState(from:))
-        guard !states.isEmpty else { return }
-        await presenceStore.applyBulk(states)
+        for state in states {
+            await presenceStore.mergeFromPeer(
+                userId: state.userId,
+                isOnline: state.isOnline,
+                lastSeenAt: state.lastSeenAt
+            )
+        }
     }
 
     private func syncFriendDisplayNames(_ friends: [UserSummary]) async {

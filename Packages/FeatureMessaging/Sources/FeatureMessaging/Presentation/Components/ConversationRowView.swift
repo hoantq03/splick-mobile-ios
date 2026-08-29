@@ -29,6 +29,11 @@ struct ConversationRowView: View {
                     userId: peer.userId,
                     showOnlineIndicator: PresenceDisplayPolicy.shouldShowOnlineIndicator(
                         isOnline: resolvedPresence(for: peer).isOnline
+                    ),
+                    lastSeenLabel: PresenceDisplayPolicy.compactLastSeenLabel(
+                        isOnline: resolvedPresence(for: peer).isOnline,
+                        lastSeenAt: resolvedPresence(for: peer).lastSeenAt,
+                        appLocale: languageService.locale
                     )
                 )
             }
@@ -56,10 +61,6 @@ struct ConversationRowView: View {
                     Group {
                         if let inboxTyping {
                             inboxTypingPreview(inboxTyping)
-                        } else if let presenceText = peerPresenceSubtitle {
-                            Text(presenceText)
-                                .font(SplickTheme.Typography.callout)
-                                .foregroundStyle(SplickTheme.Colors.textTertiary)
                         } else {
                             Text(lastMessagePreview)
                                 .font(SplickTheme.Typography.callout)
@@ -160,15 +161,5 @@ struct ConversationRowView: View {
         let isOnline = (stored?.isOnline ?? false) || (peer.isOnline ?? false)
         let lastSeenAt = stored?.lastSeenAt ?? peer.lastSeenAt
         return (isOnline, lastSeenAt)
-    }
-
-    private var peerPresenceSubtitle: String? {
-        guard !conversation.isGroup, let peer = conversation.peer else { return nil }
-        let presence = resolvedPresence(for: peer)
-        return PresenceDisplayPolicy.lastSeenText(
-            isOnline: presence.isOnline,
-            lastSeenAt: presence.lastSeenAt,
-            appLocale: languageService.locale
-        )
     }
 }

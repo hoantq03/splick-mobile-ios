@@ -36,11 +36,18 @@ public struct FriendUserProfileView: View {
                         AvatarWithPresenceView(
                             imageURL: viewModel.user.avatarURL,
                             name: viewModel.user.preferredName,
-                            size: .large,
+                            size: .profile,
                             userId: viewModel.user.id,
                             showOnlineIndicator: PresenceDisplayPolicy.shouldShowOnlineIndicator(
-                                isOnline: resolvedPresence.isOnline
-                            )
+                                isOnline: viewModel.isOwnProfile || resolvedPresence.isOnline
+                            ),
+                            lastSeenLabel: viewModel.isOwnProfile
+                                ? nil
+                                : PresenceDisplayPolicy.compactLastSeenLabel(
+                                    isOnline: resolvedPresence.isOnline,
+                                    lastSeenAt: resolvedPresence.lastSeenAt,
+                                    appLocale: languageService.locale
+                                )
                         )
                     }
                     .buttonStyle(.plain)
@@ -58,11 +65,6 @@ public struct FriendUserProfileView: View {
                         Text("@\(viewModel.user.username)")
                             .font(SplickTheme.Typography.callout)
                             .foregroundStyle(SplickTheme.Colors.textSecondary)
-                        if let presenceText = profilePresenceSubtitle {
-                            Text(presenceText)
-                                .font(SplickTheme.Typography.caption)
-                                .foregroundStyle(SplickTheme.Colors.textTertiary)
-                        }
                     }
 
                     if viewModel.isBotProfile {
@@ -526,18 +528,10 @@ public struct FriendUserProfileView: View {
     }
 
     private var resolvedPresence: (isOnline: Bool, lastSeenAt: Date?) {
-        if let state = presenceStore.state(for: viewModel.user.id) {
-            return (state.isOnline, state.lastSeenAt)
-        }
-        return (false, nil)
-    }
-
-    private var profilePresenceSubtitle: String? {
-        guard !viewModel.isBotProfile else { return nil }
-        return PresenceDisplayPolicy.lastSeenText(
-            isOnline: resolvedPresence.isOnline,
-            lastSeenAt: resolvedPresence.lastSeenAt,
-            appLocale: languageService.locale
-        )
+        _ = presenceStore.states
+        let stored = presenceStore.state(for: viewModel.user.id)
+        let isOnline = (stored?.isOnline == true) || viewModel.profileIsOnline
+        let lastSeenAt = stored?.lastSeenAt ?? viewModel.profileLastSeenAt
+        return (isOnline, lastSeenAt)
     }
 }

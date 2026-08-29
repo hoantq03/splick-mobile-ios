@@ -61,6 +61,11 @@ struct FriendRowView: View {
                 userId: user.id,
                 showOnlineIndicator: PresenceDisplayPolicy.shouldShowOnlineIndicator(
                     isOnline: resolvedPresence.isOnline
+                ),
+                lastSeenLabel: PresenceDisplayPolicy.compactLastSeenLabel(
+                    isOnline: resolvedPresence.isOnline,
+                    lastSeenAt: resolvedPresence.lastSeenAt,
+                    appLocale: languageService.locale
                 )
             )
 
@@ -68,11 +73,6 @@ struct FriendRowView: View {
                 Text(user.dualDisplayName)
                     .font(SplickTheme.Typography.headline)
                     .foregroundStyle(SplickTheme.Colors.textPrimary)
-                if let presenceText = presenceSubtitle {
-                    Text(presenceText)
-                        .font(SplickTheme.Typography.caption)
-                        .foregroundStyle(SplickTheme.Colors.textTertiary)
-                }
                 Text("@\(user.username)")
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
@@ -85,14 +85,6 @@ struct FriendRowView: View {
             return (state.isOnline, state.lastSeenAt)
         }
         return (false, nil)
-    }
-
-    private var presenceSubtitle: String? {
-        PresenceDisplayPolicy.lastSeenText(
-            isOnline: resolvedPresence.isOnline,
-            lastSeenAt: resolvedPresence.lastSeenAt,
-            appLocale: languageService.locale
-        )
     }
 
     @ViewBuilder

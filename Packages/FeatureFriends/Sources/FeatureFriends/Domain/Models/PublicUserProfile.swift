@@ -17,10 +17,20 @@ public struct PublicUserProfile: Equatable, Sendable {
     public let user: UserSummary
     public let friendStatus: FriendRelationStatus
     public let stats: UserProfileStats
+    public let isOnline: Bool
+    public let lastSeenAt: Date?
 
-    public init(user: UserSummary, friendStatus: FriendRelationStatus, stats: UserProfileStats) {
+    public init(
+        user: UserSummary,
+        friendStatus: FriendRelationStatus,
+        stats: UserProfileStats,
+        isOnline: Bool = false,
+        lastSeenAt: Date? = nil
+    ) {
         self.user = user
         self.friendStatus = friendStatus
         self.stats = stats
+        self.isOnline = isOnline
+        self.lastSeenAt = lastSeenAt
     }
 }

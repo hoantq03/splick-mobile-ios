@@ -80,16 +80,9 @@ public struct ChatThreadView: View {
                 .zIndex(20)
                 .transition(.opacity)
             }
-            NavigationLink(
-                destination: messageDetailsDestination,
-                isActive: $isDetailsPresented
-            ) {
-                EmptyView()
-            }
-            .frame(width: 0, height: 0)
-            .opacity(0)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
+        }
+        .navigationDestination(isPresented: $isDetailsPresented) {
+            messageDetailsDestination
         }
         .background(SplickTheme.Colors.background.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
@@ -107,6 +100,11 @@ public struct ChatThreadView: View {
                                 userId: peer.userId,
                                 showOnlineIndicator: PresenceDisplayPolicy.shouldShowOnlineIndicator(
                                     isOnline: resolvedPresence(for: peer).isOnline
+                                ),
+                                lastSeenLabel: PresenceDisplayPolicy.compactLastSeenLabel(
+                                    isOnline: resolvedPresence(for: peer).isOnline,
+                                    lastSeenAt: resolvedPresence(for: peer).lastSeenAt,
+                                    appLocale: languageService.locale
                                 )
                             )
                         } else {
@@ -124,12 +122,6 @@ public struct ChatThreadView: View {
                                 .foregroundStyle(SplickTheme.Colors.textPrimary)
                                 .lineLimit(1)
                                 .id(displayConversation?.groupName ?? navigationTitle)
-                            if let subtitle = headerPresenceSubtitle {
-                                Text(subtitle)
-                                    .font(SplickTheme.Typography.caption)
-                                    .foregroundStyle(SplickTheme.Colors.textTertiary)
-                                    .lineLimit(1)
-                            }
                         }
                     }
                 }
@@ -273,7 +265,16 @@ public struct ChatThreadView: View {
         }
         .onDisappear {
             viewModel.stopLocalTyping()
-            tabBarScrollState?.show()
+            // Inbox owns showing the tab bar when the stack is empty. Revealing it
+            // here races when a notification replaces this thread with another.
+        }
+        .onChange(of: isDetailsPresented) { presented in
+            if presented {
+                tabBarScrollState?.hide(flushToBottom: true)
+            } else {
+                detailsMessage = nil
+                tabBarScrollState?.hide(flushToBottom: true)
+            }
         }
         .onChange(of: inputText) { newValue in
             viewModel.onComposerTextChanged(newValue)
@@ -304,7 +305,9 @@ public struct ChatThreadView: View {
             messageArea
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .safeAreaInset(edge: .bottom, spacing: 0) {
-                    bottomBar
+                    if !isDetailsPresented {
+                        bottomBar
+                    }
                 }
         }
     }
@@ -650,6 +653,7 @@ public struct ChatThreadView: View {
             )
             .splickInteractivePopEnabled()
             .splickWideInteractivePop()
+            .splickFastPageSlide()
         } else {
             Color.clear
         }
@@ -787,15 +791,5 @@ public struct ChatThreadView: View {
         let isOnline = (stored?.isOnline ?? false) || (peer.isOnline ?? false)
         let lastSeenAt = stored?.lastSeenAt ?? peer.lastSeenAt
         return (isOnline, lastSeenAt)
-    }
-
-    private var headerPresenceSubtitle: String? {
-        guard let peer, displayConversation?.isGroup != true else { return nil }
-        let presence = resolvedPresence(for: peer)
-        return PresenceDisplayPolicy.lastSeenText(
-            isOnline: presence.isOnline,
-            lastSeenAt: presence.lastSeenAt,
-            appLocale: languageService.locale
-        )
     }
 }

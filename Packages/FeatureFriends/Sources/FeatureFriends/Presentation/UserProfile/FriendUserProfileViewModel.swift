@@ -24,6 +24,8 @@ public final class FriendUserProfileViewModel: ObservableObject {
     @Published private(set) var isLoadingPosts = false
     @Published private(set) var isLoadingMorePosts = false
     @Published private(set) var postsError: String?
+    @Published private(set) var profileIsOnline = false
+    @Published private(set) var profileLastSeenAt: Date?
 
     public var mode: FriendProfileMode { friendStatus.profileMode }
     public var isBotProfile: Bool { SplickBot.isBot(user.id) }
@@ -147,6 +149,8 @@ public final class FriendUserProfileViewModel: ObservableObject {
             )
             friendStatus = .none
             stats = nil
+            profileIsOnline = false
+            profileLastSeenAt = nil
             profileError = nil
             paymentProfile = nil
             friendPaymentNotConfigured = false
@@ -165,6 +169,8 @@ public final class FriendUserProfileViewModel: ObservableObject {
             user = profile.user
             friendStatus = profile.friendStatus
             stats = profile.stats
+            profileIsOnline = profile.isOnline
+            profileLastSeenAt = profile.lastSeenAt
             nicknameDraft = profile.user.displayName
             await loadPaymentProfileIfFriend()
         } catch {

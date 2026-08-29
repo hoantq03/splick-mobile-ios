@@ -183,6 +183,11 @@ struct PostCardView: View, Equatable {
                     userId: post.author.id,
                     showOnlineIndicator: PresenceDisplayPolicy.shouldShowOnlineIndicator(
                         isOnline: resolvedAuthorPresence.isOnline
+                    ),
+                    lastSeenLabel: PresenceDisplayPolicy.compactLastSeenLabel(
+                        isOnline: resolvedAuthorPresence.isOnline,
+                        lastSeenAt: resolvedAuthorPresence.lastSeenAt,
+                        appLocale: languageService.locale
                     )
                 )
             }
