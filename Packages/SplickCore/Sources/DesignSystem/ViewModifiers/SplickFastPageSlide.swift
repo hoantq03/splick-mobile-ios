@@ -35,6 +35,13 @@ extension View {
     public func splickInteractivePopEnabled() -> some View {
         background(SplickInteractivePopEnabler())
     }
+
+    /// Widens interactive pop to the leading quarter of the screen (same as Android post detail).
+    /// The system edge gesture stays in place so iOS 18 zoom still tracks the finger; a second
+    /// pan on the navigation view covers the rest of the band and drives the same transition.
+    public func splickWideInteractivePop(fraction: CGFloat = 0.25) -> some View {
+        background(SplickWideInteractivePopInstaller(fraction: fraction))
+    }
 }
 
 private struct SplickInteractivePopEnabler: UIViewControllerRepresentable {
@@ -80,6 +87,148 @@ private final class SplickInteractivePopHostController: UIViewController {
             responder = current.next
         }
         return nil
+    }
+}
+
+/// Installs a leading-quarter pan on `UINavigationController.view` without stealing edge hits.
+/// The overlay approach blocked `interactivePopGestureRecognizer`, so zoom only popped on lift.
+private struct SplickWideInteractivePopInstaller: UIViewControllerRepresentable {
+    var fraction: CGFloat
+
+    func makeUIViewController(context: Context) -> SplickWideInteractivePopHostController {
+        let host = SplickWideInteractivePopHostController()
+        host.fraction = fraction
+        return host
+    }
+
+    func updateUIViewController(_ uiViewController: SplickWideInteractivePopHostController, context: Context) {
+        uiViewController.fraction = fraction
+        uiViewController.installIfNeeded()
+    }
+}
+
+private final class SplickWideInteractivePopHostController: UIViewController {
+    var fraction: CGFloat = 0.25
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        installIfNeeded()
+    }
+
+    override func didMove(toParent parent: UIViewController?) {
+        super.didMove(toParent: parent)
+        installIfNeeded()
+    }
+
+    func installIfNeeded() {
+        guard let nav = navigationController ?? ancestorNavigationController() else { return }
+        SplickWidePopGesture.install(on: nav, fraction: fraction)
+    }
+
+    private func ancestorNavigationController() -> UINavigationController? {
+        var responder: UIResponder? = view
+        while let current = responder {
+            if let nav = current as? UINavigationController {
+                return nav
+            }
+            responder = current.next
+        }
+        return nil
+    }
+}
+
+/// One pan per navigation controller. Waits for the system edge pop to fail, then drives
+/// the same `handleNavigationTransition:` so zoom stays percent-driven under the finger.
+private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate {
+    private static var associatedKey: UInt8 = 0
+
+    private weak var navigationController: UINavigationController?
+    private var pan: UIPanGestureRecognizer?
+    var fraction: CGFloat = 0.25
+
+    static func install(on nav: UINavigationController, fraction: CGFloat) {
+        let owner: SplickWidePopGesture
+        if let existing = objc_getAssociatedObject(nav, &associatedKey) as? SplickWidePopGesture {
+            owner = existing
+        } else {
+            owner = SplickWidePopGesture()
+            objc_setAssociatedObject(nav, &associatedKey, owner, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
+        owner.fraction = fraction
+        owner.attach(to: nav)
+    }
+
+    private func attach(to nav: UINavigationController) {
+        navigationController = nav
+        guard let systemPop = nav.interactivePopGestureRecognizer else { return }
+
+        if pan == nil {
+            let gesture = UIPanGestureRecognizer()
+            gesture.maximumNumberOfTouches = 1
+            gesture.delegate = self
+            if let targets = systemPop.value(forKey: "targets") {
+                gesture.setValue(targets, forKey: "targets")
+            } else {
+                let selector = NSSelectorFromString("handleNavigationTransition:")
+                if let transition = systemPop.delegate, transition.responds(to: selector) {
+                    gesture.addTarget(transition, action: selector)
+                }
+            }
+            nav.view.addGestureRecognizer(gesture)
+            pan = gesture
+        }
+
+        let canPop = nav.viewControllers.count > 1
+        systemPop.isEnabled = canPop
+        pan?.isEnabled = canPop
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        guard let nav = navigationController, nav.viewControllers.count > 1, let view = nav.view else {
+            return false
+        }
+        let point = touch.location(in: view)
+        if point.y < view.safeAreaInsets.top + 44 {
+            return false
+        }
+        let band = view.bounds.width * fraction
+        if view.effectiveUserInterfaceLayoutDirection == .rightToLeft {
+            return point.x >= view.bounds.width - band
+        }
+        return point.x <= band
+    }
+
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard let pan = gestureRecognizer as? UIPanGestureRecognizer,
+              let nav = navigationController,
+              let view = nav.view,
+              nav.viewControllers.count > 1 else {
+            return false
+        }
+        let translation = pan.translation(in: view)
+        let rtl = view.effectiveUserInterfaceLayoutDirection == .rightToLeft
+        let outward = rtl ? translation.x < 0 : translation.x > 0
+        return outward && abs(translation.x) > abs(translation.y)
+    }
+
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRequireFailureOf otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        otherGestureRecognizer === navigationController?.interactivePopGestureRecognizer
+    }
+
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        false
     }
 }
 
