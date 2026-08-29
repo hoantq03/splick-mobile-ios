@@ -67,6 +67,7 @@ public final class ConversationListViewModel: ObservableObject {
     private var debouncedRefreshTask: Task<Void, Never>?
     private var remoteTypingTimeouts: [String: Task<Void, Never>] = [:]
     private var currentPage = 0
+    private var pendingDeleteConversationId: UUID?
 
     public init(
         fetchConversationsUseCase: FetchConversationsUseCase,
@@ -157,18 +158,33 @@ public final class ConversationListViewModel: ObservableObject {
     }
 
     public func deletePeekedConversation() async {
-        guard let conversation = peekConversation else { return }
+        let conversationId = peekConversation?.id ?? pendingDeleteConversationId
+        guard let conversationId else { return }
+        pendingDeleteConversationId = nil
         do {
-            try await repository.deleteConversation(conversationId: conversation.id)
-            removeConversationFromInbox(conversation.id)
+            try await repository.deleteConversation(conversationId: conversationId)
+            hideConversationLocally(conversationId: conversationId)
             dismissPeek()
         } catch {
             Log.error(
                 error,
                 category: .network,
-                metadata: ["action": "deletePeekedConversation", "conversationId": conversation.id.uuidString]
+                metadata: ["action": "deletePeekedConversation", "conversationId": conversationId.uuidString]
             )
         }
+    }
+
+    public func prepareDeleteFromPeek() {
+        pendingDeleteConversationId = peekConversation?.id
+        dismissPeek()
+    }
+
+    public func cancelPendingDelete() {
+        pendingDeleteConversationId = nil
+    }
+
+    public func hideConversationLocally(conversationId: UUID) {
+        removeConversationFromInbox(conversationId)
     }
 
     public func toggleFilter(_ filter: InboxFilter) {
@@ -312,6 +328,18 @@ public final class ConversationListViewModel: ObservableObject {
         withTransaction(transaction) {
             state = .loaded(items)
             unreadConversationCount = max(0, unreadConversationCount - 1)
+        }
+    }
+
+    public func upsertConversation(_ updated: Conversation) {
+        guard case .loaded(var items) = state,
+              let index = items.firstIndex(where: { $0.id == updated.id }) else { return }
+
+        items[index] = updated
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            state = .loaded(items)
         }
     }
 

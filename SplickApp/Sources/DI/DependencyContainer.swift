@@ -764,7 +764,31 @@ final class DependencyContainer: ObservableObject {
             networkPathMonitor: networkPathMonitor,
             onConversationRead: { [weak self] conversationId in
                 await self?.handleConversationRead(conversationId: conversationId)
+            },
+            onConversationUpdated: { [weak self] conversation in
+                self?.handleConversationUpdated(conversation)
+            },
+            onConversationDeleted: { [weak self] conversationId in
+                self?.handleConversationDeleted(conversationId)
             }
+        )
+    }
+
+    @MainActor
+    private func handleConversationUpdated(_ conversation: Conversation) {
+        conversationListViewModel.upsertConversation(conversation)
+        widgetSyncBridge.syncConversations(
+            conversationListViewModel.conversations,
+            totalUnreadCount: conversationListViewModel.unreadConversationCount
+        )
+    }
+
+    @MainActor
+    private func handleConversationDeleted(_ conversationId: UUID) {
+        conversationListViewModel.hideConversationLocally(conversationId: conversationId)
+        widgetSyncBridge.syncConversations(
+            conversationListViewModel.conversations,
+            totalUnreadCount: conversationListViewModel.unreadConversationCount
         )
     }
 
@@ -820,31 +844,22 @@ final class DependencyContainer: ObservableObject {
     }
 
     func makeChatGroupManagementActions() -> ChatGroupManagementActions {
-        let fetchMembers = fetchGroupMembersUseCase
         let uploadAvatar = uploadGroupAvatarUseCase
-        let updateAvatar = updateGroupAvatarUseCase
+        let updateSocialAvatar = updateGroupAvatarUseCase
+        let messaging = messagingRepository
 
         return ChatGroupManagementActions(
             fetchMembers: { groupId in
-                let members = try await fetchMembers.execute(groupId: groupId, status: "ACTIVE")
-                return members.map { member in
-                    GroupChatMember(
-                        id: member.id,
-                        userId: member.userId,
-                        username: member.username,
-                        displayName: member.displayName,
-                        avatarURL: member.avatarURL,
-                        isOwner: member.isOwner
-                    )
-                }
+                try await messaging.listGroupMembers(groupId: groupId)
             },
             updateGroupAvatar: { groupId, imageData in
                 let upload = try await uploadAvatar.execute(imageData: imageData, groupId: groupId)
-                let updated = try await updateAvatar.execute(
-                    groupId: groupId,
-                    avatarURL: upload.url.absoluteString
-                )
-                return updated.avatarURL?.absoluteString ?? upload.url.absoluteString
+                let avatarURL = upload.url.absoluteString
+                let updated = try await messaging.updateGroupAvatar(groupId: groupId, avatarUrl: avatarURL)
+                Task {
+                    try? await updateSocialAvatar.execute(groupId: groupId, avatarURL: avatarURL)
+                }
+                return updated.groupAvatarUrl ?? avatarURL
             }
         )
     }

@@ -103,6 +103,14 @@ struct ConversationRowView: View {
 
     private var lastMessagePreview: String {
         guard let lastMessage = conversation.lastMessage else { return "" }
+        if lastMessage.isSystemNotice {
+            return GroupSystemNoticeCopy.text(
+                message: lastMessage,
+                currentUserId: currentUserSummary?.id,
+                actorName: lastMessage.senderDisplayName,
+                languageService: languageService
+            )
+        }
 
         let sender = ConversationPreviewFormatter.senderLabel(
             for: lastMessage,

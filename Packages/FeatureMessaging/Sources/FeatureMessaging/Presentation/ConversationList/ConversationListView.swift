@@ -156,7 +156,9 @@ public struct ConversationListView: View {
             Button(languageService.text(.messagingChatDeleteConversation), role: .destructive) {
                 Task { await viewModel.deletePeekedConversation() }
             }
-            Button(languageService.text(.commonCancel), role: .cancel) {}
+            Button(languageService.text(.commonCancel), role: .cancel) {
+                viewModel.cancelPendingDelete()
+            }
         } message: {
             Text(languageService.text(.messagingChatDeleteConversationConfirmMessage))
         }
@@ -433,7 +435,11 @@ public struct ConversationListView: View {
                             openConversationFromPeek(conversation)
                         },
                         onDelete: {
-                            confirmDeletePeekedConversation = true
+                            viewModel.prepareDeleteFromPeek()
+                            Task { @MainActor in
+                                try? await Task.sleep(nanoseconds: 200_000_000)
+                                confirmDeletePeekedConversation = true
+                            }
                         },
                         onMute: {
                             peekComingSoonTitle = languageService.text(.messagingChatMuteNotifications)
