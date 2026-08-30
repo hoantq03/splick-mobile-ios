@@ -213,6 +213,7 @@ struct PostCardView: View, Equatable {
     }
 
     private var resolvedAuthorPresence: (isOnline: Bool, lastSeenAt: Date?) {
+        _ = presenceStore.states
         if let state = presenceStore.state(for: post.author.id) {
             return (state.isOnline, state.lastSeenAt)
         }

@@ -46,7 +46,7 @@ enum FriendsMapper {
     }
 
     static func presenceState(from dto: FriendResponseDTO) -> UserPresenceState? {
-        guard dto.online == true || dto.lastSeenAt != nil else { return nil }
+        guard dto.online != nil || dto.lastSeenAt != nil else { return nil }
         return UserPresenceState(
             userId: dto.friendId,
             isOnline: dto.online == true,
@@ -55,7 +55,7 @@ enum FriendsMapper {
     }
 
     static func presenceState(from dto: UserProfileResponseDTO) -> UserPresenceState? {
-        guard dto.online == true || dto.lastSeenAt != nil else { return nil }
+        guard dto.online != nil || dto.lastSeenAt != nil else { return nil }
         return UserPresenceState(
             userId: dto.userId,
             isOnline: dto.online == true,

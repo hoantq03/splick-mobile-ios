@@ -240,3 +240,17 @@ struct GroupQRResponseDTO: Decodable {
     let issuedAt: Date
     let expiresAt: Date
 }
+
+struct BulkPresenceRequestDTO: Encodable {
+    let userIds: [UUID]
+}
+
+struct PresenceSnapshotDTO: Decodable {
+    let userId: UUID
+    let online: Bool
+    let lastSeenAt: Date?
+}
+
+struct BulkPresenceResponseDTO: Decodable {
+    let items: [PresenceSnapshotDTO]
+}

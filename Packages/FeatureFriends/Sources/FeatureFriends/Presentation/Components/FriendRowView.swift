@@ -81,6 +81,7 @@ struct FriendRowView: View {
     }
 
     private var resolvedPresence: (isOnline: Bool, lastSeenAt: Date?) {
+        _ = presenceStore.states
         if let state = presenceStore.state(for: user.id) {
             return (state.isOnline, state.lastSeenAt)
         }

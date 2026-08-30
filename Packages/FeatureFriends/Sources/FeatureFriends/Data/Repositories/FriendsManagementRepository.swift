@@ -9,6 +9,7 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
     private let presenceStore: PresenceStore?
     private let friendDisplayNameStore: FriendDisplayNameStore?
     private static let maxCachedFriends = 200
+    private static let presenceBulkLimit = 100
 
     public init(
         apiClient: APIClientProtocol,
@@ -28,6 +29,7 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
             return (response.content, response.page)
         }
         await syncPresence(from: friends)
+        await hydrateMessagingPresence(userIds: friends.map(\.friendId))
         let mapped = friends.map(FriendsMapper.toUserSummary)
         await syncFriendDisplayNames(mapped)
         return mapped
@@ -38,6 +40,7 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
             SocialEndpoint.listFriends(page: page, size: size)
         )
         await syncPresence(from: response.content)
+        await hydrateMessagingPresence(userIds: response.content.map(\.friendId))
         let friends = response.content.map(FriendsMapper.toUserSummary)
         await syncFriendDisplayNames(friends)
         let hasMore = page + 1 < max(response.page.totalPages, 1) && !response.content.isEmpty
@@ -70,12 +73,9 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
             SocialEndpoint.getUserProfile(userId: userId)
         )
         if let state = FriendsMapper.presenceState(from: response), let presenceStore {
-            await presenceStore.mergeFromPeer(
-                userId: state.userId,
-                isOnline: state.isOnline,
-                lastSeenAt: state.lastSeenAt
-            )
+            await presenceStore.apply(state)
         }
+        await hydrateMessagingPresence(userIds: [userId])
         let profile = FriendsMapper.toPublicUserProfile(response)
         if profile.friendStatus == .friends, let friendDisplayNameStore {
             await friendDisplayNameStore.upsert(from: profile.user)
@@ -279,12 +279,31 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
     private func syncPresence(from friends: [FriendResponseDTO]) async {
         guard let presenceStore else { return }
         let states = friends.compactMap(FriendsMapper.presenceState(from:))
-        for state in states {
-            await presenceStore.mergeFromPeer(
-                userId: state.userId,
-                isOnline: state.isOnline,
-                lastSeenAt: state.lastSeenAt
-            )
+        await presenceStore.applyBulk(states)
+    }
+
+    private func hydrateMessagingPresence(userIds: [UUID]) async {
+        guard let presenceStore, !userIds.isEmpty else { return }
+        var index = 0
+        while index < userIds.count {
+            let end = min(index + Self.presenceBulkLimit, userIds.count)
+            let chunk = Array(userIds[index..<end])
+            do {
+                let response: BulkPresenceResponseDTO = try await apiClient.request(
+                    SocialEndpoint.bulkMessagingPresence(userIds: chunk)
+                )
+                let states = response.items.map { item in
+                    UserPresenceState(
+                        userId: item.userId,
+                        isOnline: item.online,
+                        lastSeenAt: item.lastSeenAt
+                    )
+                }
+                await presenceStore.applyBulk(states)
+            } catch {
+                // Fail soft: friends DTO + WS catch-up still apply.
+            }
+            index = end
         }
     }
 

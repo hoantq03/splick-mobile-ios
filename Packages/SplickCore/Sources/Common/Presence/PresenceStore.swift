@@ -30,12 +30,13 @@ public final class PresenceStore: ObservableObject {
         }
     }
 
+    /// Optional peer fields: ignore empty snapshots; never OR-sticky online.
     public func mergeFromPeer(userId: UUID, isOnline: Bool?, lastSeenAt: Date?) {
         guard isOnline != nil || lastSeenAt != nil else { return }
         let existing = states[userId]
         states[userId] = UserPresenceState(
             userId: userId,
-            isOnline: (isOnline == true) || (existing?.isOnline == true),
+            isOnline: isOnline ?? existing?.isOnline ?? false,
             lastSeenAt: lastSeenAt ?? existing?.lastSeenAt
         )
     }

@@ -40,6 +40,7 @@ enum SocialEndpoint: APIEndpoint {
     case transferGroupOwnership(groupId: UUID, newOwnerId: UUID)
     case generateMyQr
     case revokeMyQr
+    case bulkMessagingPresence(userIds: [UUID])
 
     var path: String {
         switch self {
@@ -109,6 +110,8 @@ enum SocialEndpoint: APIEndpoint {
             return "/v1/social/friendships/requests/\(requestId.uuidString)"
         case .generateMyQr, .revokeMyQr:
             return "/v1/social/qr/me"
+        case .bulkMessagingPresence:
+            return "/v1/messaging/presence/bulk"
         }
     }
 
@@ -120,7 +123,7 @@ enum SocialEndpoint: APIEndpoint {
         case .sendFriendRequest, .sendFriendRequestByQr, .generateMyQr, .acceptFriendRequest,
              .rejectFriendRequest, .createGroup, .generateGroupInviteCode, .inviteFriendsToGroup,
              .blockUser, .joinGroupByCode, .joinGroupByQr, .generateGroupQr, .approveGroupMember,
-             .rejectGroupMember, .transferGroupOwnership:
+             .rejectGroupMember, .transferGroupOwnership, .bulkMessagingPresence:
             return .post
         case .revokeMyQr, .cancelFriendRequest, .removeFriend, .unblockUser, .deleteGroup,
              .revokeGroupInviteCode, .revokeGroupQr, .removeGroupMember, .leaveGroup:
@@ -187,6 +190,8 @@ enum SocialEndpoint: APIEndpoint {
             return SetNicknameBodyDTO(nickname: nickname)
         case .blockUser(let userId):
             return BlockUserBodyDTO(userId: userId)
+        case .bulkMessagingPresence(let userIds):
+            return BulkPresenceRequestDTO(userIds: userIds)
         default:
             return nil
         }
