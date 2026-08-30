@@ -483,6 +483,10 @@ public final class ConversationListViewModel: ObservableObject {
                     Task { await self.refresh() }
                 case .newMessage(let conversationId, let message):
                     self.applyIncomingMessage(conversationId: conversationId, message: message)
+                case .groupMemberRemoved(let conversationId, let removedUserId, _):
+                    if self.currentUserId == removedUserId {
+                        self.applyRemovedFromGroup(conversationId: conversationId)
+                    }
                 case .typing(let conversationId, let userId, let isTyping):
                     self.applyRemoteTyping(
                         conversationId: conversationId,
@@ -500,6 +504,17 @@ public final class ConversationListViewModel: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+    }
+
+    private func applyRemovedFromGroup(conversationId: UUID) {
+        guard case .loaded(var items) = state,
+              let index = items.firstIndex(where: { $0.id == conversationId }) else {
+            return
+        }
+        let existing = items[index]
+        if existing.leftAt != nil { return }
+        items[index] = existing.updating(leftAt: Date())
+        state = .loaded(items)
     }
 
     /// Patches the inbox row from the WS payload instead of refetching the whole list.
@@ -520,6 +535,7 @@ public final class ConversationListViewModel: ObservableObject {
         }
 
         let existing = items[index]
+        if existing.leftAt != nil { return }
         let wasUnread = existing.unreadCount > 0
         let nextUnread: Int
         if isFromSelf {

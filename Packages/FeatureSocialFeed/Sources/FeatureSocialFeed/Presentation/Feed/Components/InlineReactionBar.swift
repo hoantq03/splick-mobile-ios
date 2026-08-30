@@ -22,9 +22,9 @@ struct InlineReactionBar: View {
 
     private let slotSize: CGFloat = 36
     private let slotSpacing: CGFloat = 4
-    /// Long-press hover (doubled from 1.45 / -10).
+    /// Long-press hover — scale from the tray so the glyph rises above the finger.
     private let hoverScale: CGFloat = 2.9
-    private let hoverLift: CGFloat = -20
+    private let hoverLift: CGFloat = -28
     /// Fail the long-press if the finger moves this far — lets the feed scroll win.
     private let longPressDuration: TimeInterval = 0.4
     private let scrollCancelDistance: CGFloat = 16
@@ -70,7 +70,7 @@ struct InlineReactionBar: View {
 
         return EmojiView(value: emoji, size: slotSize)
             .frame(width: slotSize, height: slotSize)
-            .scaleEffect(isHighlighted ? hoverScale : (isBouncing ? 1.22 : 1))
+            .scaleEffect(isHighlighted ? hoverScale : (isBouncing ? 1.22 : 1), anchor: .bottom)
             .offset(y: isHighlighted ? hoverLift : 0)
             .zIndex(isHighlighted ? 1 : 0)
             .animation(.spring(response: 0.18, dampingFraction: 0.78), value: isHighlighted)
@@ -92,7 +92,7 @@ struct InlineReactionBar: View {
             .foregroundStyle(SplickTheme.Colors.textSecondary)
             .frame(width: slotSize, height: slotSize)
             .background(Circle().fill(SplickTheme.Colors.tertiaryBackground))
-            .scaleEffect(isHighlighted ? hoverScale : 1)
+            .scaleEffect(isHighlighted ? hoverScale : 1, anchor: .bottom)
             .offset(y: isHighlighted ? hoverLift : 0)
             .zIndex(isHighlighted ? 1 : 0)
             .animation(.spring(response: 0.18, dampingFraction: 0.78), value: isHighlighted)

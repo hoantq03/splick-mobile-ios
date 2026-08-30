@@ -59,6 +59,9 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
     public let updatedAt: Date
     public let notificationsEnabled: Bool
     public let notificationSound: String
+    public let leftAt: Date?
+
+    public var isRemovedFromGroup: Bool { leftAt != nil }
     
     public var displayTitle: String {
         if type == .group {
@@ -83,7 +86,8 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
         createdAt: Date,
         updatedAt: Date,
         notificationsEnabled: Bool = true,
-        notificationSound: String = ConversationNotificationSound.default.rawValue
+        notificationSound: String = ConversationNotificationSound.default.rawValue,
+        leftAt: Date? = nil
     ) {
         self.id = id
         self.type = type
@@ -97,6 +101,7 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
         self.updatedAt = updatedAt
         self.notificationsEnabled = notificationsEnabled
         self.notificationSound = notificationSound
+        self.leftAt = leftAt
     }
     
     public func updating(unreadCount: Int) -> Conversation {
@@ -112,7 +117,8 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
             createdAt: createdAt,
             updatedAt: updatedAt,
             notificationsEnabled: notificationsEnabled,
-            notificationSound: notificationSound
+            notificationSound: notificationSound,
+            leftAt: leftAt
         )
     }
     
@@ -129,7 +135,8 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
             createdAt: createdAt,
             updatedAt: updatedAt,
             notificationsEnabled: notificationsEnabled,
-            notificationSound: notificationSound
+            notificationSound: notificationSound,
+            leftAt: leftAt
         )
     }
     
@@ -146,7 +153,8 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
             createdAt: createdAt,
             updatedAt: updatedAt,
             notificationsEnabled: notificationsEnabled,
-            notificationSound: notificationSound
+            notificationSound: notificationSound,
+            leftAt: leftAt
         )
     }
     
@@ -168,7 +176,8 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
             createdAt: createdAt,
             updatedAt: updatedAt,
             notificationsEnabled: notificationsEnabled,
-            notificationSound: notificationSound
+            notificationSound: notificationSound,
+            leftAt: leftAt
         )
     }
     
@@ -185,7 +194,8 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
             createdAt: createdAt,
             updatedAt: updatedAt,
             notificationsEnabled: enabled,
-            notificationSound: sound
+            notificationSound: sound,
+            leftAt: leftAt
         )
     }
 
@@ -202,7 +212,26 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
             createdAt: createdAt,
             updatedAt: updatedAt,
             notificationsEnabled: notificationsEnabled,
-            notificationSound: notificationSound
+            notificationSound: notificationSound,
+            leftAt: leftAt
+        )
+    }
+
+    public func updating(leftAt: Date?) -> Conversation {
+        Conversation(
+            id: id,
+            type: type,
+            unreadCount: unreadCount,
+            peer: peer,
+            groupName: groupName,
+            groupAvatarUrl: groupAvatarUrl,
+            memberCount: memberCount,
+            lastMessage: lastMessage,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            notificationsEnabled: notificationsEnabled,
+            notificationSound: notificationSound,
+            leftAt: leftAt
         )
     }
 }

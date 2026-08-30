@@ -48,7 +48,8 @@ private struct ChatThreadScreen: View {
         _viewModel = StateObject(
             wrappedValue: factory.make(
                 conversationId: conversation.id,
-                highlightMessageId: highlightMessageId
+                highlightMessageId: highlightMessageId,
+                leftAt: conversation.leftAt
             )
         )
         if let peer = conversation.peer, !conversation.isGroup {
@@ -128,7 +129,7 @@ public final class ChatThreadViewModelFactory: ObservableObject {
         self.onConversationDeleted = onConversationDeleted
     }
 
-    public func make(conversationId: UUID, highlightMessageId: UUID? = nil) -> ChatThreadViewModel {
+    public func make(conversationId: UUID, highlightMessageId: UUID? = nil, leftAt: Date? = nil) -> ChatThreadViewModel {
         ChatThreadViewModel(
             conversationId: conversationId,
             currentUserId: currentUserId,
@@ -143,7 +144,8 @@ public final class ChatThreadViewModelFactory: ObservableObject {
             messageCache: messageCache,
             pendingMessageStore: pendingMessageStore,
             networkPathMonitor: networkPathMonitor,
-            onConversationRead: onConversationRead
+            onConversationRead: onConversationRead,
+            leftAt: leftAt
         )
     }
 }

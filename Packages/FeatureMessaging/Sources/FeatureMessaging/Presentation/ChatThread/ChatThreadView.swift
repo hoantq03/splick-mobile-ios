@@ -600,12 +600,25 @@ public struct ChatThreadView: View {
 
     @ViewBuilder
     private var bottomBar: some View {
-        if relationshipViewModel.isBlocked {
+        if viewModel.isRemovedFromGroup {
+            removedFromGroupFooter
+        } else if relationshipViewModel.isBlocked {
             blockedFooter
         } else {
             // Paint the composer on the first frame; do not wait for peer status.
             inputBar
         }
+    }
+
+    private var removedFromGroupFooter: some View {
+        Text(languageService.text(.messagingGroupRemovedFooter))
+            .font(SplickTheme.Typography.caption)
+            .foregroundStyle(SplickTheme.Colors.textSecondary)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, SplickTheme.Spacing.md)
+            .padding(.vertical, SplickTheme.Spacing.sm)
+            .background(SplickTheme.Colors.background)
     }
 
     private var blockedFooter: some View {

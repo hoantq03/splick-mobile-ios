@@ -13,6 +13,7 @@ public enum MessagingWsEvent: Sendable {
     case messageEdited(conversationId: UUID, messageId: UUID, senderId: UUID, body: String)
     case messageRecalled(conversationId: UUID, messageId: UUID, senderId: UUID)
     case presence(userId: UUID, isOnline: Bool, lastSeenAt: Date?)
+    case groupMemberRemoved(conversationId: UUID, removedUserId: UUID, selfLeave: Bool)
 }
 
 @MainActor

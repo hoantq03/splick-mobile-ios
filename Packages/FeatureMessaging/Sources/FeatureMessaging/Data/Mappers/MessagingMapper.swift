@@ -17,7 +17,8 @@ enum MessagingMapper {
             createdAt: dto.createdAt,
             updatedAt: dto.updatedAt,
             notificationsEnabled: dto.notificationsEnabled ?? true,
-            notificationSound: ConversationNotificationSound.resolved(dto.notificationSound).rawValue
+            notificationSound: ConversationNotificationSound.resolved(dto.notificationSound).rawValue,
+            leftAt: dto.leftAt
         )
     }
 

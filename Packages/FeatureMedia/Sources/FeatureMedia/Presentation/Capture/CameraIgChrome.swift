@@ -108,6 +108,33 @@ struct CameraFilterNameBadge: View {
     }
 }
 
+/// Current optical zoom. Tap to jump between 1× and 2×.
+struct CameraZoomBadge: View {
+    @EnvironmentObject private var languageService: LanguageService
+    let zoom: CGFloat
+    let onToggle: () -> Void
+
+    var body: some View {
+        Button(action: onToggle) {
+            Text(CameraZoom.label(zoom))
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background {
+                    Capsule()
+                        .fill(Color.black.opacity(0.45))
+                        .overlay {
+                            Capsule()
+                                .stroke(Color.white.opacity(0.22), lineWidth: 0.5)
+                        }
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(languageService.text(.mediaZoomA11y))
+    }
+}
+
 /// Single filter orb (same diameter as shutter). Swipe or tap to cycle presets.
 struct FilterCarouselBar: View {
     @EnvironmentObject private var languageService: LanguageService

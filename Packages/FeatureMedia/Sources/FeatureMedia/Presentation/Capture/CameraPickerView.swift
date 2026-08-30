@@ -38,10 +38,28 @@ struct CameraPickerView: View {
 
             previewLayer
                 .ignoresSafeArea()
+                .gesture(
+                    MagnificationGesture()
+                        .onChanged { session.updatePinch(magnification: $0) }
+                        .onEnded { _ in session.endPinch() }
+                )
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 12)
+                        .onChanged { session.updatePan(translationX: $0.translation.width, translationY: $0.translation.height) }
+                        .onEnded { _ in session.endPan() }
+                )
+                .simultaneousGesture(
+                    TapGesture(count: 2).onEnded { session.cycleZoomStep() }
+                )
 
             VStack(spacing: 0) {
                 topBar
                 Spacer()
+                CameraZoomBadge(
+                    zoom: session.zoomFactor,
+                    onToggle: { session.cycleZoomStep() }
+                )
+                .padding(.bottom, 12)
                 HStack(alignment: .bottom, spacing: 0) {
                     CameraLeftToolbar(
                         onTextMode: { onResult(.openTextCreation) },

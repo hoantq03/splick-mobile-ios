@@ -10,15 +10,36 @@ enum GroupSystemNoticeCopy {
         actorName: String?,
         languageService: LanguageService
     ) -> String {
-        guard message.type == .groupRenamed else { return message.body }
-        let newName = message.body.trimmingCharacters(in: .whitespacesAndNewlines)
-        if message.senderId == currentUserId {
-            return languageService.format(.messagingGroupRenamedNoticeYou, newName)
-        }
         let actor = actorName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if actor.isEmpty {
-            return languageService.format(.messagingGroupRenamedNoticeUnknown, newName)
+        switch message.type {
+        case .groupRenamed:
+            let newName = message.body.trimmingCharacters(in: .whitespacesAndNewlines)
+            if message.senderId == currentUserId {
+                return languageService.format(.messagingGroupRenamedNoticeYou, newName)
+            }
+            if actor.isEmpty {
+                return languageService.format(.messagingGroupRenamedNoticeUnknown, newName)
+            }
+            return languageService.format(.messagingGroupRenamedNotice, actor, newName)
+        case .groupMemberLeft:
+            if message.senderId == currentUserId {
+                return languageService.text(.messagingGroupMemberLeftNoticeYou)
+            }
+            if actor.isEmpty {
+                return languageService.text(.messagingGroupMemberLeftNoticeUnknown)
+            }
+            return languageService.format(.messagingGroupMemberLeftNotice, actor)
+        case .groupMemberRemoved:
+            let removedName = message.body.trimmingCharacters(in: .whitespacesAndNewlines)
+            if message.senderId == currentUserId {
+                return languageService.format(.messagingGroupMemberRemovedNoticeYouAdmin, removedName)
+            }
+            if actor.isEmpty {
+                return languageService.format(.messagingGroupMemberRemovedNoticeUnknown, removedName)
+            }
+            return languageService.format(.messagingGroupMemberRemovedNotice, actor, removedName)
+        default:
+            return message.body
         }
-        return languageService.format(.messagingGroupRenamedNotice, actor, newName)
     }
 }

@@ -41,6 +41,7 @@ struct ConversationResponseDTO: Decodable {
     let updatedAt: Date
     let notificationsEnabled: Bool?
     let notificationSound: String?
+    let leftAt: Date?
 
     init(
         id: UUID,
@@ -54,7 +55,8 @@ struct ConversationResponseDTO: Decodable {
         createdAt: Date,
         updatedAt: Date,
         notificationsEnabled: Bool? = true,
-        notificationSound: String? = "default"
+        notificationSound: String? = "default",
+        leftAt: Date? = nil
     ) {
         self.id = id
         self.type = type
@@ -68,6 +70,7 @@ struct ConversationResponseDTO: Decodable {
         self.updatedAt = updatedAt
         self.notificationsEnabled = notificationsEnabled
         self.notificationSound = notificationSound
+        self.leftAt = leftAt
     }
 }
 

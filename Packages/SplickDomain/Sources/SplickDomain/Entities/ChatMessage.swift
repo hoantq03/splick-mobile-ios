@@ -3,6 +3,8 @@ import Foundation
 public enum ChatMessageType: String, Equatable, Hashable, Sendable, Codable {
     case user = "USER"
     case groupRenamed = "GROUP_RENAMED"
+    case groupMemberRemoved = "GROUP_MEMBER_REMOVED"
+    case groupMemberLeft = "GROUP_MEMBER_LEFT"
 }
 
 public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable, Codable {
@@ -22,7 +24,12 @@ public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable, Codable 
     public let type: ChatMessageType?
 
     public var isSystemNotice: Bool {
-        type == .groupRenamed
+        switch type {
+        case .groupRenamed, .groupMemberRemoved, .groupMemberLeft:
+            return true
+        case .user, .none:
+            return false
+        }
     }
 
     public init(

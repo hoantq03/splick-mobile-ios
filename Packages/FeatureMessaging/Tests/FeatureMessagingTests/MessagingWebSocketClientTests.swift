@@ -130,4 +130,24 @@ final class MessagingWebSocketClientTests: XCTestCase {
         }
         XCTAssertEqual(recalledId, messageId)
     }
+
+    func test_decode_groupMemberRemoved() throws {
+        let removedUserId = UUID()
+        let json = """
+        {
+          "type": "group.member_removed",
+          "conversationId": "\(conversationId.uuidString)",
+          "removedUserId": "\(removedUserId.uuidString)",
+          "selfLeave": false
+        }
+        """.data(using: .utf8)!
+
+        let event = MessagingWsEventDecoder.decode(json)
+        guard case .groupMemberRemoved(let convId, let userId, let selfLeave)? = event else {
+            return XCTFail("Expected groupMemberRemoved")
+        }
+        XCTAssertEqual(convId, conversationId)
+        XCTAssertEqual(userId, removedUserId)
+        XCTAssertFalse(selfLeave)
+    }
 }

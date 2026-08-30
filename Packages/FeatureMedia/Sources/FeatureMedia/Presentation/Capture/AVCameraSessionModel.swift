@@ -17,6 +17,9 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
     @Published var filterIntensity: Float = 0.75
     @Published var primaryFaceBounds: CGRect?
     @Published var lastErrorMessage: String?
+    @Published var zoomFactor: CGFloat = 1
+    @Published var minZoom: CGFloat = 1
+    @Published var maxZoom: CGFloat = 1
 
     let filterEngine = CameraFilterEngine()
 
@@ -27,6 +30,10 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
     private var currentInput: AVCaptureDeviceInput?
     private var photoContinuation: CheckedContinuation<UIImage, Error>?
     private var isDetectingFace = false
+    private var pinchBase: CGFloat = 1
+    private var isPinching = false
+    private var panBase: CGFloat = 1
+    private var isPanning = false
 
     func start() {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
@@ -71,6 +78,61 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
             case .off: self.flashMode = .auto
             case .auto: self.flashMode = .on
             case .on: self.flashMode = .off
+            }
+        }
+    }
+
+    func updatePinch(magnification: CGFloat) {
+        isPanning = false
+        if !isPinching {
+            isPinching = true
+            pinchBase = zoomFactor
+        }
+        setZoom(CameraZoom.applyPinch(base: pinchBase, scale: magnification, min: minZoom, max: maxZoom), animated: false)
+    }
+
+    func endPinch() {
+        isPinching = false
+        pinchBase = zoomFactor
+    }
+
+    func updatePan(translationX: CGFloat, translationY: CGFloat) {
+        guard !isPinching, abs(translationX) >= abs(translationY) else { return }
+        if !isPanning {
+            isPanning = true
+            panBase = zoomFactor
+        }
+        let width = max(UIScreen.main.bounds.width, 1)
+        setZoom(
+            CameraZoom.applyPan(base: panBase, deltaPx: translationX, viewWidth: width, min: minZoom, max: maxZoom),
+            animated: false
+        )
+    }
+
+    func endPan() {
+        isPanning = false
+        panBase = zoomFactor
+    }
+
+    func cycleZoomStep() {
+        setZoom(CameraZoom.nextStep(current: zoomFactor, min: minZoom, max: maxZoom), animated: true)
+    }
+
+    func setZoom(_ factor: CGFloat, animated: Bool) {
+        let clamped = CameraZoom.clamp(factor, min: minZoom, max: maxZoom)
+        sessionQueue.async { [weak self] in
+            guard let self, let device = self.currentInput?.device else { return }
+            do {
+                try device.lockForConfiguration()
+                if animated {
+                    device.ramp(toVideoZoomFactor: clamped, withRate: 8)
+                } else {
+                    device.videoZoomFactor = clamped
+                }
+                device.unlockForConfiguration()
+                DispatchQueue.main.async { self.zoomFactor = clamped }
+            } catch {
+                // Keep the last successful zoom.
             }
         }
     }
@@ -138,6 +200,7 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
         session.addInput(input)
         currentInput = input
         configureConnections()
+        applyZoomLimits(for: device)
         if !inConfiguration { session.commitConfiguration() }
         DispatchQueue.main.async { self.isFrontCamera = position == .front }
     }
@@ -158,6 +221,28 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
             if connection.isVideoMirroringSupported {
                 connection.isVideoMirrored = currentInput?.device.position == .front
             }
+        }
+    }
+
+    private func applyZoomLimits(for device: AVCaptureDevice) {
+        let minFactor = max(device.minAvailableVideoZoomFactor, 1)
+        let maxFactor = min(device.maxAvailableVideoZoomFactor, CameraZoom.uxMax)
+        let reset = CameraZoom.clamp(1, min: minFactor, max: maxFactor)
+        do {
+            try device.lockForConfiguration()
+            device.videoZoomFactor = reset
+            device.unlockForConfiguration()
+        } catch {
+            // Device may still be configuring.
+        }
+        DispatchQueue.main.async {
+            self.minZoom = minFactor
+            self.maxZoom = maxFactor
+            self.zoomFactor = reset
+            self.pinchBase = reset
+            self.panBase = reset
+            self.isPinching = false
+            self.isPanning = false
         }
     }
 }

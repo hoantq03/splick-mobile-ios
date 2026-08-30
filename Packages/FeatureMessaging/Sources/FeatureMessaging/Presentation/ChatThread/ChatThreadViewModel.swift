@@ -34,6 +34,7 @@ public final class ChatThreadViewModel: ObservableObject {
     @Published public private(set) var threadSearchState: LoadingState<[MessageSearchHit]> = .idle
     @Published public private(set) var activeThreadSearchQuery = ""
     @Published public private(set) var typingUserIds: [UUID] = []
+    @Published public private(set) var leftAt: Date?
 
     private static let maxPagesForMessageLookup = 10
     private static let pageSize = 30
@@ -93,7 +94,8 @@ public final class ChatThreadViewModel: ObservableObject {
         messageCache: MessageThreadCache? = nil,
         pendingMessageStore: PendingMessageStore? = nil,
         networkPathMonitor: NetworkPathMonitor? = nil,
-        onConversationRead: ((UUID) async -> Void)? = nil
+        onConversationRead: ((UUID) async -> Void)? = nil,
+        leftAt: Date? = nil
     ) {
         self.conversationId = conversationId
         self.currentUserId = currentUserId
@@ -109,14 +111,17 @@ public final class ChatThreadViewModel: ObservableObject {
         self.pendingMessageStore = pendingMessageStore ?? PendingMessageStore()
         self.networkPathMonitor = networkPathMonitor
         self.onConversationRead = onConversationRead
+        self.leftAt = leftAt
         bindWsEvents()
         bindNetworkRetry()
         bindForegroundGapFill()
         _ = applyCachedThreadIfAvailable()
     }
 
+    public var isRemovedFromGroup: Bool { leftAt != nil }
+
     public var messages: [ChatMessage] {
-        if case .loaded(let msgs) = state { return msgs }
+        if case .loaded(let msgs) = state { return visibleMessages(msgs) }
         return []
     }
 
@@ -331,6 +336,7 @@ public final class ChatThreadViewModel: ObservableObject {
     }
 
     public func send(body: String, submissions: [CommentSubmissionAttachment]) async {
+        guard !isRemovedFromGroup else { return }
         stopLocalTyping()
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty || !submissions.isEmpty else { return }
@@ -402,6 +408,7 @@ public final class ChatThreadViewModel: ObservableObject {
     }
 
     public func beginReply(to message: ChatMessage, senderDisplayName: String) {
+        guard !isRemovedFromGroup else { return }
         let snippet = replySnippet(from: message)
         withAnimation(MessageReplyIslandMotion.present) {
             replyDraft = MessageReplyDraft(
@@ -456,6 +463,7 @@ public final class ChatThreadViewModel: ObservableObject {
 
     @discardableResult
     public func react(to messageId: UUID, emoji: String) -> String? {
+        guard !isRemovedFromGroup else { return nil }
         guard case .loaded(let messages) = state,
               let index = messages.firstIndex(where: { $0.id == messageId }) else {
             return nil
@@ -805,6 +813,7 @@ public final class ChatThreadViewModel: ObservableObject {
         animate: Bool = false,
         scrollToBottom: Bool = false
     ) {
+        guard isMessageVisible(message) else { return }
         guard case .loaded(var msgs) = state else { return }
 
         if let index = msgs.firstIndex(where: { $0.clientMessageId == message.clientMessageId || $0.id == message.id }) {
@@ -911,13 +920,36 @@ public final class ChatThreadViewModel: ObservableObject {
                     self.applyRecalledMessage(messageId: messageId)
 
                 case .typing(let convId, let userId, let isTyping) where convId == self.conversationId:
+                    if self.isRemovedFromGroup { break }
                     self.applyRemoteTyping(userId: userId, isTyping: isTyping)
+
+                case .groupMemberRemoved(let convId, let removedUserId, _)
+                    where convId == self.conversationId && removedUserId == self.currentUserId:
+                    self.markRemovedFromGroup()
 
                 default:
                     break
                 }
             }
             .store(in: &cancellables)
+    }
+
+    private func markRemovedFromGroup() {
+        leftAt = leftAt ?? Date()
+        stopLocalTyping()
+        typingUserIds = []
+        if case .loaded(let msgs) = state {
+            state = .loaded(visibleMessages(msgs))
+        }
+    }
+
+    private func isMessageVisible(_ message: ChatMessage) -> Bool {
+        guard let leftAt else { return true }
+        return message.createdAt <= leftAt
+    }
+
+    private func visibleMessages(_ messages: [ChatMessage]) -> [ChatMessage] {
+        messages.filter(isMessageVisible)
     }
 
     private func applyRemoteTyping(userId: UUID, isTyping: Bool) {

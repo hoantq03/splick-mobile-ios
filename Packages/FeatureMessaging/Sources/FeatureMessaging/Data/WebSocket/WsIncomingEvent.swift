@@ -57,6 +57,12 @@ struct WsMessageRecalledEvent: Decodable {
     let senderId: UUID
 }
 
+struct WsGroupMemberRemovedEvent: Decodable {
+    let conversationId: UUID
+    let removedUserId: UUID
+    let selfLeave: Bool
+}
+
 struct WsPresenceEvent: Decodable {
     let userId: UUID
     let online: Bool
@@ -175,6 +181,14 @@ enum MessagingWsEventDecoder {
                 userId: event.userId,
                 isOnline: event.online,
                 lastSeenAt: event.lastSeenAt
+            )
+
+        case "group.member_removed":
+            guard let event = try? decoder.decode(WsGroupMemberRemovedEvent.self, from: data) else { return nil }
+            return .groupMemberRemoved(
+                conversationId: event.conversationId,
+                removedUserId: event.removedUserId,
+                selfLeave: event.selfLeave
             )
 
         default:

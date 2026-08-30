@@ -438,15 +438,21 @@ struct PostCardView: View, Equatable {
     }
 
     private var reactionBarRow: some View {
-        InlineReactionBar(
-            onReact: { emoji in actions.onReact(post.id, emoji) },
-            onDragRelease: { emoji, sourceGlobal in
-                scheduleFlyingEmoji(emoji: emoji, sourceGlobal: sourceGlobal)
-            },
-            onCustomEmoji: { actions.onPresent(.emojiPicker(post)) }
-        )
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: Layout.reactionBarHeight, alignment: .center)
+        HStack(alignment: .center, spacing: Layout.trailingActionSpacing) {
+            InlineReactionBar(
+                onReact: { emoji in actions.onReact(post.id, emoji) },
+                onDragRelease: { emoji, sourceGlobal in
+                    scheduleFlyingEmoji(emoji: emoji, sourceGlobal: sourceGlobal)
+                },
+                onCustomEmoji: { actions.onPresent(.emojiPicker(post)) }
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if showsCommentPreview {
+                commentEntryButton
+            }
+        }
+        .frame(minHeight: Layout.reactionBarHeight, alignment: .center)
         .padding(.top, SplickTheme.Spacing.xxs)
     }
 
@@ -464,11 +470,6 @@ struct PostCardView: View, Equatable {
             Text("\(viewCount)")
                 .font(.system(size: Layout.commentCountFontSize, weight: .medium))
                 .monospacedDigit()
-            if let viewedAt = post.viewers.first?.viewedAt {
-                Text(languageService.compactRelativeTime(from: viewedAt))
-                    .font(.system(size: 11, weight: .medium))
-                    .monospacedDigit()
-            }
         }
         .foregroundStyle(SplickTheme.Colors.textSecondary)
         .padding(.horizontal, 6)
@@ -560,10 +561,6 @@ struct PostCardView: View, Equatable {
 
             if isAuthor {
                 viewsEntryButton
-            }
-
-            if showsCommentPreview {
-                commentEntryButton
             }
         }
         .frame(minHeight: Layout.selfAvatarSize, alignment: .center)
