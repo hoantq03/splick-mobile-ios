@@ -3,6 +3,7 @@ import Foundation
 struct NotificationDestinationDTO: Decodable {
     let screen: String
     let postId: UUID?
+    let commentId: UUID?
 }
 
 struct NotificationResponseDTO: Decodable {

@@ -48,7 +48,8 @@ public struct LinkedPostDetailOverlay: View {
                 destination: FeedPostDestination(
                     postId: presentation.postId,
                     mediaIndex: 0,
-                    expandBillSplit: presentation.expandBillSplit
+                    expandBillSplit: presentation.expandBillSplit,
+                    commentId: presentation.commentId
                 ),
                 feedViewModel: feedViewModel,
                 fetchFriendsUseCase: fetchFriendsUseCase,

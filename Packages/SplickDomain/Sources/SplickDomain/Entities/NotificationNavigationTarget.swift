@@ -1,7 +1,7 @@
 import Foundation
 
 public enum NotificationNavigationTarget: Equatable, Sendable {
-    case post(UUID)
+    case post(UUID, commentId: UUID? = nil)
     case feed
     case expenses
     case friends

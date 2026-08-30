@@ -4,16 +4,20 @@ public struct NotificationDestination: Codable, Equatable, Sendable {
     public let screen: NotificationScreen
     /// Post id for `.postDetail`, conversation id for `.messages`, user id for `.userProfile`.
     public let postId: UUID?
+    /// Comment to focus after opening `.postDetail`.
+    public let commentId: UUID?
 
-    public init(screen: NotificationScreen, postId: UUID? = nil) {
+    public init(screen: NotificationScreen, postId: UUID? = nil, commentId: UUID? = nil) {
         self.screen = screen
         self.postId = postId
+        self.commentId = commentId
     }
 
-    public init(screen: String, postId: UUID? = nil) {
+    public init(screen: String, postId: UUID? = nil, commentId: UUID? = nil) {
         self.init(
             screen: NotificationScreen(rawValue: screen.uppercased()) ?? .unknown,
-            postId: postId
+            postId: postId,
+            commentId: commentId
         )
     }
 
@@ -52,7 +56,11 @@ public struct NotificationDestination: Codable, Equatable, Sendable {
             ?? uuidValue(userInfo["userId"])
 
         guard let screenRaw else { return nil }
-        return NotificationDestination(screen: screenRaw, postId: entityId)
+        return NotificationDestination(
+            screen: screenRaw,
+            postId: entityId,
+            commentId: uuidValue(userInfo["commentId"]) ?? uuidValue(userInfo["comment_id"])
+        )
     }
 
     private static func fromNestedValue(_ rawValue: Any?) -> NotificationDestination? {
@@ -87,8 +95,10 @@ public struct NotificationDestination: Codable, Equatable, Sendable {
             ?? uuidValue(dictionary["post_id"])
             ?? uuidValue(dictionary["destinationPostId"])
             ?? uuidValue(dictionary["userId"])
+        let commentId = uuidValue(dictionary["commentId"])
+            ?? uuidValue(dictionary["comment_id"])
         guard let screenRaw else { return nil }
-        return NotificationDestination(screen: screenRaw, postId: entityId)
+        return NotificationDestination(screen: screenRaw, postId: entityId, commentId: commentId)
     }
 
     private static func screenRaw(fromType type: String?) -> String? {
@@ -98,6 +108,8 @@ public struct NotificationDestination: Codable, Equatable, Sendable {
              "GROUP_CREATED", "GROUP_MEMBER_ADDED", "GROUP_MEMBER_REMOVED",
              "GROUP_RENAMED", "GROUP_ADMIN_TRANSFERRED":
             return NotificationScreen.messages.rawValue
+        case "PAYMENT_EVIDENCE_SUBMITTED", "PAYMENT_EVIDENCE_APPROVED", "PAYMENT_EVIDENCE_REJECTED":
+            return NotificationScreen.postDetail.rawValue
         default:
             return nil
         }

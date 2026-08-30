@@ -35,7 +35,8 @@ struct PostDetailContainerView: View {
                     profileDependencies: profileDependencies,
                     makeGifPickerViewModel: makeGifPickerViewModel,
                     expandBillSplitInitially: destination.expandBillSplit,
-                    focusComposerOnAppear: destination.focusComposerOnAppear
+                    focusComposerOnAppear: destination.focusComposerOnAppear,
+                    initialCommentId: destination.commentId
                 )
             } else if !loadAttemptFinished {
                 SkeletonShimmerHost {

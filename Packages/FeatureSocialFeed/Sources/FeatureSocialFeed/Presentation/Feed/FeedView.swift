@@ -162,7 +162,8 @@ public struct FeedView: View {
                         FeedPostDestination(
                             postId: navigation.postId,
                             mediaIndex: 0,
-                            expandBillSplit: navigation.expandBillSplit
+                            expandBillSplit: navigation.expandBillSplit,
+                            commentId: navigation.commentId
                         )
                     )
                 }

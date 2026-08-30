@@ -26,7 +26,7 @@ public struct NotificationListView: View {
             self.onNavigate = onNavigate
         } else if let onNavigateToPost {
             self.onNavigate = { target in
-                if case .post(let postId) = target {
+                if case .post(let postId, _) = target {
                     onNavigateToPost(postId)
                 }
             }
@@ -259,18 +259,46 @@ struct NotificationRowView: View {
     var onRowTap: (() -> Void)? = nil
     @EnvironmentObject private var languageService: LanguageService
 
+    private var displayNotification: AppNotification {
+        let body = NotificationActorPresentation.expandedBody(
+            for: notification,
+            friendAcceptedDescription: { actorName in
+                languageService.format(.notificationFriendRequestAcceptedBody, actorName)
+            },
+            groupInviteDescription: { actorName, groupName in
+                languageService.format(.notificationGroupInviteBody, actorName, groupName)
+            }
+        )
+        let title = notification.type == .groupInvite
+            ? languageService.text(.notificationGroupInviteTitle)
+            : notification.title
+        guard title != notification.title || body != notification.body else { return notification }
+        return AppNotification(
+            id: notification.id,
+            type: notification.type,
+            title: title,
+            body: body,
+            isRead: notification.isRead,
+            referenceId: notification.referenceId,
+            destination: notification.destination,
+            actorUserId: notification.actorUserId,
+            actorAvatarURL: notification.actorAvatarURL,
+            createdAt: notification.createdAt
+        )
+    }
+
     private var bodySegments: (actorName: String?, remainder: String) {
-        NotificationActorPresentation.bodySegments(for: notification)
+        NotificationActorPresentation.bodySegments(for: displayNotification)
     }
 
     private var titleMatchesActorName: Bool {
         guard let actorName = bodySegments.actorName else { return false }
-        return notification.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return displayNotification.title.trimmingCharacters(in: .whitespacesAndNewlines)
             .caseInsensitiveCompare(actorName) == .orderedSame
     }
 
     private var showsCategoryTitle: Bool {
-        !notification.title.isEmpty && !titleMatchesActorName
+        !displayNotification.title.isEmpty && !titleMatchesActorName
     }
 
     private var timestampText: some View {
@@ -292,12 +320,12 @@ struct NotificationRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top, spacing: SplickTheme.Spacing.sm) {
-                NotificationAvatarBadgeView(notification: notification)
+                NotificationAvatarBadgeView(notification: displayNotification)
 
                 VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
                     if showsCategoryTitle {
                         HStack(alignment: .firstTextBaseline, spacing: SplickTheme.Spacing.xs) {
-                            Text(notification.title)
+                            Text(displayNotification.title)
                                 .font(SplickTheme.Typography.headline)
                                 .foregroundColor(SplickTheme.Colors.textPrimary)
                                 .lineLimit(1)
@@ -309,7 +337,7 @@ struct NotificationRowView: View {
                     }
 
                     HStack(alignment: .firstTextBaseline, spacing: SplickTheme.Spacing.xxs) {
-                        NotificationInlineBodyText(notification: notification)
+                        NotificationInlineBodyText(notification: displayNotification)
                             .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
 
                         if !showsCategoryTitle {
@@ -444,7 +472,7 @@ private struct NotificationAvatarBadgeView: View {
 
     @ViewBuilder
     private var avatarContent: some View {
-        if NotificationActorPresentation.usesSystemAvatar(for: notification.type) {
+        if NotificationActorPresentation.usesSystemAvatar(for: notification) {
             ZStack {
                 SplickTheme.Colors.secondaryBackground
                 SplickLogoMark(size: 28, style: .fullColor)

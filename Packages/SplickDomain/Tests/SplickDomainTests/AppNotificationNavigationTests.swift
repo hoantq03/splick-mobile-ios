@@ -16,12 +16,69 @@ final class AppNotificationNavigationTests: XCTestCase {
         XCTAssertEqual(notification.navigationTarget, .post(postId))
     }
 
+    func testNavigationTargetOpensCommentFromMentionInComment() {
+        let postId = UUID()
+        let commentId = UUID()
+        let notification = AppNotification(
+            id: UUID(),
+            type: .feedMentionedInComment,
+            title: "Mentioned in comment",
+            body: "Alice mentioned you",
+            destination: NotificationDestination(screen: .postDetail, postId: postId, commentId: commentId)
+        )
+
+        XCTAssertEqual(notification.navigationTarget, .post(postId, commentId: commentId))
+    }
+
+    func testNavigationTargetOpensCommentFromPaymentEvidence() {
+        let postId = UUID()
+        let commentId = UUID()
+        for type: NotificationType in [
+            .paymentEvidenceSubmitted,
+            .paymentEvidenceApproved,
+            .paymentEvidenceRejected
+        ] {
+            let notification = AppNotification(
+                id: UUID(),
+                type: type,
+                title: "Payment evidence",
+                body: "Evidence updated",
+                referenceId: postId,
+                destination: NotificationDestination(screen: .postDetail, postId: postId, commentId: commentId)
+            )
+            XCTAssertEqual(notification.navigationTarget, .post(postId, commentId: commentId), "\(type)")
+        }
+
+        let legacyWithoutDestination = AppNotification(
+            id: UUID(),
+            type: .paymentEvidenceSubmitted,
+            title: "Payment evidence",
+            body: "Evidence submitted",
+            referenceId: postId
+        )
+        XCTAssertEqual(legacyWithoutDestination.navigationTarget, .post(postId))
+    }
+
+    func testPushUserInfoOpensPostCommentFromPaymentEvidenceType() {
+        let postId = UUID()
+        let commentId = UUID()
+        let destination = NotificationDestination.fromPushUserInfo([
+            "type": "PAYMENT_EVIDENCE_REJECTED",
+            "postId": postId.uuidString,
+            "commentId": commentId.uuidString,
+        ])
+
+        XCTAssertEqual(destination?.screen, .postDetail)
+        XCTAssertEqual(destination?.postId, postId)
+        XCTAssertEqual(destination?.commentId, commentId)
+    }
+
     func testNavigationTargetRoutesDebtReminderToExpenses() {
         let notification = AppNotification(
             id: UUID(),
             type: .dailyDebtReminder,
-            title: "Outstanding debts",
-            body: "You owe 100 VND",
+            title: "Unpaid amount",
+            body: "You have an unpaid amount of 100 VND",
             destination: NotificationDestination(screen: .expenses, postId: nil)
         )
 
@@ -94,6 +151,29 @@ final class AppNotificationNavigationTests: XCTestCase {
 
         XCTAssertEqual(destination?.screen, .messages)
         XCTAssertEqual(destination?.conversationId, conversationId)
+    }
+
+    func testNavigationTargetOpensUserProfileFromFriendRequestSent() {
+        let requesterId = UUID()
+        let withProfileDestination = AppNotification(
+            id: UUID(),
+            type: .friendRequestSent,
+            title: "Lời mời kết bạn mới",
+            body: "Alice đã gửi lời mời kết bạn cho bạn",
+            destination: NotificationDestination(screen: .userProfile, postId: requesterId),
+            actorUserId: requesterId
+        )
+        XCTAssertEqual(withProfileDestination.navigationTarget, .userProfile(requesterId))
+
+        let legacyFriendsDestination = AppNotification(
+            id: UUID(),
+            type: .friendRequestSent,
+            title: "Lời mời kết bạn",
+            body: "Alice đã gửi lời mời kết bạn cho bạn",
+            destination: NotificationDestination(screen: .friends),
+            actorUserId: requesterId
+        )
+        XCTAssertEqual(legacyFriendsDestination.navigationTarget, .userProfile(requesterId))
     }
 
     func testNavigationTargetOpensUserProfileFromFriendAccepted() {

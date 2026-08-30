@@ -17,6 +17,7 @@ struct PostDetailView: View {
     let makeGifPickerViewModel: GifPickerViewModelFactory?
     let expandBillSplitInitially: Bool
     let focusComposerOnAppear: Bool
+    let initialCommentId: UUID?
 
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.currentUserSummary) private var currentUserSummary
@@ -51,7 +52,8 @@ struct PostDetailView: View {
         profileDependencies: FriendUserProfileDependencies? = nil,
         makeGifPickerViewModel: GifPickerViewModelFactory? = nil,
         expandBillSplitInitially: Bool = false,
-        focusComposerOnAppear: Bool = false
+        focusComposerOnAppear: Bool = false,
+        initialCommentId: UUID? = nil
     ) {
         self.post = post
         self.initialMediaIndex = initialMediaIndex
@@ -61,6 +63,7 @@ struct PostDetailView: View {
         self.makeGifPickerViewModel = makeGifPickerViewModel
         self.expandBillSplitInitially = expandBillSplitInitially
         self.focusComposerOnAppear = focusComposerOnAppear
+        self.initialCommentId = initialCommentId
         _commentPager = StateObject(
             wrappedValue: PostDetailViewModel(postId: post.id) { postId, page, limit, filter in
                 try await feedViewModel.fetchPostComments(
@@ -78,7 +81,7 @@ struct PostDetailView: View {
     }
 
     private var highlightedCommentId: UUID? {
-        replyTarget?.id
+        replyTarget?.id ?? initialCommentId
     }
 
     var body: some View {
@@ -179,7 +182,13 @@ struct PostDetailView: View {
             configureCardActions()
             feedViewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
             enableComposerInteraction()
-            async let comments: Void = commentPager.loadInitial()
+            async let comments: Void = {
+                if let initialCommentId {
+                    await commentPager.reload(ensureVisibleId: initialCommentId)
+                } else {
+                    await commentPager.loadInitial()
+                }
+            }()
             try? await Task.sleep(for: .milliseconds(380))
             guard !Task.isCancelled else { return }
             tabBarScrollState?.hide(flushToBottom: true)
@@ -187,6 +196,11 @@ struct PostDetailView: View {
                 commentsRevealed = true
             }
             await comments
+            if let initialCommentId {
+                let expectsMedia = commentPager.allComments.first(where: { $0.id == initialCommentId })?
+                    .attachments.isEmpty == false
+                requestScroll(to: initialCommentId, expectsMedia: expectsMedia)
+            }
         }
         .onDisappear {
             tabBarScrollState?.show()

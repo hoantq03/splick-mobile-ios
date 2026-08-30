@@ -38,7 +38,14 @@ public struct AppNotification: Identifiable, Codable, Equatable, Sendable {
 
     public var navigationTarget: NotificationNavigationTarget {
         if let postId = destination?.postDetailId {
-            return .post(postId)
+            return .post(postId, commentId: destination?.commentId)
+        }
+
+        if type == .friendRequestSent {
+            if let userId = destination?.userProfileId ?? actorUserId {
+                return .userProfile(userId)
+            }
+            return .friends
         }
 
         if let userId = destination?.userProfileId ?? (destination?.screen == .userProfile ? actorUserId : nil) {
@@ -48,7 +55,7 @@ public struct AppNotification: Identifiable, Codable, Equatable, Sendable {
         switch destination?.screen {
         case .postDetail:
             if let referenceId {
-                return .post(referenceId)
+                return .post(referenceId, commentId: destination?.commentId)
             }
             return .feed
         case .expenses:
@@ -72,13 +79,13 @@ public struct AppNotification: Identifiable, Codable, Equatable, Sendable {
 
         switch type {
         case .feedTaggedInPost, .feedMentionedInPost, .feedMentionedInComment,
-             .postCommented, .postReactionMilestone:
+             .postCommented, .postReactionMilestone,
+             .paymentEvidenceSubmitted, .paymentEvidenceApproved, .paymentEvidenceRejected:
             if let referenceId {
-                return .post(referenceId)
+                return .post(referenceId, commentId: destination?.commentId)
             }
             return .feed
-        case .paymentEvidenceSubmitted, .paymentEvidenceApproved, .paymentEvidenceRejected,
-             .expenseSplitBill, .expenseReminder, .expenseSettled,
+        case .expenseSplitBill, .expenseReminder, .expenseSettled,
              .dailyDebtReminder, .bulkSettlementPendingApproval, .bulkSettlementApproved,
              .bulkSettlementRejected:
             return .expenses
@@ -89,7 +96,9 @@ public struct AppNotification: Identifiable, Codable, Equatable, Sendable {
                 return .userProfile(actorUserId)
             }
             return .friends
-        case .friendRequestSent, .groupInvite:
+        case .groupInvite:
+            return .friends
+        case .friendRequestSent:
             return .friends
         case .directMessage, .groupMessage, .groupCreated, .groupMemberAdded,
              .groupMemberRemoved, .groupRenamed, .groupAdminTransferred:

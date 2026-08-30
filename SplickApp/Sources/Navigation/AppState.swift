@@ -196,10 +196,11 @@ final class AppState: ObservableObject {
             .first
     }
 
-    func openPostFromNotification(_ postId: UUID) {
+    func openPostFromNotification(_ postId: UUID, commentId: UUID? = nil) {
         pendingFeedPostNavigation = PendingFeedPostNavigation(
             postId: postId,
-            expandBillSplit: false
+            expandBillSplit: false,
+            commentId: commentId
         )
         withAnimation(.easeInOut(duration: 0.35)) {
             selectedTab = .feed
@@ -244,8 +245,8 @@ final class AppState: ObservableObject {
 
     func routeNotification(target: NotificationNavigationTarget) {
         switch target {
-        case .post(let postId):
-            openPostFromNotification(postId)
+        case .post(let postId, let commentId):
+            openPostFromNotification(postId, commentId: commentId)
         case .feed:
             withAnimation(.easeInOut(duration: 0.35)) {
                 selectedTab = .feed
@@ -284,7 +285,7 @@ final class AppState: ObservableObject {
         switch destination.screen {
         case .postDetail:
             if let postId = destination.postDetailId {
-                return .post(postId)
+                return .post(postId, commentId: destination.commentId)
             }
             return .feed
         case .feed:
