@@ -258,6 +258,7 @@ private struct FeedPrimaryPage: View {
     @Environment(\.feedSegmentScrollState) private var feedSegmentScrollState
     @Environment(\.customEmojiDependencies) private var customEmojiDependencies
     @Environment(\.currentUserSummary) private var currentUserSummary
+    @Environment(\.feedTabIsActive) private var feedTabIsActive
     @ObservedObject var viewModel: FeedViewModel
     @Binding var navigationPath: NavigationPath
     @Binding var companionsRoute: CompanionsSheetRoute?
@@ -452,7 +453,7 @@ private struct FeedPrimaryPage: View {
                     .equatable()
                     .feedPostZoomSource(postId: post.id)
                     .onAppear {
-                        guard !viewModel.isRefreshing else { return }
+                        guard feedTabIsActive, !viewModel.isRefreshing else { return }
                         Task { await viewModel.trackViewOnScrollIfNeeded(for: post) }
                         if post.id == viewModel.posts.last?.id {
                             Task { await viewModel.loadMore() }

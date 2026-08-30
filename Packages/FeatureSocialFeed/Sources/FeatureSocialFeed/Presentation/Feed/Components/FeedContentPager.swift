@@ -22,12 +22,19 @@ private final class _PagerState {
     }
 }
 
+private struct _PagerChrome: Equatable {
+    var activeSelection: FeedContentSegment
+    var feedTabIsActive: Bool
+    var sameTabTapHandlingEnabled: Bool
+    var pullToRefreshActive: Bool
+}
+
 @MainActor
 private final class _PagerActivityState: ObservableObject {
-    @Published var activeSelection: FeedContentSegment
+    @Published var chrome: _PagerChrome
 
-    init(activeSelection: FeedContentSegment) {
-        self.activeSelection = activeSelection
+    init(chrome: _PagerChrome) {
+        self.chrome = chrome
     }
 }
 
@@ -47,13 +54,11 @@ struct FeedContentPager<Feed: View, Album: View, Streak: View>: View {
     @Environment(\.pullToRefreshActive) private var pullToRefreshActive
     @Environment(\.feedTabIsActive) private var feedTabIsActive
 
+    /// Locale-only: high-frequency flags (tab active, pull-to-refresh, selection) must not
+    /// replace UIHostingController roots — that hitch is what made main-tab switches lag on iOS 17.
     private var contentRevision: Int {
         var hasher = Hasher()
         hasher.combine(languageService.locale)
-        hasher.combine(feedTabIsActive)
-        hasher.combine(pullToRefreshActive)
-        hasher.combine(sameTabTapHandlingEnabled)
-        hasher.combine(selection)
         return hasher.finalize()
     }
 
@@ -68,20 +73,17 @@ struct FeedContentPager<Feed: View, Album: View, Streak: View>: View {
                 height: h,
                 activeSelection: selection,
                 contentRevision: contentRevision,
+                feedTabIsActive: feedTabIsActive,
+                sameTabTapHandlingEnabled: sameTabTapHandlingEnabled,
+                pullToRefreshActive: pullToRefreshActive,
                 feed: {
-                    feed().modifier(
-                        pagerEnvironment(sameTabTapHandlingEnabled: sameTabTapHandlingEnabled && selection == .feed)
-                    )
+                    feed().modifier(pagerEnvironment)
                 },
                 album: {
-                    album().modifier(
-                        pagerEnvironment(sameTabTapHandlingEnabled: sameTabTapHandlingEnabled && selection == .album)
-                    )
+                    album().modifier(pagerEnvironment)
                 },
                 streak: {
-                    streak().modifier(
-                        pagerEnvironment(sameTabTapHandlingEnabled: sameTabTapHandlingEnabled && selection == .streak)
-                    )
+                    streak().modifier(pagerEnvironment)
                 }
             )
             .frame(width: w, height: h)
@@ -90,35 +92,27 @@ struct FeedContentPager<Feed: View, Album: View, Streak: View>: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func pagerEnvironment(sameTabTapHandlingEnabled: Bool) -> _PagerEnvironmentForwarding {
+    private var pagerEnvironment: _PagerEnvironmentForwarding {
         _PagerEnvironmentForwarding(
             languageService: languageService,
             tabBarScrollState: tabBarScrollState,
-            feedSegmentScrollState: feedSegmentScrollState,
-            sameTabTapHandlingEnabled: sameTabTapHandlingEnabled,
-            pullToRefreshActive: pullToRefreshActive,
-            feedTabIsActive: feedTabIsActive
+            feedSegmentScrollState: feedSegmentScrollState
         )
     }
 }
 
 /// Re-applies environment values lost when embedding pages in `UIHostingController`.
+/// Tab/refresh flags live on `_PagerActivityState` so they update without remounting pages.
 private struct _PagerEnvironmentForwarding: ViewModifier {
     let languageService: LanguageService
     let tabBarScrollState: TabBarScrollState?
     let feedSegmentScrollState: FeedSegmentScrollState?
-    let sameTabTapHandlingEnabled: Bool
-    let pullToRefreshActive: Bool
-    let feedTabIsActive: Bool
 
     func body(content: Content) -> some View {
         content
             .environmentObject(languageService)
             .environment(\.tabBarScrollState, tabBarScrollState)
             .environment(\.feedSegmentScrollState, feedSegmentScrollState)
-            .environment(\.sameTabTapHandlingEnabled, sameTabTapHandlingEnabled)
-            .environment(\.pullToRefreshActive, pullToRefreshActive)
-            .environment(\.feedTabIsActive, feedTabIsActive)
     }
 }
 
@@ -296,6 +290,9 @@ private struct _PagerHostRep<Feed: View, Album: View, Streak: View>: UIViewContr
     let height: CGFloat
     let activeSelection: FeedContentSegment
     let contentRevision: Int
+    let feedTabIsActive: Bool
+    let sameTabTapHandlingEnabled: Bool
+    let pullToRefreshActive: Bool
     let feed: () -> Feed
     let album: () -> Album
     let streak: () -> Streak
@@ -312,7 +309,12 @@ private struct _PagerHostRep<Feed: View, Album: View, Streak: View>: UIViewContr
             coordinator: coordinator,
             width: width,
             height: height,
-            activeSelection: activeSelection,
+            chrome: _PagerChrome(
+                activeSelection: activeSelection,
+                feedTabIsActive: feedTabIsActive,
+                sameTabTapHandlingEnabled: sameTabTapHandlingEnabled,
+                pullToRefreshActive: pullToRefreshActive
+            ),
             feed: feed,
             album: album,
             streak: streak
@@ -339,7 +341,12 @@ private struct _PagerHostRep<Feed: View, Album: View, Streak: View>: UIViewContr
             streak: streak,
             width: width,
             height: height,
-            activeSelection: activeSelection,
+            chrome: _PagerChrome(
+                activeSelection: activeSelection,
+                feedTabIsActive: feedTabIsActive,
+                sameTabTapHandlingEnabled: sameTabTapHandlingEnabled,
+                pullToRefreshActive: pullToRefreshActive
+            ),
             contentRevision: contentRevision
         )
     }
@@ -353,7 +360,15 @@ private struct _PagerPageRoot<Content: View>: View {
     let content: Content
 
     var body: some View {
-        content.environment(\.scrollChromeTrackingEnabled, activityState.activeSelection == segment)
+        let chrome = activityState.chrome
+        content
+            .environment(\.scrollChromeTrackingEnabled, chrome.activeSelection == segment)
+            .environment(\.feedTabIsActive, chrome.feedTabIsActive && segment == .feed)
+            .environment(
+                \.sameTabTapHandlingEnabled,
+                chrome.sameTabTapHandlingEnabled && chrome.activeSelection == segment
+            )
+            .environment(\.pullToRefreshActive, chrome.pullToRefreshActive)
     }
 }
 
@@ -369,7 +384,6 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
     private var currentStreak: () -> Streak
     private var currentWidth: CGFloat
     private var currentHeight: CGFloat
-    private var activeSelection: FeedContentSegment
     private var currentContentRevision: Int?
     /// Lazy-mount segment UI; feed (index 1) is mounted on first layout.
     private var mountedSegmentIndices: Set<Int> = []
@@ -378,16 +392,15 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
         coordinator: _PagerGestureCoordinator,
         width: CGFloat,
         height: CGFloat,
-        activeSelection: FeedContentSegment,
+        chrome: _PagerChrome,
         feed: @escaping () -> Feed,
         album: @escaping () -> Album,
         streak: @escaping () -> Streak
     ) {
         self.coordinator = coordinator
-        self.activityState = _PagerActivityState(activeSelection: activeSelection)
+        self.activityState = _PagerActivityState(chrome: chrome)
         self.currentWidth = width
         self.currentHeight = height
-        self.activeSelection = activeSelection
         self.currentFeed = feed
         self.currentAlbum = album
         self.currentStreak = streak
@@ -429,7 +442,7 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
 
     private func embedHosting() {
         coordinator.attachHostView(view)
-        let initialIndex = feedSegmentOrder.firstIndex(of: activeSelection) ?? 1
+        let initialIndex = feedSegmentOrder.firstIndex(of: activityState.chrome.activeSelection) ?? 1
         ensureSegmentMounted(at: initialIndex)
         applyLayout()
     }
@@ -560,7 +573,7 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
         streak: @escaping () -> Streak,
         width: CGFloat,
         height: CGFloat,
-        activeSelection: FeedContentSegment,
+        chrome: _PagerChrome,
         contentRevision: Int
     ) {
         let geometryChanged = width != currentWidth || height != currentHeight
@@ -569,14 +582,13 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
         currentStreak = streak
         currentWidth = width
         currentHeight = height
-        self.activeSelection = activeSelection
-        if activityState.activeSelection != activeSelection {
+        if activityState.chrome != chrome {
             Task { @MainActor in
-                activityState.activeSelection = activeSelection
+                activityState.chrome = chrome
             }
         }
 
-        if let index = feedSegmentOrder.firstIndex(of: activeSelection) {
+        if let index = feedSegmentOrder.firstIndex(of: chrome.activeSelection) {
             ensureSegmentMounted(at: index)
         }
         if currentContentRevision != contentRevision {

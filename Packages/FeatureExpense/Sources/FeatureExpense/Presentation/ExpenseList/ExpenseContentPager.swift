@@ -24,11 +24,10 @@ struct ExpenseContentPager<History: View, Overview: View, Friends: View>: View {
     @Environment(\.feedSegmentScrollState) private var feedSegmentScrollState
     @Environment(\.pullToRefreshActive) private var pullToRefreshActive
 
+    /// Locale + identity epoch only. Pull-to-refresh / selection must not remount hosted pages.
     private var contentRevision: Int {
         var hasher = Hasher()
         hasher.combine(languageService.locale)
-        hasher.combine(pullToRefreshActive)
-        hasher.combine(selection)
         hasher.combine(contentEpoch)
         return hasher.finalize()
     }
@@ -43,14 +42,13 @@ struct ExpenseContentPager<History: View, Overview: View, Friends: View>: View {
                 width: width,
                 height: height,
                 contentRevision: contentRevision,
+                pullToRefreshActive: pullToRefreshActive,
                 history: {
                     history().modifier(
                         ExpensePagerEnvironmentForwarding(
                             languageService: languageService,
                             tabBarScrollState: tabBarScrollState,
-                            feedSegmentScrollState: feedSegmentScrollState,
-                            pullToRefreshActive: pullToRefreshActive,
-                            scrollChromeTrackingEnabled: selection == .history
+                            feedSegmentScrollState: feedSegmentScrollState
                         )
                     )
                 },
@@ -59,9 +57,7 @@ struct ExpenseContentPager<History: View, Overview: View, Friends: View>: View {
                         ExpensePagerEnvironmentForwarding(
                             languageService: languageService,
                             tabBarScrollState: tabBarScrollState,
-                            feedSegmentScrollState: feedSegmentScrollState,
-                            pullToRefreshActive: pullToRefreshActive,
-                            scrollChromeTrackingEnabled: selection == .overview
+                            feedSegmentScrollState: feedSegmentScrollState
                         )
                     )
                 },
@@ -70,9 +66,7 @@ struct ExpenseContentPager<History: View, Overview: View, Friends: View>: View {
                         ExpensePagerEnvironmentForwarding(
                             languageService: languageService,
                             tabBarScrollState: tabBarScrollState,
-                            feedSegmentScrollState: feedSegmentScrollState,
-                            pullToRefreshActive: pullToRefreshActive,
-                            scrollChromeTrackingEnabled: selection == .friends
+                            feedSegmentScrollState: feedSegmentScrollState
                         )
                     )
                 }
@@ -90,16 +84,12 @@ private struct ExpensePagerEnvironmentForwarding: ViewModifier {
     let languageService: LanguageService
     let tabBarScrollState: TabBarScrollState?
     let feedSegmentScrollState: FeedSegmentScrollState?
-    let pullToRefreshActive: Bool
-    let scrollChromeTrackingEnabled: Bool
 
     func body(content: Content) -> some View {
         content
             .environmentObject(languageService)
             .environment(\.tabBarScrollState, tabBarScrollState)
             .environment(\.feedSegmentScrollState, feedSegmentScrollState)
-            .environment(\.pullToRefreshActive, pullToRefreshActive)
-            .environment(\.scrollChromeTrackingEnabled, scrollChromeTrackingEnabled)
     }
 }
 
@@ -119,12 +109,17 @@ private final class ExpensePagerState {
     }
 }
 
+private struct ExpensePagerChrome: Equatable {
+    var activeSelection: ExpenseContentSegment
+    var pullToRefreshActive: Bool
+}
+
 @MainActor
 private final class ExpensePagerActivityState: ObservableObject {
-    @Published var activeSelection: ExpenseContentSegment
+    @Published var chrome: ExpensePagerChrome
 
-    init(activeSelection: ExpenseContentSegment) {
-        self.activeSelection = activeSelection
+    init(chrome: ExpensePagerChrome) {
+        self.chrome = chrome
     }
 }
 
@@ -227,6 +222,7 @@ private struct ExpensePagerHostRep<History: View, Overview: View, Friends: View>
     let width: CGFloat
     let height: CGFloat
     let contentRevision: Int
+    let pullToRefreshActive: Bool
     let history: () -> History
     let overview: () -> Overview
     let friends: () -> Friends
@@ -242,7 +238,10 @@ private struct ExpensePagerHostRep<History: View, Overview: View, Friends: View>
             coordinator: coordinator,
             width: width,
             height: height,
-            activeSelection: selection,
+            chrome: ExpensePagerChrome(
+                activeSelection: selection,
+                pullToRefreshActive: pullToRefreshActive
+            ),
             history: history,
             overview: overview,
             friends: friends
@@ -267,7 +266,10 @@ private struct ExpensePagerHostRep<History: View, Overview: View, Friends: View>
             friends: friends,
             width: width,
             height: height,
-            activeSelection: selection,
+            chrome: ExpensePagerChrome(
+                activeSelection: selection,
+                pullToRefreshActive: pullToRefreshActive
+            ),
             contentRevision: contentRevision
         )
     }
@@ -281,7 +283,10 @@ private struct ExpensePagerPageRoot<Content: View>: View {
     let content: Content
 
     var body: some View {
-        content.environment(\.scrollChromeTrackingEnabled, activityState.activeSelection == segment)
+        let chrome = activityState.chrome
+        content
+            .environment(\.scrollChromeTrackingEnabled, chrome.activeSelection == segment)
+            .environment(\.pullToRefreshActive, chrome.pullToRefreshActive)
     }
 }
 
@@ -297,7 +302,6 @@ private final class ExpensePagerContainerVC<History: View, Overview: View, Frien
     private var currentFriends: () -> Friends
     private var currentWidth: CGFloat
     private var currentHeight: CGFloat
-    private var activeSelection: ExpenseContentSegment
     private var currentContentRevision: Int?
     private var mountedIndices: Set<Int> = []
 
@@ -305,16 +309,15 @@ private final class ExpensePagerContainerVC<History: View, Overview: View, Frien
         coordinator: ExpensePagerGestureCoordinator,
         width: CGFloat,
         height: CGFloat,
-        activeSelection: ExpenseContentSegment,
+        chrome: ExpensePagerChrome,
         history: @escaping () -> History,
         overview: @escaping () -> Overview,
         friends: @escaping () -> Friends
     ) {
         self.coordinator = coordinator
-        self.activityState = ExpensePagerActivityState(activeSelection: activeSelection)
+        self.activityState = ExpensePagerActivityState(chrome: chrome)
         self.currentWidth = width
         self.currentHeight = height
-        self.activeSelection = activeSelection
         self.currentHistory = history
         self.currentOverview = overview
         self.currentFriends = friends
@@ -336,7 +339,7 @@ private final class ExpensePagerContainerVC<History: View, Overview: View, Frien
 
         bindCoordinatorCallbacks()
         coordinator.attachHostView(view)
-        ensureMounted(at: expenseSegmentStripOrder.firstIndex(of: activeSelection) ?? 1)
+        ensureMounted(at: expenseSegmentStripOrder.firstIndex(of: activityState.chrome.activeSelection) ?? 1)
         applyLayout()
     }
 
@@ -460,7 +463,7 @@ private final class ExpensePagerContainerVC<History: View, Overview: View, Frien
         friends: @escaping () -> Friends,
         width: CGFloat,
         height: CGFloat,
-        activeSelection: ExpenseContentSegment,
+        chrome: ExpensePagerChrome,
         contentRevision: Int
     ) {
         let geometryChanged = width != currentWidth || height != currentHeight
@@ -469,15 +472,14 @@ private final class ExpensePagerContainerVC<History: View, Overview: View, Frien
         currentFriends = friends
         currentWidth = width
         currentHeight = height
-        self.activeSelection = activeSelection
 
-        if activityState.activeSelection != activeSelection {
+        if activityState.chrome != chrome {
             Task { @MainActor in
-                activityState.activeSelection = activeSelection
+                activityState.chrome = chrome
             }
         }
 
-        if let index = expenseSegmentStripOrder.firstIndex(of: activeSelection) {
+        if let index = expenseSegmentStripOrder.firstIndex(of: chrome.activeSelection) {
             ensureMounted(at: index)
         }
         if currentContentRevision != contentRevision {

@@ -1,4 +1,5 @@
 import ARKit
+import DesignSystem
 import Localization
 import SwiftUI
 import UIKit
@@ -11,7 +12,6 @@ struct CameraPickerView: View {
         case cancelled
         case openLibrary
         case openTextCreation
-        case openLayoutCapture
     }
 
     let onResult: (Result) -> Void
@@ -23,7 +23,6 @@ struct CameraPickerView: View {
     @StateObject private var arHandle = ARCaptureHandle()
     @State private var arEffect: ARFaceEffect = .glasses
     @State private var isCapturing = false
-    @State private var publishMode: CameraPublishMode = .post
     @State private var catalogItems: [FilterCatalogItem] = []
     @State private var toastMessage: String?
     @State private var handsFreeSeconds = 0
@@ -34,54 +33,70 @@ struct CameraPickerView: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
-
-            previewLayer
-                .ignoresSafeArea()
-                .gesture(
-                    MagnificationGesture()
-                        .onChanged { session.updatePinch(magnification: $0) }
-                        .onEnded { _ in session.endPinch() }
-                )
-                .simultaneousGesture(
-                    DragGesture(minimumDistance: 12)
-                        .onChanged { session.updatePan(translationX: $0.translation.width, translationY: $0.translation.height) }
-                        .onEnded { _ in session.endPan() }
-                )
-                .simultaneousGesture(
-                    TapGesture(count: 2).onEnded { session.cycleZoomStep() }
-                )
+            SplickTheme.Colors.background.ignoresSafeArea()
 
             VStack(spacing: 0) {
                 topBar
-                Spacer()
-                CameraZoomBadge(
-                    zoom: session.zoomFactor,
-                    onToggle: { session.cycleZoomStep() }
-                )
-                .padding(.bottom, 12)
-                HStack(alignment: .bottom, spacing: 0) {
-                    CameraLeftToolbar(
-                        onTextMode: { onResult(.openTextCreation) },
-                        onBoomerang: { showComingSoon() },
-                        onLayout: { onResult(.openLayoutCapture) },
-                        onHandsFree: cycleHandsFree
-                    )
-                    .padding(.bottom, 24)
+                GeometryReader { geo in
+                    let maxWidth = geo.size.width - (CameraBottomBarMetrics.previewInset * 2)
+                    let maxHeight = max(geo.size.height - 16, 1)
+                    let frameWidth = min(maxWidth, maxHeight * CameraBottomBarMetrics.previewAspect)
+                    let frameHeight = frameWidth / CameraBottomBarMetrics.previewAspect
+                    let areaHeight = geo.size.height
+                    let liftedTop = (areaHeight - frameHeight) / 2 - CameraBottomBarMetrics.previewLift
+                    let frameBottom = liftedTop + frameHeight
+                    let toolsCenterY = (max(frameBottom, 0) + areaHeight) / 2
+                    ZStack {
+                        previewLayer
+                            .frame(width: frameWidth, height: frameHeight)
+                            .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous))
+                            .overlay {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous)
+                                        .strokeBorder(SplickTheme.Colors.divider, lineWidth: 0.5)
+                                    if let indicator = session.focusIndicator {
+                                        CameraFocusReticle(indicator: indicator)
+                                    }
+                                }
+                            }
+                            .contentShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous))
+                            .highPriorityGesture(
+                                SpatialTapGesture()
+                                    .onEnded { event in
+                                        guard !(session.filterPreset == .ar && faceTrackingSupported) else { return }
+                                        session.focus(at: event.location, viewSize: CGSize(width: frameWidth, height: frameHeight))
+                                    }
+                            )
+                            .simultaneousGesture(
+                                MagnificationGesture()
+                                    .onChanged { session.updatePinch(magnification: $0) }
+                                    .onEnded { _ in session.endPinch() }
+                            )
+                            .simultaneousGesture(
+                                DragGesture(minimumDistance: 12)
+                                    .onChanged {
+                                        session.updatePan(
+                                            translationX: $0.translation.width,
+                                            translationY: $0.translation.height
+                                        )
+                                    }
+                                    .onEnded { _ in session.endPan() }
+                            )
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                            .offset(y: -CameraBottomBarMetrics.previewLift)
 
-                    Spacer()
-
-                    VStack(spacing: 12) {
-                        CameraModeStrip(
-                            selected: publishMode,
-                            onSelect: { publishMode = $0 },
-                            onComingSoon: showComingSoon
+                        CameraCaptureToolsRow(
+                            onTextMode: { onResult(.openTextCreation) },
+                            onBoomerang: { showComingSoon() },
+                            onHandsFree: cycleHandsFree,
+                            onFilter: cycleFilter
                         )
-                        bottomBar
+                        .position(x: geo.size.width / 2, y: toolsCenterY)
                     }
-
-                    Spacer(minLength: 56)
                 }
+
+                bottomBar
+                    .padding(.bottom, 16)
             }
 
             if handsFreeSeconds > 0 {
@@ -152,16 +167,10 @@ struct CameraPickerView: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 10)
-        .background(
-            LinearGradient(colors: [.black.opacity(0.55), .clear], startPoint: .top, endPoint: .bottom)
-                .frame(height: 96)
-                .ignoresSafeArea(edges: .top),
-            alignment: .top
-        )
     }
 
     private var bottomBar: some View {
-        HStack(alignment: .bottom, spacing: 16) {
+        HStack(alignment: .bottom, spacing: 28) {
             ZStack(alignment: .topTrailing) {
                 circleButton(
                     systemName: "photo.on.rectangle",
@@ -178,9 +187,16 @@ struct CameraPickerView: View {
                 }
             }
 
-            VStack(spacing: 10) {
-                CameraFilterNameBadge(title: activeFilterTitle)
-                    .animation(.easeInOut(duration: 0.18), value: session.filterPreset)
+            VStack(spacing: 6) {
+                if !(session.filterPreset == .ar && faceTrackingSupported) {
+                    CameraNativeZoomChrome(
+                        displayZoom: session.zoomFactor,
+                        presets: session.zoomPresets,
+                        hardware: session.zoomHardware,
+                        isDialVisible: session.isZoomDialVisible,
+                        onSelectPreset: { session.selectPreset($0) }
+                    )
+                }
 
                 Button(action: capture) {
                     Circle()
@@ -197,22 +213,21 @@ struct CameraPickerView: View {
                         .scaleEffect(isCapturing ? 0.9 : 1)
                 }
                 .disabled(isCapturing)
+                .accessibilityLabel(languageService.text(.mediaTypePhoto))
             }
-
-            FilterCarouselBar(
-                preset: $session.filterPreset,
-                catalogItems: catalogItems
-            )
+            .overlay(alignment: .top) {
+                if session.filterPreset != .none {
+                    CameraFilterNameBadge(title: activeFilterTitle)
+                        .offset(y: -28)
+                        .allowsHitTesting(false)
+                }
+            }
 
             circleButton(systemName: "arrow.triangle.2.circlepath") { session.flipCamera() }
                 .padding(.bottom, shutterVerticalInset(for: CameraBottomBarMetrics.sideControlDiameter))
         }
         .padding(.horizontal, 12)
-        .padding(.bottom, 20)
-        .background(
-            LinearGradient(colors: [.clear, .black.opacity(0.55)], startPoint: .top, endPoint: .bottom)
-                .allowsHitTesting(false)
-        )
+        .padding(.bottom, 12)
     }
 
     private var activeFilterTitle: String {
@@ -241,9 +256,9 @@ struct CameraPickerView: View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
                 .frame(width: size, height: size)
-                .background(Circle().fill(Color.black.opacity(0.3)))
+                .background(Circle().fill(SplickTheme.Colors.textPrimary.opacity(0.12)))
         }
     }
 
@@ -262,6 +277,18 @@ struct CameraPickerView: View {
         }
     }
 
+    private func cycleFilter() {
+        let presets = CameraFilterPreset.allCases.filter { $0 != .ar }
+        guard let index = presets.firstIndex(of: session.filterPreset) else {
+            session.filterPreset = presets.first ?? .none
+            return
+        }
+        withAnimation(.easeInOut(duration: 0.18)) {
+            session.filterPreset = presets[(index + 1) % presets.count]
+        }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
     private func loadFilterCatalog() async {
         guard let filterCatalogRepository else { return }
         do {
@@ -276,10 +303,9 @@ struct CameraPickerView: View {
         isCapturing = true
         if session.filterPreset == .ar, faceTrackingSupported, let snapshot = arHandle.snapshot() {
             isCapturing = false
-            let screen = UIScreen.main.bounds
             let framed = PhotoEditorImageProcessor.cropToAspectFill(
                 PhotoEditorImageProcessor.normalizeOrientation(snapshot),
-                aspectRatio: screen.width / max(screen.height, 1)
+                aspectRatio: CameraBottomBarMetrics.previewAspect
             )
             onResult(.image(framed, initialFilter: .none))
             return
@@ -301,10 +327,9 @@ struct CameraPickerView: View {
                     output = session.filterEngine.renderUIImage(from: filtered) ?? output
                     initialFilter = .none
                 }
-                let screen = UIScreen.main.bounds
                 output = PhotoEditorImageProcessor.cropToAspectFill(
                     output,
-                    aspectRatio: screen.width / max(screen.height, 1)
+                    aspectRatio: CameraBottomBarMetrics.previewAspect
                 )
                 await MainActor.run {
                     isCapturing = false

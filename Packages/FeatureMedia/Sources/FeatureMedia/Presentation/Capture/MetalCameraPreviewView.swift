@@ -38,6 +38,7 @@ final class MetalPreviewMTKView: MTKView, MTKViewDelegate {
         }
         isOpaque = true
         backgroundColor = .black
+        isUserInteractionEnabled = false
     }
 
     required init(coder: NSCoder) { fatalError() }

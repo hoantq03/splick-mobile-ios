@@ -947,6 +947,7 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case mediaCameraToolBoomerang = "media.camera.tool.boomerang"
     case mediaCameraToolLayout = "media.camera.tool.layout"
     case mediaCameraToolHandsFree = "media.camera.tool.hands_free"
+    case mediaCameraToolFilter = "media.camera.tool.filter"
     case mediaCameraTimerSeconds = "media.camera.timer_seconds"
     case mediaZoomA11y = "media.zoom.a11y"
     case mediaLoadFailed = "media.load_failed"

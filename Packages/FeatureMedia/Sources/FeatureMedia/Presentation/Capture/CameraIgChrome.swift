@@ -2,79 +2,42 @@ import DesignSystem
 import Localization
 import SwiftUI
 
-enum CameraPublishMode: String, CaseIterable, Identifiable {
-    case post
-    case story
-    case reels
-
-    var id: String { rawValue }
-}
-
-struct CameraLeftToolbar: View {
+struct CameraCaptureToolsRow: View {
     @EnvironmentObject private var languageService: LanguageService
     let onTextMode: () -> Void
     let onBoomerang: () -> Void
-    let onLayout: () -> Void
     let onHandsFree: () -> Void
+    let onFilter: () -> Void
 
     var body: some View {
-        VStack(spacing: SplickTheme.Spacing.md) {
-            sideTool(icon: "textformat", label: .mediaCameraToolText, action: onTextMode)
-            sideTool(icon: "infinity", label: .mediaCameraToolBoomerang, action: onBoomerang)
-            sideTool(icon: "square.grid.2x2", label: .mediaCameraToolLayout, action: onLayout)
-            sideTool(icon: "timer", label: .mediaCameraToolHandsFree, action: onHandsFree)
+        HStack(alignment: .bottom) {
+            tool(icon: "textformat", label: .mediaCameraToolText, action: onTextMode)
+            Spacer(minLength: 0)
+            tool(icon: "infinity", label: .mediaCameraToolBoomerang, action: onBoomerang)
+            Spacer(minLength: 0)
+            tool(icon: "timer", label: .mediaCameraToolHandsFree, action: onHandsFree)
+            Spacer(minLength: 0)
+            tool(icon: "camera.filters", label: .mediaCameraToolFilter, action: onFilter)
         }
-        .padding(.leading, SplickTheme.Spacing.sm)
+        .padding(.horizontal, SplickTheme.Spacing.sm)
     }
 
-    private func sideTool(icon: String, label: L10nKey, action: @escaping () -> Void) -> some View {
+    private func tool(icon: String, label: L10nKey, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(spacing: 4) {
                 Image(systemName: icon)
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SplickTheme.Colors.textPrimary)
                     .frame(width: 44, height: 44)
-                    .background(Circle().fill(Color.black.opacity(0.28)))
+                    .background(Circle().fill(SplickTheme.Colors.textPrimary.opacity(0.12)))
 
                 Text(languageService.text(label))
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SplickTheme.Colors.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
-            .frame(width: 56)
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-struct CameraModeStrip: View {
-    @EnvironmentObject private var languageService: LanguageService
-    let selected: CameraPublishMode
-    let onSelect: (CameraPublishMode) -> Void
-    let onComingSoon: () -> Void
-
-    var body: some View {
-        HStack(spacing: 20) {
-            modeTab(.post, label: .mediaCameraModePost)
-            modeTab(.story, label: .mediaCameraModeStory, disabled: true)
-            modeTab(.reels, label: .mediaCameraModeReels, disabled: true)
-        }
-        .padding(.bottom, SplickTheme.Spacing.xs)
-    }
-
-    private func modeTab(_ mode: CameraPublishMode, label: L10nKey, disabled: Bool = false) -> some View {
-        let isSelected = selected == mode
-        return Button {
-            if disabled {
-                onComingSoon()
-            } else {
-                onSelect(mode)
-            }
-        } label: {
-            Text(languageService.text(label))
-                .font(.system(size: 13, weight: isSelected ? .bold : .regular))
-                .foregroundStyle(isSelected ? .white : .white.opacity(0.55))
+            .frame(width: 64)
         }
         .buttonStyle(.plain)
     }
@@ -84,6 +47,10 @@ enum CameraBottomBarMetrics {
     static let shutterDiameter: CGFloat = 72
     static let sideControlDiameter: CGFloat = 44
     static let galleryDiameter: CGFloat = 50
+    /// Width / height. 4:3 frame raised 50% → 8:9.
+    static let previewAspect: CGFloat = 8 / 9
+    static let previewInset: CGFloat = 12
+    static let previewLift: CGFloat = 24
 }
 
 /// Capsule label centered above the shutter — matches Instagram filter name chrome.
@@ -105,33 +72,6 @@ struct CameraFilterNameBadge: View {
                             .stroke(Color.white.opacity(0.18), lineWidth: 0.5)
                     }
             }
-    }
-}
-
-/// Current optical zoom. Tap to jump between 1× and 2×.
-struct CameraZoomBadge: View {
-    @EnvironmentObject private var languageService: LanguageService
-    let zoom: CGFloat
-    let onToggle: () -> Void
-
-    var body: some View {
-        Button(action: onToggle) {
-            Text(CameraZoom.label(zoom))
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background {
-                    Capsule()
-                        .fill(Color.black.opacity(0.45))
-                        .overlay {
-                            Capsule()
-                                .stroke(Color.white.opacity(0.22), lineWidth: 0.5)
-                        }
-                }
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(languageService.text(.mediaZoomA11y))
     }
 }
 

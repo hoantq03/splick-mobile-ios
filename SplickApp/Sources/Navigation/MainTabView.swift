@@ -28,9 +28,11 @@ struct MainTabView: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var tabBarChrome = TabBarScrollStateHolder()
     @State private var badgeCounts: TabBadgeCounts = .zero
-    /// Drives heavy tab work (loads, video, chrome) — updated after the pager slide settles
+    /// Drives heavy tab work (loads, chrome) — updated after the pager slide settles
     /// so activation cost does not hitch the slide itself.
     @State private var settledPagerTab: Tab = .feed
+    /// Updated immediately when leaving feed so video decode stops before the pager slide.
+    @State private var feedPlaybackActive = true
     /// Toggled to `true` by the bell button while the panel is open; the overlay's onChange
     /// observes this, resets it, and runs `dismissAnimated()` so the collapse animation plays
     /// before the overlay is removed from the hierarchy.
@@ -110,6 +112,7 @@ struct MainTabView: View {
                 if appState.selectedTab.isPagerTab {
                     settledPagerTab = appState.selectedTab
                 }
+                feedPlaybackActive = appState.selectedTab == .feed
                 Task { @MainActor in
                     badgeCounts = container.badgeCountService.counts
                     pushNotificationCoordinator.syncAppIconBadge(count: badgeCounts.total)
@@ -245,7 +248,7 @@ struct MainTabView: View {
             onPendingPostHandled: {
                 appState.clearPendingPostNavigation()
             },
-            isTabActive: settledPagerTab == .feed
+            isTabActive: feedPlaybackActive
         )
         .environmentObject(container.customEmojiStore)
         .environment(\.customEmojiDependencies, container.customEmojiDependencies)
@@ -353,6 +356,9 @@ struct MainTabView: View {
 
     private func handleSelectedTabChange(_ tab: Tab) {
         Log.debug("Tab selected", category: .ui, metadata: ["tab": tab.rawValue])
+        if tab != .feed {
+            feedPlaybackActive = false
+        }
         if tab == .camera {
             tabBarChrome.tabBar.hide(flushToBottom: true)
             return
@@ -362,6 +368,7 @@ struct MainTabView: View {
             try? await Task.sleep(for: .milliseconds(MainTabPagerMotion.settleMilliseconds))
             guard appState.selectedTab == tab else { return }
             settledPagerTab = tab
+            feedPlaybackActive = tab == .feed
             if tab == .messages,
                appState.isMessagingThreadPresented || appState.pendingMessagingNavigation != nil {
                 tabBarChrome.tabBar.hide(flushToBottom: true)
@@ -1411,6 +1418,8 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
         Group {
             if activatedTabs.contains(tab) {
                 content()
+                    // Pager `withAnimation` must not leak into feed/messages layout.
+                    .transaction { $0.animation = nil }
             } else {
                 // Keep a stable-sized placeholder so HStack geometry stays correct
                 // before the tab is visited for the first time.

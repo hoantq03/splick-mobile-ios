@@ -17,9 +17,14 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
     @Published var filterIntensity: Float = 0.75
     @Published var primaryFaceBounds: CGRect?
     @Published var lastErrorMessage: String?
+    /// Display zoom (0.5× / 1× / 2×), not raw `videoZoomFactor`.
     @Published var zoomFactor: CGFloat = 1
     @Published var minZoom: CGFloat = 1
     @Published var maxZoom: CGFloat = 1
+    @Published var zoomPresets: [CGFloat] = [1]
+    @Published var isZoomDialVisible = false
+    @Published var focusIndicator: CameraFocusIndicator?
+    @Published private(set) var zoomHardware = CameraZoom.hardware(minVideo: 1, maxVideo: 1, switchOverVideo: [])
 
     let filterEngine = CameraFilterEngine()
 
@@ -34,6 +39,16 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
     private var isPinching = false
     private var panBase: CGFloat = 1
     private var isPanning = false
+    private var hideZoomDialTask: Task<Void, Never>?
+    private var hideFocusTask: Task<Void, Never>?
+    private var subjectAreaObserver: NSObjectProtocol?
+    private var ignoreSubjectAreaUntil: Date = .distantPast
+
+    deinit {
+        if let subjectAreaObserver {
+            NotificationCenter.default.removeObserver(subjectAreaObserver)
+        }
+    }
 
     func start() {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
@@ -57,10 +72,16 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
     }
 
     func stop() {
+        hideZoomDialTask?.cancel()
+        hideFocusTask?.cancel()
         sessionQueue.async { [weak self] in
             guard let self, self.session.isRunning else { return }
             self.session.stopRunning()
-            DispatchQueue.main.async { self.isRunning = false }
+            DispatchQueue.main.async {
+                self.isRunning = false
+                self.isZoomDialVisible = false
+                self.focusIndicator = nil
+            }
         }
     }
 
@@ -88,12 +109,17 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
             isPinching = true
             pinchBase = zoomFactor
         }
-        setZoom(CameraZoom.applyPinch(base: pinchBase, scale: magnification, min: minZoom, max: maxZoom), animated: false)
+        showZoomDial()
+        setDisplayZoom(
+            CameraZoom.applyPinch(base: pinchBase, scale: magnification, hardware: zoomHardware),
+            animated: false
+        )
     }
 
     func endPinch() {
         isPinching = false
         pinchBase = zoomFactor
+        scheduleHideZoomDial()
     }
 
     func updatePan(translationX: CGFloat, translationY: CGFloat) {
@@ -102,9 +128,15 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
             isPanning = true
             panBase = zoomFactor
         }
+        showZoomDial()
         let width = max(UIScreen.main.bounds.width, 1)
-        setZoom(
-            CameraZoom.applyPan(base: panBase, deltaPx: translationX, viewWidth: width, min: minZoom, max: maxZoom),
+        setDisplayZoom(
+            CameraZoom.applyPan(
+                base: panBase,
+                deltaPx: translationX,
+                viewWidth: width,
+                hardware: zoomHardware
+            ),
             animated: false
         )
     }
@@ -112,28 +144,56 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
     func endPan() {
         isPanning = false
         panBase = zoomFactor
+        scheduleHideZoomDial()
+    }
+
+    func selectPreset(_ display: CGFloat) {
+        isZoomDialVisible = false
+        hideZoomDialTask?.cancel()
+        setDisplayZoom(display, animated: true)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
     func cycleZoomStep() {
-        setZoom(CameraZoom.nextStep(current: zoomFactor, min: minZoom, max: maxZoom), animated: true)
+        selectPreset(CameraZoom.nextPreset(current: zoomFactor, hardware: zoomHardware))
     }
 
-    func setZoom(_ factor: CGFloat, animated: Bool) {
-        let clamped = CameraZoom.clamp(factor, min: minZoom, max: maxZoom)
+    func setDisplayZoom(_ display: CGFloat, animated: Bool) {
+        let clampedDisplay = CameraZoom.clampDisplay(display, hardware: zoomHardware)
+        let video = zoomHardware.video(fromDisplay: clampedDisplay)
         sessionQueue.async { [weak self] in
             guard let self, let device = self.currentInput?.device else { return }
             do {
                 try device.lockForConfiguration()
+                let capped = min(
+                    max(video, device.minAvailableVideoZoomFactor),
+                    min(device.maxAvailableVideoZoomFactor, zoomHardware.maxVideo)
+                )
                 if animated {
-                    device.ramp(toVideoZoomFactor: clamped, withRate: 8)
+                    device.ramp(toVideoZoomFactor: capped, withRate: 8)
                 } else {
-                    device.videoZoomFactor = clamped
+                    device.videoZoomFactor = capped
                 }
                 device.unlockForConfiguration()
-                DispatchQueue.main.async { self.zoomFactor = clamped }
+                DispatchQueue.main.async { self.zoomFactor = clampedDisplay }
             } catch {
                 // Keep the last successful zoom.
             }
+        }
+    }
+
+    func focus(at viewPoint: CGPoint, viewSize: CGSize) {
+        guard viewSize.width > 1, viewSize.height > 1 else { return }
+        let poi = CameraFocusMapping.devicePointOfInterest(
+            viewPoint: viewPoint,
+            viewSize: viewSize,
+            mirrored: isFrontCamera
+        )
+        presentFocusIndicator(at: viewPoint)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        ignoreSubjectAreaUntil = Date().addingTimeInterval(1.6)
+        sessionQueue.async { [weak self] in
+            self?.applyFocusAndExposure(at: poi)
         }
     }
 
@@ -189,8 +249,7 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
         if let currentInput {
             session.removeInput(currentInput)
         }
-        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position)
-            ?? AVCaptureDevice.default(for: .video),
+        guard let device = preferredCamera(position: position),
             let input = try? AVCaptureDeviceInput(device: device),
             session.canAddInput(input)
         else {
@@ -224,25 +283,172 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
         }
     }
 
+    private func preferredCamera(position: AVCaptureDevice.Position) -> AVCaptureDevice? {
+        let types: [AVCaptureDevice.DeviceType]
+        if position == .back {
+            types = [
+                .builtInTripleCamera,
+                .builtInDualWideCamera,
+                .builtInDualCamera,
+                .builtInWideAngleCamera,
+            ]
+        } else {
+            types = [
+                .builtInTrueDepthCamera,
+                .builtInWideAngleCamera,
+            ]
+        }
+        let discovery = AVCaptureDevice.DiscoverySession(
+            deviceTypes: types,
+            mediaType: .video,
+            position: position
+        )
+        for type in types {
+            if let match = discovery.devices.first(where: { $0.deviceType == type }) {
+                return match
+            }
+        }
+        return AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position)
+            ?? AVCaptureDevice.default(for: .video)
+    }
+
     private func applyZoomLimits(for device: AVCaptureDevice) {
-        let minFactor = max(device.minAvailableVideoZoomFactor, 1)
-        let maxFactor = min(device.maxAvailableVideoZoomFactor, CameraZoom.uxMax)
-        let reset = CameraZoom.clamp(1, min: minFactor, max: maxFactor)
+        let switchOvers = device.virtualDeviceSwitchOverVideoZoomFactors.map { CGFloat(truncating: $0) }
+        var systemMultiplier: CGFloat?
+        if #available(iOS 18.0, *) {
+            systemMultiplier = device.displayVideoZoomFactorMultiplier
+        }
+        let hardware = CameraZoom.hardware(
+            minVideo: device.minAvailableVideoZoomFactor,
+            maxVideo: device.maxAvailableVideoZoomFactor,
+            switchOverVideo: switchOvers,
+            systemDisplayMultiplier: systemMultiplier
+        )
+        let oneX = CameraZoom.clampDisplay(1, hardware: hardware)
+        let video = min(
+            max(hardware.video(fromDisplay: oneX), device.minAvailableVideoZoomFactor),
+            device.maxAvailableVideoZoomFactor
+        )
         do {
             try device.lockForConfiguration()
-            device.videoZoomFactor = reset
+            device.videoZoomFactor = video
+            if device.isFocusModeSupported(.continuousAutoFocus) {
+                device.focusMode = .continuousAutoFocus
+            }
+            if device.isExposureModeSupported(.continuousAutoExposure) {
+                device.exposureMode = .continuousAutoExposure
+            }
+            device.isSubjectAreaChangeMonitoringEnabled = true
             device.unlockForConfiguration()
         } catch {
             // Device may still be configuring.
         }
+        observeSubjectArea(device)
         DispatchQueue.main.async {
-            self.minZoom = minFactor
-            self.maxZoom = maxFactor
-            self.zoomFactor = reset
-            self.pinchBase = reset
-            self.panBase = reset
+            self.zoomHardware = hardware
+            self.minZoom = hardware.minDisplay
+            self.maxZoom = hardware.maxDisplay
+            self.zoomPresets = hardware.presets
+            self.zoomFactor = oneX
+            self.pinchBase = oneX
+            self.panBase = oneX
             self.isPinching = false
             self.isPanning = false
+            self.isZoomDialVisible = false
+        }
+    }
+
+    private func observeSubjectArea(_ device: AVCaptureDevice) {
+        if let subjectAreaObserver {
+            NotificationCenter.default.removeObserver(subjectAreaObserver)
+        }
+        subjectAreaObserver = NotificationCenter.default.addObserver(
+            forName: .AVCaptureDeviceSubjectAreaDidChange,
+            object: device,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self, Date() >= self.ignoreSubjectAreaUntil else { return }
+            self.resetFocusToContinuous()
+        }
+    }
+
+    private func resetFocusToContinuous() {
+        sessionQueue.async { [weak self] in
+            guard let self, let device = self.currentInput?.device else { return }
+            do {
+                try device.lockForConfiguration()
+                if device.isFocusModeSupported(.continuousAutoFocus) {
+                    device.focusMode = .continuousAutoFocus
+                }
+                if device.isExposureModeSupported(.continuousAutoExposure) {
+                    device.exposureMode = .continuousAutoExposure
+                }
+                device.unlockForConfiguration()
+            } catch {
+                // Ignore — next tap can re-focus.
+            }
+        }
+        DispatchQueue.main.async {
+            self.focusIndicator = nil
+        }
+    }
+
+    private func showZoomDial() {
+        hideZoomDialTask?.cancel()
+        if !isZoomDialVisible {
+            isZoomDialVisible = true
+        }
+    }
+
+    private func scheduleHideZoomDial() {
+        hideZoomDialTask?.cancel()
+        hideZoomDialTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(900))
+            guard !Task.isCancelled else { return }
+            self.isZoomDialVisible = false
+        }
+    }
+
+    private func presentFocusIndicator(at point: CGPoint) {
+        hideFocusTask?.cancel()
+        focusIndicator = CameraFocusIndicator(point: point)
+        hideFocusTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(1200))
+            guard !Task.isCancelled else { return }
+            self.focusIndicator = nil
+        }
+    }
+
+    private func applyFocusAndExposure(at poi: CGPoint) {
+        guard let device = currentInput?.device else { return }
+        do {
+            try device.lockForConfiguration()
+            if device.isSmoothAutoFocusSupported {
+                device.isSmoothAutoFocusEnabled = false
+            }
+            if device.isFocusPointOfInterestSupported {
+                if device.focusMode == .autoFocus {
+                    device.focusMode = .locked
+                }
+                device.focusPointOfInterest = poi
+                if device.isFocusModeSupported(.autoFocus) {
+                    device.focusMode = .autoFocus
+                } else if device.isFocusModeSupported(.continuousAutoFocus) {
+                    device.focusMode = .continuousAutoFocus
+                }
+            }
+            if device.isExposurePointOfInterestSupported {
+                device.exposurePointOfInterest = poi
+                if device.isExposureModeSupported(.continuousAutoExposure) {
+                    device.exposureMode = .continuousAutoExposure
+                } else if device.isExposureModeSupported(.autoExpose) {
+                    device.exposureMode = .autoExpose
+                }
+            }
+            device.isSubjectAreaChangeMonitoringEnabled = true
+            device.unlockForConfiguration()
+        } catch {
+            // Device may still be configuring.
         }
     }
 }

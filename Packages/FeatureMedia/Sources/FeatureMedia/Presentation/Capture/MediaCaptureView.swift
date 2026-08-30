@@ -73,17 +73,6 @@ public struct MediaCaptureView: View {
                 )
                 .transition(.opacity)
 
-            case .layoutCapture:
-                LayoutCaptureView(
-                    onBack: { reopenCamera() },
-                    onCreated: { image in
-                        workingImage = image
-                        workingFilter = .none
-                        route = .preview
-                    }
-                )
-                .transition(.opacity)
-
             case .preview:
                 if let workingImage {
                     CapturePreviewView(
@@ -120,7 +109,16 @@ public struct MediaCaptureView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black.ignoresSafeArea())
+        .background(
+            Group {
+                if route == .camera {
+                    SplickTheme.Colors.background
+                } else {
+                    Color.black
+                }
+            }
+            .ignoresSafeArea()
+        )
         .animation(.easeInOut(duration: 0.2), value: route)
         .editorStatusBarHidden(true)
     }
@@ -139,15 +137,15 @@ public struct MediaCaptureView: View {
         VStack(spacing: SplickTheme.Spacing.lg) {
             Image(systemName: "camera.fill")
                 .font(.system(size: 48))
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(SplickTheme.Colors.textTertiary)
 
             VStack(spacing: SplickTheme.Spacing.sm) {
                 Text(languageService.text(.mediaCameraUnavailable))
                     .font(SplickTheme.Typography.headline)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SplickTheme.Colors.textPrimary)
                 Text(languageService.text(.mediaCameraUnavailableHint))
                     .font(SplickTheme.Typography.callout)
-                    .foregroundStyle(.white.opacity(0.65))
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
                     .multilineTextAlignment(.center)
             }
 
@@ -165,7 +163,7 @@ public struct MediaCaptureView: View {
 
             Button(languageService.text(.commonBack), action: onCancel)
                 .font(SplickTheme.Typography.callout)
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
         }
         .padding(SplickTheme.Spacing.xl)
     }
@@ -197,8 +195,6 @@ public struct MediaCaptureView: View {
             route = .library
         case .openTextCreation:
             route = .textCreation
-        case .openLayoutCapture:
-            route = .layoutCapture
         }
     }
 
@@ -213,7 +209,6 @@ private enum CaptureRoute: Equatable {
     case camera
     case library
     case textCreation
-    case layoutCapture
     case preview
     case editor
 }
