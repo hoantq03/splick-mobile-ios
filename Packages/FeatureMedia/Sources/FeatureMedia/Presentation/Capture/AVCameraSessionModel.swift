@@ -174,8 +174,7 @@ extension AVCameraSessionModel: AVCaptureVideoDataOutputSampleBufferDelegate {
         from connection: AVCaptureConnection
     ) {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-        let raw = CIImage(cvPixelBuffer: pixelBuffer)
-            .oriented(previewExifOrientation(for: connection))
+        let raw = previewCIImage(from: pixelBuffer, connection: connection)
         let preset = filterPreset
         let intensity = filterIntensity
         let filtered = filterEngine.apply(raw, preset: preset, intensity: intensity)
@@ -201,7 +200,7 @@ extension AVCameraSessionModel: AVCaptureVideoDataOutputSampleBufferDelegate {
         }
         let handler = VNImageRequestHandler(
             cvPixelBuffer: pixelBuffer,
-            orientation: previewExifOrientation(for: videoOutput.connection(with: .video)),
+            orientation: visionOrientation(for: videoOutput.connection(with: .video)),
             options: [:]
         )
         sessionQueue.async {
@@ -211,6 +210,24 @@ extension AVCameraSessionModel: AVCaptureVideoDataOutputSampleBufferDelegate {
 }
 
 private extension AVCameraSessionModel {
+    /// Video connection is locked to portrait, so buffers are already upright.
+    /// Applying `.right` again stretched/rotated the finder preview.
+    func previewCIImage(from pixelBuffer: CVPixelBuffer, connection: AVCaptureConnection) -> CIImage {
+        let image = CIImage(cvPixelBuffer: pixelBuffer)
+        if connection.isVideoOrientationSupported, connection.videoOrientation == .portrait {
+            return image
+        }
+        return image.oriented(previewExifOrientation(for: connection))
+    }
+
+    func visionOrientation(for connection: AVCaptureConnection?) -> CGImagePropertyOrientation {
+        guard let connection else { return .up }
+        if connection.isVideoOrientationSupported, connection.videoOrientation == .portrait {
+            return .up
+        }
+        return previewExifOrientation(for: connection)
+    }
+
     func previewExifOrientation(for connection: AVCaptureConnection?) -> CGImagePropertyOrientation {
         guard let connection else { return .right }
         let mirrored = connection.isVideoMirrored
@@ -241,13 +258,16 @@ extension AVCameraSessionModel: AVCapturePhotoCaptureDelegate {
             continuation?.resume(throwing: error)
             return
         }
+        if let cgImage = photo.cgImageRepresentation() {
+            continuation?.resume(returning: UIImage(cgImage: cgImage, scale: 1, orientation: .up))
+            return
+        }
         guard let data = photo.fileDataRepresentation(),
               let uiImage = UIImage(data: data)
         else {
             continuation?.resume(throwing: CameraSessionError.captureFailed)
             return
         }
-        let normalized = PhotoEditorImageProcessor.normalizeOrientation(uiImage)
-        continuation?.resume(returning: normalized)
+        continuation?.resume(returning: PhotoEditorImageProcessor.normalizeOrientation(uiImage))
     }
 }

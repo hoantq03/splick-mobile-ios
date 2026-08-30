@@ -258,26 +258,36 @@ struct CameraPickerView: View {
         isCapturing = true
         if session.filterPreset == .ar, faceTrackingSupported, let snapshot = arHandle.snapshot() {
             isCapturing = false
-            onResult(.image(PhotoEditorImageProcessor.normalizeOrientation(snapshot), initialFilter: .none))
+            let screen = UIScreen.main.bounds
+            let framed = PhotoEditorImageProcessor.cropToAspectFill(
+                PhotoEditorImageProcessor.normalizeOrientation(snapshot),
+                aspectRatio: screen.width / max(screen.height, 1)
+            )
+            onResult(.image(framed, initialFilter: .none))
             return
         }
         Task {
             do {
                 let image = try await session.capturePhoto()
-                var output = image
+                var output = PhotoEditorImageProcessor.normalizeOrientation(image)
                 var initialFilter = FilterPreset(session.filterPreset)
                 if session.filterPreset == .ar, let bounds = session.primaryFaceBounds {
-                    output = VisionFaceOverlayCompositor.composite(image: image, effect: arEffect, faceRect: bounds)
+                    output = VisionFaceOverlayCompositor.composite(image: output, effect: arEffect, faceRect: bounds)
                     initialFilter = .none
-                } else if session.filterPreset == .beauty, let ci = CIImage(image: image) {
+                } else if session.filterPreset == .beauty, let ci = CIImage(image: output) {
                     let filtered = session.filterEngine.apply(
                         ci,
                         preset: .beauty,
                         intensity: session.filterIntensity
                     )
-                    output = session.filterEngine.renderUIImage(from: filtered) ?? image
+                    output = session.filterEngine.renderUIImage(from: filtered) ?? output
                     initialFilter = .none
                 }
+                let screen = UIScreen.main.bounds
+                output = PhotoEditorImageProcessor.cropToAspectFill(
+                    output,
+                    aspectRatio: screen.width / max(screen.height, 1)
+                )
                 await MainActor.run {
                     isCapturing = false
                     onResult(.image(output, initialFilter: initialFilter))
