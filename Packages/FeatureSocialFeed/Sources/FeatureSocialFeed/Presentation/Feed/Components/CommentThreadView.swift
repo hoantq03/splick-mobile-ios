@@ -523,16 +523,8 @@ struct CommentRowView: View {
                             maxImageWidth: depth == 0 ? 220 : 200
                         )
 
-                        if showsReplyAction {
-                            Button(languageService.text(.messagingReplyAction), action: onReply)
-                                .font(.system(size: style.replyActionFontSize, weight: .medium))
-                                .foregroundStyle(SplickTheme.Colors.textTertiary)
-                                .disabled(isPending)
-                                .opacity(isPending ? 0.45 : 1)
-                        }
-
-                        if canModerateEvidence {
-                            evidenceModerationActions
+                        if showsReplyAction || canModerateEvidence {
+                            commentActionRow
                         }
                     }
                     .padding(.top, 3)
@@ -597,23 +589,33 @@ struct CommentRowView: View {
         }
     }
 
-    private var evidenceModerationActions: some View {
-        HStack(spacing: 8) {
-            evidenceModerationButton(
-                title: languageService.text(.feedPaymentEvidenceApprove),
-                tint: SplickTheme.Colors.success,
-                action: onApproveEvidence
-            )
-            evidenceModerationButton(
-                title: languageService.text(.feedPaymentEvidenceReject),
-                tint: SplickTheme.Colors.error,
-                action: onRejectEvidence
-            )
+    private var commentActionRow: some View {
+        HStack(alignment: .center, spacing: 8) {
+            if showsReplyAction {
+                commentActionChip(
+                    title: languageService.text(.messagingReplyAction),
+                    tint: SplickTheme.Colors.textTertiary,
+                    action: onReply
+                )
+                .disabled(isPending)
+                .opacity(isPending ? 0.45 : 1)
+            }
+            if canModerateEvidence {
+                commentActionChip(
+                    title: languageService.text(.feedPaymentEvidenceApprove),
+                    tint: SplickTheme.Colors.success,
+                    action: onApproveEvidence
+                )
+                commentActionChip(
+                    title: languageService.text(.feedPaymentEvidenceReject),
+                    tint: SplickTheme.Colors.error,
+                    action: onRejectEvidence
+                )
+            }
         }
-        .padding(.top, 2)
     }
 
-    private func evidenceModerationButton(
+    private func commentActionChip(
         title: String,
         tint: Color,
         action: @escaping () -> Void
