@@ -28,7 +28,7 @@ enum NotificationActorPresentation {
     static func expandedBody(
         for notification: AppNotification,
         friendAcceptedDescription: (String) -> String,
-        groupInviteDescription: (String, String) -> String = { _, _ in notification.body }
+        groupInviteDescription: ((String, String) -> String)? = nil
     ) -> String {
         let body = notification.body.trimmingCharacters(in: .whitespacesAndNewlines)
         if notification.type == .friendRequestAccepted,
@@ -37,7 +37,10 @@ enum NotificationActorPresentation {
             return friendAcceptedDescription(body)
         }
         if notification.type == .groupInvite {
-            return expandGroupInvite(notification, groupInviteDescription)
+            return expandGroupInvite(
+                notification,
+                groupInviteDescription ?? { _, _ in notification.body }
+            )
         }
         return notification.body
     }
