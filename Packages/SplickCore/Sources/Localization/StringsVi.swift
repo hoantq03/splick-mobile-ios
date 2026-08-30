@@ -214,6 +214,7 @@ enum StringsVi {
         .errorNetworkInvalidURL: "Yêu cầu này chưa ổn. Thử lại giúp mình nha!",
         .errorNetworkUnauthorized: "Phiên đăng nhập hết hạn rồi. Đăng nhập lại nhé!",
         .errorNetworkForbidden: "Bạn chưa có quyền làm việc này đâu nha.",
+        .errorMediaForbiddenGroupAvatar: "Chỉ thành viên nhóm mới đổi được ảnh đại diện nhóm.",
         .errorNetworkNotFound: "Không tìm thấy nội dung này rồi.",
         .errorNetworkRateLimited: "Bạn thao tác hơi nhanh đó. Nghỉ một chút rồi thử lại nha!",
         .errorNetworkUnexpected: "Úi, có lỗi rồi. Thử lại giúp mình nha!",

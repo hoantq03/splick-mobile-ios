@@ -302,7 +302,8 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
         case "REMINDER_COOLDOWN",
              "REMINDER_ALREADY_PAID",
              "REMINDER_NO_TARGETS",
-             "REMINDER_RATE_LIMITED":
+             "REMINDER_RATE_LIMITED",
+             "MEDIA_FORBIDDEN":
             return NetworkError.apiError(
                 code: body.error,
                 message: body.message,

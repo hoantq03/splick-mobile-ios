@@ -214,6 +214,7 @@ enum StringsEn {
         .errorNetworkInvalidURL: "That request didn't look right. Try again?",
         .errorNetworkUnauthorized: "Your session expired. Log in again to keep going.",
         .errorNetworkForbidden: "You don't have access to do that.",
+        .errorMediaForbiddenGroupAvatar: "Only group members can change the group avatar.",
         .errorNetworkNotFound: "We couldn't find what you're looking for.",
         .errorNetworkRateLimited: "Whoa, slow down a sec — then try again.",
         .errorNetworkUnexpected: "Something unexpected happened. Try again?",

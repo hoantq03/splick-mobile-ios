@@ -210,6 +210,7 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case errorNetworkInvalidURL = "error.network.invalid_url"
     case errorNetworkUnauthorized = "error.network.unauthorized"
     case errorNetworkForbidden = "error.network.forbidden"
+    case errorMediaForbiddenGroupAvatar = "error.media.forbidden_group_avatar"
     case errorNetworkNotFound = "error.network.not_found"
     case errorNetworkRateLimited = "error.network.rate_limited"
     case errorNetworkUnexpected = "error.network.unexpected"

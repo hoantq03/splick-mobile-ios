@@ -119,6 +119,8 @@ public enum APIErrorLocalization {
             return L10n.string(.feedBillReminderRateLimited, locale: locale)
         case "POST_HAS_EVIDENCE":
             return L10n.string(.feedPostDeleteHasEvidence, locale: locale)
+        case "MEDIA_FORBIDDEN":
+            return L10n.string(.errorMediaForbiddenGroupAvatar, locale: locale)
         default:
             return fallback.isEmpty
                 ? L10n.string(.errorNetworkUnexpected, locale: locale)
