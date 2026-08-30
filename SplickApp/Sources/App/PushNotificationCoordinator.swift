@@ -387,16 +387,33 @@ final class PushNotificationCoordinator: ObservableObject {
     private func registerNotificationCategories() {
         let acceptTitle = languageService?.text(.friendsAccept) ?? "Accept"
         let rejectTitle = languageService?.text(.friendsReject) ?? "Reject"
-        let accept = UNNotificationAction(
-            identifier: PushNotificationAction.accept,
-            title: acceptTitle,
-            options: []
-        )
-        let reject = UNNotificationAction(
-            identifier: PushNotificationAction.reject,
-            title: rejectTitle,
-            options: [.destructive]
-        )
+        let accept: UNNotificationAction
+        let reject: UNNotificationAction
+        if #available(iOS 15.0, *) {
+            accept = UNNotificationAction(
+                identifier: PushNotificationAction.accept,
+                title: acceptTitle,
+                options: [],
+                icon: UNNotificationActionIcon(systemImageName: "person.badge.plus")
+            )
+            reject = UNNotificationAction(
+                identifier: PushNotificationAction.reject,
+                title: rejectTitle,
+                options: [.destructive],
+                icon: UNNotificationActionIcon(systemImageName: "person.crop.circle.badge.xmark")
+            )
+        } else {
+            accept = UNNotificationAction(
+                identifier: PushNotificationAction.accept,
+                title: acceptTitle,
+                options: []
+            )
+            reject = UNNotificationAction(
+                identifier: PushNotificationAction.reject,
+                title: rejectTitle,
+                options: [.destructive]
+            )
+        }
         let friendRequest = UNNotificationCategory(
             identifier: PushNotificationAction.friendRequestCategory,
             actions: [accept, reject],
