@@ -170,6 +170,10 @@ public struct ExpenseFriendListView: View {
         }
         .padding(.horizontal, SplickTheme.Spacing.md)
         .padding(.top, SplickTheme.Spacing.md)
+        .padding(
+          .bottom,
+          SplickTabBarMetrics.floatingClearance + SplickTheme.Spacing.md
+        )
       }
       .splickInstantScrollTaps()
       .scrollChromeTracking()

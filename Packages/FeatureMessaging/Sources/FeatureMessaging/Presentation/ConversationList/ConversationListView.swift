@@ -373,6 +373,7 @@ public struct ConversationListView: View {
                     }
                 }
                 .padding(.horizontal, SplickTheme.Spacing.md)
+                .padding(.bottom, SplickTabBarMetrics.floatingClearance + SplickTheme.Spacing.md)
                 .transaction { transaction in
                     if suppressRefreshAnimations {
                         transaction.animation = nil
@@ -592,6 +593,7 @@ public struct ConversationListView: View {
                     }
                 }
                 .padding(.horizontal, SplickTheme.Spacing.md)
+                .padding(.bottom, SplickTabBarMetrics.floatingClearance + SplickTheme.Spacing.md)
                 .onPreferenceChange(ConversationRowAnchorFrameKey.self) { frames in
                     for (id, frame) in frames where frame.width > 1 && frame.height > 1 {
                         conversationRowFrames[id] = frame
