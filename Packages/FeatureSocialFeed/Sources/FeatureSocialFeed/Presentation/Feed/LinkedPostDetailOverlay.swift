@@ -76,7 +76,7 @@ public struct LinkedPostDetailOverlay: View {
         }
         .environment(\.commentImageUpload, uploadCommentImage)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(SplickTheme.Colors.background.ignoresSafeArea())
+        .background(SplickTheme.Colors.background.ignoresSafeArea(.container))
         .shadow(color: .black.opacity(0.14), radius: 16, x: -6, y: 0)
         .offset(x: max(0, dragOffset))
         .overlay {

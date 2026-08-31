@@ -259,9 +259,11 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
 
         let participants = billSplit.splits.map(\.user.id)
         let splitType = (input.billSplitType ?? "EQUAL").uppercased()
+        // Clients send computed VND amounts for percentage mode; expense PERCENTAGE is 0–100.
+        let apiSplitType = splitType == "PERCENTAGE" ? "EXACT" : splitType
 
         var customAmounts: [String: String]?
-        if splitType == "EXACT" || splitType == "PERCENTAGE" {
+        if apiSplitType == "EXACT" {
             customAmounts = Dictionary(
                 uniqueKeysWithValues: billSplit.splits.map { ($0.user.id.uuidString, "\($0.amount)") }
             )
@@ -270,7 +272,7 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
         return CreatePostBillSplitRequestDTO(
             totalAmount: "\(billSplit.totalAmount)",
             currency: billSplit.currency,
-            splitType: splitType,
+            splitType: apiSplitType,
             participants: participants,
             customAmounts: customAmounts,
             autoReminderEnabled: input.autoReminderEnabled ? true : nil

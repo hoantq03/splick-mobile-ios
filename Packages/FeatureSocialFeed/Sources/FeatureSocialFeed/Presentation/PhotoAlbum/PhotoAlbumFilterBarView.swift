@@ -9,6 +9,7 @@ private typealias AlbumGroup = SplickDomain.Group
 struct PhotoAlbumFilterBarView: View {
     @EnvironmentObject private var languageService: LanguageService
     @ObservedObject var viewModel: PhotoAlbumViewModel
+    let currentUser: UserSummary?
     let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol?
     let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
 
@@ -40,6 +41,7 @@ struct PhotoAlbumFilterBarView: View {
         .splickCard(padding: SplickTheme.Spacing.md)
         .sheet(isPresented: $showPeoplePicker) {
             PhotoAlbumPeoplePickerSheet(
+                currentUser: currentUser,
                 fetchMyFriendsUseCase: fetchMyFriendsUseCase,
                 fetchMyGroupsUseCase: fetchMyGroupsUseCase,
                 selectedAuthors: filters.authors,
@@ -120,7 +122,10 @@ struct PhotoAlbumFilterBarView: View {
     }
 
     private var peopleChip: some View {
-        let names = filters.authors.map(\.displayName) + filters.groups.map(\.name)
+        let meLabel = languageService.text(.commonMe)
+        let names = filters.authors.map { author in
+            author.id == currentUser?.id ? meLabel : author.displayName
+        } + filters.groups.map(\.name)
         let title: String = {
             if names.isEmpty {
                 return languageService.text(.feedAlbumPickPeople)
@@ -131,7 +136,7 @@ struct PhotoAlbumFilterBarView: View {
             return languageService.format(.feedAlbumSelectedCount, names.count)
         }()
         let isActive = !filters.authors.isEmpty || !filters.groups.isEmpty
-        let enabled = fetchMyFriendsUseCase != nil || fetchMyGroupsUseCase != nil
+        let enabled = currentUser != nil || fetchMyFriendsUseCase != nil || fetchMyGroupsUseCase != nil
 
         return Button {
             showPeoplePicker = true
@@ -185,6 +190,7 @@ private struct PhotoAlbumPeoplePickerSheet: View {
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
 
+    let currentUser: UserSummary?
     let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol?
     let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
     let selectedAuthors: [UserSummary]
@@ -199,12 +205,14 @@ private struct PhotoAlbumPeoplePickerSheet: View {
     @State private var isLoading = true
 
     init(
+        currentUser: UserSummary?,
         fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol?,
         fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?,
         selectedAuthors: [UserSummary],
         selectedGroups: [AlbumGroup],
         onApply: @escaping ([UserSummary], [AlbumGroup]) -> Void
     ) {
+        self.currentUser = currentUser
         self.fetchMyFriendsUseCase = fetchMyFriendsUseCase
         self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
         self.selectedAuthors = selectedAuthors
@@ -214,12 +222,28 @@ private struct PhotoAlbumPeoplePickerSheet: View {
         _draftGroups = State(initialValue: selectedGroups)
     }
 
+    private var normalizedQuery: String {
+        searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private var filteredCurrentUser: UserSummary? {
+        guard let currentUser else { return nil }
+        guard !normalizedQuery.isEmpty else { return currentUser }
+        let meLabel = languageService.text(.commonMe).lowercased()
+        if meLabel.contains(normalizedQuery)
+            || currentUser.displayName.lowercased().contains(normalizedQuery)
+            || currentUser.username.lowercased().contains(normalizedQuery) {
+            return currentUser
+        }
+        return nil
+    }
+
     private var filteredFriends: [UserSummary] {
-        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !query.isEmpty else { return friends }
-        return friends.filter {
-            $0.displayName.lowercased().contains(query)
-                || $0.username.lowercased().contains(query)
+        let others = friends.filter { $0.id != currentUser?.id }
+        guard !normalizedQuery.isEmpty else { return others }
+        return others.filter {
+            $0.displayName.lowercased().contains(normalizedQuery)
+                || $0.username.lowercased().contains(normalizedQuery)
         }
     }
 
@@ -262,16 +286,27 @@ private struct PhotoAlbumPeoplePickerSheet: View {
 
     @ViewBuilder
     private var pickerContent: some View {
-        if isLoading {
+        if isLoading && currentUser == nil && friends.isEmpty && groups.isEmpty {
             ProgressView()
-        } else if friends.isEmpty && groups.isEmpty {
+        } else if currentUser == nil && friends.isEmpty && groups.isEmpty {
             Text(languageService.text(.feedAlbumPeopleEmpty))
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
-        } else if filteredFriends.isEmpty && filteredGroups.isEmpty {
+        } else if filteredCurrentUser == nil && filteredFriends.isEmpty && filteredGroups.isEmpty {
             Text(languageService.text(.feedFilterFriendsNotFound))
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
         } else {
             List {
+                if let me = filteredCurrentUser {
+                    peopleRow(
+                        title: languageService.text(.commonMe),
+                        subtitle: "@\(me.username)",
+                        avatarURL: me.avatarURL,
+                        isGroup: false,
+                        selected: draftAuthors.contains(where: { $0.id == me.id })
+                    ) {
+                        toggleAuthor(me)
+                    }
+                }
                 ForEach(filteredFriends) { friend in
                     peopleRow(
                         title: friend.displayName,

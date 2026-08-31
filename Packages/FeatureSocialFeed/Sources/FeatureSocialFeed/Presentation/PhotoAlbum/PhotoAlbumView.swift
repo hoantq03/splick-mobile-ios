@@ -23,6 +23,7 @@ public struct PhotoAlbumView: View {
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.feedSegmentScrollState) private var feedSegmentScrollState
     @Environment(\.sameTabTapHandlingEnabled) private var sameTabTapHandlingEnabled
+    @Environment(\.currentUserSummary) private var currentUserSummary
     @ObservedObject private var viewModel: PhotoAlbumViewModel
     @ObservedObject private var feedViewModel: FeedViewModel
     @Binding private var navigationPath: NavigationPath
@@ -36,6 +37,10 @@ public struct PhotoAlbumView: View {
 
     private static let gridSpacing = SplickTheme.Spacing.xs
     private static let cellCornerRadius = SplickTheme.CornerRadius.small
+    /// Extra scroll room so the last thumbnail row clears the floating tab bar.
+    private static var bottomScrollClearance: CGFloat {
+        SplickTabBarMetrics.floatingClearance + SplickTheme.Spacing.lg
+    }
 
     private let columns = Array(
         repeating: GridItem(.flexible(), spacing: Self.gridSpacing),
@@ -71,6 +76,7 @@ public struct PhotoAlbumView: View {
         VStack(spacing: 0) {
             PhotoAlbumFilterBarView(
                 viewModel: viewModel,
+                currentUser: feedViewModel.currentUser ?? currentUserSummary,
                 fetchMyFriendsUseCase: fetchMyFriendsUseCase,
                 fetchMyGroupsUseCase: fetchMyGroupsUseCase
             )
@@ -193,6 +199,10 @@ public struct PhotoAlbumView: View {
                     .padding(.horizontal, SplickTheme.Spacing.md)
                     .padding(.vertical, SplickTheme.Spacing.md)
                 }
+
+                Color.clear
+                    .frame(height: Self.bottomScrollClearance)
+                    .accessibilityHidden(true)
             }
             .feedPagerScrollInsets()
             .feedScrollSoftTopEdge()

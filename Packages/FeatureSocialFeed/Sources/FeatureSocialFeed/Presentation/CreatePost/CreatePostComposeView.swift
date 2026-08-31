@@ -490,6 +490,12 @@ public struct CreatePostComposeView: View {
                     style: .continuous
                 )
             )
+
+            if let error = viewModel.billTotalAmountError {
+                Text(error)
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.error)
+            }
         }
     }
 
@@ -950,33 +956,72 @@ private struct ComposeCompanionsEditorView: View {
     }
 
     private func selectedCompanionGroupCard(_ group: SplickDomain.Group) -> some View {
-        HStack(spacing: SplickTheme.Spacing.sm) {
-            Image(systemName: "person.3.fill")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                .frame(width: 40, height: 40)
-                .background(SplickTheme.Colors.primaryGradientStart.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        let displayCount = group.members.isEmpty ? group.memberCount : group.members.count
+        return VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+            HStack(spacing: SplickTheme.Spacing.sm) {
+                Image(systemName: "person.3.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                    .frame(width: 40, height: 40)
+                    .background(SplickTheme.Colors.primaryGradientStart.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(group.name)
-                    .font(SplickTheme.Typography.callout)
-                    .foregroundStyle(SplickTheme.Colors.textPrimary)
-                Text(languageService.format(.friendsMemberCount, group.memberCount))
-                    .font(SplickTheme.Typography.caption)
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                Button {
+                    viewModel.toggleCompanionGroupMembersExpanded()
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(group.name)
+                            .font(SplickTheme.Typography.callout)
+                            .foregroundStyle(SplickTheme.Colors.textPrimary)
+                        Text(languageService.format(.friendsMemberCount, displayCount))
+                            .font(SplickTheme.Typography.caption)
+                            .foregroundStyle(SplickTheme.Colors.textSecondary)
+                        HStack(spacing: 4) {
+                            Text(
+                                languageService.text(
+                                    viewModel.companionGroupMembersExpanded
+                                        ? .feedCreateHideGroupMembers
+                                        : .feedCreateShowGroupMembers
+                                )
+                            )
+                            .font(SplickTheme.Typography.caption)
+                            .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                            if viewModel.isLoadingCompanionGroupMembers {
+                                ProgressView()
+                                    .controlSize(.mini)
+                            } else {
+                                Image(
+                                    systemName: viewModel.companionGroupMembersExpanded
+                                        ? "chevron.up"
+                                        : "chevron.down"
+                                )
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    viewModel.removeCompanionGroup()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 18))
+                        .foregroundStyle(SplickTheme.Colors.textTertiary)
+                }
+                .buttonStyle(.plain)
             }
 
-            Spacer()
-
-            Button {
-                viewModel.removeCompanionGroup()
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 18))
-                    .foregroundStyle(SplickTheme.Colors.textTertiary)
+            if viewModel.companionGroupMembersExpanded, !group.members.isEmpty {
+                VStack(spacing: SplickTheme.Spacing.xs) {
+                    ForEach(group.members) { member in
+                        companionGroupMemberRow(member)
+                    }
+                }
             }
-            .buttonStyle(.plain)
         }
         .padding(SplickTheme.Spacing.sm)
         .background(SplickTheme.Colors.tertiaryBackground)
@@ -986,6 +1031,37 @@ private struct ComposeCompanionsEditorView: View {
                 style: .continuous
             )
         )
+    }
+
+    private func companionGroupMemberRow(_ member: UserSummary) -> some View {
+        HStack(spacing: SplickTheme.Spacing.sm) {
+            AvatarView(
+                imageURL: member.avatarURL,
+                name: member.displayName,
+                size: .small
+            )
+            Text(
+                viewModel.isCurrentUser(member)
+                    ? languageService.text(.commonMe)
+                    : member.displayName
+            )
+            .font(SplickTheme.Typography.callout)
+            .foregroundStyle(SplickTheme.Colors.textPrimary)
+            .lineLimit(1)
+
+            Spacer(minLength: 0)
+
+            if !viewModel.isCurrentUser(member) {
+                Button {
+                    viewModel.removeCompanionGroupMember(member)
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(SplickTheme.Colors.textTertiary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 
     private func companionGroupRow(_ group: SplickDomain.Group) -> some View {

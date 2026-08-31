@@ -45,6 +45,8 @@ public final class CreatePostComposeViewModel: ObservableObject {
     @Published private(set) var friendSearchResults: [UserSummary] = []
     @Published private(set) var selectedCompanions: [UserSummary] = []
     @Published private(set) var selectedCompanionGroup: Group?
+    @Published private(set) var companionGroupMembersExpanded = false
+    @Published private(set) var isLoadingCompanionGroupMembers = false
     @Published var enableBillSplit = false
     @Published var autoReminderEnabled = false
     @Published var billTotalText = ""
@@ -69,11 +71,13 @@ public final class CreatePostComposeViewModel: ObservableObject {
 
     private let fetchFriendsUseCase: FetchFriendsUseCaseProtocol
     private let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol
+    private let fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol
     private let languageService: LanguageService
     private let currentUser: UserSummary?
     private let currentUserId: UUID?
     private let feedRepository: FeedRepositoryProtocol?
     private var friendSearchTask: Task<Void, Never>?
+    private var companionGroupMembersTask: Task<Void, Never>?
     private var locationSearchTask: Task<Void, Never>?
     private var audienceFriendSearchTask: Task<Void, Never>?
     private var activeMentionQuery = ""
@@ -103,6 +107,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
         mediaType: PostMediaType = .image,
         fetchFriendsUseCase: FetchFriendsUseCaseProtocol,
         fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol,
+        fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol,
         languageService: LanguageService,
         currentUser: UserSummary?,
         currentUserId: UUID?,
@@ -110,6 +115,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
     ) {
         self.fetchFriendsUseCase = fetchFriendsUseCase
         self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
+        self.fetchGroupMembersUseCase = fetchGroupMembersUseCase
         self.languageService = languageService
         self.currentUser = currentUser
         self.currentUserId = currentUserId ?? currentUser?.id
@@ -306,6 +312,12 @@ public final class CreatePostComposeViewModel: ObservableObject {
         VNDMoneyFormat.parse(billTotalText)
     }
 
+    var billTotalAmountError: String? {
+        guard enableBillSplit, let total = parsedBillTotal else { return nil }
+        guard !VndAmountRules.isAtLeastMinimum(total) else { return nil }
+        return languageService.text(.feedCreateBillAmountMinimum)
+    }
+
     var equalShareAmount: Decimal? {
         guard let total = parsedBillTotal, !billSplitParticipants.isEmpty else { return nil }
         return total / Decimal(billSplitParticipants.count)
@@ -439,6 +451,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
 
     func addCompanion(_ user: UserSummary) {
         guard !selectedCompanionIds.contains(user.id) else { return }
+        if selectedCompanionGroup?.members.contains(where: { $0.id == user.id }) == true { return }
         selectedCompanions.append(user)
         friendSearchResults.removeAll { $0.id == user.id }
         friendSearchQuery = ""
@@ -456,11 +469,81 @@ public final class CreatePostComposeViewModel: ObservableObject {
     }
 
     func selectCompanionGroup(_ group: Group) {
+        companionGroupMembersTask?.cancel()
         selectedCompanionGroup = group
+        companionGroupMembersExpanded = false
+        isLoadingCompanionGroupMembers = true
+        if case .failed = submitState {
+            submitState = .idle
+        }
+        companionGroupMembersTask = Task {
+            await loadCompanionGroupMembers(for: group)
+        }
+    }
+
+    func toggleCompanionGroupMembersExpanded() {
+        companionGroupMembersExpanded.toggle()
+    }
+
+    func removeCompanionGroupMember(_ user: UserSummary) {
+        guard !isCurrentUser(user) else { return }
+        guard let group = selectedCompanionGroup else { return }
+        let nextMembers = group.members.filter { $0.id != user.id }
+        selectedCompanionGroup = groupWithMembers(group, members: nextMembers)
+        selectedCompanions.removeAll { $0.id == user.id }
+        percentageTexts.removeValue(forKey: user.id)
+        exactAmountTexts.removeValue(forKey: user.id)
     }
 
     func removeCompanionGroup() {
+        companionGroupMembersTask?.cancel()
         selectedCompanionGroup = nil
+        companionGroupMembersExpanded = false
+        isLoadingCompanionGroupMembers = false
+    }
+
+    private func loadCompanionGroupMembers(for group: Group) async {
+        isLoadingCompanionGroupMembers = true
+        defer { isLoadingCompanionGroupMembers = false }
+        do {
+            let items = try await fetchGroupMembersUseCase.execute(groupId: group.id, status: "ACTIVE")
+            guard !Task.isCancelled else { return }
+            guard selectedCompanionGroup?.id == group.id else { return }
+            var seen = Set<UUID>()
+            let members = items.compactMap { item -> UserSummary? in
+                guard seen.insert(item.userId).inserted else { return nil }
+                return UserSummary(
+                    id: item.userId,
+                    username: item.username,
+                    displayName: item.displayName,
+                    avatarURL: item.avatarURL
+                )
+            }
+            if members.isEmpty && group.memberCount > 0 {
+                submitState = .failed(languageService.text(.feedCreateLoadGroupMembersFailed))
+                return
+            }
+            selectedCompanionGroup = groupWithMembers(group, members: members)
+            companionGroupMembersExpanded = !members.isEmpty
+        } catch {
+            guard !Task.isCancelled else { return }
+            guard selectedCompanionGroup?.id == group.id else { return }
+            submitState = .failed(languageService.text(.feedCreateLoadGroupMembersFailed))
+        }
+    }
+
+    private func groupWithMembers(_ group: Group, members: [UserSummary]) -> Group {
+        Group(
+            id: group.id,
+            name: group.name,
+            inviteCode: group.inviteCode,
+            description: group.description,
+            avatarURL: group.avatarURL,
+            members: members,
+            memberCount: members.count,
+            createdBy: group.createdBy,
+            createdAt: group.createdAt
+        )
     }
 
     func loadAudienceGroupsIfNeeded() async {
@@ -591,12 +674,26 @@ public final class CreatePostComposeViewModel: ObservableObject {
         }
 
         if enableBillSplit {
-            guard buildBillSplit() != nil else {
-                submitState = .failed(languageService.text(.feedCreateBillInvalid))
+            if isLoadingCompanionGroupMembers ||
+                (selectedCompanionGroup?.members.isEmpty == true &&
+                 (selectedCompanionGroup?.memberCount ?? 0) > 0) {
+                submitState = .failed(languageService.text(.feedCreateLoadGroupMembersFailed))
                 return nil
             }
             if billSplitParticipants.isEmpty {
                 submitState = .failed(languageService.text(.feedCreateBillNeedPeople))
+                return nil
+            }
+            guard let total = parsedBillTotal, total > 0 else {
+                submitState = .failed(languageService.text(.feedCreateBillInvalid))
+                return nil
+            }
+            guard VndAmountRules.isAtLeastMinimum(total) else {
+                submitState = .failed(languageService.text(.feedCreateBillAmountMinimum))
+                return nil
+            }
+            guard buildBillSplit() != nil else {
+                submitState = .failed(languageService.text(.feedCreateBillInvalid))
                 return nil
             }
         }
@@ -637,7 +734,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
     }
 
     private func buildBillSplit() -> PostBillSplit? {
-        guard let total = parsedBillTotal, total > 0 else { return nil }
+        guard let total = parsedBillTotal, VndAmountRules.isAtLeastMinimum(total) else { return nil }
 
         let participants = billSplitParticipants
         guard !participants.isEmpty else { return nil }
@@ -770,8 +867,11 @@ public final class CreatePostComposeViewModel: ObservableObject {
                 limit: friendSearchPageSize
             )
             guard !Task.isCancelled else { return }
+            let excludedIds = selectedCompanionIds.union(
+                Set(selectedCompanionGroup?.members.map(\.id) ?? [])
+            )
             let filtered = results
-                .filter { !selectedCompanionIds.contains($0.id) }
+                .filter { !excludedIds.contains($0.id) }
                 .sorted {
                     $0.displayName.localizedCaseInsensitiveCompare($1.displayName)
                         == .orderedAscending

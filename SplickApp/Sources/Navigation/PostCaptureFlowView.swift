@@ -29,7 +29,6 @@ struct PostCaptureFlowView: View {
                     stickerPickerBuilder: makeStickerPicker,
                     filterCatalogRepository: container.filterCatalogRepository
                 )
-                .ignoresSafeArea()
             }
         }
     }
@@ -52,6 +51,7 @@ struct PostCaptureFlowView: View {
                 mediaType: payload.mediaType,
                 fetchFriendsUseCase: container.fetchFriendsUseCase,
                 fetchMyGroupsUseCase: container.fetchMyGroupsUseCase,
+                fetchGroupMembersUseCase: container.fetchGroupMembersUseCase,
                 languageService: container.languageService,
                 currentUser: currentUser,
                 currentUserId: currentUser?.id,
