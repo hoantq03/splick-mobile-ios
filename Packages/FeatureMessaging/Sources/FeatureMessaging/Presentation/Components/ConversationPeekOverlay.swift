@@ -26,6 +26,8 @@ struct ConversationPeekOverlay: View {
     @State private var isOptionsRevealed = false
     @State private var isDismissing = false
     @State private var dismissIsArmed = false
+    @State private var optionsSize = CGSize(width: 188, height: 108)
+    @State private var didFreezeOptionsSize = false
 
     private static let dismissArmDelay: TimeInterval = 0.45
     private static let actionImpact = UIImpactFeedbackGenerator(style: .light)
@@ -37,10 +39,15 @@ struct ConversationPeekOverlay: View {
     var body: some View {
         GeometryReader { geometry in
             let insets = geometry.safeAreaInsets
-            let topInset = max(insets.top, Self.windowSafeAreaTop)
-            let bottomInset = max(insets.bottom, Self.windowSafeAreaBottom)
-            let chromeTop = topInset + extraBelowIsland
-            let bottomPad = bottomInset + SplickTabBarMetrics.floatingClearance + edgeMargin
+            let chromeTop = max(insets.top, Self.windowSafeAreaTop) + extraBelowIsland
+            let destFrame = previewDestinationFrame(
+                containerSize: geometry.size,
+                insets: insets,
+                chromeTop: chromeTop,
+                optionsSize: optionsSize
+            )
+            // Morph from the list row into the stacked peek card — this is the bounce users expect.
+            let currentFrame = isRevealed ? destFrame : context.anchorFrame
             let matchingRadius = max(
                 Self.displayCornerRadius - edgeMargin,
                 SplickTheme.CornerRadius.card
@@ -51,6 +58,10 @@ struct ConversationPeekOverlay: View {
                 bottomTrailingRadius: matchingRadius,
                 topTrailingRadius: SplickTheme.CornerRadius.card,
                 style: .continuous
+            )
+            let optionsOrigin = CGPoint(
+                x: insets.leading + edgeMargin,
+                y: chromeTop
             )
 
             ZStack(alignment: .topLeading) {
@@ -63,42 +74,61 @@ struct ConversationPeekOverlay: View {
                         dismissAnimated(completion: onDismiss)
                     }
 
-                VStack(alignment: .leading, spacing: contentGap) {
-                    optionsStack
-                        .scaleEffect(
-                            isOptionsRevealed ? 1 : 0.72,
-                            anchor: .top
-                        )
-                        .opacity(isOptionsRevealed ? 1 : 0)
-                        .offset(y: isOptionsRevealed ? 0 : -16)
-                        .allowsHitTesting(isOptionsRevealed)
-
-                    previewCard(shape: previewShape)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .clipShape(previewShape)
-                        .compositingGroup()
-                        .onTapGesture {
-                            guard dismissIsArmed else { return }
-                            dismissAnimated(completion: onOpen)
+                optionsStack
+                    .fixedSize()
+                    .background(optionsSizeReader)
+                    .onPreferenceChange(PeekOptionsSizeKey.self) { size in
+                        guard size.width > 1, size.height > 1, !didFreezeOptionsSize else { return }
+                        didFreezeOptionsSize = true
+                        var transaction = Transaction()
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) {
+                            optionsSize = size
                         }
-                }
-                .padding(.top, chromeTop)
-                .padding(.leading, insets.leading + edgeMargin)
-                .padding(.trailing, insets.trailing + edgeMargin)
-                .padding(.bottom, bottomPad)
-                .scaleEffect(isRevealed ? 1 : 0.96, anchor: .top)
-                .opacity(isRevealed ? 1 : 0)
-                .allowsHitTesting(isRevealed)
+                    }
+                    .scaleEffect(
+                        isOptionsRevealed ? 1 : 0.72,
+                        anchor: .top
+                    )
+                    .opacity(isOptionsRevealed ? 1 : 0)
+                    .offset(y: isOptionsRevealed ? 0 : -16)
+                    .allowsHitTesting(isOptionsRevealed)
+                    .position(
+                        x: optionsOrigin.x + optionsSize.width / 2,
+                        y: optionsOrigin.y + optionsSize.height / 2
+                    )
+                    .compositingGroup()
+                    .zIndex(2)
+            }
+            .overlay {
+                previewCard(shape: previewShape)
+                    .frame(width: currentFrame.width, height: currentFrame.height)
+                    .clipShape(previewShape)
+                    .compositingGroup()
+                    .scaleEffect(isRevealed ? 1 : 0.96, anchor: .top)
+                    .position(x: currentFrame.midX, y: currentFrame.midY)
+                    .animation(ConversationPeekMotion.appear, value: isRevealed)
+                    .zIndex(1)
+                    .onTapGesture {
+                        guard dismissIsArmed else { return }
+                        dismissAnimated(completion: onOpen)
+                    }
             }
         }
         .ignoresSafeArea()
         .onAppear {
-            withAnimation(ConversationPeekMotion.appear) {
-                isRevealed = true
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + MessageReactionTrayMotion.optionsChromeDelay) {
+            // Paint the first frame at the list-row anchor, then spring-morph open.
+            // Without the async hop, SwiftUI often skips the anchor frame and the bounce vanishes.
+            isRevealed = false
+            isOptionsRevealed = false
+            DispatchQueue.main.async {
                 withAnimation(ConversationPeekMotion.appear) {
-                    isOptionsRevealed = true
+                    isRevealed = true
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + MessageReactionTrayMotion.optionsChromeDelay) {
+                    withAnimation(ConversationPeekMotion.appear) {
+                        isOptionsRevealed = true
+                    }
                 }
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.dismissArmDelay) {
@@ -112,6 +142,12 @@ struct ConversationPeekOverlay: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(languageService.text(.messagingConversationPeekA11y))
+    }
+
+    private var optionsSizeReader: some View {
+        GeometryReader { proxy in
+            Color.clear.preference(key: PeekOptionsSizeKey.self, value: proxy.size)
+        }
     }
 
     private var optionsStack: some View {
@@ -228,7 +264,6 @@ struct ConversationPeekOverlay: View {
                     }
                 }
             }
-
         }
     }
 
@@ -273,6 +308,23 @@ struct ConversationPeekOverlay: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    private func previewDestinationFrame(
+        containerSize: CGSize,
+        insets: EdgeInsets,
+        chromeTop: CGFloat,
+        optionsSize: CGSize
+    ) -> CGRect {
+        let left = insets.leading + edgeMargin
+        let right = containerSize.width - insets.trailing - edgeMargin
+        let bottom = containerSize.height - max(insets.bottom, Self.windowSafeAreaBottom)
+            - SplickTabBarMetrics.floatingClearance - edgeMargin
+        let overlap = optionsSize.height * 0.55
+        let previewTop = min(chromeTop + optionsSize.height + contentGap - overlap, bottom - 120)
+        let width = max(right - left, 160)
+        let height = max(bottom - previewTop, 120)
+        return CGRect(x: left, y: previewTop, width: width, height: height)
+    }
+
     private static var displayCornerRadius: CGFloat {
         let screen = UIScreen.main
         if let radius = screen.value(forKey: "_displayCornerRadius") as? CGFloat, radius > 0 {
@@ -313,9 +365,20 @@ struct ConversationPeekOverlay: View {
 }
 
 private enum ConversationPeekMotion {
-    /// Drop into the stacked layout with one soft overshoot.
-    static let appear = Animation.spring(response: 0.38, dampingFraction: 0.62)
+    /// Morph from the list row with a soft overshoot (bounce).
+    static let appear = Animation.spring(response: 0.42, dampingFraction: 0.58)
     /// Return to the list row without oscillating past it.
     static let dismiss = Animation.spring(response: 0.30, dampingFraction: 0.86)
     static let dismissSettlingDelay: TimeInterval = 0.28
+}
+
+private struct PeekOptionsSizeKey: PreferenceKey {
+    static var defaultValue: CGSize = CGSize(width: 188, height: 108)
+
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
+        let next = nextValue()
+        if next.width > 1, next.height > 1, next.height < 400 {
+            value = next
+        }
+    }
 }

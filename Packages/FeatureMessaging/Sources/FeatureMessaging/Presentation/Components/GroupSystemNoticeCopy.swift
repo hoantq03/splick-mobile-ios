@@ -22,13 +22,17 @@ enum GroupSystemNoticeCopy {
             }
             return languageService.format(.messagingGroupRenamedNotice, actor, newName)
         case .groupMemberLeft:
+            // Body stores the leaver's display name at write time (survives projection gaps).
+            let resolvedActor = actor.isEmpty
+                ? GroupSystemNoticePayload.memberLeftDisplayName(message.body)
+                : actor
             if message.senderId == currentUserId {
                 return languageService.text(.messagingGroupMemberLeftNoticeYou)
             }
-            if actor.isEmpty {
+            if resolvedActor.isEmpty {
                 return languageService.text(.messagingGroupMemberLeftNoticeUnknown)
             }
-            return languageService.format(.messagingGroupMemberLeftNotice, actor)
+            return languageService.format(.messagingGroupMemberLeftNotice, resolvedActor)
         case .groupMemberRemoved:
             let removedName = message.body.trimmingCharacters(in: .whitespacesAndNewlines)
             if message.senderId == currentUserId {

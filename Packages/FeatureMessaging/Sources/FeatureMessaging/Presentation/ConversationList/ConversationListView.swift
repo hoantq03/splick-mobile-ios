@@ -85,7 +85,8 @@ public struct ConversationListView: View {
                         }
                     }
                 }
-                .splickFastPageSlide()
+                // Native NavigationStack push/pop. Swipe-back is edge-only via
+                // `splickEdgeOnlyInteractivePop` on ChatThreadView (reply pans own mid-screen).
                 .environment(\.scrollChromeTrackingEnabled, path.isEmpty)
                 .animation(
                     suppressRefreshAnimations ? nil : MessagingSearchChromeAnimation.resultsSpring,
@@ -103,7 +104,6 @@ public struct ConversationListView: View {
                         conversation: route.conversation,
                         highlightMessageId: route.highlightMessageId
                     )
-                    .splickFastPageSlide()
                 }
                 .sheet(item: $composePresentation) { presentation in
                     NewMessageComposeView(viewModel: presentation.viewModel) { conversation in
@@ -509,17 +509,15 @@ public struct ConversationListView: View {
     }
 
     private func pushThread(_ route: ChatThreadRoute) {
-        var transaction = Transaction()
-        transaction.animation = SplickPageSlideMotion.animation
-        withTransaction(transaction) {
+        // Match system NavigationStack slide (~0.35s). Avoid SplickPageSlideMotion (0.16s)
+        // — that short transaction reads as a flash on chat open.
+        withAnimation(.easeInOut(duration: 0.35)) {
             path.append(route)
         }
     }
 
     private func popToInbox() {
-        var transaction = Transaction()
-        transaction.animation = SplickPageSlideMotion.animation
-        withTransaction(transaction) {
+        withAnimation(.easeInOut(duration: 0.35)) {
             path = NavigationPath()
         }
     }
@@ -559,7 +557,9 @@ public struct ConversationListView: View {
                 LazyVStack(spacing: 0) {
                     Color.clear.frame(height: 0).id("messagingScrollTop")
                     ForEach(items) { conversation in
-                        NavigationLink(value: ChatThreadRoute(conversation: conversation)) {
+                        Button {
+                            pushThread(ChatThreadRoute(conversation: conversation))
+                        } label: {
                             ConversationRowView(
                                 conversation: conversation,
                                 inboxTyping: inboxTyping(for: conversation)

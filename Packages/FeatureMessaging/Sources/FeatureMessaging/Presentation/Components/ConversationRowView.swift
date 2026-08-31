@@ -101,11 +101,30 @@ struct ConversationRowView: View {
 
     private var lastMessagePreview: String {
         guard let lastMessage = conversation.lastMessage else { return "" }
-        if lastMessage.isSystemNotice {
+        if lastMessage.isSystemNotice || Self.looksLikeGroupMemberLeft(lastMessage) {
+            let notice = (lastMessage.type == .groupMemberLeft || Self.looksLikeGroupMemberLeft(lastMessage))
+                ? ChatMessage(
+                    id: lastMessage.id,
+                    conversationId: lastMessage.conversationId,
+                    senderId: lastMessage.senderId,
+                    senderDisplayName: lastMessage.senderDisplayName
+                        ?? GroupSystemNoticePayload.memberLeftDisplayName(lastMessage.body),
+                    body: lastMessage.body,
+                    clientMessageId: lastMessage.clientMessageId,
+                    createdAt: lastMessage.createdAt,
+                    sequenceNo: lastMessage.sequenceNo,
+                    reactions: lastMessage.reactions,
+                    deliveryStatus: lastMessage.deliveryStatus,
+                    imageAttachments: lastMessage.imageAttachments,
+                    replyPreview: lastMessage.replyPreview,
+                    type: .groupMemberLeft
+                )
+                : lastMessage
             return GroupSystemNoticeCopy.text(
-                message: lastMessage,
+                message: notice,
                 currentUserId: currentUserSummary?.id,
-                actorName: lastMessage.senderDisplayName,
+                actorName: notice.senderDisplayName
+                    ?? GroupSystemNoticePayload.memberLeftDisplayName(notice.body),
                 languageService: languageService
             )
         }
@@ -133,6 +152,16 @@ struct ConversationRowView: View {
         }
 
         return "\(sender): \(content)"
+    }
+
+    /// Leave notices persist the leaver display name as `body` (optionally marked).
+    /// Recover when inbox mapping dropped `message_type` (raw name leaked into the row).
+    private static func looksLikeGroupMemberLeft(_ message: ChatMessage) -> Bool {
+        guard message.imageAttachments.isEmpty else { return false }
+        if GroupSystemNoticePayload.isMemberLeft(message.body) { return true }
+        let body = GroupSystemNoticePayload.memberLeftDisplayName(message.body)
+        let sender = message.senderDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return !body.isEmpty && !sender.isEmpty && body == sender
     }
 
     @ViewBuilder
