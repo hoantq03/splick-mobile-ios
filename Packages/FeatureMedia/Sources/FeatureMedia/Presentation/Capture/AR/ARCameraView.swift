@@ -32,6 +32,7 @@ struct ARCameraView: UIViewRepresentable {
         context.coordinator.effect = effect
         context.coordinator.sceneView = view
         captureHandle.renderer = context.coordinator
+        view.transform = CGAffineTransform(scaleX: -1, y: 1)
         let config = ARFaceTrackingConfiguration()
         config.isLightEstimationEnabled = true
         view.session.run(config, options: [.resetTracking, .removeExistingAnchors])
@@ -118,12 +119,14 @@ final class FaceOverlayRenderer: NSObject, ARSCNViewDelegate {
 struct VisionFaceOverlayView: View {
     var effect: ARFaceEffect
     var faceRect: CGRect?
+    var mirrored: Bool = false
 
     var body: some View {
         GeometryReader { geo in
             if let faceRect {
+                let minX = mirrored ? (1 - faceRect.maxX) : faceRect.minX
                 let frame = CGRect(
-                    x: faceRect.minX * geo.size.width,
+                    x: minX * geo.size.width,
                     y: (1 - faceRect.maxY) * geo.size.height,
                     width: faceRect.width * geo.size.width,
                     height: faceRect.height * geo.size.height

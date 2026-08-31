@@ -150,7 +150,7 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
         let poi = CameraFocusMapping.devicePointOfInterest(
             viewPoint: viewPoint,
             viewSize: viewSize,
-            mirrored: false
+            mirrored: isFrontCamera
         )
         presentFocusIndicator(at: viewPoint)
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -242,7 +242,7 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
         }
     }
 
-    /// Finder is shown unmirrored; keep buffers matching tap-to-focus POI space.
+    /// Keep capture/analysis buffers unmirrored. Selfie look is applied in preview CI.
     private func disableVideoMirroring(_ connection: AVCaptureConnection) {
         guard connection.isVideoMirroringSupported else { return }
         connection.automaticallyAdjustsVideoMirroring = false
@@ -448,13 +448,17 @@ extension AVCameraSessionModel: AVCaptureVideoDataOutputSampleBufferDelegate {
 
 private extension AVCameraSessionModel {
     /// Video connection is locked to portrait, so buffers are already upright.
-    /// Applying `.right` again stretched/rotated the finder preview.
+    /// Front camera is flipped here so the finder moves like a mirror.
     func previewCIImage(from pixelBuffer: CVPixelBuffer, connection: AVCaptureConnection) -> CIImage {
         let image = CIImage(cvPixelBuffer: pixelBuffer)
+        let upright: CIImage
         if connection.isVideoOrientationSupported, connection.videoOrientation == .portrait {
-            return image
+            upright = image
+        } else {
+            upright = image.oriented(previewExifOrientation(for: connection))
         }
-        return image.oriented(previewExifOrientation(for: connection))
+        guard currentInput?.device.position == .front else { return upright }
+        return upright.oriented(.upMirrored)
     }
 
     func visionOrientation(for connection: AVCaptureConnection?) -> CGImagePropertyOrientation {

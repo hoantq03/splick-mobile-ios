@@ -148,7 +148,11 @@ struct CameraPickerView: View {
             ZStack {
                 MetalCameraPreviewView(image: session.previewImage)
                 if session.filterPreset == .ar {
-                    VisionFaceOverlayView(effect: arEffect, faceRect: session.primaryFaceBounds)
+                    VisionFaceOverlayView(
+                        effect: arEffect,
+                        faceRect: session.primaryFaceBounds,
+                        mirrored: session.isFrontCamera
+                    )
                 }
             }
         }

@@ -184,7 +184,7 @@ struct CameraFocusIndicator: Equatable {
 
 /// Maps a portrait preview tap into `AVCaptureDevice` point-of-interest space.
 /// The sensor is landscape: view Y → device X, view X → device Y.
-/// `mirrored` is only for a horizontally flipped finder; live preview is unmirrored.
+/// `mirrored` is true for the front-camera selfie finder.
 enum CameraFocusMapping {
     static func devicePointOfInterest(
         viewPoint: CGPoint,
