@@ -18,6 +18,7 @@ struct GroupDetailView: View {
     let updateGroupAvatarUseCase: UpdateGroupAvatarUseCaseProtocol
     let uploadGroupAvatarUseCase: UploadGroupAvatarUseCaseProtocol
     let transferOwnershipUseCase: TransferGroupOwnershipUseCaseProtocol
+    let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol
     let searchUsersUseCase: SearchUsersUseCaseProtocol
     let addFriendUseCase: AddFriendUseCaseProtocol
     let inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol
@@ -26,6 +27,7 @@ struct GroupDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openGroupChat) private var openGroupChat
     @Environment(\.addMembersToGroupConversation) private var addMembersToGroupConversation
+    @Environment(\.leaveGroupConversation) private var leaveGroupConversation
 
     @State private var showGroupQR = false
     @State private var showInviteFriends = false
@@ -42,12 +44,14 @@ struct GroupDetailView: View {
         onGroupDeleted: @escaping () -> Void = {},
         fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol,
         fetchInviteCodeUseCase: FetchGroupInviteCodeUseCaseProtocol,
+        generateInviteCodeUseCase: GenerateGroupInviteCodeUseCaseProtocol,
         generateGroupQrUseCase: GenerateGroupQrUseCaseProtocol,
         revokeGroupQrUseCase: RevokeGroupQrUseCaseProtocol,
         updateGroupUseCase: UpdateGroupUseCaseProtocol,
         updateGroupAvatarUseCase: UpdateGroupAvatarUseCaseProtocol,
         uploadGroupAvatarUseCase: UploadGroupAvatarUseCaseProtocol,
         transferOwnershipUseCase: TransferGroupOwnershipUseCaseProtocol,
+        fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol,
         searchUsersUseCase: SearchUsersUseCaseProtocol,
         addFriendUseCase: AddFriendUseCaseProtocol,
         inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol,
@@ -68,6 +72,7 @@ struct GroupDetailView: View {
         self.updateGroupAvatarUseCase = updateGroupAvatarUseCase
         self.uploadGroupAvatarUseCase = uploadGroupAvatarUseCase
         self.transferOwnershipUseCase = transferOwnershipUseCase
+        self.fetchMyFriendsUseCase = fetchMyFriendsUseCase
         self.searchUsersUseCase = searchUsersUseCase
         self.addFriendUseCase = addFriendUseCase
         self.inviteFriendsUseCase = inviteFriendsUseCase
@@ -76,6 +81,7 @@ struct GroupDetailView: View {
                 group: group,
                 fetchGroupMembersUseCase: fetchGroupMembersUseCase,
                 fetchInviteCodeUseCase: fetchInviteCodeUseCase,
+                generateInviteCodeUseCase: generateInviteCodeUseCase,
                 fetchGroupUseCase: fetchGroupUseCase,
                 approveMemberUseCase: approveMemberUseCase,
                 rejectMemberUseCase: rejectMemberUseCase,
@@ -134,6 +140,7 @@ struct GroupDetailView: View {
                 groupId: viewModel.group.id,
                 existingMemberIds: viewModel.existingMemberIds,
                 currentUserId: currentUserSummary?.id,
+                fetchMyFriendsUseCase: fetchMyFriendsUseCase,
                 searchUsersUseCase: searchUsersUseCase,
                 addFriendUseCase: addFriendUseCase,
                 inviteFriendsUseCase: inviteFriendsUseCase,
@@ -179,6 +186,9 @@ struct GroupDetailView: View {
             Button(languageService.text(.messagingLeaveGroup), role: .destructive) {
                 Task {
                     if await viewModel.leave(currentUserId: currentUserSummary?.id) {
+                        if let leaveGroupConversation {
+                            try? await leaveGroupConversation(viewModel.group.id)
+                        }
                         onGroupLeft()
                         dismiss()
                     }
@@ -324,6 +334,13 @@ struct GroupDetailView: View {
                 Text(languageService.format(.friendsGroupMemberCount, viewModel.displayedMemberCount))
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
+
+                if !viewModel.displayedInviteCode.isEmpty {
+                    Text(languageService.format(.friendsGroupInviteCodeLabel, viewModel.displayedInviteCode))
+                        .font(SplickTheme.Typography.caption.weight(.semibold))
+                        .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                        .textSelection(.enabled)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }

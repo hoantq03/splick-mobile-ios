@@ -297,12 +297,14 @@ public struct FriendsRootView: View {
                         onGroupDeleted: { viewModel.onGroupJoined() },
                         fetchGroupMembersUseCase: fetchGroupMembersUseCase,
                         fetchInviteCodeUseCase: fetchGroupInviteCodeUseCase,
+                        generateInviteCodeUseCase: generateGroupInviteCodeUseCase,
                         generateGroupQrUseCase: generateGroupQrUseCase,
                         revokeGroupQrUseCase: revokeGroupQrUseCase,
                         updateGroupUseCase: updateGroupUseCase,
                         updateGroupAvatarUseCase: updateGroupAvatarUseCase,
                         uploadGroupAvatarUseCase: uploadGroupAvatarUseCase,
                         transferOwnershipUseCase: transferGroupOwnershipUseCase,
+                        fetchMyFriendsUseCase: fetchMyFriendsUseCase,
                         searchUsersUseCase: searchUsersUseCase,
                         addFriendUseCase: addFriendUseCase,
                         inviteFriendsUseCase: inviteFriendsToGroupUseCase,
@@ -610,13 +612,34 @@ public struct FriendsRootView: View {
     }
 
     private var friendsSearchTopFade: some View {
-        LinearGradient(
-            stops: SplickScrollChromeFadeMetrics.backgroundStops,
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .frame(height: searchChromeHeight + SplickScrollChromeFadeMetrics.fadeTail)
+        let height = searchChromeHeight + SplickScrollChromeFadeMetrics.fadeTail
+        let wash = SplickTheme.Colors.background
+        return ZStack(alignment: .top) {
+            LinearGradient(
+                stops: [
+                    .init(color: wash.opacity(0.62), location: 0),
+                    .init(color: wash.opacity(0.38), location: 0.32),
+                    .init(color: wash.opacity(0.16), location: 0.62),
+                    .init(color: wash.opacity(0.05), location: 0.84),
+                    .init(color: wash.opacity(0), location: 1),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .mask {
+                    LinearGradient(
+                        stops: SplickScrollChromeFadeMetrics.materialMaskStops,
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+        }
+        .frame(height: height)
         .frame(maxWidth: .infinity, alignment: .top)
+        .compositingGroup()
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
@@ -780,7 +803,7 @@ public struct FriendsRootView: View {
                     }
                 }
                 .padding(.horizontal, SplickTheme.Spacing.md)
-                .padding(.bottom, SplickTheme.Spacing.md)
+                .padding(.bottom, SplickTabBarMetrics.floatingClearance + SplickTheme.Spacing.md)
                 .animation(suppressRefreshAnimations ? nil : searchRowAnimation, value: itemIDs)
                 .transaction { transaction in
                     if suppressRefreshAnimations {
@@ -929,7 +952,7 @@ public struct FriendsRootView: View {
                         }
                     }
                     .padding(.horizontal, SplickTheme.Spacing.md)
-                    .padding(.bottom, SplickTheme.Spacing.md)
+                    .padding(.bottom, SplickTabBarMetrics.floatingClearance + SplickTheme.Spacing.md)
                     .transaction { transaction in
                         if suppressRefreshAnimations {
                             transaction.animation = nil

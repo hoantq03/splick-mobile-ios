@@ -201,11 +201,18 @@ struct MainTabView: View {
             .environment(\.addMembersToGroupConversation) { groupId, userIds in
                 await container.addMembersToGroupConversation(groupId: groupId, userIds: userIds)
             }
+            .environment(\.leaveSocialGroupMembership) { groupId in
+                try await container.leaveGroupUseCase.execute(groupId: groupId)
+            }
+            .environment(\.leaveGroupConversation) { groupId in
+                try await container.leaveMessagingGroupConversation(groupId: groupId)
+            }
             .sheet(item: $inviteFriendsToGroupRequest) { request in
                 InviteFriendsToGroupSheet(
                     groupId: request.groupId,
                     existingMemberIds: request.existingMemberIds,
                     currentUserId: appState.currentUser?.id,
+                    fetchMyFriendsUseCase: container.fetchMyFriendsUseCase,
                     searchUsersUseCase: container.searchUsersUseCase,
                     addFriendUseCase: container.addFriendUseCase,
                     inviteFriendsUseCase: container.inviteFriendsToGroupUseCase,
