@@ -72,7 +72,8 @@ public final class ExpenseListViewModel: ObservableObject {
 
     var filterSignature: String {
         var parts = [filters.captionQuery, filters.debtStatus.rawValue]
-        if let userId = filters.selectedUser?.id { parts.append(userId.uuidString) }
+        parts.append(contentsOf: filters.selectedUsers.map { $0.id.uuidString }.sorted())
+        parts.append(contentsOf: filters.selectedGroups.map { $0.id.uuidString }.sorted())
         if let from = filters.dateFrom { parts.append("from-\(from.timeIntervalSince1970)") }
         if let to = filters.dateTo { parts.append("to-\(to.timeIntervalSince1970)") }
         return parts.joined(separator: "|")
@@ -331,14 +332,27 @@ public final class ExpenseListViewModel: ObservableObject {
                     $0.debtStatus = .all
                 } else {
                     $0.debtStatus = status
-                    $0.selectedUser = nil
+                    $0.selectedUsers = []
+                    $0.selectedGroups = []
                 }
             }
         }
     }
 
+    func setPeopleFilter(users: [UserSummary], groups: [SplickDomain.Group]) {
+        mutateFilters {
+            $0.selectedUsers = users
+            $0.selectedGroups = groups
+        }
+    }
+
     func setSelectedUser(_ user: UserSummary?) {
-        mutateFilters { $0.selectedUser = user }
+        mutateFilters {
+            $0.selectedUsers = user.map { [$0] } ?? []
+            if user != nil {
+                $0.selectedGroups = []
+            }
+        }
     }
 
     func setDateFrom(_ date: Date?) {
@@ -356,7 +370,8 @@ public final class ExpenseListViewModel: ObservableObject {
     func clearAdvancedFilters() {
         mutateFilters {
             $0.debtStatus = .all
-            $0.selectedUser = nil
+            $0.selectedUsers = []
+            $0.selectedGroups = []
             $0.dateFrom = ExpenseListFilters.defaultMonthStart
             $0.dateTo = nil
         }
@@ -381,7 +396,9 @@ public final class ExpenseListViewModel: ObservableObject {
     func clearListFilters() {
         mutateFilters {
             $0.captionQuery = ""
-            $0.selectedUser = nil
+            $0.selectedUsers = []
+            $0.selectedGroups = []
+            $0.debtStatus = .all
             $0.dateFrom = ExpenseListFilters.defaultMonthStart
             $0.dateTo = nil
         }
@@ -483,8 +500,14 @@ public final class ExpenseListViewModel: ObservableObject {
             guard debt.isOwed else { return false }
         }
 
-        if let user = filters.selectedUser, debt.user.id != user.id {
-            return false
+        if filters.hasPeopleFilter {
+            let userIds = Set(filters.selectedUsers.map(\.id))
+            let groupIds = Set(filters.selectedGroups.map(\.id))
+            let userMatch = !userIds.isEmpty && userIds.contains(debt.user.id)
+            let groupOnly = userIds.isEmpty && !groupIds.isEmpty
+            if !userMatch && !groupOnly {
+                return false
+            }
         }
 
         return true
@@ -498,9 +521,16 @@ public final class ExpenseListViewModel: ObservableObject {
     }
 
     private func matchesUser(_ expense: Expense) -> Bool {
-        guard let user = filters.selectedUser else { return true }
-        if expense.paidBy.id == user.id { return true }
-        return expense.splits.contains { $0.user.id == user.id }
+        let userIds = Set(filters.selectedUsers.map(\.id))
+        let groupIds = Set(filters.selectedGroups.map(\.id))
+        if userIds.isEmpty && groupIds.isEmpty { return true }
+
+        let userMatch = !userIds.isEmpty && (
+            userIds.contains(expense.paidBy.id) ||
+            expense.splits.contains { userIds.contains($0.user.id) }
+        )
+        let groupMatch = !groupIds.isEmpty && expense.groupId.map(groupIds.contains) == true
+        return userMatch || groupMatch
     }
 
     private func matchesDateRange(_ expense: Expense) -> Bool {

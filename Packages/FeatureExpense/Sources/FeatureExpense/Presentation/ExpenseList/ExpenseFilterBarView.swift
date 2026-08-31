@@ -166,7 +166,7 @@ struct ExpenseFilterBarView: View {
         VStack(alignment: .leading, spacing: 3) {
             filterLabel(languageService.text(.expenseFilterFriends))
 
-            if let user = filters.selectedUser {
+            if let user = filters.selectedUsers.first {
                 selectedUserChip(user)
             } else {
                 compactTextField(

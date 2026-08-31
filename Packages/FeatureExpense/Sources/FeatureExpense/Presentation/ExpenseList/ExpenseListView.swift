@@ -14,7 +14,6 @@ private struct ExpenseUserProfileRoute: Identifiable {
 
 public struct ExpenseListView: View {
     @ObservedObject private var viewModel: ExpenseListViewModel
-    @StateObject private var friendSearchViewModel: ExpenseUserSearchViewModel
     @StateObject private var scrollChrome = ScrollChromeStateHolder()
     @State private var profileRoute: ExpenseUserProfileRoute?
     @State private var selectedSegment: ExpenseContentSegment = .overview
@@ -34,11 +33,14 @@ public struct ExpenseListView: View {
     @Environment(\.openLinkedPost) private var openLinkedPost
     @Environment(\.openProfileSettings) private var openProfileSettings
     @Environment(\.notificationsPresented) private var notificationsPresented
+    private let currentUser: UserSummary?
     private let currentUserId: UUID?
     private let isTabActive: Bool
     private let profileDependencies: FriendUserProfileDependencies?
     private let friendListViewModel: ExpenseFriendListViewModel?
     private let makeFriendDetailViewModel: ((DebtSummary) -> ExpenseFriendDetailViewModel)?
+    private let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol?
+    private let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
 
     private var sameTabTapPublisher: AnyPublisher<Void, Never> {
         tabBarScrollState?.sameTabTapSubject.eraseToAnyPublisher()
@@ -48,18 +50,20 @@ public struct ExpenseListView: View {
     public init(
         viewModel: ExpenseListViewModel,
         currentUserId: UUID? = nil,
+        currentUser: UserSummary? = nil,
         isTabActive: Bool = true,
-        userSearchUseCase: UserSearchUseCaseProtocol? = nil,
+        fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol? = nil,
+        fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol? = nil,
         profileDependencies: FriendUserProfileDependencies? = nil,
         friendListViewModel: ExpenseFriendListViewModel? = nil,
         makeFriendDetailViewModel: ((DebtSummary) -> ExpenseFriendDetailViewModel)? = nil
     ) {
         self.viewModel = viewModel
-        _friendSearchViewModel = StateObject(
-            wrappedValue: ExpenseUserSearchViewModel(useCase: userSearchUseCase)
-        )
-        self.currentUserId = currentUserId
+        self.currentUser = currentUser
+        self.currentUserId = currentUserId ?? currentUser?.id
         self.isTabActive = isTabActive
+        self.fetchMyFriendsUseCase = fetchMyFriendsUseCase
+        self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
         self.profileDependencies = profileDependencies
         self.friendListViewModel = friendListViewModel
         self.makeFriendDetailViewModel = makeFriendDetailViewModel
@@ -191,9 +195,11 @@ public struct ExpenseListView: View {
     private var historyPage: some View {
         ExpenseHistoryPage(
             viewModel: viewModel,
-            friendSearchViewModel: friendSearchViewModel,
             refreshController: refreshController,
+            currentUser: currentUser,
             currentUserId: currentUserId,
+            fetchMyFriendsUseCase: fetchMyFriendsUseCase,
+            fetchMyGroupsUseCase: fetchMyGroupsUseCase,
             historyScrollTopSignal: historyScrollTopSignal,
             onOpenCapture: openPostCapture,
             onOpenLinkedPost: openLinkedPost(for:),
@@ -425,12 +431,14 @@ public struct ExpenseListView: View {
 
 private struct ExpenseHistoryPage: View {
     @ObservedObject var viewModel: ExpenseListViewModel
-    @ObservedObject var friendSearchViewModel: ExpenseUserSearchViewModel
     @ObservedObject var refreshController: SplickRefreshController
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.pullToRefreshActive) private var pullToRefreshActive
 
+    let currentUser: UserSummary?
     let currentUserId: UUID?
+    let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol?
+    let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
     let historyScrollTopSignal: Int
     let onOpenCapture: () -> Void
     let onOpenLinkedPost: (Expense) -> Void
@@ -438,7 +446,6 @@ private struct ExpenseHistoryPage: View {
 
     @State private var showFilterPanel = false
     @State private var captionQueryDraft = ""
-    @State private var friendQueryDraft = ""
 
     private let listFilterAnimation = Animation.spring(response: 0.42, dampingFraction: 0.86)
 
@@ -514,8 +521,6 @@ private struct ExpenseHistoryPage: View {
                 showsFilterClear: viewModel.filters.hasNonDefaultListFilters,
                 onClearFilters: {
                     captionQueryDraft = ""
-                    friendQueryDraft = ""
-                    friendSearchViewModel.reset(query: "")
                     viewModel.clearListFilters()
                 },
                 systemImage: "list.bullet.rectangle",
@@ -531,13 +536,18 @@ private struct ExpenseHistoryPage: View {
                 filterPanel: {
                     ExpenseListFilterPanel(
                         viewModel: viewModel,
-                        friendSearchViewModel: friendSearchViewModel,
                         captionQueryDraft: $captionQueryDraft,
-                        friendQueryDraft: $friendQueryDraft,
-                        languageService: languageService
+                        languageService: languageService,
+                        currentUser: currentUser,
+                        fetchMyFriendsUseCase: fetchMyFriendsUseCase,
+                        fetchMyGroupsUseCase: fetchMyGroupsUseCase
                     )
                 }
             )
+
+            if !showFilterPanel {
+                historyDebtFilterRow
+            }
 
             Group {
                 if viewModel.displayedExpenses.isEmpty {
@@ -579,6 +589,56 @@ private struct ExpenseHistoryPage: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, SplickTheme.Spacing.xl)
         .splickCard(cornerRadius: ExpenseScreenChrome.cardRadius)
+    }
+
+    private var historyDebtFilterRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: SplickTheme.Spacing.xs) {
+                ForEach(ExpenseDebtFilter.historyCases) { status in
+                    historyDebtChip(status)
+                }
+            }
+        }
+    }
+
+    private func historyDebtChip(_ status: ExpenseDebtFilter) -> some View {
+        let isSelected = viewModel.filters.debtStatus == status
+        return Button {
+            viewModel.setDebtStatus(status)
+        } label: {
+            Text(historyDebtLabel(status))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(
+                    isSelected
+                        ? SplickTheme.Colors.primaryGradientStart
+                        : SplickTheme.Colors.textSecondary
+                )
+                .padding(.horizontal, SplickTheme.Spacing.sm)
+                .padding(.vertical, SplickTheme.Spacing.xs)
+                .background {
+                    Capsule(style: .continuous)
+                        .fill(
+                            isSelected
+                                ? SplickTheme.Colors.primaryGradientStart.opacity(0.14)
+                                : SplickTheme.Colors.secondaryBackground
+                        )
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private func historyDebtLabel(_ status: ExpenseDebtFilter) -> String {
+        switch status {
+        case .all:
+            return languageService.text(.expenseDebtAll)
+        case .oweUnpaid:
+            return languageService.text(.expenseFilterIOweUnpaid)
+        case .owedUnpaid:
+            return languageService.text(.expenseFilterOwedUnpaid)
+        default:
+            return languageService.text(.expenseDebtAll)
+        }
     }
 
     private var datePeriodSubtitle: String? {
@@ -1080,23 +1140,28 @@ private struct ExpenseListSectionHeader<FilterPanel: View>: View {
 
 private struct ExpenseListFilterPanel: View {
     @ObservedObject var viewModel: ExpenseListViewModel
-    @ObservedObject var friendSearchViewModel: ExpenseUserSearchViewModel
     @Binding var captionQueryDraft: String
-    @Binding var friendQueryDraft: String
     let languageService: LanguageService
+    let currentUser: UserSummary?
+    let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol?
+    let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
 
     @State private var captionSearchTask: Task<Void, Never>?
-
-    private var visibleFriendOptions: [UserSummary] {
-        let query = friendQueryDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        if query.isEmpty {
-            return viewModel.filterParticipantUsers
-        }
-        return friendSearchViewModel.users
-    }
+    @State private var showPeoplePicker = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
+            VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+                filterSectionLabel(languageService.text(.expenseFilterStatus))
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: SplickTheme.Spacing.xs) {
+                        ForEach(ExpenseDebtFilter.historyCases) { status in
+                            historyStatusChip(status)
+                        }
+                    }
+                }
+            }
+
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
                 filterSectionLabel(languageService.text(.expenseFilterDateRange))
                 HStack(spacing: SplickTheme.Spacing.xs) {
@@ -1142,46 +1207,18 @@ private struct ExpenseListFilterPanel: View {
             }
 
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
-                filterSectionLabel(languageService.text(.expenseFilterFriends))
-
-                if let selectedUser = viewModel.filters.selectedUser {
-                    selectedFriendChip(selectedUser)
-                }
-
-                HStack(spacing: SplickTheme.Spacing.xs) {
-                    Image(systemName: "person.2.fill")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
-
-                    TextField(
-                        languageService.text(.expenseFilterSearchFriends),
-                        text: $friendQueryDraft
-                    )
-                    .font(SplickTheme.Typography.callout)
-                    .textFieldStyle(.plain)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                    .onChange(of: friendQueryDraft) { query in
-                        friendSearchViewModel.reset(query: query)
-                    }
-
-                    if !friendQueryDraft.isEmpty {
-                        Button {
-                            friendQueryDraft = ""
-                            friendSearchViewModel.reset(query: "")
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(SplickTheme.Colors.textTertiary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.horizontal, SplickTheme.Spacing.sm)
-                .padding(.vertical, SplickTheme.Spacing.sm)
-                .background(SplickTheme.Colors.secondaryBackground)
-                .clipShape(RoundedRectangle(cornerRadius: ExpenseScreenChrome.controlRadius, style: .continuous))
-
-                friendsOptionsList
+                peopleChip
+            }
+        }
+        .sheet(isPresented: $showPeoplePicker) {
+            ExpensePeoplePickerSheet(
+                currentUser: currentUser,
+                fetchMyFriendsUseCase: fetchMyFriendsUseCase,
+                fetchMyGroupsUseCase: fetchMyGroupsUseCase,
+                selectedUsers: viewModel.filters.selectedUsers,
+                selectedGroups: viewModel.filters.selectedGroups
+            ) { users, groups in
+                viewModel.setPeopleFilter(users: users, groups: groups)
             }
         }
         .onDisappear {
@@ -1189,55 +1226,48 @@ private struct ExpenseListFilterPanel: View {
         }
     }
 
-    @ViewBuilder
-    private var friendsOptionsList: some View {
-        if friendSearchViewModel.isLoading && visibleFriendOptions.isEmpty {
-            SplickSpinner(size: .small)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, SplickTheme.Spacing.xs)
-        } else if visibleFriendOptions.isEmpty {
-            Text(languageService.text(.expenseFilterNoFriends))
-                .font(SplickTheme.Typography.caption)
-                .foregroundStyle(SplickTheme.Colors.textTertiary)
-        } else {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: SplickTheme.Spacing.xs) {
-                    ForEach(visibleFriendOptions) { user in
-                        userChip(user)
-                            .onAppear {
-                                Task { await friendSearchViewModel.loadMoreIfNeeded(current: user) }
-                            }
-                    }
-                }
+    private var peopleChip: some View {
+        let meLabel = languageService.text(.commonMe)
+        let names = viewModel.filters.selectedUsers.map { user in
+            user.id == currentUser?.id ? meLabel : user.displayName
+        } + viewModel.filters.selectedGroups.map(\.name)
+        let title: String = {
+            if names.isEmpty {
+                return languageService.text(.feedAlbumPickPeople)
             }
-        }
-    }
-
-    private func selectedFriendChip(_ user: UserSummary) -> some View {
-        HStack(spacing: SplickTheme.Spacing.xs) {
-            AvatarView(imageURL: user.avatarURL, name: user.displayName, size: .small)
-                .scaleEffect(0.78)
-                .frame(width: 24, height: 24)
-
-            Text(user.displayName)
-                .font(.system(size: 12, weight: .medium))
-                .lineLimit(1)
-
-            Spacer(minLength: 0)
-
-            Button {
-                viewModel.setSelectedUser(nil)
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(SplickTheme.Colors.textTertiary)
+            if names.count == 1 {
+                return names[0]
             }
-            .buttonStyle(.plain)
+            return languageService.format(.feedAlbumSelectedCount, names.count)
+        }()
+        let isActive = viewModel.filters.hasPeopleFilter
+        let enabled = currentUser != nil || fetchMyFriendsUseCase != nil || fetchMyGroupsUseCase != nil
+
+        return Button {
+            showPeoplePicker = true
+        } label: {
+            HStack(spacing: SplickTheme.Spacing.sm) {
+                Image(systemName: "person.2")
+                Text(title)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .font(.system(size: 14, weight: .medium))
+            .foregroundStyle(isActive ? SplickTheme.Colors.primary : SplickTheme.Colors.textPrimary)
+            .padding(.horizontal, SplickTheme.Spacing.md)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(
+                        isActive
+                            ? SplickTheme.Colors.primary.opacity(0.12)
+                            : SplickTheme.Colors.secondaryBackground
+                    )
+            )
         }
-        .padding(.horizontal, SplickTheme.Spacing.sm)
-        .padding(.vertical, SplickTheme.Spacing.xs)
-        .background(SplickTheme.Colors.secondaryBackground)
-        .clipShape(RoundedRectangle(cornerRadius: ExpenseScreenChrome.controlRadius, style: .continuous))
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
     }
 
     private func filterSectionLabel(_ title: String) -> some View {
@@ -1245,6 +1275,46 @@ private struct ExpenseListFilterPanel: View {
             .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(SplickTheme.Colors.textTertiary)
             .textCase(.uppercase)
+    }
+
+    private func historyStatusChip(_ status: ExpenseDebtFilter) -> some View {
+        let isSelected = viewModel.filters.debtStatus == status
+        return Button {
+            viewModel.setDebtStatus(status)
+        } label: {
+            Text(historyStatusLabel(status))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(
+                    isSelected
+                        ? SplickTheme.Colors.primaryGradientStart
+                        : SplickTheme.Colors.textSecondary
+                )
+                .padding(.horizontal, SplickTheme.Spacing.sm)
+                .padding(.vertical, SplickTheme.Spacing.xs)
+                .background {
+                    Capsule(style: .continuous)
+                        .fill(
+                            isSelected
+                                ? SplickTheme.Colors.primaryGradientStart.opacity(0.14)
+                                : SplickTheme.Colors.secondaryBackground
+                        )
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private func historyStatusLabel(_ status: ExpenseDebtFilter) -> String {
+        switch status {
+        case .all:
+            return languageService.text(.expenseDebtAll)
+        case .oweUnpaid:
+            return languageService.text(.expenseFilterIOweUnpaid)
+        case .owedUnpaid:
+            return languageService.text(.expenseFilterOwedUnpaid)
+        default:
+            return languageService.text(.expenseDebtAll)
+        }
     }
 
     private func filterPresetChip(_ preset: ExpenseDatePreset) -> some View {
@@ -1282,48 +1352,6 @@ private struct ExpenseListFilterPanel: View {
         case .all:
             return languageService.text(.expenseFilterPresetAll)
         }
-    }
-
-    private func userChip(_ user: UserSummary) -> some View {
-        let isSelected = viewModel.filters.selectedUser?.id == user.id
-        return Button {
-            if isSelected {
-                viewModel.setSelectedUser(nil)
-            } else {
-                viewModel.setSelectedUser(user)
-                friendQueryDraft = ""
-                friendSearchViewModel.reset(query: "")
-            }
-        } label: {
-            HStack(spacing: SplickTheme.Spacing.xxs) {
-                AvatarView(imageURL: user.avatarURL, name: user.displayName, size: .small)
-                    .scaleEffect(0.78)
-                    .frame(width: 24, height: 24)
-                Text(user.displayName)
-                    .font(.system(size: 12, weight: .medium))
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, SplickTheme.Spacing.sm)
-            .padding(.vertical, SplickTheme.Spacing.xs)
-            .background {
-                Capsule(style: .continuous)
-                    .fill(
-                        isSelected
-                            ? SplickTheme.Colors.primaryGradientStart.opacity(0.14)
-                            : SplickTheme.Colors.secondaryBackground
-                    )
-            }
-            .overlay {
-                Capsule(style: .continuous)
-                    .strokeBorder(
-                        isSelected
-                            ? SplickTheme.Colors.primaryGradientStart.opacity(0.35)
-                            : Color.clear,
-                        lineWidth: 1
-                    )
-            }
-        }
-        .buttonStyle(.plain)
     }
 
     private func scheduleCaptionSearch(_ query: String) {

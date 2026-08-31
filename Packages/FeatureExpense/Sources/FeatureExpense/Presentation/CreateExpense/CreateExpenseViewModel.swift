@@ -69,6 +69,11 @@ public final class CreateExpenseViewModel: ObservableObject {
             return isValid
         }
 
+        if !VndAmountRules.isAtLeastMinimum(amountValue) {
+            amountError = languageService.text(.expenseAmountMinimum)
+            isValid = false
+        }
+
         if selectedParticipants.isEmpty {
             state = .failed(languageService.text(.expenseNeedParticipant))
             isValid = false

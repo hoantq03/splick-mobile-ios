@@ -10,6 +10,11 @@ public enum ExpenseDebtFilter: String, CaseIterable, Identifiable {
 
     public var id: String { rawValue }
 
+    /// Settlement chips on the history tab (unpaid I owe, unpaid owed to me, all).
+    public static var historyCases: [ExpenseDebtFilter] {
+        [.all, .oweUnpaid, .owedUnpaid]
+    }
+
     public var matchingDebtState: ExpenseUserDebtState? {
         switch self {
         case .all: return nil
@@ -32,10 +37,15 @@ public enum ExpenseDatePreset: String, CaseIterable, Identifiable, Sendable {
 public struct ExpenseListFilters: Equatable {
     public var captionQuery: String = ""
     public var debtStatus: ExpenseDebtFilter = .all
-    public var selectedUser: UserSummary?
+    public var selectedUsers: [UserSummary] = []
+    public var selectedGroups: [SplickDomain.Group] = []
     public var dateFrom: Date?
     public var dateTo: Date?
     public var isAdvancedExpanded: Bool = false
+
+    public var hasPeopleFilter: Bool {
+        !selectedUsers.isEmpty || !selectedGroups.isEmpty
+    }
 
     public static var defaultWeekStart: Date? {
         Calendar.current.date(
@@ -56,14 +66,16 @@ public struct ExpenseListFilters: Equatable {
     public init(
         captionQuery: String = "",
         debtStatus: ExpenseDebtFilter = .all,
-        selectedUser: UserSummary? = nil,
+        selectedUsers: [UserSummary] = [],
+        selectedGroups: [SplickDomain.Group] = [],
         dateFrom: Date? = ExpenseListFilters.defaultMonthStart,
         dateTo: Date? = nil,
         isAdvancedExpanded: Bool = false
     ) {
         self.captionQuery = captionQuery
         self.debtStatus = debtStatus
-        self.selectedUser = selectedUser
+        self.selectedUsers = selectedUsers
+        self.selectedGroups = selectedGroups
         self.dateFrom = dateFrom
         self.dateTo = dateTo
         self.isAdvancedExpanded = isAdvancedExpanded
@@ -74,7 +86,7 @@ public struct ExpenseListFilters: Equatable {
     }
 
     public var hasAdvancedFilters: Bool {
-        debtStatus != .all || selectedUser != nil || dateFrom != nil || dateTo != nil
+        debtStatus != .all || hasPeopleFilter || dateFrom != nil || dateTo != nil
     }
 
     public var hasAnyFilter: Bool {
@@ -82,7 +94,7 @@ public struct ExpenseListFilters: Equatable {
     }
 
     public var hasNonDefaultListFilters: Bool {
-        hasCaptionSearch || selectedUser != nil || !isDefaultDateFilter
+        hasCaptionSearch || hasPeopleFilter || !isDefaultDateFilter || debtStatus != .all
     }
 
     /// Default list scope: current calendar month through now (no end bound).
