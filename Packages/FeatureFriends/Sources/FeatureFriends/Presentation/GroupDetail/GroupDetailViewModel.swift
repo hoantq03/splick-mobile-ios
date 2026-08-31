@@ -16,6 +16,7 @@ final class GroupDetailViewModel: ObservableObject {
 
     private let fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol
     private let fetchInviteCodeUseCase: FetchGroupInviteCodeUseCaseProtocol
+    private let generateInviteCodeUseCase: GenerateGroupInviteCodeUseCaseProtocol
     private let fetchGroupUseCase: FetchGroupUseCaseProtocol?
     private let approveMemberUseCase: ApproveGroupMemberUseCaseProtocol?
     private let rejectMemberUseCase: RejectGroupMemberUseCaseProtocol?
@@ -41,6 +42,7 @@ final class GroupDetailViewModel: ObservableObject {
         group: Group,
         fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol,
         fetchInviteCodeUseCase: FetchGroupInviteCodeUseCaseProtocol,
+        generateInviteCodeUseCase: GenerateGroupInviteCodeUseCaseProtocol,
         fetchGroupUseCase: FetchGroupUseCaseProtocol? = nil,
         approveMemberUseCase: ApproveGroupMemberUseCaseProtocol? = nil,
         rejectMemberUseCase: RejectGroupMemberUseCaseProtocol? = nil,
@@ -52,6 +54,7 @@ final class GroupDetailViewModel: ObservableObject {
         self.group = group
         self.fetchGroupMembersUseCase = fetchGroupMembersUseCase
         self.fetchInviteCodeUseCase = fetchInviteCodeUseCase
+        self.generateInviteCodeUseCase = generateInviteCodeUseCase
         self.fetchGroupUseCase = fetchGroupUseCase
         self.approveMemberUseCase = approveMemberUseCase
         self.rejectMemberUseCase = rejectMemberUseCase
@@ -110,9 +113,22 @@ final class GroupDetailViewModel: ObservableObject {
     }
 
     func refreshInviteCodeLabel() async {
-        guard displayedInviteCode.isEmpty else { return }
-        if let code = try? await fetchInviteCodeUseCase.execute(groupId: group.id) {
-            displayedInviteCode = code.code
+        do {
+            if let active = try await fetchInviteCodeUseCase.execute(groupId: group.id) {
+                let code = active.code.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !code.isEmpty {
+                    displayedInviteCode = code
+                    return
+                }
+            }
+        } catch {
+            return
+        }
+        if !displayedInviteCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return
+        }
+        if let generated = try? await generateInviteCodeUseCase.execute(groupId: group.id) {
+            displayedInviteCode = generated.code
         }
     }
 
