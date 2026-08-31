@@ -109,23 +109,11 @@ public struct PaymentProfileManageView: View {
 
             VStack(spacing: SplickTheme.Spacing.md) {
                 if let url = viewModel.qrImageURL {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFit()
-                                .frame(maxHeight: 220)
-                                .frame(maxWidth: .infinity)
-                        case .failure:
-                            Image(systemName: "qrcode")
-                                .font(.largeTitle)
-                                .frame(maxWidth: .infinity)
-                        default:
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                        }
-                    }
+                    SplickExpandableRemoteImage(
+                        url: url,
+                        maxHeight: 220,
+                        accessibilityLabel: languageService.text(.profilePaymentQrSection)
+                    )
                 }
 
                 PhotosPicker(

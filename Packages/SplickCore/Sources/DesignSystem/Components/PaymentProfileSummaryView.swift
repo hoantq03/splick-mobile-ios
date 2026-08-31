@@ -1,9 +1,12 @@
 import SwiftUI
+import Localization
 import SplickDomain
 
 public struct PaymentProfileSummaryView: View {
     let profile: PaymentProfile
     let title: String
+
+    @EnvironmentObject private var languageService: LanguageService
 
     public init(profile: PaymentProfile, title: String) {
         self.profile = profile
@@ -16,24 +19,11 @@ public struct PaymentProfileSummaryView: View {
                 .font(SplickTheme.Typography.headline)
 
             if let url = profile.qrImageURL {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFit()
-                            .frame(maxHeight: 180)
-                            .frame(maxWidth: .infinity)
-                    case .failure:
-                        Image(systemName: "qrcode")
-                            .font(.largeTitle)
-                            .frame(maxWidth: .infinity)
-                            .foregroundStyle(SplickTheme.Colors.textSecondary)
-                    default:
-                        ProgressView()
-                            .frame(maxWidth: .infinity)
-                    }
-                }
+                SplickExpandableRemoteImage(
+                    url: url,
+                    maxHeight: 180,
+                    accessibilityLabel: languageService.text(.profilePaymentQrSection)
+                )
             }
 
             if profile.hasDisplayableBankFields {
