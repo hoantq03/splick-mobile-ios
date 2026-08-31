@@ -24,6 +24,8 @@ public final class ChatThreadViewModel: ObservableObject {
     @Published public private(set) var highlightedMessageId: UUID?
     @Published public private(set) var newlySentMessageIds: Set<UUID> = []
     @Published public var replyDraft: MessageReplyDraft?
+    @Published public var editDraft: MessageEditDraft?
+    @Published public private(set) var mutationError: String?
     @Published public private(set) var hasMoreMessages = false
     @Published public private(set) var isLoadingOlder = false
     /// After older messages are prepended, the list scrolls to this client id to avoid jump.
@@ -363,6 +365,13 @@ public final class ChatThreadViewModel: ObservableObject {
         guard !isRemovedFromGroup else { return }
         stopLocalTyping()
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let editDraft {
+            guard !trimmed.isEmpty else { return }
+            await commitEdit(messageId: editDraft.messageId, body: trimmed)
+            return
+        }
+
         guard !trimmed.isEmpty || !submissions.isEmpty else { return }
 
         isSending = true
@@ -433,6 +442,7 @@ public final class ChatThreadViewModel: ObservableObject {
 
     public func beginReply(to message: ChatMessage, senderDisplayName: String) {
         guard !isRemovedFromGroup else { return }
+        cancelEdit()
         let snippet = replySnippet(from: message)
         withAnimation(MessageReplyIslandMotion.present) {
             replyDraft = MessageReplyDraft(
@@ -449,6 +459,65 @@ public final class ChatThreadViewModel: ObservableObject {
         withAnimation(MessageReplyIslandMotion.dismiss) {
             replyDraft = nil
         }
+    }
+
+    public func beginEdit(_ message: ChatMessage) -> String? {
+        guard message.isEditable(by: currentUserId) else { return nil }
+        cancelReply()
+        withAnimation(MessageReplyIslandMotion.present) {
+            editDraft = MessageEditDraft(messageId: message.id, originalBody: message.body)
+        }
+        return message.body
+    }
+
+    public func cancelEdit() {
+        withAnimation(MessageReplyIslandMotion.dismiss) {
+            editDraft = nil
+        }
+    }
+
+    public func recallMessage(id messageId: UUID) async {
+        guard case .loaded(let messages) = state,
+              let message = messages.first(where: { $0.id == messageId }),
+              message.isRecallable(by: currentUserId) else { return }
+        mutationError = nil
+        applyRecalledMessage(messageId: messageId)
+        do {
+            try await repository.recallMessage(conversationId: conversationId, messageId: messageId)
+        } catch {
+            Log.error(error, category: .network, metadata: ["action": "recallMessage"])
+            mutationError = languageService.text(.messagingRecallError)
+            // Reload quietly if optimistic recall failed.
+            await load()
+        }
+    }
+
+    private func commitEdit(messageId: UUID, body: String) async {
+        mutationError = nil
+        isSending = true
+        defer { isSending = false }
+        applyEditedMessage(messageId: messageId, body: body, editedAt: Date())
+        cancelEdit()
+        do {
+            let updated = try await repository.editMessage(
+                conversationId: conversationId,
+                messageId: messageId,
+                body: body
+            )
+            applyEditedMessage(
+                messageId: updated.id,
+                body: updated.body,
+                editedAt: updated.editedAt ?? Date()
+            )
+        } catch {
+            Log.error(error, category: .network, metadata: ["action": "editMessage"])
+            mutationError = languageService.text(.messagingEditError)
+            await load()
+        }
+    }
+
+    public func dismissMutationError() {
+        mutationError = nil
     }
 
     public func retrySend(messageId: UUID) async {
@@ -937,8 +1006,13 @@ public final class ChatThreadViewModel: ObservableObject {
                 case .deliveryAck(let convId, let messageId) where convId == self.conversationId:
                     self.applyDeliveryAck(messageId: messageId)
 
-                case .messageEdited(let convId, let messageId, _, let body) where convId == self.conversationId:
-                    self.applyEditedMessage(messageId: messageId, body: body)
+                case .messageEdited(let convId, let messageId, _, let body, let editedAt)
+                    where convId == self.conversationId:
+                    self.applyEditedMessage(
+                        messageId: messageId,
+                        body: body,
+                        editedAt: editedAt ?? Date()
+                    )
 
                 case .messageRecalled(let convId, let messageId, _) where convId == self.conversationId:
                     self.applyRecalledMessage(messageId: messageId)
@@ -1056,10 +1130,10 @@ public final class ChatThreadViewModel: ObservableObject {
         persistCache()
     }
 
-    private func applyEditedMessage(messageId: UUID, body: String) {
+    private func applyEditedMessage(messageId: UUID, body: String, editedAt: Date) {
         guard case .loaded(var messages) = state,
               let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
-        messages[index] = messages[index].updating(body: body)
+        messages[index] = messages[index].updating(body: body, editedAt: editedAt)
         var transaction = Transaction()
         transaction.animation = nil
         withTransaction(transaction) {
@@ -1071,7 +1145,7 @@ public final class ChatThreadViewModel: ObservableObject {
     private func applyRecalledMessage(messageId: UUID) {
         guard case .loaded(var messages) = state,
               let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
-        messages[index] = messages[index].updating(body: "")
+        messages[index] = messages[index].updatingAsRecalled()
         var transaction = Transaction()
         transaction.animation = nil
         withTransaction(transaction) {

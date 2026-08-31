@@ -6,10 +6,15 @@ enum ConversationPreviewContent: Equatable {
     case emoji
     case gif
     case images(Int)
+    case recalled
 }
 
 enum ConversationPreviewFormatter {
     static func content(for message: ChatMessage) -> ConversationPreviewContent {
+        if message.recalled {
+            return .recalled
+        }
+
         if message.imageAttachments.count == 1,
            message.imageAttachments[0].mediaId == nil {
             return .gif

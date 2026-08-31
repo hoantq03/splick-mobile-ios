@@ -117,6 +117,20 @@ private actor StubMessagingRepository: MessagingRepositoryProtocol {
     }
     func removeReaction(conversationId: UUID, messageId: UUID, reactionId: UUID) async throws {}
     func searchMessages(query: String, page: Int, limit: Int, conversationId: UUID?) async throws -> [MessageSearchHit] { [] }
+
+    func editMessage(conversationId: UUID, messageId: UUID, body: String) async throws -> ChatMessage {
+        ChatMessage(
+            id: messageId,
+            conversationId: conversationId,
+            senderId: UUID(),
+            body: body,
+            clientMessageId: UUID(),
+            createdAt: Date(),
+            editedAt: Date()
+        )
+    }
+    func recallMessage(conversationId: UUID, messageId: UUID) async throws {}
+
     func requestWsTicket() async throws -> String { "test-ticket" }
     func recordedMarkReadCalls() async -> [(UUID, UUID)] { markReadCalls }
     func recordedSendMessageCallCount() async -> Int { sendMessageCallCount }

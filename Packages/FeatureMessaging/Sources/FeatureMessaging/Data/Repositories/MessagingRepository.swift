@@ -184,6 +184,23 @@ public final class MessagingRepository: MessagingRepositoryProtocol, Sendable {
         return MessagingMapper.toMessage(dto)
     }
 
+    public func editMessage(conversationId: UUID, messageId: UUID, body: String) async throws -> ChatMessage {
+        let dto: MessageResponseDTO = try await apiClient.request(
+            MessagingEndpoint.editMessage(
+                conversationId: conversationId,
+                messageId: messageId,
+                EditMessageRequestDTO(body: body)
+            )
+        )
+        return MessagingMapper.toMessage(dto)
+    }
+
+    public func recallMessage(conversationId: UUID, messageId: UUID) async throws {
+        try await apiClient.request(
+            MessagingEndpoint.recallMessage(conversationId: conversationId, messageId: messageId)
+        )
+    }
+
     public func markRead(conversationId: UUID, upToMessageId: UUID) async throws {
         try await apiClient.request(
             MessagingEndpoint.markRead(conversationId: conversationId, upToMessageId: upToMessageId)

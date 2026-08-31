@@ -10,7 +10,7 @@ public enum MessagingWsEvent: Sendable {
     case readReceipt(conversationId: UUID, readerId: UUID, upToMessageId: UUID, upToSequence: Int64?)
     case deliveryAck(conversationId: UUID, messageId: UUID)
     case typing(conversationId: UUID, userId: UUID, isTyping: Bool)
-    case messageEdited(conversationId: UUID, messageId: UUID, senderId: UUID, body: String)
+    case messageEdited(conversationId: UUID, messageId: UUID, senderId: UUID, body: String, editedAt: Date?)
     case messageRecalled(conversationId: UUID, messageId: UUID, senderId: UUID)
     case presence(userId: UUID, isOnline: Bool, lastSeenAt: Date?)
     case groupMemberRemoved(conversationId: UUID, removedUserId: UUID, selfLeave: Bool)

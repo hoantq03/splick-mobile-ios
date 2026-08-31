@@ -32,6 +32,7 @@ public struct ChatThreadView: View {
     @State private var confirmLeaveGroup = false
     @State private var leaveError: String?
     @State private var confirmDeleteConversation = false
+    @State private var confirmRecallMessageId: UUID?
     @State private var comingSoonFeatureTitle: String?
     @State private var showNotificationSettings = false
     @State private var pendingPeerConfirm: PendingPeerConfirm?
@@ -235,6 +236,25 @@ public struct ChatThreadView: View {
             Button(languageService.text(.commonCancel), role: .cancel) {}
         } message: {
             Text(languageService.text(.messagingChatDeleteConversationConfirmMessage))
+        }
+        .confirmationDialog(
+            languageService.text(.messagingRecallConfirmTitle),
+            isPresented: Binding(
+                get: { confirmRecallMessageId != nil },
+                set: { if !$0 { confirmRecallMessageId = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(languageService.text(.messagingRecallAction), role: .destructive) {
+                guard let messageId = confirmRecallMessageId else { return }
+                confirmRecallMessageId = nil
+                Task { await viewModel.recallMessage(id: messageId) }
+            }
+            Button(languageService.text(.commonCancel), role: .cancel) {
+                confirmRecallMessageId = nil
+            }
+        } message: {
+            Text(languageService.text(.messagingRecallConfirmMessage))
         }
         .alert(
             pendingPeerConfirmTitle,
@@ -794,7 +814,16 @@ public struct ChatThreadView: View {
                 bottomOverlayInset: SplickTheme.Spacing.sm,
                 onOpenDetails: openMessageDetails,
                 allowsThreadInteraction: groupCapabilities.canInteractWithMessages
-                    && !relationshipViewModel.isBlocked
+                    && !relationshipViewModel.isBlocked,
+                onBeginEdit: { message in
+                    if let body = viewModel.beginEdit(message) {
+                        inputText = body
+                        isInputFocused = true
+                    }
+                },
+                onRequestRecall: { messageId in
+                    confirmRecallMessageId = messageId
+                }
             )
         }
     }
@@ -811,13 +840,24 @@ public struct ChatThreadView: View {
                     guard let originId = viewModel.replyDraft?.messageId else { return }
                     Task { await viewModel.revealSearchedMessage(id: originId) }
                 },
+                editDraft: viewModel.editDraft,
+                onCancelEdit: {
+                    viewModel.cancelEdit()
+                    inputText = ""
+                },
                 placeholder: languageService.text(.messagingInputPlaceholder),
                 isSending: viewModel.isSending,
-                errorMessage: nil,
+                errorMessage: viewModel.mutationError,
                 onSend: { text, submissions in
                     viewModel.stopLocalTyping()
+                    let isEditing = viewModel.editDraft != nil
                     inputText = ""
-                    Task { await viewModel.send(body: text, submissions: submissions) }
+                    Task {
+                        await viewModel.send(body: text, submissions: submissions)
+                        if !isEditing {
+                            viewModel.dismissMutationError()
+                        }
+                    }
                 },
                 isFocused: $isInputFocused
             )

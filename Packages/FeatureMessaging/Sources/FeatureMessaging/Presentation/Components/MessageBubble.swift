@@ -135,20 +135,34 @@ struct MessageBubble: View {
     }
 
     private var slidingBubbleContent: some View {
-        HStack(alignment: .messageDeliveryStatus, spacing: MessageThreadRowLayout.statusBubbleGap) {
-            bubbleCluster
-            if isOutgoing, message.deliveryStatus != .failed {
-                MessageStatusIndicator(
-                    status: message.deliveryStatus,
-                    showsReadAvatar: showsReadReceiptAvatar,
-                    readAvatarURL: readReceiptPeerAvatarURL,
-                    readAvatarName: readReceiptPeerName,
-                    readReceiptMessageId: message.id
-                )
-                .alignmentGuide(.messageDeliveryStatus) { dimensions in
-                    dimensions[VerticalAlignment.bottom]
+        HStack(alignment: .center, spacing: 6) {
+            if isOutgoing, message.isEdited {
+                editedCaption
+            }
+            if isOutgoing, message.deliveryStatus == .failed {
+                failedRetryAffordance
+            }
+            HStack(alignment: .messageDeliveryStatus, spacing: MessageThreadRowLayout.statusBubbleGap) {
+                bubbleCluster
+                if isOutgoing, message.deliveryStatus != .failed {
+                    MessageStatusIndicator(
+                        status: message.deliveryStatus,
+                        showsReadAvatar: showsReadReceiptAvatar,
+                        readAvatarURL: readReceiptPeerAvatarURL,
+                        readAvatarName: readReceiptPeerName,
+                        readReceiptMessageId: message.id
+                    )
+                    .alignmentGuide(.messageDeliveryStatus) { dimensions in
+                        dimensions[VerticalAlignment.bottom]
+                    }
+                    .allowsHitTesting(false)
                 }
-                .allowsHitTesting(false)
+            }
+            if !isOutgoing, message.deliveryStatus == .failed {
+                failedRetryAffordance
+            }
+            if !isOutgoing, message.isEdited {
+                editedCaption
             }
         }
     }
@@ -246,8 +260,20 @@ struct MessageBubble: View {
         )
     }
 
+    private var editedCaption: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "pencil")
+                .font(.system(size: 10, weight: .semibold))
+            Text(languageService.text(.messagingMessageEdited))
+                .font(.system(size: 11, weight: .medium, design: .rounded))
+        }
+        .foregroundStyle(SplickTheme.Colors.textSecondary)
+        .padding(.horizontal, 2)
+        .accessibilityElement(children: .combine)
+    }
+
     private var showsReactionAccessory: Bool {
-        !message.reactions.isEmpty
+        !message.recalled && !message.reactions.isEmpty
     }
 
     /// Widen short bubbles enough to seat visible reaction pills (capped at content max).
@@ -270,34 +296,52 @@ struct MessageBubble: View {
     }
 
     private var hasTextBody: Bool {
-        !message.body.isEmpty
+        !message.recalled && !message.body.isEmpty
     }
 
+    @ViewBuilder
     private var bubbleContent: some View {
-        VStack(alignment: .leading, spacing: MessageThreadRowLayout.quoteBodySpacing) {
-            if !imageAttachments.isEmpty {
-                if let preview = message.replyPreview {
-                    mediaReplyPreview(preview)
+        if message.recalled {
+            recalledBubbleBody
+                .modifier(MessageDeliveryStatusAnchor(isActive: true))
+        } else {
+            VStack(alignment: .leading, spacing: MessageThreadRowLayout.quoteBodySpacing) {
+                if !imageAttachments.isEmpty {
+                    if let preview = message.replyPreview {
+                        mediaReplyPreview(preview)
+                    }
+                    messageMediaAttachments
+                        .modifier(MessageDeliveryStatusAnchor(isActive: !hasTextBody))
                 }
-                messageMediaAttachments
-                    .modifier(MessageDeliveryStatusAnchor(isActive: !hasTextBody))
-            }
 
-            if hasTextBody || (message.replyPreview != nil && imageAttachments.isEmpty) {
-                textBubbleBody
-                    .modifier(MessageDeliveryStatusAnchor(isActive: true))
+                if hasTextBody || (message.replyPreview != nil && imageAttachments.isEmpty) {
+                    textBubbleBody
+                        .modifier(MessageDeliveryStatusAnchor(isActive: true))
+                }
+            }
+            .overlay {
+                if message.deliveryStatus == .failed {
+                    failedOverlay
+                }
+            }
+            .contentShape(Rectangle())
+            .modifier(FailedMessageRetryTap(isFailed: message.deliveryStatus == .failed, onRetry: onRetry))
+            .splickWindowFullScreenCover(item: $imageViewerRoute) { route in
+                attachmentFullscreenPreview(at: route.index)
             }
         }
-        .overlay {
-            if message.deliveryStatus == .failed {
-                failedOverlay
-            }
-        }
-        .contentShape(Rectangle())
-        .modifier(FailedMessageRetryTap(isFailed: message.deliveryStatus == .failed, onRetry: onRetry))
-        .splickWindowFullScreenCover(item: $imageViewerRoute) { route in
-            attachmentFullscreenPreview(at: route.index)
-        }
+    }
+
+    private var recalledBubbleBody: some View {
+        Text(languageService.text(.messagingMessageRecalled))
+            .font(SplickTheme.Typography.body.italic())
+            .foregroundStyle(isOutgoing ? Color.white.opacity(0.85) : SplickTheme.Colors.textSecondary)
+            .multilineTextAlignment(.leading)
+            .padding(.horizontal, MessageThreadRowLayout.bubbleHorizontalPadding)
+            .padding(.vertical, MessageThreadRowLayout.bubbleVerticalPadding)
+            .frame(maxWidth: resolvedContentMaxWidth, alignment: .leading)
+            .background(bubbleBackground.opacity(0.72))
+            .clipShape(bubbleShape)
     }
 
     private var quotedReplyTap: (() -> Void)? {
@@ -416,25 +460,34 @@ struct MessageBubble: View {
     }
 
     private var failedOverlay: some View {
-        ZStack {
-            RadialGradient(
-                colors: [
-                    Color.black.opacity(0.55),
-                    Color.black.opacity(0.15)
-                ],
-                center: .center,
-                startRadius: 0,
-                endRadius: 120
-            )
+        // Dim only — retry copy lives in `failedRetryAffordance` so short bubbles stay readable.
+        Color.black.opacity(0.34)
+            .clipShape(bubbleShape)
+            .allowsHitTesting(false)
+    }
 
-            Text(languageService.text(.messagingTapToRetry))
-                .font(SplickTheme.Typography.caption.weight(.semibold))
-                .foregroundStyle(.white)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, SplickTheme.Spacing.xs)
+    private var failedRetryAffordance: some View {
+        Button {
+            onRetry?()
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "exclamationmark.circle.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                Text(languageService.text(.messagingTapToRetry))
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .foregroundStyle(Color.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background {
+                Capsule(style: .continuous)
+                    .fill(Color.red.opacity(0.92))
+            }
         }
-        .clipShape(RoundedRectangle(cornerRadius: Self.mediaCornerRadius, style: .continuous))
-        .allowsHitTesting(false)
+        .buttonStyle(.plain)
+        .accessibilityLabel(languageService.text(.messagingTapToRetry))
     }
 
     @ViewBuilder

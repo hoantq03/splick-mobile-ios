@@ -164,7 +164,8 @@ enum MessagingWsEventDecoder {
                 conversationId: event.conversationId,
                 messageId: event.messageId,
                 senderId: event.senderId,
-                body: event.body
+                body: event.body,
+                editedAt: event.editedAt
             )
 
         case "message.recalled":

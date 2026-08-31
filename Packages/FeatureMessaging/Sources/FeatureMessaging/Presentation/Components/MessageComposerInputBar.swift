@@ -18,6 +18,8 @@ struct MessageComposerInputBar: View {
     var replyDraft: MessageReplyDraft?
     var onCancelReply: (() -> Void)?
     var onRevealReplyOriginal: (() -> Void)? = nil
+    var editDraft: MessageEditDraft? = nil
+    var onCancelEdit: (() -> Void)? = nil
     var placeholder: String
     var isSending: Bool
     var errorMessage: String?
@@ -68,6 +70,10 @@ struct MessageComposerInputBar: View {
                     onCancel: onCancelReply,
                     onRevealOriginal: onRevealReplyOriginal
                 )
+                    .transition(.replyIsland)
+                    .zIndex(1)
+            } else if editDraft != nil, let onCancelEdit {
+                MessageEditBanner(onCancel: onCancelEdit)
                     .transition(.replyIsland)
                     .zIndex(1)
             }

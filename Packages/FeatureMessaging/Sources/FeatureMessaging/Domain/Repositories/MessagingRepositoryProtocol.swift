@@ -38,6 +38,8 @@ public protocol MessagingRepositoryProtocol: Sendable {
         imageAttachments: [MessageImageAttachment],
         replyToMessageId: UUID?
     ) async throws -> ChatMessage
+    func editMessage(conversationId: UUID, messageId: UUID, body: String) async throws -> ChatMessage
+    func recallMessage(conversationId: UUID, messageId: UUID) async throws
     func markRead(conversationId: UUID, upToMessageId: UUID) async throws
     func unreadCount() async throws -> Int
     func addReaction(conversationId: UUID, messageId: UUID, emoji: String) async throws -> Reaction

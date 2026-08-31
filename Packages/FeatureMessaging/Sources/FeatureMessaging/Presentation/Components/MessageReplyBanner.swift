@@ -90,6 +90,66 @@ struct MessageReplyBanner: View {
     }
 }
 
+struct MessageEditBanner: View {
+    @EnvironmentObject private var languageService: LanguageService
+
+    let onCancel: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
+            HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
+                Image(systemName: "pencil")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.92))
+                    .frame(width: 28, height: 28)
+                    .background {
+                        Circle()
+                            .fill(Color.white.opacity(0.14))
+                    }
+
+                Text(languageService.text(.messagingEditingBanner))
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color.white)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            Button {
+                withAnimation(MessageReplyIslandMotion.dismiss) {
+                    onCancel()
+                }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color.white.opacity(0.9))
+                    .frame(width: 26, height: 26)
+                    .background {
+                        Circle()
+                            .fill(Color.white.opacity(0.16))
+                    }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(languageService.text(.messagingEditCancelAccessibility))
+        }
+        .padding(.leading, SplickTheme.Spacing.sm)
+        .padding(.trailing, SplickTheme.Spacing.xs + 2)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            Capsule(style: .continuous)
+                .fill(Color.black.opacity(0.88))
+                .overlay {
+                    Capsule(style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.8)
+                }
+                .shadow(color: .black.opacity(0.28), radius: 16, y: 8)
+        }
+        .padding(.horizontal, SplickTheme.Spacing.md)
+        .padding(.top, SplickTheme.Spacing.xs)
+        .padding(.bottom, 2)
+    }
+}
+
 /// Dynamic Island–style morph: compact blob rises from below and expands into the pill.
 struct ReplyIslandAppearModifier: ViewModifier {
     var progress: CGFloat

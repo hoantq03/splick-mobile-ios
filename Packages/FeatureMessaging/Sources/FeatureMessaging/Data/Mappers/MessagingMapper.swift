@@ -39,15 +39,17 @@ enum MessagingMapper {
             conversationId: dto.conversationId,
             senderId: dto.senderId,
             senderDisplayName: dto.senderDisplayName,
-            body: dto.body,
+            body: dto.recalled ? "" : dto.body,
             clientMessageId: dto.clientMessageId,
             createdAt: dto.createdAt,
             sequenceNo: dto.sequenceNo,
-            reactions: (dto.reactions ?? []).map(toReaction),
+            reactions: dto.recalled ? [] : (dto.reactions ?? []).map(toReaction),
             deliveryStatus: mapDeliveryStatus(dto.status),
-            imageAttachments: (dto.attachments ?? []).compactMap(toImageAttachment),
-            replyPreview: dto.replyPreview.map(toReplyPreview),
-            type: ChatMessageType(rawValue: dto.type ?? "") ?? .user
+            imageAttachments: dto.recalled ? [] : (dto.attachments ?? []).compactMap(toImageAttachment),
+            replyPreview: dto.recalled ? nil : dto.replyPreview.map(toReplyPreview),
+            type: ChatMessageType(rawValue: dto.type ?? "") ?? .user,
+            editedAt: dto.recalled ? nil : dto.editedAt,
+            recalled: dto.recalled
         )
     }
 

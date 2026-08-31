@@ -149,6 +149,8 @@ struct ConversationRowView: View {
             content = count == 1
                 ? languageService.text(.messagingConversationSentImage)
                 : languageService.format(.messagingConversationSentImages, count)
+        case .recalled:
+            return languageService.text(.messagingMessageRecalled)
         }
 
         return "\(sender): \(content)"

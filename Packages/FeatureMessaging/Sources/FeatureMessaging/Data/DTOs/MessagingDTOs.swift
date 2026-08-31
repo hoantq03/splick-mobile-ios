@@ -83,6 +83,8 @@ struct MessageResponseDTO: Decodable {
     let clientMessageId: UUID
     let createdAt: Date
     let sequenceNo: Int64
+    let editedAt: Date?
+    let recalled: Bool
     let reactions: [ReactionResponseDTO]?
     let status: String?
     let attachments: [MessageAttachmentResponseDTO]?
@@ -98,6 +100,8 @@ struct MessageResponseDTO: Decodable {
         clientMessageId: UUID,
         createdAt: Date,
         sequenceNo: Int64 = 0,
+        editedAt: Date? = nil,
+        recalled: Bool = false,
         reactions: [ReactionResponseDTO]? = nil,
         status: String? = nil,
         attachments: [MessageAttachmentResponseDTO]? = nil,
@@ -112,6 +116,8 @@ struct MessageResponseDTO: Decodable {
         self.clientMessageId = clientMessageId
         self.createdAt = createdAt
         self.sequenceNo = sequenceNo
+        self.editedAt = editedAt
+        self.recalled = recalled
         self.reactions = reactions
         self.status = status
         self.attachments = attachments
@@ -129,6 +135,8 @@ struct MessageResponseDTO: Decodable {
         clientMessageId = try container.decode(UUID.self, forKey: .clientMessageId)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         sequenceNo = try container.decodeIfPresent(Int64.self, forKey: .sequenceNo) ?? 0
+        editedAt = try container.decodeIfPresent(Date.self, forKey: .editedAt)
+        recalled = try container.decodeIfPresent(Bool.self, forKey: .recalled) ?? false
         reactions = try container.decodeIfPresent([ReactionResponseDTO].self, forKey: .reactions)
         status = try container.decodeIfPresent(String.self, forKey: .status)
         attachments = try container.decodeIfPresent([MessageAttachmentResponseDTO].self, forKey: .attachments)
@@ -138,7 +146,7 @@ struct MessageResponseDTO: Decodable {
 
     private enum CodingKeys: String, CodingKey {
         case id, conversationId, senderId, senderDisplayName, body, clientMessageId
-        case createdAt, sequenceNo, reactions, status, attachments, replyPreview, type
+        case createdAt, sequenceNo, editedAt, recalled, reactions, status, attachments, replyPreview, type
     }
 }
 
@@ -200,16 +208,20 @@ struct TransferGroupAdminRequestDTO: Encodable {
 }
 
 struct SendMessageRequestDTO: Encodable {
-    let body: String
-    let clientMessageId: UUID
-    let attachments: [MessageAttachmentRequestDTO]?
-    let replyToMessageId: UUID?
-
     struct MessageAttachmentRequestDTO: Encodable {
         let mediaId: UUID?
         let url: String
         let thumbnailUrl: String?
     }
+
+    let body: String
+    let clientMessageId: UUID
+    let attachments: [MessageAttachmentRequestDTO]?
+    let replyToMessageId: UUID?
+}
+
+struct EditMessageRequestDTO: Encodable {
+    let body: String
 }
 
 struct MarkReadRequestDTO: Encodable {

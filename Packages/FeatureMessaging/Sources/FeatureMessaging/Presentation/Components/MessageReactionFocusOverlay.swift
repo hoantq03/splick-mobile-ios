@@ -10,8 +10,12 @@ struct MessageReactionFocusOverlay: View {
     let context: MessageReactionFocusContext
     /// When false, Reply and the reaction tray are hidden (removed / blocked viewers).
     var allowsThreadInteraction: Bool = true
+    var canEdit: Bool = false
+    var canRecall: Bool = false
     let onReact: (String) -> Void
     let onReply: () -> Void
+    var onEdit: (() -> Void)? = nil
+    var onRecall: (() -> Void)? = nil
     let onCopy: () -> Void
     let onDetails: () -> Void
     let onOpenFullPicker: () -> Void
@@ -56,6 +60,7 @@ struct MessageReactionFocusOverlay: View {
     }
 
     private var copyPayload: String? {
+        guard !message.recalled else { return nil }
         let trimmed = message.body.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
@@ -198,11 +203,11 @@ struct MessageReactionFocusOverlay: View {
         VStack(alignment: horizontalAlignment, spacing: stackSpacing) {
             if placeAbove {
                 actionButtons
-                if allowsThreadInteraction {
+                if allowsThreadInteraction && !message.recalled {
                     reactionTray
                 }
             } else {
-                if allowsThreadInteraction {
+                if allowsThreadInteraction && !message.recalled {
                     reactionTray
                 }
                 actionButtons
@@ -213,12 +218,20 @@ struct MessageReactionFocusOverlay: View {
 
     private var actionButtons: some View {
         VStack(alignment: horizontalAlignment, spacing: SplickTheme.Spacing.xs) {
-            if allowsThreadInteraction {
+            if allowsThreadInteraction && !message.recalled {
                 actionButton(
                     titleKey: .messagingReplyAction,
                     systemImage: "arrowshape.turn.up.left.fill"
                 ) {
                     dismissCommitted(then: onReply)
+                }
+            }
+            if canEdit, let onEdit {
+                actionButton(
+                    titleKey: .messagingEditAction,
+                    systemImage: "pencil"
+                ) {
+                    dismissCommitted(then: onEdit)
                 }
             }
             if copyPayload != nil {
@@ -235,6 +248,14 @@ struct MessageReactionFocusOverlay: View {
                 systemImage: "info.circle"
             ) {
                 onDetails()
+            }
+            if canRecall, let onRecall {
+                actionButton(
+                    titleKey: .messagingRecallAction,
+                    systemImage: "arrow.uturn.backward"
+                ) {
+                    dismissCommitted(then: onRecall)
+                }
             }
         }
     }

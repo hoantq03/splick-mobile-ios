@@ -29,6 +29,8 @@ enum MessagingEndpoint: APIEndpoint {
         attachments: [SendMessageRequestDTO.MessageAttachmentRequestDTO],
         replyToMessageId: UUID?
     )
+    case editMessage(conversationId: UUID, messageId: UUID, EditMessageRequestDTO)
+    case recallMessage(conversationId: UUID, messageId: UUID)
     case markRead(conversationId: UUID, upToMessageId: UUID)
     case unreadCount
     case searchMessages(q: String, page: Int, limit: Int, conversationId: UUID?)
@@ -64,6 +66,9 @@ enum MessagingEndpoint: APIEndpoint {
             return "/v1/messaging/conversations/\(id)/messages"
         case .sendMessage(let id, _, _, _, _):
             return "/v1/messaging/conversations/\(id)/messages"
+        case .editMessage(let conversationId, let messageId, _),
+             .recallMessage(let conversationId, let messageId):
+            return "/v1/messaging/conversations/\(conversationId)/messages/\(messageId)"
         case .markRead(let id, _):
             return "/v1/messaging/conversations/\(id)/read"
         case .unreadCount:
@@ -85,9 +90,9 @@ enum MessagingEndpoint: APIEndpoint {
             return .get
         case .getOrCreateConversation, .sendMessage, .markRead, .addReaction, .createGroup, .addGroupMember, .wsTicket:
             return .post
-        case .removeReaction, .removeGroupMember, .leaveGroup, .deleteConversation:
+        case .removeReaction, .removeGroupMember, .leaveGroup, .deleteConversation, .recallMessage:
             return .delete
-        case .renameGroup, .updateGroupAvatar, .updateNotificationSettings:
+        case .renameGroup, .updateGroupAvatar, .updateNotificationSettings, .editMessage:
             return .patch
         case .transferGroupAdmin:
             return .put
@@ -158,6 +163,8 @@ enum MessagingEndpoint: APIEndpoint {
                 attachments: attachments.isEmpty ? nil : attachments,
                 replyToMessageId: replyToMessageId
             )
+        case .editMessage(_, _, let dto):
+            return dto
         case .markRead(_, let messageId):
             return MarkReadRequestDTO(upToMessageId: messageId)
         case .addReaction(_, _, let dto):

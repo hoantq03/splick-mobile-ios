@@ -289,6 +289,20 @@ public actor FakeMessagingRepository: MessagingRepositoryProtocol {
         ]
     }
 
+    public func editMessage(conversationId: UUID, messageId: UUID, body: String) async throws -> ChatMessage {
+        ChatMessage(
+            id: messageId,
+            conversationId: conversationId,
+            senderId: UUID(),
+            body: body,
+            clientMessageId: UUID(),
+            createdAt: Date(),
+            editedAt: Date()
+        )
+    }
+
+    public func recallMessage(conversationId: UUID, messageId: UUID) async throws {}
+
     public func requestWsTicket() async throws -> String {
         "fake-ws-ticket"
     }

@@ -8,6 +8,8 @@ public enum ChatMessageType: String, Equatable, Hashable, Sendable, Codable {
 }
 
 public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable, Codable {
+    public static let editRecallWindow: TimeInterval = 5 * 60
+
     public let id: UUID
     public let conversationId: UUID
     public let senderId: UUID
@@ -22,6 +24,8 @@ public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable, Codable 
     public let imageAttachments: [MessageImageAttachment]
     public let replyPreview: MessageReplyPreview?
     public let type: ChatMessageType?
+    public let editedAt: Date?
+    public let recalled: Bool
 
     public var isSystemNotice: Bool {
         switch type {
@@ -31,6 +35,8 @@ public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable, Codable 
             return false
         }
     }
+
+    public var isEdited: Bool { editedAt != nil && !recalled }
 
     public init(
         id: UUID,
@@ -45,7 +51,9 @@ public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable, Codable 
         deliveryStatus: MessageDeliveryStatus = .sent,
         imageAttachments: [MessageImageAttachment] = [],
         replyPreview: MessageReplyPreview? = nil,
-        type: ChatMessageType? = nil
+        type: ChatMessageType? = nil,
+        editedAt: Date? = nil,
+        recalled: Bool = false
     ) {
         self.id = id
         self.conversationId = conversationId
@@ -60,68 +68,91 @@ public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable, Codable 
         self.imageAttachments = imageAttachments
         self.replyPreview = replyPreview
         self.type = type
+        self.editedAt = editedAt
+        self.recalled = recalled
+    }
+
+    public func isWithinEditRecallWindow(now: Date = Date()) -> Bool {
+        now.timeIntervalSince(createdAt) < Self.editRecallWindow
+    }
+
+    public func isEditable(by userId: UUID, now: Date = Date()) -> Bool {
+        !recalled
+            && !isSystemNotice
+            && senderId == userId
+            && !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && isWithinEditRecallWindow(now: now)
+    }
+
+    public func isRecallable(by userId: UUID, now: Date = Date()) -> Bool {
+        !recalled
+            && !isSystemNotice
+            && senderId == userId
+            && isWithinEditRecallWindow(now: now)
+    }
+
+    private func copy(
+        body: String? = nil,
+        reactions: [Reaction]? = nil,
+        deliveryStatus: MessageDeliveryStatus? = nil,
+        imageAttachments: [MessageImageAttachment]? = nil,
+        replyPreview: MessageReplyPreview?? = nil,
+        editedAt: Date?? = nil,
+        recalled: Bool? = nil
+    ) -> ChatMessage {
+        ChatMessage(
+            id: id,
+            conversationId: conversationId,
+            senderId: senderId,
+            senderDisplayName: senderDisplayName,
+            body: body ?? self.body,
+            clientMessageId: clientMessageId,
+            createdAt: createdAt,
+            sequenceNo: sequenceNo,
+            reactions: reactions ?? self.reactions,
+            deliveryStatus: deliveryStatus ?? self.deliveryStatus,
+            imageAttachments: imageAttachments ?? self.imageAttachments,
+            replyPreview: replyPreview ?? self.replyPreview,
+            type: type,
+            editedAt: editedAt ?? self.editedAt,
+            recalled: recalled ?? self.recalled
+        )
     }
 
     public func updating(reactions: [Reaction]) -> ChatMessage {
-        ChatMessage(
-            id: id,
-            conversationId: conversationId,
-            senderId: senderId,
-            senderDisplayName: senderDisplayName,
-            body: body,
-            clientMessageId: clientMessageId,
-            createdAt: createdAt,
-            sequenceNo: sequenceNo,
-            reactions: reactions,
-            deliveryStatus: deliveryStatus,
-            imageAttachments: imageAttachments,
-            replyPreview: replyPreview,
-            type: type
-        )
+        copy(reactions: reactions)
     }
 
     public func updating(deliveryStatus: MessageDeliveryStatus) -> ChatMessage {
-        ChatMessage(
-            id: id,
-            conversationId: conversationId,
-            senderId: senderId,
-            senderDisplayName: senderDisplayName,
-            body: body,
-            clientMessageId: clientMessageId,
-            createdAt: createdAt,
-            sequenceNo: sequenceNo,
-            reactions: reactions,
-            deliveryStatus: deliveryStatus,
-            imageAttachments: imageAttachments,
-            replyPreview: replyPreview,
-            type: type
-        )
+        copy(deliveryStatus: deliveryStatus)
     }
 
     public func updating(body: String) -> ChatMessage {
-        ChatMessage(
-            id: id,
-            conversationId: conversationId,
-            senderId: senderId,
-            senderDisplayName: senderDisplayName,
-            body: body,
-            clientMessageId: clientMessageId,
-            createdAt: createdAt,
-            sequenceNo: sequenceNo,
-            reactions: reactions,
-            deliveryStatus: deliveryStatus,
-            imageAttachments: imageAttachments,
-            replyPreview: replyPreview,
-            type: type
+        copy(body: body)
+    }
+
+    public func updating(body: String, editedAt: Date) -> ChatMessage {
+        copy(body: body, editedAt: .some(editedAt), recalled: false)
+    }
+
+    public func updatingAsRecalled() -> ChatMessage {
+        copy(
+            body: "",
+            reactions: [],
+            imageAttachments: [],
+            replyPreview: .some(nil),
+            editedAt: .some(nil),
+            recalled: true
         )
     }
 
     public var hasImageAttachments: Bool {
-        !imageAttachments.isEmpty
+        !imageAttachments.isEmpty && !recalled
     }
 
     /// Aggregated emoji counts for compact display, e.g. ❤️×3 😂×1
     public func reactionCounts() -> [(emoji: String, count: Int)] {
+        guard !recalled else { return [] }
         let grouped = Dictionary(grouping: reactions, by: \.emoji)
         return grouped
             .map { (emoji: $0.key, count: $0.value.count) }
@@ -133,6 +164,7 @@ public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable, Codable 
 
     /// Pills ordered from the bubble inner edge outward (first-added sits next to the bubble).
     public func reactionCountsInsideOut(isOutgoing: Bool) -> [(emoji: String, count: Int)] {
+        guard !recalled else { return [] }
         var emojiOrder: [String] = []
         for reaction in reactions where !emojiOrder.contains(reaction.emoji) {
             emojiOrder.append(reaction.emoji)
@@ -148,6 +180,7 @@ public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable, Codable 
 
     /// Last emoji the given user reacted with on this message (most recent by append order).
     public func lastReactionEmoji(for userId: UUID) -> String? {
-        reactions.last(where: { $0.userId == userId })?.emoji
+        guard !recalled else { return nil }
+        return reactions.last(where: { $0.userId == userId })?.emoji
     }
 }

@@ -24,6 +24,8 @@ struct ChatMessageListView: View {
     var onOpenDetails: (ChatMessage) -> Void = { _ in }
     /// When false (removed from group / blocked), hide Reply and reactions; Copy + Details remain.
     var allowsThreadInteraction: Bool = true
+    var onBeginEdit: (ChatMessage) -> Void = { _ in }
+    var onRequestRecall: (UUID) -> Void = { _ in }
 
     @State private var reactionFocusMessageId: UUID?
     /// Fresh identity each open so `@State isRevealed` cannot stick across odd/even mounts.
@@ -123,7 +125,7 @@ struct ChatMessageListView: View {
                                         onLongPress: {
                                             openReactionFocus(for: item)
                                         },
-                                        onReply: allowsThreadInteraction
+                                        onReply: allowsThreadInteraction && !item.message.recalled
                                             ? {
                                                 beginReply(to: item.message)
                                             }
@@ -236,7 +238,10 @@ struct ChatMessageListView: View {
                        ) {
                         MessageReactionFocusOverlay(
                             context: focusContext,
-                            allowsThreadInteraction: allowsThreadInteraction,
+                            allowsThreadInteraction: allowsThreadInteraction
+                                && !focusContext.displayMessage.message.recalled,
+                            canEdit: focusContext.displayMessage.message.isEditable(by: currentUserId),
+                            canRecall: focusContext.displayMessage.message.isRecallable(by: currentUserId),
                             onReact: { emoji in
                                 _ = viewModel.react(to: focusContext.messageId, emoji: emoji)
                             },
@@ -245,6 +250,15 @@ struct ChatMessageListView: View {
                                     return
                                 }
                                 beginReply(to: item.message)
+                            },
+                            onEdit: {
+                                guard let item = displayMessages.first(where: { $0.message.id == focusContext.messageId }) else {
+                                    return
+                                }
+                                onBeginEdit(item.message)
+                            },
+                            onRecall: {
+                                onRequestRecall(focusContext.messageId)
                             },
                             onCopy: {
                                 let body = focusContext.displayMessage.message.body
@@ -621,7 +635,7 @@ struct ChatMessageListView: View {
     }
 
     private func beginReply(to message: ChatMessage) {
-        guard allowsThreadInteraction else { return }
+        guard allowsThreadInteraction, !message.recalled else { return }
         guard !message.isSystemNotice else { return }
         dismissReactionFocus(force: true)
         viewModel.beginReply(to: message, senderDisplayName: senderDisplayName(message))

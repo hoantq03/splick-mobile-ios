@@ -111,7 +111,7 @@ final class MessagingWebSocketClientTests: XCTestCase {
           "editedAt":"2026-08-01T12:01:00.000Z"
         }
         """.data(using: .utf8)!
-        guard case .messageEdited(_, let editedId, _, let body)? = MessagingWsEventDecoder.decode(editedJSON) else {
+        guard case .messageEdited(_, let editedId, _, let body, _)? = MessagingWsEventDecoder.decode(editedJSON) else {
             return XCTFail("Expected messageEdited")
         }
         XCTAssertEqual(editedId, messageId)
