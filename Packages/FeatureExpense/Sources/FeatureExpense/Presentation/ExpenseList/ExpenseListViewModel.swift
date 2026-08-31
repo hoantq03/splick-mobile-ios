@@ -199,8 +199,8 @@ public final class ExpenseListViewModel: ObservableObject {
             await performLoad(isPullToRefresh: isPullToRefresh)
         }
         inFlightLoadTask = task
+        defer { inFlightLoadTask = nil }
         await task.value
-        inFlightLoadTask = nil
     }
 
     private func performLoad(isPullToRefresh: Bool) async {
@@ -212,6 +212,7 @@ public final class ExpenseListViewModel: ObservableObject {
             async let expensesTask = fetchExpensesUseCase.execute(
                 groupId: groupId, page: 0, cursor: nil)
             async let debtsTask = fetchDebtSummaryUseCase.execute(groupId: groupId)
+            async let monthlyTask = fetchMonthlySummaryIsolated()
 
             let (fetchedExpenses, fetchedDebts) = try await (expensesTask, debtsTask)
             expenses = fetchedExpenses
@@ -223,21 +224,16 @@ public final class ExpenseListViewModel: ObservableObject {
                 nextCursor = nil
             }
 
-            if let fetchMonthlySummaryUseCase {
-                do {
-                    monthlySummary = try await fetchMonthlySummaryUseCase.execute(months: 12)
-                } catch {
-                    Log.warning(
-                        "Monthly summary load failed",
-                        category: .expense,
-                        metadata: ["error": error.localizedDescription]
-                    )
-                }
-            }
-
+            // Overview UI keys off `state == .loading`. Do not wait for monthly-summary —
+            // that endpoint can be slow, and Android already renders overview without it.
             state = .loaded(fetchedExpenses)
             lastSuccessfulLoadAt = Date()
             persistDiskCache()
+
+            if let summary = await monthlyTask {
+                monthlySummary = summary
+            }
+
             Log.info(
                 "Loaded expenses",
                 category: .expense,
@@ -258,6 +254,22 @@ public final class ExpenseListViewModel: ObservableObject {
                 state = .failed(languageService.localizedMessage(for: error))
             }
             Log.error(error, category: .expense)
+        }
+    }
+
+    private func fetchMonthlySummaryIsolated() async -> MonthlyExpenseSummary? {
+        guard let fetchMonthlySummaryUseCase else { return nil }
+        do {
+            return try await fetchMonthlySummaryUseCase.execute(months: 12)
+        } catch is CancellationError {
+            return monthlySummary
+        } catch {
+            Log.warning(
+                "Monthly summary load failed",
+                category: .expense,
+                metadata: ["error": error.localizedDescription]
+            )
+            return monthlySummary
         }
     }
 

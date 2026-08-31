@@ -17,7 +17,6 @@ public struct ExpenseListView: View {
     @StateObject private var scrollChrome = ScrollChromeStateHolder()
     @State private var profileRoute: ExpenseUserProfileRoute?
     @State private var selectedSegment: ExpenseContentSegment = .overview
-    @State private var chartMode: ExpenseChartMode = .income
     @State private var refreshController = SplickRefreshController()
     @State private var overviewRefreshController = SplickRefreshController()
     @State private var friendsRefreshController = SplickRefreshController()
@@ -28,7 +27,6 @@ public struct ExpenseListView: View {
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.sameTabTapHandlingEnabled) private var sameTabTapHandlingEnabled
-    @Environment(\.pullToRefreshActive) private var pullToRefreshActive
     @Environment(\.openPostCaptureFlow) private var openPostCaptureFlow
     @Environment(\.openLinkedPost) private var openLinkedPost
     @Environment(\.openProfileSettings) private var openProfileSettings
@@ -71,7 +69,10 @@ public struct ExpenseListView: View {
 
     public var body: some View {
         NavigationStack(path: $navigationPath) {
-            ExpenseContentPager(selection: $selectedSegment, contentEpoch: historyScrollTopSignal) {
+            ExpenseContentPager(
+                selection: $selectedSegment,
+                contentEpoch: historyScrollTopSignal &+ (overviewScrollTopSignal &* 1_000_003)
+            ) {
                 historyPage
             } overview: {
                 overviewPage
@@ -209,22 +210,11 @@ public struct ExpenseListView: View {
 
     @ViewBuilder
     private var overviewPage: some View {
-        Group {
-            switch viewModel.state {
-            case .idle, .loading:
-                LoadingView(message: languageService.text(.expenseLoading))
-                    .splickSegmentPagerPageTopInset(isEnabled: true)
-
-            case .failed(let message):
-                ErrorView(message: message) {
-                    Task { await viewModel.load() }
-                }
-                .splickSegmentPagerPageTopInset(isEnabled: true)
-
-            default:
-                overviewContent
-            }
-        }
+        ExpenseOverviewPage(
+            viewModel: viewModel,
+            refreshController: overviewRefreshController,
+            overviewScrollTopSignal: overviewScrollTopSignal
+        )
     }
 
     @ViewBuilder
@@ -244,6 +234,58 @@ public struct ExpenseListView: View {
                 message: languageService.text(.expenseFriendsEmptyMessage)
             )
             .splickSegmentPagerPageTopInset(isEnabled: true)
+        }
+    }
+
+    private func openPostCapture() {
+        openPostCaptureFlow?()
+    }
+
+    private func openLinkedPost(for expense: Expense) {
+        guard let postId = expense.postId else { return }
+        openLinkedPost?(postId, true)
+    }
+
+    private func openCreatorProfile(_ user: UserSummary) {
+        guard profileDependencies != nil else { return }
+        if user.id == currentUserId {
+            openProfileSettings?()
+            return
+        }
+        profileRoute = ExpenseUserProfileRoute(user: user)
+    }
+
+    private func formatAmount(_ amount: Decimal) -> String {
+        let symbol = Decimal.displayCurrencySymbol(for: "VND")
+        return "\(SplickMoneyFormat.string(from: amount))\(symbol)"
+    }
+}
+
+private struct ExpenseOverviewPage: View {
+    @ObservedObject var viewModel: ExpenseListViewModel
+    @ObservedObject var refreshController: SplickRefreshController
+    @EnvironmentObject private var languageService: LanguageService
+    @Environment(\.pullToRefreshActive) private var pullToRefreshActive
+
+    let overviewScrollTopSignal: Int
+    @State private var chartMode: ExpenseChartMode = .income
+
+    var body: some View {
+        Group {
+            switch viewModel.state {
+            case .idle, .loading:
+                LoadingView(message: languageService.text(.expenseLoading))
+                    .splickSegmentPagerPageTopInset(isEnabled: true)
+
+            case .failed(let message):
+                ErrorView(message: message) {
+                    Task { await viewModel.load() }
+                }
+                .splickSegmentPagerPageTopInset(isEnabled: true)
+
+            default:
+                overviewContent
+            }
         }
     }
 
@@ -280,6 +322,10 @@ public struct ExpenseListView: View {
                 }
                 .padding(.horizontal, SplickTheme.Spacing.md)
                 .padding(.top, SplickTheme.Spacing.md)
+                .padding(
+                    .bottom,
+                    SplickTabBarMetrics.floatingClearance + SplickTheme.Spacing.md
+                )
                 .transaction { transaction in
                     if pullToRefreshActive {
                         transaction.animation = nil
@@ -289,7 +335,7 @@ public struct ExpenseListView: View {
             .scrollChromeTracking()
             .splickSegmentPagerScrollInsets()
             .splickScrollSoftTopEdge()
-            .splickNativeRefreshable(controller: overviewRefreshController) {
+            .splickNativeRefreshable(controller: refreshController) {
                 await viewModel.load(isPullToRefresh: true)
             }
             .onChange(of: overviewScrollTopSignal) { _ in
@@ -354,8 +400,6 @@ public struct ExpenseListView: View {
     }
 
     private func selectOverviewDebtFilter(_ status: ExpenseDebtFilter) {
-        // Stay on Overview — only highlight the selected donut segment.
-        // History keeps its own filters unless the user switches tabs later.
         viewModel.applyOverviewDebtFilter(status)
     }
 
@@ -393,7 +437,6 @@ public struct ExpenseListView: View {
         .accessibilityValue(datePeriodSubtitle ?? "")
     }
 
-    /// Shared period label shown beside overview and history section titles.
     private var datePeriodSubtitle: String? {
         switch viewModel.filters.activeDatePreset {
         case .week:
@@ -403,29 +446,6 @@ public struct ExpenseListView: View {
         case .all:
             return languageService.text(.expenseRecordsSectionAllTime)
         }
-    }
-
-    private func openPostCapture() {
-        openPostCaptureFlow?()
-    }
-
-    private func openLinkedPost(for expense: Expense) {
-        guard let postId = expense.postId else { return }
-        openLinkedPost?(postId, true)
-    }
-
-    private func openCreatorProfile(_ user: UserSummary) {
-        guard profileDependencies != nil else { return }
-        if user.id == currentUserId {
-            openProfileSettings?()
-            return
-        }
-        profileRoute = ExpenseUserProfileRoute(user: user)
-    }
-
-    private func formatAmount(_ amount: Decimal) -> String {
-        let symbol = Decimal.displayCurrencySymbol(for: "VND")
-        return "\(SplickMoneyFormat.string(from: amount))\(symbol)"
     }
 }
 
