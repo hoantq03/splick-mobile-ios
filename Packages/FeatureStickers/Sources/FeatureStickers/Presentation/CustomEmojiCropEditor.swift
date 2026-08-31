@@ -290,8 +290,9 @@ enum CustomEmojiCropRenderer {
     static func render(source: UIImage, transform: CustomEmojiCropTransform, outputSize: CGFloat = 256) -> UIImage {
         let crop = transform.crop
         let viewport = transform.viewportSize
-        guard crop.width > 1, viewport.width > 1, viewport.height > 1, let cgImage = source.cgImage else {
-            return source
+        let oriented = CustomEmojiImageProcessor.normalizeOrientation(source)
+        guard crop.width > 1, viewport.width > 1, viewport.height > 1, oriented.cgImage != nil else {
+            return oriented
         }
 
         let format = UIGraphicsImageRendererFormat.default()
@@ -313,18 +314,19 @@ enum CustomEmojiCropRenderer {
             let flip: CGFloat = transform.flipHorizontal ? -1 : 1
             cg.scaleBy(x: transform.imageScale * flip, y: transform.imageScale)
 
-            let fitted = aspectFit(imageSize: CGSize(width: cgImage.width, height: cgImage.height), in: viewport)
+            // `UIImage.size` is orientation-aware; using raw cgImage pixels squashes EXIF photos.
+            let fitted = aspectFit(imageSize: oriented.size, in: viewport)
             let drawRect = CGRect(
                 x: -fitted.width / 2,
                 y: -fitted.height / 2,
                 width: fitted.width,
                 height: fitted.height
             )
-            source.draw(in: drawRect)
+            oriented.draw(in: drawRect)
         }
     }
 
-    private static func aspectFit(imageSize: CGSize, in bounds: CGSize) -> CGSize {
+    static func aspectFit(imageSize: CGSize, in bounds: CGSize) -> CGSize {
         guard imageSize.width > 0, imageSize.height > 0 else { return bounds }
         let ratio = min(bounds.width / imageSize.width, bounds.height / imageSize.height)
         return CGSize(width: imageSize.width * ratio, height: imageSize.height * ratio)
