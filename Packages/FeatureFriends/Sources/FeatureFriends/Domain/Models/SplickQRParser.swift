@@ -96,31 +96,48 @@ public enum SplickQRParser {
     /// Returns the raw scanned string when it is a server-issued personal QR envelope.
     private static func parseServerPersonalPayload(_ raw: String) -> String? {
         guard let data = base64URLDecode(raw),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let type = json["type"] as? String,
-              type == "user",
-              json["userId"] != nil,
-              json["qrVersion"] != nil,
-              json["nonce"] != nil
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else {
             return nil
         }
-        return raw
+        if let type = json["type"] as? String,
+           type == "user",
+           json["userId"] != nil,
+           json["qrVersion"] != nil,
+           json["nonce"] != nil {
+            return raw
+        }
+        if let type = json["t"] as? String,
+           type == "u",
+           json["i"] != nil,
+           json["q"] != nil,
+           json["n"] != nil {
+            return raw
+        }
+        return nil
     }
 
     /// Returns the raw scanned string when it is a server-issued group QR envelope.
     private static func parseServerGroupPayload(_ raw: String) -> String? {
         guard let data = base64URLDecode(raw),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let type = json["type"] as? String,
-              type == "group",
-              json["groupId"] != nil,
-              json["nonce"] != nil,
-              json["issuedAt"] != nil
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else {
             return nil
         }
-        return raw
+        if let type = json["type"] as? String,
+           type == "group",
+           json["groupId"] != nil,
+           json["nonce"] != nil,
+           json["issuedAt"] != nil {
+            return raw
+        }
+        if let type = json["t"] as? String,
+           type == "g",
+           json["i"] != nil,
+           json["n"] != nil {
+            return raw
+        }
+        return nil
     }
 
     private static func base64URLDecode(_ value: String) -> Data? {
