@@ -309,8 +309,15 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
                 message: body.message,
                 traceId: resolvedTraceId
             )
-        case "PAYMENT_PROFILE_NOT_FOUND", "RESOURCE_NOT_FOUND":
+        case "PAYMENT_PROFILE_NOT_FOUND", "RESOURCE_NOT_FOUND",
+             "GROUP_NOT_FOUND", "NOT_GROUP_MEMBER", "MEMBER_NOT_FOUND":
             return NetworkError.notFound
+        case "OWNERSHIP_TRANSFER_REQUIRED":
+            return NetworkError.apiError(
+                code: body.error,
+                message: body.message,
+                traceId: resolvedTraceId
+            )
         case "NOT_FOUND":
             return NetworkError.notFound
         case "INTERNAL_ERROR":

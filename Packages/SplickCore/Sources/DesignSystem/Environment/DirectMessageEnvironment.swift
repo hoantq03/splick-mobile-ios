@@ -45,6 +45,14 @@ private struct AddMembersToGroupConversationKey: EnvironmentKey {
     static let defaultValue: ((UUID, [UUID]) async -> Void)? = nil
 }
 
+private struct LeaveSocialGroupMembershipKey: EnvironmentKey {
+    static let defaultValue: ((UUID) async throws -> Void)? = nil
+}
+
+private struct LeaveGroupConversationKey: EnvironmentKey {
+    static let defaultValue: ((UUID) async throws -> Void)? = nil
+}
+
 extension EnvironmentValues {
     public var openDirectMessage: ((UUID) async -> UUID?)? {
         get { self[OpenDirectMessageKey.self] }
@@ -67,5 +75,17 @@ extension EnvironmentValues {
     public var addMembersToGroupConversation: ((UUID, [UUID]) async -> Void)? {
         get { self[AddMembersToGroupConversationKey.self] }
         set { self[AddMembersToGroupConversationKey.self] = newValue }
+    }
+
+    /// Leaves a social friends-group. Throws if the caller is the owner.
+    public var leaveSocialGroupMembership: ((UUID) async throws -> Void)? {
+        get { self[LeaveSocialGroupMembershipKey.self] }
+        set { self[LeaveSocialGroupMembershipKey.self] = newValue }
+    }
+
+    /// Leaves the messaging conversation aligned with a social group id, if it exists.
+    public var leaveGroupConversation: ((UUID) async throws -> Void)? {
+        get { self[LeaveGroupConversationKey.self] }
+        set { self[LeaveGroupConversationKey.self] = newValue }
     }
 }

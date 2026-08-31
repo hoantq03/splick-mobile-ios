@@ -30,6 +30,7 @@ public struct ChatThreadView: View {
     @State private var groupConversation: Conversation?
     @State private var activeGroupSheet: GroupChatSheet?
     @State private var confirmLeaveGroup = false
+    @State private var leaveError: String?
     @State private var confirmDeleteConversation = false
     @State private var comingSoonFeatureTitle: String?
     @State private var showNotificationSettings = false
@@ -39,6 +40,7 @@ public struct ChatThreadView: View {
 
     @Environment(\.chatGroupManagementActions) private var groupManagementActions
     @Environment(\.presentInviteFriendsToGroup) private var presentInviteFriendsToGroup
+    @Environment(\.leaveSocialGroupMembership) private var leaveSocialGroupMembership
     @Environment(\.dismiss) private var dismiss
 
     public init(
@@ -247,6 +249,14 @@ public struct ChatThreadView: View {
             Button(pendingPeerConfirmActionTitle, role: .destructive) {
                 confirmPendingPeerAction()
             }
+        }
+        .alert(languageService.text(.commonError), isPresented: Binding(
+            get: { leaveError != nil },
+            set: { if !$0 { leaveError = nil } }
+        )) {
+            Button(languageService.text(.commonOK), role: .cancel) { leaveError = nil }
+        } message: {
+            Text(leaveError ?? "")
         }
         .alert(
             comingSoonFeatureTitle ?? languageService.text(.messagingChatMoreAccessibility),
@@ -532,10 +542,22 @@ public struct ChatThreadView: View {
     private func leaveGroup() async {
         guard let displayConversation, let repository else { return }
         do {
+            if let leaveSocialGroupMembership {
+                do {
+                    try await leaveSocialGroupMembership(displayConversation.id)
+                } catch {
+                    if error.isOwnershipTransferRequired {
+                        leaveError = languageService.text(.friendsTransferBeforeLeave)
+                        return
+                    }
+                    guard error.isIgnorableSocialLeave else { throw error }
+                }
+            }
             try await repository.leaveGroup(groupId: displayConversation.id)
+            onConversationDeleted?(displayConversation.id)
             dismiss()
         } catch {
-            // Leave errors surface on next navigation refresh; keep UX simple here.
+            leaveError = languageService.localizedMessage(for: error)
         }
     }
 
@@ -840,5 +862,24 @@ public struct ChatThreadView: View {
         let isOnline = (stored?.isOnline ?? false) || (peer.isOnline ?? false)
         let lastSeenAt = stored?.lastSeenAt ?? peer.lastSeenAt
         return (isOnline, lastSeenAt)
+    }
+}
+
+private extension Error {
+    var isOwnershipTransferRequired: Bool {
+        if case .apiError(let code, _, _) = self as? NetworkError {
+            return code.caseInsensitiveCompare("OWNERSHIP_TRANSFER_REQUIRED") == .orderedSame
+        }
+        return false
+    }
+
+    var isIgnorableSocialLeave: Bool {
+        guard let network = self as? NetworkError else { return false }
+        switch network {
+        case .notFound, .forbidden:
+            return true
+        default:
+            return false
+        }
     }
 }

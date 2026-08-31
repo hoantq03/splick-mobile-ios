@@ -896,6 +896,10 @@ final class DependencyContainer: ObservableObject {
         }
     }
 
+    func leaveMessagingGroupConversation(groupId: UUID) async throws {
+        try await messagingRepository.leaveGroup(groupId: groupId)
+    }
+
     // MARK: - Tab ViewModels (survive tab switches)
 
     lazy var feedViewModel: FeedViewModel = makeFeedViewModel()
