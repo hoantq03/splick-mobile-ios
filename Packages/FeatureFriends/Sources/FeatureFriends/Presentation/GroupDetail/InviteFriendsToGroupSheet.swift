@@ -13,6 +13,7 @@ public struct InviteFriendsToGroupSheet: View {
         groupId: UUID,
         existingMemberIds: Set<UUID>,
         currentUserId: UUID?,
+        fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol,
         searchUsersUseCase: SearchUsersUseCaseProtocol,
         addFriendUseCase: AddFriendUseCaseProtocol,
         inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol,
@@ -24,6 +25,7 @@ public struct InviteFriendsToGroupSheet: View {
                 groupId: groupId,
                 existingMemberIds: existingMemberIds,
                 currentUserId: currentUserId,
+                fetchMyFriendsUseCase: fetchMyFriendsUseCase,
                 searchUsersUseCase: searchUsersUseCase,
                 addFriendUseCase: addFriendUseCase,
                 inviteFriendsUseCase: inviteFriendsUseCase,
@@ -33,24 +35,14 @@ public struct InviteFriendsToGroupSheet: View {
         )
     }
 
-    var body: some View {
+    public var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 searchField
                     .padding(.horizontal, SplickTheme.Spacing.md)
                     .padding(.vertical, SplickTheme.Spacing.sm)
 
-                Group {
-                    if viewModel.isSearching {
-                        searchResultsContent
-                    } else {
-                        EmptyStateView(
-                            icon: "magnifyingglass",
-                            title: languageService.text(.friendsInviteSearchUsers),
-                            message: languageService.text(.friendsInviteHint)
-                        )
-                    }
-                }
+                resultsContent
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(SplickTheme.Colors.background)
@@ -66,6 +58,9 @@ public struct InviteFriendsToGroupSheet: View {
                     }
                     .disabled(viewModel.selectedIds.isEmpty || viewModel.state == .submitting)
                 }
+            }
+            .task {
+                await viewModel.loadFriendsIfNeeded()
             }
             .onChange(of: viewModel.searchQuery) { newValue in
                 viewModel.onSearchQueryChanged(newValue)
@@ -107,25 +102,42 @@ public struct InviteFriendsToGroupSheet: View {
     }
 
     @ViewBuilder
-    private var searchResultsContent: some View {
+    private var resultsContent: some View {
         switch viewModel.searchState {
         case .idle, .loading:
-            LoadingView(message: languageService.text(.messagingSearchLoading))
+            LoadingView(message: languageService.text(.commonLoading))
         case .failed(let message):
             ErrorView(message: message) {
-                viewModel.onSearchQueryChanged(viewModel.searchQuery)
+                if viewModel.isSearching {
+                    viewModel.onSearchQueryChanged(viewModel.searchQuery)
+                } else {
+                    Task { await viewModel.loadFriendsIfNeeded() }
+                }
             }
         case .loaded(let results) where results.isEmpty:
             EmptyStateView(
                 icon: "magnifyingglass",
-                title: languageService.text(.friendsInviteNotFoundTitle),
-                message: languageService.text(.friendsInviteNotFoundMessage)
+                title: languageService.text(
+                    viewModel.isSearching ? .friendsInviteNotFoundTitle : .friendsGroupNoFriendsToInvite
+                ),
+                message: languageService.text(
+                    viewModel.isSearching ? .friendsInviteNotFoundMessage : .friendsInviteHint
+                )
             )
         case .loaded:
             ScrollView {
                 LazyVStack(spacing: SplickTheme.Spacing.xs) {
                     ForEach(viewModel.searchResults) { result in
                         inviteRow(for: result)
+                            .onAppear {
+                                Task { await viewModel.loadMoreIfNeeded(currentId: result.user.id) }
+                            }
+                    }
+                    if viewModel.isLoadingMore {
+                        ProgressView()
+                            .controlSize(.regular)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, SplickTheme.Spacing.sm)
                     }
                 }
                 .padding(.horizontal, SplickTheme.Spacing.md)
