@@ -36,6 +36,12 @@ extension View {
         background(SplickInteractivePopEnabler())
     }
 
+    /// System edge swipe-back only. Disables the stock (wide) interactive-pop recognizer
+    /// and any widened pop band, then installs a thin leading-edge pan for chat reply screens.
+    public func splickEdgeOnlyInteractivePop(edgeWidth: CGFloat = 1) -> some View {
+        background(SplickEdgeOnlyInteractivePopInstaller(edgeWidth: edgeWidth))
+    }
+
     /// Widens interactive pop to the leading quarter of the screen (same as Android post detail).
     /// On iOS 18 zoom destinations (feed → post) the extra pan is disabled — zoom dismiss is
     /// bound to the system edge gesture, and a second pan only pops after the finger lifts.
@@ -51,6 +57,72 @@ private struct SplickInteractivePopEnabler: UIViewControllerRepresentable {
 
     func updateUIViewController(_ uiViewController: SplickInteractivePopHostController, context: Context) {
         uiViewController.enableIfNeeded()
+    }
+}
+
+/// Replaces the stock interactive-pop recognizer with a thin leading-edge pan.
+/// Stock UIKit edge pop is too wide for chat — it steals swipe-to-reply on short incoming bubbles.
+private struct SplickEdgeOnlyInteractivePopInstaller: UIViewControllerRepresentable {
+    var edgeWidth: CGFloat
+
+    func makeUIViewController(context: Context) -> SplickEdgeOnlyInteractivePopHostController {
+        let host = SplickEdgeOnlyInteractivePopHostController()
+        host.edgeWidth = edgeWidth
+        return host
+    }
+
+    func updateUIViewController(_ uiViewController: SplickEdgeOnlyInteractivePopHostController, context: Context) {
+        uiViewController.edgeWidth = edgeWidth
+        uiViewController.enableIfNeeded()
+    }
+
+    static func dismantleUIViewController(_ uiViewController: SplickEdgeOnlyInteractivePopHostController, coordinator: ()) {
+        uiViewController.restoreSystemPopIfNeeded()
+    }
+}
+
+private final class SplickEdgeOnlyInteractivePopHostController: UIViewController {
+    var edgeWidth: CGFloat = 1
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        enableIfNeeded()
+    }
+
+    override func didMove(toParent parent: UIViewController?) {
+        super.didMove(toParent: parent)
+        if parent == nil {
+            restoreSystemPopIfNeeded()
+        } else {
+            enableIfNeeded()
+        }
+    }
+
+    func enableIfNeeded() {
+        guard let nav = navigationController ?? ancestorNavigationController() else { return }
+        SplickStrictEdgePopGesture.install(on: nav, edgeWidth: edgeWidth)
+    }
+
+    func restoreSystemPopIfNeeded() {
+        guard let nav = navigationController ?? ancestorNavigationController() else { return }
+        SplickStrictEdgePopGesture.uninstall(on: nav)
+    }
+
+    private func ancestorNavigationController() -> UINavigationController? {
+        var responder: UIResponder? = view
+        while let current = responder {
+            if let nav = current as? UINavigationController {
+                return nav
+            }
+            responder = current.next
+        }
+        return nil
     }
 }
 
@@ -146,6 +218,125 @@ private final class SplickWideInteractivePopHostController: UIViewController {
     }
 }
 
+/// Thin leading-edge pop used by chat. Disables stock interactive-pop (too wide) and
+/// drives the same transition targets from an ~8pt strip only.
+private final class SplickStrictEdgePopGesture: NSObject, UIGestureRecognizerDelegate {
+    private static var associatedKey: UInt8 = 0
+
+    private weak var navigationController: UINavigationController?
+    private var pan: UIPanGestureRecognizer?
+    var edgeWidth: CGFloat = 1
+
+    static func install(on nav: UINavigationController, edgeWidth: CGFloat) {
+        let owner: SplickStrictEdgePopGesture
+        if let existing = objc_getAssociatedObject(nav, &associatedKey) as? SplickStrictEdgePopGesture {
+            owner = existing
+        } else {
+            owner = SplickStrictEdgePopGesture()
+            objc_setAssociatedObject(nav, &associatedKey, owner, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
+        owner.edgeWidth = edgeWidth
+        owner.attach(to: nav)
+    }
+
+    static func uninstall(on nav: UINavigationController) {
+        guard let existing = objc_getAssociatedObject(nav, &associatedKey) as? SplickStrictEdgePopGesture else {
+            return
+        }
+        existing.detach(restoringSystemPop: true)
+        objc_setAssociatedObject(nav, &associatedKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+    }
+
+    static func refresh(on nav: UINavigationController) {
+        guard let existing = objc_getAssociatedObject(nav, &associatedKey) as? SplickStrictEdgePopGesture else {
+            return
+        }
+        existing.attach(to: nav)
+    }
+
+    static func isInstalled(on nav: UINavigationController) -> Bool {
+        objc_getAssociatedObject(nav, &associatedKey) is SplickStrictEdgePopGesture
+    }
+
+    private func attach(to nav: UINavigationController) {
+        navigationController = nav
+        guard let systemPop = nav.interactivePopGestureRecognizer else { return }
+
+        SplickWidePopGesture.forceDisable(on: nav)
+
+        // Stock recognizer accepts a wide leading band and steals chat reply pans.
+        systemPop.isEnabled = false
+
+        if pan == nil {
+            let gesture = UIPanGestureRecognizer()
+            gesture.maximumNumberOfTouches = 1
+            gesture.delegate = self
+            nav.view.addGestureRecognizer(gesture)
+            pan = gesture
+        }
+
+        bindTargets(from: systemPop, onto: pan)
+        pan?.isEnabled = nav.viewControllers.count > 1
+    }
+
+    private func detach(restoringSystemPop: Bool) {
+        if let pan, let view = pan.view {
+            view.removeGestureRecognizer(pan)
+        }
+        pan = nil
+        if restoringSystemPop, let nav = navigationController {
+            nav.interactivePopGestureRecognizer?.isEnabled = nav.viewControllers.count > 1
+        }
+        navigationController = nil
+    }
+
+    private func bindTargets(from systemPop: UIGestureRecognizer, onto pan: UIPanGestureRecognizer?) {
+        guard let pan else { return }
+        if let targets = systemPop.value(forKey: "targets") {
+            pan.setValue(targets, forKey: "targets")
+            return
+        }
+        let selector = NSSelectorFromString("handleNavigationTransition:")
+        if let transition = systemPop.delegate, transition.responds(to: selector) {
+            pan.addTarget(transition, action: selector)
+        }
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        guard let nav = navigationController, nav.viewControllers.count > 1, let view = nav.view else {
+            return false
+        }
+        let point = touch.location(in: view)
+        if point.y < view.safeAreaInsets.top + 44 {
+            return false
+        }
+        if view.effectiveUserInterfaceLayoutDirection == .rightToLeft {
+            return point.x >= view.bounds.width - edgeWidth
+        }
+        return point.x <= edgeWidth
+    }
+
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard let pan = gestureRecognizer as? UIPanGestureRecognizer,
+              let nav = navigationController,
+              let view = nav.view,
+              nav.viewControllers.count > 1 else {
+            return false
+        }
+        let translation = pan.translation(in: view)
+        let rtl = view.effectiveUserInterfaceLayoutDirection == .rightToLeft
+        let outward = rtl ? translation.x < 0 : translation.x > 0
+        return outward && abs(translation.x) > abs(translation.y)
+    }
+
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        false
+    }
+}
+
 /// One pan per navigation controller. Waits for the system edge pop to fail, then drives
 /// the same `handleNavigationTransition:` so zoom stays percent-driven under the finger.
 private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate {
@@ -155,6 +346,8 @@ private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate 
     private var pan: UIPanGestureRecognizer?
     var fraction: CGFloat = 0.25
     var minimumWidth: CGFloat = 0
+    /// When true, keep the widened band off (chat needs content area for reply pans).
+    private var isForcedDisabled = false
 
     static func install(on nav: UINavigationController, fraction: CGFloat, minimumWidth: CGFloat = 0) {
         let owner: SplickWidePopGesture
@@ -164,9 +357,23 @@ private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate 
             owner = SplickWidePopGesture()
             objc_setAssociatedObject(nav, &associatedKey, owner, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
+        owner.isForcedDisabled = false
         owner.fraction = fraction
         owner.minimumWidth = minimumWidth
         owner.attach(to: nav)
+    }
+
+    /// Turns off any widened pop band and keeps `refresh` from re-enabling it.
+    static func forceDisable(on nav: UINavigationController) {
+        let owner: SplickWidePopGesture
+        if let existing = objc_getAssociatedObject(nav, &associatedKey) as? SplickWidePopGesture {
+            owner = existing
+        } else {
+            owner = SplickWidePopGesture()
+            objc_setAssociatedObject(nav, &associatedKey, owner, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
+        owner.isForcedDisabled = true
+        owner.pan?.isEnabled = false
     }
 
     private func leadingPopBand(in view: UIView) -> CGFloat {
@@ -176,6 +383,14 @@ private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate 
     private func attach(to nav: UINavigationController) {
         navigationController = nav
         guard let systemPop = nav.interactivePopGestureRecognizer else { return }
+
+        let canPop = nav.viewControllers.count > 1
+        systemPop.isEnabled = canPop
+
+        if isForcedDisabled {
+            pan?.isEnabled = false
+            return
+        }
 
         if pan == nil {
             let gesture = UIPanGestureRecognizer()
@@ -187,9 +402,7 @@ private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate 
 
         bindTargets(from: systemPop, onto: pan)
 
-        let canPop = nav.viewControllers.count > 1
         let usesZoom = splickNavigationUsesZoom(nav)
-        systemPop.isEnabled = canPop
         // Zoom interactive dismiss is bound to the system edge recognizer.
         // A second pan with copied targets pops on lift instead of tracking the finger.
         pan?.isEnabled = canPop && !usesZoom
@@ -215,6 +428,7 @@ private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate 
     }
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        guard !isForcedDisabled else { return false }
         guard let nav = navigationController, nav.viewControllers.count > 1, let view = nav.view else {
             return false
         }
@@ -230,6 +444,7 @@ private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate 
     }
 
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard !isForcedDisabled else { return false }
         guard let pan = gestureRecognizer as? UIPanGestureRecognizer,
               let nav = navigationController,
               let view = nav.view,
@@ -462,6 +677,14 @@ private enum SplickInteractivePopConfigurator {
         retryZoomDetection: Bool = true
     ) {
         guard let pop = nav.interactivePopGestureRecognizer else { return }
+
+        // Chat edge-only mode owns pop — never re-enable the stock wide recognizer.
+        if SplickStrictEdgePopGesture.isInstalled(on: nav) {
+            SplickStrictEdgePopGesture.refresh(on: nav)
+            SplickWidePopGesture.refresh(on: nav)
+            return
+        }
+
         pop.isEnabled = nav.viewControllers.count > 1
 
         let usesZoom = splickNavigationUsesZoom(nav)
