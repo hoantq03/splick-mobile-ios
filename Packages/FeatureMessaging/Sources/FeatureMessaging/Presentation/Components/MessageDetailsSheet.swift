@@ -53,8 +53,7 @@ struct MessageDetailsSheet: View {
             .background(SplickTheme.Colors.background.ignoresSafeArea())
             .navigationTitle(languageService.text(.messagingMessageDetailsTitle))
             .navigationBarTitleDisplayMode(.inline)
-            .splickInteractivePopEnabled()
-            .splickWideInteractivePop()
+            .splickEdgeOnlyInteractivePop()
             .onAppear {
                 tabBarScrollState?.hide(flushToBottom: true)
             }

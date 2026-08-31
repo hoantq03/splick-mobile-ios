@@ -15,6 +15,18 @@ enum MessageThreadRowLayout {
     /// Fallback when the list has not measured yet.
     static let mediaFallbackMaxWidth: CGFloat = 220
 
+    /// Outer message bubble radius (matches Android `BUBBLE_CORNER_RADIUS`).
+    static let bubbleCornerRadius: CGFloat = 20
+    /// Nested quote card — paired with bubble so corners read as one family.
+    static let quoteCornerRadius: CGFloat = 10
+    static let quoteAccentWidth: CGFloat = 2.5
+    static let quoteAccentCornerRadius: CGFloat = 1.25
+    /// Space between quote strip and message body inside the bubble.
+    static let quoteBodySpacing: CGFloat = 6
+    static let quoteHorizontalPaddingLeading: CGFloat = 6
+    static let quoteHorizontalPaddingTrailing: CGFloat = 8
+    static let quoteVerticalPadding: CGFloat = 5
+
     /// Max bubble/media width for a thread **row** (already inside list padding).
     static func contentMaxWidth(forRowWidth rowWidth: CGFloat) -> CGFloat {
         guard rowWidth > 1 else { return mediaFallbackMaxWidth }

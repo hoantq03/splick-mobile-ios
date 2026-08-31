@@ -3,11 +3,16 @@ import DesignSystem
 import Localization
 import SplickDomain
 
+/// Nested reply quote — hugs sender + snippet width (capped by [maxContentWidth]).
+/// Corner radius pairs with [MessageThreadRowLayout.bubbleCornerRadius]
+/// (Android `MessageQuotedReply` twin).
 struct MessageQuotedReplyView: View {
     @EnvironmentObject private var languageService: LanguageService
 
     let preview: MessageReplyPreview
     let isOutgoing: Bool
+    /// When `true`, quote sits inside the colored text bubble (outgoing uses light-on-gradient).
+    /// When `false`, quote sits above media on the chat background (surface colors).
     var usesBubbleTextColors: Bool = true
     /// Caps quote width so long replies wrap instead of stretching the bubble.
     var maxContentWidth: CGFloat? = nil
@@ -15,9 +20,14 @@ struct MessageQuotedReplyView: View {
 
     var body: some View {
         if let onTap {
+            // simultaneous — exclusive onTapGesture steals the list reply-swipe pan
+            // when the finger starts on the quoted strip.
             quotedContent
-                .contentShape(Rectangle())
-                .onTapGesture(perform: onTap)
+                .contentShape(RoundedRectangle(
+                    cornerRadius: MessageThreadRowLayout.quoteCornerRadius,
+                    style: .continuous
+                ))
+                .simultaneousGesture(TapGesture().onEnded(onTap))
                 .accessibilityAddTraits(.isButton)
         } else {
             quotedContent
@@ -25,11 +35,14 @@ struct MessageQuotedReplyView: View {
     }
 
     private var quotedContent: some View {
-        HStack(spacing: SplickTheme.Spacing.xs) {
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .fill(accentColor)
-                .frame(width: 3)
-                .padding(.vertical, 4)
+        let core = HStack(alignment: .top, spacing: 6) {
+            RoundedRectangle(
+                cornerRadius: MessageThreadRowLayout.quoteAccentCornerRadius,
+                style: .continuous
+            )
+            .fill(accentColor)
+            .frame(width: MessageThreadRowLayout.quoteAccentWidth)
+            .padding(.vertical, 1)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(displayName)
@@ -45,23 +58,45 @@ struct MessageQuotedReplyView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .frame(maxWidth: maxContentWidth, alignment: .leading)
-        .padding(.leading, 6)
-        .padding(.vertical, 5)
-        .padding(.trailing, 8)
-        .background {
-            if let cardFill {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(cardFill)
+        .padding(.leading, MessageThreadRowLayout.quoteHorizontalPaddingLeading)
+        .padding(.trailing, MessageThreadRowLayout.quoteHorizontalPaddingTrailing)
+        .padding(.vertical, MessageThreadRowLayout.quoteVerticalPadding)
+
+        return Group {
+            if let maxContentWidth {
+                ViewThatFits(in: .horizontal) {
+                    core.fixedSize(horizontal: true, vertical: true)
+                    core
+                        .frame(maxWidth: maxContentWidth, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: maxContentWidth, alignment: .leading)
+            } else {
+                core.fixedSize(horizontal: true, vertical: true)
             }
         }
+        .background {
+            RoundedRectangle(
+                cornerRadius: MessageThreadRowLayout.quoteCornerRadius,
+                style: .continuous
+            )
+            .fill(cardFill)
+        }
+        .clipShape(
+            RoundedRectangle(
+                cornerRadius: MessageThreadRowLayout.quoteCornerRadius,
+                style: .continuous
+            )
+        )
     }
 
-    private var cardFill: Color? {
-        guard usesBubbleTextColors else { return nil }
-        return isOutgoing
-            ? Color.white.opacity(0.16)
-            : SplickTheme.Colors.background.opacity(0.72)
+    private var cardFill: Color {
+        if usesBubbleTextColors {
+            return isOutgoing
+                ? Color.white.opacity(0.16)
+                : SplickTheme.Colors.background.opacity(0.72)
+        }
+        return SplickTheme.Colors.secondaryBackground
     }
 
     private var displayName: String {
@@ -83,7 +118,7 @@ struct MessageQuotedReplyView: View {
         guard usesBubbleTextColors, isOutgoing else {
             return SplickTheme.Colors.primaryGradientStart
         }
-        return Color.white.opacity(0.85)
+        return Color.white.opacity(0.88)
     }
 
     private var nameColor: Color {

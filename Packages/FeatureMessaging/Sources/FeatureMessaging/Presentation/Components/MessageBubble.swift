@@ -228,8 +228,10 @@ struct MessageBubble: View {
                 .padding(.bottom, showsReactionAccessory ? Self.reactionAccessoryOverlap : 0)
         }
         .simultaneousGesture(longPressGesture)
-        .overlay {
+        .background {
             if presentation == .threadRow {
+                // Background fills the full bubble (quote + body). Overlay UIViewRepresentable
+                // can collapse and miss hit-tests on the quoted strip.
                 MessageBubbleAnchorProbe(messageId: message.id)
                     .allowsHitTesting(false)
             }
@@ -272,7 +274,7 @@ struct MessageBubble: View {
     }
 
     private var bubbleContent: some View {
-        VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+        VStack(alignment: .leading, spacing: MessageThreadRowLayout.quoteBodySpacing) {
             if !imageAttachments.isEmpty {
                 if let preview = message.replyPreview {
                     mediaReplyPreview(preview)
@@ -305,27 +307,22 @@ struct MessageBubble: View {
         return { onQuotedReply(preview.messageId) }
     }
 
-    /// Quote sits above media, outside the colored text bubble, so it must not use
-    /// outgoing white text (that is invisible on the chat background).
+    /// Quote sits above media, outside the colored text bubble — same nested card
+    /// language as in-bubble quotes (`usesBubbleTextColors: false`).
     private func mediaReplyPreview(_ preview: MessageReplyPreview) -> some View {
         MessageQuotedReplyView(
             preview: preview,
             isOutgoing: isOutgoing,
             usesBubbleTextColors: false,
+            maxContentWidth: resolvedContentMaxWidth,
             onTap: quotedReplyTap
         )
-        .padding(.horizontal, SplickTheme.Spacing.xs)
-        .padding(.vertical, SplickTheme.Spacing.xxs)
-        .background {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(SplickTheme.Colors.secondaryBackground)
-        }
     }
 
     private var textBubbleBody: some View {
-        // Quote + text share one clipped bubble. ViewThatFits hugs short lines;
-        // long text wraps at textWrapMaxWidth.
-        let core = VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+        // Quote + text share one clipped bubble. Width hugs the wider of quote
+        // (sender / snippet) or body — ViewThatFits keeps short lines compact.
+        let core = VStack(alignment: .leading, spacing: MessageThreadRowLayout.quoteBodySpacing) {
             if imageAttachments.isEmpty, let preview = message.replyPreview {
                 MessageQuotedReplyView(
                     preview: preview,
@@ -347,8 +344,8 @@ struct MessageBubble: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: textWrapMaxWidth, alignment: .leading)
-        .padding(.horizontal, SplickTheme.Spacing.sm + 2)
-        .padding(.vertical, SplickTheme.Spacing.xs + 2)
+        .padding(.horizontal, MessageThreadRowLayout.bubbleHorizontalPadding)
+        .padding(.vertical, MessageThreadRowLayout.bubbleVerticalPadding)
         .frame(
             minWidth: textReactionMinWidth,
             maxWidth: resolvedContentMaxWidth,
@@ -368,7 +365,7 @@ struct MessageBubble: View {
 
     /// Max width available for wrapped text (excluding horizontal bubble padding).
     private var textWrapMaxWidth: CGFloat {
-        max(resolvedContentMaxWidth - (SplickTheme.Spacing.sm + 2) * 2, 80)
+        max(resolvedContentMaxWidth - MessageThreadRowLayout.bubbleHorizontalPadding * 2, 80)
     }
 
     private func messageTextLabel(lineLimit: Int?) -> some View {
@@ -458,7 +455,7 @@ struct MessageBubble: View {
         }
     }
 
-    private static let bubbleCornerRadius: CGFloat = 24
+    private static let bubbleCornerRadius: CGFloat = MessageThreadRowLayout.bubbleCornerRadius
 
     private var bubbleShape: RoundedRectangle {
         RoundedRectangle(cornerRadius: Self.bubbleCornerRadius, style: .continuous)

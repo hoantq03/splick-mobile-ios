@@ -6,7 +6,7 @@ import Localization
 struct MessageTypingIndicatorBubble: View {
     @EnvironmentObject private var languageService: LanguageService
 
-    private static let bubbleCornerRadius: CGFloat = 24
+    private static let bubbleCornerRadius: CGFloat = MessageThreadRowLayout.bubbleCornerRadius
     fileprivate static let dotSize: CGFloat = 7
     private static let dotSpacing: CGFloat = 3
     fileprivate static let bounceHeight: CGFloat = 4
