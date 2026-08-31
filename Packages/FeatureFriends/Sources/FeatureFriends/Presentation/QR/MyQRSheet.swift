@@ -50,6 +50,7 @@ struct MyQRSheet: View {
                     }
 
                     qrContent
+                        .padding(.horizontal, SplickTheme.Spacing.lg)
 
                     Text(languageService.text(.friendsMyQRHint))
                         .font(SplickTheme.Typography.caption)
@@ -65,7 +66,7 @@ struct MyQRSheet: View {
                 .padding(.bottom, SplickTheme.Spacing.xxl)
             }
             .frame(maxWidth: .infinity)
-            .background(SplickTheme.Colors.background)
+            .background { SplickQRScreenBackground() }
             .navigationTitle(languageService.text(.friendsMyQRTitle))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -140,8 +141,14 @@ struct MyQRSheet: View {
     private var qrContent: some View {
         switch viewModel.state {
         case .idle, .loading:
-            LoadingView(message: languageService.text(.friendsMyQRGenerating))
-                .frame(height: 260)
+            VStack(spacing: SplickTheme.Spacing.sm) {
+                SplickQRFrame(isBusy: true) {
+                    Color.clear
+                }
+                Text(languageService.text(.friendsMyQRGenerating))
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+            }
         case .failed(let message):
             ErrorView(message: message) {
                 Task { await viewModel.load() }
@@ -149,14 +156,12 @@ struct MyQRSheet: View {
             .frame(height: 260)
         case .loaded:
             if let image = qrUIImage {
-                Image(uiImage: image)
-                    .interpolation(.none)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 220, height: 220)
-                    .padding(SplickTheme.Spacing.md)
-                    .background(Color.white)
-                    .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium))
+                SplickQRFrame {
+                    Image(uiImage: image)
+                        .interpolation(.none)
+                        .resizable()
+                        .scaledToFit()
+                }
             } else {
                 Text(languageService.text(.friendsMyQRFailed))
                     .font(SplickTheme.Typography.callout)
@@ -171,15 +176,28 @@ struct MyQRSheet: View {
     }
 
     private var shareItems: [Any]? {
-        guard let qrUIImage else { return nil }
+        guard let branded = brandedExportImage else { return nil }
         return [
-            qrUIImage,
+            branded,
             AppConstants.Links.profileInviteURL(username: username)
         ]
     }
 
+    @MainActor
+    private var brandedExportImage: UIImage? {
+        guard let qrUIImage else { return nil }
+        let versionMeta = viewModel.version.map { languageService.format(.friendsMyQRVersion, $0) }
+        return SplickQRShareCard.render(
+            qrImage: qrUIImage,
+            title: displayName,
+            subtitle: "@\(username)",
+            meta: versionMeta,
+            hint: languageService.text(.friendsMyQRHint)
+        )
+    }
+
     private func saveQRImage() async {
-        guard let qrUIImage else {
+        guard let brandedExportImage else {
             feedbackMessage = languageService.text(.profilePaymentImageSaveFailed)
             return
         }
@@ -195,7 +213,7 @@ struct MyQRSheet: View {
 
         let saved = await withCheckedContinuation { continuation in
             PHPhotoLibrary.shared().performChanges({
-                PHAssetChangeRequest.creationRequestForAsset(from: qrUIImage)
+                PHAssetChangeRequest.creationRequestForAsset(from: brandedExportImage)
             }) { success, _ in
                 continuation.resume(returning: success)
             }

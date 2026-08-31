@@ -46,6 +46,7 @@ struct GroupInviteQRSheet: View {
                 .padding(.top, SplickTheme.Spacing.lg)
 
                 qrContent
+                    .padding(.horizontal, SplickTheme.Spacing.lg)
 
                 if let qr = viewModel.serverQR {
                     Text(languageService.format(
@@ -70,7 +71,7 @@ struct GroupInviteQRSheet: View {
                 Spacer()
             }
             .frame(maxWidth: .infinity)
-            .background(SplickTheme.Colors.background)
+            .background { SplickQRScreenBackground() }
             .navigationTitle(languageService.text(.friendsGroupQRTitle))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -166,8 +167,14 @@ struct GroupInviteQRSheet: View {
     private var qrContent: some View {
         switch viewModel.state {
         case .idle, .loading:
-            LoadingView(message: languageService.text(.friendsGroupQRGenerating))
-                .frame(height: 260)
+            VStack(spacing: SplickTheme.Spacing.sm) {
+                SplickQRFrame(isBusy: true) {
+                    Color.clear
+                }
+                Text(languageService.text(.friendsGroupQRGenerating))
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+            }
         case .failed(let message):
             ErrorView(message: message) {
                 Task { await viewModel.load() }
@@ -175,22 +182,12 @@ struct GroupInviteQRSheet: View {
             .frame(height: 260)
         case .loaded:
             if let image = qrDisplayImage {
-                ZStack {
+                SplickQRFrame(isBusy: viewModel.isRefreshing) {
                     Image(uiImage: image)
                         .interpolation(.none)
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 220, height: 220)
-
-                    if viewModel.isRefreshing {
-                        Color.white.opacity(0.75)
-                        ProgressView()
-                    }
                 }
-                .padding(SplickTheme.Spacing.md)
-                .background(Color.white)
-                .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium))
-                .frame(height: 260)
             } else {
                 Text(languageService.text(.friendsGroupQRFailed))
                     .font(SplickTheme.Typography.callout)
@@ -209,9 +206,27 @@ struct GroupInviteQRSheet: View {
         return QRCodeGenerator.image(from: payload, dimension: 1024)
     }
 
-    private var shareItems: [Any]? {
+    @MainActor
+    private var brandedExportImage: UIImage? {
         guard let qrExportImage else { return nil }
-        var items: [Any] = [qrExportImage]
+        let expiresMeta = viewModel.serverQR.map { qr in
+            languageService.format(
+                .friendsGroupQRExpires,
+                qr.expiresAt.formatted(date: .abbreviated, time: .shortened)
+            )
+        }
+        return SplickQRShareCard.render(
+            qrImage: qrExportImage,
+            title: groupName,
+            subtitle: languageService.text(.friendsGroupQRSecureTitle),
+            meta: expiresMeta,
+            hint: languageService.text(.friendsGroupQRHint)
+        )
+    }
+
+    private var shareItems: [Any]? {
+        guard let brandedExportImage else { return nil }
+        var items: [Any] = [brandedExportImage]
         if let shareURL = viewModel.shareURL {
             items.append(shareURL)
         }
@@ -219,7 +234,7 @@ struct GroupInviteQRSheet: View {
     }
 
     private func saveQRImage() async {
-        guard let qrExportImage else {
+        guard let brandedExportImage else {
             feedbackMessage = languageService.text(.friendsGroupQRSaveFailed)
             return
         }
@@ -235,7 +250,7 @@ struct GroupInviteQRSheet: View {
 
         let saved = await withCheckedContinuation { continuation in
             PHPhotoLibrary.shared().performChanges({
-                PHAssetChangeRequest.creationRequestForAsset(from: qrExportImage)
+                PHAssetChangeRequest.creationRequestForAsset(from: brandedExportImage)
             }) { success, _ in
                 continuation.resume(returning: success)
             }

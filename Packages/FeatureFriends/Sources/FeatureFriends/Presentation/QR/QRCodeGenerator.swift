@@ -6,7 +6,7 @@ enum QRCodeGenerator {
     static func image(from string: String, dimension: CGFloat = 240) -> UIImage? {
         let filter = CIFilter.qrCodeGenerator()
         filter.message = Data(string.utf8)
-        filter.correctionLevel = "M"
+        filter.correctionLevel = "L"
 
         guard let output = filter.outputImage else { return nil }
 
