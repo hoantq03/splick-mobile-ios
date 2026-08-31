@@ -4,12 +4,12 @@ import Common
 import Localization
 import SplickDomain
 
-struct InviteFriendsToGroupSheet: View {
+public struct InviteFriendsToGroupSheet: View {
     @StateObject private var viewModel: InviteFriendsToGroupViewModel
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
 
-    init(
+    public init(
         groupId: UUID,
         existingMemberIds: Set<UUID>,
         currentUserId: UUID?,
@@ -17,7 +17,7 @@ struct InviteFriendsToGroupSheet: View {
         addFriendUseCase: AddFriendUseCaseProtocol,
         inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol,
         languageService: LanguageService,
-        onInvited: @escaping () -> Void
+        onInvited: @escaping ([UUID]) -> Void
     ) {
         _viewModel = StateObject(
             wrappedValue: InviteFriendsToGroupViewModel(

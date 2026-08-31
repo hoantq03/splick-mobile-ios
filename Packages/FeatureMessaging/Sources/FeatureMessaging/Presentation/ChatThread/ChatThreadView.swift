@@ -38,6 +38,7 @@ public struct ChatThreadView: View {
     @State private var isDetailsPresented = false
 
     @Environment(\.chatGroupManagementActions) private var groupManagementActions
+    @Environment(\.presentInviteFriendsToGroup) private var presentInviteFriendsToGroup
     @Environment(\.dismiss) private var dismiss
 
     public init(
@@ -177,6 +178,17 @@ public struct ChatThreadView: View {
                                 groupId: groupId,
                                 memberUserId: memberUserId
                             )
+                        },
+                        onAddMembers: { memberIds in
+                            activeGroupSheet = nil
+                            presentCenteredConfirm {
+                                presentInviteFriendsToGroup?(
+                                    InviteFriendsToGroupRequest(
+                                        groupId: displayConversation.id,
+                                        existingMemberIds: memberIds
+                                    )
+                                )
+                            }
                         }
                     )
                 }
@@ -411,6 +423,15 @@ public struct ChatThreadView: View {
                 )
             }
 
+            Button {
+                presentInviteMembers()
+            } label: {
+                Label(
+                    languageService.text(.friendsAddMembersTitle),
+                    systemImage: "person.badge.plus"
+                )
+            }
+
             Button(role: .destructive) {
                 confirmLeaveGroup = true
             } label: {
@@ -444,6 +465,21 @@ public struct ChatThreadView: View {
     private enum PendingPeerConfirm {
         case removeFriend
         case blockUser
+    }
+
+    private func presentInviteMembers() {
+        guard let displayConversation else { return }
+        Task {
+            let members = (try? await groupManagementActions.fetchMembers(displayConversation.id)) ?? []
+            var excluded = Set(members.map(\.userId))
+            excluded.insert(currentUserId)
+            presentInviteFriendsToGroup?(
+                InviteFriendsToGroupRequest(
+                    groupId: displayConversation.id,
+                    existingMemberIds: excluded
+                )
+            )
+        }
     }
 
     private func applyConversationUpdate(_ updated: Conversation) {

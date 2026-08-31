@@ -24,6 +24,8 @@ struct GroupDetailView: View {
 
     @Environment(\.currentUserSummary) private var currentUserSummary
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openGroupChat) private var openGroupChat
+    @Environment(\.addMembersToGroupConversation) private var addMembersToGroupConversation
 
     @State private var showGroupQR = false
     @State private var showInviteFriends = false
@@ -31,6 +33,7 @@ struct GroupDetailView: View {
     @State private var showTransferOwnership = false
     @State private var confirmLeave = false
     @State private var confirmDelete = false
+    @State private var isOpeningChat = false
 
     init(
         group: SplickDomain.Group,
@@ -135,10 +138,13 @@ struct GroupDetailView: View {
                 addFriendUseCase: addFriendUseCase,
                 inviteFriendsUseCase: inviteFriendsUseCase,
                 languageService: languageService,
-                onInvited: {
+                onInvited: { invitedIds in
                     Task {
                         await viewModel.loadMembers()
                         await viewModel.loadPendingMembers()
+                        if let addMembers = addMembersToGroupConversation {
+                            await addMembers(viewModel.group.id, invitedIds)
+                        }
                     }
                 }
             )
@@ -166,7 +172,7 @@ struct GroupDetailView: View {
             Text(viewModel.actionError ?? "")
         }
         .confirmationDialog(
-            languageService.text(.messagingLeaveGroupConfirmTitle),
+            languageService.text(.friendsLeaveGroupConfirmTitle),
             isPresented: $confirmLeave,
             titleVisibility: .visible
         ) {
@@ -179,6 +185,8 @@ struct GroupDetailView: View {
                 }
             }
             Button(languageService.text(.friendsCancel), role: .cancel) {}
+        } message: {
+            Text(languageService.text(.friendsLeaveGroupMessage))
         }
         .alert(languageService.text(.friendsDeleteGroupConfirmTitle), isPresented: $confirmDelete) {
             Button(languageService.text(.friendsCancel), role: .cancel) {}
@@ -332,6 +340,21 @@ struct GroupDetailView: View {
             ],
             spacing: SplickTheme.Spacing.xs
         ) {
+            headerQuickActionButton(
+                icon: "bubble.left.and.bubble.right.fill",
+                title: languageService.text(.friendsGroupChat),
+                isDisabled: isOpeningChat
+            ) {
+                openGroupChatThread()
+            }
+
+            headerQuickActionButton(
+                icon: "person.badge.plus",
+                title: languageService.text(.friendsAddMembersTitle)
+            ) {
+                showInviteFriends = true
+            }
+
             headerQuickActionButton(icon: "qrcode", title: languageService.text(.friendsGroupQR)) {
                 showGroupQR = true
             }
@@ -358,6 +381,14 @@ struct GroupDetailView: View {
                     isDestructive: true
                 ) {
                     confirmDelete = true
+                }
+            } else {
+                headerQuickActionButton(
+                    icon: "rectangle.portrait.and.arrow.right",
+                    title: languageService.text(.messagingLeaveGroup),
+                    isDestructive: true
+                ) {
+                    confirmLeave = true
                 }
             }
         }
@@ -406,6 +437,36 @@ struct GroupDetailView: View {
         guard !code.isEmpty else { return }
         UIPasteboard.general.string = code
         viewModel.actionMessage = languageService.text(.friendsGroupCodeCopied)
+    }
+
+    private func openGroupChatThread() {
+        guard !isOpeningChat else { return }
+        let memberIds = viewModel.members
+            .map(\.userId)
+            .filter { $0 != currentUserSummary?.id }
+        guard !memberIds.isEmpty else {
+            viewModel.actionError = languageService.text(.messagingGroupChatRequiresMembers)
+            return
+        }
+        guard let openGroupChat else {
+            viewModel.actionError = languageService.text(.friendsGroupChatFailed)
+            return
+        }
+        isOpeningChat = true
+        Task { @MainActor in
+            let conversationId = await openGroupChat(
+                OpenGroupChatRequest(
+                    groupId: viewModel.group.id,
+                    name: viewModel.group.name,
+                    avatarURL: viewModel.group.avatarURL?.absoluteString,
+                    memberUserIds: memberIds
+                )
+            )
+            if conversationId == nil {
+                viewModel.actionError = languageService.text(.friendsGroupChatFailed)
+            }
+            isOpeningChat = false
+        }
     }
 
     private func memberDisplayName(_ member: GroupMemberItem, isMe: Bool) -> String {

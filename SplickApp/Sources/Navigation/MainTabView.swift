@@ -41,6 +41,7 @@ struct MainTabView: View {
     /// bar chrome can start sliding in immediately, in parallel with the overlay collapsing.
     /// Reset to `false` once `showNotifications` fully clears.
     @State private var notificationIsDismissing = false
+    @State private var inviteFriendsToGroupRequest: InviteFriendsToGroupRequest?
 
     private var currentUserSummary: UserSummary? {
         appState.currentUser.map {
@@ -65,7 +66,7 @@ struct MainTabView: View {
             // Fills the full screen (including safe areas) so system white never shows
             // through at the top (status bar) or bottom (home indicator) safe area regions.
             SplickTheme.Colors.background
-                .ignoresSafeArea()
+                .ignoresSafeArea(.container)
 
             MainTabContentPager(
                 selectedTab: $appState.selectedTab,
@@ -180,6 +181,46 @@ struct MainTabView: View {
                 appState.openConversation(conversationId)
                 return conversationId
             }
+            .environment(\.openGroupChat) { request in
+                do {
+                    let conversationId = try await container.getOrCreateSocialGroupConversation(
+                        groupId: request.groupId,
+                        name: request.name,
+                        avatarURL: request.avatarURL,
+                        memberUserIds: request.memberUserIds
+                    )
+                    appState.openConversation(conversationId)
+                    return conversationId
+                } catch {
+                    return nil
+                }
+            }
+            .environment(\.presentInviteFriendsToGroup) { request in
+                inviteFriendsToGroupRequest = request
+            }
+            .environment(\.addMembersToGroupConversation) { groupId, userIds in
+                await container.addMembersToGroupConversation(groupId: groupId, userIds: userIds)
+            }
+            .sheet(item: $inviteFriendsToGroupRequest) { request in
+                InviteFriendsToGroupSheet(
+                    groupId: request.groupId,
+                    existingMemberIds: request.existingMemberIds,
+                    currentUserId: appState.currentUser?.id,
+                    searchUsersUseCase: container.searchUsersUseCase,
+                    addFriendUseCase: container.addFriendUseCase,
+                    inviteFriendsUseCase: container.inviteFriendsToGroupUseCase,
+                    languageService: container.languageService,
+                    onInvited: { invitedIds in
+                        Task {
+                            await container.addMembersToGroupConversation(
+                                groupId: request.groupId,
+                                userIds: invitedIds
+                            )
+                        }
+                    }
+                )
+                .environmentObject(container.languageService)
+            }
             .environment(\.currentUserSummary, currentUserSummary)
             .environment(\.tabBarScrollState, tabBarChrome.tabBar)
             .overlay(alignment: .bottom) {
@@ -272,8 +313,10 @@ struct MainTabView: View {
         ExpenseListView(
             viewModel: container.expenseListViewModel,
             currentUserId: appState.currentUser?.id,
+            currentUser: currentUserSummary,
             isTabActive: settledPagerTab == .expenses,
-            userSearchUseCase: container.expenseFriendSearchUseCase,
+            fetchMyFriendsUseCase: container.fetchMyFriendsUseCase,
+            fetchMyGroupsUseCase: container.fetchMyGroupsUseCase,
             profileDependencies: container.friendUserProfileDependencies,
             friendListViewModel: container.expenseFriendListViewModel,
             makeFriendDetailViewModel: { debt in
@@ -563,7 +606,7 @@ struct ProfileSettingsView: View {
             .onChange(of: selectedPhotoItem) { _ in
                 Task { await onPhotoItemChanged() }
             }
-            .fullScreenCover(isPresented: $showAvatarViewer) {
+            .splickWindowFullScreenCover(isPresented: $showAvatarViewer) {
                 AvatarFullScreenView(
                     url: appState.currentUser?.avatarURL,
                     placeholderName: appState.currentUser?.displayName ?? "",

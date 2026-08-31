@@ -873,6 +873,29 @@ final class DependencyContainer: ObservableObject {
         }
     }
 
+    func getOrCreateSocialGroupConversation(
+        groupId: UUID,
+        name: String,
+        avatarURL: String?,
+        memberUserIds: [UUID]
+    ) async throws -> UUID {
+        let conversation = try await CreateGroupConversationUseCase(
+            repository: messagingRepository
+        ).execute(
+            name: name,
+            avatarUrl: avatarURL,
+            memberUserIds: memberUserIds,
+            groupId: groupId
+        )
+        return conversation.id
+    }
+
+    func addMembersToGroupConversation(groupId: UUID, userIds: [UUID]) async {
+        for userId in userIds {
+            try? await messagingRepository.addGroupMember(groupId: groupId, memberUserId: userId)
+        }
+    }
+
     // MARK: - Tab ViewModels (survive tab switches)
 
     lazy var feedViewModel: FeedViewModel = makeFeedViewModel()

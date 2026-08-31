@@ -68,13 +68,16 @@ struct GroupMembersSheet: View {
     @StateObject private var viewModel: GroupMembersSheetViewModel
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
+    private let onAddMembers: ((Set<UUID>) -> Void)?
 
     init(
         groupId: UUID,
         currentUserId: UUID,
         fetchMembers: @escaping (UUID) async throws -> [GroupChatMember],
-        removeMember: @escaping (UUID, UUID) async throws -> Void
+        removeMember: @escaping (UUID, UUID) async throws -> Void,
+        onAddMembers: ((Set<UUID>) -> Void)? = nil
     ) {
+        self.onAddMembers = onAddMembers
         _viewModel = StateObject(
             wrappedValue: GroupMembersSheetViewModel(
                 groupId: groupId,
@@ -107,6 +110,20 @@ struct GroupMembersSheet: View {
             .navigationTitle(languageService.text(.messagingGroupManageMembers))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    if let onAddMembers {
+                        Button {
+                            var ids = Set(viewModel.members.map(\.userId))
+                            ids.insert(viewModel.currentUserId)
+                            onAddMembers(ids)
+                        } label: {
+                            Label(
+                                languageService.text(.friendsAddMembersTitle),
+                                systemImage: "person.badge.plus"
+                            )
+                        }
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(languageService.text(.commonDone)) { dismiss() }
                 }

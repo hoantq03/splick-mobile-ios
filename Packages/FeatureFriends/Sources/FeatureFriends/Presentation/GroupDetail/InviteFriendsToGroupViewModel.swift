@@ -25,7 +25,7 @@ final class InviteFriendsToGroupViewModel: ObservableObject {
     private let addFriendUseCase: AddFriendUseCaseProtocol
     private let inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol
     private let languageService: LanguageService
-    private let onInvited: () -> Void
+    private let onInvited: ([UUID]) -> Void
     private var searchTask: Task<Void, Never>?
     private var inFlightRelationActionUserIds: Set<UUID> = []
 
@@ -41,7 +41,7 @@ final class InviteFriendsToGroupViewModel: ObservableObject {
         addFriendUseCase: AddFriendUseCaseProtocol,
         inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol,
         languageService: LanguageService,
-        onInvited: @escaping () -> Void
+        onInvited: @escaping ([UUID]) -> Void
     ) {
         self.groupId = groupId
         self.existingMemberIds = existingMemberIds
@@ -126,7 +126,7 @@ final class InviteFriendsToGroupViewModel: ObservableObject {
             let skippedCount = result.skipped.count
             if invitedCount > 0 {
                 successMessage = languageService.format(.friendsInviteSuccessCount, invitedCount)
-                onInvited()
+                onInvited(result.invited)
             } else if skippedCount > 0 {
                 alertMessage = languageService.text(.friendsInviteFailedReason)
             } else {
