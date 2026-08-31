@@ -59,6 +59,7 @@ public struct LocalImageFullscreenPreview: View {
             .padding(.trailing, 16)
         }
         .statusBarHidden(true)
+        .ignoresSafeArea()
     }
 }
 
@@ -359,6 +360,7 @@ public struct RemoteGifFullscreenPreview: View {
             .padding(.trailing, 16)
         }
         .statusBarHidden(true)
+        .ignoresSafeArea()
     }
 }
 
@@ -433,6 +435,7 @@ public struct RemoteImageFullscreenPreview: View {
             }
         }
         .statusBarHidden(true)
+        .ignoresSafeArea()
     }
 }
 

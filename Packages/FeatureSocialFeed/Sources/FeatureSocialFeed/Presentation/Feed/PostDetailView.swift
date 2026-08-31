@@ -155,6 +155,7 @@ struct PostDetailView: View {
         .navigationTitle(languageService.text(.feedPostCommentsTitle))
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbar(mediaViewerRoute == nil ? .visible : .hidden, for: .navigationBar)
         .splickInteractivePopEnabled()
         .splickWideInteractivePop()
         .overlay(alignment: .top) {
@@ -264,7 +265,7 @@ struct PostDetailView: View {
                 }
             }
         }
-        .fullScreenCover(item: $mediaViewerRoute) { route in
+        .splickWindowFullScreenCover(item: $mediaViewerRoute) { route in
             let mediaItems = livePost.displayMediaItems
             if !mediaItems.isEmpty {
                 MediaViewerView(
@@ -275,6 +276,7 @@ struct PostDetailView: View {
                         set: { if !$0 { mediaViewerRoute = nil } }
                     )
                 )
+                .environmentObject(languageService)
             }
         }
         .alert(
@@ -372,7 +374,7 @@ struct PostDetailView: View {
             .strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5)
         }
         .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: -3)
-        .ignoresSafeArea(edges: .bottom)
+        .ignoresSafeArea(.container, edges: .bottom)
     }
 
     private var composerPlaceholder: String {

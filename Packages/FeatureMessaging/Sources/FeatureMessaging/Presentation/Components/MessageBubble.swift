@@ -293,7 +293,7 @@ struct MessageBubble: View {
         }
         .contentShape(Rectangle())
         .modifier(FailedMessageRetryTap(isFailed: message.deliveryStatus == .failed, onRetry: onRetry))
-        .fullScreenCover(item: $imageViewerRoute) { route in
+        .splickWindowFullScreenCover(item: $imageViewerRoute) { route in
             attachmentFullscreenPreview(at: route.index)
         }
     }

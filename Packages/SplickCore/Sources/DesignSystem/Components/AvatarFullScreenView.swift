@@ -26,7 +26,7 @@ public struct AvatarFullScreenView: View {
             onDismiss: onDismiss
         )
         .ignoresSafeArea()
-        .statusBarHidden(false)
+        .statusBarHidden(true)
     }
 }
 

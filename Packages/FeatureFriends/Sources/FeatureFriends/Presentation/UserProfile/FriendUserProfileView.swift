@@ -180,7 +180,7 @@ public struct FriendUserProfileView: View {
             .sheet(isPresented: $viewModel.showNicknameEditor) {
                 nicknameEditorSheet
             }
-            .fullScreenCover(isPresented: $showAvatarViewer) {
+            .splickWindowFullScreenCover(isPresented: $showAvatarViewer) {
                 AvatarFullScreenView(
                     url: viewModel.user.avatarURL,
                     placeholderName: viewModel.user.preferredName,

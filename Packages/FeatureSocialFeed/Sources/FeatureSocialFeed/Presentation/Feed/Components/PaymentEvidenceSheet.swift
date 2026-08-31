@@ -71,7 +71,7 @@ struct PaymentEvidenceSheet: View {
             .safeAreaInset(edge: .bottom) {
                 submitBar
             }
-            .fullScreenCover(item: $fullScreenPreviewRoute) { route in
+            .splickWindowFullScreenCover(item: $fullScreenPreviewRoute) { route in
                 let previewImages = LocalImagePreviewSupport.decodeImages(from: pendingAttachments)
                 if previewImages.indices.contains(route.index) {
                     LocalImageFullscreenPreview(

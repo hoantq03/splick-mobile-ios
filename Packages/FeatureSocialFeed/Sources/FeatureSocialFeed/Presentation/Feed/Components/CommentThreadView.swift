@@ -809,7 +809,7 @@ private struct CommentAttachmentsView: View {
                     }
                 }
             }
-            .fullScreenCover(item: $mediaViewerRoute) { route in
+            .splickWindowFullScreenCover(item: $mediaViewerRoute) { route in
                 let items = mediaItems
                 if !items.isEmpty {
                     MediaViewerView(

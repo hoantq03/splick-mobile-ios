@@ -171,7 +171,7 @@ public struct AttachmentComposerView<TextField: View, Accessory: View, SendButto
         .onChange(of: photoPickerItems) { items in
             beginImportingPhotoPickerItems(items)
         }
-        .fullScreenCover(item: $attachmentPreviewRoute) { route in
+        .splickWindowFullScreenCover(item: $attachmentPreviewRoute) { route in
             attachmentFullscreenPreview(at: route.index)
         }
     }
