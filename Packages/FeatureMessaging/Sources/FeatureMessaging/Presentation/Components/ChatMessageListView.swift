@@ -20,9 +20,10 @@ struct ChatMessageListView: View {
     var peerDisplayName: String = ""
     var showsPeerReadAvatar: Bool = false
     var conversationId: UUID? = nil
-    var isComposerFocused: Bool = false
     var bottomOverlayInset: CGFloat = 8
     var onOpenDetails: (ChatMessage) -> Void = { _ in }
+    /// When false (removed from group / blocked), hide Reply and reactions; Copy + Details remain.
+    var allowsThreadInteraction: Bool = true
 
     @State private var reactionFocusMessageId: UUID?
     /// Fresh identity each open so `@State isRevealed` cannot stick across odd/even mounts.
@@ -50,9 +51,10 @@ struct ChatMessageListView: View {
     private static let replySwipeThreshold: CGFloat = 56
     /// Past the icon slot (46) so threshold is reachable while reveal stays 1:1.
     private static let replySwipeMaxOffset: CGFloat = 72
-    /// Leading screen edge reserved for UIKit interactive pop (swipe back).
-    /// Keep this at the system edge so incoming bubbles can still swipe-to-reply.
-    private static let navigationBackEdgeWidth: CGFloat = 20
+    /// Leading strip reserved for strict edge-only interactive pop (must match
+    /// `splickEdgeOnlyInteractivePop` default). 1pt so timestamp / reply own
+    /// almost the full leading edge; only a hairline triggers back.
+    private static let navigationBackEdgeWidth: CGFloat = 1
 
     private var latestReadOutgoingMessageId: UUID? {
         MessageReadReceiptPresentation.latestReadOutgoingMessageId(
@@ -112,6 +114,7 @@ struct ChatMessageListView: View {
                                             ? replySwipeTranslation
                                             : 0,
                                         onReact: { emoji in
+                                            guard allowsThreadInteraction else { return }
                                             _ = viewModel.react(to: item.message.id, emoji: emoji)
                                         },
                                         onRetry: {
@@ -120,9 +123,11 @@ struct ChatMessageListView: View {
                                         onLongPress: {
                                             openReactionFocus(for: item)
                                         },
-                                        onReply: {
-                                            beginReply(to: item.message)
-                                        },
+                                        onReply: allowsThreadInteraction
+                                            ? {
+                                                beginReply(to: item.message)
+                                            }
+                                            : nil,
                                         onQuotedReply: { originId in
                                             Task { await viewModel.revealSearchedMessage(id: originId) }
                                         },
@@ -231,6 +236,7 @@ struct ChatMessageListView: View {
                        ) {
                         MessageReactionFocusOverlay(
                             context: focusContext,
+                            allowsThreadInteraction: allowsThreadInteraction,
                             onReact: { emoji in
                                 _ = viewModel.react(to: focusContext.messageId, emoji: emoji)
                             },
@@ -339,18 +345,14 @@ struct ChatMessageListView: View {
                 lastHandledScrollToBottomToken = token
                 scrollToBottom(proxy: proxy, animated: hasCompletedInitialBottomScroll)
             }
-            .onChange(of: isComposerFocused) { focused in
-                guard focused else { return }
-                guard viewModel.scrollToMessageToken == 0 else { return }
-                guard viewModel.highlightedMessageId == nil else { return }
-                scrollToBottom(proxy: proxy, animated: true)
-            }
             .onReceive(
                 NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)
             ) { notification in
                 guard viewModel.scrollToMessageToken == 0 else { return }
                 guard viewModel.highlightedMessageId == nil else { return }
-                guard isComposerFocused || viewModel.isNearBottom || initialOpenBottomScrollPending else { return }
+                // Only keep the latest in view if the user is already at the bottom.
+                // Focusing the composer for reply must not jump away from the replied message.
+                guard viewModel.isNearBottom || initialOpenBottomScrollPending else { return }
                 scrollToBottom(proxy: proxy, animated: false)
                 let duration = (notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? NSNumber)?
                     .doubleValue ?? 0.25
@@ -432,9 +434,11 @@ struct ChatMessageListView: View {
             // Reply only when the finger started on the bubble. Empty row space
             // (spacers, gaps) keeps the list-wide timestamp reveal.
             if let hit = messageHit(at: globalStart) {
-                let inReplyDirection = hit.isOutgoing
-                    ? horizontal < -4
-                    : horizontal > 4
+                let inReplyDirection = allowsThreadInteraction && (
+                    hit.isOutgoing
+                        ? horizontal < -4
+                        : horizontal > 4
+                )
                 if inReplyDirection {
                     listPanSession = .replySwiping(
                         messageId: hit.messageId,
@@ -617,6 +621,7 @@ struct ChatMessageListView: View {
     }
 
     private func beginReply(to message: ChatMessage) {
+        guard allowsThreadInteraction else { return }
         guard !message.isSystemNotice else { return }
         dismissReactionFocus(force: true)
         viewModel.beginReply(to: message, senderDisplayName: senderDisplayName(message))
@@ -787,12 +792,13 @@ private struct ChatListHorizontalPanInstaller: UIViewRepresentable {
     }
 
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
-        var edgeExclusionWidth: CGFloat = 20
+        var edgeExclusionWidth: CGFloat = 1
         var isEnabled = true
         var onChanged: ((_ globalStart: CGPoint, _ localStart: CGPoint, _ listWidth: CGFloat, _ translation: CGSize) -> Void)?
         var onEnded: ((CGSize) -> Void)?
 
         private weak var hostScrollView: UIScrollView?
+        private weak var navigationController: UINavigationController?
         private var startLocation: CGPoint = .zero
         private var startLocal: CGPoint = .zero
         private lazy var pan: UIPanGestureRecognizer = {
@@ -805,11 +811,17 @@ private struct ChatListHorizontalPanInstaller: UIViewRepresentable {
 
         func attach(from markerView: UIView) {
             guard markerView.window != nil, let scrollView = chatListScrollView(from: markerView) else { return }
-            if hostScrollView === scrollView, pan.view === scrollView { return }
+            let nav = navigationController(from: scrollView)
+            if hostScrollView === scrollView, pan.view === scrollView, navigationController === nav {
+                return
+            }
             detach()
             scrollView.addGestureRecognizer(pan)
+            // Stock interactive-pop is disabled on chat; only an ~8pt strict edge pan
+            // can go back. Content past that strip is reply / timestamp.
             scrollView.panGestureRecognizer.require(toFail: pan)
             hostScrollView = scrollView
+            navigationController = nav
         }
 
         func detach() {
@@ -817,6 +829,7 @@ private struct ChatListHorizontalPanInstaller: UIViewRepresentable {
                 view.removeGestureRecognizer(pan)
             }
             hostScrollView = nil
+            navigationController = nil
         }
 
         @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
@@ -847,7 +860,6 @@ private struct ChatListHorizontalPanInstaller: UIViewRepresentable {
                 inContentBand = point.x > edgeExclusionWidth
             }
             guard inContentBand else { return false }
-            // Hit-test the row the finger went down on, not where the pan begins after 8pt.
             startLocation = touch.location(in: nil)
             startLocal = point
             return true
@@ -866,6 +878,20 @@ private struct ChatListHorizontalPanInstaller: UIViewRepresentable {
             shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
         ) -> Bool {
             false
+        }
+
+        private func navigationController(from view: UIView) -> UINavigationController? {
+            var responder: UIResponder? = view
+            while let current = responder {
+                if let nav = current as? UINavigationController {
+                    return nav
+                }
+                if let vc = current as? UIViewController, let nav = vc.navigationController {
+                    return nav
+                }
+                responder = current.next
+            }
+            return nil
         }
 
         private func chatListScrollView(from marker: UIView) -> UIScrollView? {
@@ -896,7 +922,6 @@ private struct ChatListHorizontalPanInstaller: UIViewRepresentable {
                 scroll.contentSize.width <= scroll.bounds.width + 24
             }
             let pool = vertical.isEmpty ? candidates : vertical
-            // Tightest fit — avoid attaching to a full-screen tab pager.
             return pool.min { lhs, rhs in
                 lhs.bounds.width * lhs.bounds.height < rhs.bounds.width * rhs.bounds.height
             }

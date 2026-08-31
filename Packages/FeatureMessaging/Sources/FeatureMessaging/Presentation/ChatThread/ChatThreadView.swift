@@ -89,8 +89,8 @@ public struct ChatThreadView: View {
         }
         .background(SplickTheme.Colors.background.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
-        .splickInteractivePopEnabled()
-        .splickWideInteractivePop(fraction: 0.06, minimumWidth: 20)
+        // Edge-only pop: disables widened pop band so swipe-to-reply is not stolen.
+        .splickEdgeOnlyInteractivePop()
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Button(action: openChatHeader) {
@@ -268,10 +268,6 @@ public struct ChatThreadView: View {
         } message: {
             Text(languageService.text(.messagingFilterComingSoon))
         }
-        .onChange(of: isInputFocused) { focused in
-            guard focused else { return }
-            viewModel.pinToLatest()
-        }
         .onChange(of: relationshipViewModel.isBlocked) { isBlocked in
             guard isBlocked else { return }
             inputText = ""
@@ -304,12 +300,19 @@ public struct ChatThreadView: View {
         .task {
             async let messages: Void = viewModel.loadIfNeeded()
             async let relationship: Void = relationshipViewModel.loadIfNeeded()
-            _ = await (messages, relationship)
+            async let groupRole: Void = viewModel.refreshGroupViewerRole(
+                isGroup: (groupConversation ?? conversation)?.isGroup == true
+            )
+            _ = await (messages, relationship, groupRole)
         }
     }
 
     private var displayConversation: Conversation? {
         groupConversation ?? conversation
+    }
+
+    private var groupCapabilities: GroupChatThreadCapabilities {
+        viewModel.groupThreadCapabilities(isGroup: displayConversation?.isGroup == true)
     }
 
     private var threadContent: some View {
@@ -404,54 +407,68 @@ public struct ChatThreadView: View {
 
     private var groupChatOptionsMenu: some View {
         Menu {
-            conversationComingSoonActions
-
-            Button {
-                activeGroupSheet = .avatar
-            } label: {
-                Label(
-                    languageService.text(.messagingGroupChangeAvatar),
-                    systemImage: "photo.circle"
-                )
+            if groupCapabilities.canSearch || groupCapabilities.canManageNotifications {
+                conversationComingSoonActions
             }
 
-            Button {
-                activeGroupSheet = .rename
-            } label: {
-                Label(
-                    languageService.text(.messagingGroupChangeName),
-                    systemImage: "pencil"
-                )
+            if groupCapabilities.canChangeAvatar {
+                Button {
+                    activeGroupSheet = .avatar
+                } label: {
+                    Label(
+                        languageService.text(.messagingGroupChangeAvatar),
+                        systemImage: "photo.circle"
+                    )
+                }
             }
 
-            Button {
-                activeGroupSheet = .members
-            } label: {
-                Label(
-                    languageService.text(.messagingGroupManageMembers),
-                    systemImage: "person.2"
-                )
+            if groupCapabilities.canRename {
+                Button {
+                    activeGroupSheet = .rename
+                } label: {
+                    Label(
+                        languageService.text(.messagingGroupChangeName),
+                        systemImage: "pencil"
+                    )
+                }
             }
 
-            Button {
-                presentInviteMembers()
-            } label: {
-                Label(
-                    languageService.text(.friendsAddMembersTitle),
-                    systemImage: "person.badge.plus"
-                )
+            if groupCapabilities.canManageMembers {
+                Button {
+                    activeGroupSheet = .members
+                } label: {
+                    Label(
+                        languageService.text(.messagingGroupManageMembers),
+                        systemImage: "person.2"
+                    )
+                }
             }
 
-            Button(role: .destructive) {
-                confirmLeaveGroup = true
-            } label: {
-                Label(
-                    languageService.text(.messagingLeaveGroup),
-                    systemImage: "rectangle.portrait.and.arrow.right"
-                )
+            if groupCapabilities.canInviteMembers {
+                Button {
+                    presentInviteMembers()
+                } label: {
+                    Label(
+                        languageService.text(.friendsAddMembersTitle),
+                        systemImage: "person.badge.plus"
+                    )
+                }
             }
 
-            deleteConversationAction
+            if groupCapabilities.canLeave {
+                Button(role: .destructive) {
+                    confirmLeaveGroup = true
+                } label: {
+                    Label(
+                        languageService.text(.messagingLeaveGroup),
+                        systemImage: "rectangle.portrait.and.arrow.right"
+                    )
+                }
+            }
+
+            if groupCapabilities.canDeleteConversation {
+                deleteConversationAction
+            }
         } label: {
             Image(systemName: "ellipsis")
         }
@@ -553,7 +570,11 @@ public struct ChatThreadView: View {
                     guard error.isIgnorableSocialLeave else { throw error }
                 }
             }
-            try await repository.leaveGroup(groupId: displayConversation.id)
+            do {
+                try await repository.leaveGroup(groupId: displayConversation.id)
+            } catch {
+                guard error.isIgnorableMessagingLeave else { throw error }
+            }
             onConversationDeleted?(displayConversation.id)
             dismiss()
         } catch {
@@ -722,9 +743,7 @@ public struct ChatThreadView: View {
                 message: detailsMessage,
                 displayNameForUserId: userDisplayName(for:)
             )
-            .splickInteractivePopEnabled()
-            .splickWideInteractivePop()
-            .splickFastPageSlide()
+            .splickEdgeOnlyInteractivePop()
         } else {
             Color.clear
         }
@@ -772,9 +791,10 @@ public struct ChatThreadView: View {
                 peerDisplayName: peer?.displayTitle ?? "",
                 showsPeerReadAvatar: displayConversation?.isGroup != true,
                 conversationId: viewModel.conversationId,
-                isComposerFocused: isInputFocused,
                 bottomOverlayInset: SplickTheme.Spacing.sm,
-                onOpenDetails: openMessageDetails
+                onOpenDetails: openMessageDetails,
+                allowsThreadInteraction: groupCapabilities.canInteractWithMessages
+                    && !relationshipViewModel.isBlocked
             )
         }
     }
@@ -881,5 +901,9 @@ private extension Error {
         default:
             return false
         }
+    }
+
+    var isIgnorableMessagingLeave: Bool {
+        isIgnorableSocialLeave
     }
 }

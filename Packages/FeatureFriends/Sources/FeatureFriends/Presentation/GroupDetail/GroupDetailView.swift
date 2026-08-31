@@ -4,6 +4,7 @@ import DesignSystem
 import Common
 import FeatureMedia
 import Localization
+import Networking
 import SplickDomain
 
 struct GroupDetailView: View {
@@ -187,7 +188,15 @@ struct GroupDetailView: View {
                 Task {
                     if await viewModel.leave(currentUserId: currentUserSummary?.id) {
                         if let leaveGroupConversation {
-                            try? await leaveGroupConversation(viewModel.group.id)
+                            do {
+                                try await leaveGroupConversation(viewModel.group.id)
+                            } catch {
+                                // Already left messaging / no conversation yet is OK.
+                                if !error.isIgnorableMessagingLeave {
+                                    viewModel.actionError = languageService.localizedMessage(for: error)
+                                    return
+                                }
+                            }
                         }
                         onGroupLeft()
                         dismiss()
@@ -521,5 +530,17 @@ struct GroupDetailView: View {
                 Task { await viewModel.remove(member, currentUserId: currentUserSummary?.id) }
             } : nil
         )
+    }
+}
+
+private extension Error {
+    var isIgnorableMessagingLeave: Bool {
+        guard let network = self as? NetworkError else { return false }
+        switch network {
+        case .notFound, .forbidden:
+            return true
+        default:
+            return false
+        }
     }
 }

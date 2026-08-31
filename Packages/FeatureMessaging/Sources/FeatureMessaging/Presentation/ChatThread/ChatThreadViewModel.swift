@@ -35,6 +35,8 @@ public final class ChatThreadViewModel: ObservableObject {
     @Published public private(set) var activeThreadSearchQuery = ""
     @Published public private(set) var typingUserIds: [UUID] = []
     @Published public private(set) var leftAt: Date?
+    /// True when the current user is OWNER/ADMIN in this group (loaded asynchronously).
+    @Published public private(set) var isGroupOwner = false
 
     private static let maxPagesForMessageLookup = 10
     private static let pageSize = 30
@@ -119,6 +121,28 @@ public final class ChatThreadViewModel: ObservableObject {
     }
 
     public var isRemovedFromGroup: Bool { leftAt != nil }
+
+    public func groupThreadCapabilities(isGroup: Bool) -> GroupChatThreadCapabilities {
+        GroupChatThreadCapabilities.resolve(
+            isGroup: isGroup,
+            isRemoved: isRemovedFromGroup,
+            isOwner: isGroupOwner
+        )
+    }
+
+    /// Loads whether the current user is group owner/admin. No-op for direct chats or removed viewers.
+    public func refreshGroupViewerRole(isGroup: Bool) async {
+        guard isGroup else {
+            isGroupOwner = false
+            return
+        }
+        if isRemovedFromGroup {
+            isGroupOwner = false
+            return
+        }
+        let members = (try? await repository.listGroupMembers(groupId: conversationId)) ?? []
+        isGroupOwner = members.contains { $0.userId == currentUserId && $0.isOwner }
+    }
 
     public var messages: [ChatMessage] {
         if case .loaded(let msgs) = state { return visibleMessages(msgs) }
@@ -850,7 +874,7 @@ public final class ChatThreadViewModel: ObservableObject {
         scrollToBottomToken += 1
     }
 
-    /// Keeps the latest message (or typing indicator) on screen — open, send, keyboard, typing.
+    /// Scrolls to the latest message (send / open). Not used for composer focus.
     public func pinToLatest() {
         requestScrollToBottom()
     }
@@ -936,6 +960,7 @@ public final class ChatThreadViewModel: ObservableObject {
 
     private func markRemovedFromGroup() {
         leftAt = leftAt ?? Date()
+        isGroupOwner = false
         stopLocalTyping()
         typingUserIds = []
         if case .loaded(let msgs) = state {

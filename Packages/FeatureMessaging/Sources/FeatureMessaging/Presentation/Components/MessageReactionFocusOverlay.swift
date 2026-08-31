@@ -8,6 +8,8 @@ struct MessageReactionFocusOverlay: View {
     @EnvironmentObject private var languageService: LanguageService
 
     let context: MessageReactionFocusContext
+    /// When false, Reply and the reaction tray are hidden (removed / blocked viewers).
+    var allowsThreadInteraction: Bool = true
     let onReact: (String) -> Void
     let onReply: () -> Void
     let onCopy: () -> Void
@@ -196,9 +198,13 @@ struct MessageReactionFocusOverlay: View {
         VStack(alignment: horizontalAlignment, spacing: stackSpacing) {
             if placeAbove {
                 actionButtons
-                reactionTray
+                if allowsThreadInteraction {
+                    reactionTray
+                }
             } else {
-                reactionTray
+                if allowsThreadInteraction {
+                    reactionTray
+                }
                 actionButtons
             }
         }
@@ -207,11 +213,13 @@ struct MessageReactionFocusOverlay: View {
 
     private var actionButtons: some View {
         VStack(alignment: horizontalAlignment, spacing: SplickTheme.Spacing.xs) {
-            actionButton(
-                titleKey: .messagingReplyAction,
-                systemImage: "arrowshape.turn.up.left.fill"
-            ) {
-                dismissCommitted(then: onReply)
+            if allowsThreadInteraction {
+                actionButton(
+                    titleKey: .messagingReplyAction,
+                    systemImage: "arrowshape.turn.up.left.fill"
+                ) {
+                    dismissCommitted(then: onReply)
+                }
             }
             if copyPayload != nil {
                 actionButton(
