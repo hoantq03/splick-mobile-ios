@@ -1,5 +1,6 @@
 import ARKit
 import Combine
+import DesignSystem
 import SceneKit
 import SwiftUI
 import UIKit
@@ -23,6 +24,10 @@ struct ARCameraView: UIViewRepresentable {
     func makeUIView(context: Context) -> ARSCNView {
         let view = ARSCNView(frame: .zero)
         view.automaticallyUpdatesLighting = true
+        view.clipsToBounds = true
+        view.layer.cornerRadius = SplickTheme.CornerRadius.card
+        view.layer.cornerCurve = .continuous
+        view.layer.masksToBounds = true
         view.delegate = context.coordinator
         context.coordinator.effect = effect
         context.coordinator.sceneView = view

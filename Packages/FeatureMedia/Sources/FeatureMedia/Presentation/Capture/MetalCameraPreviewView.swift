@@ -1,4 +1,5 @@
 import CoreImage
+import DesignSystem
 import MetalKit
 import SwiftUI
 
@@ -12,6 +13,10 @@ struct MetalCameraPreviewView: UIViewRepresentable {
         view.enableSetNeedsDisplay = false
         view.preferredFramesPerSecond = 30
         view.contentMode = .scaleAspectFill
+        view.clipsToBounds = true
+        view.layer.cornerRadius = SplickTheme.CornerRadius.card
+        view.layer.cornerCurve = .continuous
+        view.layer.masksToBounds = true
         return view
     }
 

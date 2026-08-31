@@ -4,6 +4,8 @@ import Foundation
 enum CameraZoom {
     /// Cap shown in UI; hardware may allow more.
     static let uxMaxDisplay: CGFloat = 15
+    /// Tap-to-cycle stops on the zoom readout.
+    static let tapStops: [CGFloat] = [1, 2, 5, 10]
 
     struct Hardware: Equatable {
         var minVideo: CGFloat
@@ -124,9 +126,13 @@ enum CameraZoom {
     }
 
     static func nextPreset(current: CGFloat, hardware: Hardware) -> CGFloat {
-        let available = hardware.presets
+        let available = tapStops(for: hardware)
         guard !available.isEmpty else { return clampDisplay(current, hardware: hardware) }
         return available.first(where: { $0 > current + 0.08 }) ?? available[0]
+    }
+
+    static func tapStops(for hardware: Hardware) -> [CGFloat] {
+        tapStops.filter { $0 >= hardware.minDisplay - 0.02 && $0 <= hardware.maxDisplay + 0.02 }
     }
 
     static func nearestPreset(_ current: CGFloat, hardware: Hardware, tolerance: CGFloat = 0.08) -> CGFloat? {
@@ -178,6 +184,7 @@ struct CameraFocusIndicator: Equatable {
 
 /// Maps a portrait preview tap into `AVCaptureDevice` point-of-interest space.
 /// The sensor is landscape: view Y → device X, view X → device Y.
+/// `mirrored` is only for a horizontally flipped finder; live preview is unmirrored.
 enum CameraFocusMapping {
     static func devicePointOfInterest(
         viewPoint: CGPoint,

@@ -49,12 +49,19 @@ final class CameraZoomTests: XCTestCase {
         XCTAssertEqual(CameraZoom.applyPinch(base: 1, scale: 0.4, hardware: hw), 0.5, accuracy: 0.05)
     }
 
-    func testTapCyclesDevicePresets() {
-        let hw = CameraZoom.hardware(minVideo: 1, maxVideo: 16, switchOverVideo: [2, 6])
-        XCTAssertEqual(CameraZoom.nextPreset(current: 0.5, hardware: hw), 1, accuracy: 0.001)
+    func testTapCyclesOneTwoFiveTen() {
+        let hw = CameraZoom.hardware(minVideo: 1, maxVideo: 20, switchOverVideo: [])
         XCTAssertEqual(CameraZoom.nextPreset(current: 1, hardware: hw), 2, accuracy: 0.001)
-        XCTAssertEqual(CameraZoom.nextPreset(current: 2, hardware: hw), 3, accuracy: 0.001)
-        XCTAssertEqual(CameraZoom.nextPreset(current: 3, hardware: hw), 0.5, accuracy: 0.001)
+        XCTAssertEqual(CameraZoom.nextPreset(current: 2, hardware: hw), 5, accuracy: 0.001)
+        XCTAssertEqual(CameraZoom.nextPreset(current: 5, hardware: hw), 10, accuracy: 0.001)
+        XCTAssertEqual(CameraZoom.nextPreset(current: 10, hardware: hw), 1, accuracy: 0.001)
+        XCTAssertEqual(CameraZoom.nextPreset(current: 1.3, hardware: hw), 2, accuracy: 0.001)
+    }
+
+    func testTapStopsSkipUnavailableTen() {
+        let hw = CameraZoom.hardware(minVideo: 1, maxVideo: 8, switchOverVideo: [])
+        XCTAssertEqual(CameraZoom.tapStops(for: hw), [1, 2, 5])
+        XCTAssertEqual(CameraZoom.nextPreset(current: 5, hardware: hw), 1, accuracy: 0.001)
     }
 
     func testPanRightZoomsInAndLeftZoomsOutOnLogScale() {
@@ -73,21 +80,21 @@ final class CameraZoomTests: XCTestCase {
     }
 
     func testFocusPointOfInterestMapsPortraitTapToSensorSpace() {
-        let back = CameraFocusMapping.devicePointOfInterest(
+        let unmirrored = CameraFocusMapping.devicePointOfInterest(
             viewPoint: CGPoint(x: 25, y: 50),
             viewSize: CGSize(width: 100, height: 100),
             mirrored: false
         )
-        XCTAssertEqual(back.x, 0.5, accuracy: 0.01)
-        XCTAssertEqual(back.y, 0.75, accuracy: 0.01)
+        XCTAssertEqual(unmirrored.x, 0.5, accuracy: 0.01)
+        XCTAssertEqual(unmirrored.y, 0.75, accuracy: 0.01)
 
-        let front = CameraFocusMapping.devicePointOfInterest(
+        let mirroredFinder = CameraFocusMapping.devicePointOfInterest(
             viewPoint: CGPoint(x: 25, y: 50),
             viewSize: CGSize(width: 100, height: 100),
             mirrored: true
         )
-        XCTAssertEqual(front.x, 0.5, accuracy: 0.01)
-        XCTAssertEqual(front.y, 0.25, accuracy: 0.01)
+        XCTAssertEqual(mirroredFinder.x, 0.5, accuracy: 0.01)
+        XCTAssertEqual(mirroredFinder.y, 0.25, accuracy: 0.01)
     }
 
     func testLabelUsesTimesSign() {

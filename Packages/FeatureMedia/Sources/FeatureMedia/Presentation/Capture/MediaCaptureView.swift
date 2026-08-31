@@ -1,11 +1,10 @@
 import AVFoundation
-import CoreImage
 import DesignSystem
 import Localization
 import SwiftUI
 import UIKit
 
-/// Orchestrates camera capture, album picker, photo preview, and editor.
+/// Orchestrates camera capture, album picker, and photo editor.
 public struct MediaCaptureView: View {
     @EnvironmentObject private var languageService: LanguageService
     let onMediaCaptured: (CapturedMedia) -> Void
@@ -42,7 +41,6 @@ public struct MediaCaptureView: View {
                         filterCatalogRepository: filterCatalogRepository
                     )
                     .id(cameraSessionID)
-                    .ignoresSafeArea()
                     .transition(.opacity)
                 } else {
                     cameraUnavailableView
@@ -68,32 +66,10 @@ public struct MediaCaptureView: View {
                     onCreated: { image in
                         workingImage = image
                         workingFilter = .none
-                        route = .preview
+                        route = .editor
                     }
                 )
                 .transition(.opacity)
-
-            case .preview:
-                if let workingImage {
-                    CapturePreviewView(
-                        image: filteredPreview(workingImage, filter: workingFilter),
-                        onRetake: {
-                            self.workingImage = nil
-                            self.workingFilter = .none
-                            reopenCamera()
-                        },
-                        onEdit: { route = .editor },
-                        onUsePhoto: {
-                            onMediaCaptured(.image(filteredPreview(workingImage, filter: workingFilter)))
-                        },
-                        onCancel: {
-                            self.workingImage = nil
-                            self.workingFilter = .none
-                            reopenCamera()
-                        }
-                    )
-                    .transition(.opacity)
-                }
 
             case .editor:
                 if let workingImage {
@@ -102,7 +78,11 @@ public struct MediaCaptureView: View {
                         initialFilter: workingFilter,
                         stickerPickerBuilder: stickerPickerBuilder,
                         onDone: { edited in onMediaCaptured(.image(edited)) },
-                        onCancel: { route = .preview }
+                        onCancel: {
+                            self.workingImage = nil
+                            self.workingFilter = .none
+                            reopenCamera()
+                        }
                     )
                     .transition(.opacity)
                 }
@@ -186,7 +166,7 @@ public struct MediaCaptureView: View {
         case .image(let image, let filter):
             workingImage = image
             workingFilter = filter
-            route = .preview
+            route = .editor
         case .video(let url):
             onMediaCaptured(.video(url))
         case .cancelled:
@@ -197,18 +177,11 @@ public struct MediaCaptureView: View {
             route = .textCreation
         }
     }
-
-    private func filteredPreview(_ image: UIImage, filter: FilterPreset) -> UIImage {
-        guard filter != .none, let ciImage = CIImage(image: image) else { return image }
-        let filtered = FilterEngine.apply(ciImage, preset: filter, intensity: 1)
-        return FilterEngine.renderUIImage(from: filtered) ?? image
-    }
 }
 
 private enum CaptureRoute: Equatable {
     case camera
     case library
     case textCreation
-    case preview
     case editor
 }

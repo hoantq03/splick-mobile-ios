@@ -31,6 +31,10 @@ struct CameraPickerView: View {
         ARFaceTrackingConfiguration.isSupported
     }
 
+    private var finderShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous)
+    }
+
     var body: some View {
         ZStack {
             SplickTheme.Colors.background.ignoresSafeArea()
@@ -38,28 +42,29 @@ struct CameraPickerView: View {
             VStack(spacing: 0) {
                 topBar
                 GeometryReader { geo in
+                    let lift = CameraBottomBarMetrics.previewLift
                     let maxWidth = geo.size.width - (CameraBottomBarMetrics.previewInset * 2)
-                    let maxHeight = max(geo.size.height - 16, 1)
+                    let maxHeight = max(geo.size.height - lift - 16, 1)
                     let frameWidth = min(maxWidth, maxHeight * CameraBottomBarMetrics.previewAspect)
                     let frameHeight = frameWidth / CameraBottomBarMetrics.previewAspect
                     let areaHeight = geo.size.height
-                    let liftedTop = (areaHeight - frameHeight) / 2 - CameraBottomBarMetrics.previewLift
+                    let liftedTop = (areaHeight - frameHeight) / 2 - lift
                     let frameBottom = liftedTop + frameHeight
-                    let toolsCenterY = (max(frameBottom, 0) + areaHeight) / 2
+                    let zoomCenterY = max(frameBottom, 0) + 16 + 18
                     ZStack {
                         previewLayer
                             .frame(width: frameWidth, height: frameHeight)
-                            .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous))
+                            .clipShape(finderShape)
+                            .compositingGroup()
                             .overlay {
                                 ZStack {
-                                    RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous)
-                                        .strokeBorder(SplickTheme.Colors.divider, lineWidth: 0.5)
+                                    finderShape.strokeBorder(SplickTheme.Colors.divider, lineWidth: 0.5)
                                     if let indicator = session.focusIndicator {
                                         CameraFocusReticle(indicator: indicator)
                                     }
                                 }
                             }
-                            .contentShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous))
+                            .contentShape(finderShape)
                             .highPriorityGesture(
                                 SpatialTapGesture()
                                     .onEnded { event in
@@ -72,26 +77,16 @@ struct CameraPickerView: View {
                                     .onChanged { session.updatePinch(magnification: $0) }
                                     .onEnded { _ in session.endPinch() }
                             )
-                            .simultaneousGesture(
-                                DragGesture(minimumDistance: 12)
-                                    .onChanged {
-                                        session.updatePan(
-                                            translationX: $0.translation.width,
-                                            translationY: $0.translation.height
-                                        )
-                                    }
-                                    .onEnded { _ in session.endPan() }
-                            )
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                            .offset(y: -CameraBottomBarMetrics.previewLift)
+                            .offset(y: -lift)
 
-                        CameraCaptureToolsRow(
-                            onTextMode: { onResult(.openTextCreation) },
-                            onBoomerang: { showComingSoon() },
-                            onHandsFree: cycleHandsFree,
-                            onFilter: cycleFilter
-                        )
-                        .position(x: geo.size.width / 2, y: toolsCenterY)
+                        if !(session.filterPreset == .ar && faceTrackingSupported) {
+                            CameraNativeZoomChrome(
+                                displayZoom: session.zoomFactor,
+                                onTap: { session.cycleZoomStep() }
+                            )
+                            .position(x: geo.size.width / 2, y: zoomCenterY)
+                        }
                     }
                 }
 
@@ -167,6 +162,7 @@ struct CameraPickerView: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 10)
+        .padding(.bottom, 6)
     }
 
     private var bottomBar: some View {
@@ -187,16 +183,13 @@ struct CameraPickerView: View {
                 }
             }
 
-            VStack(spacing: 6) {
-                if !(session.filterPreset == .ar && faceTrackingSupported) {
-                    CameraNativeZoomChrome(
-                        displayZoom: session.zoomFactor,
-                        presets: session.zoomPresets,
-                        hardware: session.zoomHardware,
-                        isDialVisible: session.isZoomDialVisible,
-                        onSelectPreset: { session.selectPreset($0) }
-                    )
-                }
+            VStack(spacing: 12) {
+                CameraCaptureToolsRow(
+                    onTextMode: { onResult(.openTextCreation) },
+                    onBoomerang: { showComingSoon() },
+                    onHandsFree: cycleHandsFree,
+                    onFilter: cycleFilter
+                )
 
                 Button(action: capture) {
                     Circle()

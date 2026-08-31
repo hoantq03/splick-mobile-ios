@@ -1,8 +1,32 @@
+import ImageIO
 import UIKit
 import XCTest
 @testable import FeatureMedia
 
 final class PhotoEditorImageProcessorTests: XCTestCase {
+    func testCGImagePropertyOrientationSixMapsToRight() {
+        XCTAssertEqual(
+            PhotoEditorImageProcessor.uiImageOrientation(fromCGImagePropertyOrientationRaw: 6),
+            .right
+        )
+        XCTAssertEqual(
+            PhotoEditorImageProcessor.uiImageOrientation(fromCGImagePropertyOrientationRaw: 1),
+            .up
+        )
+        XCTAssertEqual(
+            PhotoEditorImageProcessor.uiImageOrientation(fromCGImagePropertyOrientationRaw: nil),
+            .right
+        )
+    }
+
+    func testPhotoMetadataOrientationIsAppliedBeforeNormalize() {
+        let metadata: [String: Any] = [kCGImagePropertyOrientation as String: NSNumber(value: 6)]
+        XCTAssertEqual(
+            PhotoEditorImageProcessor.uiImageOrientation(fromPhotoMetadata: metadata),
+            .right
+        )
+    }
+
     func testNormalizeOrientationKeepsPortraitSizeForRightEXIF() {
         let pixels = makeSolidImage(width: 40, height: 20, color: .red)
         let tagged = UIImage(cgImage: pixels.cgImage!, scale: 1, orientation: .right)

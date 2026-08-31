@@ -21,8 +21,6 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
     @Published var zoomFactor: CGFloat = 1
     @Published var minZoom: CGFloat = 1
     @Published var maxZoom: CGFloat = 1
-    @Published var zoomPresets: [CGFloat] = [1]
-    @Published var isZoomDialVisible = false
     @Published var focusIndicator: CameraFocusIndicator?
     @Published private(set) var zoomHardware = CameraZoom.hardware(minVideo: 1, maxVideo: 1, switchOverVideo: [])
 
@@ -37,9 +35,6 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
     private var isDetectingFace = false
     private var pinchBase: CGFloat = 1
     private var isPinching = false
-    private var panBase: CGFloat = 1
-    private var isPanning = false
-    private var hideZoomDialTask: Task<Void, Never>?
     private var hideFocusTask: Task<Void, Never>?
     private var subjectAreaObserver: NSObjectProtocol?
     private var ignoreSubjectAreaUntil: Date = .distantPast
@@ -72,14 +67,12 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
     }
 
     func stop() {
-        hideZoomDialTask?.cancel()
         hideFocusTask?.cancel()
         sessionQueue.async { [weak self] in
             guard let self, self.session.isRunning else { return }
             self.session.stopRunning()
             DispatchQueue.main.async {
                 self.isRunning = false
-                self.isZoomDialVisible = false
                 self.focusIndicator = nil
             }
         }
@@ -104,12 +97,10 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
     }
 
     func updatePinch(magnification: CGFloat) {
-        isPanning = false
         if !isPinching {
             isPinching = true
             pinchBase = zoomFactor
         }
-        showZoomDial()
         setDisplayZoom(
             CameraZoom.applyPinch(base: pinchBase, scale: magnification, hardware: zoomHardware),
             animated: false
@@ -119,37 +110,9 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
     func endPinch() {
         isPinching = false
         pinchBase = zoomFactor
-        scheduleHideZoomDial()
-    }
-
-    func updatePan(translationX: CGFloat, translationY: CGFloat) {
-        guard !isPinching, abs(translationX) >= abs(translationY) else { return }
-        if !isPanning {
-            isPanning = true
-            panBase = zoomFactor
-        }
-        showZoomDial()
-        let width = max(UIScreen.main.bounds.width, 1)
-        setDisplayZoom(
-            CameraZoom.applyPan(
-                base: panBase,
-                deltaPx: translationX,
-                viewWidth: width,
-                hardware: zoomHardware
-            ),
-            animated: false
-        )
-    }
-
-    func endPan() {
-        isPanning = false
-        panBase = zoomFactor
-        scheduleHideZoomDial()
     }
 
     func selectPreset(_ display: CGFloat) {
-        isZoomDialVisible = false
-        hideZoomDialTask?.cancel()
         setDisplayZoom(display, animated: true)
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
@@ -187,7 +150,7 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
         let poi = CameraFocusMapping.devicePointOfInterest(
             viewPoint: viewPoint,
             viewSize: viewSize,
-            mirrored: isFrontCamera
+            mirrored: false
         )
         presentFocusIndicator(at: viewPoint)
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -269,18 +232,21 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
             if connection.isVideoOrientationSupported {
                 connection.videoOrientation = .portrait
             }
-            if connection.isVideoMirroringSupported {
-                connection.isVideoMirrored = isFrontCamera || currentInput?.device.position == .front
-            }
+            disableVideoMirroring(connection)
         }
         if let connection = photoOutput.connection(with: .video) {
             if connection.isVideoOrientationSupported {
                 connection.videoOrientation = .portrait
             }
-            if connection.isVideoMirroringSupported {
-                connection.isVideoMirrored = currentInput?.device.position == .front
-            }
+            disableVideoMirroring(connection)
         }
+    }
+
+    /// Finder is shown unmirrored; keep buffers matching tap-to-focus POI space.
+    private func disableVideoMirroring(_ connection: AVCaptureConnection) {
+        guard connection.isVideoMirroringSupported else { return }
+        connection.automaticallyAdjustsVideoMirroring = false
+        connection.isVideoMirrored = false
     }
 
     private func preferredCamera(position: AVCaptureDevice.Position) -> AVCaptureDevice? {
@@ -348,13 +314,9 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
             self.zoomHardware = hardware
             self.minZoom = hardware.minDisplay
             self.maxZoom = hardware.maxDisplay
-            self.zoomPresets = hardware.presets
             self.zoomFactor = oneX
             self.pinchBase = oneX
-            self.panBase = oneX
             self.isPinching = false
-            self.isPanning = false
-            self.isZoomDialVisible = false
         }
     }
 
@@ -390,22 +352,6 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
         }
         DispatchQueue.main.async {
             self.focusIndicator = nil
-        }
-    }
-
-    private func showZoomDial() {
-        hideZoomDialTask?.cancel()
-        if !isZoomDialVisible {
-            isZoomDialVisible = true
-        }
-    }
-
-    private func scheduleHideZoomDial() {
-        hideZoomDialTask?.cancel()
-        hideZoomDialTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(900))
-            guard !Task.isCancelled else { return }
-            self.isZoomDialVisible = false
         }
     }
 
@@ -549,16 +495,25 @@ extension AVCameraSessionModel: AVCapturePhotoCaptureDelegate {
             continuation?.resume(throwing: error)
             return
         }
-        if let cgImage = photo.cgImageRepresentation() {
-            continuation?.resume(returning: UIImage(cgImage: cgImage, scale: 1, orientation: .up))
-            return
-        }
-        guard let data = photo.fileDataRepresentation(),
-              let uiImage = UIImage(data: data)
-        else {
+        guard let image = Self.uprightImage(from: photo) else {
             continuation?.resume(throwing: CameraSessionError.captureFailed)
             return
         }
-        continuation?.resume(returning: PhotoEditorImageProcessor.normalizeOrientation(uiImage))
+        continuation?.resume(returning: image)
+    }
+
+    /// `cgImageRepresentation()` is unrotated sensor pixels. Tagging it `.up` shows
+    /// portrait captures on their side. Prefer JPEG (EXIF) and bake orientation.
+    static func uprightImage(from photo: AVCapturePhoto) -> UIImage? {
+        if let data = photo.fileDataRepresentation(), let image = UIImage(data: data) {
+            return PhotoEditorImageProcessor.normalizeOrientation(image)
+        }
+        guard let cgImage = photo.cgImageRepresentation() else { return nil }
+        let tagged = UIImage(
+            cgImage: cgImage,
+            scale: 1,
+            orientation: PhotoEditorImageProcessor.uiImageOrientation(fromPhotoMetadata: photo.metadata)
+        )
+        return PhotoEditorImageProcessor.normalizeOrientation(tagged)
     }
 }

@@ -3,6 +3,55 @@ import Localization
 import SwiftUI
 import UIKit
 
+private enum TextCreationTypeface: String, CaseIterable, Identifiable {
+    case classic
+    case rounded
+    case serif
+    case mono
+
+    var id: String { rawValue }
+
+    var titleKey: L10nKey {
+        switch self {
+        case .classic: return .mediaTextFontClassic
+        case .rounded: return .mediaTextFontRounded
+        case .serif: return .mediaTextFontSerif
+        case .mono: return .mediaTextFontMono
+        }
+    }
+
+    func font(size: CGFloat) -> Font {
+        let design: Font.Design
+        switch self {
+        case .classic: design = .default
+        case .rounded: design = .rounded
+        case .serif: design = .serif
+        case .mono: design = .monospaced
+        }
+        return .system(size: size, weight: .bold, design: design)
+    }
+
+    func uiFont(size: CGFloat) -> UIFont {
+        let base = UIFont.systemFont(ofSize: size, weight: .bold)
+        let design: UIFontDescriptor.SystemDesign
+        switch self {
+        case .classic: design = .default
+        case .rounded: design = .rounded
+        case .serif: design = .serif
+        case .mono: design = .monospaced
+        }
+        guard let descriptor = base.fontDescriptor.withDesign(design) else { return base }
+        return UIFont(descriptor: descriptor, size: size)
+    }
+}
+
+private enum TextCreationLayout {
+    static let horizontalPadding: CGFloat = 24
+    static let topChrome: CGFloat = 56
+    static let bottomChrome: CGFloat = 200
+    static let fontSize: CGFloat = 32
+}
+
 struct TextCreationView: View {
     @EnvironmentObject private var languageService: LanguageService
     let onBack: () -> Void
@@ -10,6 +59,9 @@ struct TextCreationView: View {
 
     @State private var text = ""
     @State private var gradientIndex = 0
+    @State private var alignment: TextAlignment = .center
+    @State private var typeface: TextCreationTypeface = .classic
+    @FocusState private var isTextFocused: Bool
 
     private let gradients: [[Color]] = [
         [Color(red: 0.51, green: 0.23, blue: 0.71), Color(red: 1, green: 0.11, blue: 0.11), Color(red: 0.99, green: 0.69, blue: 0.27)],
@@ -26,7 +78,12 @@ struct TextCreationView: View {
             )
             .ignoresSafeArea()
 
-            VStack(spacing: SplickTheme.Spacing.lg) {
+            textEditor
+                .padding(.horizontal, TextCreationLayout.horizontalPadding)
+                .padding(.top, TextCreationLayout.topChrome)
+                .padding(.bottom, TextCreationLayout.bottomChrome)
+
+            VStack(spacing: SplickTheme.Spacing.sm) {
                 HStack {
                     Button(action: onBack) {
                         Image(systemName: "xmark")
@@ -41,17 +98,29 @@ struct TextCreationView: View {
 
                 Spacer()
 
-                Text(displayText)
-                    .font(.system(size: 32, weight: .bold))
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, SplickTheme.Spacing.lg)
+                HStack(spacing: 12) {
+                    alignButton("text.alignleft", .leading, .mediaTextAlignLeft)
+                    alignButton("text.aligncenter", .center, .mediaTextAlignCenter)
+                    alignButton("text.alignright", .trailing, .mediaTextAlignRight)
+                }
 
-                Spacer()
-
-                TextField(languageService.text(.mediaTextPlaceholder), text: $text, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .padding(.horizontal, SplickTheme.Spacing.lg)
+                HStack(spacing: 8) {
+                    ForEach(TextCreationTypeface.allCases) { face in
+                        Button {
+                            typeface = face
+                        } label: {
+                            Text("Aa")
+                                .font(face.font(size: 16))
+                                .foregroundColor(.white)
+                                .frame(width: 44, height: 36)
+                                .background(
+                                    Capsule().fill(Color.white.opacity(typeface == face ? 0.32 : 0.12))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(languageService.text(face.titleKey))
+                    }
+                }
 
                 Button {
                     gradientIndex = (gradientIndex + 1) % gradients.count
@@ -76,28 +145,86 @@ struct TextCreationView: View {
             }
         }
         .editorStatusBarHidden(true)
+        .onAppear { isTextFocused = true }
+    }
+
+    private var textEditor: some View {
+        ZStack {
+            if text.isEmpty {
+                Text(languageService.text(.mediaTextPlaceholder))
+                    .font(typeface.font(size: TextCreationLayout.fontSize))
+                    .foregroundColor(.white.opacity(0.55))
+                    .multilineTextAlignment(alignment)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: canvasAlignment)
+                    .allowsHitTesting(false)
+            }
+            TextField("", text: $text, axis: .vertical)
+                .font(typeface.font(size: TextCreationLayout.fontSize))
+                .foregroundColor(.white)
+                .multilineTextAlignment(alignment)
+                .textFieldStyle(.plain)
+                .tint(.white)
+                .focused($isTextFocused)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: canvasAlignment)
+        }
+    }
+
+    private var canvasAlignment: Alignment {
+        switch alignment {
+        case .leading: return .leading
+        case .trailing: return .trailing
+        default: return .center
+        }
     }
 
     private var displayText: String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? languageService.text(.mediaTextDefault) : trimmed
+        return trimmed.isEmpty ? languageService.text(.mediaTextDefault) : text
+    }
+
+    private func alignButton(_ systemName: String, _ value: TextAlignment, _ key: L10nKey) -> some View {
+        Button {
+            alignment = value
+        } label: {
+            Image(systemName: systemName)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(.white)
+                .frame(width: 44, height: 36)
+                .background(
+                    Capsule().fill(Color.white.opacity(alignment == value ? 0.32 : 0.12))
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(languageService.text(key))
     }
 
     private func renderAndFinish() {
-        let rendered = TextCreationRenderer.render(text: displayText, gradientIndex: gradientIndex, gradients: gradients)
+        let rendered = TextCreationRenderer.render(
+            text: displayText,
+            colors: gradients[gradientIndex],
+            typeface: typeface,
+            alignment: alignment
+        )
         onCreated(rendered)
     }
 }
 
 private enum TextCreationRenderer {
-    static func render(text: String, gradientIndex: Int, gradients: [[Color]]) -> UIImage {
-        let size = CGSize(width: 1080, height: 1080)
+    static func render(
+        text: String,
+        colors: [Color],
+        typeface: TextCreationTypeface,
+        alignment: TextAlignment
+    ) -> UIImage {
+        let screen = UIScreen.main.bounds.size
+        let scale = UIScreen.main.scale
+        let size = CGSize(width: screen.width * scale, height: screen.height * scale)
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         format.opaque = true
 
         return UIGraphicsImageRenderer(size: size, format: format).image { context in
-            let cgColors = gradients[gradientIndex].map { UIColor($0).cgColor } as CFArray
+            let cgColors = colors.map { UIColor($0).cgColor } as CFArray
             let gradient = CGGradient(
                 colorsSpace: CGColorSpaceCreateDeviceRGB(),
                 colors: cgColors,
@@ -111,14 +238,42 @@ private enum TextCreationRenderer {
             )
 
             let paragraph = NSMutableParagraphStyle()
-            paragraph.alignment = .center
+            paragraph.alignment = nsAlignment(alignment)
+            paragraph.lineBreakMode = .byWordWrapping
+            let font = typeface.uiFont(size: TextCreationLayout.fontSize * scale)
             let attributes: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: 56, weight: .bold),
+                .font: font,
                 .foregroundColor: UIColor.white,
                 .paragraphStyle: paragraph,
             ]
-            let rect = CGRect(x: 48, y: size.height * 0.35, width: size.width - 96, height: size.height * 0.3)
-            (text as NSString).draw(in: rect, withAttributes: attributes)
+            let padX = TextCreationLayout.horizontalPadding * scale
+            let padTop = TextCreationLayout.topChrome * scale
+            let padBottom = TextCreationLayout.bottomChrome * scale
+            let maxWidth = size.width - padX * 2
+            let maxHeight = size.height - padTop - padBottom
+            let bound = (text as NSString).boundingRect(
+                with: CGSize(width: maxWidth, height: .greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin, .usesFontLeading],
+                attributes: attributes,
+                context: nil
+            )
+            let drawHeight = min(ceil(bound.height), maxHeight)
+            let originY = padTop + (maxHeight - drawHeight) / 2
+            let drawRect = CGRect(x: padX, y: originY, width: maxWidth, height: drawHeight)
+            (text as NSString).draw(
+                with: drawRect,
+                options: [.usesLineFragmentOrigin, .usesFontLeading],
+                attributes: attributes,
+                context: nil
+            )
+        }
+    }
+
+    private static func nsAlignment(_ alignment: TextAlignment) -> NSTextAlignment {
+        switch alignment {
+        case .leading: return .left
+        case .trailing: return .right
+        default: return .center
         }
     }
 }

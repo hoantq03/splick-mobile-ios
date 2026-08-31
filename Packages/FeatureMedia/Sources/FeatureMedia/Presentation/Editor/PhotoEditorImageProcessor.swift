@@ -1,3 +1,4 @@
+import ImageIO
 import UIKit
 
 enum PhotoEditorImageProcessor {
@@ -10,6 +11,38 @@ enum PhotoEditorImageProcessor {
     static func prepareForEditing(_ image: UIImage) -> PreparedImage {
         let normalized = normalizeOrientation(image)
         return PreparedImage(editingImage: normalized, originalImage: normalized, exportScale: 1)
+    }
+
+    /// Still-photo `cgImageRepresentation()` is sensor pixels without EXIF. Portrait shots
+    /// are usually landscape buffers tagged `.right`. Missing metadata defaults to that.
+    static func uiImageOrientation(fromCGImagePropertyOrientationRaw raw: UInt32?) -> UIImage.Orientation {
+        guard let raw, let cgOrientation = CGImagePropertyOrientation(rawValue: raw) else {
+            return .right
+        }
+        switch cgOrientation {
+        case .up: return .up
+        case .upMirrored: return .upMirrored
+        case .down: return .down
+        case .downMirrored: return .downMirrored
+        case .left: return .left
+        case .leftMirrored: return .leftMirrored
+        case .right: return .right
+        case .rightMirrored: return .rightMirrored
+        @unknown default: return .right
+        }
+    }
+
+    static func uiImageOrientation(fromPhotoMetadata metadata: [String: Any]) -> UIImage.Orientation {
+        let key = kCGImagePropertyOrientation as String
+        let raw: UInt32?
+        if let number = metadata[key] as? NSNumber {
+            raw = number.uint32Value
+        } else if let number = metadata["Orientation"] as? NSNumber {
+            raw = number.uint32Value
+        } else {
+            raw = nil
+        }
+        return uiImageOrientation(fromCGImagePropertyOrientationRaw: raw)
     }
 
     /// Bakes EXIF orientation into pixels so `size` matches what is shown on screen.
