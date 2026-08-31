@@ -32,6 +32,27 @@ public final class LanguageService: ObservableObject, LocaleHeaderProviding {
         String(format: L10n.string(key, locale: locale), arguments: arguments)
     }
 
+    public func passwordRuleText(_ rule: PasswordRule) -> String {
+        switch rule {
+        case .minLength:
+            return format(.authPasswordRuleMinLength, AppConstants.Validation.minPasswordLength)
+        case .uppercase:
+            return text(.authPasswordRuleUppercase)
+        case .lowercase:
+            return text(.authPasswordRuleLowercase)
+        case .digit:
+            return text(.authPasswordRuleDigit)
+        case .specialCharacter:
+            return text(.authPasswordRuleSpecial)
+        }
+    }
+
+    public func weakPasswordMessage(for result: PasswordStrengthResult) -> String? {
+        guard !result.isStrong, !result.failedRules.isEmpty else { return nil }
+        let details = result.failedRules.map(passwordRuleText).joined(separator: ", ")
+        return format(.authPasswordWeakMissing, details)
+    }
+
     public func compactRelativeTime(from date: Date, relativeTo now: Date = .now) -> String {
         LocaleFormatting.compactRelativeDate(date, appLocale: locale, now: now)
     }

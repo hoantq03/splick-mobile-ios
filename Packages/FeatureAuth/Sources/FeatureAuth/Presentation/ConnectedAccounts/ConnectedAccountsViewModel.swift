@@ -259,13 +259,9 @@ public final class ConnectedAccountsViewModel: ObservableObject {
     public func validateEmailPasswordFields() {
         if connectEmailPassword.isEmpty {
             emailSheetPasswordError = nil
-        } else if connectEmailPassword.count < AppConstants.Validation.minPasswordLength {
-            emailSheetPasswordError = languageService.format(
-                .connectedAccountsPasswordTooShort,
-                AppConstants.Validation.minPasswordLength
-            )
         } else {
-            emailSheetPasswordError = nil
+            let strength = PasswordStrengthValidator.evaluate(connectEmailPassword)
+            emailSheetPasswordError = languageService.weakPasswordMessage(for: strength)
         }
 
         if connectEmailConfirm.isEmpty {
@@ -283,11 +279,9 @@ public final class ConnectedAccountsViewModel: ObservableObject {
             emailSheetConfirmPasswordError = languageService.text(.changePasswordPasswordsMismatch)
             return false
         }
-        guard connectEmailPassword.count >= AppConstants.Validation.minPasswordLength else {
-            emailSheetPasswordError = languageService.format(
-                .connectedAccountsPasswordTooShort,
-                AppConstants.Validation.minPasswordLength
-            )
+        let passwordStrength = PasswordStrengthValidator.evaluate(connectEmailPassword)
+        guard passwordStrength.isStrong else {
+            emailSheetPasswordError = languageService.weakPasswordMessage(for: passwordStrength)
             return false
         }
         guard connectEmailOtp.count == SplickOtpField.defaultLength else {

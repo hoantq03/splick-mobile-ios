@@ -104,9 +104,7 @@ public final class ChangePasswordViewModel: ObservableObject {
             passwordError = nil
             return
         }
-        passwordError = passwordStrength.isStrong
-            ? nil
-            : languageService.text(.changePasswordWeakPassword)
+        passwordError = languageService.weakPasswordMessage(for: passwordStrength)
         validateConfirmPasswordField()
     }
 

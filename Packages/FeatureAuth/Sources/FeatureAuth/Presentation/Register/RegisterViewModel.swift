@@ -164,7 +164,7 @@ public final class RegisterViewModel: ObservableObject {
             passwordError = nil
             passwordStatus = .valid
         } else {
-            passwordError = nil
+            passwordError = languageService.weakPasswordMessage(for: passwordStrength)
             passwordStatus = .warning
         }
         validateConfirmPasswordField()

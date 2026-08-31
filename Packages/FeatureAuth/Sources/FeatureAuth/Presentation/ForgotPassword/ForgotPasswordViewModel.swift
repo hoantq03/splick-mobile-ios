@@ -43,6 +43,14 @@ public final class ForgotPasswordViewModel: ObservableObject {
         identifier.detectedLoginIdentifierKind
     }
 
+    var passwordFieldError: String? {
+        guard let passwordErrorKey else { return nil }
+        if passwordErrorKey == .changePasswordWeakPassword {
+            return languageService.weakPasswordMessage(for: passwordStrength)
+        }
+        return languageService.text(passwordErrorKey)
+    }
+
     var normalizedEmail: String {
         identifier.trimmed.lowercased()
     }

@@ -25,7 +25,7 @@ struct PasswordRequirementsSheet: View {
                                 .foregroundStyle(
                                     item.met ? SplickTheme.Colors.success : SplickTheme.Colors.textTertiary
                                 )
-                            Text(guideText(for: item.rule))
+                            Text(languageService.passwordRuleText(item.rule))
                                 .font(SplickTheme.Typography.body)
                                 .foregroundStyle(SplickTheme.Colors.textPrimary)
                         }
@@ -41,23 +41,5 @@ struct PasswordRequirementsSheet: View {
             }
         }
         .presentationDetents([.medium])
-    }
-
-    private func guideText(for rule: PasswordRule) -> String {
-        switch rule {
-        case .minLength:
-            return languageService.format(
-                .authPasswordRuleMinLength,
-                AppConstants.Validation.minPasswordLength
-            )
-        case .uppercase:
-            return languageService.text(.authPasswordRuleUppercase)
-        case .lowercase:
-            return languageService.text(.authPasswordRuleLowercase)
-        case .digit:
-            return languageService.text(.authPasswordRuleDigit)
-        case .specialCharacter:
-            return languageService.text(.authPasswordRuleSpecial)
-        }
     }
 }

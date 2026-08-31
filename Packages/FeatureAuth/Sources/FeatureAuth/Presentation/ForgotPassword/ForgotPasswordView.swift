@@ -236,7 +236,7 @@ public struct ForgotPasswordView: View {
                 languageService.text(.changePasswordNewPassword),
                 text: $viewModel.password,
                 isSecure: true,
-                errorMessage: localized(viewModel.passwordErrorKey),
+                errorMessage: viewModel.passwordFieldError,
                 icon: "lock",
                 cornerRadius: fieldCornerRadius,
                 passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
