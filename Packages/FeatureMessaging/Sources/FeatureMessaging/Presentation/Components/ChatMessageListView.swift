@@ -188,7 +188,8 @@ struct ChatMessageListView: View {
                             allowsThreadInteraction: allowsThreadInteraction
                                 && !focusContext.displayMessage.message.recalled,
                             canEdit: focusContext.displayMessage.message.isEditable(by: currentUserId),
-                            canRecall: focusContext.displayMessage.message.isRecallable(by: currentUserId),
+                            canRecall: focusContext.displayMessage.message.isRecallable(by: currentUserId)
+                                && allowsThreadInteraction,
                             onReact: { emoji in
                                 _ = viewModel.react(to: focusContext.messageId, emoji: emoji)
                             },
@@ -428,6 +429,9 @@ struct ChatMessageListView: View {
             && item.message.id == lastMessage?.id
         let isOutgoing = item.message.senderId == currentUserId
         let replySwipe = replySwipeMessageId == item.message.id ? replySwipeTranslation : 0
+        let isQuotedMessageRecalled: (UUID) -> Bool = { messageId in
+            messages.contains { $0.id == messageId && $0.recalled }
+        }
 
         ChatMessageListItemRow(
             item: item,
@@ -476,7 +480,8 @@ struct ChatMessageListView: View {
                 guard initialOpenBottomScrollPending else { return }
                 markInitialBottomScrollComplete()
             },
-            actorDisplayName: userDisplayName(item.message.senderId)
+            actorDisplayName: userDisplayName(item.message.senderId),
+            isQuotedMessageRecalled: isQuotedMessageRecalled
         )
         .id(item.message.clientMessageId)
         .onAppear {
