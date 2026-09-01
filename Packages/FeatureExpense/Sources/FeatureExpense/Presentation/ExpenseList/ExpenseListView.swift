@@ -626,7 +626,7 @@ private struct ExpenseHistoryPage: View {
         return Button {
             viewModel.setDebtStatus(status)
         } label: {
-            Text(historyDebtLabel(status))
+            Text(status.historyTitle(using: languageService))
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(
                     isSelected
@@ -646,19 +646,6 @@ private struct ExpenseHistoryPage: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-
-    private func historyDebtLabel(_ status: ExpenseDebtFilter) -> String {
-        switch status {
-        case .all:
-            return languageService.text(.expenseDebtAll)
-        case .oweUnpaid:
-            return languageService.text(.expenseFilterIOweUnpaid)
-        case .owedUnpaid:
-            return languageService.text(.expenseFilterOwedUnpaid)
-        default:
-            return languageService.text(.expenseDebtAll)
-        }
     }
 
     private var datePeriodSubtitle: String? {
@@ -899,6 +886,10 @@ struct ExpenseRowView: View {
         expense.userCashFlow(userId: currentUserId)
     }
 
+    private var userPaymentStatus: ExpensePaymentDisplayStatus {
+        expense.userPaymentDisplayStatus(userId: currentUserId)
+    }
+
     var body: some View {
         HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
             Button(action: onCreatorTap) {
@@ -995,20 +986,7 @@ struct ExpenseRowView: View {
 
     @ViewBuilder
     private var paymentStatusIcon: some View {
-        Group {
-            if userDebtState.isSettled {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(SplickTheme.Colors.success)
-                    .accessibilityLabel(languageService.text(.expenseRowPaidAccessibility))
-            } else {
-                Image(systemName: "exclamationmark.circle.fill")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(SplickTheme.Colors.error)
-                    .accessibilityLabel(languageService.text(.expenseRowUnpaidAccessibility))
-            }
-        }
-        .frame(width: 32, height: 32)
+        ExpensePaymentStatusIcon(status: userPaymentStatus)
     }
 }
 
@@ -1325,16 +1303,7 @@ private struct ExpenseListFilterPanel: View {
     }
 
     private func historyStatusLabel(_ status: ExpenseDebtFilter) -> String {
-        switch status {
-        case .all:
-            return languageService.text(.expenseDebtAll)
-        case .oweUnpaid:
-            return languageService.text(.expenseFilterIOweUnpaid)
-        case .owedUnpaid:
-            return languageService.text(.expenseFilterOwedUnpaid)
-        default:
-            return languageService.text(.expenseDebtAll)
-        }
+        status.historyTitle(using: languageService)
     }
 
     private func filterPresetChip(_ preset: ExpenseDatePreset) -> some View {

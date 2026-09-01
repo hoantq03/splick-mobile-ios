@@ -99,6 +99,31 @@ public struct Expense: Identifiable, Codable, Equatable, Sendable {
         return .neutral
     }
 
+    /// Payment status for list-row icons (unpaid, pending approval, paid).
+    public func userPaymentDisplayStatus(userId: UUID?) -> ExpensePaymentDisplayStatus {
+        guard let userId else {
+            return status == .settled ? .paid : .unpaid
+        }
+
+        if paidBy.id == userId {
+            let others = splits.filter { $0.user.id != userId }
+            guard !others.isEmpty else { return .neutral }
+            if others.allSatisfy(\.isPaid) { return .paid }
+            if others.contains(where: { $0.paymentStatus == .pendingApproval }) {
+                return .pendingApproval
+            }
+            return .unpaid
+        }
+
+        if let split = splits.first(where: { $0.user.id == userId }) {
+            if split.isPaid { return .paid }
+            if split.paymentStatus == .pendingApproval { return .pendingApproval }
+            return .unpaid
+        }
+
+        return .neutral
+    }
+
     /// Amount attributed to the current user for overview totals in a given debt state.
     public func userDebtAmount(userId: UUID?, state: ExpenseUserDebtState) -> Decimal {
         guard userDebtState(userId: userId) == state else { return .zero }
@@ -123,6 +148,13 @@ public enum ExpenseUserDebtState: String, CaseIterable, Sendable {
     }
 }
 
+public enum ExpensePaymentDisplayStatus: Sendable {
+    case unpaid
+    case pendingApproval
+    case paid
+    case neutral
+}
+
 public struct ExpenseUserCashFlow: Equatable, Sendable {
     public enum Direction: Sendable {
         case receiving
@@ -145,19 +177,26 @@ public struct ExpenseSplit: Codable, Equatable, Sendable, Identifiable {
     public let amount: Decimal
     public let isPaid: Bool
     public let paidAt: Date?
+    public let paymentStatus: PaymentSplitStatus
 
     public init(
         id: UUID,
         user: UserSummary,
         amount: Decimal,
         isPaid: Bool = false,
-        paidAt: Date? = nil
+        paidAt: Date? = nil,
+        paymentStatus: PaymentSplitStatus? = nil
     ) {
         self.id = id
         self.user = user
         self.amount = amount
         self.isPaid = isPaid
         self.paidAt = paidAt
+        if let paymentStatus {
+            self.paymentStatus = paymentStatus
+        } else {
+            self.paymentStatus = isPaid ? .paid : .unpaid
+        }
     }
 }
 

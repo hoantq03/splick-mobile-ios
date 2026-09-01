@@ -7,21 +7,43 @@ public enum ExpenseDebtFilter: String, CaseIterable, Identifiable {
     case owePaid
     case owedUnpaid
     case owedPaid
+    case pendingApproval
+    case repaid
 
     public var id: String { rawValue }
 
-    /// Settlement chips on the history tab (unpaid I owe, unpaid owed to me, all).
+    /// Settlement chips on the history tab.
     public static var historyCases: [ExpenseDebtFilter] {
-        [.all, .oweUnpaid, .owedUnpaid]
+        [.all, .oweUnpaid, .owedUnpaid, .pendingApproval, .repaid]
     }
 
     public var matchingDebtState: ExpenseUserDebtState? {
         switch self {
-        case .all: return nil
+        case .all, .pendingApproval, .repaid: return nil
         case .oweUnpaid: return .oweUnpaid
         case .owePaid: return .owePaid
         case .owedUnpaid: return .owedUnpaid
         case .owedPaid: return .owedPaid
+        }
+    }
+
+    public func matches(expense: Expense, userId: UUID?) -> Bool {
+        switch self {
+        case .all:
+            return true
+        case .oweUnpaid:
+            return expense.userDebtState(userId: userId) == .oweUnpaid
+        case .owePaid:
+            return expense.userDebtState(userId: userId) == .owePaid
+        case .owedUnpaid:
+            return expense.userDebtState(userId: userId) == .owedUnpaid
+        case .owedPaid:
+            return expense.userDebtState(userId: userId) == .owedPaid
+        case .pendingApproval:
+            return expense.userPaymentDisplayStatus(userId: userId) == .pendingApproval
+        case .repaid:
+            let state = expense.userDebtState(userId: userId)
+            return state == .owePaid || state == .owedPaid
         }
     }
 }

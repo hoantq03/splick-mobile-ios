@@ -20,12 +20,14 @@ enum ExpenseMapper {
   }
 
   static func toExpenseSplit(_ dto: ExpenseSplitDTO) -> ExpenseSplit {
-    ExpenseSplit(
+    let paymentStatus = dto.paymentStatus.flatMap { PaymentSplitStatus(rawValue: $0) }
+    return ExpenseSplit(
       id: dto.id,
       user: toUserSummary(dto.user),
       amount: Decimal(string: dto.amount) ?? 0,
       isPaid: dto.isPaid,
-      paidAt: dto.paidAt
+      paidAt: dto.paidAt,
+      paymentStatus: paymentStatus
     )
   }
 

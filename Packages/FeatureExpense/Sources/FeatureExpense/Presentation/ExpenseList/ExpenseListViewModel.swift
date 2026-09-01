@@ -510,6 +510,10 @@ public final class ExpenseListViewModel: ObservableObject {
             guard debt.owes else { return false }
         case .owedUnpaid, .owedPaid:
             guard debt.isOwed else { return false }
+        case .pendingApproval:
+            return false
+        case .repaid:
+            guard !debt.owes && !debt.isOwed else { return false }
         }
 
         if filters.hasPeopleFilter {
@@ -526,10 +530,7 @@ public final class ExpenseListViewModel: ObservableObject {
     }
 
     private func matchesDebtStatus(_ expense: Expense) -> Bool {
-        guard let targetState = filters.debtStatus.matchingDebtState else {
-            return true
-        }
-        return expense.userDebtState(userId: currentUserId) == targetState
+        filters.debtStatus.matches(expense: expense, userId: currentUserId)
     }
 
     private func matchesUser(_ expense: Expense) -> Bool {

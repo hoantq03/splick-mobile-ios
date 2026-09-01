@@ -28,6 +28,7 @@ struct ExpenseSplitDTO: Decodable {
   let amount: String
   let isPaid: Bool
   let paidAt: Date?
+  let paymentStatus: String?
 }
 
 struct CreateExpenseRequestDTO: Encodable {
