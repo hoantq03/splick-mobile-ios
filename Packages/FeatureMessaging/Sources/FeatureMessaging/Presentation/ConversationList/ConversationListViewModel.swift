@@ -474,7 +474,7 @@ public final class ConversationListViewModel: ObservableObject {
     }
 
     private func bindWsEvents() {
-        wsClient.eventSubject
+        wsClient.eventsPublisher()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] event in
                 guard let self else { return }

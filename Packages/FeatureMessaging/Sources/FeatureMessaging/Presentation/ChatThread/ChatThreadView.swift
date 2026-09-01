@@ -830,7 +830,11 @@ public struct ChatThreadView: View {
 
     @ViewBuilder
     private var inputBar: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: SplickTheme.Spacing.xs) {
+            JumpToLatestChip(
+                visible: viewModel.showJumpToLatest,
+                onTap: { viewModel.pinToLatest() }
+            )
             MessageComposerInputBar(
                 text: $inputText,
                 attachmentDrafts: $viewModel.attachmentDrafts,

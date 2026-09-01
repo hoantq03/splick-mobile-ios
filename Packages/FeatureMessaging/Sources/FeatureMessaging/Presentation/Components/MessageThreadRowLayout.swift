@@ -7,6 +7,10 @@ enum MessageThreadRowLayout {
     static let accessorySlotWidth: CGFloat = 46
     /// Matches Android `STATUS_TICK_SIZE` + `STATUS_BUBBLE_GAP`.
     static let statusGutter: CGFloat = 24
+    /// Incoming sender avatar (last bubble in a same-sender cluster).
+    static let senderAvatarSize: CGFloat = 32
+    static let senderAvatarGap: CGFloat = 6
+    static var senderAvatarGutter: CGFloat { senderAvatarSize + senderAvatarGap }
     static let listHorizontalPadding: CGFloat = 8
     static let statusBubbleGap: CGFloat = 6
     static let bubbleWidthFraction: CGFloat = 0.72
@@ -31,7 +35,7 @@ enum MessageThreadRowLayout {
     static func contentMaxWidth(forRowWidth rowWidth: CGFloat) -> CGFloat {
         guard rowWidth > 1 else { return mediaFallbackMaxWidth }
         let fraction = rowWidth * bubbleWidthFraction
-        let afterGutter = rowWidth - rowSideSpacer - statusGutter
+        let afterGutter = rowWidth - rowSideSpacer - statusGutter - senderAvatarGutter
         let floor = min(bubbleAbsoluteMinWidth, rowWidth * 0.55)
         return max(min(min(fraction, afterGutter), bubbleAbsoluteMaxWidth), floor)
     }
@@ -79,8 +83,16 @@ struct MessageThreadIncomingRow<Content: View>: View {
     @ViewBuilder var content: () -> Content
 
     var body: some View {
-        HStack(alignment: .messageThreadRowCenter, spacing: SplickTheme.Spacing.xxs) {
+        HStack(alignment: .messageThreadRowCenter, spacing: 0) {
             MessageThreadIncomingLeadingSlot()
+            // Reserve the same gutter as `MessageBubble.incomingSenderAvatar`.
+            Color.clear
+                .frame(
+                    width: MessageThreadRowLayout.senderAvatarSize,
+                    height: MessageThreadRowLayout.senderAvatarSize
+                )
+                .padding(.trailing, MessageThreadRowLayout.senderAvatarGap)
+                .allowsHitTesting(false)
             content()
                 .fixedSize(horizontal: true, vertical: false)
             Spacer(minLength: MessageThreadRowLayout.rowSideSpacer)
