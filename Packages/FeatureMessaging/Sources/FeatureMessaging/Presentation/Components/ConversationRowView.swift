@@ -55,17 +55,20 @@ struct ConversationRowView: View {
                 }
 
                 HStack(spacing: SplickTheme.Spacing.xxs) {
-                    Group {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(lastMessagePreview)
+                            .font(SplickTheme.Typography.callout)
+                            .foregroundStyle(SplickTheme.Colors.textSecondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+
                         if let inboxTyping {
                             inboxTypingPreview(inboxTyping)
-                        } else {
-                            Text(lastMessagePreview)
-                                .font(SplickTheme.Typography.callout)
-                                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                                .transition(.opacity.combined(with: .move(edge: .top)))
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .animation(.easeInOut(duration: 0.24), value: inboxTyping != nil)
-                    Spacer()
                     if conversation.unreadCount > 0 {
                         Text("\(conversation.unreadCount)")
                             .font(SplickTheme.Typography.caption.bold())
@@ -168,20 +171,7 @@ struct ConversationRowView: View {
 
     @ViewBuilder
     private func inboxTypingPreview(_ state: InboxTypingState) -> some View {
-        switch state.layout {
-        case .direct:
-            ConversationListTypingPreview(accessibilityLabel: state.typingBase)
-        case .group(let username, let avatarURL):
-            HStack(spacing: 6) {
-                AvatarView(imageURL: avatarURL, name: username, size: .small)
-                    .frame(width: 22, height: 22)
-                Text(username)
-                    .font(SplickTheme.Typography.callout.weight(.semibold))
-                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                    .lineLimit(1)
-                ConversationListTypingPreview(accessibilityLabel: state.typingBase)
-            }
-        }
+        ConversationListTypingPreview(accessibilityLabel: state.typingBase)
     }
 
     private func resolvedPresence(for peer: ConversationPeer) -> (isOnline: Bool, lastSeenAt: Date?) {
