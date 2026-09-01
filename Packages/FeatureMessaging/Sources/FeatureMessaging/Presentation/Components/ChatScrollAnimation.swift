@@ -14,4 +14,10 @@ enum ChatScrollAnimation {
         insertion: .move(edge: .bottom).combined(with: .opacity),
         removal: .opacity
     )
+
+    /// Typing row + avatar hand-off — softer than full message insert.
+    static let typingRow = AnyTransition.asymmetric(
+        insertion: .move(edge: .bottom).combined(with: .opacity),
+        removal: .move(edge: .top).combined(with: .opacity)
+    )
 }
