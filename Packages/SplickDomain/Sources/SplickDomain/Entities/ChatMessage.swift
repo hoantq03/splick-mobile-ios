@@ -3,8 +3,11 @@ import Foundation
 public enum ChatMessageType: String, Equatable, Hashable, Sendable, Codable {
     case user = "USER"
     case groupRenamed = "GROUP_RENAMED"
+    case groupMemberAdded = "GROUP_MEMBER_ADDED"
     case groupMemberRemoved = "GROUP_MEMBER_REMOVED"
     case groupMemberLeft = "GROUP_MEMBER_LEFT"
+    case groupDeleted = "GROUP_DELETED"
+    case groupAdminTransferred = "GROUP_ADMIN_TRANSFERRED"
 }
 
 public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable, Codable {
@@ -29,7 +32,7 @@ public struct ChatMessage: Identifiable, Equatable, Hashable, Sendable, Codable 
 
     public var isSystemNotice: Bool {
         switch type {
-        case .groupRenamed, .groupMemberRemoved, .groupMemberLeft:
+        case .groupRenamed, .groupMemberAdded, .groupMemberRemoved, .groupMemberLeft, .groupDeleted, .groupAdminTransferred:
             return true
         case .user, .none:
             return false

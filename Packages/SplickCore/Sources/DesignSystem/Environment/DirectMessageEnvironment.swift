@@ -53,6 +53,14 @@ private struct LeaveGroupConversationKey: EnvironmentKey {
     static let defaultValue: ((UUID) async throws -> Void)? = nil
 }
 
+private struct TransferGroupConversationAdminKey: EnvironmentKey {
+    static let defaultValue: ((UUID, UUID) async throws -> Void)? = nil
+}
+
+private struct TransferSocialGroupOwnershipKey: EnvironmentKey {
+    static let defaultValue: ((UUID, UUID) async throws -> Void)? = nil
+}
+
 extension EnvironmentValues {
     public var openDirectMessage: ((UUID) async -> UUID?)? {
         get { self[OpenDirectMessageKey.self] }
@@ -87,5 +95,17 @@ extension EnvironmentValues {
     public var leaveGroupConversation: ((UUID) async throws -> Void)? {
         get { self[LeaveGroupConversationKey.self] }
         set { self[LeaveGroupConversationKey.self] = newValue }
+    }
+
+    /// Transfers messaging group admin to another member.
+    public var transferGroupConversationAdmin: ((UUID, UUID) async throws -> Void)? {
+        get { self[TransferGroupConversationAdminKey.self] }
+        set { self[TransferGroupConversationAdminKey.self] = newValue }
+    }
+
+    /// Transfers social group ownership. Throws if the caller is not the owner.
+    public var transferSocialGroupOwnership: ((UUID, UUID) async throws -> Void)? {
+        get { self[TransferSocialGroupOwnershipKey.self] }
+        set { self[TransferSocialGroupOwnershipKey.self] = newValue }
     }
 }

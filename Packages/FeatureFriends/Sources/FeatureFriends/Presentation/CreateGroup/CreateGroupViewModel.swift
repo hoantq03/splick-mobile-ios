@@ -28,6 +28,7 @@ public final class CreateGroupViewModel: ObservableObject {
     private let inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol
     private let uploadGroupAvatarUseCase: UploadGroupAvatarUseCaseProtocol
     private let updateGroupAvatarUseCase: UpdateGroupAvatarUseCaseProtocol
+    private let openLinkedGroupConversation: (_ groupId: UUID, _ name: String, _ memberUserIds: [UUID]) async throws -> Void
     private let languageService: LanguageService
     private let onSuccess: (SplickDomain.Group, [UUID]) -> Void
 
@@ -38,6 +39,7 @@ public final class CreateGroupViewModel: ObservableObject {
         inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol,
         uploadGroupAvatarUseCase: UploadGroupAvatarUseCaseProtocol,
         updateGroupAvatarUseCase: UpdateGroupAvatarUseCaseProtocol,
+        openLinkedGroupConversation: @escaping (_ groupId: UUID, _ name: String, _ memberUserIds: [UUID]) async throws -> Void = { _, _, _ in },
         languageService: LanguageService,
         onSuccess: @escaping (SplickDomain.Group, [UUID]) -> Void
     ) {
@@ -47,6 +49,7 @@ public final class CreateGroupViewModel: ObservableObject {
         self.inviteFriendsUseCase = inviteFriendsUseCase
         self.uploadGroupAvatarUseCase = uploadGroupAvatarUseCase
         self.updateGroupAvatarUseCase = updateGroupAvatarUseCase
+        self.openLinkedGroupConversation = openLinkedGroupConversation
         self.languageService = languageService
         self.onSuccess = onSuccess
     }
@@ -172,7 +175,9 @@ public final class CreateGroupViewModel: ObservableObject {
                 }
             }
 
-            let invitedMemberIds = Array(selectedMemberIds)
+            try? await openLinkedGroupConversation(group.id, group.name, memberIds)
+
+            let invitedMemberIds = memberIds
             resetForm()
             let createdMessage = languageService.format(.friendsGroupCreated, group.name)
             if warnings.isEmpty {

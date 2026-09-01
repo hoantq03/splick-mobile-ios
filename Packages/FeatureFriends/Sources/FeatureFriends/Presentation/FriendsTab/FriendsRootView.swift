@@ -82,6 +82,7 @@ public struct FriendsRootView: View {
     private let transferGroupOwnershipUseCase: TransferGroupOwnershipUseCaseProtocol
     private let generateGroupQrUseCase: GenerateGroupQrUseCaseProtocol
     private let revokeGroupQrUseCase: RevokeGroupQrUseCaseProtocol
+    private let openLinkedGroupConversation: (_ groupId: UUID, _ name: String, _ memberUserIds: [UUID]) async throws -> Void
     private let profileDependencies: FriendUserProfileDependencies
     private let onBadgeCountsChanged: (() async -> Void)?
     private let onDirectoryLoaded: (([SplickDomain.Group]) async -> Void)?
@@ -125,6 +126,7 @@ public struct FriendsRootView: View {
         transferGroupOwnershipUseCase: TransferGroupOwnershipUseCaseProtocol,
         generateGroupQrUseCase: GenerateGroupQrUseCaseProtocol,
         revokeGroupQrUseCase: RevokeGroupQrUseCaseProtocol,
+        openLinkedGroupConversation: @escaping (_ groupId: UUID, _ name: String, _ memberUserIds: [UUID]) async throws -> Void = { _, _, _ in },
         languageService: LanguageService,
         onBadgeCountsChanged: (() async -> Void)? = nil,
         onDirectoryLoaded: (([SplickDomain.Group]) async -> Void)? = nil,
@@ -176,6 +178,7 @@ public struct FriendsRootView: View {
         self.transferGroupOwnershipUseCase = transferGroupOwnershipUseCase
         self.generateGroupQrUseCase = generateGroupQrUseCase
         self.revokeGroupQrUseCase = revokeGroupQrUseCase
+        self.openLinkedGroupConversation = openLinkedGroupConversation
         self.profileDependencies = FriendUserProfileDependencies(
             fetchUserProfileUseCase: fetchUserProfileUseCase,
             fetchUserPostsUseCase: fetchUserPostsUseCase,
@@ -339,9 +342,10 @@ public struct FriendsRootView: View {
                     fetchMyFriendsUseCase: fetchMyFriendsUseCase,
                     createGroupUseCase: createGroupUseCase,
                     inviteFriendsUseCase: inviteFriendsToGroupUseCase,
-                    uploadGroupAvatarUseCase: uploadGroupAvatarUseCase,
-                    updateGroupAvatarUseCase: updateGroupAvatarUseCase,
-                    languageService: languageService
+                uploadGroupAvatarUseCase: uploadGroupAvatarUseCase,
+                updateGroupAvatarUseCase: updateGroupAvatarUseCase,
+                openLinkedGroupConversation: openLinkedGroupConversation,
+                languageService: languageService
                 ) { group, _ in
                     viewModel.onGroupCreated(group)
                     showCreateGroup = false
@@ -419,6 +423,9 @@ public struct FriendsRootView: View {
                 _ = await (directory, blocked)
                 // PYMK scans group members (N API calls) — only when user opens that sheet.
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .groupsDirectoryDidChange)) { _ in
+            Task { await viewModel.loadGroups(isPullToRefresh: true) }
         }
         .onReceive(sameTabTapPublisher) { _ in
             guard sameTabTapHandlingEnabled else { return }

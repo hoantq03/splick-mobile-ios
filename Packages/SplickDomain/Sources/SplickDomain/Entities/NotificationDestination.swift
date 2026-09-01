@@ -108,6 +108,8 @@ public struct NotificationDestination: Codable, Equatable, Sendable {
              "GROUP_CREATED", "GROUP_MEMBER_ADDED", "GROUP_MEMBER_REMOVED",
              "GROUP_RENAMED", "GROUP_ADMIN_TRANSFERRED":
             return NotificationScreen.messages.rawValue
+        case "GROUP_DELETED", "GROUP_INVITE":
+            return NotificationScreen.friends.rawValue
         case "PAYMENT_EVIDENCE_SUBMITTED", "PAYMENT_EVIDENCE_APPROVED", "PAYMENT_EVIDENCE_REJECTED":
             return NotificationScreen.postDetail.rawValue
         default:

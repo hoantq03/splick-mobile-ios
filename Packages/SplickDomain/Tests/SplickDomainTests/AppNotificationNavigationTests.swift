@@ -108,6 +108,7 @@ final class AppNotificationNavigationTests: XCTestCase {
         )
         XCTAssertEqual(NotificationType(rawValue: "EXPENSE_SPLIT_BILL"), .expenseSplitBill)
         XCTAssertEqual(NotificationType(rawValue: "GROUP_INVITE"), .groupInvite)
+        XCTAssertEqual(NotificationType(rawValue: "GROUP_DELETED"), .groupDeleted)
     }
 
     func testNavigationTargetOpensConversationFromMessagesDestination() {

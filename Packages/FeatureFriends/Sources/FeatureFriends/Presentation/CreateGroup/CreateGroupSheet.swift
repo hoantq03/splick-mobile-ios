@@ -29,6 +29,7 @@ public struct CreateGroupSheet: View {
         inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol,
         uploadGroupAvatarUseCase: UploadGroupAvatarUseCaseProtocol,
         updateGroupAvatarUseCase: UpdateGroupAvatarUseCaseProtocol,
+        openLinkedGroupConversation: @escaping (_ groupId: UUID, _ name: String, _ memberUserIds: [UUID]) async throws -> Void = { _, _, _ in },
         languageService: LanguageService,
         onSuccess: @escaping (SplickDomain.Group, [UUID]) -> Void
     ) {
@@ -40,6 +41,7 @@ public struct CreateGroupSheet: View {
                 inviteFriendsUseCase: inviteFriendsUseCase,
                 uploadGroupAvatarUseCase: uploadGroupAvatarUseCase,
                 updateGroupAvatarUseCase: updateGroupAvatarUseCase,
+                openLinkedGroupConversation: openLinkedGroupConversation,
                 languageService: languageService,
                 onSuccess: onSuccess
             )

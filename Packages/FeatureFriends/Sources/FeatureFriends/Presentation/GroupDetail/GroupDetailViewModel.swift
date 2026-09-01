@@ -1,6 +1,7 @@
 import Foundation
 import Common
 import Localization
+import Networking
 import SplickDomain
 
 @MainActor
@@ -13,6 +14,7 @@ final class GroupDetailViewModel: ObservableObject {
     @Published var displayedInviteCode: String
     @Published var actionMessage: String?
     @Published var actionError: String?
+    @Published var showTransferBeforeLeave = false
 
     private let fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol
     private let fetchInviteCodeUseCase: FetchGroupInviteCodeUseCaseProtocol
@@ -186,13 +188,20 @@ final class GroupDetailViewModel: ObservableObject {
     func leave(currentUserId: UUID?) async -> Bool {
         guard let leaveGroupUseCase, let currentUserId else { return false }
         if isOwner(currentUserId: currentUserId) {
-            actionError = languageService.text(.friendsTransferBeforeLeave)
+            showTransferBeforeLeave = true
             return false
         }
         do {
             try await leaveGroupUseCase.execute(groupId: group.id)
             return true
         } catch {
+            if error.isIgnorableSocialLeave {
+                return true
+            }
+            if error.isOwnershipTransferRequired {
+                showTransferBeforeLeave = true
+                return false
+            }
             actionError = languageService.localizedMessage(for: error)
             return false
         }
@@ -211,5 +220,24 @@ final class GroupDetailViewModel: ObservableObject {
 
     func applyUpdatedGroup(_ updated: Group) {
         group = updated
+    }
+}
+
+private extension Error {
+    var isOwnershipTransferRequired: Bool {
+        if case .apiError(let code, _, _) = self as? NetworkError {
+            return code.caseInsensitiveCompare("OWNERSHIP_TRANSFER_REQUIRED") == .orderedSame
+        }
+        return false
+    }
+
+    var isIgnorableSocialLeave: Bool {
+        guard let network = self as? NetworkError else { return false }
+        switch network {
+        case .notFound, .forbidden:
+            return true
+        default:
+            return false
+        }
     }
 }

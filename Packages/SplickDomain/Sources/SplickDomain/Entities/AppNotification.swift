@@ -98,6 +98,8 @@ public struct AppNotification: Identifiable, Codable, Equatable, Sendable {
             return .friends
         case .groupInvite:
             return .friends
+        case .groupDeleted:
+            return .friends
         case .friendRequestSent:
             return .friends
         case .directMessage, .groupMessage, .groupCreated, .groupMemberAdded,
@@ -153,6 +155,7 @@ public enum NotificationType: String, Codable, Sendable {
     case friendRequestAccepted = "FRIEND_REQUEST_ACCEPTED"
     case friendNicknameChanged = "FRIEND_NICKNAME_CHANGED"
     case groupInvite = "GROUP_INVITE"
+    case groupDeleted = "GROUP_DELETED"
     case directMessage = "DIRECT_MESSAGE"
     case groupMessage = "GROUP_MESSAGE"
     case groupCreated = "GROUP_CREATED"
@@ -197,7 +200,7 @@ public enum NotificationType: String, Codable, Sendable {
             return "person.fill.badge.plus"
         case .friendNicknameChanged:
             return "tag.fill"
-        case .groupInvite, .groupMessage, .groupCreated, .groupMemberAdded,
+        case .groupInvite, .groupDeleted, .groupMessage, .groupCreated, .groupMemberAdded,
              .groupMemberRemoved, .groupRenamed, .groupAdminTransferred:
             return "person.3.fill"
         case .directMessage:

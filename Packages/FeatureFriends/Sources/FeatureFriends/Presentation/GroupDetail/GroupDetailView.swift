@@ -29,11 +29,14 @@ struct GroupDetailView: View {
     @Environment(\.openGroupChat) private var openGroupChat
     @Environment(\.addMembersToGroupConversation) private var addMembersToGroupConversation
     @Environment(\.leaveGroupConversation) private var leaveGroupConversation
+    @Environment(\.transferGroupConversationAdmin) private var transferGroupConversationAdmin
 
     @State private var showGroupQR = false
     @State private var showInviteFriends = false
     @State private var showEditGroup = false
     @State private var showTransferOwnership = false
+    @State private var transferSocialOwnership = true
+    @State private var leaveAfterOwnershipTransfer = false
     @State private var confirmLeave = false
     @State private var confirmDelete = false
     @State private var isOpeningChat = false
@@ -130,9 +133,23 @@ struct GroupDetailView: View {
                 members: viewModel.members,
                 currentUserId: currentUserSummary?.id,
                 transferOwnershipUseCase: transferOwnershipUseCase,
+                alsoTransferMessagingAdmin: { newAdminId in
+                    guard let transferGroupConversationAdmin else { return }
+                    try await transferGroupConversationAdmin(viewModel.group.id, newAdminId)
+                },
+                transferSocialOwnership: transferSocialOwnership,
+                currentGroup: viewModel.group,
                 onTransferred: { updated in
                     viewModel.applyUpdatedGroup(updated)
-                    Task { await viewModel.load(currentUserId: currentUserSummary?.id) }
+                    viewModel.showTransferBeforeLeave = false
+                    let shouldLeave = leaveAfterOwnershipTransfer
+                    leaveAfterOwnershipTransfer = false
+                    Task {
+                        await viewModel.load(currentUserId: currentUserSummary?.id)
+                        if shouldLeave {
+                            await leaveAfterTransferringOwnership()
+                        }
+                    }
                 }
             )
         }
@@ -186,18 +203,25 @@ struct GroupDetailView: View {
         ) {
             Button(languageService.text(.messagingLeaveGroup), role: .destructive) {
                 Task {
-                    if await viewModel.leave(currentUserId: currentUserSummary?.id) {
-                        if let leaveGroupConversation {
-                            do {
-                                try await leaveGroupConversation(viewModel.group.id)
-                            } catch {
-                                // Already left messaging / no conversation yet is OK.
-                                if !error.isIgnorableMessagingLeave {
-                                    viewModel.actionError = languageService.localizedMessage(for: error)
-                                    return
-                                }
+                    if viewModel.isOwner(currentUserId: currentUserSummary?.id) {
+                        viewModel.showTransferBeforeLeave = true
+                        return
+                    }
+                    if let leaveGroupConversation {
+                        do {
+                            try await leaveGroupConversation(viewModel.group.id)
+                        } catch {
+                            if error.isOwnershipTransferRequired {
+                                viewModel.showTransferBeforeLeave = true
+                                return
+                            }
+                            if !error.isIgnorableMessagingLeave {
+                                viewModel.actionError = languageService.localizedMessage(for: error)
+                                return
                             }
                         }
+                    }
+                    if await viewModel.leave(currentUserId: currentUserSummary?.id) {
                         onGroupLeft()
                         dismiss()
                     }
@@ -206,6 +230,25 @@ struct GroupDetailView: View {
             Button(languageService.text(.friendsCancel), role: .cancel) {}
         } message: {
             Text(languageService.text(.friendsLeaveGroupMessage))
+        }
+        .alert(
+            languageService.text(.friendsTransferBeforeLeaveTitle),
+            isPresented: Binding(
+                get: { viewModel.showTransferBeforeLeave },
+                set: { if !$0 { viewModel.showTransferBeforeLeave = false } }
+            )
+        ) {
+            Button(languageService.text(.friendsStay), role: .cancel) {
+                viewModel.showTransferBeforeLeave = false
+            }
+            Button(languageService.text(.friendsTransferOwnership)) {
+                transferSocialOwnership = viewModel.isOwner(currentUserId: currentUserSummary?.id)
+                leaveAfterOwnershipTransfer = true
+                viewModel.showTransferBeforeLeave = false
+                showTransferOwnership = true
+            }
+        } message: {
+            Text(languageService.text(.friendsTransferBeforeLeave))
         }
         .alert(languageService.text(.friendsDeleteGroupConfirmTitle), isPresented: $confirmDelete) {
             Button(languageService.text(.friendsCancel), role: .cancel) {}
@@ -398,6 +441,8 @@ struct GroupDetailView: View {
                     icon: "person.crop.circle.badge.checkmark",
                     title: languageService.text(.friendsTransferOwnership)
                 ) {
+                    transferSocialOwnership = true
+                    leaveAfterOwnershipTransfer = false
                     showTransferOwnership = true
                 }
 
@@ -456,6 +501,23 @@ struct GroupDetailView: View {
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)
+    }
+
+    private func leaveAfterTransferringOwnership() async {
+        if let leaveGroupConversation {
+            do {
+                try await leaveGroupConversation(viewModel.group.id)
+            } catch {
+                if !error.isIgnorableMessagingLeave {
+                    viewModel.actionError = languageService.localizedMessage(for: error)
+                    return
+                }
+            }
+        }
+        if await viewModel.leave(currentUserId: currentUserSummary?.id) {
+            onGroupLeft()
+            dismiss()
+        }
     }
 
     private func copyInviteCode() {
@@ -534,13 +596,16 @@ struct GroupDetailView: View {
 }
 
 private extension Error {
+    var isOwnershipTransferRequired: Bool {
+        if case .apiError(let code, _, _) = self as? NetworkError {
+            return code.caseInsensitiveCompare("OWNERSHIP_TRANSFER_REQUIRED") == .orderedSame
+        }
+        return false
+    }
+
     var isIgnorableMessagingLeave: Bool {
         guard let network = self as? NetworkError else { return false }
-        switch network {
-        case .notFound, .forbidden:
-            return true
-        default:
-            return false
-        }
+        if case .notFound = network { return true }
+        return false
     }
 }
