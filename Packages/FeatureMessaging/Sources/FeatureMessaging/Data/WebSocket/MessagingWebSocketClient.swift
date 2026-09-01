@@ -4,6 +4,8 @@ import SplickDomain
 import Common
 import Networking
 
+// MARK: - Event stream
+
 public enum MessagingWsEvent: Sendable {
     case connected
     case newMessage(conversationId: UUID, message: ChatMessage)
@@ -24,6 +26,8 @@ public final class MessagingWebSocketClient: ObservableObject {
     private var pingTask: Task<Void, Never>?
     private var isConnected = false
     private var shouldRun = false
+    /// Bumped on every `connect()` / `disconnect()` so stale connection loops exit promptly.
+    private var connectGeneration = 0
     private let minReconnectDelay: TimeInterval = 1.0
     private let maxReconnectDelay: TimeInterval = 60.0
     private let encoder = JSONEncoder()
@@ -32,7 +36,20 @@ public final class MessagingWebSocketClient: ObservableObject {
     private let deviceIdProvider: @Sendable () -> String
     private let forceTokenRefresh: @Sendable () async -> Void
 
-    public let eventSubject = PassthroughSubject<MessagingWsEvent, Never>()
+    internal let eventSubject = PassthroughSubject<MessagingWsEvent, Never>()
+    private var eventBuffer: [MessagingWsEvent] = []
+    private let maxEventBuffer = 64
+
+    /// Replays recent events to new subscribers (late-bound view models after connect).
+    public func eventsPublisher() -> AnyPublisher<MessagingWsEvent, Never> {
+        let buffered = eventBuffer
+        guard !buffered.isEmpty else {
+            return eventSubject.eraseToAnyPublisher()
+        }
+        return buffered.publisher
+            .merge(with: eventSubject)
+            .eraseToAnyPublisher()
+    }
 
     public init(
         ticketProvider: @escaping @Sendable () async throws -> String,
@@ -44,18 +61,48 @@ public final class MessagingWebSocketClient: ObservableObject {
         self.forceTokenRefresh = forceTokenRefresh
     }
 
+    /// Ensures a live socket while the app is foregrounded. Safe to call repeatedly.
     public func connect() {
-        guard !shouldRun else { return }
         shouldRun = true
+        if isConnected, connectionLoopTask != nil, connectionLoopTask?.isCancelled == false {
+            return
+        }
+        startConnectionLoop()
+    }
+
+    /// Tears down any stale socket and starts a fresh connection (use after background resume).
+    public func reconnect() {
+        shouldRun = true
+        isConnected = false
+        pingTask?.cancel()
+        pingTask = nil
+        webSocketTask?.cancel(with: .goingAway, reason: nil)
+        webSocketTask = nil
+        startConnectionLoop()
+    }
+
+    private func startConnectionLoop() {
+        connectGeneration += 1
+        let generation = connectGeneration
         connectionLoopTask?.cancel()
         connectionLoopTask = Task { [weak self] in
-            await self?.runConnectionLoop()
+            guard let self, generation == self.connectGeneration else { return }
+            await self.runConnectionLoop(generation: generation)
         }
+    }
+
+    private func publish(_ event: MessagingWsEvent) {
+        eventBuffer.append(event)
+        if eventBuffer.count > maxEventBuffer {
+            eventBuffer.removeFirst(eventBuffer.count - maxEventBuffer)
+        }
+        eventSubject.send(event)
     }
 
     public func disconnect() {
         shouldRun = false
         isConnected = false
+        connectGeneration += 1
         connectionLoopTask?.cancel()
         connectionLoopTask = nil
         pingTask?.cancel()
@@ -81,11 +128,13 @@ public final class MessagingWebSocketClient: ObservableObject {
 
     // MARK: - Connection loop (single Task, exponential backoff + jitter)
 
-    private func runConnectionLoop() async {
+    private func runConnectionLoop(generation: Int) async {
         var reconnectDelay = minReconnectDelay
-        var handshakeFailures = 0
+        var ticketFailures = 0
 
-        while shouldRun, !Task.isCancelled {
+        while shouldRun,
+              generation == connectGeneration,
+              !Task.isCancelled {
             do {
                 let ticket = try await ticketProvider()
                 let deviceId = deviceIdProvider()
@@ -94,55 +143,39 @@ public final class MessagingWebSocketClient: ObservableObject {
                 let encodedDevice = deviceId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? deviceId
                 guard let url = URL(string: "\(baseURL)/v1/messaging/ws?ticket=\(encodedTicket)&deviceId=\(encodedDevice)") else {
                     Log.error("Invalid WS URL", category: .network)
-                    break
-                }
-
-                let task = URLSession.shared.webSocketTask(with: url)
-                webSocketTask = task
-                task.resume()
-
-                guard await sendPing(on: task) else {
-                    handshakeFailures += 1
-                    Log.warning(
-                        "WS handshake failed (\(handshakeFailures)) — messaging service may be down",
-                        category: .network
-                    )
-                    task.cancel(with: .goingAway, reason: nil)
-                    webSocketTask = nil
-
-                    if handshakeFailures >= 3 {
-                        handshakeFailures = 0
-                        await forceTokenRefresh()
-                    }
-
                     let delay = jitteredDelay(reconnectDelay)
                     reconnectDelay = min(reconnectDelay * 2, maxReconnectDelay)
                     try? await Task.sleep(for: .seconds(delay))
                     continue
                 }
 
-                handshakeFailures = 0
+                let task = URLSession.shared.webSocketTask(with: url)
+                webSocketTask = task
+                task.resume()
+
+                ticketFailures = 0
                 reconnectDelay = minReconnectDelay
                 isConnected = true
-                eventSubject.send(.connected)
+                Log.info("Messaging WS connected", category: .network)
+                publish(.connected)
                 startPing()
-                await receiveLoop()
+                await receiveLoop(generation: generation)
                 isConnected = false
                 pingTask?.cancel()
                 pingTask = nil
                 webSocketTask = nil
 
-                guard shouldRun, !Task.isCancelled else { break }
+                guard shouldRun, generation == connectGeneration, !Task.isCancelled else { break }
                 let delay = jitteredDelay(reconnectDelay)
                 reconnectDelay = min(reconnectDelay * 2, maxReconnectDelay)
                 Log.info("WS reconnecting in \(String(format: "%.1f", delay))s", category: .network)
                 try? await Task.sleep(for: .seconds(delay))
             } catch {
-                guard shouldRun, !Task.isCancelled else { break }
+                guard shouldRun, generation == connectGeneration, !Task.isCancelled else { break }
                 Log.warning("WS ticket/connect error: \(error.localizedDescription)", category: .network)
-                handshakeFailures += 1
-                if handshakeFailures >= 3 {
-                    handshakeFailures = 0
+                ticketFailures += 1
+                if ticketFailures >= 3 {
+                    ticketFailures = 0
                     await forceTokenRefresh()
                 }
                 let delay = jitteredDelay(reconnectDelay)
@@ -159,17 +192,12 @@ public final class MessagingWebSocketClient: ObservableObject {
         return max(minReconnectDelay, base * jitterFactor)
     }
 
-    private func sendPing(on task: URLSessionWebSocketTask) async -> Bool {
-        await withCheckedContinuation { continuation in
-            let gate = ContinuationGate(continuation)
-            task.sendPing { error in
-                gate.resume(returning: error == nil)
-            }
-        }
-    }
-
-    private func receiveLoop() async {
-        while isConnected, shouldRun, let task = webSocketTask, !Task.isCancelled {
+    private func receiveLoop(generation: Int) async {
+        while isConnected,
+              shouldRun,
+              generation == connectGeneration,
+              let task = webSocketTask,
+              !Task.isCancelled {
             do {
                 let message = try await task.receive()
                 handleMessage(message)
@@ -183,13 +211,16 @@ public final class MessagingWebSocketClient: ObservableObject {
 
     private func handleMessage(_ message: URLSessionWebSocketTask.Message) {
         guard case .string(let text) = message else { return }
-        Task { [weak self] in
+        Task { @MainActor [weak self] in
             let event = await Task.detached(priority: .utility) {
                 guard let data = text.data(using: .utf8) else { return nil as MessagingWsEvent? }
                 return MessagingWsEventDecoder.decode(data)
             }.value
-            guard let event else { return }
-            self?.eventSubject.send(event)
+            guard let event else {
+                Log.warning("WS event decode failed", category: .network, metadata: ["preview": String(text.prefix(160))])
+                return
+            }
+            self?.publish(event)
         }
     }
 
@@ -212,22 +243,5 @@ public final class MessagingWebSocketClient: ObservableObject {
                 Log.warning("WS send failed: \(error.localizedDescription)", category: .network)
             }
         }
-    }
-}
-
-private final class ContinuationGate<T>: @unchecked Sendable {
-    private let lock = NSLock()
-    private var continuation: CheckedContinuation<T, Never>?
-
-    init(_ continuation: CheckedContinuation<T, Never>) {
-        self.continuation = continuation
-    }
-
-    func resume(returning value: T) {
-        lock.lock()
-        defer { lock.unlock() }
-        guard let continuation else { return }
-        self.continuation = nil
-        continuation.resume(returning: value)
     }
 }
