@@ -47,6 +47,7 @@ public struct SplickButton: View {
             .background(backgroundColor)
             .foregroundStyle(foregroundColor)
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay {
                 if style == .secondary || style == .ghost {
                     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)

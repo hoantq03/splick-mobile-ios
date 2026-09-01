@@ -156,12 +156,28 @@ private struct DismissKeyboardTapInstaller: UIViewRepresentable {
         ) -> Bool {
             var view = touch.view
             while let current = view {
-                if current is UITextField || current is UITextView {
+                if Self.shouldKeepKeyboard(for: current) {
                     return false
                 }
                 view = current.superview
             }
             return true
+        }
+
+        /// Text inputs keep the IME; so do buttons (send, composer actions) so
+        /// tapping send does not resign first responder.
+        private static func shouldKeepKeyboard(for view: UIView) -> Bool {
+            if view is UITextField || view is UITextView || view is UISearchBar {
+                return true
+            }
+            if view is UIControl {
+                return true
+            }
+            if view.accessibilityTraits.contains(.button) {
+                return true
+            }
+            let typeName = String(describing: type(of: view))
+            return typeName.contains("Button")
         }
 
         func gestureRecognizer(

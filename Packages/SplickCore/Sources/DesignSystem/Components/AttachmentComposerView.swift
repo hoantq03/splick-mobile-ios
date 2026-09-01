@@ -144,6 +144,7 @@ public struct AttachmentComposerView<TextField: View, Accessory: View, SendButto
                     Button(action: submit) {
                         sendButton()
                     }
+                    .buttonStyle(.plain)
                     .disabled(!canSubmit)
                     .foregroundStyle(
                         canSubmit
