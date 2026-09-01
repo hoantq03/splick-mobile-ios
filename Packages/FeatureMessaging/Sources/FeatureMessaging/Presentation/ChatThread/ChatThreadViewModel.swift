@@ -31,7 +31,11 @@ public final class ChatThreadViewModel: ObservableObject {
     /// After older messages are prepended, the list scrolls to this client id to avoid jump.
     @Published public private(set) var prependAnchorMessageId: UUID?
     /// Set by the message list when the bottom anchor is visible.
-    @Published public var isNearBottom = false
+    @Published public var isNearBottom = true
+    /// When true, new WS messages and typing auto-scroll. Cleared only by explicit user scroll-up.
+    @Published public private(set) var autoFollowLatest = true
+    /// Floating chip above the composer when newer messages arrived while scrolled up.
+    @Published public private(set) var showJumpToLatest = false
     @Published public private(set) var threadSearchHits: [MessageSearchHit] = []
     @Published public private(set) var threadSearchState: LoadingState<[MessageSearchHit]> = .idle
     @Published public private(set) var activeThreadSearchQuery = ""
@@ -42,6 +46,7 @@ public final class ChatThreadViewModel: ObservableObject {
 
     private static let maxPagesForMessageLookup = 10
     private static let pageSize = 30
+    private var initialBottomScrollRequested = false
     private static let highlightDuration: Duration = .seconds(2)
     private static let markReadDebounce: Duration = .milliseconds(500)
 
@@ -68,6 +73,7 @@ public final class ChatThreadViewModel: ObservableObject {
     private var highlightClearTask: Task<Void, Never>?
     private var markReadTask: Task<Void, Never>?
     private var gapFillTask: Task<Void, Never>?
+    private var nearBottomFalseTask: Task<Void, Never>?
     private var floatSwayByMessageId: [UUID: CGFloat] = [:]
     private var pendingBodiesByClientId: [UUID: String] = [:]
     private var pendingAttachmentsByClientId: [UUID: [MessageImageAttachment]] = [:]
@@ -267,7 +273,7 @@ public final class ChatThreadViewModel: ObservableObject {
         // Paint cached thread immediately, then reconcile with the network.
         let paintedFromCache = applyCachedThreadIfAvailable()
         if paintedFromCache {
-            requestScrollToBottom()
+            requestInitialBottomScrollIfNeeded()
         } else if case .loaded(let existing) = state, !existing.isEmpty {
             // Keep the visible thread while refreshing — avoids a loading flash on push.
         } else {
@@ -286,11 +292,16 @@ public final class ChatThreadViewModel: ObservableObject {
                 let sorted = MessageTimelineOrdering.sortedChronologically(Array(page.items.reversed()))
                 highestLoadedPage = 0
                 hasMoreMessages = page.hasMore
-                state = .loaded(sorted)
+                if case .loaded(let existing) = state {
+                    state = .loaded(mergedTimeline(existing, with: sorted))
+                } else {
+                    state = .loaded(sorted)
+                }
                 recomputeMaxSequenceNo()
                 restorePendingMessages()
                 persistCache()
-                requestScrollToBottom()
+                // Only pin once on open — never yank back after the user scrolls up.
+                requestInitialBottomScrollIfNeeded()
                 if let lastId = sorted.last?.id {
                     scheduleMarkRead(upToMessageId: lastId, requireNearBottom: false)
                     sendDeliveryAck(for: lastId)
@@ -368,7 +379,7 @@ public final class ChatThreadViewModel: ObservableObject {
 
         if let editDraft {
             guard !trimmed.isEmpty else { return }
-            await commitEdit(messageId: editDraft.messageId, body: trimmed)
+            await commitEdit(messageId: editDraft.messageId, body: MessageBodyChunker.clampForEdit(trimmed))
             return
         }
 
@@ -386,53 +397,69 @@ public final class ChatThreadViewModel: ObservableObject {
             }
             let activeReplyDraft = replyDraft
             let replyToMessageId = activeReplyDraft?.messageId
-            let clientMessageId = UUID()
             let replyPreview = activeReplyDraft?.replyPreview
-            let optimistic = ChatMessage(
-                id: clientMessageId,
-                conversationId: conversationId,
-                senderId: currentUserId,
-                body: trimmed,
-                clientMessageId: clientMessageId,
-                createdAt: Date(),
-                deliveryStatus: .sending,
-                imageAttachments: attachments,
-                replyPreview: replyPreview
-            )
-
-            rememberPending(
-                clientMessageId: clientMessageId,
-                body: trimmed,
-                attachments: attachments,
-                replyToMessageId: replyToMessageId
-            )
-            registerFloatAnimation(for: clientMessageId)
-            appendMessage(optimistic)
-
-            let sent = try await sendMessageUseCase.execute(
-                conversationId: conversationId,
-                body: trimmed,
-                clientMessageId: clientMessageId,
-                imageAttachments: attachments,
-                replyToMessageId: replyToMessageId
-            )
-            replaceMessage(
-                matching: clientMessageId,
-                with: sent.updating(deliveryStatus: .sent)
-            )
-            clearPending(clientMessageId: clientMessageId)
+            let parts = MessageBodyChunker.partsForSend(trimmed)
 
             attachmentDrafts = []
             withAnimation(MessageReplyIslandMotion.dismiss) {
                 replyDraft = nil
             }
+
+            for (index, part) in parts.enumerated() {
+                let isFirst = index == 0
+                let partAttachments = isFirst ? attachments : []
+                let partReplyId = isFirst ? replyToMessageId : nil
+                let partReplyPreview = isFirst ? replyPreview : nil
+                let clientMessageId = UUID()
+                // Slight stagger so consecutive chunks sort stably while still "now".
+                let createdAt = Date().addingTimeInterval(TimeInterval(index) * 0.001)
+                let optimistic = ChatMessage(
+                    id: clientMessageId,
+                    conversationId: conversationId,
+                    senderId: currentUserId,
+                    body: part,
+                    clientMessageId: clientMessageId,
+                    createdAt: createdAt,
+                    deliveryStatus: .sending,
+                    imageAttachments: partAttachments,
+                    replyPreview: partReplyPreview
+                )
+
+                rememberPending(
+                    clientMessageId: clientMessageId,
+                    body: part,
+                    attachments: partAttachments,
+                    replyToMessageId: partReplyId
+                )
+                registerFloatAnimation(for: clientMessageId)
+                appendMessage(optimistic)
+
+                do {
+                    let sent = try await sendMessageUseCase.execute(
+                        conversationId: conversationId,
+                        body: part,
+                        clientMessageId: clientMessageId,
+                        imageAttachments: partAttachments,
+                        replyToMessageId: partReplyId
+                    )
+                    replaceMessage(
+                        matching: clientMessageId,
+                        with: sent.updating(deliveryStatus: .sent)
+                    )
+                    clearPending(clientMessageId: clientMessageId)
+                } catch {
+                    Log.error(error, category: .network, metadata: [
+                        "action": "sendMessage",
+                        "chunkIndex": "\(index)",
+                        "chunkCount": "\(parts.count)",
+                    ])
+                    updateDeliveryStatus(for: clientMessageId, status: .failed)
+                    persistFailedPending(clientMessageId: clientMessageId)
+                    // Continue remaining chunks so a mid-split failure does not drop the rest.
+                }
+            }
         } catch {
             Log.error(error, category: .network, metadata: ["action": "sendMessage"])
-            if case .loaded(let messages) = state,
-               let lastOptimistic = messages.last(where: { $0.deliveryStatus == .sending && $0.senderId == currentUserId }) {
-                updateDeliveryStatus(for: lastOptimistic.clientMessageId, status: .failed)
-                persistFailedPending(clientMessageId: lastOptimistic.clientMessageId)
-            }
         }
     }
 
@@ -619,7 +646,7 @@ public final class ChatThreadViewModel: ObservableObject {
             )
             guard !page.items.isEmpty else { return }
             for message in page.items {
-                upsertIncomingMessage(message)
+                upsertIncomingMessage(message, scrollToBottom: autoFollowLatest)
             }
             if isNearBottom, let lastId = messages.last?.id {
                 scheduleMarkRead(upToMessageId: lastId)
@@ -907,7 +934,14 @@ public final class ChatThreadViewModel: ObservableObject {
         scrollToBottom: Bool = false
     ) {
         guard isMessageVisible(message) else { return }
-        guard case .loaded(var msgs) = state else { return }
+
+        // Accept realtime messages even during the loading flash so WS events are not dropped.
+        var msgs: [ChatMessage]
+        if case .loaded(let existing) = state {
+            msgs = existing
+        } else {
+            msgs = []
+        }
 
         if let index = msgs.firstIndex(where: { $0.clientMessageId == message.clientMessageId || $0.id == message.id }) {
             // Prefer server payload (keeps clientMessageId match for optimistic → confirmed).
@@ -932,23 +966,96 @@ public final class ChatThreadViewModel: ObservableObject {
                 }
             }
             if scrollToBottom {
+                showJumpToLatest = false
                 requestScrollToBottom()
+            } else if message.senderId != currentUserId, !autoFollowLatest {
+                showJumpToLatest = true
             }
         }
         recomputeMaxSequenceNo()
         persistCache()
     }
 
+    /// Merges WS / optimistic rows into a freshly fetched page without dropping realtime inserts.
+    private func mergedTimeline(_ existing: [ChatMessage], with fetched: [ChatMessage]) -> [ChatMessage] {
+        var merged = existing
+        for message in fetched {
+            if let index = merged.firstIndex(where: {
+                $0.clientMessageId == message.clientMessageId || $0.id == message.id
+            }) {
+                merged[index] = message
+            } else {
+                merged.append(message)
+            }
+        }
+        return MessageTimelineOrdering.sortedChronologically(merged)
+    }
+
+    /// Called from the list when the viewport returns to / leaves the latest messages.
+    /// Only `isNearBottom` is updated here — `autoFollowLatest` is toggled by explicit user scroll.
+    public func noteNearBottom(_ near: Bool) {
+        if near {
+            nearBottomFalseTask?.cancel()
+            nearBottomFalseTask = nil
+            isNearBottom = true
+        } else {
+            nearBottomFalseTask?.cancel()
+            nearBottomFalseTask = Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(150))
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    self?.isNearBottom = false
+                }
+            }
+        }
+    }
+
+    /// User deliberately scrolled up to read history — stop auto-follow until they return.
+    public func userScrolledAwayFromLatest() {
+        autoFollowLatest = false
+    }
+
+    /// User returned to the latest messages (scroll or jump chip).
+    public func userReturnedToLatest() {
+        autoFollowLatest = true
+        showJumpToLatest = false
+        isNearBottom = true
+    }
+
+    public func onViewportReturnedToBottom() {
+        noteNearBottom(true)
+        if !autoFollowLatest {
+            userReturnedToLatest()
+        }
+    }
+
+    public func onViewportLeftBottom() {
+        userScrolledAwayFromLatest()
+        noteNearBottom(false)
+    }
+
     private func requestScrollToBottom() {
         scrollToBottomToken += 1
     }
 
-    /// Scrolls to the latest message (send / open). Not used for composer focus.
+    private func requestInitialBottomScrollIfNeeded() {
+        guard !initialBottomScrollRequested else { return }
+        guard !messages.isEmpty else { return }
+        initialBottomScrollRequested = true
+        requestScrollToBottom()
+    }
+
+    /// Scrolls to the latest message (send / open / jump chip).
     public func pinToLatest() {
+        nearBottomFalseTask?.cancel()
+        nearBottomFalseTask = nil
+        userReturnedToLatest()
         requestScrollToBottom()
     }
 
     private func registerFloatAnimation(for clientMessageId: UUID) {
+        autoFollowLatest = true
+        showJumpToLatest = false
         newlySentMessageIds.insert(clientMessageId)
         floatSwayByMessageId[clientMessageId] = CGFloat.random(in: -4...4)
         Task {
@@ -980,7 +1087,7 @@ public final class ChatThreadViewModel: ObservableObject {
     }
 
     private func bindWsEvents() {
-        wsClient.eventSubject
+        wsClient.eventsPublisher()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] event in
                 guard let self else { return }
@@ -989,7 +1096,7 @@ public final class ChatThreadViewModel: ObservableObject {
                     self.scheduleGapFill()
 
                 case .newMessage(let convId, let msg) where convId == self.conversationId:
-                    self.upsertIncomingMessage(msg, scrollToBottom: self.isNearBottom)
+                    self.upsertIncomingMessage(msg, scrollToBottom: self.autoFollowLatest)
                     self.scheduleMarkRead(upToMessageId: msg.id)
                     self.sendDeliveryAck(for: msg.id)
                     if msg.clientMessageId != msg.id {
@@ -1055,12 +1162,10 @@ public final class ChatThreadViewModel: ObservableObject {
         guard userId != currentUserId else { return }
         remoteTypingTimeouts[userId]?.cancel()
         if isTyping {
-            let wasTyping = typingUserIds.contains(userId)
-            if !typingUserIds.contains(userId) {
-                typingUserIds.append(userId)
-            }
-            if !wasTyping {
-                requestScrollToBottom()
+            withAnimation(ChatScrollAnimation.spring) {
+                if !typingUserIds.contains(userId) {
+                    typingUserIds.append(userId)
+                }
             }
             remoteTypingTimeouts[userId] = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(MessagingTypingTiming.displayTimeout))
@@ -1075,7 +1180,9 @@ public final class ChatThreadViewModel: ObservableObject {
     private func removeRemoteTypingUser(_ userId: UUID) {
         remoteTypingTimeouts[userId]?.cancel()
         remoteTypingTimeouts[userId] = nil
-        typingUserIds.removeAll { $0 == userId }
+        withAnimation(ChatScrollAnimation.spring) {
+            typingUserIds.removeAll { $0 == userId }
+        }
     }
 
     private func bindNetworkRetry() {
