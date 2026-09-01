@@ -30,7 +30,7 @@ enum NotificationTypeBadge {
         case .system:
             return SplickTheme.Colors.textTertiary
         case .feedTaggedInPost, .postCommented, .feedMentionedInPost, .feedMentionedInComment,
-             .friendRequestSent, .friendRequestAccepted, .friendNicknameChanged, .groupInvite, .groupMessage,
+             .friendRequestSent, .friendRequestAccepted, .friendNicknameChanged, .groupInvite, .groupDeleted, .groupMessage,
              .groupCreated, .groupMemberAdded, .groupMemberRemoved, .groupRenamed,
              .groupAdminTransferred:
             return SplickTheme.Colors.primaryGradientStart

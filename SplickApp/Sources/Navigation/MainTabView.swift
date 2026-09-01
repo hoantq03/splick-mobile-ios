@@ -207,6 +207,18 @@ struct MainTabView: View {
             .environment(\.leaveGroupConversation) { groupId in
                 try await container.leaveMessagingGroupConversation(groupId: groupId)
             }
+            .environment(\.transferGroupConversationAdmin) { groupId, newAdminUserId in
+                try await container.transferMessagingGroupAdmin(
+                    groupId: groupId,
+                    newAdminUserId: newAdminUserId
+                )
+            }
+            .environment(\.transferSocialGroupOwnership) { groupId, newOwnerId in
+                _ = try await container.transferGroupOwnershipUseCase.execute(
+                    groupId: groupId,
+                    newOwnerId: newOwnerId
+                )
+            }
             .sheet(item: $inviteFriendsToGroupRequest) { request in
                 InviteFriendsToGroupSheet(
                     groupId: request.groupId,
@@ -374,6 +386,13 @@ struct MainTabView: View {
             transferGroupOwnershipUseCase: container.transferGroupOwnershipUseCase,
             generateGroupQrUseCase: container.generateGroupQrUseCase,
             revokeGroupQrUseCase: container.revokeGroupQrUseCase,
+            openLinkedGroupConversation: { groupId, name, memberIds in
+                try await container.openLinkedGroupConversation(
+                    groupId: groupId,
+                    name: name,
+                    memberUserIds: memberIds
+                )
+            },
             languageService: container.languageService,
             onBadgeCountsChanged: { await container.badgeCountService.refresh(force: true) },
             onDirectoryLoaded: { groups in

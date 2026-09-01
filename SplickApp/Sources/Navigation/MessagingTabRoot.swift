@@ -103,6 +103,7 @@ struct MessagingTabRoot: View {
                 updateGroupAvatarUseCase: container.updateGroupAvatarUseCase,
                 languageService: container.languageService
             ) { group, invitedMemberIds in
+                NotificationCenter.default.post(name: .groupsDirectoryDidChange, object: nil)
                 showCreateGroup = false
                 Task {
                     await container.openMessagingGroupChat(

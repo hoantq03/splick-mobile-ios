@@ -75,7 +75,7 @@ public actor FakeNotificationRepository: NotificationRepositoryProtocol {
         case "FRIENDS":
             filtered = notifications.filter {
                 switch $0.type {
-                case .friendRequestSent, .friendRequestAccepted, .friendNicknameChanged, .groupInvite:
+                case .friendRequestSent, .friendRequestAccepted, .friendNicknameChanged, .groupInvite, .groupDeleted:
                     return true
                 default:
                     return false
@@ -150,7 +150,7 @@ public actor FakeNotificationRepository: NotificationRepositoryProtocol {
         var expenses = 0
         for item in inboxSource {
             switch item.type {
-            case .friendRequestSent, .friendRequestAccepted, .friendNicknameChanged, .groupInvite:
+            case .friendRequestSent, .friendRequestAccepted, .friendNicknameChanged, .groupInvite, .groupDeleted:
                 friends += 1
             case .expenseSplitBill, .expenseReminder, .expenseSettled,
                  .paymentEvidenceSubmitted, .paymentEvidenceApproved, .paymentEvidenceRejected,

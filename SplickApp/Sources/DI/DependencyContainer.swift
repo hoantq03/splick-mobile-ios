@@ -697,6 +697,19 @@ final class DependencyContainer: ObservableObject {
         MessagingRepository(apiClient: apiClient, friendDisplayNameStore: friendDisplayNameStore)
     }()
 
+    func openLinkedGroupConversation(
+        groupId: UUID,
+        name: String,
+        memberUserIds: [UUID]
+    ) async throws {
+        try await messagingRepository.createGroup(
+            name: name,
+            avatarUrl: nil,
+            memberUserIds: memberUserIds,
+            groupId: groupId
+        )
+    }
+
     private lazy var fetchConversationsUseCase: FetchConversationsUseCase = {
         FetchConversationsUseCase(repository: messagingRepository)
     }()
@@ -727,6 +740,14 @@ final class DependencyContainer: ObservableObject {
             searchUsersProvider: { [searchUsersUseCase] query in
                 let results = try await searchUsersUseCase.execute(query: query, page: 0, size: 20)
                 return results.map(\.user)
+            },
+            createSocialGroupWithMembers: { [createGroupUseCase, inviteFriendsToGroupUseCase] name, memberIds in
+                let group = try await createGroupUseCase.execute(name: name, description: nil)
+                if !memberIds.isEmpty {
+                    try await inviteFriendsToGroupUseCase.execute(groupId: group.id, userIds: memberIds)
+                }
+                NotificationCenter.default.post(name: .groupsDirectoryDidChange, object: nil)
+                return group
             },
             uploadImage: { [weak self] data, mimeType in
                 guard let self else { throw URLError(.cancelled) }
@@ -770,6 +791,12 @@ final class DependencyContainer: ObservableObject {
             },
             onConversationDeleted: { [weak self] conversationId in
                 self?.handleConversationDeleted(conversationId)
+            },
+            onThreadVisible: { [weak self] conversationId in
+                self?.conversationListViewModel.setActiveConversation(conversationId)
+            },
+            onThreadHidden: { [weak self] conversationId in
+                self?.conversationListViewModel.clearActiveConversation(conversationId)
             }
         )
     }
@@ -785,6 +812,7 @@ final class DependencyContainer: ObservableObject {
 
     @MainActor
     private func handleConversationDeleted(_ conversationId: UUID) {
+        messageThreadCache.remove(conversationId: conversationId)
         conversationListViewModel.hideConversationLocally(conversationId: conversationId)
         widgetSyncBridge.syncConversations(
             conversationListViewModel.conversations,
@@ -812,15 +840,21 @@ final class DependencyContainer: ObservableObject {
 
         return ChatPeerRelationshipActions(
             fetchStatus: { userId in
-                guard let profile = try? await fetchProfile.execute(userId: userId) else {
+                do {
+                    let profile = try await fetchProfile.execute(userId: userId)
+                    switch profile.friendStatus {
+                    case .friends: return .friends
+                    case .blocked: return .blocked
+                    case .none: return .stranger
+                    case .requestSent: return .requestSent
+                    case .requestReceived: return .requestReceived
+                    }
+                } catch {
+                    if case .apiError(let code, _, _) = error as? NetworkError,
+                       code.caseInsensitiveCompare("BLOCKED") == .orderedSame {
+                        return .blocked
+                    }
                     return .unknown
-                }
-                switch profile.friendStatus {
-                case .friends: return .friends
-                case .blocked: return .blocked
-                case .none: return .stranger
-                case .requestSent: return .requestSent
-                case .requestReceived: return .requestReceived
                 }
             },
             blockUser: { try await block.execute(userId: $0) },
@@ -847,6 +881,7 @@ final class DependencyContainer: ObservableObject {
         let uploadAvatar = uploadGroupAvatarUseCase
         let updateSocialAvatar = updateGroupAvatarUseCase
         let messaging = messagingRepository
+        let deleteGroup = deleteGroupUseCase
 
         return ChatGroupManagementActions(
             fetchMembers: { groupId in
@@ -860,6 +895,9 @@ final class DependencyContainer: ObservableObject {
                     try? await updateSocialAvatar.execute(groupId: groupId, avatarURL: avatarURL)
                 }
                 return updated.groupAvatarUrl ?? avatarURL
+            },
+            deleteGroup: { groupId in
+                try await deleteGroup.execute(groupId: groupId)
             }
         )
     }
@@ -898,6 +936,10 @@ final class DependencyContainer: ObservableObject {
 
     func leaveMessagingGroupConversation(groupId: UUID) async throws {
         try await messagingRepository.leaveGroup(groupId: groupId)
+    }
+
+    func transferMessagingGroupAdmin(groupId: UUID, newAdminUserId: UUID) async throws {
+        try await messagingRepository.transferGroupAdmin(groupId: groupId, newAdminUserId: newAdminUserId)
     }
 
     // MARK: - Tab ViewModels (survive tab switches)
@@ -1027,6 +1069,7 @@ final class DependencyContainer: ObservableObject {
             repository: messagingRepository,
             wsClient: messagingWebSocketClient,
             languageService: languageService,
+            messageCache: messageThreadCache,
             onInboxLoaded: { [weak self] conversations, unreadCount in
                 guard let self else { return }
                 self.widgetSyncBridge.syncConversations(conversations, totalUnreadCount: unreadCount)

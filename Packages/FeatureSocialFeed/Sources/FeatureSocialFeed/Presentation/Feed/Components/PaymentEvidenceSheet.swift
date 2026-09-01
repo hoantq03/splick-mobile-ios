@@ -318,17 +318,18 @@ struct PaymentEvidenceSheet: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
+                .foregroundStyle(.white)
+                .background {
+                    Capsule(style: .continuous)
+                        .fill(
+                            pendingAttachments.isEmpty || isImportingPhotos || isSubmitting
+                                ? SplickTheme.Colors.primaryGradientStart.opacity(0.38)
+                                : SplickTheme.Colors.primaryGradientStart
+                        )
+                }
+                .contentShape(Capsule())
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.white)
-            .background {
-                Capsule(style: .continuous)
-                    .fill(
-                        pendingAttachments.isEmpty || isImportingPhotos || isSubmitting
-                            ? SplickTheme.Colors.primaryGradientStart.opacity(0.38)
-                            : SplickTheme.Colors.primaryGradientStart
-                    )
-            }
             .disabled(pendingAttachments.isEmpty || isImportingPhotos || isSubmitting)
             .padding(.horizontal, SplickTheme.Spacing.md)
             .padding(.top, SplickTheme.Spacing.sm)
