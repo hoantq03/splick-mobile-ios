@@ -119,6 +119,10 @@ public enum APIErrorLocalization {
             return L10n.string(.feedBillReminderRateLimited, locale: locale)
         case "POST_HAS_EVIDENCE":
             return L10n.string(.feedPostDeleteHasEvidence, locale: locale)
+        case "CONVERSATION_NOT_FOUND":
+            return L10n.string(.messagingChatDeleteConversationError, locale: locale)
+        case "OWNERSHIP_TRANSFER_REQUIRED":
+            return L10n.string(.friendsTransferBeforeLeave, locale: locale)
         case "MEDIA_FORBIDDEN":
             return L10n.string(.errorMediaForbiddenGroupAvatar, locale: locale)
         default:
