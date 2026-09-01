@@ -87,7 +87,11 @@ public final class MessagingRepository: MessagingRepositoryProtocol, Sendable {
     }
 
     public func deleteConversation(conversationId: UUID) async throws {
-        try await apiClient.request(MessagingEndpoint.deleteConversation(conversationId: conversationId))
+        do {
+            try await apiClient.request(MessagingEndpoint.deleteConversation(conversationId: conversationId))
+        } catch {
+            guard error.isConversationDeleteNotFound else { throw error }
+        }
     }
 
     public func updateNotificationSettings(
@@ -263,5 +267,30 @@ public final class MessagingRepository: MessagingRepositoryProtocol, Sendable {
     private func resolveConversation(_ conversation: Conversation) async -> Conversation {
         guard let friendDisplayNameStore else { return conversation }
         return await friendDisplayNameStore.resolve(conversation)
+    }
+}
+
+private extension Error {
+    var isConversationDeleteNotFound: Bool {
+        if let appError = self as? AppError, case .network(let networkError) = appError {
+            return networkError.isConversationDeleteNotFound
+        }
+        if let networkError = self as? NetworkError {
+            return networkError.isConversationDeleteNotFound
+        }
+        return false
+    }
+}
+
+private extension NetworkError {
+    var isConversationDeleteNotFound: Bool {
+        switch self {
+        case .notFound:
+            return true
+        case .apiError(let code, _, _):
+            return code.uppercased() == "CONVERSATION_NOT_FOUND"
+        default:
+            return false
+        }
     }
 }

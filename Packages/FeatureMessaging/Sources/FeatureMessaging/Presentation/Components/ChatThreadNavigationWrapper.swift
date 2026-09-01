@@ -76,6 +76,8 @@ private struct ChatThreadScreen: View {
             onConversationUpdated: factory.onConversationUpdated,
             onConversationDeleted: factory.onConversationDeleted
         )
+        .onAppear { factory.onThreadVisible?(conversation.id) }
+        .onDisappear { factory.onThreadHidden?(conversation.id) }
     }
 }
 
@@ -96,6 +98,8 @@ public final class ChatThreadViewModelFactory: ObservableObject {
     private let onConversationRead: ((UUID) async -> Void)?
     public let onConversationUpdated: ((Conversation) -> Void)?
     public let onConversationDeleted: ((UUID) -> Void)?
+    public let onThreadVisible: ((UUID) -> Void)?
+    public let onThreadHidden: ((UUID) -> Void)?
 
     public init(
         currentUserId: UUID,
@@ -111,7 +115,9 @@ public final class ChatThreadViewModelFactory: ObservableObject {
         networkPathMonitor: NetworkPathMonitor? = nil,
         onConversationRead: ((UUID) async -> Void)? = nil,
         onConversationUpdated: ((Conversation) -> Void)? = nil,
-        onConversationDeleted: ((UUID) -> Void)? = nil
+        onConversationDeleted: ((UUID) -> Void)? = nil,
+        onThreadVisible: ((UUID) -> Void)? = nil,
+        onThreadHidden: ((UUID) -> Void)? = nil
     ) {
         self.currentUserId = currentUserId
         self.fetchMessagesUseCase = fetchMessagesUseCase
@@ -127,6 +133,8 @@ public final class ChatThreadViewModelFactory: ObservableObject {
         self.onConversationRead = onConversationRead
         self.onConversationUpdated = onConversationUpdated
         self.onConversationDeleted = onConversationDeleted
+        self.onThreadVisible = onThreadVisible
+        self.onThreadHidden = onThreadHidden
     }
 
     public func make(conversationId: UUID, highlightMessageId: UUID? = nil, leftAt: Date? = nil) -> ChatThreadViewModel {

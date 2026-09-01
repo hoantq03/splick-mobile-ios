@@ -267,9 +267,24 @@ struct ConversationPeekOverlay: View {
         }
     }
 
+    @ViewBuilder
     private func previewBubble(_ item: DisplayMessage, contentMaxWidth: CGFloat) -> some View {
-        let isOutgoing = item.message.senderId == context.currentUserId
+        if GroupSystemNoticePayload.displaysAsSystemNotice(item.message) {
+            GroupSystemNoticeLabel(
+                text: GroupSystemNoticeCopy.text(
+                    message: item.message,
+                    currentUserId: context.currentUserId,
+                    actorName: item.message.senderDisplayName,
+                    languageService: languageService
+                )
+            )
+        } else {
+            previewUserBubble(item, contentMaxWidth: contentMaxWidth)
+        }
+    }
 
+    private func previewUserBubble(_ item: DisplayMessage, contentMaxWidth: CGFloat) -> some View {
+        let isOutgoing = item.message.senderId == context.currentUserId
         return HStack {
             if isOutgoing {
                 Spacer(minLength: 44)

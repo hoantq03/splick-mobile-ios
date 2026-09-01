@@ -17,6 +17,8 @@ public struct GroupChatThreadCapabilities: Equatable, Sendable {
     public let canManageMembers: Bool
     public let canInviteMembers: Bool
     public let canLeave: Bool
+    /// Permanently delete the social group (owner only).
+    public let canDisbandGroup: Bool
     public let canDeleteConversation: Bool
     /// Reply, react, swipe-to-reply, composer.
     public let canInteractWithMessages: Bool
@@ -51,6 +53,7 @@ public struct GroupChatThreadCapabilities: Equatable, Sendable {
         canManageMembers: true,
         canInviteMembers: true,
         canLeave: true,
+        canDisbandGroup: true,
         canDeleteConversation: true,
         canInteractWithMessages: true
     )
@@ -63,6 +66,7 @@ public struct GroupChatThreadCapabilities: Equatable, Sendable {
         canManageMembers: true,
         canInviteMembers: true,
         canLeave: true,
+        canDisbandGroup: false,
         canDeleteConversation: true,
         canInteractWithMessages: true
     )
@@ -75,6 +79,7 @@ public struct GroupChatThreadCapabilities: Equatable, Sendable {
         canManageMembers: false,
         canInviteMembers: false,
         canLeave: false,
+        canDisbandGroup: false,
         canDeleteConversation: true,
         canInteractWithMessages: false
     )
@@ -88,6 +93,7 @@ public struct GroupChatThreadCapabilities: Equatable, Sendable {
         canManageMembers: false,
         canInviteMembers: false,
         canLeave: false,
+        canDisbandGroup: false,
         canDeleteConversation: true,
         canInteractWithMessages: true
     )

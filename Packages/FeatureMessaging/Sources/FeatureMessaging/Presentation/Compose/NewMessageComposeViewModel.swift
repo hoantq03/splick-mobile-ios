@@ -25,6 +25,7 @@ public final class NewMessageComposeViewModel: ObservableObject {
     private let groupsProvider: () async throws -> [Group]
     private let searchUsersProvider: (_ query: String) async throws -> [UserSummary]
     private let uploadImage: (Data, String) async throws -> MessageImageAttachment
+    private let createSocialGroupWithMembers: (_ name: String, _ memberUserIds: [UUID]) async throws -> Group
     private let languageService: LanguageService
     private var searchTask: Task<Void, Never>?
 
@@ -35,6 +36,7 @@ public final class NewMessageComposeViewModel: ObservableObject {
         friendsProvider: @escaping () async throws -> [UserSummary],
         groupsProvider: @escaping () async throws -> [Group],
         searchUsersProvider: @escaping (_ query: String) async throws -> [UserSummary],
+        createSocialGroupWithMembers: @escaping (_ name: String, _ memberUserIds: [UUID]) async throws -> Group,
         uploadImage: @escaping (Data, String) async throws -> MessageImageAttachment,
         languageService: LanguageService
     ) {
@@ -44,6 +46,7 @@ public final class NewMessageComposeViewModel: ObservableObject {
         self.friendsProvider = friendsProvider
         self.groupsProvider = groupsProvider
         self.searchUsersProvider = searchUsersProvider
+        self.createSocialGroupWithMembers = createSocialGroupWithMembers
         self.uploadImage = uploadImage
         self.languageService = languageService
     }
@@ -246,10 +249,13 @@ public final class NewMessageComposeViewModel: ObservableObject {
             .map(shortDisplayName)
             .joined(separator: ", ")
         let memberIds = selectedUsers.map(\.id)
+        let resolvedName = name.isEmpty ? languageService.text(.messagingComposeDefaultGroupName) : name
+        let socialGroup = try await createSocialGroupWithMembers(resolvedName, memberIds)
         return try await repository.createGroup(
-            name: name.isEmpty ? languageService.text(.messagingComposeDefaultGroupName) : name,
-            avatarUrl: nil,
-            memberUserIds: memberIds
+            name: socialGroup.name,
+            avatarUrl: socialGroup.avatarURL?.absoluteString,
+            memberUserIds: memberIds,
+            groupId: socialGroup.id
         )
     }
 

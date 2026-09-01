@@ -617,6 +617,43 @@ final class ChatThreadViewModelTests: XCTestCase {
         XCTAssertEqual(cache.entry(for: ChatThreadViewModelTestFixtures.conversationId)?.messages.first?.body, "Fresh")
     }
 
+    func test_load_dropsCachedHistoryWhenServerReturnsEmptyPage() async {
+        let cachedMessage = makeMessage(body: "Cached")
+        let cache = MessageThreadCache(capacity: 5)
+        cache.store(
+            conversationId: ChatThreadViewModelTestFixtures.conversationId,
+            messages: [cachedMessage],
+            highestLoadedPage: 0,
+            hasMoreMessages: false
+        )
+
+        let repo = StubMessagingRepository(messages: [])
+        let wsClient = makeTestWsClient()
+        let vm = ChatThreadViewModel(
+            conversationId: ChatThreadViewModelTestFixtures.conversationId,
+            currentUserId: ChatThreadViewModelTestFixtures.currentUserId,
+            fetchMessagesUseCase: FetchMessagesUseCase(repository: repo),
+            sendMessageUseCase: SendMessageUseCase(repository: repo),
+            reactToMessageUseCase: StubReactToMessageUseCase(),
+            repository: repo,
+            uploadImage: { _, _ in
+                MessageImageAttachment(
+                    mediaId: UUID(),
+                    url: URL(string: "https://example.com/image.jpg")!,
+                    thumbnailURL: nil
+                )
+            },
+            wsClient: wsClient,
+            languageService: LanguageService(userDefaults: UserDefaultsService()),
+            messageCache: cache
+        )
+
+        await vm.load()
+
+        XCTAssertTrue(vm.messages.isEmpty)
+        XCTAssertEqual(cache.entry(for: ChatThreadViewModelTestFixtures.conversationId)?.messages ?? [], [])
+    }
+
     func test_typingEvent_recordsPeerAndIgnoresSelf() async {
         let repo = StubMessagingRepository(messages: [])
         let wsClient = makeTestWsClient()

@@ -179,6 +179,129 @@ final class ConversationListViewModelWsPatchTests: XCTestCase {
         XCTAssertEqual(viewModel.conversations.first?.lastMessage?.body, "Sent by me")
     }
 
+    func test_wsNewMessage_whileThreadOpen_doesNotKeepConversationUnread() {
+        let conversationId = UUID()
+        let existing = Conversation(
+            id: conversationId,
+            unreadCount: 1,
+            peer: ConversationPeer(
+                userId: peerUserId,
+                username: "peer",
+                displayName: "Peer",
+                avatarUrl: nil
+            ),
+            lastMessage: nil,
+            createdAt: .now,
+            updatedAt: .now
+        )
+        let wsClient = MessagingWebSocketClient(
+            ticketProvider: { "ticket" },
+            deviceIdProvider: { "device" }
+        )
+        let viewModel = makeViewModel(wsClient: wsClient)
+        viewModel.applyStartupConversations([existing])
+        viewModel.setUnreadConversationCountForTests(1)
+        viewModel.setActiveConversation(conversationId)
+        XCTAssertEqual(viewModel.conversations.first?.unreadCount, 0)
+
+        let incoming = ChatMessage(
+            id: UUID(),
+            conversationId: conversationId,
+            senderId: peerUserId,
+            body: "Still in thread",
+            clientMessageId: UUID(),
+            createdAt: .now
+        )
+        viewModel.handleIncomingWsMessageForTesting(conversationId: conversationId, message: incoming)
+
+        XCTAssertEqual(viewModel.conversations.first?.unreadCount, 0)
+        XCTAssertEqual(viewModel.conversations.first?.lastMessage?.body, "Still in thread")
+        XCTAssertEqual(viewModel.unreadConversationCount, 0)
+    }
+
+    func test_markConversationAsRead_dropsRowFromUnreadFilterAndClearsBadge() {
+        let conversationId = UUID()
+        let unread = Conversation(
+            id: conversationId,
+            unreadCount: 3,
+            peer: nil,
+            lastMessage: nil,
+            createdAt: .now,
+            updatedAt: .now
+        )
+        let wsClient = MessagingWebSocketClient(
+            ticketProvider: { "ticket" },
+            deviceIdProvider: { "device" }
+        )
+        let viewModel = makeViewModel(wsClient: wsClient)
+        viewModel.applyStartupConversations([unread])
+        viewModel.setUnreadConversationCountForTests(1)
+        viewModel.setActiveFilterForTests(.unread)
+
+        viewModel.markConversationAsRead(conversationId: conversationId)
+
+        XCTAssertTrue(viewModel.conversations.isEmpty)
+        XCTAssertEqual(viewModel.unreadConversationCount, 0)
+    }
+
+    func test_markConversationAsRead_keepsRowOnAllFilterWithZeroUnread() {
+        let conversationId = UUID()
+        let unread = Conversation(
+            id: conversationId,
+            type: .group,
+            unreadCount: 1,
+            peer: nil,
+            lastMessage: nil,
+            createdAt: .now,
+            updatedAt: .now
+        )
+        let wsClient = MessagingWebSocketClient(
+            ticketProvider: { "ticket" },
+            deviceIdProvider: { "device" }
+        )
+        let viewModel = makeViewModel(wsClient: wsClient)
+        viewModel.applyStartupConversations([unread])
+        viewModel.setUnreadConversationCountForTests(1)
+
+        viewModel.markConversationAsRead(conversationId: conversationId)
+
+        XCTAssertEqual(viewModel.conversations.count, 1)
+        XCTAssertEqual(viewModel.conversations.first?.unreadCount, 0)
+        XCTAssertEqual(viewModel.unreadConversationCount, 0)
+    }
+
+    func test_incomingMessage_onUsersFilter_removesGroupConversation() {
+        let conversationId = UUID()
+        let group = Conversation(
+            id: conversationId,
+            type: .group,
+            unreadCount: 0,
+            peer: nil,
+            lastMessage: nil,
+            createdAt: .now,
+            updatedAt: .now
+        )
+        let wsClient = MessagingWebSocketClient(
+            ticketProvider: { "ticket" },
+            deviceIdProvider: { "device" }
+        )
+        let viewModel = makeViewModel(wsClient: wsClient)
+        viewModel.applyStartupConversations([group])
+        viewModel.setActiveFilterForTests(.users)
+
+        let incoming = ChatMessage(
+            id: UUID(),
+            conversationId: conversationId,
+            senderId: peerUserId,
+            body: "Should not stay on people filter",
+            clientMessageId: UUID(),
+            createdAt: .now
+        )
+        viewModel.handleIncomingWsMessageForTesting(conversationId: conversationId, message: incoming)
+
+        XCTAssertTrue(viewModel.conversations.isEmpty)
+    }
+
     func test_typingEvent_tracksPeerForConversationPreview() async {
         let conversationId = UUID()
         let wsClient = MessagingWebSocketClient(

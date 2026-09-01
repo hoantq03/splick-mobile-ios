@@ -13,17 +13,23 @@ final class GroupMembersSheetViewModel: ObservableObject {
     private let groupId: UUID
     private let fetchMembers: (UUID) async throws -> [GroupChatMember]
     private let removeMember: (UUID, UUID) async throws -> Void
+    private let transferAdmin: ((UUID, UUID) async throws -> Void)?
+    private let onTransferred: (() -> Void)?
 
     init(
         groupId: UUID,
         currentUserId: UUID,
         fetchMembers: @escaping (UUID) async throws -> [GroupChatMember],
-        removeMember: @escaping (UUID, UUID) async throws -> Void
+        removeMember: @escaping (UUID, UUID) async throws -> Void,
+        transferAdmin: ((UUID, UUID) async throws -> Void)? = nil,
+        onTransferred: (() -> Void)? = nil
     ) {
         self.groupId = groupId
         self.currentUserId = currentUserId
         self.fetchMembers = fetchMembers
         self.removeMember = removeMember
+        self.transferAdmin = transferAdmin
+        self.onTransferred = onTransferred
     }
 
     func load() async {
@@ -49,9 +55,28 @@ final class GroupMembersSheetViewModel: ObservableObject {
         }
     }
 
+    var isCurrentUserAdmin: Bool {
+        members.contains { $0.userId == currentUserId && $0.isOwner }
+    }
+
     func canRemove(_ member: GroupChatMember) -> Bool {
-        let currentIsAdmin = members.contains { $0.userId == currentUserId && $0.isOwner }
-        return currentIsAdmin && member.userId != currentUserId && !member.isOwner
+        isCurrentUserAdmin && member.userId != currentUserId && !member.isOwner
+    }
+
+    func canTransfer(to member: GroupChatMember) -> Bool {
+        transferAdmin != nil && isCurrentUserAdmin && member.userId != currentUserId && !member.isOwner
+    }
+
+    func transfer(to member: GroupChatMember) async {
+        guard canTransfer(to: member), let transferAdmin else { return }
+        actionError = nil
+        do {
+            try await transferAdmin(groupId, member.userId)
+            onTransferred?()
+            await load()
+        } catch {
+            actionError = error.localizedDescription
+        }
     }
 
     private func sorted(_ members: [GroupChatMember]) -> [GroupChatMember] {
@@ -69,21 +94,35 @@ struct GroupMembersSheet: View {
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
     private let onAddMembers: ((Set<UUID>) -> Void)?
+    private let groupId: UUID
+    private let fetchMembers: (UUID) async throws -> [GroupChatMember]
+    private let transferAdmin: ((UUID, UUID) async throws -> Void)?
+    private let onTransferred: (() -> Void)?
+    @State private var showTransferPicker = false
+    @State private var memberPendingTransfer: GroupChatMember?
 
     init(
         groupId: UUID,
         currentUserId: UUID,
         fetchMembers: @escaping (UUID) async throws -> [GroupChatMember],
         removeMember: @escaping (UUID, UUID) async throws -> Void,
+        transferAdmin: ((UUID, UUID) async throws -> Void)? = nil,
+        onTransferred: (() -> Void)? = nil,
         onAddMembers: ((Set<UUID>) -> Void)? = nil
     ) {
+        self.groupId = groupId
+        self.fetchMembers = fetchMembers
         self.onAddMembers = onAddMembers
+        self.transferAdmin = transferAdmin
+        self.onTransferred = onTransferred
         _viewModel = StateObject(
             wrappedValue: GroupMembersSheetViewModel(
                 groupId: groupId,
                 currentUserId: currentUserId,
                 fetchMembers: fetchMembers,
-                removeMember: removeMember
+                removeMember: removeMember,
+                transferAdmin: transferAdmin,
+                onTransferred: onTransferred
             )
         )
     }
@@ -111,22 +150,72 @@ struct GroupMembersSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    if let onAddMembers {
-                        Button {
-                            var ids = Set(viewModel.members.map(\.userId))
-                            ids.insert(viewModel.currentUserId)
-                            onAddMembers(ids)
-                        } label: {
-                            Label(
-                                languageService.text(.friendsAddMembersTitle),
-                                systemImage: "person.badge.plus"
-                            )
+                    HStack {
+                        if let onAddMembers {
+                            Button {
+                                var ids = Set(viewModel.members.map(\.userId))
+                                ids.insert(viewModel.currentUserId)
+                                onAddMembers(ids)
+                            } label: {
+                                Label(
+                                    languageService.text(.friendsAddMembersTitle),
+                                    systemImage: "person.badge.plus"
+                                )
+                            }
+                        }
+                        if transferAdmin != nil, viewModel.isCurrentUserAdmin {
+                            Button {
+                                showTransferPicker = true
+                            } label: {
+                                Label(
+                                    languageService.text(.friendsTransferOwnership),
+                                    systemImage: "person.crop.circle.badge.checkmark"
+                                )
+                            }
                         }
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(languageService.text(.commonDone)) { dismiss() }
                 }
+            }
+            .sheet(isPresented: $showTransferPicker) {
+                if let transferAdmin {
+                    TransferGroupAdminSheet(
+                        groupId: groupId,
+                        currentUserId: viewModel.currentUserId,
+                        fetchMembers: fetchMembers,
+                        transferAdmin: transferAdmin,
+                        onTransferred: {
+                            onTransferred?()
+                            Task { await viewModel.load() }
+                        }
+                    )
+                    .environmentObject(languageService)
+                }
+            }
+            .alert(
+                languageService.text(.friendsTransferTitle),
+                isPresented: Binding(
+                    get: { memberPendingTransfer != nil },
+                    set: { if !$0 { memberPendingTransfer = nil } }
+                )
+            ) {
+                Button(languageService.text(.commonCancel), role: .cancel) {
+                    memberPendingTransfer = nil
+                }
+                Button(languageService.text(.friendsTransferAction)) {
+                    guard let member = memberPendingTransfer else { return }
+                    memberPendingTransfer = nil
+                    Task { await viewModel.transfer(to: member) }
+                }
+            } message: {
+                Text(
+                    languageService.format(
+                        .friendsTransferConfirmMember,
+                        memberPendingTransfer?.displayName ?? ""
+                    )
+                )
             }
             .alert(
                 languageService.text(.commonError),
@@ -177,6 +266,17 @@ struct GroupMembersSheet: View {
                         systemImage: "person.badge.minus"
                     )
                 }
+            }
+            if viewModel.canTransfer(to: member) {
+                Button {
+                    memberPendingTransfer = member
+                } label: {
+                    Label(
+                        languageService.text(.friendsTransferOwnership),
+                        systemImage: "person.crop.circle.badge.checkmark"
+                    )
+                }
+                .tint(SplickTheme.Colors.primaryGradientStart)
             }
         }
     }

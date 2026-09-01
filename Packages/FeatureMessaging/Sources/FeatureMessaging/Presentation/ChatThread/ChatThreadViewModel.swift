@@ -270,6 +270,8 @@ public final class ChatThreadViewModel: ObservableObject {
     public func load() async {
         guard !isLoading else { return }
 
+        Task { await onConversationRead?(conversationId) }
+
         // Paint cached thread immediately, then reconcile with the network.
         let paintedFromCache = applyCachedThreadIfAvailable()
         if paintedFromCache {
@@ -293,7 +295,7 @@ public final class ChatThreadViewModel: ObservableObject {
                 highestLoadedPage = 0
                 hasMoreMessages = page.hasMore
                 if case .loaded(let existing) = state {
-                    state = .loaded(mergedTimeline(existing, with: sorted))
+                    state = .loaded(reconcileResetTimeline(existing: existing, fetched: sorted))
                 } else {
                     state = .loaded(sorted)
                 }
@@ -758,6 +760,7 @@ public final class ChatThreadViewModel: ObservableObject {
         if requireNearBottom, !isNearBottom { return }
         if lastMarkedReadMessageId == upToMessageId { return }
 
+        Task { await onConversationRead?(conversationId) }
         markReadTask?.cancel()
         markReadTask = Task { [weak self] in
             try? await Task.sleep(for: Self.markReadDebounce)
@@ -976,6 +979,19 @@ public final class ChatThreadViewModel: ObservableObject {
         }
         recomputeMaxSequenceNo()
         persistCache()
+    }
+
+    /// Server page wins after hide/delete. Keep unsent locals and WS rows newer than the page.
+    private func reconcileResetTimeline(existing: [ChatMessage], fetched: [ChatMessage]) -> [ChatMessage] {
+        let pendingLocal = existing.filter {
+            $0.deliveryStatus == .sending || $0.deliveryStatus == .failed
+        }
+        if fetched.isEmpty {
+            return MessageTimelineOrdering.sortedChronologically(pendingLocal)
+        }
+        let maxFetchedSequence = fetched.map(\.sequenceNo).max() ?? 0
+        let liveTail = existing.filter { $0.sequenceNo > maxFetchedSequence && $0.sequenceNo > 0 }
+        return mergedTimeline(fetched, with: pendingLocal + liveTail)
     }
 
     /// Merges WS / optimistic rows into a freshly fetched page without dropping realtime inserts.

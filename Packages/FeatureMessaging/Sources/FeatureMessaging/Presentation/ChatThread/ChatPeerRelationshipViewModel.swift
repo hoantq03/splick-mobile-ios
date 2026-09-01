@@ -38,7 +38,7 @@ public final class ChatPeerRelationshipViewModel: ObservableObject {
     }
 
     public func loadIfNeeded() async {
-        guard isActive, status == .unknown else { return }
+        guard isActive else { return }
         await refresh()
     }
 

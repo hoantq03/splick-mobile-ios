@@ -180,6 +180,9 @@ public struct ConversationListView: View {
         }
         .onChange(of: path.isEmpty) { isEmpty in
             syncThreadPresentation(isPresented: !isEmpty)
+            if isEmpty {
+                Task { await viewModel.reconcileVisibleInbox() }
+            }
         }
         .onChange(of: conversationToOpen?.conversation.id) { _ in
             consumeConversationToOpen()

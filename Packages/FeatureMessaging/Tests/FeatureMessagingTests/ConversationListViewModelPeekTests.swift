@@ -133,7 +133,10 @@ private actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
 
 @MainActor
 final class ConversationListViewModelPeekTests: XCTestCase {
-    private func makeViewModel(repository: PeekMessagingRepositoryStub) -> ConversationListViewModel {
+    private func makeViewModel(
+        repository: PeekMessagingRepositoryStub,
+        messageCache: MessageThreadCache? = nil
+    ) -> ConversationListViewModel {
         let languageService = LanguageService(userDefaults: UserDefaultsService())
         languageService.setLocale(.vi, persist: false)
         return ConversationListViewModel(
@@ -145,7 +148,8 @@ final class ConversationListViewModelPeekTests: XCTestCase {
                 ticketProvider: { "ticket" },
                 deviceIdProvider: { "device" }
             ),
-            languageService: languageService
+            languageService: languageService,
+            messageCache: messageCache
         )
     }
 
@@ -268,7 +272,14 @@ final class ConversationListViewModelPeekTests: XCTestCase {
     func test_deletePeekedConversation_removesFromInboxAndClearsPeek() async {
         let conversation = makeConversation()
         let repository = PeekMessagingRepositoryStub()
-        let viewModel = makeViewModel(repository: repository)
+        let cache = MessageThreadCache(capacity: 5)
+        cache.store(
+            conversationId: conversation.id,
+            messages: [makeMessage(conversationId: conversation.id, body: "Old", createdAt: .now)],
+            highestLoadedPage: 0,
+            hasMoreMessages: false
+        )
+        let viewModel = makeViewModel(repository: repository, messageCache: cache)
         viewModel.applyStartupConversations([conversation])
         await viewModel.beginPeek(conversation: conversation)
 
@@ -276,6 +287,7 @@ final class ConversationListViewModelPeekTests: XCTestCase {
 
         XCTAssertNil(viewModel.peekConversation)
         XCTAssertTrue(viewModel.conversations.isEmpty)
+        XCTAssertNil(cache.entry(for: conversation.id))
         let deletedIds = await repository.deletedConversationIds
         XCTAssertEqual(deletedIds, [conversation.id])
     }

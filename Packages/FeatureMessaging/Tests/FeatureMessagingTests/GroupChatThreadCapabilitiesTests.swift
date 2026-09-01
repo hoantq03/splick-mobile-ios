@@ -14,6 +14,7 @@ final class GroupChatThreadCapabilitiesTests: XCTestCase {
         XCTAssertTrue(caps.canManageMembers)
         XCTAssertTrue(caps.canInviteMembers)
         XCTAssertTrue(caps.canLeave)
+        XCTAssertTrue(caps.canDisbandGroup)
         XCTAssertTrue(caps.canInteractWithMessages)
     }
 
@@ -28,6 +29,7 @@ final class GroupChatThreadCapabilitiesTests: XCTestCase {
         XCTAssertTrue(caps.canManageMembers)
         XCTAssertTrue(caps.canInviteMembers)
         XCTAssertTrue(caps.canLeave)
+        XCTAssertFalse(caps.canDisbandGroup)
         XCTAssertTrue(caps.canInteractWithMessages)
     }
 
@@ -45,6 +47,7 @@ final class GroupChatThreadCapabilitiesTests: XCTestCase {
         XCTAssertFalse(caps.canManageMembers)
         XCTAssertFalse(caps.canInviteMembers)
         XCTAssertFalse(caps.canLeave)
+        XCTAssertFalse(caps.canDisbandGroup)
         XCTAssertFalse(caps.canInteractWithMessages)
     }
 }

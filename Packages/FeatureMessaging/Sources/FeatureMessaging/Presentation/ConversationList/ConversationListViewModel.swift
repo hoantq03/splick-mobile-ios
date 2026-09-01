@@ -58,6 +58,7 @@ public final class ConversationListViewModel: ObservableObject {
     private let repository: MessagingRepositoryProtocol
     private let wsClient: MessagingWebSocketClient
     private let languageService: LanguageService
+    private let messageCache: MessageThreadCache?
     private let onInboxLoaded: (([Conversation], Int) async -> Void)?
     private var cancellables = Set<AnyCancellable>()
     private var searchTask: Task<Void, Never>?
@@ -76,6 +77,7 @@ public final class ConversationListViewModel: ObservableObject {
         repository: MessagingRepositoryProtocol,
         wsClient: MessagingWebSocketClient,
         languageService: LanguageService,
+        messageCache: MessageThreadCache? = nil,
         onInboxLoaded: (([Conversation], Int) async -> Void)? = nil
     ) {
         self.fetchConversationsUseCase = fetchConversationsUseCase
@@ -84,6 +86,7 @@ public final class ConversationListViewModel: ObservableObject {
         self.repository = repository
         self.wsClient = wsClient
         self.languageService = languageService
+        self.messageCache = messageCache
         self.onInboxLoaded = onInboxLoaded
         bindWsEvents()
     }
@@ -184,6 +187,7 @@ public final class ConversationListViewModel: ObservableObject {
     }
 
     public func hideConversationLocally(conversationId: UUID) {
+        messageCache?.remove(conversationId: conversationId)
         removeConversationFromInbox(conversationId)
     }
 
@@ -195,6 +199,36 @@ public final class ConversationListViewModel: ObservableObject {
 
     public func isFilterActive(_ filter: InboxFilter) -> Bool {
         activeFilter == filter
+    }
+
+    /// Conversation the user is currently viewing — incoming WS must not keep it unread.
+    public private(set) var activeConversationId: UUID?
+
+    public func setActiveConversation(_ conversationId: UUID) {
+        activeConversationId = conversationId
+        markConversationAsRead(conversationId: conversationId)
+    }
+
+    public func clearActiveConversation(_ conversationId: UUID) {
+        if activeConversationId == conversationId {
+            activeConversationId = nil
+        }
+        markConversationAsRead(conversationId: conversationId)
+    }
+
+    /// Re-applies the selected inbox filter and unread badge after leaving a thread.
+    public func reconcileVisibleInbox() async {
+        pruneConversationsToActiveFilter()
+        await refreshInboxSummary()
+        pruneConversationsToActiveFilter()
+    }
+
+    func setActiveFilterForTests(_ filter: InboxFilter?) {
+        activeFilter = filter
+    }
+
+    func setUnreadConversationCountForTests(_ count: Int) {
+        unreadConversationCount = count
     }
 
     public func applyStartupConversations(_ items: [Conversation]) {
@@ -318,29 +352,15 @@ public final class ConversationListViewModel: ObservableObject {
     }
 
     public func markConversationAsRead(conversationId: UUID) {
-        guard case .loaded(var items) = state,
-              let index = items.firstIndex(where: { $0.id == conversationId }),
-              items[index].unreadCount > 0 else { return }
-
-        items[index] = items[index].updating(unreadCount: 0)
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
-            state = .loaded(items)
-            unreadConversationCount = max(0, unreadConversationCount - 1)
+        guard case .loaded(let items) = state,
+              let existing = items.first(where: { $0.id == conversationId }) else {
+            return
         }
+        applyConversationToInbox(existing.updating(unreadCount: 0), moveToTop: false)
     }
 
     public func upsertConversation(_ updated: Conversation) {
-        guard case .loaded(var items) = state,
-              let index = items.firstIndex(where: { $0.id == updated.id }) else { return }
-
-        items[index] = updated
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
-            state = .loaded(items)
-        }
+        applyConversationToInbox(updated, moveToTop: false)
     }
 
     private func removeConversationFromInbox(_ conversationId: UUID) {
@@ -473,6 +493,84 @@ public final class ConversationListViewModel: ObservableObject {
         }
     }
 
+    private func matchesActiveFilter(_ conversation: Conversation) -> Bool {
+        switch activeFilter {
+        case .groups:
+            return conversation.isGroup
+        case .users:
+            return !conversation.isGroup
+        case .unread:
+            return conversation.unreadCount > 0
+        case .closeFriends, .none:
+            return true
+        }
+    }
+
+    private func pruneConversationsToActiveFilter() {
+        guard case .loaded(let items) = state else { return }
+        let pruned = items.filter(matchesActiveFilter)
+        guard pruned.count != items.count else { return }
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            state = .loaded(pruned)
+        }
+    }
+
+    private func refreshInboxSummary() async {
+        do {
+            let summary = try await repository.fetchConversationInboxSummary()
+            unreadConversationCount = summary
+        } catch {
+            Log.error(error, category: .network, metadata: ["action": "refreshInboxSummary"])
+        }
+    }
+
+    private func applyConversationToInbox(_ updated: Conversation, moveToTop: Bool) {
+        let items: [Conversation]
+        if case .loaded(let current) = state {
+            items = current
+        } else {
+            items = []
+        }
+        let existing = items.first(where: { $0.id == updated.id })
+        let wasUnread = (existing?.unreadCount ?? 0) > 0
+        let isUnread = updated.unreadCount > 0
+        let unreadDelta: Int
+        if existing == nil {
+            unreadDelta = 0
+        } else if !wasUnread && isUnread {
+            unreadDelta = 1
+        } else if wasUnread && !isUnread {
+            unreadDelta = -1
+        } else {
+            unreadDelta = 0
+        }
+        let matches = matchesActiveFilter(updated)
+        let next: [Conversation]
+        if matches, existing != nil {
+            if moveToTop {
+                next = [updated] + items.filter { $0.id != updated.id }
+            } else {
+                next = items.map { $0.id == updated.id ? updated : $0 }
+            }
+        } else if matches, existing == nil {
+            next = [updated] + items
+        } else if !matches, existing != nil {
+            next = items.filter { $0.id != updated.id }
+        } else {
+            next = items
+        }
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            state = .loaded(next)
+            if unreadDelta != 0 {
+                unreadConversationCount = max(0, unreadConversationCount + unreadDelta)
+            }
+        }
+    }
+
     private func bindWsEvents() {
         wsClient.eventsPublisher()
             .receive(on: DispatchQueue.main)
@@ -539,19 +637,18 @@ public final class ConversationListViewModel: ObservableObject {
             )
         }
 
-        guard case .loaded(var items) = state,
+        guard case .loaded(let items) = state,
               let index = items.firstIndex(where: { $0.id == conversationId }) else {
-            // Conversation missing from the loaded page / filter — reconcile soon.
-            scheduleDebouncedRefresh()
+            Task { await self.refresh() }
             return
         }
 
         let existing = items[index]
         if existing.leftAt != nil { return }
-        let wasUnread = existing.unreadCount > 0
+        let viewingOpenThread = activeConversationId == conversationId
         let nextUnread: Int
-        if isFromSelf {
-            nextUnread = existing.unreadCount
+        if isFromSelf || viewingOpenThread {
+            nextUnread = 0
         } else {
             nextUnread = existing.unreadCount + 1
         }
@@ -561,20 +658,10 @@ public final class ConversationListViewModel: ObservableObject {
             unreadCount: nextUnread,
             updatedAt: message.createdAt
         )
-        items.remove(at: index)
-        items.insert(patched, at: 0)
-
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
-            state = .loaded(items)
-            if !isFromSelf, !wasUnread {
-                unreadConversationCount += 1
-            }
+        applyConversationToInbox(patched, moveToTop: true)
+        if !viewingOpenThread {
+            scheduleDebouncedRefresh()
         }
-
-        // Periodic reconcile in case local patch drifts from server ordering / filters.
-        scheduleDebouncedRefresh()
     }
 
     private func applyEditedMessage(

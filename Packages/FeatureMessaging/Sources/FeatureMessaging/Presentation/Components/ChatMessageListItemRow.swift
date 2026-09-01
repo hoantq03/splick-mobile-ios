@@ -48,7 +48,7 @@ struct ChatMessageListItemRow: View {
                 MessageTimeSeparatorLabel(date: item.message.createdAt)
             }
 
-            if item.message.isSystemNotice {
+            if GroupSystemNoticePayload.displaysAsSystemNotice(item.message) {
                 GroupSystemNoticeLabel(
                     text: GroupSystemNoticeCopy.text(
                         message: item.message,

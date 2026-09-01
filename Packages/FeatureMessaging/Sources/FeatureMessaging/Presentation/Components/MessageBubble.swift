@@ -395,8 +395,8 @@ struct MessageBubble: View {
             preview: preview,
             isOutgoing: isOutgoing,
             usesBubbleTextColors: false,
-            quotedMessageRecalled: isQuotedMessageRecalled(preview.messageId),
             maxContentWidth: resolvedContentMaxWidth,
+            quotedMessageRecalled: isQuotedMessageRecalled(preview.messageId),
             onTap: quotedReplyTap
         )
     }
@@ -410,8 +410,8 @@ struct MessageBubble: View {
                     preview: preview,
                     isOutgoing: isOutgoing,
                     usesBubbleTextColors: true,
-                    quotedMessageRecalled: isQuotedMessageRecalled(preview.messageId),
                     maxContentWidth: textWrapMaxWidth,
+                    quotedMessageRecalled: isQuotedMessageRecalled(preview.messageId),
                     onTap: quotedReplyTap
                 )
             }
