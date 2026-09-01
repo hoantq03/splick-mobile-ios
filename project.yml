@@ -115,6 +115,8 @@ targets:
         product: GoogleSignIn
       - target: SplickWidgetExtension
         embed: true
+      - target: SplickNotificationServiceExtension
+        embed: true
     attributes:
       SystemCapabilities:
         com.apple.Push:
@@ -162,12 +164,29 @@ targets:
         Release:
           CODE_SIGN_ENTITLEMENTS: SplickWidgetExtension/SplickWidgetExtension.entitlements
 
+  SplickNotificationServiceExtension:
+    type: app-extension
+    platform: iOS
+    deploymentTarget:
+      iOS: "16.0"
+    sources:
+      - path: SplickNotificationServiceExtension/Sources
+    settings:
+      base:
+        PRODUCT_NAME: SplickNotificationServiceExtension
+        PRODUCT_BUNDLE_IDENTIFIER: com.splick.app.NotificationService
+        INFOPLIST_FILE: SplickNotificationServiceExtension/Resources/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
+
 schemes:
   SplickApp:
     build:
       targets:
         SplickApp: all
         SplickWidgetExtension: all
+        SplickNotificationServiceExtension: all
     run:
       config: Debug
     test:
@@ -185,6 +204,7 @@ schemes:
     build:
       targets:
         SplickApp: all
+        SplickNotificationServiceExtension: all
     run:
       config: Debug
       debugEnabled: false
