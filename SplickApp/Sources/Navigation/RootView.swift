@@ -55,6 +55,35 @@ struct RootView: View {
         .task(id: appState.splashSessionID) {
             await bootstrapSession()
         }
+        .onChange(of: appState.isAuthenticated) { isAuthenticated in
+            if isAuthenticated {
+                container.messagingWebSocketClient.connect()
+            } else {
+                container.messagingWebSocketClient.disconnect()
+            }
+        }
+        .onChange(of: scenePhase) { phase in
+            guard appState.isAuthenticated else { return }
+            switch phase {
+            case .active:
+                if previousScenePhase == .background {
+                    container.messagingWebSocketClient.reconnect()
+                } else {
+                    container.messagingWebSocketClient.connect()
+                }
+            case .inactive:
+                container.messagingWebSocketClient.connect()
+            case .background:
+                container.messagingWebSocketClient.disconnect()
+            @unknown default:
+                break
+            }
+        }
+        .onAppear {
+            if appState.isAuthenticated {
+                container.messagingWebSocketClient.connect()
+            }
+        }
         .onChange(of: appState.needsSplash) { needsSplash in
             guard needsSplash else { return }
             hideKeyboard()

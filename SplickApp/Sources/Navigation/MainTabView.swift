@@ -138,7 +138,7 @@ struct MainTabView: View {
                     pushNotificationCoordinator.syncAppIconBadge(count: newCounts.total)
                 }
             }
-            .onReceive(container.messagingWebSocketClient.eventSubject) { event in
+            .onReceive(container.messagingWebSocketClient.eventsPublisher()) { event in
                 switch event {
                 case .newMessage:
                     Task { await container.badgeCountService.refresh(force: true) }
@@ -246,12 +246,11 @@ struct MainTabView: View {
             switch scenePhase {
             case .active:
                 container.badgeCountService.startPolling()
-                container.messagingWebSocketClient.connect()
+                // Messaging socket lifecycle is owned by RootView (auth + scene phase).
                 // Badges come from startup `apply` + 30s polling + force refresh on mutations.
                 pushNotificationCoordinator.syncAppIconBadge(count: container.badgeCountService.counts.total)
             case .background:
                 container.badgeCountService.stopPolling()
-                container.messagingWebSocketClient.disconnect()
             case .inactive:
                 break
             @unknown default:
