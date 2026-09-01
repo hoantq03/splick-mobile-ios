@@ -8,6 +8,17 @@ enum MessageReplyIslandMotion {
     static let dismiss = Animation.spring(response: 0.34, dampingFraction: 0.88, blendDuration: 0.04)
 }
 
+private enum MessageReplyIslandStyle {
+    static let background = SplickTheme.Colors.tertiaryBackground
+    static let title = SplickTheme.Colors.textPrimary
+    static let preview = SplickTheme.Colors.textSecondary
+    static let icon = SplickTheme.Colors.textPrimary
+    static let iconWell = SplickTheme.Colors.textPrimary.opacity(0.08)
+    static let dismissWell = SplickTheme.Colors.textPrimary.opacity(0.10)
+    static let border = SplickTheme.Colors.divider
+    static let shadow = SplickTheme.Shadow.small
+}
+
 struct MessageReplyBanner: View {
     @EnvironmentObject private var languageService: LanguageService
 
@@ -20,22 +31,22 @@ struct MessageReplyBanner: View {
             HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
                 Image(systemName: "arrowshape.turn.up.left.fill")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.92))
+                    .foregroundStyle(MessageReplyIslandStyle.icon.opacity(0.92))
                     .frame(width: 28, height: 28)
                     .background {
                         Circle()
-                            .fill(Color.white.opacity(0.14))
+                            .fill(MessageReplyIslandStyle.iconWell)
                     }
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text("\(languageService.text(.messagingReplyingTo)) \(draft.senderDisplayName)")
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(MessageReplyIslandStyle.title)
                         .lineLimit(1)
 
                     Text(previewText)
                         .font(.system(size: 12, design: .rounded))
-                        .foregroundStyle(Color.white.opacity(0.72))
+                        .foregroundStyle(MessageReplyIslandStyle.preview)
                         .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -52,11 +63,11 @@ struct MessageReplyBanner: View {
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Color.white.opacity(0.9))
+                    .foregroundStyle(MessageReplyIslandStyle.icon.opacity(0.9))
                     .frame(width: 26, height: 26)
                     .background {
                         Circle()
-                            .fill(Color.white.opacity(0.16))
+                            .fill(MessageReplyIslandStyle.dismissWell)
                     }
             }
             .buttonStyle(.plain)
@@ -68,12 +79,16 @@ struct MessageReplyBanner: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             Capsule(style: .continuous)
-                .fill(Color.black.opacity(0.88))
+                .fill(MessageReplyIslandStyle.background)
                 .overlay {
                     Capsule(style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.8)
+                        .strokeBorder(MessageReplyIslandStyle.border, lineWidth: 0.8)
                 }
-                .shadow(color: .black.opacity(0.28), radius: 16, y: 8)
+                .shadow(
+                    color: MessageReplyIslandStyle.shadow.color,
+                    radius: MessageReplyIslandStyle.shadow.radius,
+                    y: MessageReplyIslandStyle.shadow.y
+                )
         }
         .padding(.horizontal, SplickTheme.Spacing.md)
         .padding(.top, SplickTheme.Spacing.xs)
@@ -100,16 +115,16 @@ struct MessageEditBanner: View {
             HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
                 Image(systemName: "pencil")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.92))
+                    .foregroundStyle(MessageReplyIslandStyle.icon.opacity(0.92))
                     .frame(width: 28, height: 28)
                     .background {
                         Circle()
-                            .fill(Color.white.opacity(0.14))
+                            .fill(MessageReplyIslandStyle.iconWell)
                     }
 
                 Text(languageService.text(.messagingEditingBanner))
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Color.white)
+                    .foregroundStyle(MessageReplyIslandStyle.title)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -121,11 +136,11 @@ struct MessageEditBanner: View {
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Color.white.opacity(0.9))
+                    .foregroundStyle(MessageReplyIslandStyle.icon.opacity(0.9))
                     .frame(width: 26, height: 26)
                     .background {
                         Circle()
-                            .fill(Color.white.opacity(0.16))
+                            .fill(MessageReplyIslandStyle.dismissWell)
                     }
             }
             .buttonStyle(.plain)
@@ -137,12 +152,16 @@ struct MessageEditBanner: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             Capsule(style: .continuous)
-                .fill(Color.black.opacity(0.88))
+                .fill(MessageReplyIslandStyle.background)
                 .overlay {
                     Capsule(style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.8)
+                        .strokeBorder(MessageReplyIslandStyle.border, lineWidth: 0.8)
                 }
-                .shadow(color: .black.opacity(0.28), radius: 16, y: 8)
+                .shadow(
+                    color: MessageReplyIslandStyle.shadow.color,
+                    radius: MessageReplyIslandStyle.shadow.radius,
+                    y: MessageReplyIslandStyle.shadow.y
+                )
         }
         .padding(.horizontal, SplickTheme.Spacing.md)
         .padding(.top, SplickTheme.Spacing.xs)
