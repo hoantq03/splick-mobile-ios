@@ -40,6 +40,7 @@ struct ChatMessageListItemRow: View {
     let onQuotedReply: (UUID) -> Void
     let onTypingRowAppear: () -> Void
     let actorDisplayName: String
+    let isQuotedMessageRecalled: (UUID) -> Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -86,7 +87,8 @@ struct ChatMessageListItemRow: View {
             senderAvatarURL: senderAvatarURL,
             senderAvatarName: senderAvatarName,
             suppressSenderAvatar: suppressSenderAvatar,
-            reportsSenderAvatarAnchor: reportsSenderAvatarAnchor
+            reportsSenderAvatarAnchor: reportsSenderAvatarAnchor,
+            isQuotedMessageRecalled: isQuotedMessageRecalled
         )
         .opacity(isReactionFocusHidden ? 0 : 1)
         .allowsHitTesting(!isReactionFocusHidden)

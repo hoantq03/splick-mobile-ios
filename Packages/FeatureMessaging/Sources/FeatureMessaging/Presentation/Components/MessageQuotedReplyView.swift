@@ -16,6 +16,8 @@ struct MessageQuotedReplyView: View {
     var usesBubbleTextColors: Bool = true
     /// Caps quote width so long replies wrap instead of stretching the bubble.
     var maxContentWidth: CGFloat? = nil
+    /// When `true`, the quoted original has been recalled — show unsent placeholder text.
+    var quotedMessageRecalled: Bool = false
     var onTap: (() -> Void)? = nil
 
     var body: some View {
@@ -106,6 +108,9 @@ struct MessageQuotedReplyView: View {
     }
 
     private var quotedText: String {
+        if quotedMessageRecalled {
+            return languageService.text(.messagingMessageRecalled)
+        }
         let trimmed = preview.body.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { return trimmed }
         if preview.hasImageAttachment {

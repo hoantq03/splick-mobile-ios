@@ -48,6 +48,7 @@ struct MessageBubble: View {
     /// When typing continues this cluster, hide the row avatar — overlay draws it while animating.
     var suppressSenderAvatar: Bool = false
     var reportsSenderAvatarAnchor: Bool = false
+    var isQuotedMessageRecalled: (UUID) -> Bool = { _ in false }
 
     @State private var imageViewerRoute: AttachmentPreviewRoute?
 
@@ -394,6 +395,7 @@ struct MessageBubble: View {
             preview: preview,
             isOutgoing: isOutgoing,
             usesBubbleTextColors: false,
+            quotedMessageRecalled: isQuotedMessageRecalled(preview.messageId),
             maxContentWidth: resolvedContentMaxWidth,
             onTap: quotedReplyTap
         )
@@ -408,6 +410,7 @@ struct MessageBubble: View {
                     preview: preview,
                     isOutgoing: isOutgoing,
                     usesBubbleTextColors: true,
+                    quotedMessageRecalled: isQuotedMessageRecalled(preview.messageId),
                     maxContentWidth: textWrapMaxWidth,
                     onTap: quotedReplyTap
                 )

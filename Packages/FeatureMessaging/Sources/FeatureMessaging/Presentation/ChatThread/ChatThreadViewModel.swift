@@ -504,6 +504,7 @@ public final class ChatThreadViewModel: ObservableObject {
     }
 
     public func recallMessage(id messageId: UUID) async {
+        guard !isRemovedFromGroup else { return }
         guard case .loaded(let messages) = state,
               let message = messages.first(where: { $0.id == messageId }),
               message.isRecallable(by: currentUserId) else { return }
@@ -590,6 +591,7 @@ public final class ChatThreadViewModel: ObservableObject {
         }
 
         let message = messages[index]
+        guard !message.recalled else { return nil }
 
         if let existing = message.reactions.first(where: {
             $0.userId == currentUserId && $0.emoji == emoji
