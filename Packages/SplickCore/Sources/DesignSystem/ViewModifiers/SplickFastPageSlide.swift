@@ -219,13 +219,14 @@ private final class SplickWideInteractivePopHostController: UIViewController {
 }
 
 /// Thin leading-edge pop used by chat. Disables stock interactive-pop (too wide) and
-/// drives the same transition targets from an ~8pt strip only.
+/// drives the same transition targets from a hairline leading strip only.
 private final class SplickStrictEdgePopGesture: NSObject, UIGestureRecognizerDelegate {
     private static var associatedKey: UInt8 = 0
 
     private weak var navigationController: UINavigationController?
     private var pan: UIPanGestureRecognizer?
     var edgeWidth: CGFloat = 1
+    private var touchStartX: CGFloat = .greatestFiniteMagnitude
 
     static func install(on nav: UINavigationController, edgeWidth: CGFloat) {
         let owner: SplickStrictEdgePopGesture
@@ -302,6 +303,13 @@ private final class SplickStrictEdgePopGesture: NSObject, UIGestureRecognizerDel
         }
     }
 
+    private func isInStrictEdgeBand(point: CGPoint, in view: UIView) -> Bool {
+        if view.effectiveUserInterfaceLayoutDirection == .rightToLeft {
+            return point.x >= view.bounds.width - edgeWidth
+        }
+        return point.x <= edgeWidth
+    }
+
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
         guard let nav = navigationController, nav.viewControllers.count > 1, let view = nav.view else {
             return false
@@ -310,10 +318,12 @@ private final class SplickStrictEdgePopGesture: NSObject, UIGestureRecognizerDel
         if point.y < view.safeAreaInsets.top + 44 {
             return false
         }
-        if view.effectiveUserInterfaceLayoutDirection == .rightToLeft {
-            return point.x >= view.bounds.width - edgeWidth
+        guard isInStrictEdgeBand(point: point, in: view) else {
+            touchStartX = .greatestFiniteMagnitude
+            return false
         }
-        return point.x <= edgeWidth
+        touchStartX = point.x
+        return true
     }
 
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
@@ -321,6 +331,13 @@ private final class SplickStrictEdgePopGesture: NSObject, UIGestureRecognizerDel
               let nav = navigationController,
               let view = nav.view,
               nav.viewControllers.count > 1 else {
+            return false
+        }
+        // Re-check start location — `shouldReceive` alone is not enough if another
+        // recognizer path reuses this pan after a non-edge touch.
+        let start = pan.location(in: view)
+        let edgePoint = CGPoint(x: touchStartX, y: start.y)
+        guard isInStrictEdgeBand(point: edgePoint, in: view) || isInStrictEdgeBand(point: start, in: view) else {
             return false
         }
         let translation = pan.translation(in: view)
@@ -373,7 +390,9 @@ private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate 
             objc_setAssociatedObject(nav, &associatedKey, owner, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
         owner.isForcedDisabled = true
+        owner.navigationController = nav
         owner.pan?.isEnabled = false
+        nav.interactivePopGestureRecognizer?.isEnabled = false
     }
 
     private func leadingPopBand(in view: UIView) -> CGFloat {
@@ -385,12 +404,16 @@ private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate 
         guard let systemPop = nav.interactivePopGestureRecognizer else { return }
 
         let canPop = nav.viewControllers.count > 1
-        systemPop.isEnabled = canPop
 
+        // Chat edge-only mode must keep the stock (wide) recognizer off. Refresh used to
+        // re-enable it here and steal reply / timestamp pans from ~20pt of the leading edge.
         if isForcedDisabled {
+            systemPop.isEnabled = false
             pan?.isEnabled = false
             return
         }
+
+        systemPop.isEnabled = canPop
 
         if pan == nil {
             let gesture = UIPanGestureRecognizer()
