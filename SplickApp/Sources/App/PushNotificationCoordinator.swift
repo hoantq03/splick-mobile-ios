@@ -10,6 +10,10 @@ import Networking
 import SplickDomain
 import Storage
 
+/// Coordinates APNs permission, token sync, and tap routing.
+/// Actor avatars on the lock-screen / banner are attached by
+/// `SplickNotificationServiceExtension` from the `actorAvatarUrl` payload key
+/// (requires APNs `mutable-content`).
 @MainActor
 final class PushNotificationCoordinator: ObservableObject {
     static let shared = PushNotificationCoordinator()
