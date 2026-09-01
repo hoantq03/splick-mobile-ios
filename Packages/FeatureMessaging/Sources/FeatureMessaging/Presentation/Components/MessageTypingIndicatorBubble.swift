@@ -2,9 +2,17 @@ import SwiftUI
 import DesignSystem
 import Localization
 
-/// Inline peer typing row — incoming bubble with three bouncing dots.
+/// Inline peer typing row — incoming bubble with three bouncing dots + sender avatar.
 struct MessageTypingIndicatorBubble: View {
     @EnvironmentObject private var languageService: LanguageService
+
+    var senderAvatarURL: URL? = nil
+    var senderAvatarName: String = ""
+    var senderUserId: UUID? = nil
+    var showsSenderAvatar: Bool = true
+    /// Tight spacing when stacked directly under the typer's last bubble (Android `groupedWithNext`).
+    var continuesMessageCluster: Bool = false
+    var reportsSenderAvatarAnchor: Bool = false
 
     private static let bubbleCornerRadius: CGFloat = MessageThreadRowLayout.bubbleCornerRadius
     fileprivate static let dotSize: CGFloat = 7
@@ -14,24 +22,59 @@ struct MessageTypingIndicatorBubble: View {
     fileprivate static let stagger: TimeInterval = 0.14
 
     var body: some View {
-        MessageThreadIncomingRow(topSpacing: SplickTheme.Spacing.sm) {
-            HStack(spacing: Self.dotSpacing) {
-                ForEach(0..<3, id: \.self) { index in
-                    TypingDot(index: index)
-                }
-            }
-            .padding(.top, Self.bounceHeight)
-            .frame(minHeight: MessageThreadRowLayout.bubbleMinContentHeight)
-            .frame(maxHeight: .infinity)
-            .padding(.horizontal, MessageThreadRowLayout.bubbleHorizontalPadding)
-            .padding(.vertical, MessageThreadRowLayout.bubbleVerticalPadding)
-            .background(
-                RoundedRectangle(cornerRadius: Self.bubbleCornerRadius, style: .continuous)
-                    .fill(SplickTheme.Colors.secondaryBackground)
-            )
-            .frame(minHeight: MessageThreadRowLayout.typingBubbleMinHeight)
+        HStack(alignment: .messageThreadRowCenter, spacing: 0) {
+            MessageThreadIncomingLeadingSlot()
+            typingSenderAvatar
+            typingBubble
+                .fixedSize(horizontal: true, vertical: false)
+            Spacer(minLength: MessageThreadRowLayout.rowSideSpacer)
+                .allowsHitTesting(false)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, continuesMessageCluster ? 2 : SplickTheme.Spacing.sm)
         .accessibilityLabel(languageService.text(.messagingChatTyping))
+    }
+
+    @ViewBuilder
+    private var typingSenderAvatar: some View {
+        let name = senderAvatarName.isEmpty ? "?" : senderAvatarName
+        ZStack {
+            if showsSenderAvatar {
+                AvatarView(
+                    imageURL: senderAvatarURL,
+                    name: name,
+                    size: .small,
+                    userId: senderUserId
+                )
+            }
+        }
+        .frame(
+            width: MessageThreadRowLayout.senderAvatarSize,
+            height: MessageThreadRowLayout.senderAvatarSize,
+            alignment: .center
+        )
+        .padding(.trailing, MessageThreadRowLayout.senderAvatarGap)
+        .reportTypingAvatarAnchor(slot: .typing, isEnabled: reportsSenderAvatarAnchor)
+        .accessibilityHidden(!showsSenderAvatar)
+        .allowsHitTesting(false)
+    }
+
+    private var typingBubble: some View {
+        HStack(spacing: Self.dotSpacing) {
+            ForEach(0..<3, id: \.self) { index in
+                TypingDot(index: index)
+            }
+        }
+        .padding(.top, Self.bounceHeight)
+        .frame(minHeight: MessageThreadRowLayout.bubbleMinContentHeight)
+        .frame(maxHeight: .infinity)
+        .padding(.horizontal, MessageThreadRowLayout.bubbleHorizontalPadding)
+        .padding(.vertical, MessageThreadRowLayout.bubbleVerticalPadding)
+        .background(
+            RoundedRectangle(cornerRadius: Self.bubbleCornerRadius, style: .continuous)
+                .fill(SplickTheme.Colors.secondaryBackground)
+        )
+        .frame(minHeight: MessageThreadRowLayout.typingBubbleMinHeight)
     }
 }
 

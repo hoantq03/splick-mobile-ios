@@ -42,6 +42,12 @@ struct MessageBubble: View {
     var readReceiptPeerAvatarURL: URL? = nil
     var readReceiptPeerName: String = ""
     var showsReadReceiptAvatar: Bool = false
+    /// Incoming sender avatar (DM peer / group member). Shown on the last bubble in a cluster.
+    var senderAvatarURL: URL? = nil
+    var senderAvatarName: String = ""
+    /// When typing continues this cluster, hide the row avatar — overlay draws it while animating.
+    var suppressSenderAvatar: Bool = false
+    var reportsSenderAvatarAnchor: Bool = false
 
     @State private var imageViewerRoute: AttachmentPreviewRoute?
 
@@ -115,6 +121,8 @@ struct MessageBubble: View {
                     .allowsHitTesting(false)
             } else {
                 incomingLeadingMeta
+                incomingSenderAvatar
+                    .padding(.trailing, MessageThreadRowLayout.senderAvatarGap)
             }
 
             slidingBubbleContent
@@ -134,11 +142,36 @@ struct MessageBubble: View {
         .padding(.top, topSpacing)
     }
 
+    /// Avatar only on the last bubble of a same-sender cluster; spacer keeps earlier rows aligned.
+    @ViewBuilder
+    private var incomingSenderAvatar: some View {
+        let isClusterTail = displayMessage.groupPosition == .standalone
+            || displayMessage.groupPosition == .groupLast
+        let showsAvatar = !suppressSenderAvatar && isClusterTail
+        let name = senderAvatarName.isEmpty ? "?" : senderAvatarName
+        ZStack {
+            if showsAvatar || reportsSenderAvatarAnchor {
+                AvatarView(
+                    imageURL: senderAvatarURL,
+                    name: name,
+                    size: .small,
+                    userId: message.senderId
+                )
+                .opacity(showsAvatar ? 1 : 0)
+            }
+        }
+        .frame(
+            width: MessageThreadRowLayout.senderAvatarSize,
+            height: MessageThreadRowLayout.senderAvatarSize,
+            alignment: .center
+        )
+        .reportTypingAvatarAnchor(slot: .message, isEnabled: reportsSenderAvatarAnchor)
+        .accessibilityHidden(!showsAvatar)
+        .allowsHitTesting(false)
+    }
+
     private var slidingBubbleContent: some View {
         HStack(alignment: .center, spacing: 6) {
-            if isOutgoing, message.isEdited {
-                editedCaption
-            }
             if isOutgoing, message.deliveryStatus == .failed {
                 failedRetryAffordance
             }
@@ -160,9 +193,6 @@ struct MessageBubble: View {
             }
             if !isOutgoing, message.deliveryStatus == .failed {
                 failedRetryAffordance
-            }
-            if !isOutgoing, message.isEdited {
-                editedCaption
             }
         }
     }
@@ -261,14 +291,20 @@ struct MessageBubble: View {
     }
 
     private var editedCaption: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: 4) {
+            Spacer(minLength: 0)
             Image(systemName: "pencil")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 9, weight: .semibold))
             Text(languageService.text(.messagingMessageEdited))
                 .font(.system(size: 11, weight: .medium, design: .rounded))
+                .italic()
         }
-        .foregroundStyle(SplickTheme.Colors.textSecondary)
-        .padding(.horizontal, 2)
+        .foregroundStyle(
+            isOutgoing
+                ? Color.white.opacity(0.72)
+                : SplickTheme.Colors.textSecondary.opacity(0.9)
+        )
+        .padding(.top, 2)
         .accessibilityElement(children: .combine)
     }
 
@@ -378,6 +414,9 @@ struct MessageBubble: View {
             }
             if hasTextBody {
                 messageTextLabel(lineLimit: nil)
+            }
+            if message.isEdited {
+                editedCaption
             }
         }
 
