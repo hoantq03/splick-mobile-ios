@@ -427,6 +427,7 @@ enum StringsFeatureVi {
         .messagingChatLoading: "Đang tải tin nhắn...",
         .messagingChatEmptyTitle: "Chưa có tin nhắn",
         .messagingChatEmptyMessage: "Gửi lời chào nào!",
+        .messagingJumpToLatest: "Tin nhắn mới",
         .messagingConversationPeekEmpty: "Chưa có tin nhắn để xem trước.",
         .messagingConversationPeekError: "Không thể tải bản xem trước.",
         .messagingConversationPeekA11y: "Xem trước cuộc trò chuyện",

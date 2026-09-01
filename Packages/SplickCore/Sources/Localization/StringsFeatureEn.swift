@@ -427,6 +427,7 @@ enum StringsFeatureEn {
         .messagingChatLoading: "Loading messages...",
         .messagingChatEmptyTitle: "No messages yet",
         .messagingChatEmptyMessage: "Say hello!",
+        .messagingJumpToLatest: "New messages",
         .messagingConversationPeekEmpty: "No messages to preview.",
         .messagingConversationPeekError: "Couldn’t load this preview.",
         .messagingConversationPeekA11y: "Conversation preview",

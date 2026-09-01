@@ -686,6 +686,7 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case messagingChatLoading = "messaging.chat.loading"
     case messagingChatEmptyTitle = "messaging.chat.empty.title"
     case messagingChatEmptyMessage = "messaging.chat.empty.message"
+    case messagingJumpToLatest = "messaging.chat.jump_to_latest"
     case messagingConversationPeekEmpty = "messaging.conversation.peek.empty"
     case messagingConversationPeekError = "messaging.conversation.peek.error"
     case messagingConversationPeekA11y = "messaging.conversation.peek.accessibility"
