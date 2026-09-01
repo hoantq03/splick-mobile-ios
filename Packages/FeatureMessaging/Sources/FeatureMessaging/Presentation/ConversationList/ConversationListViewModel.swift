@@ -499,6 +499,18 @@ public final class ConversationListViewModel: ObservableObject {
                         isOnline: isOnline,
                         lastSeenAt: lastSeenAt
                     )
+                case .messageEdited(let conversationId, let messageId, _, let body, let editedAt):
+                    self.applyEditedMessage(
+                        conversationId: conversationId,
+                        messageId: messageId,
+                        body: body,
+                        editedAt: editedAt
+                    )
+                case .messageRecalled(let conversationId, let messageId, _):
+                    self.applyRecalledMessage(
+                        conversationId: conversationId,
+                        messageId: messageId
+                    )
                 default:
                     break
                 }
@@ -563,6 +575,49 @@ public final class ConversationListViewModel: ObservableObject {
 
         // Periodic reconcile in case local patch drifts from server ordering / filters.
         scheduleDebouncedRefresh()
+    }
+
+    private func applyEditedMessage(
+        conversationId: UUID,
+        messageId: UUID,
+        body: String,
+        editedAt: Date?
+    ) {
+        patchLastMessage(conversationId: conversationId, messageId: messageId) { message in
+            message.updating(body: body, editedAt: editedAt ?? Date())
+        }
+    }
+
+    private func applyRecalledMessage(conversationId: UUID, messageId: UUID) {
+        patchLastMessage(conversationId: conversationId, messageId: messageId) { message in
+            message.updatingAsRecalled()
+        }
+    }
+
+    private func patchLastMessage(
+        conversationId: UUID,
+        messageId: UUID,
+        transform: (ChatMessage) -> ChatMessage
+    ) {
+        guard case .loaded(var items) = state,
+              let index = items.firstIndex(where: { $0.id == conversationId }) else {
+            return
+        }
+        let existing = items[index]
+        guard let lastMessage = existing.lastMessage, lastMessage.id == messageId else {
+            return
+        }
+        let patched = existing.updating(
+            lastMessage: transform(lastMessage),
+            unreadCount: existing.unreadCount,
+            updatedAt: Date()
+        )
+        items[index] = patched
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            state = .loaded(items)
+        }
     }
 
     private func applyRemoteTyping(conversationId: UUID, userId: UUID, isTyping: Bool) {
