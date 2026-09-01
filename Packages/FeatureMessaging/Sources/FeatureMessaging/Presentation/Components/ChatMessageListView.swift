@@ -6,7 +6,6 @@ import Localization
 import SplickDomain
 
 struct ChatMessageListView: View {
-    @Environment(\.messagingReactionPicker) private var reactionPicker
     @EnvironmentObject private var languageService: LanguageService
 
     @ObservedObject var viewModel: ChatThreadViewModel
@@ -26,12 +25,10 @@ struct ChatMessageListView: View {
     var allowsThreadInteraction: Bool = true
     var onBeginEdit: (ChatMessage) -> Void = { _ in }
     var onRequestRecall: (UUID) -> Void = { _ in }
-
-    @State private var reactionFocusMessageId: UUID?
+    /// Window-space focus presentation — drawn by `ChatThreadView` so the dimmer covers the composer.
+    @Binding var reactionFocus: MessageReactionFocusContext?
     /// Fresh identity each open so `@State isRevealed` cannot stick across odd/even mounts.
     @State private var reactionFocusSession = UUID()
-    /// Snapshot at open — opacity-0 source bubble can stop publishing a usable frame.
-    @State private var reactionFocusFrozenFrame: CGRect?
     /// Ignore drag / dim-tap dismiss until the long-press finger has lifted.
     @State private var reactionFocusDismissArmed = false
     @State private var timestampRevealTranslation: CGFloat = 0
@@ -62,6 +59,10 @@ struct ChatMessageListView: View {
     /// almost the full leading edge; only a hairline triggers back.
     private static let navigationBackEdgeWidth: CGFloat = 1
 
+    private var reactionFocusMessageId: UUID? {
+        reactionFocus?.messageId
+    }
+
     private var latestReadOutgoingMessageId: UUID? {
         MessageReadReceiptPresentation.latestReadOutgoingMessageId(
             in: messages,
@@ -87,6 +88,11 @@ struct ChatMessageListView: View {
                 displayMessages: displayMessages,
                 typingContext: typingContext
             )
+            .onChange(of: reactionFocus == nil) { isCleared in
+                if isCleared {
+                    InteractionScrollLock.forceUnlock()
+                }
+            }
         }
     }
 
@@ -104,7 +110,7 @@ struct ChatMessageListView: View {
         let typingHandoffEligible = typingUserId != nil
             && lastMessage?.senderId == typingUserId
             && lastMessage?.senderId != currentUserId
-            && !(lastMessage?.isSystemNotice ?? false)
+            && lastMessage.map { !GroupSystemNoticePayload.displaysAsSystemNotice($0) } ?? true
         let showAvatarHandoffOverlay = typingHandoffEligible
             && (showsTypingIndicator || avatarHandoffProgress > 0.01)
             && messageAvatarCenter != nil
@@ -176,63 +182,6 @@ struct ChatMessageListView: View {
                     },
                     including: reactionFocusMessageId == nil ? .all : .none
                 )
-
-                GeometryReader { overlayGeometry in
-                    if reactionFocusMessageId != nil,
-                       let focusContext = reactionFocusContext(
-                        in: displayMessages,
-                        overlayOrigin: overlayGeometry.frame(in: .global).origin
-                       ) {
-                        MessageReactionFocusOverlay(
-                            context: focusContext,
-                            allowsThreadInteraction: allowsThreadInteraction
-                                && !focusContext.displayMessage.message.recalled,
-                            canEdit: focusContext.displayMessage.message.isEditable(by: currentUserId),
-                            canRecall: focusContext.displayMessage.message.isRecallable(by: currentUserId)
-                                && allowsThreadInteraction,
-                            onReact: { emoji in
-                                _ = viewModel.react(to: focusContext.messageId, emoji: emoji)
-                            },
-                            onReply: {
-                                guard let item = displayMessages.first(where: { $0.message.id == focusContext.messageId }) else {
-                                    return
-                                }
-                                beginReply(to: item.message)
-                            },
-                            onEdit: {
-                                guard let item = displayMessages.first(where: { $0.message.id == focusContext.messageId }) else {
-                                    return
-                                }
-                                onBeginEdit(item.message)
-                            },
-                            onRecall: {
-                                onRequestRecall(focusContext.messageId)
-                            },
-                            onCopy: {
-                                let body = focusContext.displayMessage.message.body
-                                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                                guard !body.isEmpty else { return }
-                                UIPasteboard.general.string = body
-                            },
-                            onDetails: {
-                                let message = focusContext.displayMessage.message
-                                dismissReactionFocus(force: true)
-                                onOpenDetails(message)
-                            },
-                            onOpenFullPicker: {
-                                reactionPicker.present { emoji in
-                                    _ = viewModel.react(to: focusContext.messageId, emoji: emoji)
-                                }
-                            },
-                            onDismiss: { dismissReactionFocus(force: false) },
-                            onForceDismiss: { dismissReactionFocus(force: true) }
-                        )
-                        .id(reactionFocusSession)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .zIndex(100)
-                    }
-                }
-                .allowsHitTesting(reactionFocusMessageId != nil)
             }
             .overlayPreferenceValue(ChatReadReceiptAnchorKey.self) { anchor in
                 ChatReadReceiptAvatarOverlay(
@@ -656,7 +605,7 @@ struct ChatMessageListView: View {
             lhs.frame.width * lhs.frame.height < rhs.frame.width * rhs.frame.height
         }) else { return nil }
         guard let message = messages.first(where: { $0.id == tightest.id }),
-              !message.isSystemNotice
+              !GroupSystemNoticePayload.displaysAsSystemNotice(message)
         else { return nil }
 
         return MessageHit(
@@ -665,32 +614,24 @@ struct ChatMessageListView: View {
         )
     }
 
-    private func reactionFocusContext(
-        in displayMessages: [DisplayMessage],
-        overlayOrigin: CGPoint
-    ) -> MessageReactionFocusContext? {
-        guard let messageId = reactionFocusMessageId,
-              let globalFrame = reactionFocusFrozenFrame ?? MessageReactionAnchorStore.shared.frame(for: messageId),
-              globalFrame.width > 1,
-              globalFrame.height > 1,
-              let item = displayMessages.first(where: { $0.message.id == messageId })
-        else { return nil }
-
-        let localFrame = globalFrame.offsetBy(dx: -overlayOrigin.x, dy: -overlayOrigin.y)
-
-        return MessageReactionFocusContext(
-            messageId: messageId,
+    private func reactionFocusContext(for item: DisplayMessage, globalFrame: CGRect) -> MessageReactionFocusContext {
+        MessageReactionFocusContext(
+            session: reactionFocusSession,
+            messageId: item.message.id,
             isOutgoing: item.message.senderId == currentUserId,
-            frame: localFrame,
+            frame: globalFrame,
             displayMessage: item,
-            currentUserId: currentUserId
+            currentUserId: currentUserId,
+            senderAvatarURL: senderAvatarURL(for: item.message),
+            senderAvatarName: senderDisplayName(item.message),
+            showsSenderAvatar: item.message.senderId != currentUserId
+                && (item.groupPosition == .standalone || item.groupPosition == .groupLast)
         )
     }
 
     private func openReactionFocus(for item: DisplayMessage) {
-        guard !item.message.isSystemNotice else { return }
-        // Recover from a stuck focus id (overlay never mounted / never armed dismiss).
-        if reactionFocusMessageId != nil {
+        guard !GroupSystemNoticePayload.displaysAsSystemNotice(item.message) else { return }
+        if reactionFocus != nil {
             dismissReactionFocus(force: true)
         }
         guard let globalFrame = MessageReactionAnchorStore.shared.frame(for: item.message.id),
@@ -700,19 +641,19 @@ struct ChatMessageListView: View {
 
         let session = UUID()
         reactionFocusSession = session
-        reactionFocusFrozenFrame = globalFrame
         reactionFocusDismissArmed = false
         Self.longPressImpact.impactOccurred()
         InteractionScrollLock.setLocked(true)
-        // Instant handoff to the overlay clone at the same frame — no fade/slide.
+        onDismissKeyboard()
+        hideKeyboard()
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            reactionFocusMessageId = item.message.id
+            reactionFocus = reactionFocusContext(for: item, globalFrame: globalFrame)
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.reactionFocusDismissArmDelay) {
-            guard reactionFocusSession == session, reactionFocusMessageId != nil else { return }
+            guard reactionFocusSession == session, reactionFocus != nil else { return }
             reactionFocusDismissArmed = true
         }
     }
@@ -741,7 +682,7 @@ struct ChatMessageListView: View {
 
     private func beginReply(to message: ChatMessage) {
         guard allowsThreadInteraction, !message.recalled else { return }
-        guard !message.isSystemNotice else { return }
+        guard !GroupSystemNoticePayload.displaysAsSystemNotice(message) else { return }
         dismissReactionFocus(force: true)
         viewModel.beginReply(to: message, senderDisplayName: senderDisplayName(message))
         onRequestComposerFocus()
@@ -768,12 +709,9 @@ struct ChatMessageListView: View {
     }
 
     private func dismissReactionFocus(force: Bool) {
-        guard reactionFocusMessageId != nil else { return }
+        guard reactionFocus != nil else { return }
         guard force || reactionFocusDismissArmed else { return }
-        // Overlay already sprang back to the anchor — clear focus without a second
-        // layout animation that would slide the list bubble.
-        reactionFocusMessageId = nil
-        reactionFocusFrozenFrame = nil
+        reactionFocus = nil
         reactionFocusDismissArmed = false
         InteractionScrollLock.forceUnlock()
     }

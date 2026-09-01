@@ -31,17 +31,13 @@ struct MessageReactionFocusOverlay: View {
     @State private var isDismissing = false
     /// Only this drives the bubble motion — never animate position/frame.
     @State private var messagePopScale: CGFloat = 1
-    @State private var optionsSize: CGSize = CGSize(width: 200, height: 88)
-    /// Freeze options side on first layout so measuring cannot reshuffle chrome.
-    @State private var placeOptionsAbove = true
-    @State private var didFreezePlacement = false
+    @State private var optionsSize: CGSize = .zero
 
     private let stackSpacing: CGFloat = 10
     private let horizontalMargin: CGFloat = SplickTheme.Spacing.lg
     private let verticalMargin: CGFloat = SplickTheme.Spacing.md
     private let messageFocusScale: CGFloat = 1.12
     private static let actionImpact = UIImpactFeedbackGenerator(style: .light)
-    private let estimatedOptionsHeight: CGFloat = 260
 
     private var contentAlignment: Alignment {
         context.isOutgoing ? .trailing : .leading
@@ -53,6 +49,15 @@ struct MessageReactionFocusOverlay: View {
 
     private var horizontalScaleAnchorX: CGFloat {
         context.isOutgoing ? 1 : 0
+    }
+
+    private var incomingAvatarGutter: CGFloat {
+        context.showsSenderAvatar ? MessageThreadRowLayout.senderAvatarGutter : 0
+    }
+
+    private var liftedOriginX: CGFloat {
+        if context.isOutgoing { return anchorFrame.minX }
+        return anchorFrame.minX - incomingAvatarGutter
     }
 
     private var message: ChatMessage {
@@ -75,82 +80,110 @@ struct MessageReactionFocusOverlay: View {
         anchorFrame.height > 420
     }
 
+    private var estimatedOptionsHeight: CGFloat {
+        var chips = 1
+        if allowsThreadInteraction && !message.recalled { chips += 1 }
+        if canEdit { chips += 1 }
+        if copyPayload != nil { chips += 1 }
+        if canRecall { chips += 1 }
+        let chipHeight: CGFloat = 44
+        let chipGap = SplickTheme.Spacing.xs
+        let chipsHeight = CGFloat(chips) * chipHeight + CGFloat(max(chips - 1, 0)) * chipGap
+        let showTray = allowsThreadInteraction && !message.recalled
+        let trayHeight: CGFloat = showTray ? 52 : 0
+        let blockGap: CGFloat = showTray ? stackSpacing : 0
+        return chipsHeight + trayHeight + blockGap
+    }
+
     var body: some View {
         GeometryReader { geo in
-            let columnWidth = max(geo.size.width - horizontalMargin * 2, 120)
-            let resolvedOptionsHeight = max(optionsSize.height, estimatedOptionsHeight)
-            let optionsCenterY = optionsCenterY(
-                placeAbove: placeOptionsAbove,
+            let resolvedOptionsHeight = optionsSize.height > 1 ? optionsSize.height : estimatedOptionsHeight
+            let resolvedOptionsWidth = optionsSize.width > 1 ? optionsSize.width : 180
+            let scaleExtra = isMessageCapped ? 0 : anchorFrame.height * (messageFocusScale - 1) / 2
+            let placeOptionsAbove = preferredOptionsAbove(
                 containerHeight: geo.size.height,
-                optionsHeight: resolvedOptionsHeight
+                optionsHeight: resolvedOptionsHeight,
+                scaleExtra: scaleExtra
+            )
+            let optionsTop = optionsTopY(
+                placeAbove: placeOptionsAbove,
+                optionsHeight: resolvedOptionsHeight,
+                scaleExtra: scaleExtra
+            )
+            let optionsLeading = optionsLeadingX(
+                containerWidth: geo.size.width,
+                optionsWidth: resolvedOptionsWidth
             )
 
-            ZStack {
+            ZStack(alignment: .topLeading) {
                 Color.black
                     .opacity(isRevealed ? 0.52 : 0)
                     .ignoresSafeArea()
                     .contentShape(Rectangle())
                     .onTapGesture { dismissAnimated() }
 
-                HStack(alignment: .top, spacing: 0) {
+                Group {
                     if context.isOutgoing {
-                        Spacer(minLength: 0)
-                    }
-                    liftedMessage(
-                        maxContentWidth: MessageThreadRowLayout.contentMaxWidth(
-                            forRowWidth: max(geo.size.width - MessageThreadRowLayout.listHorizontalPadding * 2, 120)
-                        ),
-                        maxLayoutHeight: min(geo.size.height * 0.55, 420),
-                        isCapped: isMessageCapped
-                    )
-                    .scaleEffect(
-                        messagePopScale,
-                        anchor: UnitPoint(x: horizontalScaleAnchorX, y: 0.5)
-                    )
-                    .allowsHitTesting(isMessageCapped)
-                    if !context.isOutgoing {
-                        Spacer(minLength: 0)
+                        HStack(alignment: .top, spacing: 0) {
+                            Spacer(minLength: 0)
+                            liftedMessage(
+                                maxContentWidth: MessageThreadRowLayout.contentMaxWidth(
+                                    forRowWidth: max(geo.size.width - MessageThreadRowLayout.listHorizontalPadding * 2, 120)
+                                ),
+                                maxLayoutHeight: min(geo.size.height * 0.55, 420),
+                                isCapped: isMessageCapped
+                            )
+                            .scaleEffect(
+                                messagePopScale,
+                                anchor: UnitPoint(x: 1, y: 0.5)
+                            )
+                            .allowsHitTesting(isMessageCapped)
+                        }
+                        .padding(.top, max(anchorFrame.minY, 0))
+                        .padding(.trailing, max(geo.size.width - anchorFrame.maxX, 0))
+                        .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+                    } else {
+                        liftedMessage(
+                            maxContentWidth: MessageThreadRowLayout.contentMaxWidth(
+                                forRowWidth: max(geo.size.width - MessageThreadRowLayout.listHorizontalPadding * 2, 120)
+                            ),
+                            maxLayoutHeight: min(geo.size.height * 0.55, 420),
+                            isCapped: isMessageCapped
+                        )
+                        .scaleEffect(
+                            messagePopScale,
+                            anchor: UnitPoint(x: 0, y: 0.5)
+                        )
+                        .allowsHitTesting(isMessageCapped)
+                        .offset(x: liftedOriginX, y: max(anchorFrame.minY, 0))
                     }
                 }
-                .padding(.top, max(anchorFrame.minY, 0))
-                .padding(.leading, context.isOutgoing ? horizontalMargin : max(anchorFrame.minX, 0))
-                .padding(.trailing, context.isOutgoing ? max(geo.size.width - anchorFrame.maxX, 0) : horizontalMargin)
-                .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
                 .zIndex(1)
 
-                focusColumn(width: columnWidth) {
-                    optionsStack(placeAbove: placeOptionsAbove)
-                }
-                .fixedSize(horizontal: false, vertical: true)
-                .background(optionsSizeReader)
-                .onPreferenceChange(OptionsMeasuredSizeKey.self) { size in
-                    guard size.width > 1, size.height > 1, size.height < 500 else { return }
-                    var transaction = Transaction()
-                    transaction.disablesAnimations = true
-                    withTransaction(transaction) {
-                        optionsSize = size
+                optionsStack(placeAbove: placeOptionsAbove)
+                    .fixedSize()
+                    .background(optionsSizeReader)
+                    .onPreferenceChange(OptionsMeasuredSizeKey.self) { size in
+                        guard size.width > 1, size.height > 1 else { return }
+                        var transaction = Transaction()
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) {
+                            optionsSize = size
+                        }
                     }
-                }
-                .scaleEffect(
-                    isOptionsRevealed ? 1 : 0.36,
-                    anchor: UnitPoint(
-                        x: horizontalScaleAnchorX,
-                        y: placeOptionsAbove ? 1 : 0
+                    .scaleEffect(
+                        isOptionsRevealed ? 1 : 0.36,
+                        anchor: UnitPoint(
+                            x: horizontalScaleAnchorX,
+                            y: placeOptionsAbove ? 1 : 0
+                        )
                     )
-                )
-                .opacity(isOptionsRevealed ? 1 : 0)
-                .offset(y: isOptionsRevealed ? 0 : (placeOptionsAbove ? 14 : -14))
-                .position(x: geo.size.width / 2, y: optionsCenterY)
-                .zIndex(2)
+                    .opacity(isOptionsRevealed ? 1 : 0)
+                    .offset(y: isOptionsRevealed ? 0 : (placeOptionsAbove ? 14 : -14))
+                    .offset(x: optionsLeading, y: optionsTop)
+                    .zIndex(2)
             }
-            .onAppear {
-                guard !didFreezePlacement else { return }
-                didFreezePlacement = true
-                placeOptionsAbove = preferredOptionsAbove(
-                    containerHeight: geo.size.height,
-                    optionsHeight: resolvedOptionsHeight
-                )
-            }
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
         }
         .onAppear {
             // Rest scale matches the list bubble; then pop in place (no slide).
@@ -190,19 +223,11 @@ struct MessageReactionFocusOverlay: View {
         }
     }
 
-    private func focusColumn<Content: View>(
-        width: CGFloat,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        content()
-            .frame(width: width, alignment: contentAlignment)
-    }
-
     @ViewBuilder
     private func optionsStack(placeAbove: Bool) -> some View {
         VStack(alignment: horizontalAlignment, spacing: stackSpacing) {
             if placeAbove {
-                actionButtons
+                actionButtons(placeAbove: true)
                 if allowsThreadInteraction && !message.recalled {
                     reactionTray
                 }
@@ -210,52 +235,92 @@ struct MessageReactionFocusOverlay: View {
                 if allowsThreadInteraction && !message.recalled {
                     reactionTray
                 }
-                actionButtons
+                actionButtons(placeAbove: false)
             }
         }
-        .frame(maxWidth: .infinity, alignment: contentAlignment)
+        .frame(alignment: contentAlignment)
     }
 
-    private var actionButtons: some View {
-        VStack(alignment: horizontalAlignment, spacing: SplickTheme.Spacing.xs) {
-            if allowsThreadInteraction && !message.recalled {
-                actionButton(
+    private struct FocusActionItem: Identifiable {
+        let id: String
+        let titleKey: L10nKey
+        let systemImage: String
+        let action: () -> Void
+    }
+
+    private func orderedActionItems(placeAbove: Bool) -> [FocusActionItem] {
+        var items: [FocusActionItem] = []
+        if allowsThreadInteraction && !message.recalled {
+            items.append(
+                FocusActionItem(
+                    id: "reply",
                     titleKey: .messagingReplyAction,
-                    systemImage: "arrowshape.turn.up.left.fill"
-                ) {
-                    dismissCommitted(then: onReply)
-                }
-            }
-            if canEdit, let onEdit {
-                actionButton(
+                    systemImage: "arrowshape.turn.up.left.fill",
+                    action: { dismissCommitted(then: onReply) }
+                )
+            )
+        }
+        if canEdit, let onEdit {
+            items.append(
+                FocusActionItem(
+                    id: "edit",
                     titleKey: .messagingEditAction,
-                    systemImage: "pencil"
-                ) {
-                    dismissCommitted(then: onEdit)
-                }
-            }
-            if copyPayload != nil {
-                actionButton(
+                    systemImage: "pencil",
+                    action: { dismissCommitted(then: onEdit) }
+                )
+            )
+        }
+        if copyPayload != nil {
+            items.append(
+                FocusActionItem(
+                    id: "copy",
                     titleKey: .messagingCopyAction,
-                    systemImage: "doc.on.doc"
-                ) {
-                    onCopy()
-                    dismissCommitted()
-                }
-            }
-            actionButton(
+                    systemImage: "doc.on.doc",
+                    action: {
+                        onCopy()
+                        dismissCommitted()
+                    }
+                )
+            )
+        }
+        items.append(
+            FocusActionItem(
+                id: "details",
                 titleKey: .messagingDetailsAction,
-                systemImage: "info.circle"
-            ) {
-                onDetails()
-            }
-            if canRecall, let onRecall {
-                actionButton(
+                systemImage: "info.circle",
+                action: { onDetails() }
+            )
+        )
+        if canRecall, let onRecall {
+            items.append(
+                FocusActionItem(
+                    id: "recall",
                     titleKey: .messagingRecallAction,
-                    systemImage: "arrow.uturn.backward"
-                ) {
-                    dismissCommitted(then: onRecall)
-                }
+                    systemImage: "arrow.uturn.backward",
+                    action: { dismissCommitted(then: onRecall) }
+                )
+            )
+        }
+        let shortestFirst = items.sorted { lhs, rhs in
+            let left = languageService.text(lhs.titleKey)
+            let right = languageService.text(rhs.titleKey)
+            if left.count != right.count { return left.count < right.count }
+            return left < right
+        }
+        return placeAbove ? shortestFirst : Array(shortestFirst.reversed())
+    }
+
+    private func actionButtons(placeAbove: Bool) -> some View {
+        let items = orderedActionItems(placeAbove: placeAbove)
+        return VStack(alignment: horizontalAlignment, spacing: SplickTheme.Spacing.xs) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                let closeness = placeAbove ? index : items.count - 1 - index
+                actionButton(
+                    titleKey: item.titleKey,
+                    systemImage: item.systemImage,
+                    minWidth: 108 + CGFloat(closeness) * 16,
+                    action: item.action
+                )
             }
         }
     }
@@ -273,6 +338,7 @@ struct MessageReactionFocusOverlay: View {
     private func actionButton(
         titleKey: L10nKey,
         systemImage: String,
+        minWidth: CGFloat = 0,
         action: @escaping () -> Void
     ) -> some View {
         Button {
@@ -288,6 +354,7 @@ struct MessageReactionFocusOverlay: View {
             .foregroundStyle(SplickTheme.Colors.textPrimary)
             .padding(.horizontal, SplickTheme.Spacing.md)
             .padding(.vertical, SplickTheme.Spacing.sm)
+            .frame(minWidth: minWidth, alignment: context.isOutgoing ? .trailing : .leading)
             .background {
                 Capsule(style: .continuous)
                     .fill(SplickTheme.Colors.cardBackground)
@@ -317,72 +384,85 @@ struct MessageReactionFocusOverlay: View {
         )
         .fixedSize(horizontal: true, vertical: true)
 
-        Group {
-            if isCapped {
-                ScrollView(showsIndicators: false) {
-                    bubble
-                }
-                .frame(maxWidth: maxContentWidth, maxHeight: maxLayoutHeight, alignment: .top)
-                .fixedSize(horizontal: true, vertical: false)
-                .clipped()
-                .contentShape(Rectangle())
-            } else {
-                bubble
-                    .frame(maxWidth: maxContentWidth, alignment: contentAlignment)
+        HStack(alignment: .center, spacing: MessageThreadRowLayout.senderAvatarGap) {
+            if context.showsSenderAvatar {
+                AvatarView(
+                    imageURL: context.senderAvatarURL,
+                    name: context.senderAvatarName.isEmpty ? "?" : context.senderAvatarName,
+                    size: .small,
+                    userId: message.senderId
+                )
+                .frame(
+                    width: MessageThreadRowLayout.senderAvatarSize,
+                    height: MessageThreadRowLayout.senderAvatarSize
+                )
+                .allowsHitTesting(false)
             }
+
+            Group {
+                if isCapped {
+                    ScrollView(showsIndicators: false) {
+                        bubble
+                    }
+                    .frame(maxWidth: maxContentWidth, maxHeight: maxLayoutHeight, alignment: .top)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .clipped()
+                    .contentShape(Rectangle())
+                } else {
+                    bubble
+                        .frame(maxWidth: maxContentWidth, alignment: contentAlignment)
+                }
+            }
+            .shadow(
+                color: .black.opacity(isRevealed ? 0.22 : 0.08),
+                radius: isRevealed ? 18 : 6,
+                y: isRevealed ? 8 : 2
+            )
         }
-        .shadow(
-            color: .black.opacity(isRevealed ? 0.22 : 0.08),
-            radius: isRevealed ? 18 : 6,
-            y: isRevealed ? 8 : 2
-        )
     }
 
     private func preferredOptionsAbove(
         containerHeight: CGFloat,
-        optionsHeight: CGFloat
+        optionsHeight: CGFloat,
+        scaleExtra: CGFloat
     ) -> Bool {
-        // Default: place above the bubble.
-        //
-        // Only place below when BOTH conditions hold:
-        //   1. The bubble is in the upper portion of the screen (its midpoint is
-        //      within the top 42 % of the container), so there is naturally more
-        //      empty space below it.
-        //   2. There is enough room below for the options chrome without clamping.
-        //      (Clamping pushes the options center up, potentially overlapping the
-        //      bubble — exactly the bug this addresses.)
-        //
-        // Every other case — bottom-of-screen messages, keyboard-narrowed views,
-        // first-layout with an imprecise estimate — stays safely above.
         let needed = optionsHeight + stackSpacing
-        let spaceBelow = containerHeight - anchorFrame.maxY - verticalMargin
-        let bubbleIsInUpperRegion = anchorFrame.midY < containerHeight * 0.42
-        return !(bubbleIsInUpperRegion && spaceBelow >= needed)
+        let spaceAbove = anchorFrame.minY - scaleExtra - verticalMargin
+        let spaceBelow = containerHeight - (anchorFrame.maxY + scaleExtra) - verticalMargin
+        let preferAbove = anchorFrame.midY >= containerHeight / 2
+        let aboveFits = spaceAbove >= needed
+        let belowFits = spaceBelow >= needed
+        if preferAbove, aboveFits { return true }
+        if !preferAbove, belowFits { return false }
+        if aboveFits, !belowFits { return true }
+        if belowFits, !aboveFits { return false }
+        return spaceAbove >= spaceBelow
     }
 
-    /// Options float around the anchored bubble (or to a screen edge) — bubble never moves.
-    private func optionsCenterY(
+    /// Top-leading origin of the options stack — never clamp into the bubble.
+    private func optionsTopY(
         placeAbove: Bool,
-        containerHeight: CGFloat,
-        optionsHeight: CGFloat
+        optionsHeight: CGFloat,
+        scaleExtra: CGFloat
     ) -> CGFloat {
-        let minY = verticalMargin
-        let maxY = containerHeight - verticalMargin
-        let optionsHalf = optionsHeight / 2
-
         if placeAbove {
-            let ideal = anchorFrame.minY - stackSpacing - optionsHalf
-            if ideal - optionsHalf >= minY {
-                return ideal
-            }
-            return minY + optionsHalf
-        } else {
-            let ideal = anchorFrame.maxY + stackSpacing + optionsHalf
-            if ideal + optionsHalf <= maxY {
-                return ideal
-            }
-            return maxY - optionsHalf
+            return anchorFrame.minY - scaleExtra - stackSpacing - optionsHeight
         }
+        return anchorFrame.maxY + scaleExtra + stackSpacing
+    }
+
+    private func optionsLeadingX(
+        containerWidth: CGFloat,
+        optionsWidth: CGFloat
+    ) -> CGFloat {
+        let width = max(optionsWidth, 1)
+        let minX = horizontalMargin
+        let maxX = max(containerWidth - horizontalMargin - width, minX)
+        if context.isOutgoing {
+            return min(max(anchorFrame.maxX - width, minX), maxX)
+        }
+        // Incoming chips follow the bubble leading after the avatar-pinned pop scale.
+        return liftedOriginX + incomingAvatarGutter * messagePopScale
     }
 
     private func dismissAnimated() {
@@ -413,11 +493,11 @@ struct MessageReactionFocusOverlay: View {
 }
 
 private struct OptionsMeasuredSizeKey: PreferenceKey {
-    static var defaultValue: CGSize = CGSize(width: 200, height: 88)
+    static var defaultValue: CGSize = .zero
 
     static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
         let next = nextValue()
-        if next.width > 1, next.height > 1, next.height < 500 {
+        if next.width > 1, next.height > 1 {
             value = next
         }
     }

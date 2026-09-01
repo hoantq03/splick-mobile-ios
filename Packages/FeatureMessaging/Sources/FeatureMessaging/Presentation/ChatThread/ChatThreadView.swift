@@ -1,7 +1,9 @@
 import SwiftUI
+import UIKit
 import Common
 import DesignSystem
 import Localization
+import Networking
 import SplickDomain
 import Storage
 
@@ -30,6 +32,8 @@ public struct ChatThreadView: View {
     @State private var groupConversation: Conversation?
     @State private var activeGroupSheet: GroupChatSheet?
     @State private var confirmLeaveGroup = false
+    @State private var confirmDisbandGroup = false
+    @State private var showTransferBeforeLeave = false
     @State private var leaveError: String?
     @State private var confirmDeleteConversation = false
     @State private var confirmRecallMessageId: UUID?
@@ -38,11 +42,13 @@ public struct ChatThreadView: View {
     @State private var pendingPeerConfirm: PendingPeerConfirm?
     @State private var detailsMessage: ChatMessage?
     @State private var isDetailsPresented = false
+    @State private var reactionFocus: MessageReactionFocusContext?
 
     @Environment(\.chatGroupManagementActions) private var groupManagementActions
     @Environment(\.presentInviteFriendsToGroup) private var presentInviteFriendsToGroup
-    @Environment(\.leaveSocialGroupMembership) private var leaveSocialGroupMembership
+    @Environment(\.transferSocialGroupOwnership) private var transferSocialGroupOwnership
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.messagingReactionPicker) private var reactionPicker
 
     public init(
         viewModel: ChatThreadViewModel,
@@ -70,6 +76,7 @@ public struct ChatThreadView: View {
         ZStack {
             threadContent
                 .dismissKeyboardOnTap()
+            reactionFocusCover
             if isSearchingThread {
                 ChatThreadSearchOverlay(
                     viewModel: viewModel,
@@ -90,6 +97,8 @@ public struct ChatThreadView: View {
         }
         .background(SplickTheme.Colors.background.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(reactionFocus == nil ? .automatic : .hidden, for: .navigationBar)
+        .toolbarBackground(reactionFocus == nil ? .automatic : .hidden, for: .tabBar)
         // Edge-only pop: disables widened pop band so swipe-to-reply is not stolen.
         .splickEdgeOnlyInteractivePop()
         .toolbar {
@@ -182,6 +191,17 @@ public struct ChatThreadView: View {
                                 memberUserId: memberUserId
                             )
                         },
+                        transferAdmin: { groupId, newAdminUserId in
+                            try await transferGroupLeadership(
+                                groupId: groupId,
+                                newAdminUserId: newAdminUserId
+                            )
+                        },
+                        onTransferred: {
+                            Task {
+                                await viewModel.refreshGroupViewerRole(isGroup: true)
+                            }
+                        },
                         onAddMembers: { memberIds in
                             activeGroupSheet = nil
                             presentCenteredConfirm {
@@ -191,6 +211,24 @@ public struct ChatThreadView: View {
                                         existingMemberIds: memberIds
                                     )
                                 )
+                            }
+                        }
+                    )
+                case .transferAdmin:
+                    TransferGroupAdminSheet(
+                        groupId: displayConversation.id,
+                        currentUserId: currentUserId,
+                        fetchMembers: groupManagementActions.fetchMembers,
+                        transferAdmin: { groupId, newAdminUserId in
+                            try await transferGroupLeadership(
+                                groupId: groupId,
+                                newAdminUserId: newAdminUserId
+                            )
+                        },
+                        onTransferred: {
+                            Task {
+                                await viewModel.refreshGroupViewerRole(isGroup: true)
+                                await leaveGroup()
                             }
                         }
                     )
@@ -224,6 +262,18 @@ public struct ChatThreadView: View {
                 Task { await leaveGroup() }
             }
             Button(languageService.text(.commonCancel), role: .cancel) {}
+        }
+        .confirmationDialog(
+            languageService.text(.messagingGroupDisbandConfirmTitle),
+            isPresented: $confirmDisbandGroup,
+            titleVisibility: .visible
+        ) {
+            Button(languageService.text(.messagingGroupDisband), role: .destructive) {
+                Task { await disbandGroup() }
+            }
+            Button(languageService.text(.commonCancel), role: .cancel) {}
+        } message: {
+            Text(languageService.text(.messagingGroupDisbandConfirmMessage))
         }
         .confirmationDialog(
             languageService.text(.messagingChatDeleteConversationConfirmTitle),
@@ -277,6 +327,20 @@ public struct ChatThreadView: View {
             Button(languageService.text(.commonOK), role: .cancel) { leaveError = nil }
         } message: {
             Text(leaveError ?? "")
+        }
+        .alert(
+            languageService.text(.friendsTransferBeforeLeaveTitle),
+            isPresented: $showTransferBeforeLeave
+        ) {
+            Button(languageService.text(.friendsStay), role: .cancel) {
+                showTransferBeforeLeave = false
+            }
+            Button(languageService.text(.friendsTransferOwnership)) {
+                showTransferBeforeLeave = false
+                activeGroupSheet = .transferAdmin
+            }
+        } message: {
+            Text(languageService.text(.friendsTransferBeforeLeave))
         }
         .alert(
             comingSoonFeatureTitle ?? languageService.text(.messagingChatMoreAccessibility),
@@ -354,6 +418,69 @@ public struct ChatThreadView: View {
                         bottomBar
                     }
                 }
+        }
+    }
+
+    @ViewBuilder
+    private var reactionFocusCover: some View {
+        if let focus = reactionFocus {
+            GeometryReader { geo in
+                MessageReactionFocusOverlay(
+                    context: focus.localized(overlayOrigin: geo.frame(in: .global).origin),
+                    allowsThreadInteraction: groupCapabilities.canInteractWithMessages
+                        && !relationshipViewModel.isBlocked
+                        && !focus.displayMessage.message.recalled,
+                    canEdit: focus.displayMessage.message.isEditable(by: currentUserId),
+                    canRecall: focus.displayMessage.message.isRecallable(by: currentUserId)
+                        && groupCapabilities.canInteractWithMessages
+                        && !relationshipViewModel.isBlocked,
+                    onReact: { emoji in
+                        _ = viewModel.react(to: focus.messageId, emoji: emoji)
+                    },
+                    onReply: {
+                        guard let message = viewModel.messages.first(where: { $0.id == focus.messageId }) else {
+                            return
+                        }
+                        viewModel.beginReply(
+                            to: message,
+                            senderDisplayName: senderDisplayName(for: message)
+                        )
+                        isInputFocused = true
+                    },
+                    onEdit: {
+                        guard let message = viewModel.messages.first(where: { $0.id == focus.messageId }) else {
+                            return
+                        }
+                        if let body = viewModel.beginEdit(message) {
+                            inputText = body
+                            isInputFocused = true
+                        }
+                    },
+                    onRecall: {
+                        confirmRecallMessageId = focus.messageId
+                    },
+                    onCopy: {
+                        let body = focus.displayMessage.message.body
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !body.isEmpty else { return }
+                        UIPasteboard.general.string = body
+                    },
+                    onDetails: {
+                        reactionFocus = nil
+                        openMessageDetails(focus.displayMessage.message)
+                    },
+                    onOpenFullPicker: {
+                        reactionPicker.present { emoji in
+                            _ = viewModel.react(to: focus.messageId, emoji: emoji)
+                        }
+                    },
+                    onDismiss: { reactionFocus = nil },
+                    onForceDismiss: { reactionFocus = nil }
+                )
+                .id(focus.session)
+            }
+            .ignoresSafeArea()
+            .zIndex(100)
         }
     }
 
@@ -486,6 +613,17 @@ public struct ChatThreadView: View {
                 }
             }
 
+            if groupCapabilities.canDisbandGroup {
+                Button(role: .destructive) {
+                    confirmDisbandGroup = true
+                } label: {
+                    Label(
+                        languageService.text(.messagingGroupDisband),
+                        systemImage: "xmark.circle"
+                    )
+                }
+            }
+
             if groupCapabilities.canDeleteConversation {
                 deleteConversationAction
             }
@@ -499,12 +637,14 @@ public struct ChatThreadView: View {
         case rename
         case avatar
         case members
+        case transferAdmin
 
         var id: String {
             switch self {
             case .rename: return "rename"
             case .avatar: return "avatar"
             case .members: return "members"
+            case .transferAdmin: return "transferAdmin"
             }
         }
     }
@@ -576,25 +716,39 @@ public struct ChatThreadView: View {
         }
     }
 
+    private func transferGroupLeadership(groupId: UUID, newAdminUserId: UUID) async throws {
+        if let transferSocialGroupOwnership {
+            do {
+                try await transferSocialGroupOwnership(groupId, newAdminUserId)
+            } catch {
+                if !error.isIgnorableSocialOwnershipTransfer {
+                    throw error
+                }
+            }
+        }
+        guard let repository else { return }
+        try await repository.transferGroupAdmin(groupId: groupId, newAdminUserId: newAdminUserId)
+    }
+
     private func leaveGroup() async {
         guard let displayConversation, let repository else { return }
         do {
-            if let leaveSocialGroupMembership {
-                do {
-                    try await leaveSocialGroupMembership(displayConversation.id)
-                } catch {
-                    if error.isOwnershipTransferRequired {
-                        leaveError = languageService.text(.friendsTransferBeforeLeave)
-                        return
-                    }
-                    guard error.isIgnorableSocialLeave else { throw error }
-                }
+            try await repository.leaveGroup(groupId: displayConversation.id)
+            onConversationDeleted?(displayConversation.id)
+            dismiss()
+        } catch {
+            if error.isOwnershipTransferRequired {
+                showTransferBeforeLeave = true
+            } else {
+                leaveError = languageService.localizedMessage(for: error)
             }
-            do {
-                try await repository.leaveGroup(groupId: displayConversation.id)
-            } catch {
-                guard error.isIgnorableMessagingLeave else { throw error }
-            }
+        }
+    }
+
+    private func disbandGroup() async {
+        guard let displayConversation else { return }
+        do {
+            try await groupManagementActions.deleteGroup(displayConversation.id)
             onConversationDeleted?(displayConversation.id)
             dismiss()
         } catch {
@@ -823,7 +977,8 @@ public struct ChatThreadView: View {
                 },
                 onRequestRecall: { messageId in
                     confirmRecallMessageId = messageId
-                }
+                },
+                reactionFocus: $reactionFocus
             )
         }
     }
@@ -856,8 +1011,10 @@ public struct ChatThreadView: View {
                     viewModel.stopLocalTyping()
                     let isEditing = viewModel.editDraft != nil
                     inputText = ""
+                    isInputFocused = true
                     Task {
                         await viewModel.send(body: text, submissions: submissions)
+                        isInputFocused = true
                         if !isEditing {
                             viewModel.dismissMutationError()
                         }
@@ -937,17 +1094,13 @@ private extension Error {
         return false
     }
 
-    var isIgnorableSocialLeave: Bool {
+    var isIgnorableSocialOwnershipTransfer: Bool {
         guard let network = self as? NetworkError else { return false }
         switch network {
-        case .notFound, .forbidden:
+        case .forbidden, .notFound:
             return true
         default:
             return false
         }
-    }
-
-    var isIgnorableMessagingLeave: Bool {
-        isIgnorableSocialLeave
     }
 }
