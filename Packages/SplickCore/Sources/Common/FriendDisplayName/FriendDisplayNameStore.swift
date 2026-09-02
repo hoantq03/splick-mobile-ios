@@ -133,15 +133,18 @@ public actor FriendDisplayNameStore {
                     splits: billSplit.splits.map { line in
                         PostBillSplitLine(
                             id: line.id,
-                            user: resolve(line.user),
+                            user: line.user.map { resolve($0) },
+                            guest: line.guest,
                             amount: line.amount,
                             isPaid: line.isPaid,
                             paymentStatus: line.paymentStatus,
                             latestEvidenceCommentId: line.latestEvidenceCommentId,
                             lastRejectedAt: line.lastRejectedAt,
-                            reminderCount: line.reminderCount
+                            reminderCount: line.reminderCount,
+                            inviteUrl: line.inviteUrl
                         )
-                    }
+                    },
+                    tableInviteUrl: billSplit.tableInviteUrl
                 )
             },
             viewCount: post.viewCount,
@@ -198,7 +201,8 @@ public actor FriendDisplayNameStore {
                     user: resolve(split.user),
                     amount: split.amount,
                     isPaid: split.isPaid,
-                    paidAt: split.paidAt
+                    paidAt: split.paidAt,
+                    paymentStatus: split.paymentStatus
                 )
             },
             groupId: expense.groupId,

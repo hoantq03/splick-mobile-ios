@@ -90,17 +90,25 @@ struct PostBillSplitDTO: Decodable {
     let totalAmount: String
     let currency: String
     let splits: [PostBillSplitLineDTO]
+    let tableInviteUrl: String?
 }
 
 struct PostBillSplitLineDTO: Decodable {
     let id: UUID?
-    let user: AuthorDTO
+    let user: AuthorDTO?
+    let guest: GuestParticipantDTO?
     let amount: String
     let isPaid: Bool?
     let paymentStatus: String?
     let latestEvidenceCommentId: UUID?
     let lastRejectedAt: Date?
     let reminderCount: Int?
+    let inviteUrl: String?
+}
+
+struct GuestParticipantDTO: Decodable {
+    let displayName: String
+    let status: String?
 }
 
 struct AuthorDTO: Decodable {
@@ -217,6 +225,13 @@ struct CreatePostBillSplitRequestDTO: Encodable {
     let participants: [UUID]
     let customAmounts: [String: String]?
     let autoReminderEnabled: Bool?
+    let pendingCompanions: [PendingCompanionRequestDTO]?
+}
+
+struct PendingCompanionRequestDTO: Encodable {
+    let displayName: String
+    let phoneNumber: String?
+    let amount: String?
 }
 
 struct SendPostBillReminderRequestDTO: Encodable {

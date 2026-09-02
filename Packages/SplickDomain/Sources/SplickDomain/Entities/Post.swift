@@ -16,9 +16,20 @@ public enum PaymentSplitStatus: String, Codable, Equatable, Sendable {
     case paid = "PAID"
 }
 
+public struct GuestParticipant: Codable, Equatable, Sendable {
+    public let displayName: String
+    public let status: String
+
+    public init(displayName: String, status: String = "pending") {
+        self.displayName = displayName
+        self.status = status
+    }
+}
+
 public struct PostBillSplitLine: Identifiable, Codable, Equatable, Sendable {
     public let id: UUID
-    public let user: UserSummary
+    public let user: UserSummary?
+    public let guest: GuestParticipant?
     public let amount: Decimal
     public let isPaid: Bool
     public let paymentStatus: PaymentSplitStatus
@@ -27,18 +38,30 @@ public struct PostBillSplitLine: Identifiable, Codable, Equatable, Sendable {
     /// Total payment reminders (manual + auto) for this split.
     public let reminderCount: Int
 
+    /// Creator-only share URL for this pending guest (omitted for other viewers).
+    public let inviteUrl: String?
+
+    public var participantDisplayName: String {
+        user?.displayName ?? guest?.displayName ?? "Guest"
+    }
+
+    public var isPendingGuest: Bool { user == nil && guest != nil }
+
     public init(
         id: UUID = UUID(),
-        user: UserSummary,
+        user: UserSummary? = nil,
+        guest: GuestParticipant? = nil,
         amount: Decimal,
         isPaid: Bool = false,
         paymentStatus: PaymentSplitStatus? = nil,
         latestEvidenceCommentId: UUID? = nil,
         lastRejectedAt: Date? = nil,
-        reminderCount: Int = 0
+        reminderCount: Int = 0,
+        inviteUrl: String? = nil
     ) {
         self.id = id
         self.user = user
+        self.guest = guest
         self.amount = amount
         self.isPaid = isPaid
         if let paymentStatus {
@@ -49,6 +72,7 @@ public struct PostBillSplitLine: Identifiable, Codable, Equatable, Sendable {
         self.latestEvidenceCommentId = latestEvidenceCommentId
         self.lastRejectedAt = lastRejectedAt
         self.reminderCount = max(reminderCount, 0)
+        self.inviteUrl = inviteUrl
     }
 }
 
@@ -56,11 +80,18 @@ public struct PostBillSplit: Codable, Equatable, Sendable {
     public let totalAmount: Decimal
     public let currency: String
     public let splits: [PostBillSplitLine]
+    public let tableInviteUrl: String?
 
-    public init(totalAmount: Decimal, currency: String, splits: [PostBillSplitLine]) {
+    public init(
+        totalAmount: Decimal,
+        currency: String,
+        splits: [PostBillSplitLine],
+        tableInviteUrl: String? = nil
+    ) {
         self.totalAmount = totalAmount
         self.currency = currency
         self.splits = splits
+        self.tableInviteUrl = tableInviteUrl
     }
 }
 
@@ -332,23 +363,26 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
     public func incrementingBillReminders(for userIds: Set<UUID>) -> Post {
         guard let bill = billSplit, !userIds.isEmpty else { return self }
         let updatedSplits = bill.splits.map { line -> PostBillSplitLine in
-            guard !line.isPaid, userIds.contains(line.user.id) else { return line }
+            guard !line.isPaid, let userId = line.user?.id, userIds.contains(userId) else { return line }
             return PostBillSplitLine(
                 id: line.id,
                 user: line.user,
+                guest: line.guest,
                 amount: line.amount,
                 isPaid: line.isPaid,
                 paymentStatus: line.paymentStatus,
                 latestEvidenceCommentId: line.latestEvidenceCommentId,
                 lastRejectedAt: line.lastRejectedAt,
-                reminderCount: line.reminderCount + 1
+                reminderCount: line.reminderCount + 1,
+                inviteUrl: line.inviteUrl
             )
         }
         return updating(
             billSplit: PostBillSplit(
                 totalAmount: bill.totalAmount,
                 currency: bill.currency,
-                splits: updatedSplits
+                splits: updatedSplits,
+                tableInviteUrl: bill.tableInviteUrl
             )
         )
     }
@@ -365,19 +399,22 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
             return PostBillSplitLine(
                 id: line.id,
                 user: line.user,
+                guest: line.guest,
                 amount: line.amount,
                 isPaid: line.isPaid,
                 paymentStatus: line.paymentStatus,
                 latestEvidenceCommentId: line.latestEvidenceCommentId,
                 lastRejectedAt: line.lastRejectedAt,
-                reminderCount: mergedCount
+                reminderCount: mergedCount,
+                inviteUrl: line.inviteUrl
             )
         }
         return updating(
             billSplit: PostBillSplit(
                 totalAmount: bill.totalAmount,
                 currency: bill.currency,
-                splits: mergedSplits
+                splits: mergedSplits,
+                tableInviteUrl: bill.tableInviteUrl
             )
         )
     }
@@ -385,7 +422,9 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
     public var knownUsers: [UUID: UserSummary] {
         var map = [author.id: author]
         companions.forEach { map[$0.id] = $0 }
-        billSplit?.splits.forEach { map[$0.user.id] = $0.user }
+        billSplit?.splits.forEach { line in
+            if let user = line.user { map[user.id] = user }
+        }
         comments.forEach { map[$0.author.id] = $0.author }
         viewers.forEach { map[$0.id] = $0 }
         reactionPreview.forEach { map[$0.user.id] = $0.user }
@@ -743,6 +782,6 @@ public extension Post {
 
     /// Split line for the given user in a share-bill post.
     func billSplitLine(for userId: UUID) -> PostBillSplitLine? {
-        billSplit?.splits.first { $0.user.id == userId }
+        billSplit?.splits.first { $0.user?.id == userId }
     }
 }

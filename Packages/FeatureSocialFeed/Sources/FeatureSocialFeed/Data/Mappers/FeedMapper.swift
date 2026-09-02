@@ -179,7 +179,8 @@ enum FeedMapper {
         return PostBillSplit(
             totalAmount: totalAmount,
             currency: dto.currency,
-            splits: splits
+            splits: splits,
+            tableInviteUrl: dto.tableInviteUrl
         )
     }
 
@@ -214,13 +215,15 @@ enum FeedMapper {
         let paymentStatus = line.paymentStatus.flatMap { PaymentSplitStatus(rawValue: $0) }
         return PostBillSplitLine(
             id: line.id ?? UUID(),
-            user: toUserSummary(line.user),
+            user: line.user.map(toUserSummary),
+            guest: line.guest.map { GuestParticipant(displayName: $0.displayName, status: $0.status ?? "pending") },
             amount: amount,
             isPaid: line.isPaid ?? false,
             paymentStatus: paymentStatus,
             latestEvidenceCommentId: line.latestEvidenceCommentId,
             lastRejectedAt: line.lastRejectedAt,
-            reminderCount: line.reminderCount ?? 0
+            reminderCount: line.reminderCount ?? 0,
+            inviteUrl: line.inviteUrl
         )
     }
 

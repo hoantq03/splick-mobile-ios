@@ -595,13 +595,13 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
                 targets = Set(targetUserIds)
             } else {
                 targets = Set(
-                    post.billSplit?.splits.filter { !$0.isPaid }.map(\.user.id) ?? []
+                    post.billSplit?.splits.filter { !$0.isPaid }.compactMap(\.user?.id) ?? []
                 )
             }
             sentCount = targets.count
             let targetUsers = post.billSplit?.splits
-                .filter { targets.contains($0.user.id) }
-                .map(\.user) ?? []
+                .filter { line in line.user.map { targets.contains($0.id) } ?? false }
+                .compactMap(\.user) ?? []
             let mentions = targetUsers.map { "@\($0.username)" }.joined(separator: " ")
             let commentBody = [mentions, message]
                 .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
