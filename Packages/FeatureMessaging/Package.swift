@@ -35,6 +35,7 @@ let package = Package(
                 .product(name: "Localization", package: "SplickCore"),
                 .product(name: "Storage", package: "SplickCore"),
                 .product(name: "Networking", package: "SplickCore"),
+                .product(name: "DesignSystem", package: "SplickCore"),
             ],
             path: "Tests/FeatureMessagingTests"
         ),

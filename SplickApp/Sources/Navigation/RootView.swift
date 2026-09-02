@@ -66,13 +66,12 @@ struct RootView: View {
             guard appState.isAuthenticated else { return }
             switch phase {
             case .active:
-                if previousScenePhase == .background {
-                    container.messagingWebSocketClient.reconnect()
-                } else {
-                    container.messagingWebSocketClient.connect()
-                }
+                // Always tear down a possibly zombie socket. iOS often skips `.background`
+                // (Control Center, app switcher) so `connect()` would no-op on a dead task.
+                // Inbox/thread catch-up is silent (WS `.connected` + gap-fill), not pull-to-refresh.
+                container.messagingWebSocketClient.reconnect()
             case .inactive:
-                container.messagingWebSocketClient.connect()
+                break
             case .background:
                 container.messagingWebSocketClient.disconnect()
             @unknown default:

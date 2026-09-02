@@ -69,6 +69,7 @@ public final class ConversationListViewModel: ObservableObject {
     private var remoteTypingTimeouts: [String: Task<Void, Never>] = [:]
     private var currentPage = 0
     private var pendingDeleteConversationId: UUID?
+    private var refreshQueued = false
 
     public init(
         fetchConversationsUseCase: FetchConversationsUseCase,
@@ -245,7 +246,11 @@ public final class ConversationListViewModel: ObservableObject {
 
     public func refresh() async {
         if let existing = refreshTask {
+            refreshQueued = true
             await existing.value
+            guard refreshQueued else { return }
+            refreshQueued = false
+            await refresh()
             return
         }
 
@@ -255,6 +260,10 @@ public final class ConversationListViewModel: ObservableObject {
         refreshTask = task
         await task.value
         refreshTask = nil
+        if refreshQueued {
+            refreshQueued = false
+            await refresh()
+        }
     }
 
     public func loadMoreIfNeeded(current conversation: Conversation) async {
@@ -578,6 +587,7 @@ public final class ConversationListViewModel: ObservableObject {
                 guard let self else { return }
                 switch event {
                 case .connected:
+                    // Missed WS events while backgrounded are not replayed — REST catch-up.
                     Task { await self.refresh() }
                 case .newMessage(let conversationId, let message):
                     self.applyIncomingMessage(conversationId: conversationId, message: message)

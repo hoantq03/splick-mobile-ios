@@ -54,10 +54,9 @@ struct ChatMessageListView: View {
     private static let replySwipeThreshold: CGFloat = 56
     /// Past the icon slot (46) so threshold is reachable while reveal stays 1:1.
     private static let replySwipeMaxOffset: CGFloat = 72
-    /// Leading strip reserved for strict edge-only interactive pop (must match
-    /// `splickEdgeOnlyInteractivePop` default). 1pt so timestamp / reply own
-    /// almost the full leading edge; only a hairline triggers back.
-    private static let navigationBackEdgeWidth: CGFloat = 1
+    /// Leading strip reserved for bezel-only interactive pop (must match
+    /// `SplickEdgeInteractivePop.edgeWidth`). Interior space is reply / timestamps.
+    private static let navigationBackEdgeWidth: CGFloat = SplickEdgeInteractivePop.edgeWidth
 
     private var reactionFocusMessageId: UUID? {
         reactionFocus?.messageId
@@ -830,7 +829,7 @@ private struct ChatListHorizontalPanInstaller: UIViewRepresentable {
     }
 
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
-        var edgeExclusionWidth: CGFloat = 1
+        var edgeExclusionWidth: CGFloat = SplickEdgeInteractivePop.edgeWidth
         var isEnabled = true
         var onChanged: ((_ globalStart: CGPoint, _ localStart: CGPoint, _ listWidth: CGFloat, _ translation: CGSize) -> Void)?
         var onEnded: ((CGSize) -> Void)?
@@ -862,8 +861,8 @@ private struct ChatListHorizontalPanInstaller: UIViewRepresentable {
             }
             detach()
             scrollView.addGestureRecognizer(pan)
-            // Stock interactive-pop is disabled on chat; only a hairline strict edge pan
-            // can go back. Content past that strip is reply / timestamp.
+            // Bezel pop owns the leading strip; this pan owns reply / timestamps past it.
+            SplickEdgeInteractivePop.requireFailureOfEdgePop(for: pan, from: scrollView)
             scrollView.panGestureRecognizer.require(toFail: pan)
             hostScrollView = scrollView
             navigationController = nav

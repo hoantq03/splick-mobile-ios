@@ -134,6 +134,10 @@ private actor StubMessagingRepository: MessagingRepositoryProtocol {
     func requestWsTicket() async throws -> String { "test-ticket" }
     func recordedMarkReadCalls() async -> [(UUID, UUID)] { markReadCalls }
     func recordedSendMessageCallCount() async -> Int { sendMessageCallCount }
+    func recordedAfterFetchCalls() async -> [Int64] { afterFetchCalls }
+    func replaceMessages(_ messages: [ChatMessage]) {
+        self.messages = messages
+    }
 }
 
 private struct StubReactToMessageUseCase: ReactToMessageUseCaseProtocol {
@@ -266,6 +270,25 @@ final class ChatThreadViewModelTests: XCTestCase {
         XCTAssertEqual(vm.messages.count, 1)
         XCTAssertEqual(vm.messages.first?.body, "New incoming")
         XCTAssertEqual(vm.messages.first?.sequenceNo, 5)
+    }
+
+    func test_wsConnected_gapFillsMessagesMissedWhileDisconnected() async {
+        let old = makeMessage(body: "old", sequenceNo: 1)
+        let missed = makeMessage(body: "missed", sequenceNo: 2)
+        let repo = StubMessagingRepository(messages: [old])
+        let wsClient = makeTestWsClient()
+        let vm = makeViewModel(repo: repo, wsClient: wsClient)
+
+        await vm.load()
+        XCTAssertEqual(vm.messages.map(\.body), ["old"])
+
+        await repo.replaceMessages([missed, old])
+        wsClient.eventSubject.send(.connected)
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        let afterCalls = await repo.recordedAfterFetchCalls()
+        XCTAssertEqual(afterCalls, [1])
+        XCTAssertEqual(vm.messages.map(\.body), ["old", "missed"])
     }
 
     // MARK: Mark-read on load

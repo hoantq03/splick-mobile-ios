@@ -36,9 +36,9 @@ extension View {
         background(SplickInteractivePopEnabler())
     }
 
-    /// System edge swipe-back only. Disables the stock (wide) interactive-pop recognizer
-    /// and any widened pop band, then installs a thin leading-edge pan for chat reply screens.
-    public func splickEdgeOnlyInteractivePop(edgeWidth: CGFloat = 1) -> some View {
+    /// Physical-bezel swipe-back only. Disables the stock (wide) interactive-pop recognizer
+    /// and any widened pop band, then installs a screen-edge pan for chat reply screens.
+    public func splickEdgeOnlyInteractivePop(edgeWidth: CGFloat = SplickEdgeInteractivePop.edgeWidth) -> some View {
         background(SplickEdgeOnlyInteractivePopInstaller(edgeWidth: edgeWidth))
     }
 
@@ -82,7 +82,7 @@ private struct SplickEdgeOnlyInteractivePopInstaller: UIViewControllerRepresenta
 }
 
 private final class SplickEdgeOnlyInteractivePopHostController: UIViewController {
-    var edgeWidth: CGFloat = 1
+    var edgeWidth: CGFloat = SplickEdgeInteractivePop.edgeWidth
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -105,24 +105,23 @@ private final class SplickEdgeOnlyInteractivePopHostController: UIViewController
     }
 
     func enableIfNeeded() {
-        guard let nav = navigationController ?? ancestorNavigationController() else { return }
+        guard let nav = resolvedNavigationController() else {
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let nav = self.resolvedNavigationController() else { return }
+                SplickStrictEdgePopGesture.install(on: nav, edgeWidth: self.edgeWidth)
+            }
+            return
+        }
         SplickStrictEdgePopGesture.install(on: nav, edgeWidth: edgeWidth)
     }
 
     func restoreSystemPopIfNeeded() {
-        guard let nav = navigationController ?? ancestorNavigationController() else { return }
+        guard let nav = resolvedNavigationController() else { return }
         SplickStrictEdgePopGesture.uninstall(on: nav)
     }
 
-    private func ancestorNavigationController() -> UINavigationController? {
-        var responder: UIResponder? = view
-        while let current = responder {
-            if let nav = current as? UINavigationController {
-                return nav
-            }
-            responder = current.next
-        }
-        return nil
+    private func resolvedNavigationController() -> UINavigationController? {
+        navigationController ?? SplickNavigationLookup.navigationController(from: view)
     }
 }
 
@@ -218,14 +217,40 @@ private final class SplickWideInteractivePopHostController: UIViewController {
     }
 }
 
+/// Leading-bezel width for chat back-swipe. Stock `NavigationStack` pop is much wider
+/// and steals swipe-to-reply on short incoming bubbles.
+public enum SplickEdgeInteractivePop {
+    public static let edgeWidth: CGFloat = 12
+
+    public static func isInLeadingEdgeBand(
+        x: CGFloat,
+        viewWidth: CGFloat,
+        isRightToLeft: Bool,
+        edgeWidth: CGFloat = edgeWidth
+    ) -> Bool {
+        if isRightToLeft {
+            return x >= viewWidth - edgeWidth
+        }
+        return x <= edgeWidth
+    }
+
+    /// Chat reply pans wait for the bezel pop, then own the rest of the row.
+    public static func requireFailureOfEdgePop(for gesture: UIGestureRecognizer, from view: UIView) {
+        guard let nav = SplickNavigationLookup.navigationController(from: view) else { return }
+        if let edge = SplickStrictEdgePopGesture.edgePan(on: nav) {
+            gesture.require(toFail: edge)
+        }
+    }
+}
+
 /// Thin leading-edge pop used by chat. Disables stock interactive-pop (too wide) and
-/// drives the same transition targets from a hairline leading strip only.
+/// drives the same transition from `UIScreenEdgePanGestureRecognizer` only.
 private final class SplickStrictEdgePopGesture: NSObject, UIGestureRecognizerDelegate {
     private static var associatedKey: UInt8 = 0
 
     private weak var navigationController: UINavigationController?
-    private var pan: UIPanGestureRecognizer?
-    var edgeWidth: CGFloat = 1
+    private var pan: UIScreenEdgePanGestureRecognizer?
+    var edgeWidth: CGFloat = SplickEdgeInteractivePop.edgeWidth
     private var touchStartX: CGFloat = .greatestFiniteMagnitude
 
     static func install(on nav: UINavigationController, edgeWidth: CGFloat) {
@@ -259,25 +284,37 @@ private final class SplickStrictEdgePopGesture: NSObject, UIGestureRecognizerDel
         objc_getAssociatedObject(nav, &associatedKey) is SplickStrictEdgePopGesture
     }
 
+    static func edgePan(on nav: UINavigationController) -> UIGestureRecognizer? {
+        (objc_getAssociatedObject(nav, &associatedKey) as? SplickStrictEdgePopGesture)?.pan
+    }
+
     private func attach(to nav: UINavigationController) {
         navigationController = nav
         guard let systemPop = nav.interactivePopGestureRecognizer else { return }
 
         SplickWidePopGesture.forceDisable(on: nav)
 
-        // Stock recognizer accepts a wide leading band and steals chat reply pans.
+        // Stock + SwiftUI interior pans accept a wide leading band and steal reply.
         systemPop.isEnabled = false
 
         if pan == nil {
-            let gesture = UIPanGestureRecognizer()
+            let gesture = UIScreenEdgePanGestureRecognizer()
             gesture.maximumNumberOfTouches = 1
             gesture.delegate = self
             nav.view.addGestureRecognizer(gesture)
             pan = gesture
         }
+        pan?.edges = nav.view.effectiveUserInterfaceLayoutDirection == .rightToLeft ? .right : .left
 
         bindTargets(from: systemPop, onto: pan)
         pan?.isEnabled = nav.viewControllers.count > 1
+        suppressInteriorNavigationPops(on: nav, keeping: pan)
+
+        // SwiftUI often adds its wide pop pan one run-loop after didShow.
+        DispatchQueue.main.async { [weak self, weak nav] in
+            guard let self, let nav else { return }
+            self.suppressInteriorNavigationPops(on: nav, keeping: self.pan)
+        }
     }
 
     private func detach(restoringSystemPop: Bool) {
@@ -303,11 +340,45 @@ private final class SplickStrictEdgePopGesture: NSObject, UIGestureRecognizerDel
         }
     }
 
-    private func isInStrictEdgeBand(point: CGPoint, in view: UIView) -> Bool {
-        if view.effectiveUserInterfaceLayoutDirection == .rightToLeft {
-            return point.x >= view.bounds.width - edgeWidth
+    private func suppressInteriorNavigationPops(on nav: UINavigationController, keeping kept: UIGestureRecognizer?) {
+        nav.interactivePopGestureRecognizer?.isEnabled = false
+        for gesture in nav.view.gestureRecognizers ?? [] {
+            if gesture === kept { continue }
+            if gesture is UIPanGestureRecognizer, !(gesture is UIScreenEdgePanGestureRecognizer) {
+                gesture.isEnabled = false
+            }
         }
-        return point.x <= edgeWidth
+        func walk(_ view: UIView) {
+            let viewName = NSStringFromClass(type(of: view))
+            for gesture in view.gestureRecognizers ?? [] {
+                if gesture === kept { continue }
+                let name = NSStringFromClass(type(of: gesture))
+                let isInteriorNavPan =
+                    name.contains("ParallaxTransition")
+                    || name.contains("NavigationInteractive")
+                    || name.contains("SwipeBack")
+                    || (name.contains("UINavigation") && gesture is UIPanGestureRecognizer)
+                    || (
+                        gesture is UIPanGestureRecognizer
+                            && !(gesture is UIScreenEdgePanGestureRecognizer)
+                            && (viewName.contains("Navigation") || viewName.contains("Parallax"))
+                    )
+                if isInteriorNavPan {
+                    gesture.isEnabled = false
+                }
+            }
+            view.subviews.forEach(walk)
+        }
+        walk(nav.view)
+    }
+
+    private func isInStrictEdgeBand(point: CGPoint, in view: UIView) -> Bool {
+        SplickEdgeInteractivePop.isInLeadingEdgeBand(
+            x: point.x,
+            viewWidth: view.bounds.width,
+            isRightToLeft: view.effectiveUserInterfaceLayoutDirection == .rightToLeft,
+            edgeWidth: edgeWidth
+        )
     }
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
@@ -333,11 +404,9 @@ private final class SplickStrictEdgePopGesture: NSObject, UIGestureRecognizerDel
               nav.viewControllers.count > 1 else {
             return false
         }
-        // Re-check start location — `shouldReceive` alone is not enough if another
-        // recognizer path reuses this pan after a non-edge touch.
         let start = pan.location(in: view)
         let edgePoint = CGPoint(x: touchStartX, y: start.y)
-        guard isInStrictEdgeBand(point: edgePoint, in: view) || isInStrictEdgeBand(point: start, in: view) else {
+        guard isInStrictEdgeBand(point: edgePoint, in: view) else {
             return false
         }
         let translation = pan.translation(in: view)
@@ -351,6 +420,22 @@ private final class SplickStrictEdgePopGesture: NSObject, UIGestureRecognizerDel
         shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
     ) -> Bool {
         false
+    }
+}
+
+private enum SplickNavigationLookup {
+    static func navigationController(from view: UIView) -> UINavigationController? {
+        var responder: UIResponder? = view
+        while let current = responder {
+            if let nav = current as? UINavigationController {
+                return nav
+            }
+            if let vc = current as? UIViewController, let nav = vc.navigationController {
+                return nav
+            }
+            responder = current.next
+        }
+        return nil
     }
 }
 
@@ -656,6 +741,9 @@ private final class SplickNavigationDelegateProxy: NSObject, UINavigationControl
     ) -> Bool {
         guard let nav = navigationController,
               gestureRecognizer === nav.interactivePopGestureRecognizer else {
+            return false
+        }
+        if SplickStrictEdgePopGesture.isInstalled(on: nav) {
             return false
         }
         return otherGestureRecognizer is UIPanGestureRecognizer

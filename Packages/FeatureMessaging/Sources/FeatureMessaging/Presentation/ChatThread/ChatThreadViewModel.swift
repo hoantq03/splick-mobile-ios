@@ -128,6 +128,12 @@ public final class ChatThreadViewModel: ObservableObject {
         _ = applyCachedThreadIfAvailable()
     }
 
+    deinit {
+        if let foregroundObserver {
+            NotificationCenter.default.removeObserver(foregroundObserver)
+        }
+    }
+
     public var isRemovedFromGroup: Bool { leftAt != nil }
 
     public func groupThreadCapabilities(isGroup: Bool) -> GroupChatThreadCapabilities {
@@ -639,17 +645,34 @@ public final class ChatThreadViewModel: ObservableObject {
     // MARK: - Gap fill
 
     private func gapFillIfNeeded() async {
-        guard maxSequenceNo > 0 else { return }
         do {
-            let page = try await repository.fetchMessages(
+            if maxSequenceNo > 0 {
+                let gap = try await repository.fetchMessages(
+                    conversationId: conversationId,
+                    page: 0,
+                    limit: Self.pageSize,
+                    after: maxSequenceNo,
+                    before: nil
+                )
+                guard !gap.items.isEmpty else { return }
+                for message in gap.items {
+                    upsertIncomingMessage(message, scrollToBottom: autoFollowLatest)
+                }
+                if isNearBottom, let lastId = messages.last?.id {
+                    scheduleMarkRead(upToMessageId: lastId)
+                }
+                return
+            }
+
+            // Cached rows without sequence numbers: merge newest page in place, no loading UI.
+            let page = try await fetchMessagesUseCase.execute(
                 conversationId: conversationId,
                 page: 0,
-                limit: Self.pageSize,
-                after: maxSequenceNo,
-                before: nil
+                limit: Self.pageSize
             )
             guard !page.items.isEmpty else { return }
-            for message in page.items {
+            let sorted = MessageTimelineOrdering.sortedChronologically(Array(page.items.reversed()))
+            for message in sorted {
                 upsertIncomingMessage(message, scrollToBottom: autoFollowLatest)
             }
             if isNearBottom, let lastId = messages.last?.id {
