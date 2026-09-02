@@ -136,6 +136,13 @@ public final class ExpenseRepository: ExpenseRepositoryProtocol, Sendable {
     return try ExpenseMapper.toBulkSettlement(dto)
   }
 
+  public func claimBillInvite(token: String, splitId: UUID?) async throws -> ClaimBillInviteResult {
+    let dto: ClaimBillInviteResponseDTO = try await apiClient.request(
+      ExpenseEndpoint.claimBillInvite(token: token, splitId: splitId)
+    )
+    return ClaimBillInviteResult(expenseId: dto.expenseId, postId: dto.postId, splitId: dto.splitId)
+  }
+
   private func resolveExpenses(_ expenses: [Expense]) async -> [Expense] {
     guard let friendDisplayNameStore else { return expenses }
     return await friendDisplayNameStore.resolve(expenses)

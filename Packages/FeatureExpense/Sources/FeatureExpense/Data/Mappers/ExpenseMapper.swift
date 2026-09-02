@@ -20,10 +20,12 @@ enum ExpenseMapper {
   }
 
   static func toExpenseSplit(_ dto: ExpenseSplitDTO) -> ExpenseSplit {
-    let paymentStatus = dto.paymentStatus.flatMap { PaymentSplitStatus(rawValue: $0) }
+    let paymentStatus = dto.paymentStatus.flatMap { raw in
+      PaymentSplitStatus(rawValue: raw) ?? PaymentSplitStatus(rawValue: raw.uppercased())
+    }
     return ExpenseSplit(
       id: dto.id,
-      user: toUserSummary(dto.user),
+      user: toSplitUser(dto),
       amount: Decimal(string: dto.amount) ?? 0,
       isPaid: dto.isPaid,
       paidAt: dto.paidAt,
@@ -31,10 +33,27 @@ enum ExpenseMapper {
     )
   }
 
+  private static func toSplitUser(_ dto: ExpenseSplitDTO) -> UserSummary {
+    if let user = dto.user, let id = user.id {
+      return UserSummary(
+        id: id,
+        username: user.username ?? "guest",
+        displayName: user.displayName,
+        avatarURL: user.avatarUrl.flatMap(URL.init(string:))
+      )
+    }
+    return UserSummary(
+      id: dto.id,
+      username: "guest",
+      displayName: dto.guestDisplayName ?? "Guest",
+      avatarURL: nil
+    )
+  }
+
   static func toUserSummary(_ dto: ExpenseUserDTO) -> UserSummary {
     UserSummary(
-      id: dto.id,
-      username: dto.username,
+      id: dto.id ?? UUID(),
+      username: dto.username ?? "user",
       displayName: dto.displayName,
       avatarURL: dto.avatarUrl.flatMap(URL.init(string:))
     )

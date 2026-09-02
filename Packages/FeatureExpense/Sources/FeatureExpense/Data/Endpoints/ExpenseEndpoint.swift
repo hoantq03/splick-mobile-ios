@@ -15,6 +15,7 @@ enum ExpenseEndpoint: APIEndpoint {
   case submitBulkSettlement(counterpartyId: UUID, SubmitBulkSettlementRequestDTO)
   case approveBulkSettlement(id: UUID)
   case rejectBulkSettlement(id: UUID, RejectBulkSettlementRequestDTO)
+  case claimBillInvite(token: String, splitId: UUID?)
 
   var path: String {
     switch self {
@@ -32,6 +33,8 @@ enum ExpenseEndpoint: APIEndpoint {
       return "/v1/expenses/netting/settlements/\(id)/approve"
     case .rejectBulkSettlement(let id, _):
       return "/v1/expenses/netting/settlements/\(id)/reject"
+    case .claimBillInvite(let token, _):
+      return "/v1/bills/invites/\(token)/claim"
     }
   }
 
@@ -39,7 +42,7 @@ enum ExpenseEndpoint: APIEndpoint {
     switch self {
     case .list, .detail, .debtSummary, .monthlySummary, .withCounterparty, .netting: return .get
     case .create, .settle, .submitBulkSettlement, .approveBulkSettlement,
-      .rejectBulkSettlement:
+      .rejectBulkSettlement, .claimBillInvite:
       return .post
     }
   }
@@ -89,6 +92,9 @@ enum ExpenseEndpoint: APIEndpoint {
     case .settle(_, let dto): return dto
     case .submitBulkSettlement(_, let dto): return dto
     case .rejectBulkSettlement(_, let dto): return dto
+    case .claimBillInvite(_, let splitId):
+      guard let splitId else { return nil }
+      return ClaimBillInviteRequestDTO(splitId: splitId)
     default: return nil
     }
   }

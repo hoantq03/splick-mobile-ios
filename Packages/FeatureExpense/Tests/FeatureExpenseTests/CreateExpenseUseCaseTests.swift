@@ -106,4 +106,8 @@ private actor StubExpenseRepository: ExpenseRepositoryProtocol {
     func rejectBulkSettlement(id: UUID, reason: String?) async throws -> BulkSettlement {
         throw AppError.unknown("unused")
     }
+
+    func claimBillInvite(token: String, splitId: UUID?) async throws -> ClaimBillInviteResult {
+        throw AppError.unknown("unused")
+    }
 }

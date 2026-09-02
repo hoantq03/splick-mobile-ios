@@ -286,4 +286,8 @@ public actor FakeExpenseRepository: ExpenseRepositoryProtocol {
             rejectReason: reason
         )
     }
+
+    public func claimBillInvite(token: String, splitId: UUID?) async throws -> ClaimBillInviteResult {
+        ClaimBillInviteResult(expenseId: UUID(), postId: nil, splitId: UUID())
+    }
 }

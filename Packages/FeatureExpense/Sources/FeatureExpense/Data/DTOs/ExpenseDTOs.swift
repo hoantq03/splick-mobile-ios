@@ -16,19 +16,31 @@ struct ExpenseResponseDTO: Decodable {
 }
 
 struct ExpenseUserDTO: Decodable {
-  let id: UUID
-  let username: String
+  let id: UUID?
+  let username: String?
   let displayName: String
   let avatarUrl: String?
 }
 
 struct ExpenseSplitDTO: Decodable {
   let id: UUID
-  let user: ExpenseUserDTO
+  let user: ExpenseUserDTO?
   let amount: String
   let isPaid: Bool
   let paidAt: Date?
   let paymentStatus: String?
+  let guestDisplayName: String?
+  let inviteUrl: String?
+}
+
+struct ClaimBillInviteResponseDTO: Decodable {
+  let expenseId: UUID
+  let postId: UUID?
+  let splitId: UUID
+}
+
+struct ClaimBillInviteRequestDTO: Encodable {
+  let splitId: UUID
 }
 
 struct CreateExpenseRequestDTO: Encodable {

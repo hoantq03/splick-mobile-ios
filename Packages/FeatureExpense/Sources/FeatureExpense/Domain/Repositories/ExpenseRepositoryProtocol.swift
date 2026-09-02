@@ -23,6 +23,19 @@ public protocol ExpenseRepositoryProtocol: Sendable {
   ) async throws -> BulkSettlement
   func approveBulkSettlement(id: UUID) async throws -> BulkSettlement
   func rejectBulkSettlement(id: UUID, reason: String?) async throws -> BulkSettlement
+  func claimBillInvite(token: String, splitId: UUID?) async throws -> ClaimBillInviteResult
+}
+
+public struct ClaimBillInviteResult: Equatable, Sendable {
+  public let expenseId: UUID
+  public let postId: UUID?
+  public let splitId: UUID
+
+  public init(expenseId: UUID, postId: UUID?, splitId: UUID) {
+    self.expenseId = expenseId
+    self.postId = postId
+    self.splitId = splitId
+  }
 }
 
 public struct ExpensePage: Equatable, Sendable {
