@@ -5,6 +5,12 @@ import Localization
 import DesignSystem
 import SplickDomain
 
+public struct GuestInviteSharePayload: Identifiable, Equatable {
+    public let id = UUID()
+    public let message: String
+    public let urls: [URL]
+}
+
 @MainActor
 public final class FeedViewModel: ObservableObject {
     @Published var posts: [Post] = []
@@ -66,6 +72,7 @@ public final class FeedViewModel: ObservableObject {
     // MARK: - Lazy post upload (optimistic feed card → background upload)
 
     @Published private(set) var postUploadStates: [UUID: PostUploadState] = [:]
+    @Published var pendingGuestInviteShare: GuestInviteSharePayload?
     private var postUploadTasks: [UUID: Task<Void, Never>] = [:]
 
     /// O(1) lookup for post mutations — rebuilt on full-feed assign, patched on insert/remove.
@@ -787,6 +794,7 @@ public final class FeedViewModel: ObservableObject {
             replaceOptimisticPost(localId: localPostId, with: serverPost)
             postUploadStates.removeValue(forKey: localPostId)
             OptimisticPostBuilder.cleanupPendingMedia(postId: localPostId)
+            presentGuestInviteShareIfNeeded(for: serverPost)
         } catch {
             if error.isRequestCancellation { return }
             postUploadStates[localPostId] = .failed(message: languageService.localizedMessage(for: error))
@@ -814,6 +822,22 @@ public final class FeedViewModel: ObservableObject {
             return
         }
         markPostsLoaded()
+    }
+
+    private func presentGuestInviteShareIfNeeded(for post: Post) {
+        guard let bill = post.billSplit else { return }
+        var urls: [URL] = bill.splits.compactMap { line in
+            guard let raw = line.inviteUrl, let url = URL(string: raw) else { return nil }
+            return url
+        }
+        if let table = bill.tableInviteUrl, let tableUrl = URL(string: table) {
+            urls.append(tableUrl)
+        }
+        guard !urls.isEmpty else { return }
+        pendingGuestInviteShare = GuestInviteSharePayload(
+            message: languageService.text(.feedGuestInviteShareMessage),
+            urls: urls
+        )
     }
 
     private func mergeFeedPreservingClientState(with fetched: [Post]) -> [Post] {
@@ -1045,7 +1069,7 @@ public final class FeedViewModel: ObservableObject {
         if let targetUserIds, !targetUserIds.isEmpty {
             targets = Set(targetUserIds)
         } else {
-            targets = Set(post.billSplit?.splits.filter { !$0.isPaid }.map(\.user.id) ?? [])
+            targets = Set(post.billSplit?.splits.filter { !$0.isPaid }.compactMap(\.user?.id) ?? [])
         }
 
         let optimistic = post.incrementingBillReminders(for: targets)

@@ -214,6 +214,9 @@ public struct FeedView: View {
                 openProfile(for: user)
             }
         }
+        .sheet(item: $viewModel.pendingGuestInviteShare) { payload in
+            GuestBillInviteShareSheet(message: payload.message, urls: payload.urls)
+        }
     }
 
     private func openProfile(for user: UserSummary) {
@@ -498,4 +501,17 @@ private struct FeedPrimaryPage: View {
         .padding(.vertical, SplickTheme.Spacing.xl)
         .padding(.horizontal, SplickTheme.Spacing.sm)
     }
+}
+
+private struct GuestBillInviteShareSheet: UIViewControllerRepresentable {
+    let message: String
+    let urls: [URL]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        var items: [Any] = [message]
+        items.append(contentsOf: urls)
+        return UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

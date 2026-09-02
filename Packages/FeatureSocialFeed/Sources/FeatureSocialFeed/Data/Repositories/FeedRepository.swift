@@ -257,15 +257,26 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
             return nil
         }
 
-        let participants = billSplit.splits.map(\.user.id)
+        let registeredSplits = billSplit.splits.filter { !$0.isPendingGuest }
+        let participants = registeredSplits.compactMap(\.user?.id)
         let splitType = (input.billSplitType ?? "EQUAL").uppercased()
-        // Clients send computed VND amounts for percentage mode; expense PERCENTAGE is 0–100.
         let apiSplitType = splitType == "PERCENTAGE" ? "EXACT" : splitType
 
         var customAmounts: [String: String]?
         if apiSplitType == "EXACT" {
             customAmounts = Dictionary(
-                uniqueKeysWithValues: billSplit.splits.map { ($0.user.id.uuidString, "\($0.amount)") }
+                uniqueKeysWithValues: registeredSplits.compactMap { line in
+                    guard let id = line.user?.id else { return nil }
+                    return (id.uuidString, "\(line.amount)")
+                }
+            )
+        }
+
+        let pending = input.pendingCompanions.map {
+            PendingCompanionRequestDTO(
+                displayName: $0.displayName,
+                phoneNumber: $0.phoneNumber,
+                amount: $0.amount.map { "\($0)" }
             )
         }
 
@@ -275,7 +286,8 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
             splitType: apiSplitType,
             participants: participants,
             customAmounts: customAmounts,
-            autoReminderEnabled: input.autoReminderEnabled ? true : nil
+            autoReminderEnabled: input.autoReminderEnabled ? true : nil,
+            pendingCompanions: pending.isEmpty ? nil : pending
         )
     }
 

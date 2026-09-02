@@ -44,6 +44,10 @@ struct BillSplitSectionView: View {
         bill.splits.filter { !$0.isPaid }
     }
 
+    private var unpaidRegisteredUsers: [UserSummary] {
+        unpaidSplits.compactMap(\.user)
+    }
+
     private var paidCount: Int {
         bill.splits.count - unpaidSplits.count
     }
@@ -131,14 +135,14 @@ struct BillSplitSectionView: View {
         }
         .sheet(isPresented: $showSendAllReminder) {
             BillReminderAllSheet(
-                users: unpaidSplits.map(\.user),
+                users: unpaidRegisteredUsers,
                 message: $reminderMessage,
                 selectedGIF: $selectedReminderGIF,
                 gifPickerViewModel: reminderGifPickerViewModel,
                 onUserTap: onUserTap,
                 onSend: {
                     onSendAllReminders?(
-                        unpaidSplits.map(\.user),
+                        unpaidRegisteredUsers,
                         reminderMessage,
                         reminderAttachments
                     )
@@ -220,7 +224,7 @@ struct BillSplitSectionView: View {
                 splitRow(line)
             }
 
-            if canSendReminders, !unpaidSplits.isEmpty {
+            if canSendReminders, !unpaidRegisteredUsers.isEmpty {
                 Button {
                     prepareReminderComposer()
                     showSendAllReminder = true
@@ -228,7 +232,7 @@ struct BillSplitSectionView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "bell.badge.fill")
                             .font(.system(size: 13, weight: .semibold))
-                        Text(languageService.format(.feedBillRemindAll, unpaidSplits.count))
+                        Text(languageService.format(.feedBillRemindAll, unpaidRegisteredUsers.count))
                             .font(.system(size: 12, weight: .semibold))
                     }
                     .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
@@ -255,7 +259,7 @@ struct BillSplitSectionView: View {
 
     @ViewBuilder
     private func splitRow(_ line: PostBillSplitLine) -> some View {
-        let isCurrentUser = line.user.id == currentUserSummary?.id
+        let isCurrentUser = line.user?.id == currentUserSummary?.id
         let reminderTone = unpaidReminderTone(for: line)
 
         HStack(spacing: SplickTheme.Spacing.sm) {
@@ -265,29 +269,26 @@ struct BillSplitSectionView: View {
                     .frame(width: 3, height: 28)
             }
 
-            Button {
-                onUserTap(line.user)
-            } label: {
-                HStack(spacing: SplickTheme.Spacing.xs) {
-                    AvatarView(
-                        imageURL: line.user.avatarURL,
-                        name: line.user.displayName,
-                        size: .small
+            if let user = line.user {
+                Button {
+                    onUserTap(user)
+                } label: {
+                    participantLabel(
+                        name: compactDisplayName(for: user, isCurrentUser: isCurrentUser),
+                        avatarURL: user.avatarURL,
+                        isCurrentUser: isCurrentUser,
+                        isPaid: line.isPaid
                     )
-                    Text(compactDisplayName(for: line.user, isCurrentUser: isCurrentUser))
-                        .font(.system(size: 12, weight: isCurrentUser ? .semibold : .regular))
-                        .foregroundStyle(
-                            isCurrentUser && line.isPaid
-                                ? SplickTheme.Colors.success
-                                : SplickTheme.Colors.textSecondary
-                        )
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                    Spacer(minLength: 0)
                 }
-                .frame(width: Layout.participantColumnWidth)
+                .buttonStyle(.plain)
+            } else {
+                participantLabel(
+                    name: line.participantDisplayName,
+                    avatarURL: nil,
+                    isCurrentUser: false,
+                    isPaid: line.isPaid
+                )
             }
-            .buttonStyle(.plain)
 
             Text(formatMoney(line.amount, currency: bill.currency))
                 .font(.system(size: 14, weight: .semibold))
@@ -309,6 +310,32 @@ struct BillSplitSectionView: View {
         }
     }
 
+    private func participantLabel(
+        name: String,
+        avatarURL: URL?,
+        isCurrentUser: Bool,
+        isPaid: Bool
+    ) -> some View {
+        HStack(spacing: SplickTheme.Spacing.xs) {
+            AvatarView(
+                imageURL: avatarURL,
+                name: name,
+                size: .small
+            )
+            Text(name)
+                .font(.system(size: 12, weight: isCurrentUser ? .semibold : .regular))
+                .foregroundStyle(
+                    isCurrentUser && isPaid
+                        ? SplickTheme.Colors.success
+                        : SplickTheme.Colors.textSecondary
+                )
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            Spacer(minLength: 0)
+        }
+        .frame(width: Layout.participantColumnWidth)
+    }
+
     @ViewBuilder
     private func statusView(for line: PostBillSplitLine) -> some View {
         if line.isPaid {
@@ -319,10 +346,10 @@ struct BillSplitSectionView: View {
                 .accessibilityLabel(languageService.text(.feedBillPaidAccessibility))
         } else {
             HStack(spacing: 4) {
-                if canSendReminders {
+                if canSendReminders, let user = line.user {
                     Button {
                         prepareReminderComposer()
-                        reminderTarget = line.user
+                        reminderTarget = user
                     } label: {
                         Image(systemName: "bell.badge")
                             .font(.system(size: 14, weight: .semibold))
@@ -332,7 +359,7 @@ struct BillSplitSectionView: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(
-                        languageService.format(.feedBillRemindUserAccessibility, line.user.displayName)
+                        languageService.format(.feedBillRemindUserAccessibility, user.displayName)
                     )
                 }
 
@@ -395,7 +422,7 @@ struct BillSplitSectionView: View {
 
     private func unpaidStatusAccessibilityLabel(for line: PostBillSplitLine) -> String {
         if line.reminderCount > 0 {
-            return languageService.format(.feedBillRemindUserAccessibility, line.user.displayName)
+            return languageService.format(.feedBillRemindUserAccessibility, line.participantDisplayName)
                 + ", \(line.reminderCount)"
         }
         return languageService.text(.feedBillUnpaidAccessibility)
