@@ -44,7 +44,8 @@ public final class NotificationRepository: NotificationRepositoryProtocol, Senda
             notifications: dto.notifications,
             friends: dto.friends,
             expenses: dto.expenses,
-            messages: dto.messages
+            messages: dto.messages,
+            inbox: dto.inboxCount
         )
     }
 

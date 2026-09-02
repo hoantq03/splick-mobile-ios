@@ -63,7 +63,7 @@ private struct ModernSplickTabBar: View {
         ZStack {
             HStack(alignment: .center, spacing: 0) {
                 sidePanel(side: .leading) {
-                    tabButton(.feed)
+                    tabButton(.feed, badge: badgeCounts.notifications)
                     tabButton(.expenses, badge: badgeCounts.expenses)
                 }
                 .frame(maxWidth: .infinity)
@@ -193,7 +193,7 @@ private struct LegacySplickTabBar: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            tabButton(.feed)
+            tabButton(.feed, badge: badgeCounts.notifications)
             tabButton(.expenses, badge: badgeCounts.expenses)
             cameraButton
             tabButton(.friends, badge: badgeCounts.friends)

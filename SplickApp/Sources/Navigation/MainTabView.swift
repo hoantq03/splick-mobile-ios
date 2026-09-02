@@ -166,7 +166,7 @@ struct MainTabView: View {
                     }
                 }
             }
-            .environment(\.notificationUnreadCount, badgeCounts.notifications)
+            .environment(\.notificationUnreadCount, badgeCounts.inbox)
             .environment(\.notificationsPresented, appState.showNotifications && !notificationIsDismissing)
             .environment(\.openPostCaptureFlow) {
                 appState.selectedTab = .camera

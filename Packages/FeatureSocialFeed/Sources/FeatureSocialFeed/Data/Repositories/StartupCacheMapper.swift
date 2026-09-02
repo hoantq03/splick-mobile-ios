@@ -17,6 +17,9 @@ struct CachedBadgeCounts: Codable, Sendable {
     let friends: Int
     let expenses: Int
     let messages: Int
+    let inbox: Int?
+
+    var inboxCount: Int { inbox ?? 0 }
 }
 
 struct CachedConversation: Codable, Sendable {
@@ -55,7 +58,8 @@ enum StartupCacheMapper {
                 notifications: data.badgeCounts.notifications,
                 friends: data.badgeCounts.friends,
                 expenses: data.badgeCounts.expenses,
-                messages: data.badgeCounts.messages
+                messages: data.badgeCounts.messages,
+                inbox: data.badgeCounts.inbox
             ),
             posts: data.posts,
             conversations: data.conversations.map(toCached),
@@ -71,7 +75,8 @@ enum StartupCacheMapper {
                 notifications: payload.badgeCounts.notifications,
                 friends: payload.badgeCounts.friends,
                 expenses: payload.badgeCounts.expenses,
-                messages: payload.badgeCounts.messages
+                messages: payload.badgeCounts.messages,
+                inbox: payload.badgeCounts.inboxCount
             ),
             posts: payload.posts,
             conversations: payload.conversations.map(fromCached),

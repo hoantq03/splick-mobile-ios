@@ -52,7 +52,8 @@ public final class AppStartupRepository: AppStartupRepositoryProtocol, Sendable 
                 notifications: dto.badgeCounts.notifications,
                 friends: dto.badgeCounts.friends,
                 expenses: dto.badgeCounts.expenses,
-                messages: dto.badgeCounts.messages
+                messages: dto.badgeCounts.messages,
+                inbox: dto.badgeCounts.inbox ?? 0
             ),
             posts: dto.feedFirstPage.map(FeedMapper.toPost),
             conversations: dto.conversations.map(mapConversation),

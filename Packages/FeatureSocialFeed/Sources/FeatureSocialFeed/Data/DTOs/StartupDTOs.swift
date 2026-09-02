@@ -14,6 +14,7 @@ struct StartupBadgeCountsDTO: Decodable {
     let friends: Int
     let expenses: Int
     let messages: Int
+    let inbox: Int?
 }
 
 struct StartupConversationDTO: Decodable {
