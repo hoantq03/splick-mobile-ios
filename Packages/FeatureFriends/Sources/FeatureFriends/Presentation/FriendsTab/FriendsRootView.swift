@@ -256,18 +256,20 @@ public struct FriendsRootView: View {
 
     public var body: some View {
         NavigationStack {
-            ZStack(alignment: .top) {
-                Group {
-                    if viewModel.isSearching {
-                        searchResultsContent
-                    } else {
-                        combinedDirectoryContent
-                    }
+            Group {
+                if viewModel.isSearching {
+                    searchResultsContent
+                } else {
+                    combinedDirectoryContent
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                friendsSearchTopFade
-
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .top) {
+                SplickScrollTopFadeOverlay(
+                    mode: .belowNavWithAccessory(searchChromeHeight)
+                )
+            }
+            .overlay(alignment: .top) {
                 directoryTopBar
                     .background {
                         GeometryReader { proxy in
@@ -618,39 +620,6 @@ public struct FriendsRootView: View {
         searchChromeHeight + SplickTheme.Spacing.sm
     }
 
-    private var friendsSearchTopFade: some View {
-        let height = searchChromeHeight + SplickScrollChromeFadeMetrics.fadeTail
-        let wash = SplickTheme.Colors.background
-        return ZStack(alignment: .top) {
-            LinearGradient(
-                stops: [
-                    .init(color: wash.opacity(0.62), location: 0),
-                    .init(color: wash.opacity(0.38), location: 0.32),
-                    .init(color: wash.opacity(0.16), location: 0.62),
-                    .init(color: wash.opacity(0.05), location: 0.84),
-                    .init(color: wash.opacity(0), location: 1),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .mask {
-                    LinearGradient(
-                        stops: SplickScrollChromeFadeMetrics.materialMaskStops,
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                }
-        }
-        .frame(height: height)
-        .frame(maxWidth: .infinity, alignment: .top)
-        .compositingGroup()
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-
     private var directoryTopBar: some View {
         friendsSearchField
             .padding(.horizontal, SplickTheme.Spacing.md)
@@ -882,7 +851,7 @@ public struct FriendsRootView: View {
                 Image(systemName: "person.3.fill")
                     .font(.title3)
                     .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                    .frame(width: 44, height: 44)
+                    .frame(width: 40, height: 40)
                     .background(SplickTheme.Colors.primaryGradientStart.opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
@@ -906,7 +875,7 @@ public struct FriendsRootView: View {
                         .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
                 }
             }
-            .splickCard(padding: SplickTheme.Spacing.sm)
+            .splickCard(padding: SplickTheme.Spacing.xs)
         }
         .buttonStyle(.plain)
         .disabled(isJoiningGroupFromSearch)

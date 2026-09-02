@@ -16,7 +16,8 @@ struct FriendRowView: View {
     var onUnblock: (() -> Void)?
 
     private let rowCornerRadius = SplickTheme.CornerRadius.pill
-    private let actionIconSize: CGFloat = 36
+    private let actionIconSize: CGFloat = 32
+    private let rowPadding = SplickTheme.Spacing.xs
 
     var body: some View {
         Group {
@@ -28,7 +29,7 @@ struct FriendRowView: View {
                 rowContent
             }
         }
-        .splickCard(padding: SplickTheme.Spacing.sm, cornerRadius: rowCornerRadius)
+        .splickCard(padding: rowPadding, cornerRadius: rowCornerRadius)
     }
 
     private var rowContent: some View {
@@ -57,7 +58,7 @@ struct FriendRowView: View {
             AvatarWithPresenceView(
                 imageURL: user.avatarURL,
                 name: user.preferredName,
-                size: .medium,
+                size: .compact,
                 userId: user.id,
                 showOnlineIndicator: PresenceDisplayPolicy.shouldShowOnlineIndicator(
                     isOnline: resolvedPresence.isOnline

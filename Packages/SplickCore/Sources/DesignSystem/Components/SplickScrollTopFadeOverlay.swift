@@ -25,6 +25,8 @@ public enum SplickScrollChromeFadeMetrics {
             return totalHeight(safeTop: safeTop)
         case .detailScreen:
             return detailScreenHeight(safeTop: safeTop)
+        case .belowNavWithAccessory(let accessoryHeight):
+            return detailScreenHeight(safeTop: safeTop) + accessoryHeight
         case .compactBelowNav:
             return compactFadeTail
         }
@@ -77,6 +79,8 @@ public struct SplickScrollTopFadeOverlay: View {
         case feedTab
         /// Push-style detail (post detail): safe area + nav bar + fade tail.
         case detailScreen
+        /// Tab chrome with extra overlay below the nav (e.g. friends search).
+        case belowNavWithAccessory(CGFloat)
         /// Short dissolve below an opaque nav bar.
         case compactBelowNav
     }
@@ -93,7 +97,7 @@ public struct SplickScrollTopFadeOverlay: View {
                 for: mode,
                 safeTop: proxy.safeAreaInsets.top
             )
-            let usesFullGradient = mode == .feedTab || mode == .detailScreen
+            let usesFullGradient = mode.usesFullGradient
 
             ZStack(alignment: .top) {
                 LinearGradient(
@@ -121,8 +125,23 @@ public struct SplickScrollTopFadeOverlay: View {
             .compositingGroup()
         }
         .allowsHitTesting(false)
-        .ignoresSafeArea(edges: mode == .compactBelowNav ? [] : .top)
+        .ignoresSafeArea(edges: mode.ignoresTopSafeArea ? .top : [])
         .accessibilityHidden(true)
+    }
+}
+
+private extension SplickScrollTopFadeOverlay.Mode {
+    var usesFullGradient: Bool {
+        switch self {
+        case .feedTab, .detailScreen, .belowNavWithAccessory:
+            return true
+        case .compactBelowNav:
+            return false
+        }
+    }
+
+    var ignoresTopSafeArea: Bool {
+        self != .compactBelowNav
     }
 }
 

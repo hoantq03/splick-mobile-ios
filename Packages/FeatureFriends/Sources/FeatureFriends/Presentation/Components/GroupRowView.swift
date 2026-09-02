@@ -17,7 +17,7 @@ struct GroupRowView: View {
 
     var body: some View {
         HStack(spacing: SplickTheme.Spacing.sm) {
-            AvatarView(imageURL: group.avatarURL, name: group.name, size: .medium)
+            AvatarView(imageURL: group.avatarURL, name: group.name, size: .compact)
 
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
                 Text(group.name)
@@ -37,6 +37,6 @@ struct GroupRowView: View {
 
             Spacer()
         }
-        .splickCard(padding: SplickTheme.Spacing.sm, cornerRadius: SplickTheme.CornerRadius.pill)
+        .splickCard(padding: SplickTheme.Spacing.xs, cornerRadius: SplickTheme.CornerRadius.pill)
     }
 }
