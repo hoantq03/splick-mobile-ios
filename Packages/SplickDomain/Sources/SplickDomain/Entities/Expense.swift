@@ -148,7 +148,7 @@ public enum ExpenseUserDebtState: String, CaseIterable, Sendable {
     }
 }
 
-public enum ExpensePaymentDisplayStatus: Sendable {
+public enum ExpensePaymentDisplayStatus: Equatable, Sendable {
     case unpaid
     case pendingApproval
     case paid

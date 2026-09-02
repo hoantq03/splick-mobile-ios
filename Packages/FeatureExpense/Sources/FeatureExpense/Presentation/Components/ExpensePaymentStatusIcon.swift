@@ -11,7 +11,7 @@ struct ExpensePaymentStatusIcon: View {
     var body: some View {
         Group {
             switch status {
-            case .paid, .neutral:
+            case .paid:
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(SplickTheme.Colors.success)
@@ -26,8 +26,10 @@ struct ExpensePaymentStatusIcon: View {
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(SplickTheme.Colors.error)
                     .accessibilityLabel(languageService.text(.expenseRowUnpaidAccessibility))
+            case .neutral:
+                EmptyView()
             }
         }
-        .frame(width: 32, height: 32)
+        .frame(width: status == .neutral ? 0 : 32, height: 32)
     }
 }

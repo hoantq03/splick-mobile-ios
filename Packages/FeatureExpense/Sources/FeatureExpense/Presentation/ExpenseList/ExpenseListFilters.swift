@@ -33,17 +33,18 @@ public enum ExpenseDebtFilter: String, CaseIterable, Identifiable {
             return true
         case .oweUnpaid:
             return expense.userDebtState(userId: userId) == .oweUnpaid
+                && expense.userPaymentDisplayStatus(userId: userId) == .unpaid
         case .owePaid:
             return expense.userDebtState(userId: userId) == .owePaid
         case .owedUnpaid:
             return expense.userDebtState(userId: userId) == .owedUnpaid
+                && expense.userPaymentDisplayStatus(userId: userId) == .unpaid
         case .owedPaid:
             return expense.userDebtState(userId: userId) == .owedPaid
         case .pendingApproval:
             return expense.userPaymentDisplayStatus(userId: userId) == .pendingApproval
         case .repaid:
-            let state = expense.userDebtState(userId: userId)
-            return state == .owePaid || state == .owedPaid
+            return expense.userPaymentDisplayStatus(userId: userId) == .paid
         }
     }
 }
