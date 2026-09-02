@@ -230,7 +230,7 @@ struct CreatePostBillSplitRequestDTO: Encodable {
 
 struct PendingCompanionRequestDTO: Encodable {
     let displayName: String
-    let phoneNumber: String?
+    let email: String?
     let amount: String?
 }
 

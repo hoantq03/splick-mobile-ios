@@ -3,12 +3,12 @@ import SplickDomain
 
 public struct PendingCompanionInput: Sendable {
     public let displayName: String
-    public let phoneNumber: String?
+    public let email: String?
     public let amount: Decimal?
 
-    public init(displayName: String, phoneNumber: String? = nil, amount: Decimal? = nil) {
+    public init(displayName: String, email: String? = nil, amount: Decimal? = nil) {
         self.displayName = displayName
-        self.phoneNumber = phoneNumber
+        self.email = email
         self.amount = amount
     }
 }

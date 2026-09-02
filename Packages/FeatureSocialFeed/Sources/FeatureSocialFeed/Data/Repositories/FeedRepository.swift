@@ -275,7 +275,7 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
         let pending = input.pendingCompanions.map {
             PendingCompanionRequestDTO(
                 displayName: $0.displayName,
-                phoneNumber: $0.phoneNumber,
+                email: $0.email,
                 amount: $0.amount.map { "\($0)" }
             )
         }

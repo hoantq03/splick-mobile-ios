@@ -314,7 +314,11 @@ struct PostCardView: View, Equatable {
                         .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
 
                     HStack(alignment: .center, spacing: 5) {
-                        companionsSummaryLabel
+                        CompanionsSummaryText(
+                            companions: post.companions,
+                            groupName: post.companionGroupName,
+                            currentUserId: currentUser?.id
+                        )
 
                         Image(systemName: "chevron.right")
                             .font(.system(size: 9, weight: .semibold))
@@ -326,41 +330,6 @@ struct PostCardView: View, Equatable {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-        }
-    }
-
-    @ViewBuilder
-    private var companionsSummaryLabel: some View {
-        let bodyFont = Font.system(size: 11)
-        let color = SplickTheme.Colors.textSecondary
-        let prefix = languageService.text(.feedCompanionsWith) + " "
-
-        if let groupName = post.companionGroupName, !groupName.isEmpty {
-            (Text(prefix) + Text(groupName).fontWeight(.semibold))
-                .font(bodyFont)
-                .foregroundStyle(color)
-                .lineLimit(2)
-                .multilineTextAlignment(.leading)
-        } else {
-            let maxNamed = 1
-            let companions = post.companions
-            if companions.count <= maxNamed {
-                let names = companions.map(\.displayName).joined(separator: ", ")
-                (Text(prefix) + Text(names).fontWeight(.semibold))
-                    .font(bodyFont)
-                    .foregroundStyle(color)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-            } else {
-                let first = companions.prefix(maxNamed).map(\.displayName).joined(separator: ", ")
-                let others = companions.count - maxNamed
-                let suffix = languageService.format(.feedCompanionsAndOthers, others)
-                (Text(prefix) + Text(first).fontWeight(.semibold) + Text(suffix))
-                    .font(bodyFont)
-                    .foregroundStyle(color)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-            }
         }
     }
 

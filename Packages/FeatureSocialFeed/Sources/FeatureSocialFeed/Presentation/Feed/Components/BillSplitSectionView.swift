@@ -282,12 +282,13 @@ struct BillSplitSectionView: View {
                 }
                 .buttonStyle(.plain)
             } else {
-                participantLabel(
-                    name: line.participantDisplayName,
-                    avatarURL: nil,
-                    isCurrentUser: false,
-                    isPaid: line.isPaid
-                )
+            participantLabel(
+                name: line.participantDisplayName,
+                avatarURL: nil,
+                isCurrentUser: false,
+                isPaid: line.isPaid,
+                placeholder: .brand
+            )
             }
 
             Text(formatMoney(line.amount, currency: bill.currency))
@@ -314,13 +315,15 @@ struct BillSplitSectionView: View {
         name: String,
         avatarURL: URL?,
         isCurrentUser: Bool,
-        isPaid: Bool
+        isPaid: Bool,
+        placeholder: AvatarView.Placeholder = .initials
     ) -> some View {
         HStack(spacing: SplickTheme.Spacing.xs) {
             AvatarView(
                 imageURL: avatarURL,
                 name: name,
-                size: .small
+                size: .small,
+                placeholder: placeholder
             )
             Text(name)
                 .font(.system(size: 12, weight: isCurrentUser ? .semibold : .regular))

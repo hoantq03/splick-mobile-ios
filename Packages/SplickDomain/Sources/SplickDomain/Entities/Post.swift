@@ -766,6 +766,12 @@ public extension Post {
         )
     }
 
+    /// True when `userId` appears in the tagged companions list.
+    func includesCompanion(userId: UUID?) -> Bool {
+        guard let userId else { return false }
+        return companions.contains { $0.id == userId }
+    }
+
     /// e.g. "Linh Pham" or "Linh Pham và +50 người khác"
     func companionsSummaryText(maxNamed: Int = 1) -> String? {
         if let companionGroupName, !companionGroupName.isEmpty {

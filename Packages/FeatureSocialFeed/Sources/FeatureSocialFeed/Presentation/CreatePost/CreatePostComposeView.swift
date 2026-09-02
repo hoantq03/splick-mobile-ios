@@ -336,6 +336,7 @@ public struct CreatePostComposeView: View {
 
     private var companionsSummaryText: String {
         let companionNames = viewModel.selectedCompanions.map(\.displayName)
+            + (viewModel.enableBillSplit ? viewModel.pendingGuests.map(\.displayName) : [])
 
         if viewModel.enableBillSplit,
            let groupName = viewModel.selectedCompanionGroup?.name,
@@ -437,7 +438,7 @@ public struct CreatePostComposeView: View {
                     }
                     .pickerStyle(.segmented)
 
-                    if viewModel.billSplitParticipants.isEmpty {
+                    if viewModel.billSplitParticipants.isEmpty && viewModel.pendingGuests.isEmpty {
                         Text(languageService.text(.feedCreateTagFriendsHint))
                             .font(SplickTheme.Typography.caption)
                             .foregroundStyle(SplickTheme.Colors.textSecondary)
@@ -524,16 +525,28 @@ public struct CreatePostComposeView: View {
                         amountLabel: VNDMoneyFormat.formatDisplay(share)
                     )
                 }
+                ForEach(viewModel.pendingGuests) { guest in
+                    guestAmountPreviewRow(
+                        guest,
+                        amountLabel: VNDMoneyFormat.formatDisplay(share)
+                    )
+                }
             }
 
         case .percentage:
             ForEach(viewModel.billSplitParticipants) { user in
                 percentageRow(for: user)
             }
+            ForEach(viewModel.pendingGuests) { guest in
+                percentageRow(guestId: guest.id, identity: guestIdentityView(guest))
+            }
 
         case .exact:
             ForEach(viewModel.billSplitParticipants) { user in
                 exactAmountRow(for: user)
+            }
+            ForEach(viewModel.pendingGuests) { guest in
+                exactAmountRow(guestId: guest.id, identity: guestIdentityView(guest))
             }
         }
     }
@@ -582,13 +595,51 @@ public struct CreatePostComposeView: View {
         )
     }
 
-    private func percentageRow(for user: UserSummary) -> some View {
+    private func guestIdentityView(_ guest: ComposePendingGuest) -> some View {
+        HStack(spacing: SplickTheme.Spacing.xs) {
+            AvatarView(
+                name: guest.displayName,
+                size: .small,
+                placeholder: .brand
+            )
+            Text(guest.displayName)
+                .font(SplickTheme.Typography.callout)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
+                .lineLimit(1)
+        }
+    }
+
+    private func guestAmountPreviewRow(_ guest: ComposePendingGuest, amountLabel: String) -> some View {
         HStack(spacing: SplickTheme.Spacing.sm) {
-            participantIdentityView(user)
+            guestIdentityView(guest)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(amountLabel)
+                .font(SplickTheme.Typography.callout)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+        }
+        .padding(.horizontal, SplickTheme.Spacing.sm)
+        .padding(.vertical, SplickTheme.Spacing.xs)
+        .background(SplickTheme.Colors.tertiaryBackground)
+        .clipShape(
+            RoundedRectangle(
+                cornerRadius: ComposeMetrics.fieldCornerRadius,
+                style: .continuous
+            )
+        )
+    }
+
+    private func percentageRow(for user: UserSummary) -> some View {
+        percentageRow(guestId: user.id, identity: participantIdentityView(user))
+    }
+
+    private func percentageRow<Identity: View>(guestId: UUID, identity: Identity) -> some View {
+        HStack(spacing: SplickTheme.Spacing.sm) {
+            identity
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 4) {
-                TextField("0", text: percentBinding(for: user.id))
+                TextField("0", text: percentBinding(for: guestId))
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.center)
                     .frame(width: 48)
@@ -598,7 +649,7 @@ public struct CreatePostComposeView: View {
             }
             .frame(width: 72)
 
-            Text(percentageAmountLabel(for: user.id))
+            Text(percentageAmountLabel(for: guestId))
                 .font(SplickTheme.Typography.callout)
                 .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
                 .frame(width: 110, alignment: .trailing)
@@ -615,14 +666,18 @@ public struct CreatePostComposeView: View {
     }
 
     private func exactAmountRow(for user: UserSummary) -> some View {
+        exactAmountRow(guestId: user.id, identity: participantIdentityView(user))
+    }
+
+    private func exactAmountRow<Identity: View>(guestId: UUID, identity: Identity) -> some View {
         HStack(spacing: SplickTheme.Spacing.sm) {
-            participantIdentityView(user)
+            identity
 
             Spacer()
 
             HStack(spacing: 4) {
                 LiveVNDMoneyTextField(
-                    text: exactAmountBinding(for: user.id),
+                    text: exactAmountBinding(for: guestId),
                     font: .systemFont(ofSize: 16, weight: .medium),
                     textColor: UIColor(SplickTheme.Colors.textPrimary)
                 )
@@ -703,8 +758,7 @@ private struct ComposeCompanionsEditorView: View {
     @ObservedObject var viewModel: CreatePostComposeViewModel
     let onUserTap: (UserSummary) -> Void
     @FocusState private var isFriendSearchFocused: Bool
-    @State private var guestName = ""
-    @State private var guestPhone = ""
+    @State private var showAddGuestSheet = false
 
     private var companionsTitle: String {
         viewModel.enableBillSplit
@@ -752,16 +806,12 @@ private struct ComposeCompanionsEditorView: View {
                         selectedCompanionGroupCard(group)
                     }
 
-                    if !viewModel.selectedCompanions.isEmpty {
+                    if !viewModel.selectedCompanions.isEmpty || !viewModel.pendingGuests.isEmpty {
                         selectedCompanionsStrip
                     }
 
-                    if !viewModel.pendingGuests.isEmpty {
-                        pendingGuestsStrip
-                    }
-
                     if viewModel.enableBillSplit {
-                        addGuestWithoutApp
+                        addGuestWithoutAppButton
                     }
 
                     if viewModel.enableBillSplit || viewModel.shouldShowFriendSuggestions {
@@ -781,48 +831,27 @@ private struct ComposeCompanionsEditorView: View {
                 await viewModel.loadCompanionGroupsIfNeeded()
             }
         }
-    }
-
-    private var pendingGuestsStrip: some View {
-        VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
-            ForEach(viewModel.pendingGuests) { guest in
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text(guest.displayName)
-                            .font(SplickTheme.Typography.callout)
-                        Text("Chưa có Splick")
-                            .font(SplickTheme.Typography.caption)
-                            .foregroundStyle(SplickTheme.Colors.textTertiary)
-                    }
-                    Spacer()
-                    Button {
-                        viewModel.removePendingGuest(guest)
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(SplickTheme.Colors.textTertiary)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Remove \(guest.displayName)")
-                }
+        .sheet(isPresented: $showAddGuestSheet) {
+            AddGuestWithoutAppSheet { email in
+                viewModel.addPendingGuest(displayName: "", email: email)
             }
+            .environmentObject(languageService)
         }
     }
 
-    private var addGuestWithoutApp: some View {
-        VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
-            Text("Thêm bạn chưa có app")
-                .font(SplickTheme.Typography.callout)
-            TextField("Tên", text: $guestName)
-                .textInputAutocapitalization(.words)
-            TextField("Số điện thoại (tuỳ chọn)", text: $guestPhone)
-                .keyboardType(.phonePad)
-            Button("Thêm vào bill") {
-                viewModel.addPendingGuest(displayName: guestName, phoneNumber: guestPhone)
-                guestName = ""
-                guestPhone = ""
+    private var addGuestWithoutAppButton: some View {
+        Button {
+            showAddGuestSheet = true
+        } label: {
+            HStack(spacing: SplickTheme.Spacing.xs) {
+                Image(systemName: "plus.circle.fill")
+                Text(languageService.text(.feedCreateGuestSection))
+                    .font(SplickTheme.Typography.callout)
             }
-            .disabled(guestName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .foregroundStyle(SplickTheme.Colors.primary)
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(languageService.text(.feedCreateGuestSection))
     }
 
     private var selectedCompanionsStrip: some View {
@@ -831,9 +860,54 @@ private struct ComposeCompanionsEditorView: View {
                 ForEach(viewModel.selectedCompanions) { friend in
                     selectedCompanionTile(for: friend)
                 }
+                ForEach(viewModel.pendingGuests) { guest in
+                    selectedGuestTile(for: guest)
+                }
             }
             .padding(.vertical, SplickTheme.Spacing.xxxs)
         }
+    }
+
+    private func selectedGuestTile(for guest: ComposePendingGuest) -> some View {
+        VStack(spacing: SplickTheme.Spacing.xs) {
+            ZStack(alignment: .topTrailing) {
+                AvatarView(
+                    name: guest.displayName,
+                    size: .medium,
+                    placeholder: .brand
+                )
+                .overlay {
+                    Circle()
+                        .strokeBorder(
+                            SplickTheme.Colors.primaryGradientStart.opacity(0.18),
+                            lineWidth: 1
+                        )
+                }
+
+                Button {
+                    viewModel.removePendingGuest(guest)
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.white, .black.opacity(0.55))
+                }
+                .buttonStyle(.plain)
+                .offset(x: 5, y: -5)
+                .accessibilityLabel(
+                    languageService.format(.feedCreateGuestRemoveA11y, guest.displayName)
+                )
+            }
+
+            Text(guest.displayName)
+                .font(SplickTheme.Typography.caption)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .multilineTextAlignment(.center)
+                .frame(width: ComposeMetrics.companionNameWidth)
+        }
+        .frame(width: ComposeMetrics.companionTileWidth)
+        .padding(.vertical, SplickTheme.Spacing.xxs)
     }
 
     private func selectedCompanionTile(for friend: UserSummary) -> some View {
@@ -916,7 +990,7 @@ private struct ComposeCompanionsEditorView: View {
                 ForEach(viewModel.friendSearchResults) { friend in
                     HStack(spacing: SplickTheme.Spacing.sm) {
                         Button {
-                            onUserTap(friend)
+                            viewModel.addCompanion(friend)
                         } label: {
                             HStack(spacing: SplickTheme.Spacing.sm) {
                                 AvatarView(
@@ -1241,6 +1315,60 @@ private struct ComposeLocationEditorView: View {
                 Spacer()
             }
         }
+    }
+}
+
+private struct AddGuestWithoutAppSheet: View {
+    @EnvironmentObject private var languageService: LanguageService
+    @Environment(\.dismiss) private var dismiss
+    @State private var guestEmail = ""
+    @FocusState private var isEmailFocused: Bool
+    let onAdd: (String) -> Void
+
+    private var canAdd: Bool {
+        let email = guestEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        return email.contains("@") && email.contains(".")
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
+                TextField(languageService.text(.feedCreateGuestPhonePlaceholder), text: $guestEmail)
+                    .keyboardType(.emailAddress)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .textContentType(.emailAddress)
+                    .focused($isEmailFocused)
+                    .padding(SplickTheme.Spacing.sm)
+                    .background(SplickTheme.Colors.tertiaryBackground)
+                    .clipShape(
+                        RoundedRectangle(
+                            cornerRadius: ComposeMetrics.fieldCornerRadius,
+                            style: .continuous
+                        )
+                    )
+
+                Spacer()
+            }
+            .padding(SplickTheme.Spacing.md)
+            .navigationTitle(languageService.text(.feedCreateGuestSection))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(languageService.text(.commonCancel)) { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(languageService.text(.feedCreateGuestAddAction)) {
+                        onAdd(guestEmail)
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(!canAdd)
+                }
+            }
+            .onAppear { isEmailFocused = true }
+        }
+        .presentationDetents([.medium])
     }
 }
 

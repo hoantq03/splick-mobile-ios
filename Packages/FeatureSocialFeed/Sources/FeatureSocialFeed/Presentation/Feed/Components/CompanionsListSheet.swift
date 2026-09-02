@@ -11,6 +11,7 @@ struct CompanionsSheetRoute: Identifiable {
 struct CompanionsListSheet: View {
     @EnvironmentObject private var languageService: LanguageService
     let companions: [UserSummary]
+    var currentUserId: UUID?
     let onUserTap: (UserSummary) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -41,7 +42,7 @@ struct CompanionsListSheet: View {
                                     size: .small
                                 )
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(friend.displayName)
+                                    Text(displayName(for: friend))
                                         .font(SplickTheme.Typography.headline)
                                         .foregroundStyle(SplickTheme.Colors.textPrimary)
                                     Text("@\(friend.username)")
@@ -63,5 +64,10 @@ struct CompanionsListSheet: View {
                 }
             }
         }
+    }
+
+    private func displayName(for friend: UserSummary) -> String {
+        guard friend.id == currentUserId else { return friend.displayName }
+        return "\(friend.displayName) (\(languageService.text(.commonMe)))"
     }
 }

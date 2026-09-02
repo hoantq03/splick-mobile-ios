@@ -26,12 +26,12 @@ public enum ComposeBillSplitMode: String, CaseIterable, Identifiable {
 public struct ComposePendingGuest: Identifiable, Equatable, Sendable {
     public let id: UUID
     public var displayName: String
-    public var phoneNumber: String
+    public var email: String
 
-    public init(id: UUID = UUID(), displayName: String, phoneNumber: String = "") {
+    public init(id: UUID = UUID(), displayName: String, email: String = "") {
         self.id = id
         self.displayName = displayName
-        self.phoneNumber = phoneNumber
+        self.email = email
     }
 }
 
@@ -283,14 +283,28 @@ public final class CreatePostComposeViewModel: ObservableObject {
         return companions
     }
 
-    func addPendingGuest(displayName: String, phoneNumber: String) {
+    func addPendingGuest(displayName: String, email: String) {
+        let normalizedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isLikelyEmail(normalizedEmail) else { return }
         let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return }
-        pendingGuests.append(ComposePendingGuest(displayName: name, phoneNumber: phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)))
+        let resolvedName = name.isEmpty ? displayNameFromEmail(normalizedEmail) : name
+        pendingGuests.append(ComposePendingGuest(displayName: resolvedName, email: normalizedEmail))
     }
 
     func removePendingGuest(_ guest: ComposePendingGuest) {
         pendingGuests.removeAll { $0.id == guest.id }
+    }
+
+    private func isLikelyEmail(_ value: String) -> Bool {
+        guard let at = value.firstIndex(of: "@"), at > value.startIndex else { return false }
+        let domain = value[value.index(after: at)...]
+        return domain.contains(".")
+    }
+
+    private func displayNameFromEmail(_ email: String) -> String {
+        let local = email.split(separator: "@", maxSplits: 1, omittingEmptySubsequences: true).first.map(String.init) ?? email
+        let spaced = local.replacingOccurrences(of: ".", with: " ").replacingOccurrences(of: "_", with: " ")
+        return spaced.isEmpty ? email : spaced
     }
 
     func isCurrentUser(_ user: UserSummary) -> Bool {
@@ -744,10 +758,8 @@ public final class CreatePostComposeViewModel: ObservableObject {
                 ? pendingGuests.map {
                     PendingCompanionInput(
                         displayName: $0.displayName,
-                        phoneNumber: $0.phoneNumber.nilIfBlank,
-                        amount: splitMode == .exact
-                            ? VNDMoneyFormat.parse(exactAmountTexts[$0.id] ?? "")
-                            : nil
+                        email: $0.email.nilIfBlank,
+                        amount: pendingGuestAmount($0)
                     )
                 }
                 : [],
@@ -765,6 +777,19 @@ public final class CreatePostComposeViewModel: ObservableObject {
             return PostAudience(mode: .specificUsers, allowedUserIds: selectedAudienceUsers.map(\.id))
         case .friendsExcept:
             return PostAudience(mode: .friendsExcept, excludedUserIds: selectedAudienceUsers.map(\.id))
+        }
+    }
+
+    private func pendingGuestAmount(_ guest: ComposePendingGuest) -> Decimal? {
+        switch splitMode {
+        case .equal:
+            return nil
+        case .exact:
+            return VNDMoneyFormat.parse(exactAmountTexts[guest.id] ?? "")
+        case .percentage:
+            guard let total = parsedBillTotal else { return nil }
+            let pct = VNDMoneyFormat.parsePercent(percentageTexts[guest.id] ?? "") ?? 0
+            return total * pct / 100
         }
     }
 

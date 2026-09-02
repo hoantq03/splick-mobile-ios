@@ -24,17 +24,30 @@ public struct AvatarView: View {
         }
     }
 
+    public enum Placeholder {
+        case initials
+        case brand
+    }
+
     private let imageURL: URL?
     private let userId: UUID?
     private let displayName: String
     private let initials: String
     private let size: Size
+    private let placeholder: Placeholder
 
-    public init(imageURL: URL? = nil, name: String, size: Size = .medium, userId: UUID? = nil) {
+    public init(
+        imageURL: URL? = nil,
+        name: String,
+        size: Size = .medium,
+        userId: UUID? = nil,
+        placeholder: Placeholder = .initials
+    ) {
         self.imageURL = imageURL
         self.userId = userId
         self.displayName = name
         self.size = size
+        self.placeholder = placeholder
         self.initials = String(name.prefix(2)).uppercased()
     }
 
@@ -57,14 +70,14 @@ public struct AvatarView: View {
                     case .success(let image):
                         image.resizable().scaledToFill()
                     case .failure:
-                        initialsView
+                        placeholderView
                     default:
                         ProgressView()
                             .controlSize(loadingControlSize)
                     }
                 }
             } else {
-                initialsView
+                placeholderView
             }
         }
         .frame(width: size.dimension, height: size.dimension)
@@ -77,6 +90,23 @@ public struct AvatarView: View {
         case .compact, .medium: return .small
         case .large, .profile: return .regular
         }
+    }
+
+    @ViewBuilder
+    private var placeholderView: some View {
+        switch placeholder {
+        case .initials:
+            initialsView
+        case .brand:
+            brandPlaceholderView
+        }
+    }
+
+    private var brandPlaceholderView: some View {
+        SplickLogoView(layout: .markOnly, style: .fullColor)
+            .scaledToFill()
+            .frame(width: size.dimension, height: size.dimension)
+            .clipped()
     }
 
     private var initialsView: some View {

@@ -5,6 +5,7 @@ import SplickDomain
 
 public struct PostPeekOverlay: View {
     @EnvironmentObject private var languageService: LanguageService
+    @Environment(\.currentUserSummary) private var currentUserSummary
 
     private let post: Post
     private let onDismiss: () -> Void
@@ -128,7 +129,13 @@ public struct PostPeekOverlay: View {
                 .font(.system(size: 10))
                 .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
 
-            taggedSummaryLabel
+            CompanionsSummaryText(
+                companions: post.companions,
+                groupName: post.companionGroupName,
+                currentUserId: currentUserSummary?.id,
+                font: .system(size: 11),
+                color: SplickTheme.Colors.textSecondary
+            )
 
             Spacer(minLength: 0)
         }
@@ -141,41 +148,6 @@ public struct PostPeekOverlay: View {
         .clipShape(
             RoundedRectangle(cornerRadius: Self.sectionCornerRadius, style: .continuous)
         )
-    }
-
-    @ViewBuilder
-    private var taggedSummaryLabel: some View {
-        let bodyFont = Font.system(size: 11)
-        let color = SplickTheme.Colors.textSecondary
-        let prefix = languageService.text(.feedCompanionsWith) + " "
-
-        if let groupName = post.companionGroupName, !groupName.isEmpty {
-            (Text(prefix) + Text(groupName).fontWeight(.semibold))
-                .font(bodyFont)
-                .foregroundStyle(color)
-                .lineLimit(2)
-                .multilineTextAlignment(.leading)
-        } else {
-            let maxNamed = 1
-            let companions = post.companions
-            if companions.count <= maxNamed {
-                let names = companions.map(\.displayName).joined(separator: ", ")
-                (Text(prefix) + Text(names).fontWeight(.semibold))
-                    .font(bodyFont)
-                    .foregroundStyle(color)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-            } else {
-                let first = companions.prefix(maxNamed).map(\.displayName).joined(separator: ", ")
-                let others = companions.count - maxNamed
-                let suffix = languageService.format(.feedCompanionsAndOthers, others)
-                (Text(prefix) + Text(first).fontWeight(.semibold) + Text(suffix))
-                    .font(bodyFont)
-                    .foregroundStyle(color)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-            }
-        }
     }
 
     private var mediaPreview: some View {

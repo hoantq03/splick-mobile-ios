@@ -209,7 +209,10 @@ public struct FeedView: View {
             }
         }
         .sheet(item: $companionsRoute) { route in
-            CompanionsListSheet(companions: route.companions) { user in
+            CompanionsListSheet(
+                companions: route.companions,
+                currentUserId: currentUserSummary?.id
+            ) { user in
                 companionsRoute = nil
                 openProfile(for: user)
             }
