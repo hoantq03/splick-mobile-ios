@@ -26,6 +26,7 @@ public struct FriendsRootView: View {
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.pullToRefreshActive) private var pullToRefreshActive
     @Environment(\.sameTabTapHandlingEnabled) private var sameTabTapHandlingEnabled
+    @Environment(\.openURL) private var openURL
     @State private var isPullRefreshing = false
     @FocusState private var isSearchFieldFocused: Bool
 
@@ -709,6 +710,19 @@ public struct FriendsRootView: View {
             await addFriendViewModel.addFromQR(payload)
         case .joinGroup, .joinGroupByServerPayload:
             await joinGroupViewModel.joinFromQR(payload)
+        case .claimBill(let token, let splitId):
+            var components = URLComponents()
+            components.scheme = "splick"
+            components.host = "bill"
+            components.path = "/\(token)"
+            if let splitId {
+                components.queryItems = [URLQueryItem(name: "split", value: splitId.uuidString)]
+            }
+            if let url = components.url {
+                openURL(url)
+            } else {
+                viewModel.alertMessage = languageService.text(.friendsScanManualHint)
+            }
         }
 
         if let error = addFriendViewModel.errorMessage ?? joinGroupViewModel.errorMessage {

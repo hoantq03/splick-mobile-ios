@@ -12,5 +12,10 @@
 	<array>
 		<string>group.com.splick.app</string>
 	</array>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:splick.app</string>
+		<string>applinks:www.splick.app</string>
+	</array>
 </dict>
 </plist>

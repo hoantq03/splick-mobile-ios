@@ -4,6 +4,7 @@ import SplickDomain
 import Common
 import Storage
 import Localization
+import FeatureFriends
 import FeatureSocialFeed
 
 @MainActor
@@ -30,6 +31,8 @@ final class AppState: ObservableObject {
     /// notification/deep-link open cannot leave the floating menu over the composer.
     @Published var isMessagingThreadPresented = false
     @Published var pendingUserProfileNavigation: UUID?
+    @Published var pendingBillInviteToken: String?
+    @Published var pendingBillInviteSplitId: UUID?
 
     /// In-memory only — `false` every cold launch and after logout.
     /// `true` only after the user taps through the 4-page onboarding this session.
@@ -46,6 +49,17 @@ final class AppState: ObservableObject {
         }
         return !token.isEmpty
     }()
+
+    init() {
+        if let stored = UserDefaults.standard.string(forKey: AppConstants.UserDefaults.pendingBillInviteToken),
+           !stored.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            pendingBillInviteToken = stored
+            hasPassedOnboardingThisSession = true
+            if let rawSplit = UserDefaults.standard.string(forKey: AppConstants.UserDefaults.pendingBillInviteSplitId) {
+                pendingBillInviteSplitId = UUID(uuidString: rawSplit)
+            }
+        }
+    }
 
     var needsSplash: Bool {
         if isAuthenticated || hadStoredCredentialsAtLaunch { return false }
@@ -151,7 +165,18 @@ final class AppState: ObservableObject {
     }
 
     func handleDeepLink(_ url: URL) -> Bool {
+        if url.scheme?.lowercased() == "https" || url.scheme?.lowercased() == "http" {
+            if case .claimBill(let token, let splitId) = SplickQRParser.parse(url.absoluteString) {
+                storePendingBillInvite(token, splitId: splitId)
+                return true
+            }
+            return false
+        }
         guard url.scheme?.lowercased() == "splick" else { return false }
+        if case .claimBill(let token, let splitId) = SplickQRParser.parse(url.absoluteString) {
+            storePendingBillInvite(token, splitId: splitId)
+            return true
+        }
         switch url.host?.lowercased() {
         case "capture", "postcapture":
             openPostCapture()
@@ -187,6 +212,34 @@ final class AppState: ObservableObject {
         default:
             return false
         }
+    }
+
+    func storePendingBillInvite(_ token: String, splitId: UUID? = nil) {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        UserDefaults.standard.set(trimmed, forKey: AppConstants.UserDefaults.pendingBillInviteToken)
+        pendingBillInviteToken = trimmed
+        pendingBillInviteSplitId = splitId
+        if let splitId {
+            UserDefaults.standard.set(splitId.uuidString, forKey: AppConstants.UserDefaults.pendingBillInviteSplitId)
+        } else {
+            UserDefaults.standard.removeObject(forKey: AppConstants.UserDefaults.pendingBillInviteSplitId)
+        }
+        hasPassedOnboardingThisSession = true
+    }
+
+    func consumePendingBillInvite() -> (token: String, splitId: UUID?)? {
+        let stored = pendingBillInviteToken
+            ?? UserDefaults.standard.string(forKey: AppConstants.UserDefaults.pendingBillInviteToken)
+        let split = pendingBillInviteSplitId
+            ?? UserDefaults.standard.string(forKey: AppConstants.UserDefaults.pendingBillInviteSplitId)
+            .flatMap(UUID.init)
+        UserDefaults.standard.removeObject(forKey: AppConstants.UserDefaults.pendingBillInviteToken)
+        UserDefaults.standard.removeObject(forKey: AppConstants.UserDefaults.pendingBillInviteSplitId)
+        pendingBillInviteToken = nil
+        pendingBillInviteSplitId = nil
+        guard let stored, !stored.isEmpty else { return nil }
+        return (stored, split)
     }
 
     private func uuidPathComponent(_ url: URL) -> UUID? {

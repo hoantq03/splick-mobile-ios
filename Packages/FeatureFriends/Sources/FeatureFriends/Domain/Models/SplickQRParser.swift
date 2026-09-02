@@ -7,6 +7,7 @@ public enum SplickQRAction: Equatable {
     case joinGroup(inviteCode: String)
     /// Server-issued group QR (`POST /v1/groups/{id}/qr` payload, base64url JSON).
     case joinGroupByServerPayload(String)
+    case claimBill(token: String, splitId: UUID? = nil)
 }
 
 public enum SplickQRParser {
@@ -27,6 +28,9 @@ public enum SplickQRParser {
                 }
                 if host == "group", !path.isEmpty {
                     return .joinGroup(inviteCode: path)
+                }
+                if host == "bill", !path.isEmpty {
+                    return .claimBill(token: path, splitId: queryUUID(url, name: "split"))
                 }
             }
 
@@ -54,6 +58,20 @@ public enum SplickQRParser {
                     }
                     if pathComponents.count == 2, pathComponents[0].lowercased() == "friend" {
                         return .addFriend(username: pathComponents[1])
+                    }
+                    if pathComponents.count == 2, pathComponents[0].lowercased() == "b" {
+                        return .claimBill(
+                            token: pathComponents[1],
+                            splitId: queryUUID(url, name: "split")
+                        )
+                    }
+                    if pathComponents.count == 3,
+                       pathComponents[0].lowercased() == "b",
+                       pathComponents[1].lowercased() == "t" {
+                        return .claimBill(
+                            token: pathComponents[2],
+                            splitId: queryUUID(url, name: "split")
+                        )
                     }
                     if pathComponents.count == 1 {
                         return .addFriend(username: pathComponents[0])
@@ -83,6 +101,16 @@ public enum SplickQRParser {
         }
 
         return nil
+    }
+
+    private static func queryUUID(_ url: URL, name: String) -> UUID? {
+        guard let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems else {
+            return nil
+        }
+        guard let raw = items.first(where: { $0.name.lowercased() == name })?.value else {
+            return nil
+        }
+        return UUID(uuidString: raw)
     }
 
     public static func friendPayload(username: String) -> String {

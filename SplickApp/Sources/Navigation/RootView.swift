@@ -48,9 +48,13 @@ struct RootView: View {
         .onChange(of: appState.isAuthenticated) { isAuthenticated in
             guard isAuthenticated else { return }
             consumePendingNotificationDestination()
+            Task { await claimPendingBillInviteIfNeeded() }
         }
         .onAppear {
             consumePendingNotificationDestination()
+            if appState.isAuthenticated {
+                Task { await claimPendingBillInviteIfNeeded() }
+            }
         }
         .task(id: appState.splashSessionID) {
             await bootstrapSession()
@@ -203,6 +207,24 @@ struct RootView: View {
         guard let destination = pushNotificationCoordinator.pendingDestination else { return }
         appState.routeRemoteNotification(destination)
         pushNotificationCoordinator.clearPendingDestination()
+    }
+
+    private func claimPendingBillInviteIfNeeded() async {
+        guard appState.isAuthenticated else { return }
+        guard let pending = appState.consumePendingBillInvite() else { return }
+        do {
+            let result = try await container.claimBillInvite(
+                token: pending.token,
+                splitId: pending.splitId
+            )
+            if let postId = result.postId {
+                appState.openPostFromNotification(postId)
+            } else {
+                appState.selectedTab = .expenses
+            }
+        } catch {
+            appState.storePendingBillInvite(pending.token, splitId: pending.splitId)
+        }
     }
 
     private func bootstrapSession() async {

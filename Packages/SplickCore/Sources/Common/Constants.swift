@@ -37,6 +37,8 @@ public enum AppConstants {
         public static let pushNotificationPermissionRequested = "pushNotificationPermissionRequested"
         public static let processedFriendRequestOutcomes = "processedFriendRequestOutcomes"
         public static let preferredLocale = "preferredLocale"
+        public static let pendingBillInviteToken = "com.splick.pendingBillInviteToken"
+        public static let pendingBillInviteSplitId = "com.splick.pendingBillInviteSplitId"
         public static let cachedCurrentUser = "com.splick.cachedCurrentUser"
     }
 

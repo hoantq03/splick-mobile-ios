@@ -147,7 +147,7 @@ public struct GroupsRepository: GroupsRepositoryProtocol {
                     SocialEndpoint.joinGroupByQr(qrPayload: serverPayload)
                 )
                 return try await fetchGroup(groupId: joinResponse.groupId)
-            case .addFriend, .addFriendByServerPayload:
+            case .addFriend, .addFriendByServerPayload, .claimBill:
                 throw FriendsError.invalidQRCode
             }
         }

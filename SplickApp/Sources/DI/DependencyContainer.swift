@@ -577,6 +577,10 @@ final class DependencyContainer: ObservableObject {
         RejectBulkSettlementUseCase(repository: expenseRepository)
     }()
 
+    func claimBillInvite(token: String, splitId: UUID? = nil) async throws -> ClaimBillInviteResult {
+        try await expenseRepository.claimBillInvite(token: token, splitId: splitId)
+    }
+
     lazy var expenseFriendListViewModel = ExpenseFriendListViewModel(
         fetchDebtSummaryUseCase: fetchDebtSummaryUseCase,
         languageService: languageService
