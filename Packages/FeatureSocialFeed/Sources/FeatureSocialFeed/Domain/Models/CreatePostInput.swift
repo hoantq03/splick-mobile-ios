@@ -1,6 +1,18 @@
 import Foundation
 import SplickDomain
 
+public struct PendingCompanionInput: Sendable {
+    public let displayName: String
+    public let phoneNumber: String?
+    public let amount: Decimal?
+
+    public init(displayName: String, phoneNumber: String? = nil, amount: Decimal? = nil) {
+        self.displayName = displayName
+        self.phoneNumber = phoneNumber
+        self.amount = amount
+    }
+}
+
 public struct CreatePostMediaInput: Sendable {
     public let data: Data
     public let mimeType: String
@@ -26,6 +38,7 @@ public struct CreatePostInput: Sendable {
     public let billSplit: PostBillSplit?
     public let billSplitType: String?
     public let autoReminderEnabled: Bool
+    public let pendingCompanions: [PendingCompanionInput]
     public let audience: PostAudience
     public let groupId: UUID?
 
@@ -40,6 +53,7 @@ public struct CreatePostInput: Sendable {
         billSplit: PostBillSplit? = nil,
         billSplitType: String? = nil,
         autoReminderEnabled: Bool = false,
+        pendingCompanions: [PendingCompanionInput] = [],
         audience: PostAudience = .friends,
         groupId: UUID? = nil
     ) {
@@ -53,6 +67,7 @@ public struct CreatePostInput: Sendable {
         self.billSplit = billSplit
         self.billSplitType = billSplitType
         self.autoReminderEnabled = autoReminderEnabled
+        self.pendingCompanions = pendingCompanions
         self.audience = audience
         self.groupId = groupId
     }

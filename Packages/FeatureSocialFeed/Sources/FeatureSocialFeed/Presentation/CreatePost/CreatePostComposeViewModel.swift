@@ -23,6 +23,18 @@ public enum ComposeBillSplitMode: String, CaseIterable, Identifiable {
     }
 }
 
+public struct ComposePendingGuest: Identifiable, Equatable, Sendable {
+    public let id: UUID
+    public var displayName: String
+    public var phoneNumber: String
+
+    public init(id: UUID = UUID(), displayName: String, phoneNumber: String = "") {
+        self.id = id
+        self.displayName = displayName
+        self.phoneNumber = phoneNumber
+    }
+}
+
 public struct PreparedPostSubmit: Sendable {
     public let optimisticPost: Post
     public let input: CreatePostInput
@@ -44,6 +56,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
     @Published var friendSearchQuery = ""
     @Published private(set) var friendSearchResults: [UserSummary] = []
     @Published private(set) var selectedCompanions: [UserSummary] = []
+    @Published private(set) var pendingGuests: [ComposePendingGuest] = []
     @Published private(set) var selectedCompanionGroup: Group?
     @Published private(set) var companionGroupMembersExpanded = false
     @Published private(set) var isLoadingCompanionGroupMembers = false
@@ -270,6 +283,16 @@ public final class CreatePostComposeViewModel: ObservableObject {
         return companions
     }
 
+    func addPendingGuest(displayName: String, phoneNumber: String) {
+        let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        pendingGuests.append(ComposePendingGuest(displayName: name, phoneNumber: phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)))
+    }
+
+    func removePendingGuest(_ guest: ComposePendingGuest) {
+        pendingGuests.removeAll { $0.id == guest.id }
+    }
+
     func isCurrentUser(_ user: UserSummary) -> Bool {
         user.id == currentUserId
     }
@@ -319,8 +342,9 @@ public final class CreatePostComposeViewModel: ObservableObject {
     }
 
     var equalShareAmount: Decimal? {
-        guard let total = parsedBillTotal, !billSplitParticipants.isEmpty else { return nil }
-        return total / Decimal(billSplitParticipants.count)
+        let count = billSplitParticipants.count + pendingGuests.count
+        guard let total = parsedBillTotal, count > 0 else { return nil }
+        return total / Decimal(count)
     }
 
     var equalSharePreview: String? {
@@ -330,7 +354,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
         return languageService.format(
             .feedCreateEqualSplitPreview,
             VNDMoneyFormat.formatDisplay(total),
-            billSplitParticipants.count,
+            billSplitParticipants.count + pendingGuests.count,
             VNDMoneyFormat.formatDisplay(share)
         )
     }
@@ -680,7 +704,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
                 submitState = .failed(languageService.text(.feedCreateLoadGroupMembersFailed))
                 return nil
             }
-            if billSplitParticipants.isEmpty {
+            if companionUsersForSubmit.isEmpty && pendingGuests.isEmpty {
                 submitState = .failed(languageService.text(.feedCreateBillNeedPeople))
                 return nil
             }
@@ -716,6 +740,17 @@ public final class CreatePostComposeViewModel: ObservableObject {
             billSplit: enableBillSplit ? buildBillSplit() : nil,
             billSplitType: enableBillSplit ? splitMode.apiSplitType : nil,
             autoReminderEnabled: enableBillSplit && autoReminderEnabled,
+            pendingCompanions: enableBillSplit
+                ? pendingGuests.map {
+                    PendingCompanionInput(
+                        displayName: $0.displayName,
+                        phoneNumber: $0.phoneNumber.nilIfBlank,
+                        amount: splitMode == .exact
+                            ? VNDMoneyFormat.parse(exactAmountTexts[$0.id] ?? "")
+                            : nil
+                    )
+                }
+                : [],
             audience: audience
         )
     }
@@ -737,14 +772,23 @@ public final class CreatePostComposeViewModel: ObservableObject {
         guard let total = parsedBillTotal, VndAmountRules.isAtLeastMinimum(total) else { return nil }
 
         let participants = billSplitParticipants
-        guard !participants.isEmpty else { return nil }
+        let guestCount = pendingGuests.count
+        guard !participants.isEmpty || guestCount > 0 else { return nil }
+        let partyCount = participants.count + guestCount
+        guard partyCount > 0 else { return nil }
 
-        let splits: [PostBillSplitLine]
+        var splits: [PostBillSplitLine]
         switch splitMode {
         case .equal:
-            let share = total / Decimal(participants.count)
+            let share = total / Decimal(partyCount)
             splits = participants.map {
                 PostBillSplitLine(user: $0, amount: share, isPaid: $0.id == currentUserId)
+            }
+            splits += pendingGuests.map {
+                PostBillSplitLine(
+                    guest: GuestParticipant(displayName: $0.displayName),
+                    amount: share
+                )
             }
         case .percentage:
             splits = participants.map { user in
@@ -752,10 +796,25 @@ public final class CreatePostComposeViewModel: ObservableObject {
                 let amount = total * pct / 100
                 return PostBillSplitLine(user: user, amount: amount, isPaid: user.id == currentUserId)
             }
+            splits += pendingGuests.map { guest in
+                let pct = VNDMoneyFormat.parsePercent(percentageTexts[guest.id] ?? "") ?? 0
+                let amount = total * pct / 100
+                return PostBillSplitLine(
+                    guest: GuestParticipant(displayName: guest.displayName),
+                    amount: amount
+                )
+            }
         case .exact:
             splits = participants.map { user in
                 let amount = VNDMoneyFormat.parse(exactAmountTexts[user.id] ?? "") ?? 0
                 return PostBillSplitLine(user: user, amount: amount, isPaid: user.id == currentUserId)
+            }
+            splits += pendingGuests.map { guest in
+                let amount = VNDMoneyFormat.parse(exactAmountTexts[guest.id] ?? "") ?? 0
+                return PostBillSplitLine(
+                    guest: GuestParticipant(displayName: guest.displayName),
+                    amount: amount
+                )
             }
         }
 

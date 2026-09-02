@@ -597,6 +597,7 @@ enum StringsFeatureEn {
         .feedCreateBillAmountMinimum: "Amount must be at least 1,000 đ.",
         .feedCreateBillNeedPeople: "Select at least one person to split the bill with.",
         .feedCreateRetryFailed: "Couldn't post that. Try again in a bit!",
+        .feedGuestInviteShareMessage: "Join this Splick bill split:",
         .feedAudienceTitle: "Who can see this",
         .feedAudienceSection: "Visibility",
         .feedAudienceGroups: "Groups",

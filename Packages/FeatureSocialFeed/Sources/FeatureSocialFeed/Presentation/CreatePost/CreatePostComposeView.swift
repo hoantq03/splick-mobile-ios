@@ -703,6 +703,8 @@ private struct ComposeCompanionsEditorView: View {
     @ObservedObject var viewModel: CreatePostComposeViewModel
     let onUserTap: (UserSummary) -> Void
     @FocusState private var isFriendSearchFocused: Bool
+    @State private var guestName = ""
+    @State private var guestPhone = ""
 
     private var companionsTitle: String {
         viewModel.enableBillSplit
@@ -754,6 +756,14 @@ private struct ComposeCompanionsEditorView: View {
                         selectedCompanionsStrip
                     }
 
+                    if !viewModel.pendingGuests.isEmpty {
+                        pendingGuestsStrip
+                    }
+
+                    if viewModel.enableBillSplit {
+                        addGuestWithoutApp
+                    }
+
                     if viewModel.enableBillSplit || viewModel.shouldShowFriendSuggestions {
                         friendSearchResultsList
                     }
@@ -770,6 +780,48 @@ private struct ComposeCompanionsEditorView: View {
             if viewModel.enableBillSplit {
                 await viewModel.loadCompanionGroupsIfNeeded()
             }
+        }
+    }
+
+    private var pendingGuestsStrip: some View {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+            ForEach(viewModel.pendingGuests) { guest in
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text(guest.displayName)
+                            .font(SplickTheme.Typography.callout)
+                        Text("Chưa có Splick")
+                            .font(SplickTheme.Typography.caption)
+                            .foregroundStyle(SplickTheme.Colors.textTertiary)
+                    }
+                    Spacer()
+                    Button {
+                        viewModel.removePendingGuest(guest)
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(SplickTheme.Colors.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Remove \(guest.displayName)")
+                }
+            }
+        }
+    }
+
+    private var addGuestWithoutApp: some View {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+            Text("Thêm bạn chưa có app")
+                .font(SplickTheme.Typography.callout)
+            TextField("Tên", text: $guestName)
+                .textInputAutocapitalization(.words)
+            TextField("Số điện thoại (tuỳ chọn)", text: $guestPhone)
+                .keyboardType(.phonePad)
+            Button("Thêm vào bill") {
+                viewModel.addPendingGuest(displayName: guestName, phoneNumber: guestPhone)
+                guestName = ""
+                guestPhone = ""
+            }
+            .disabled(guestName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
     }
 

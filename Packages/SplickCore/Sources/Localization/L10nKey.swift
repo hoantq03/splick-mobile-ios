@@ -841,6 +841,7 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case feedCreateBillAmountMinimum = "feed.create.bill_amount_minimum"
     case feedCreateBillNeedPeople = "feed.create.bill_need_people"
     case feedCreateRetryFailed = "feed.create.retry_failed"
+    case feedGuestInviteShareMessage = "feed.guest_invite.share_message"
     case feedAudienceTitle = "feed.audience.title"
     case feedAudienceSection = "feed.audience.section"
     case feedAudienceGroups = "feed.audience.groups"
