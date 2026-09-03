@@ -100,11 +100,11 @@ private struct ModernSplickTabBar: View {
                     .fill(.clear)
                     .glassEffect(.regular)
                     .transaction { $0.animation = nil }
+                    .clipShape(
+                        SidePanelMaskShape(side: side, notchRadius: notchRadius, cornerRadius: cornerRadius),
+                        style: FillStyle(eoFill: true)
+                    )
             }
-            .clipShape(
-                SidePanelMaskShape(side: side, notchRadius: notchRadius, cornerRadius: cornerRadius),
-                style: FillStyle(eoFill: true)
-            )
     }
 
     private var cameraButton: some View {
@@ -149,25 +149,25 @@ private struct ModernSplickTabBar: View {
     }
 
     private func tabLabel(tab: Tab, isSelected: Bool, badge: Int) -> some View {
-        ZStack(alignment: .topTrailing) {
-            VStack(spacing: 3) {
+        VStack(spacing: 3) {
+            ZStack(alignment: .topTrailing) {
                 Image(systemName: isSelected ? tab.selectedIcon : tab.icon)
                     .font(.system(size: 21, weight: .medium))
                     .symbolEffect(.bounce, value: tappedTab == tab)
-                Text(tab.localizedTitle(using: languageService))
-                    .font(.system(size: 10, weight: isSelected ? .semibold : .medium))
-                    .lineLimit(1)
+                TabBarBadgeView(count: badge)
+                    .offset(x: 7, y: -5)
             }
-            .foregroundStyle(
-                isSelected
-                    ? SplickTheme.Colors.primaryGradientStart
-                    : SplickTheme.Colors.textTertiary
-            )
-            .scaleEffect(tappedTab == tab ? 1.08 : 1.0)
-            .animation(.easeOut(duration: 0.16), value: tappedTab == tab)
-            TabBarBadgeView(count: badge)
-                .offset(x: 10, y: -6)
+            Text(tab.localizedTitle(using: languageService))
+                .font(.system(size: 10, weight: isSelected ? .semibold : .medium))
+                .lineLimit(1)
         }
+        .foregroundStyle(
+            isSelected
+                ? SplickTheme.Colors.primaryGradientStart
+                : SplickTheme.Colors.textTertiary
+        )
+        .scaleEffect(tappedTab == tab ? 1.08 : 1.0)
+        .animation(.easeOut(duration: 0.16), value: tappedTab == tab)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onChange(of: tappedTab) { _, _ in
             guard tappedTab == tab else { return }
@@ -242,7 +242,7 @@ private struct LegacySplickTabBar: View {
                     Image(systemName: isSelected ? tab.selectedIcon : tab.icon)
                         .font(.system(size: 20, weight: .medium))
                     TabBarBadgeView(count: badge)
-                        .offset(x: 8, y: -6)
+                        .offset(x: 7, y: -5)
                 }
                 Text(tab.localizedTitle(using: languageService))
                     .font(.system(size: 9, weight: isSelected ? .semibold : .medium))
