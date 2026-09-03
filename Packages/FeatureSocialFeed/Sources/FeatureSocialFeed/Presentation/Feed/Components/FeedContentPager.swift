@@ -583,9 +583,7 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
         currentWidth = width
         currentHeight = height
         if activityState.chrome != chrome {
-            Task { @MainActor in
-                activityState.chrome = chrome
-            }
+            activityState.chrome = chrome
         }
 
         if let index = feedSegmentOrder.firstIndex(of: chrome.activeSelection) {

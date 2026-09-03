@@ -39,8 +39,6 @@ public struct FeedView: View {
     @State private var selectedSegment: FeedContentSegment = .feed
     @StateObject private var scrollChrome = ScrollChromeStateHolder()
     @StateObject private var videoCoordinator = FeedVideoPlaybackCoordinator()
-    @State private var feedScrollTopSignal = 0
-    @State private var feedSameTabRefreshSignal = 0
     @Namespace private var postZoomNamespace
 
     public init(
@@ -75,9 +73,7 @@ public struct FeedView: View {
         NavigationStack(path: $navigationPath) {
             FeedContentPager(
                 selection: $selectedSegment,
-                sameTabTapHandlingEnabled: sameTabTapHandlingEnabled && navigationPath.isEmpty,
-                scrollTopSignal: feedScrollTopSignal,
-                sameTabRefreshSignal: feedSameTabRefreshSignal
+                sameTabTapHandlingEnabled: sameTabTapHandlingEnabled && navigationPath.isEmpty
             ) {
                 FeedPrimaryPage(
                     viewModel: viewModel,
@@ -118,6 +114,7 @@ public struct FeedView: View {
                             albumLabel: languageService.text(.feedAlbumTitle),
                             streakLabel: languageService.text(.feedStreakTitle)
                         )
+                        .frame(maxWidth: .infinity, alignment: .center)
                     }
                 }
             }
@@ -268,8 +265,6 @@ public struct FeedView: View {
 
     private func revealNewPostsFromPill() {
         viewModel.revealNewPosts()
-        feedScrollTopSignal += 1
-        feedSameTabRefreshSignal += 1
     }
 
     private func handleSameTabTap() {
@@ -286,19 +281,12 @@ public struct FeedView: View {
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(180))
                 guard selectedSegment == .feed, isTabActive else { return }
-                feedSameTabRefreshSignal += 1
+                NotificationCenter.default.post(name: FeedSameTabNotification.refresh, object: nil)
             }
             return
         }
 
-        if tabBarScrollState?.isAtTop ?? true {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            feedSameTabRefreshSignal += 1
-        } else {
-            feedScrollTopSignal += 1
-            tabBarScrollState?.reset()
-            scrollChrome.feedSegment.reset()
-        }
+        // Feed list refresh is handled inside FeedPrimaryPage (UIHostingController-safe).
     }
 
     private var sameTabTapPublisher: AnyPublisher<Void, Never> {
@@ -312,6 +300,7 @@ private struct FeedPrimaryPage: View {
     @Environment(\.openPostCaptureFlow) private var openPostCaptureFlow
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.feedSegmentScrollState) private var feedSegmentScrollState
+    @Environment(\.sameTabTapHandlingEnabled) private var sameTabTapHandlingEnabled
     @Environment(\.customEmojiDependencies) private var customEmojiDependencies
     @Environment(\.currentUserSummary) private var currentUserSummary
     @Environment(\.feedTabIsActive) private var feedTabIsActive
@@ -323,9 +312,16 @@ private struct FeedPrimaryPage: View {
     let onOpenProfile: (UserSummary) -> Void
 
     @State private var feedScrollLocked = false
+    @State private var sameTabScrollTopSignal = 0
+    @StateObject private var refreshController = SplickRefreshController()
     @State private var cardPresentation: PostCardPresentation?
     @State private var editingPost: Post?
     @StateObject private var cardActions = PostCardActions()
+
+    private var sameTabTapPublisher: AnyPublisher<Void, Never> {
+        tabBarScrollState?.sameTabTapSubject.eraseToAnyPublisher()
+            ?? Empty().eraseToAnyPublisher()
+    }
 
     var body: some View {
         feedPane
@@ -333,6 +329,23 @@ private struct FeedPrimaryPage: View {
                 viewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
                 configureCardActions()
                 Task { await viewModel.loadFeedIfNeeded() }
+            }
+            .onReceive(sameTabTapPublisher) { _ in
+                handleFeedSameTabTap()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: FeedSameTabNotification.refresh)) { _ in
+                guard sameTabTapHandlingEnabled, feedTabIsActive else { return }
+                Task { @MainActor in
+                    refreshController.refresh()
+                }
+            }
+            .onChange(of: viewModel.revealNewPostsGeneration) { generation in
+                guard generation > 0 else { return }
+                Task { @MainActor in
+                    tabBarScrollState?.reset()
+                    feedSegmentScrollState?.reset()
+                    refreshController.refresh()
+                }
             }
             .onReceive(
                 NotificationCenter.default.publisher(for: FeedScrollLock.notification)
@@ -374,6 +387,23 @@ private struct FeedPrimaryPage: View {
                 )
                 .environmentObject(languageService)
             }
+    }
+
+    private func handleFeedSameTabTap() {
+        guard sameTabTapHandlingEnabled, feedTabIsActive else { return }
+
+        if tabBarScrollState?.isAtTop ?? true {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            Task { @MainActor in
+                refreshController.refresh()
+            }
+        } else {
+            Task { @MainActor in
+                sameTabScrollTopSignal += 1
+                tabBarScrollState?.reset()
+                feedSegmentScrollState?.reset()
+            }
+        }
     }
 
     private func configureCardActions() {
@@ -482,19 +512,37 @@ private struct FeedPrimaryPage: View {
     private func feedRefreshScroll<Content: View>(
         @ViewBuilder content: @escaping () -> Content
     ) -> some View {
-        FeedPullToRefreshScrollView(
-            onRefreshWillBegin: { viewModel.beginPullToRefreshIfNeeded() }
-        ) {
-            FeedScrollLock.forceUnlock()
-            feedScrollLocked = false
-            defer {
-                tabBarScrollState?.reset()
-                feedSegmentScrollState?.reset()
-                viewModel.endRefreshingIfNeeded()
+        ScrollViewReader { scrollProxy in
+            ScrollView {
+                VStack(spacing: 0) {
+                    Color.clear
+                        .frame(height: 0)
+                        .id(FeedScrollAnchor.top)
+                    content()
+                }
             }
-            return await viewModel.loadFeed(isPullToRefresh: true)
-        } content: {
-            content()
+            .coordinateSpace(name: FeedScrollAnchor.coordinateSpace)
+            .feedPagerScrollInsets()
+            .feedScrollSoftTopEdge()
+            .scrollChromeTracking()
+            .feedScrollBounceAlways()
+            .splickNativeRefreshable(controller: refreshController) {
+                FeedScrollLock.forceUnlock()
+                feedScrollLocked = false
+                let succeeded = await viewModel.loadFeed(isPullToRefresh: true)
+                if succeeded {
+                    tabBarScrollState?.reset()
+                    feedSegmentScrollState?.reset()
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        scrollProxy.scrollTo(FeedScrollAnchor.top, anchor: .top)
+                    }
+                }
+            }
+            .onChange(of: sameTabScrollTopSignal) { _ in
+                withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                    scrollProxy.scrollTo(FeedScrollAnchor.top, anchor: .top)
+                }
+            }
         }
     }
 
@@ -506,13 +554,16 @@ private struct FeedPrimaryPage: View {
                         post: post,
                         currentUser: viewModel.currentUser ?? currentUserSummary,
                         actions: cardActions,
+                        showsNewBadge: viewModel.showsNewBadge(for: post),
                         uploadState: viewModel.postUploadState(for: post.id)
                     )
                     .equatable()
                     .feedPostZoomSource(postId: post.id)
+                    .background {
+                        FeedPostVisibilityReporter(postId: post.id)
+                    }
                     .onAppear {
                         guard feedTabIsActive, !viewModel.isRefreshing else { return }
-                        Task { await viewModel.trackViewOnScrollIfNeeded(for: post) }
                         if post.id == viewModel.posts.last?.id {
                             Task { await viewModel.loadMore() }
                         }
@@ -532,6 +583,9 @@ private struct FeedPrimaryPage: View {
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
             .padding(.top, SplickTheme.Spacing.md)
+            .onFeedPostVisibilityChange { visibleIds in
+                viewModel.onVisiblePostsChanged(feedTabIsActive ? visibleIds : [])
+            }
         }
         .scrollDisabled(feedScrollLocked)
         .environment(\.feedVideoCoordinator, videoCoordinator)
