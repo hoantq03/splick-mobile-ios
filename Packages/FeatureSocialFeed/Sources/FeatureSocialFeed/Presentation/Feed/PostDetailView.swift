@@ -21,7 +21,7 @@ struct PostDetailView: View {
 
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.currentUserSummary) private var currentUserSummary
-    @Environment(\.openProfileSettings) private var openProfileSettings
+
     @Environment(\.customEmojiDependencies) private var customEmojiDependencies
     @StateObject private var commentPager: PostDetailViewModel
     @State private var profileRoute: ProfileRoute?
@@ -77,7 +77,7 @@ struct PostDetailView: View {
     }
 
     private var livePost: Post {
-        feedViewModel.posts.first(where: { $0.id == post.id }) ?? post
+        feedViewModel.post(byId: post.id) ?? post
     }
 
     private var highlightedCommentId: UUID? {
@@ -157,7 +157,7 @@ struct PostDetailView: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar(mediaViewerRoute == nil ? .visible : .hidden, for: .navigationBar)
         .splickInteractivePopEnabled()
-        .splickWideInteractivePop()
+        .splickHorizontalDominantInteractivePop()
         .overlay(alignment: .top) {
             SplickScrollTopFadeOverlay(mode: .detailScreen)
         }
@@ -602,10 +602,6 @@ struct PostDetailView: View {
     }
 
     private func openProfile(for user: UserSummary) {
-        if user.id == currentUserSummary?.id {
-            openProfileSettings?()
-            return
-        }
         profileRoute = ProfileRoute(user: user)
     }
 

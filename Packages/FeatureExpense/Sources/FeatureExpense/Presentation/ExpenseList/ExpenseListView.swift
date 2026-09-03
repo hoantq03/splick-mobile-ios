@@ -29,7 +29,7 @@ public struct ExpenseListView: View {
     @Environment(\.sameTabTapHandlingEnabled) private var sameTabTapHandlingEnabled
     @Environment(\.openPostCaptureFlow) private var openPostCaptureFlow
     @Environment(\.openLinkedPost) private var openLinkedPost
-    @Environment(\.openProfileSettings) private var openProfileSettings
+
     @Environment(\.notificationsPresented) private var notificationsPresented
     private let currentUser: UserSummary?
     private let currentUserId: UUID?
@@ -248,10 +248,6 @@ public struct ExpenseListView: View {
 
     private func openCreatorProfile(_ user: UserSummary) {
         guard profileDependencies != nil else { return }
-        if user.id == currentUserId {
-            openProfileSettings?()
-            return
-        }
         profileRoute = ExpenseUserProfileRoute(user: user)
     }
 

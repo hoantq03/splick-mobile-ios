@@ -20,7 +20,7 @@ public struct FeedView: View {
     private let pendingFeedPostNavigation: PendingFeedPostNavigation?
     private let onPendingPostHandled: (() -> Void)?
     @Environment(\.openPostCaptureFlow) private var openPostCaptureFlow
-    @Environment(\.openProfileSettings) private var openProfileSettings
+
     @Environment(\.currentUserSummary) private var currentUserSummary
     @Environment(\.notificationsPresented) private var notificationsPresented
     @Environment(\.tabBarScrollState) private var tabBarScrollState
@@ -39,6 +39,8 @@ public struct FeedView: View {
     @State private var selectedSegment: FeedContentSegment = .feed
     @StateObject private var scrollChrome = ScrollChromeStateHolder()
     @StateObject private var videoCoordinator = FeedVideoPlaybackCoordinator()
+    @State private var feedScrollTopSignal = 0
+    @State private var feedSameTabRefreshSignal = 0
     @Namespace private var postZoomNamespace
 
     public init(
@@ -73,7 +75,9 @@ public struct FeedView: View {
         NavigationStack(path: $navigationPath) {
             FeedContentPager(
                 selection: $selectedSegment,
-                sameTabTapHandlingEnabled: sameTabTapHandlingEnabled && navigationPath.isEmpty
+                sameTabTapHandlingEnabled: sameTabTapHandlingEnabled && navigationPath.isEmpty,
+                scrollTopSignal: feedScrollTopSignal,
+                sameTabRefreshSignal: feedSameTabRefreshSignal
             ) {
                 FeedPrimaryPage(
                     viewModel: viewModel,
@@ -99,6 +103,7 @@ public struct FeedView: View {
                     navigationPath: $navigationPath
                 )
             }
+            .environment(\.pullToRefreshActive, viewModel.isRefreshing)
             .background(SplickTheme.Colors.background.ignoresSafeArea())
             .splickInteractivePopEnabled()
             .navigationTitle("")
@@ -123,7 +128,7 @@ public struct FeedView: View {
                 if selectedSegment == .feed, navigationPath.isEmpty, !notificationsPresented {
                     FeedNewPostsPillOverlay(
                         count: viewModel.isRefreshing ? 0 : viewModel.newPostsCount,
-                        onTap: { viewModel.revealNewPosts() }
+                        onTap: revealNewPostsFromPill
                     )
                 }
             }
@@ -258,11 +263,13 @@ public struct FeedView: View {
     }
 
     private func openProfile(for user: UserSummary) {
-        if user.id == currentUserSummary?.id {
-            openProfileSettings?()
-            return
-        }
         profileRoute = ProfileRoute(user: user)
+    }
+
+    private func revealNewPostsFromPill() {
+        viewModel.revealNewPosts()
+        feedScrollTopSignal += 1
+        feedSameTabRefreshSignal += 1
     }
 
     private func handleSameTabTap() {
@@ -274,13 +281,21 @@ public struct FeedView: View {
             return
         }
 
-        guard selectedSegment == .feed else { return }
+        if selectedSegment != .feed {
+            selectedSegment = .feed
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(180))
+                guard selectedSegment == .feed, isTabActive else { return }
+                feedSameTabRefreshSignal += 1
+            }
+            return
+        }
 
         if tabBarScrollState?.isAtTop ?? true {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            NotificationCenter.default.post(name: FeedSameTabNotification.refresh, object: nil)
+            feedSameTabRefreshSignal += 1
         } else {
-            NotificationCenter.default.post(name: FeedSameTabNotification.scrollToTop, object: nil)
+            feedScrollTopSignal += 1
             tabBarScrollState?.reset()
             scrollChrome.feedSegment.reset()
         }
@@ -467,7 +482,9 @@ private struct FeedPrimaryPage: View {
     private func feedRefreshScroll<Content: View>(
         @ViewBuilder content: @escaping () -> Content
     ) -> some View {
-        FeedPullToRefreshScrollView {
+        FeedPullToRefreshScrollView(
+            onRefreshWillBegin: { viewModel.beginPullToRefreshIfNeeded() }
+        ) {
             FeedScrollLock.forceUnlock()
             feedScrollLocked = false
             defer {
