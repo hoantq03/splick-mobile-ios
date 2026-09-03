@@ -57,7 +57,39 @@ public struct PostComment: Identifiable, Codable, Equatable, Sendable {
     public let evidenceId: UUID?
     public let splitId: UUID?
     public let evidenceStatus: EvidenceStatus?
+    public let mentions: [UserSummary]
 
+    public init(
+        id: UUID = UUID(),
+        author: UserSummary,
+        text: String? = nil,
+        attachments: [CommentAttachment] = [],
+        parentCommentId: UUID? = nil,
+        createdAt: Date = .now,
+        updatedAt: Date? = nil,
+        deletedAt: Date? = nil,
+        commentType: CommentType = .standard,
+        evidenceId: UUID? = nil,
+        splitId: UUID? = nil,
+        evidenceStatus: EvidenceStatus? = nil,
+        mentions: [UserSummary]
+    ) {
+        self.id = id
+        self.author = author
+        self.text = text
+        self.attachments = attachments
+        self.parentCommentId = parentCommentId
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.deletedAt = deletedAt
+        self.commentType = commentType
+        self.evidenceId = evidenceId
+        self.splitId = splitId
+        self.evidenceStatus = evidenceStatus
+        self.mentions = mentions
+    }
+
+    /// Pre-mention ABI for modules compiled against the previous initializer.
     public init(
         id: UUID = UUID(),
         author: UserSummary,
@@ -72,18 +104,21 @@ public struct PostComment: Identifiable, Codable, Equatable, Sendable {
         splitId: UUID? = nil,
         evidenceStatus: EvidenceStatus? = nil
     ) {
-        self.id = id
-        self.author = author
-        self.text = text
-        self.attachments = attachments
-        self.parentCommentId = parentCommentId
-        self.createdAt = createdAt
-        self.updatedAt = updatedAt
-        self.deletedAt = deletedAt
-        self.commentType = commentType
-        self.evidenceId = evidenceId
-        self.splitId = splitId
-        self.evidenceStatus = evidenceStatus
+        self.init(
+            id: id,
+            author: author,
+            text: text,
+            attachments: attachments,
+            parentCommentId: parentCommentId,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt,
+            commentType: commentType,
+            evidenceId: evidenceId,
+            splitId: splitId,
+            evidenceStatus: evidenceStatus,
+            mentions: []
+        )
     }
 
     public var isEvidence: Bool { commentType == .evidence }

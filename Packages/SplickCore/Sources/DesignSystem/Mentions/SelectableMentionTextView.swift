@@ -8,6 +8,7 @@ struct SelectableMentionTextView: UIViewRepresentable {
     let plainColor: Color
     let displayNamesByUsername: [String: String]
     var onMentionTap: ((String) -> Void)?
+    var displayNamesByUserId: [UUID: String] = [:]
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onMentionTap: onMentionTap)
@@ -50,7 +51,8 @@ struct SelectableMentionTextView: UIViewRepresentable {
             fontSize: fontSize,
             plainColor: UIColor(plainColor),
             mentionColor: mentionColor,
-            displayNamesByUsername: displayNamesByUsername
+            displayNamesByUsername: displayNamesByUsername,
+            displayNamesByUserId: displayNamesByUserId
         )
         if textView.attributedText != attributed {
             textView.attributedText = attributed
@@ -62,7 +64,8 @@ struct SelectableMentionTextView: UIViewRepresentable {
         fontSize: CGFloat,
         plainColor: UIColor,
         mentionColor: UIColor,
-        displayNamesByUsername: [String: String]
+        displayNamesByUsername: [String: String],
+        displayNamesByUserId: [UUID: String] = [:]
     ) -> NSAttributedString {
         let result = NSMutableAttributedString()
         let plainFont = UIFont.systemFont(ofSize: fontSize)
@@ -76,19 +79,17 @@ struct SelectableMentionTextView: UIViewRepresentable {
                     attributes: [.font: plainFont, .foregroundColor: plainColor]
                 ))
             case .mention(let value):
-                let username = MentionStyler.username(fromMentionToken: value)
-                let key = username.lowercased()
-                let label: String
-                if let displayName = displayNamesByUsername[key], !displayName.isEmpty {
-                    label = "@\(displayName)"
-                } else {
-                    label = value
-                }
+                let mentionKey = MentionStyler.username(fromMentionToken: value)
+                let label = MentionStyler.mentionLabel(
+                    token: value,
+                    displayNamesByUsername: displayNamesByUsername,
+                    displayNamesByUserId: displayNamesByUserId
+                )
                 var attributes: [NSAttributedString.Key: Any] = [
                     .font: mentionFont,
                     .foregroundColor: mentionColor,
                 ]
-                if let url = MentionLink.url(username: username) {
+                if let url = MentionLink.url(token: value) {
                     attributes[.link] = url
                 }
                 result.append(NSAttributedString(string: label, attributes: attributes))
@@ -104,14 +105,16 @@ struct SelectableMentionTextView: UIViewRepresentable {
 
     static func displayString(
         text: String,
-        displayNamesByUsername: [String: String]
+        displayNamesByUsername: [String: String],
+        displayNamesByUserId: [UUID: String] = [:]
     ) -> String {
         attributedString(
             text: text,
             fontSize: 16,
             plainColor: .label,
             mentionColor: .blue,
-            displayNamesByUsername: displayNamesByUsername
+            displayNamesByUsername: displayNamesByUsername,
+            displayNamesByUserId: displayNamesByUserId
         ).string
     }
 

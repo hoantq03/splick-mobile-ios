@@ -262,7 +262,8 @@ struct PostCardView: View, Equatable {
                 fontSize: 16,
                 displayNamesByUsername: post.mentionDisplayNamesByUsername,
                 onMentionTap: openMentionedUser,
-                isSelectable: true
+                isSelectable: true,
+                displayNamesByUserId: post.mentionDisplayNamesByUserId
             )
             .frame(maxWidth: .infinity, alignment: .leading)
             if post.isEdited {
@@ -401,7 +402,7 @@ struct PostCardView: View, Equatable {
         /// Tray mid → avatar-row center when preference anchors are not ready yet.
         static let trayToAvatarFallbackOffsetY: CGFloat = 44
         static let selfAvatarLeadingPadding: CGFloat = 0
-        static let commentIconSize: CGFloat = 17
+        static let commentIconSize: CGFloat = 36
         static let commentCountFontSize: CGFloat = 13
         static let trailingActionSpacing: CGFloat = 10
     }
@@ -447,21 +448,23 @@ struct PostCardView: View, Equatable {
     }
 
     private var commentEntryButton: some View {
-        Button {
+        let countLabel = post.commentCount > 0 ? CompactCount.format(post.commentCount) : nil
+        return Button {
             actions.onOpenComments(post)
         } label: {
-            HStack(spacing: 5) {
+            ZStack {
                 Image(systemName: "bubble.right")
-                    .font(.system(size: Layout.commentIconSize, weight: .medium))
-                if post.commentCount > 0 {
-                    Text("\(post.commentCount)")
-                        .font(.system(size: Layout.commentCountFontSize, weight: .semibold))
+                    .font(.system(size: Layout.commentIconSize, weight: .regular))
+                    .frame(width: Layout.commentIconSize, height: Layout.commentIconSize)
+                if let countLabel {
+                    Text(countLabel)
+                        .font(.system(size: commentCountFontSize(for: countLabel), weight: .semibold))
                         .monospacedDigit()
+                        .offset(y: -2)
                 }
             }
             .foregroundStyle(SplickTheme.Colors.textSecondary)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 6)
+            .frame(width: Layout.commentIconSize, height: Layout.reactionBarHeight)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -470,6 +473,14 @@ struct PostCardView: View, Equatable {
                 ? languageService.format(.feedPostViewAllComments, post.commentCount)
                 : languageService.text(.feedPostWriteComment)
         )
+    }
+
+    private func commentCountFontSize(for label: String) -> CGFloat {
+        switch label.count {
+        case 0, 1, 2: return 12
+        case 3: return 10
+        default: return 8
+        }
     }
 
     private func scheduleFlyingEmoji(emoji: String, sourceGlobal: CGRect) {

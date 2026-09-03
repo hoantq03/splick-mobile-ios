@@ -99,22 +99,7 @@ public actor FriendDisplayNameStore {
             reactionPreview: post.reactionPreview.map { summary in
                 UserReactionSummary(user: resolve(summary.user), emojiCounts: summary.emojiCounts)
             },
-            comments: post.comments.map { comment in
-                PostComment(
-                    id: comment.id,
-                    author: resolve(comment.author),
-                    text: comment.text,
-                    attachments: comment.attachments,
-                    parentCommentId: comment.parentCommentId,
-                    createdAt: comment.createdAt,
-                    updatedAt: comment.updatedAt,
-                    deletedAt: comment.deletedAt,
-                    commentType: comment.commentType,
-                    evidenceId: comment.evidenceId,
-                    splitId: comment.splitId,
-                    evidenceStatus: comment.evidenceStatus
-                )
-            },
+            comments: post.comments.map(resolve),
             commentCount: post.commentCount,
             groupId: post.groupId,
             companionGroupName: post.companionGroupName,
@@ -149,8 +134,10 @@ public actor FriendDisplayNameStore {
             },
             viewCount: post.viewCount,
             viewers: resolve(post.viewers),
+            mentions: resolve(post.mentions),
             audience: post.audience,
-            version: post.version
+            version: post.version,
+            editedAt: post.editedAt
         )
     }
 
@@ -160,22 +147,7 @@ public actor FriendDisplayNameStore {
 
     public func resolve(_ page: CommentThreadPage) -> CommentThreadPage {
         CommentThreadPage(
-            comments: page.comments.map { comment in
-                PostComment(
-                    id: comment.id,
-                    author: resolve(comment.author),
-                    text: comment.text,
-                    attachments: comment.attachments,
-                    parentCommentId: comment.parentCommentId,
-                    createdAt: comment.createdAt,
-                    updatedAt: comment.updatedAt,
-                    deletedAt: comment.deletedAt,
-                    commentType: comment.commentType,
-                    evidenceId: comment.evidenceId,
-                    splitId: comment.splitId,
-                    evidenceStatus: comment.evidenceStatus
-                )
-            },
+            comments: page.comments.map(resolve),
             page: page.page,
             limit: page.limit,
             hasMore: page.hasMore
@@ -247,6 +219,24 @@ public actor FriendDisplayNameStore {
 
     public func resolve(_ photos: [AlbumPhoto]) -> [AlbumPhoto] {
         photos.map(resolve)
+    }
+
+    private func resolve(_ comment: PostComment) -> PostComment {
+        PostComment(
+            id: comment.id,
+            author: resolve(comment.author),
+            text: comment.text,
+            attachments: comment.attachments,
+            parentCommentId: comment.parentCommentId,
+            createdAt: comment.createdAt,
+            updatedAt: comment.updatedAt,
+            deletedAt: comment.deletedAt,
+            commentType: comment.commentType,
+            evidenceId: comment.evidenceId,
+            splitId: comment.splitId,
+            evidenceStatus: comment.evidenceStatus,
+            mentions: resolve(comment.mentions)
+        )
     }
 
     private func notifyChange() {

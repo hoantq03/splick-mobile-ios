@@ -15,7 +15,7 @@ public struct MentionContext: Equatable, Sendable {
 
         let query = String(afterAt)
         guard query.count <= 30 else { return nil }
-        guard query.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" }) else { return nil }
+        guard query.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" || $0 == "." }) else { return nil }
 
         return MentionContext(query: query, replaceRange: atRange.lowerBound..<text.endIndex)
     }

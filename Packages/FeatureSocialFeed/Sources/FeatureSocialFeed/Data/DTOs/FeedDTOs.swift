@@ -13,6 +13,7 @@ struct CommentDTO: Decodable {
     let evidenceId: UUID?
     let splitId: UUID?
     let evidenceStatus: String?
+    let mentions: [AuthorDTO]?
 }
 
 struct CommentThreadPageDTO: Decodable {
@@ -59,6 +60,7 @@ struct PostDTO: Decodable {
     let viewers: [AuthorDTO]?
     let audience: PostAudienceDTO?
     let editedAt: Date?
+    let mentions: [AuthorDTO]?
 }
 
 struct PostLocationDTO: Decodable {

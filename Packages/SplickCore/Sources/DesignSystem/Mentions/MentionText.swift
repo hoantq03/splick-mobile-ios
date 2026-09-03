@@ -11,6 +11,7 @@ public struct MentionText: View {
     var onMentionTap: ((String) -> Void)?
     /// Enables native text selection / copy. Prefer for captions and comments.
     var isSelectable: Bool
+    var displayNamesByUserId: [UUID: String] = [:]
 
     public init(
         _ text: String,
@@ -18,7 +19,8 @@ public struct MentionText: View {
         plainColor: Color = SplickTheme.Colors.textPrimary,
         displayNamesByUsername: [String: String] = [:],
         onMentionTap: ((String) -> Void)? = nil,
-        isSelectable: Bool = false
+        isSelectable: Bool = false,
+        displayNamesByUserId: [UUID: String] = [:]
     ) {
         self.text = text
         self.fontSize = fontSize
@@ -26,6 +28,7 @@ public struct MentionText: View {
         self.displayNamesByUsername = displayNamesByUsername
         self.onMentionTap = onMentionTap
         self.isSelectable = isSelectable
+        self.displayNamesByUserId = displayNamesByUserId
     }
 
     public var body: some View {
@@ -35,7 +38,8 @@ public struct MentionText: View {
             plainColor: plainColor,
             displayNamesByUsername: displayNamesByUsername,
             onMentionTap: onMentionTap,
-            isSelectable: isSelectable
+            isSelectable: isSelectable,
+            displayNamesByUserId: displayNamesByUserId
         )
     }
 }

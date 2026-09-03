@@ -121,6 +121,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
     public let billSplit: PostBillSplit?
     public let viewCount: Int
     public let viewers: [UserSummary]
+    public let mentions: [UserSummary]
     public let audience: PostAudience
     public let groupId: UUID?
     public let companionGroupName: String?
@@ -163,6 +164,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         billSplit: PostBillSplit? = nil,
         viewCount: Int = 0,
         viewers: [UserSummary] = [],
+        mentions: [UserSummary],
         audience: PostAudience = .friends,
         version: UInt64 = 0,
         editedAt: Date? = nil
@@ -187,6 +189,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         self.billSplit = billSplit
         self.viewCount = viewCount
         self.viewers = viewers
+        self.mentions = mentions
         self.audience = audience
         self.groupId = groupId
         self.companionGroupName = companionGroupName
@@ -206,6 +209,68 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
             comment.isDeleted ? count : count + 1
         }
         self.commentCount = commentCount ?? derivedCommentCount
+    }
+
+    /// Pre-mention ABI. Existing modules link this symbol; new call sites pass `mentions:`.
+    public init(
+        id: UUID,
+        author: UserSummary,
+        imageURL: URL,
+        thumbnailURL: URL? = nil,
+        caption: String? = nil,
+        reactions: [Reaction] = [],
+        reactionCount: Int? = nil,
+        reactorCount: Int? = nil,
+        reactionPreview: [UserReactionSummary]? = nil,
+        comments: [PostComment] = [],
+        commentCount: Int? = nil,
+        groupId: UUID? = nil,
+        companionGroupName: String? = nil,
+        createdAt: Date = .now,
+        mediaType: PostMediaType = .image,
+        videoURL: URL? = nil,
+        videoDurationSeconds: Int? = nil,
+        mediaItems: [PostMediaItem] = [],
+        companions: [UserSummary] = [],
+        feedKind: PostFeedKind = .checkIn,
+        checkInPlace: String? = nil,
+        billSplit: PostBillSplit? = nil,
+        viewCount: Int = 0,
+        viewers: [UserSummary] = [],
+        audience: PostAudience = .friends,
+        version: UInt64 = 0,
+        editedAt: Date? = nil
+    ) {
+        self.init(
+            id: id,
+            author: author,
+            imageURL: imageURL,
+            thumbnailURL: thumbnailURL,
+            caption: caption,
+            reactions: reactions,
+            reactionCount: reactionCount,
+            reactorCount: reactorCount,
+            reactionPreview: reactionPreview,
+            comments: comments,
+            commentCount: commentCount,
+            groupId: groupId,
+            companionGroupName: companionGroupName,
+            createdAt: createdAt,
+            mediaType: mediaType,
+            videoURL: videoURL,
+            videoDurationSeconds: videoDurationSeconds,
+            mediaItems: mediaItems,
+            companions: companions,
+            feedKind: feedKind,
+            checkInPlace: checkInPlace,
+            billSplit: billSplit,
+            viewCount: viewCount,
+            viewers: viewers,
+            mentions: [],
+            audience: audience,
+            version: version,
+            editedAt: editedAt
+        )
     }
 
     public var isEdited: Bool { editedAt != nil }
@@ -282,6 +347,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
             billSplit: billSplit ?? self.billSplit,
             viewCount: viewCount ?? self.viewCount,
             viewers: viewers ?? self.viewers,
+            mentions: mentions,
             audience: audience,
             version: version &+ 1,
             editedAt: editedAt ?? self.editedAt
@@ -316,6 +382,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
             billSplit: billSplit,
             viewCount: viewCount,
             viewers: viewers,
+            mentions: mentions,
             audience: audience,
             version: version,
             editedAt: editedAt
@@ -348,6 +415,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
             && audience == other.audience
             && groupId == other.groupId
             && editedAt == other.editedAt
+            && mentions == other.mentions
     }
 
     /// Preserves local version when content is unchanged; otherwise bumps so Equatable detects the change.
@@ -426,33 +494,73 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
             if let user = line.user { map[user.id] = user }
         }
         comments.forEach { map[$0.author.id] = $0.author }
+        comments.forEach { comment in
+            comment.mentions.forEach { map[$0.id] = $0 }
+        }
         viewers.forEach { map[$0.id] = $0 }
+        mentions.forEach { map[$0.id] = $0 }
         reactionPreview.forEach { map[$0.user.id] = $0.user }
         return map
     }
 
-    /// Username (lowercased) → display name for rendering `@mentions` while storage stays `@username`.
+    /// Username (lowercased) or userId uuid string → display name for rendering mentions.
     public var mentionDisplayNamesByUsername: [String: String] {
+        mentionDisplayNamesByUsername(including: [])
+    }
+
+    public var mentionDisplayNamesByUserId: [UUID: String] {
+        mentionDisplayNamesByUserId(including: [])
+    }
+
+    public func mentionDisplayNamesByUsername(including extraUsers: [UserSummary]) -> [String: String] {
         var map: [String: String] = [:]
-        for user in knownUsers.values {
-            let key = user.username.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            guard !key.isEmpty else { continue }
-            let name = user.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-            map[key] = name.isEmpty ? user.username : name
+        for user in usersForMentions(including: extraUsers) {
+            let display = Self.mentionDisplayLabel(for: user)
+            let usernameKey = user.username.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if !usernameKey.isEmpty {
+                map[usernameKey] = display
+            }
+            map[user.id.uuidString.lowercased()] = display
         }
         return map
     }
 
-    /// Resolves a caption `@mention` to a known post participant (author, companions, comments, …).
-    public func userForMentionUsername(_ rawUsername: String) -> UserSummary? {
+    public func mentionDisplayNamesByUserId(including extraUsers: [UserSummary]) -> [UUID: String] {
+        var map: [UUID: String] = [:]
+        for user in usersForMentions(including: extraUsers) {
+            map[user.id] = Self.mentionDisplayLabel(for: user)
+        }
+        return map
+    }
+
+    /// Resolves a caption mention token (`<@uuid>` key or `@username`) to a known user.
+    public func userForMentionUsername(
+        _ rawUsername: String,
+        including extraUsers: [UserSummary] = []
+    ) -> UserSummary? {
         let key = rawUsername
             .trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
+            .trimmingCharacters(in: CharacterSet(charactersIn: "@<>"))
             .lowercased()
         guard !key.isEmpty else { return nil }
-        return knownUsers.values.first {
+        let users = usersForMentions(including: extraUsers)
+        if let userId = UUID(uuidString: key) {
+            return users.first { $0.id == userId }
+        }
+        return users.first {
             $0.username.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == key
         }
+    }
+
+    public static func mentionDisplayLabel(for user: UserSummary) -> String {
+        let name = user.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? user.username : name
+    }
+
+    private func usersForMentions(including extraUsers: [UserSummary]) -> [UserSummary] {
+        var map = knownUsers
+        extraUsers.forEach { map[$0.id] = $0 }
+        return Array(map.values)
     }
 
     private static func makeDisplayMediaItems(
@@ -485,7 +593,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         case id, author, mediaItems, mediaType, imageURL, thumbnailURL, videoURL
         case videoDurationSeconds, caption, reactions, reactionCount, reactorCount
         case reactionPreview, comments, commentCount, companions
-        case feedKind, checkInPlace, billSplit, viewCount, viewers, audience
+        case feedKind, checkInPlace, billSplit, viewCount, viewers, mentions, audience
         case groupId, companionGroupName, createdAt
     }
 
@@ -512,6 +620,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         let billSplit = try container.decodeIfPresent(PostBillSplit.self, forKey: .billSplit)
         let viewCount = try container.decodeIfPresent(Int.self, forKey: .viewCount) ?? 0
         let viewers = try container.decodeIfPresent([UserSummary].self, forKey: .viewers) ?? []
+        let mentions = try container.decodeIfPresent([UserSummary].self, forKey: .mentions) ?? []
         let audience = try container.decodeIfPresent(PostAudience.self, forKey: .audience) ?? .friends
         let groupId = try container.decodeIfPresent(UUID.self, forKey: .groupId)
         let companionGroupName = try container.decodeIfPresent(String.self, forKey: .companionGroupName)
@@ -542,6 +651,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
             billSplit: billSplit,
             viewCount: viewCount,
             viewers: viewers,
+            mentions: mentions,
             audience: audience,
             version: 0
         )
@@ -570,6 +680,7 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         try container.encodeIfPresent(billSplit, forKey: .billSplit)
         try container.encode(viewCount, forKey: .viewCount)
         try container.encode(viewers, forKey: .viewers)
+        try container.encode(mentions, forKey: .mentions)
         try container.encode(audience, forKey: .audience)
         try container.encodeIfPresent(groupId, forKey: .groupId)
         try container.encodeIfPresent(companionGroupName, forKey: .companionGroupName)

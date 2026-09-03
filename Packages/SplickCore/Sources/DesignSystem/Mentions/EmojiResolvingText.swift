@@ -9,6 +9,7 @@ public struct EmojiResolvingText: View {
     private let displayNamesByUsername: [String: String]
     private let onMentionTap: ((String) -> Void)?
     private let isSelectable: Bool
+    private let displayNamesByUserId: [UUID: String]
 
     public init(
         _ text: String,
@@ -16,7 +17,8 @@ public struct EmojiResolvingText: View {
         plainColor: Color = SplickTheme.Colors.textPrimary,
         displayNamesByUsername: [String: String] = [:],
         onMentionTap: ((String) -> Void)? = nil,
-        isSelectable: Bool = false
+        isSelectable: Bool = false,
+        displayNamesByUserId: [UUID: String] = [:]
     ) {
         self.text = text
         self.fontSize = fontSize
@@ -24,6 +26,7 @@ public struct EmojiResolvingText: View {
         self.displayNamesByUsername = displayNamesByUsername
         self.onMentionTap = onMentionTap
         self.isSelectable = isSelectable
+        self.displayNamesByUserId = displayNamesByUserId
     }
 
     private var tokens: [FeedTextParser.Token] {
@@ -47,7 +50,8 @@ public struct EmojiResolvingText: View {
                     fontSize: fontSize,
                     plainColor: plainColor,
                     displayNamesByUsername: displayNamesByUsername,
-                    onMentionTap: onMentionTap
+                    onMentionTap: onMentionTap,
+                    displayNamesByUserId: displayNamesByUserId
                 )
                 .fixedSize(horizontal: false, vertical: true)
             } else {
@@ -68,7 +72,8 @@ public struct EmojiResolvingText: View {
                 Button {
                     UIPasteboard.general.string = SelectableMentionTextView.displayString(
                         text: text,
-                        displayNamesByUsername: displayNamesByUsername
+                        displayNamesByUsername: displayNamesByUsername,
+                        displayNamesByUserId: displayNamesByUserId
                     )
                 } label: {
                     Label("Copy", systemImage: "doc.on.doc")
@@ -87,11 +92,15 @@ public struct EmojiResolvingText: View {
                 .fixedSize(horizontal: false, vertical: true)
 
         case .mention(let value):
-            let username = MentionStyler.username(fromMentionToken: value)
-            let label = mentionLabel(for: value)
+            let mentionKey = MentionStyler.username(fromMentionToken: value)
+            let label = MentionStyler.mentionLabel(
+                token: value,
+                displayNamesByUsername: displayNamesByUsername,
+                displayNamesByUserId: displayNamesByUserId
+            )
             if let onMentionTap {
                 Button {
-                    onMentionTap(username)
+                    onMentionTap(mentionKey)
                 } label: {
                     Text(label)
                         .font(.system(size: fontSize, weight: .semibold))
@@ -108,15 +117,5 @@ public struct EmojiResolvingText: View {
         case .customEmoji(let shortcode):
             EmojiView(value: ":\(shortcode):", size: fontSize * 1.2)
         }
-    }
-
-    /// `value` is the raw token including `@` (e.g. `@hoantran`).
-    private func mentionLabel(for value: String) -> String {
-        let username = value.hasPrefix("@") ? String(value.dropFirst()) : value
-        let key = username.lowercased()
-        if let displayName = displayNamesByUsername[key], !displayName.isEmpty {
-            return "@\(displayName)"
-        }
-        return value
     }
 }

@@ -53,6 +53,7 @@ enum FeedMapper {
             billSplit: billSplit,
             viewCount: viewCount,
             viewers: viewers,
+            mentions: dto.mentions?.map(toUserSummary) ?? [],
             audience: audience,
             editedAt: dto.editedAt
         )
@@ -94,7 +95,8 @@ enum FeedMapper {
             commentType: CommentType(rawValue: dto.commentType ?? CommentType.standard.rawValue) ?? .standard,
             evidenceId: dto.evidenceId,
             splitId: dto.splitId,
-            evidenceStatus: dto.evidenceStatus.flatMap { EvidenceStatus(rawValue: $0) }
+            evidenceStatus: dto.evidenceStatus.flatMap { EvidenceStatus(rawValue: $0) },
+            mentions: dto.mentions?.map(toUserSummary) ?? []
         )
     }
 

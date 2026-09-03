@@ -28,17 +28,35 @@ public enum FeedTextParser {
         var cursor = text.startIndex
 
         while cursor < text.endIndex {
-            let mentionMatch = text[cursor...].firstMatch(of: MentionStyler.usernamePattern)
-            let emojiMatch = text[cursor...].firstMatch(of: customEmojiPattern)
+            let remaining = text[cursor...]
+            let idMatch = remaining.firstMatch(of: MentionStyler.userIdPattern)
+            let mentionMatch = remaining.firstMatch(of: MentionStyler.usernamePattern)
+            let emojiMatch = remaining.firstMatch(of: customEmojiPattern)
 
-            let nextMention = mentionMatch?.range.lowerBound
+            let nextId = idMatch?.range.lowerBound
+            let nextMention: String.Index?
+            if let mentionMatch {
+                if let idRange = idMatch?.range, mentionMatch.range.overlaps(idRange) {
+                    nextMention = nil
+                } else {
+                    nextMention = mentionMatch.range.lowerBound
+                }
+            } else {
+                nextMention = nil
+            }
             let nextEmoji = emojiMatch?.range.lowerBound
 
-            let nextSpecial = [nextMention, nextEmoji].compactMap { $0 }.min()
+            let nextSpecial = [nextId, nextMention, nextEmoji].compactMap { $0 }.min()
 
             if let nextSpecial {
                 if nextSpecial > cursor {
                     appendPlain(String(text[cursor..<nextSpecial]), to: &result)
+                }
+
+                if nextId == nextSpecial, let idMatch {
+                    result.append(.mention(String(text[idMatch.range])))
+                    cursor = idMatch.range.upperBound
+                    continue
                 }
 
                 if nextMention == nextSpecial, let mentionMatch {
