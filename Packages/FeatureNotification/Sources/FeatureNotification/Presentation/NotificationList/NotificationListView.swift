@@ -102,11 +102,9 @@ public struct NotificationListView: View {
     }
 
     private var markAllReadButton: some View {
-        Button(languageService.text(.notificationReadAll)) {
+        SplickHeaderActionChip(title: languageService.text(.notificationReadAll)) {
             Task { await viewModel.markAllAsRead() }
         }
-        .font(SplickTheme.Typography.callout)
-        .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
     }
 
     @ViewBuilder
