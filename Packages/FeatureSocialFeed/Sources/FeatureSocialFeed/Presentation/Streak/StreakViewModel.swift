@@ -14,14 +14,14 @@ public final class StreakViewModel: ObservableObject {
     @Published private(set) var isDayPhotosLoading = false
     @Published private(set) var isLoadingOlderMonths = false
     @Published private(set) var hasReachedOldestMonth = false
-    /// Increments after each full calendar load/refresh so the list pins to the end.
+    /// Increments after each full calendar load/refresh so the list pins to the current month.
     @Published private(set) var scrollToEndToken = 0
 
     private let fetchStreakUseCase: FetchStreakUseCaseProtocol
     private let onStreakUpdated: ((StreakSummary) async -> Void)?
     private let calendar = Calendar.current
     private var loadTask: Task<Void, Never>?
-    /// Current month + recent history on first open; older months paginate only when scrolled near top.
+    /// Current month + recent history on first open; older months paginate only when scrolled near the bottom.
     private let initialMonthCount = 3
     private static let maxMonthsInPast = 24
 
@@ -71,7 +71,7 @@ public final class StreakViewModel: ObservableObject {
     }
 
     func loadOlderMonthIfNeeded(for section: StreakMonthSection) async -> Bool {
-        guard section.id == monthSections.first?.id, !isLoadingOlderMonths, !hasReachedOldestMonth else {
+        guard section.id == monthSections.last?.id, !isLoadingOlderMonths, !hasReachedOldestMonth else {
             return false
         }
 
@@ -104,11 +104,10 @@ public final class StreakViewModel: ObservableObject {
                 month: previous.month,
                 days: days
             )
-            // Silent prepend — no animation so the viewport can stay put.
             var transaction = Transaction()
             transaction.disablesAnimations = true
             withTransaction(transaction) {
-                monthSections.insert(olderSection, at: 0)
+                monthSections.append(olderSection)
             }
             if let nextOlder = previousMonth(year: olderSection.year, month: olderSection.month),
                !isMonthAllowed(year: nextOlder.year, month: nextOlder.month) {
@@ -152,7 +151,7 @@ public final class StreakViewModel: ObservableObject {
             currentStreak = summary.currentStreak
             hasTodayPhoto = summary.hasTodayPhoto
             hasReachedOldestMonth = false
-            monthSections = months.sorted { $0.monthDate < $1.monthDate }
+            monthSections = months.sorted { $0.monthDate > $1.monthDate }
             state = .loaded(monthSections)
             scrollToEndToken += 1
             await onStreakUpdated?(summary)
@@ -189,7 +188,7 @@ public final class StreakViewModel: ObservableObject {
             for try await section in group {
                 sections.append(section)
             }
-            return sections.sorted { $0.monthDate < $1.monthDate }
+            return sections.sorted { $0.monthDate > $1.monthDate }
         }
     }
 
