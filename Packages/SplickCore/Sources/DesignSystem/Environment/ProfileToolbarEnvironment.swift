@@ -111,17 +111,35 @@ private struct SplickProfileToolbarModifier: ViewModifier {
                     }
                 }
 
-                ToolbarItem(placement: .topBarTrailing) {
-                    if showsBell, !notificationsPresented, let openNotifications {
-                        NotificationBellButton(
-                            unreadCount: notificationUnreadCount,
-                            isPresented: false,
-                            accessibilityLabel: languageService?.text(.notificationBellAccessibility)
-                                ?? L10n.string(.notificationBellAccessibility, locale: .default),
-                            onTap: openNotifications
-                        )
-                    }
-                }
+                trailingBellToolbarItem
             }
+    }
+
+    private var bellButton: some View {
+        Group {
+            if showsBell, !notificationsPresented, let openNotifications {
+                NotificationBellButton(
+                    unreadCount: notificationUnreadCount,
+                    isPresented: false,
+                    accessibilityLabel: languageService?.text(.notificationBellAccessibility)
+                        ?? L10n.string(.notificationBellAccessibility, locale: .default),
+                    onTap: openNotifications
+                )
+            }
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var trailingBellToolbarItem: some ToolbarContent {
+        if #available(iOS 26.0, *) {
+            ToolbarItem(placement: .topBarTrailing) {
+                bellButton
+            }
+            .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .topBarTrailing) {
+                bellButton
+            }
+        }
     }
 }

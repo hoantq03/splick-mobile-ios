@@ -88,12 +88,7 @@ public struct SplickNotificationRevealOverlay<Content: View>: View {
 
             HStack(spacing: SplickTheme.Spacing.sm) {
                 if let leadingActionTitle, let onLeadingAction, unreadCount > 0 {
-                    Button(leadingActionTitle, action: onLeadingAction)
-                        .buttonStyle(.plain)
-                        .font(SplickTheme.Typography.callout)
-                        .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
+                    SplickHeaderActionChip(title: leadingActionTitle, action: onLeadingAction)
                 } else {
                     Color.clear
                         .frame(width: closeHitSize, height: closeHitSize)

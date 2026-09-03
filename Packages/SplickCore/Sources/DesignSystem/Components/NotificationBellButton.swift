@@ -14,6 +14,10 @@ public struct NotificationBellButton: View {
     private static let bellIconFontSize: CGFloat = 17
     private static let badgeHeight: CGFloat = 20
     private static let badgeMinWidth: CGFloat = 20
+    /// Room for the badge to sit on the icon corner without leaving the control's layout
+    /// (UINavigationBar / Liquid Glass toolbar items clip anything outside their bounds).
+    private static let badgeClearance: CGFloat = 8
+    private static let badgeOverlap: CGFloat = 4
 
     public init(
         unreadCount: Int,
@@ -55,6 +59,7 @@ public struct NotificationBellButton: View {
                 }
                 .frame(width: Self.bellContainerSize, height: Self.bellContainerSize)
                 .compositingGroup()
+                .background { bellChromeBackground }
                 // Opening: match panel expand timing (same response, critically damped — no bounce on icon swap).
                 // Closing: match panel collapse timing.
                 .animation(isPresented ? SplickRevealMotion.iconSwapOpen : SplickRevealMotion.iconSwapClose, value: isPresented)
@@ -63,9 +68,10 @@ public struct NotificationBellButton: View {
                 // render layer, always visually above the bell/X icon.
                 if unreadCount > 0, !isPresented {
                     badgeView
-                        .offset(x: 2, y: -2)
+                        .offset(x: Self.badgeOverlap, y: -Self.badgeOverlap)
                 }
             }
+            .padding(Self.badgeClearance)
         }
         .buttonStyle(.plain)
         .background {
@@ -94,5 +100,15 @@ public struct NotificationBellButton: View {
                     .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
             }
             .fixedSize()
+    }
+
+    @ViewBuilder
+    private var bellChromeBackground: some View {
+        if #available(iOS 26.0, *) {
+            // System glass is hidden on this control so the badge is not masked;
+            // keep a circular plate so the trailing action still matches the header.
+            Circle()
+                .fill(.ultraThinMaterial)
+        }
     }
 }
