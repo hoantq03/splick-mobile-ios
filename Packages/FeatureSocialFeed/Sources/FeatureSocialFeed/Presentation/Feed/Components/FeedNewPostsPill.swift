@@ -34,6 +34,11 @@ struct FeedNewPostsPill: View {
     let count: Int
     let onTap: () -> Void
 
+    @State private var popScale: CGFloat = 0.55
+    @State private var popOffset: CGFloat = -18
+    @State private var popOpacity: Double = 0
+    @State private var lastAnimatedCount = 0
+
     var body: some View {
         Group {
             if count > 0 {
@@ -53,23 +58,63 @@ struct FeedNewPostsPill: View {
                     .padding(.vertical, 8)
                     .background(
                         Capsule(style: .continuous)
-                            .fill(SplickTheme.Colors.primaryGradientStart)
+                            .fill(SplickTheme.Colors.success)
                             .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
                     )
                 }
                 .buttonStyle(FeedNewPostsPillButtonStyle())
+                .scaleEffect(popScale)
+                .opacity(popOpacity)
+                .offset(y: popOffset)
                 .accessibilityLabel(languageService.format(.feedNewPostsCount, count))
-                .transition(
-                    .asymmetric(
-                        insertion: .move(edge: .top)
-                            .combined(with: .opacity)
-                            .combined(with: .scale(scale: 0.94, anchor: .top)),
-                        removal: .opacity.combined(with: .scale(scale: 0.96, anchor: .top))
-                    )
-                )
             }
         }
-        .animation(.spring(response: 0.38, dampingFraction: 0.78), value: count)
+        .onAppear {
+            if count > 0 {
+                handleCountChange(count)
+            }
+        }
+        .onChange(of: count) { newCount in
+            handleCountChange(newCount)
+        }
+    }
+
+    private func playEntranceAnimation() {
+        popScale = 0.55
+        popOffset = -18
+        popOpacity = 0
+        withAnimation(.spring(response: 0.48, dampingFraction: 0.56)) {
+            popScale = 1
+            popOffset = 0
+            popOpacity = 1
+        }
+    }
+
+    private func playCountBumpAnimation() {
+        withAnimation(.spring(response: 0.24, dampingFraction: 0.48)) {
+            popScale = 1.1
+        }
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.62).delay(0.07)) {
+            popScale = 1
+        }
+    }
+
+    private func handleCountChange(_ newCount: Int) {
+        if newCount > 0 {
+            if lastAnimatedCount == 0 {
+                playEntranceAnimation()
+            } else if newCount != lastAnimatedCount {
+                playCountBumpAnimation()
+            }
+            lastAnimatedCount = newCount
+        } else {
+            lastAnimatedCount = 0
+            withAnimation(.easeOut(duration: 0.2)) {
+                popScale = 0.9
+                popOffset = -10
+                popOpacity = 0
+            }
+        }
     }
 }
 
