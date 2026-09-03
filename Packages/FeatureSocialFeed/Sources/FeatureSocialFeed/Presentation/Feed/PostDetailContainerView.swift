@@ -21,7 +21,7 @@ struct PostDetailContainerView: View {
     @State private var loadFailedAsUnavailable = false
 
     private var post: Post? {
-        feedViewModel.posts.first(where: { $0.id == destination.postId })
+        feedViewModel.post(byId: destination.postId)
     }
 
     var body: some View {

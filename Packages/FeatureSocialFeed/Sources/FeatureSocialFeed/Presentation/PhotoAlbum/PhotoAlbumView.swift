@@ -241,7 +241,7 @@ public struct PhotoAlbumView: View {
         Task {
             let loaded = await feedViewModel.ensurePostLoaded(id: photo.postId)
             guard loaded == .loaded else { return }
-            let post = feedViewModel.posts.first(where: { $0.id == photo.postId })
+            let post = feedViewModel.post(byId: photo.postId)
             let mediaIndex = post?.displayMediaItems.firstIndex(where: { $0.id == photo.id }) ?? 0
             withFeedPostNavigation {
                 navigationPath.append(
@@ -260,7 +260,7 @@ public struct PhotoAlbumView: View {
             guard !Task.isCancelled, previewLoadingPostId == photo.postId else { return }
             defer { previewLoadingPostId = nil }
             guard loaded == .loaded,
-                  let post = feedViewModel.posts.first(where: { $0.id == photo.postId }) else {
+                  let post = feedViewModel.post(byId: photo.postId) else {
                 return
             }
             let mediaIndex = post.displayMediaItems.firstIndex(where: { $0.id == photo.id }) ?? 0

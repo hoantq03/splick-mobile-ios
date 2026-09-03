@@ -19,6 +19,8 @@ public final class FeedViewModel: ObservableObject {
     @Published private(set) var hasReachedFeedEnd = false
     @Published private(set) var isRefreshing = false
     @Published private(set) var newPostsCount = 0
+    /// Incremented when the user taps the new-posts pill; observed by feed scroll to scroll + refresh.
+    @Published private(set) var revealNewPostsGeneration = 0
     @Published var alertMessage: String?
     @Published var pendingStreakDelete: PendingStreakDelete?
     private(set) var currentUserId: UUID?
@@ -47,6 +49,7 @@ public final class FeedViewModel: ObservableObject {
     private var currentPage = 0
     private var canLoadMore = true
     private var trackedViewPostIds = Set<UUID>()
+    @Published private(set) var locallyViewedPostIds = Set<UUID>()
     private var loadFeedTask: Task<Bool, Never>?
     private var loadFeedGeneration = 0
 
@@ -67,7 +70,9 @@ public final class FeedViewModel: ObservableObject {
 
     private var pendingViewPostIds = Set<UUID>()
     private var viewTrackFlushTask: Task<Void, Never>?
+    private var viewDwellTasks: [UUID: Task<Void, Never>] = [:]
     private static let viewTrackDebounceNanos: UInt64 = 2_000_000_000
+    private static let viewDwellNanos: UInt64 = 1_000_000_000
 
     /// Optimistic comment ids not yet confirmed by the server — block reply to avoid invalid parent ids.
     @Published private(set) var pendingCommentIds = Set<UUID>()
@@ -88,6 +93,10 @@ public final class FeedViewModel: ObservableObject {
     /// prependCreatedPost, or any other local-only operation that corrupts posts[0].
     private var feedFrontierPostId: UUID?
     private var feedFrontierCreatedAt: Date?
+
+    /// Posts loaded outside the feed timeline (album, streak, deep links).
+    /// Kept separate so viewing an old post never reorders the visible feed.
+    private var supplementalPostsById: [UUID: Post] = [:]
     private var companionIndexDirty = true
 
     public init(
@@ -175,6 +184,7 @@ public final class FeedViewModel: ObservableObject {
         loadFeedTask?.cancel()
         loadFeedTask = nil
         assignPosts(startupPosts, preserveVersionsFrom: nil)
+        pinFeedFrontier(from: startupPosts)
         state = .loaded(posts)
         currentPage = 0
         canLoadMore = startupPosts.count >= 20
@@ -187,6 +197,7 @@ public final class FeedViewModel: ObservableObject {
     public func applyCachedPostsIfEmpty(_ cached: [Post]) {
         guard posts.isEmpty, !cached.isEmpty else { return }
         assignPosts(cached, preserveVersionsFrom: nil)
+        pinFeedFrontier(from: cached)
         state = .loaded(posts)
         currentPage = 0
         canLoadMore = cached.count >= 20
@@ -248,21 +259,29 @@ public final class FeedViewModel: ObservableObject {
 
     func revealNewPosts() {
         newPostsCount = 0
-        NotificationCenter.default.post(name: FeedSameTabNotification.scrollToTop, object: nil)
-        NotificationCenter.default.post(name: FeedSameTabNotification.refresh, object: nil)
+        revealNewPostsGeneration += 1
     }
 
     func refreshNewPostsCountIfNeeded() async {
         await pollAheadCountOnce()
     }
 
+    /// Pins the ahead-count cursor to the newest non-upload post in the given list.
+    private func pinFeedFrontier(from candidates: [Post]) {
+        guard let frontier = candidates.first(where: { postUploadStates[$0.id] == nil }) else { return }
+        feedFrontierPostId = frontier.id
+        feedFrontierCreatedAt = frontier.createdAt
+    }
+
     private func pollAheadCountOnce() async {
         // Use the pinned frontier rather than posts.first to avoid stale reads caused by
         // ensurePostLoaded (album / streak deep-link) inserting old posts at index 0.
-        guard !isRefreshing,
-              let createdAt = feedFrontierCreatedAt,
-              let id = feedFrontierPostId,
-              let feedRepository
+        guard !isRefreshing, let feedRepository else { return }
+        if feedFrontierPostId == nil {
+            pinFeedFrontier(from: posts)
+        }
+        guard let createdAt = feedFrontierCreatedAt,
+              let id = feedFrontierPostId
         else { return }
         do {
             let count = try await feedRepository.countFeedPostsAhead(
@@ -290,6 +309,7 @@ public final class FeedViewModel: ObservableObject {
         guard !isRefreshing else { return }
         isRefreshing = true
         newPostsCount = 0
+        cancelViewDwells()
     }
 
     @discardableResult
@@ -299,6 +319,7 @@ public final class FeedViewModel: ObservableObject {
             isRefreshing = true
             newPostsCount = 0
             cancelViewTrackFlush()
+            cancelViewDwells()
         } else if posts.isEmpty {
             state = .loading
         }
@@ -340,11 +361,9 @@ public final class FeedViewModel: ObservableObject {
             prefetchImages(for: self.posts)
             persistFeedCache()
             await onFeedLoaded?(self.posts, currentUserId)
-            // Pin the polling frontier to the first server post of this load.
-            // hydratedPosts is derived directly from the network response — not mutated by
-            // ensurePostLoaded or prependCreatedPost — so it is safe to use as a stable anchor.
-            feedFrontierPostId = hydratedPosts.first?.id
-            feedFrontierCreatedAt = hydratedPosts.first?.createdAt
+            // Pin from the raw server page — not merged posts — so optimistic uploads
+            // at the top do not shift the ahead-count cursor.
+            pinFeedFrontier(from: hydratedPosts)
             newPostsCount = 0
             return true
         } catch {
@@ -469,6 +488,31 @@ public final class FeedViewModel: ObservableObject {
         !pendingCommentIds.contains(comment.id)
     }
 
+    func showsNewBadge(for post: Post) -> Bool {
+        !post.isViewed(by: currentUserId, additionallyViewedIds: locallyViewedPostIds)
+    }
+
+    func onVisiblePostsChanged(_ visibleIds: Set<UUID>) {
+        if isRefreshing {
+            cancelViewDwells()
+            return
+        }
+        for (id, task) in viewDwellTasks where !visibleIds.contains(id) {
+            task.cancel()
+            viewDwellTasks[id] = nil
+        }
+        for id in visibleIds {
+            guard !trackedViewPostIds.contains(id), viewDwellTasks[id] == nil else { continue }
+            viewDwellTasks[id] = Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: Self.viewDwellNanos)
+                guard let self, !Task.isCancelled else { return }
+                self.viewDwellTasks[id] = nil
+                guard let post = self.posts.first(where: { $0.id == id }) else { return }
+                await self.trackViewOnScrollIfNeeded(for: post)
+            }
+        }
+    }
+
     func trackViewOnScrollIfNeeded(for post: Post) async {
         guard !isRefreshing else { return }
         guard postUploadStates[post.id] == nil else { return }
@@ -476,6 +520,7 @@ public final class FeedViewModel: ObservableObject {
         guard !trackedViewPostIds.contains(post.id) else { return }
 
         trackedViewPostIds.insert(post.id)
+        locallyViewedPostIds.insert(post.id)
         pendingViewPostIds.insert(post.id)
         scheduleViewTrackFlush()
     }
@@ -521,6 +566,13 @@ public final class FeedViewModel: ObservableObject {
         if let first = postIds.first {
             await refreshPost(id: first)
         }
+    }
+
+    private func cancelViewDwells() {
+        for task in viewDwellTasks.values {
+            task.cancel()
+        }
+        viewDwellTasks.removeAll()
     }
 
     private func cancelViewTrackFlush() {
@@ -1004,19 +1056,33 @@ public final class FeedViewModel: ObservableObject {
 
     /// Indexed single-post mutation — skips publish when card content is unchanged.
     private func replacePost(_ post: Post) {
-        guard let index = indexOfPost(id: post.id) else { return }
-        let previous = posts[index]
-        if previous.hasSameCardContent(as: post) {
+        if let index = indexOfPost(id: post.id) {
+            let previous = posts[index]
+            if previous.hasSameCardContent(as: post) {
+                FeedSignposts.postEquality(changed: false)
+                return
+            }
+            let stamped = post.ensuringVersion(relativeTo: previous)
+            posts[index] = stamped
+            if let name = stamped.companionGroupName {
+                cachedCompanionGroupNames[stamped.id] = name
+            }
+            FeedSignposts.postEquality(changed: true)
+            markPostsLoaded()
+            return
+        }
+
+        guard var cached = supplementalPostsById[post.id] else { return }
+        if cached.hasSameCardContent(as: post) {
             FeedSignposts.postEquality(changed: false)
             return
         }
-        let stamped = post.ensuringVersion(relativeTo: previous)
-        posts[index] = stamped
-        if let name = stamped.companionGroupName {
-            cachedCompanionGroupNames[stamped.id] = name
+        cached = post.ensuringVersion(relativeTo: cached)
+        supplementalPostsById[post.id] = cached
+        if let name = cached.companionGroupName {
+            cachedCompanionGroupNames[cached.id] = name
         }
         FeedSignposts.postEquality(changed: true)
-        markPostsLoaded()
     }
 
     private func markPostsLoaded() {
@@ -1026,6 +1092,14 @@ public final class FeedViewModel: ObservableObject {
             return
         }
         state = .loaded(posts)
+    }
+
+    /// Resolves a post from the feed timeline first, then from the supplemental detail cache.
+    public func post(byId id: UUID) -> Post? {
+        if let index = indexOfPost(id: id) {
+            return posts[index]
+        }
+        return supplementalPostsById[id]
     }
 
     private func indexOfPost(id: UUID) -> Int? {
@@ -1041,6 +1115,8 @@ public final class FeedViewModel: ObservableObject {
     private func assignPosts(_ newPosts: [Post], preserveVersionsFrom _: [Post]?) {
         posts = newPosts
         rebuildPostIndex()
+        let feedIds = Set(newPosts.map(\.id))
+        supplementalPostsById = supplementalPostsById.filter { !feedIds.contains($0.key) }
         companionIndexDirty = true
         _ = companionGroupNameIndex()
     }
@@ -1119,18 +1195,16 @@ public final class FeedViewModel: ObservableObject {
 
     @discardableResult
     public func ensurePostLoaded(id: UUID) async -> PostLoadResult {
-        if indexOfPost(id: id) != nil {
+        if post(byId: id) != nil {
             return .loaded
         }
 
         do {
             let post = try await fetchPostUseCase.execute(postId: id)
-            posts.insert(post, at: 0)
-            rebuildPostIndex()
+            supplementalPostsById[id] = post
             if let name = post.companionGroupName {
                 cachedCompanionGroupNames[post.id] = name
             }
-            markPostsLoaded()
             return .loaded
         } catch {
             let unavailable = Self.isPostUnavailable(error)
