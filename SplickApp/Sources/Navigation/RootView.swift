@@ -48,6 +48,10 @@ struct RootView: View {
         .onChange(of: appState.isAuthenticated) { isAuthenticated in
             guard isAuthenticated else { return }
             consumePendingNotificationDestination()
+            if appState.pendingUserProfileNavigation != nil
+                || !(appState.pendingUserProfileUsername ?? "").isEmpty {
+                appState.selectedTab = .friends
+            }
             Task { await claimPendingBillInviteIfNeeded() }
         }
         .onAppear {

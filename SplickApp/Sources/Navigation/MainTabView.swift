@@ -410,7 +410,8 @@ struct MainTabView: View {
             onFriendRequestsLoaded: { requests in
                 container.widgetSyncBridge.syncFriendRequests(requests)
             },
-            pendingUserProfileUserId: $appState.pendingUserProfileNavigation
+            pendingUserProfileUserId: $appState.pendingUserProfileNavigation,
+            pendingUserProfileUsername: $appState.pendingUserProfileUsername
         )
         .environmentObject(container.customEmojiStore)
         .environment(\.customEmojiDependencies, container.customEmojiDependencies)
@@ -507,6 +508,16 @@ private struct MainTabBarChrome: View {
 }
 
 struct ProfileSettingsView: View {
+    private enum AvatarSheetAction {
+        case view
+        case pickPhoto
+    }
+
+    private struct AvatarCropDraft: Identifiable {
+        let id = UUID()
+        let image: UIImage
+    }
+
     private static let minimumBirthdayAgeYears = 13
 
     private static let birthDateFormatter: DateFormatter = {
@@ -545,8 +556,11 @@ struct ProfileSettingsView: View {
     @State private var showLanguagePicker = false
     @State private var languageDraft = AppLocale.default
     @State private var showAvatarOptions = false
+    @State private var pendingAvatarSheetAction: AvatarSheetAction?
     @State private var showAvatarViewer = false
     @State private var showPhotoPicker = false
+    @State private var avatarCropDraft: AvatarCropDraft?
+    @State private var pendingAvatarCropImage: UIImage?
     @State private var showEditDisplayName = false
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var avatarPreviewImage: UIImage?
@@ -613,25 +627,18 @@ struct ProfileSettingsView: View {
             .task {
                 await refreshProfile()
             }
-            .confirmationDialog(
-                "",
-                isPresented: $showAvatarOptions,
-                titleVisibility: .hidden
-            ) {
-                if appState.currentUser?.avatarURL != nil || avatarPreviewImage != nil {
-                    Button(languageService.text(.profileAvatarView)) {
-                        showAvatarViewer = true
-                    }
-                }
-                Button(languageService.text(.profileAvatarEdit)) {
+            .sheet(isPresented: $showAvatarOptions, onDismiss: {
+                switch pendingAvatarSheetAction {
+                case .view:
+                    showAvatarViewer = true
+                case .pickPhoto:
                     showPhotoPicker = true
+                case .none:
+                    break
                 }
-                if appState.currentUser?.avatarURL != nil {
-                    Button(languageService.text(.profileAvatarDelete), role: .destructive) {
-                        Task { await removeAvatar() }
-                    }
-                }
-                Button(languageService.text(.commonCancel), role: .cancel) {}
+                pendingAvatarSheetAction = nil
+            }) {
+                avatarOptionsSheet
             }
             .photosPicker(
                 isPresented: $showPhotoPicker,
@@ -640,6 +647,17 @@ struct ProfileSettingsView: View {
             )
             .onChange(of: selectedPhotoItem) { _ in
                 Task { await onPhotoItemChanged() }
+            }
+            .onChange(of: showPhotoPicker) { isPresented in
+                guard !isPresented, let pendingAvatarCropImage else { return }
+                self.pendingAvatarCropImage = nil
+                avatarCropDraft = AvatarCropDraft(image: pendingAvatarCropImage)
+            }
+            .sheet(item: $avatarCropDraft) { draft in
+                ProfileAvatarCropSheet(sourceImage: draft.image) { cropped in
+                    try await uploadAvatar(cropped)
+                }
+                .environmentObject(languageService)
             }
             .splickWindowFullScreenCover(isPresented: $showAvatarViewer) {
                 AvatarFullScreenView(
@@ -922,6 +940,67 @@ struct ProfileSettingsView: View {
         }
     }
 
+    private var canViewAvatar: Bool {
+        appState.currentUser?.avatarURL != nil || avatarPreviewImage != nil
+    }
+
+    private var canRemoveAvatar: Bool {
+        appState.currentUser?.avatarURL != nil
+    }
+
+    private var avatarOptionsSheetHeight: CGFloat {
+        var rows = 1
+        if canViewAvatar { rows += 1 }
+        if canRemoveAvatar { rows += 1 }
+        return CGFloat(rows) * 52 + 48
+    }
+
+    private var avatarOptionsSheet: some View {
+        VStack(spacing: 0) {
+            if canViewAvatar {
+                avatarOptionButton(title: languageService.text(.profileAvatarView)) {
+                    pendingAvatarSheetAction = .view
+                    showAvatarOptions = false
+                }
+            }
+
+            avatarOptionButton(title: languageService.text(.profileAvatarEdit)) {
+                pendingAvatarSheetAction = .pickPhoto
+                showAvatarOptions = false
+            }
+
+            if canRemoveAvatar {
+                avatarOptionButton(
+                    title: languageService.text(.profileAvatarDelete),
+                    isDestructive: true
+                ) {
+                    showAvatarOptions = false
+                    Task { await removeAvatar() }
+                }
+            }
+        }
+        .padding(.horizontal, SplickTheme.Spacing.lg)
+        .padding(.top, SplickTheme.Spacing.xs)
+        .padding(.bottom, SplickTheme.Spacing.md)
+        .presentationDetents([.height(avatarOptionsSheetHeight)])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func avatarOptionButton(
+        title: String,
+        isDestructive: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(SplickTheme.Typography.body)
+                .foregroundStyle(isDestructive ? SplickTheme.Colors.error : SplickTheme.Colors.primary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, SplickTheme.Spacing.sm)
+        }
+        .buttonStyle(.plain)
+    }
+
     private var editDisplayNameSheet: some View {
         NavigationStack {
             VStack(spacing: SplickTheme.Spacing.lg) {
@@ -1195,20 +1274,24 @@ struct ProfileSettingsView: View {
     }
 
     private func onPhotoItemChanged() async {
-        guard let selectedPhotoItem else {
-            avatarPreviewImage = nil
-            return
-        }
-        guard let data = try? await selectedPhotoItem.loadTransferable(type: Data.self),
+        guard let selectedPhotoItem else { return }
+        let item = selectedPhotoItem
+        self.selectedPhotoItem = nil
+        guard let data = try? await item.loadTransferable(type: Data.self),
               let image = UIImage(data: data) else {
-            profileError = languageService.text(.profileRefreshFailed)
+            profileError = languageService.text(.profileAvatarLoadFailed)
             return
         }
-        avatarPreviewImage = image
-        await uploadAvatar(image)
+        avatarCropDraft = nil
+        let prepared = ImageCropRenderer.downsampled(image)
+        if showPhotoPicker {
+            pendingAvatarCropImage = prepared
+        } else {
+            avatarCropDraft = AvatarCropDraft(image: prepared)
+        }
     }
 
-    private func uploadAvatar(_ image: UIImage) async {
+    private func uploadAvatar(_ image: UIImage) async throws {
         guard !isUpdatingAvatar else { return }
         isUpdatingAvatar = true
         profileError = nil
@@ -1224,10 +1307,12 @@ struct ProfileSettingsView: View {
             appState.updateAuthenticatedUser(user)
             selectedPhotoItem = nil
             avatarPreviewImage = nil
+            avatarCropDraft = nil
         } catch {
             profileError = languageService.localizedMessage(for: error)
             avatarPreviewImage = nil
             selectedPhotoItem = nil
+            throw error
         }
     }
 

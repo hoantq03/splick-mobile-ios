@@ -41,6 +41,10 @@ public enum AppConstants {
         public static let preferredLocale = "preferredLocale"
         public static let pendingBillInviteToken = "com.splick.pendingBillInviteToken"
         public static let pendingBillInviteSplitId = "com.splick.pendingBillInviteSplitId"
+        /// Deep link / cold-start: open a user profile by id after auth.
+        public static let pendingUserProfileUserId = "com.splick.pendingUserProfileUserId"
+        /// Deep link / cold-start: open a public profile by username after auth.
+        public static let pendingUserProfileUsername = "com.splick.pendingUserProfileUsername"
         public static let cachedCurrentUser = "com.splick.cachedCurrentUser"
     }
 

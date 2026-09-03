@@ -90,6 +90,7 @@ public struct FriendsRootView: View {
     private let onDirectoryLoaded: (([SplickDomain.Group]) async -> Void)?
     private let onFriendRequestsLoaded: (([IncomingFriendRequest]) async -> Void)?
     private let pendingUserProfileUserId: Binding<UUID?>?
+    private let pendingUserProfileUsername: Binding<String?>?
 
     public init(
         fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol,
@@ -134,12 +135,14 @@ public struct FriendsRootView: View {
         onBadgeCountsChanged: (() async -> Void)? = nil,
         onDirectoryLoaded: (([SplickDomain.Group]) async -> Void)? = nil,
         onFriendRequestsLoaded: (([IncomingFriendRequest]) async -> Void)? = nil,
-        pendingUserProfileUserId: Binding<UUID?>? = nil
+        pendingUserProfileUserId: Binding<UUID?>? = nil,
+        pendingUserProfileUsername: Binding<String?>? = nil
     ) {
         self.onBadgeCountsChanged = onBadgeCountsChanged
         self.onDirectoryLoaded = onDirectoryLoaded
         self.onFriendRequestsLoaded = onFriendRequestsLoaded
         self.pendingUserProfileUserId = pendingUserProfileUserId
+        self.pendingUserProfileUsername = pendingUserProfileUsername
         self.fetchMyFriendsUseCase = fetchMyFriendsUseCase
         let rootVM = FriendsRootViewModel(
             fetchMyFriendsUseCase: fetchMyFriendsUseCase,
@@ -471,13 +474,21 @@ public struct FriendsRootView: View {
         }
         .onChange(of: pendingUserProfileUserId?.wrappedValue) { userId in
             guard let userId else { return }
-            openUserProfileFromNotification(userId: userId)
             pendingUserProfileUserId?.wrappedValue = nil
+            openUserProfileFromNotification(userId: userId)
+        }
+        .onChange(of: pendingUserProfileUsername?.wrappedValue) { username in
+            guard let username, !username.isEmpty else { return }
+            pendingUserProfileUsername?.wrappedValue = nil
+            Task { await openUserProfileFromUsername(username) }
         }
         .onAppear {
             if let userId = pendingUserProfileUserId?.wrappedValue {
-                openUserProfileFromNotification(userId: userId)
                 pendingUserProfileUserId?.wrappedValue = nil
+                openUserProfileFromNotification(userId: userId)
+            } else if let username = pendingUserProfileUsername?.wrappedValue, !username.isEmpty {
+                pendingUserProfileUsername?.wrappedValue = nil
+                Task { await openUserProfileFromUsername(username) }
             }
         }
         .onDisappear {
@@ -501,6 +512,27 @@ public struct FriendsRootView: View {
             user: UserSummary(id: userId, username: "", displayName: ""),
             status: .none
         )
+    }
+
+    private func openUserProfileFromUsername(_ username: String) async {
+        let normalized = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let friend = viewModel.friends.first(where: {
+            $0.username.caseInsensitiveCompare(normalized) == .orderedSame
+        }) {
+            openUserProfile(user: friend, status: .friends)
+            return
+        }
+        do {
+            let results = try await searchUsersUseCase.execute(query: normalized, page: 0, size: 20)
+            if let match = results.first(where: {
+                $0.user.username.caseInsensitiveCompare(normalized) == .orderedSame
+            }) {
+                openUserProfile(user: match.user, status: match.friendStatus)
+                return
+            }
+        } catch {
+            viewModel.alertMessage = error.localizedDescription
+        }
     }
 
     private var sameTabTapPublisher: AnyPublisher<Void, Never> {

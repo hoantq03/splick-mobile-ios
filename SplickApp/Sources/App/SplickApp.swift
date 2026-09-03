@@ -45,6 +45,11 @@ struct SplickApp: App {
                         GIDSignIn.sharedInstance.handle(url)
                     }
                 }
+                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+                    if let url = activity.webpageURL {
+                        _ = appState.handleDeepLink(url)
+                    }
+                }
         }
     }
 }

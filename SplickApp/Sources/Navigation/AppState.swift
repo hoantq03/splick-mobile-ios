@@ -30,7 +30,12 @@ final class AppState: ObservableObject {
     /// True while Messages has a pushed chat thread. Drives tab-bar chrome so a
     /// notification/deep-link open cannot leave the floating menu over the composer.
     @Published var isMessagingThreadPresented = false
-    @Published var pendingUserProfileNavigation: UUID?
+    @Published var pendingUserProfileNavigation: UUID? {
+        didSet { persistPendingUserProfileUserId() }
+    }
+    @Published var pendingUserProfileUsername: String? {
+        didSet { persistPendingUserProfileUsername() }
+    }
     @Published var pendingBillInviteToken: String?
     @Published var pendingBillInviteSplitId: UUID?
 
@@ -58,6 +63,14 @@ final class AppState: ObservableObject {
             if let rawSplit = UserDefaults.standard.string(forKey: AppConstants.UserDefaults.pendingBillInviteSplitId) {
                 pendingBillInviteSplitId = UUID(uuidString: rawSplit)
             }
+        }
+        if let rawProfile = UserDefaults.standard.string(forKey: AppConstants.UserDefaults.pendingUserProfileUserId),
+           let userId = UUID(uuidString: rawProfile) {
+            pendingUserProfileNavigation = userId
+        }
+        if let username = UserDefaults.standard.string(forKey: AppConstants.UserDefaults.pendingUserProfileUsername),
+           !username.isEmpty {
+            pendingUserProfileUsername = username
         }
     }
 
@@ -107,7 +120,7 @@ final class AppState: ObservableObject {
         linkedPostPresentation = nil
         pendingMessagingNavigation = nil
         isMessagingThreadPresented = false
-        pendingUserProfileNavigation = nil
+        clearPendingUserProfileNavigation()
         PushNotificationCoordinator.shared.syncAppIconBadge(count: 0)
         Log.info("User signed out", category: .lifecycle)
     }
@@ -125,7 +138,6 @@ final class AppState: ObservableObject {
         linkedPostPresentation = nil
         pendingMessagingNavigation = nil
         isMessagingThreadPresented = false
-        pendingUserProfileNavigation = nil
         PushNotificationCoordinator.shared.syncAppIconBadge(count: 0)
     }
 
@@ -151,33 +163,90 @@ final class AppState: ObservableObject {
 
     func clearPendingUserProfileNavigation() {
         pendingUserProfileNavigation = nil
+        pendingUserProfileUsername = nil
     }
 
-    /// Called when user taps through the last onboarding page.
-    func passOnboardingGate() {
-        hasPassedOnboardingThisSession = true
-    }
-
-    func openPostCapture() {
+    func openUserProfile(_ userId: UUID) {
+        pendingUserProfileUsername = nil
+        pendingUserProfileNavigation = userId
         withAnimation(.easeInOut(duration: 0.35)) {
-            selectedTab = .camera
+            selectedTab = .friends
+        }
+        showNotifications = false
+        showProfileSettings = false
+    }
+
+    func openUserProfile(username: String) {
+        let trimmed = username.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "@", with: "")
+        guard !trimmed.isEmpty, !Self.reservedWebPaths.contains(trimmed.lowercased()) else { return }
+        pendingUserProfileNavigation = nil
+        pendingUserProfileUsername = trimmed
+        withAnimation(.easeInOut(duration: 0.35)) {
+            selectedTab = .friends
+        }
+        showNotifications = false
+        showProfileSettings = false
+    }
+
+    private func persistPendingUserProfileUserId() {
+        if let userId = pendingUserProfileNavigation {
+            UserDefaults.standard.set(
+                userId.uuidString,
+                forKey: AppConstants.UserDefaults.pendingUserProfileUserId
+            )
+        } else {
+            UserDefaults.standard.removeObject(forKey: AppConstants.UserDefaults.pendingUserProfileUserId)
         }
     }
 
+    private func persistPendingUserProfileUsername() {
+        if let username = pendingUserProfileUsername, !username.isEmpty {
+            UserDefaults.standard.set(
+                username,
+                forKey: AppConstants.UserDefaults.pendingUserProfileUsername
+            )
+        } else {
+            UserDefaults.standard.removeObject(forKey: AppConstants.UserDefaults.pendingUserProfileUsername)
+        }
+    }
+
+    private static let reservedWebPaths: Set<String> = [
+        "privacy", "terms", "support", "invite", "vi", "dashboard", "admin",
+        "group", "b", "u", "post", "friends", "messages", "feed",
+    ]
+
     func handleDeepLink(_ url: URL) -> Bool {
+        let parsed = SplickQRParser.parse(url.absoluteString)
         if url.scheme?.lowercased() == "https" || url.scheme?.lowercased() == "http" {
-            if case .claimBill(let token, let splitId) = SplickQRParser.parse(url.absoluteString) {
+            switch parsed {
+            case .claimBill(let token, let splitId):
                 storePendingBillInvite(token, splitId: splitId)
+                return true
+            case .addFriend(let username):
+                openUserProfile(username: username)
+                return true
+            default:
+                return false
+            }
+        }
+        guard url.scheme?.lowercased() == "splick" else { return false }
+        switch parsed {
+        case .claimBill(let token, let splitId):
+            storePendingBillInvite(token, splitId: splitId)
+            return true
+        case .addFriend(let username):
+            openUserProfile(username: username)
+            return true
+        default:
+            break
+        }
+        switch url.host?.lowercased() {
+        case "user":
+            if let userId = uuidPathComponent(url) {
+                openUserProfile(userId)
                 return true
             }
             return false
-        }
-        guard url.scheme?.lowercased() == "splick" else { return false }
-        if case .claimBill(let token, let splitId) = SplickQRParser.parse(url.absoluteString) {
-            storePendingBillInvite(token, splitId: splitId)
-            return true
-        }
-        switch url.host?.lowercased() {
         case "capture", "postcapture":
             openPostCapture()
             return true
@@ -211,6 +280,17 @@ final class AppState: ObservableObject {
             return true
         default:
             return false
+        }
+    }
+
+    /// Called when user taps through the last onboarding page.
+    func passOnboardingGate() {
+        hasPassedOnboardingThisSession = true
+    }
+
+    func openPostCapture() {
+        withAnimation(.easeInOut(duration: 0.35)) {
+            selectedTab = .camera
         }
     }
 
@@ -314,11 +394,7 @@ final class AppState: ObservableObject {
             selectedTab = .friends
             showNotifications = false
         case .userProfile(let userId):
-            pendingUserProfileNavigation = userId
-            withAnimation(.easeInOut(duration: 0.35)) {
-                selectedTab = .friends
-            }
-            showNotifications = false
+            openUserProfile(userId)
         case .messages:
             withAnimation(.easeInOut(duration: 0.35)) {
                 selectedTab = .messages
