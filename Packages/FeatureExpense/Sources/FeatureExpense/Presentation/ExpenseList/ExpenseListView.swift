@@ -619,6 +619,7 @@ private struct ExpenseHistoryPage: View {
                 }
             }
         }
+        .contentShape(Rectangle())
     }
 
     private func historyDebtChip(_ status: ExpenseDebtFilter) -> some View {
@@ -1158,6 +1159,7 @@ private struct ExpenseListFilterPanel: View {
                         }
                     }
                 }
+                .contentShape(Rectangle())
             }
 
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
