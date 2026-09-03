@@ -31,6 +31,7 @@ public struct CreatePostComposeView: View {
     @StateObject private var viewModel: CreatePostComposeViewModel
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     private let profileDependencies: FriendUserProfileDependencies?
+    private let nearbyDiscoveryUseCase: NearbyDiscoveryUseCaseProtocol?
     let onPostSubmit: (PreparedPostSubmit) -> Void
     let onCancel: () -> Void
     @State private var photoPickerItems: [PhotosPickerItem] = []
@@ -43,11 +44,13 @@ public struct CreatePostComposeView: View {
     public init(
         viewModel: @autoclosure @escaping () -> CreatePostComposeViewModel,
         profileDependencies: FriendUserProfileDependencies? = nil,
+        nearbyDiscoveryUseCase: NearbyDiscoveryUseCaseProtocol? = nil,
         onPostSubmit: @escaping (PreparedPostSubmit) -> Void,
         onCancel: @escaping () -> Void
     ) {
         _viewModel = StateObject(wrappedValue: viewModel())
         self.profileDependencies = profileDependencies
+        self.nearbyDiscoveryUseCase = nearbyDiscoveryUseCase
         self.onPostSubmit = onPostSubmit
         self.onCancel = onCancel
     }
@@ -144,7 +147,12 @@ public struct CreatePostComposeView: View {
         .navigationDestination(for: ComposeOptionRoute.self) { route in
             switch route {
             case .companions:
-                ComposeCompanionsEditorView(viewModel: viewModel, onUserTap: openProfile)
+                ComposeCompanionsEditorView(
+                    viewModel: viewModel,
+                    onUserTap: openProfile,
+                    nearbyDiscoveryUseCase: nearbyDiscoveryUseCase,
+                    profileDependencies: profileDependencies
+                )
             case .location:
                 ComposeLocationEditorView(viewModel: viewModel)
             }
@@ -757,6 +765,8 @@ private struct ComposeCompanionsEditorView: View {
     @EnvironmentObject private var languageService: LanguageService
     @ObservedObject var viewModel: CreatePostComposeViewModel
     let onUserTap: (UserSummary) -> Void
+    let nearbyDiscoveryUseCase: NearbyDiscoveryUseCaseProtocol?
+    let profileDependencies: FriendUserProfileDependencies?
     @FocusState private var isFriendSearchFocused: Bool
     @State private var showAddGuestSheet = false
 
@@ -811,7 +821,7 @@ private struct ComposeCompanionsEditorView: View {
                     }
 
                     if viewModel.enableBillSplit {
-                        addGuestWithoutAppButton
+                        billShareAddActions
                     }
 
                     if viewModel.enableBillSplit || viewModel.shouldShowFriendSuggestions {
@@ -839,16 +849,46 @@ private struct ComposeCompanionsEditorView: View {
         }
     }
 
+    private var billShareAddActions: some View {
+        HStack(spacing: SplickTheme.Spacing.sm) {
+            addGuestWithoutAppButton
+            if let nearbyDiscoveryUseCase, let profileDependencies {
+                ComposeNearbyRadarButton(
+                    nearbyDiscoveryUseCase: nearbyDiscoveryUseCase,
+                    profileDependencies: profileDependencies,
+                    languageService: languageService,
+                    selectedCompanionIds: Set(viewModel.selectedCompanions.map(\.id)),
+                    onAddCompanion: { user in
+                        viewModel.addCompanion(user)
+                    },
+                    onRemoveCompanion: { user in
+                        viewModel.removeCompanion(user)
+                    }
+                )
+            }
+        }
+    }
+
     private var addGuestWithoutAppButton: some View {
         Button {
             showAddGuestSheet = true
         } label: {
-            HStack(spacing: SplickTheme.Spacing.xs) {
+            HStack(spacing: SplickTheme.Spacing.xxs) {
                 Image(systemName: "plus.circle.fill")
                 Text(languageService.text(.feedCreateGuestSection))
-                    .font(SplickTheme.Typography.callout)
+                    .font(SplickTheme.Typography.callout.weight(.semibold))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+                    .multilineTextAlignment(.leading)
             }
             .foregroundStyle(SplickTheme.Colors.primary)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .padding(.horizontal, SplickTheme.Spacing.sm)
+            .padding(.vertical, SplickTheme.Spacing.xs)
+            .background(SplickTheme.Colors.primary.opacity(0.08))
+            .clipShape(
+                RoundedRectangle(cornerRadius: ComposeMetrics.fieldCornerRadius, style: .continuous)
+            )
         }
         .buttonStyle(.plain)
         .accessibilityLabel(languageService.text(.feedCreateGuestSection))
@@ -1313,6 +1353,123 @@ private struct ComposeLocationEditorView: View {
                     .foregroundStyle(SplickTheme.Colors.textPrimary)
                     .multilineTextAlignment(.leading)
                 Spacer()
+            }
+        }
+    }
+}
+
+private struct ComposeNearbyRadarButton: View {
+    @EnvironmentObject private var languageService: LanguageService
+    @StateObject private var nearbyRadar: NearbyRadarSessionViewModel
+    @State private var showNearbyRadar = false
+    @State private var selectedIds: Set<UUID> = []
+    let selectedCompanionIds: Set<UUID>
+    let onAddCompanion: (UserSummary) -> Void
+    let onRemoveCompanion: (UserSummary) -> Void
+
+    init(
+        nearbyDiscoveryUseCase: NearbyDiscoveryUseCaseProtocol,
+        profileDependencies: FriendUserProfileDependencies,
+        languageService: LanguageService,
+        selectedCompanionIds: Set<UUID>,
+        onAddCompanion: @escaping (UserSummary) -> Void,
+        onRemoveCompanion: @escaping (UserSummary) -> Void
+    ) {
+        _nearbyRadar = StateObject(
+            wrappedValue: NearbyRadarSessionViewModel(
+                nearbyDiscoveryUseCase: nearbyDiscoveryUseCase,
+                addFriendUseCase: profileDependencies.addFriendUseCase,
+                acceptFriendRequestUseCase: profileDependencies.acceptFriendRequestUseCase,
+                cancelFriendRequestUseCase: profileDependencies.cancelFriendRequestUseCase,
+                fetchIncomingFriendRequestsUseCase: profileDependencies.fetchIncomingFriendRequestsUseCase,
+                fetchOutgoingFriendRequestsUseCase: profileDependencies.fetchOutgoingFriendRequestsUseCase,
+                languageService: languageService
+            )
+        )
+        self.selectedCompanionIds = selectedCompanionIds
+        self.onAddCompanion = onAddCompanion
+        self.onRemoveCompanion = onRemoveCompanion
+    }
+
+    var body: some View {
+        Button {
+            selectedIds = selectedCompanionIds
+            showNearbyRadar = true
+            nearbyRadar.startRadarSession()
+        } label: {
+            HStack(spacing: SplickTheme.Spacing.xxs) {
+                Image(systemName: "dot.radiowaves.left.and.right")
+                Text(languageService.text(.friendsNearbyOpen))
+                    .font(SplickTheme.Typography.callout.weight(.semibold))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+                    .multilineTextAlignment(.leading)
+            }
+            .foregroundStyle(SplickTheme.Colors.primary)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .padding(.horizontal, SplickTheme.Spacing.sm)
+            .padding(.vertical, SplickTheme.Spacing.xs)
+            .background(SplickTheme.Colors.primary.opacity(0.08))
+            .clipShape(
+                RoundedRectangle(cornerRadius: ComposeMetrics.fieldCornerRadius, style: .continuous)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(languageService.text(.friendsNearbyOpen))
+        .fullScreenCover(isPresented: $showNearbyRadar, onDismiss: {
+            nearbyRadar.stopRadarSession()
+        }) {
+            NearbyRadarSheet(
+                permissionNeeded: nearbyRadar.nearbyPermissionNeeded,
+                users: nearbyRadar.nearbyUsers,
+                loading: nearbyRadar.nearbyLoading,
+                selectionMode: true,
+                selectedUserIds: selectedIds,
+                onClose: {
+                    showNearbyRadar = false
+                    nearbyRadar.stopRadarSession()
+                },
+                onRequestLocation: nearbyRadar.requestNearbyLocationAccess,
+                onOpenUser: { _ in },
+                actionForResult: nearbyRadar.actionForResult,
+                onToggleSelection: { result in
+                    if selectedIds.contains(result.user.id) {
+                        selectedIds.remove(result.user.id)
+                    } else {
+                        selectedIds.insert(result.user.id)
+                    }
+                },
+                onConfirmSelection: {
+                    for result in nearbyRadar.nearbyUsers {
+                        if selectedIds.contains(result.user.id) {
+                            onAddCompanion(result.user)
+                        } else if selectedCompanionIds.contains(result.user.id) {
+                            onRemoveCompanion(result.user)
+                        }
+                    }
+                    showNearbyRadar = false
+                    nearbyRadar.stopRadarSession()
+                }
+            )
+            .environmentObject(languageService)
+        }
+        .alert(
+            languageService.text(.friendsNearbyTitle),
+            isPresented: Binding(
+                get: { nearbyRadar.alertMessage != nil },
+                set: { if !$0 { nearbyRadar.alertMessage = nil } }
+            )
+        ) {
+            Button(languageService.text(.commonOK), role: .cancel) {
+                nearbyRadar.alertMessage = nil
+            }
+        } message: {
+            Text(nearbyRadar.alertMessage ?? "")
+        }
+        .onDisappear {
+            if showNearbyRadar {
+                showNearbyRadar = false
+                nearbyRadar.stopRadarSession()
             }
         }
     }

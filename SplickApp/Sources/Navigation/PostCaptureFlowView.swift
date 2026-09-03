@@ -58,6 +58,7 @@ struct PostCaptureFlowView: View {
                 feedRepository: container.composeFeedRepository
             ),
             profileDependencies: container.friendUserProfileDependencies,
+            nearbyDiscoveryUseCase: container.nearbyDiscoveryUseCase,
             onPostSubmit: { prepared in
                 container.feedViewModel.enqueuePostUpload(
                     optimisticPost: prepared.optimisticPost,
