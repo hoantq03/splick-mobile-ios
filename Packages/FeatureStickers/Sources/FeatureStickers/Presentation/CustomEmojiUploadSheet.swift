@@ -18,9 +18,7 @@ public struct CustomEmojiUploadSheet: View {
     private let deleteEmojiUseCase: DeleteUserCustomEmojiUseCaseProtocol
 
     @State private var selectedPhotoItem: PhotosPickerItem?
-    @State private var previewImage: UIImage?
-    @State private var alias = ""
-    @State private var isUploading = false
+    @State private var composerDraft: ComposerImageDraft?
     @State private var errorMessage: String?
 
     public init(
@@ -67,6 +65,16 @@ public struct CustomEmojiUploadSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .sheet(item: $composerDraft) { draft in
+            CustomEmojiComposerSheet(
+                sourceImage: draft.image,
+                currentUserId: currentUserId,
+                uploadMediaUseCase: uploadMediaUseCase,
+                addEmojiUseCase: addEmojiUseCase
+            )
+            .environmentObject(languageService)
+            .environmentObject(emojiStore)
+        }
         .task {
             await emojiStore.load(fetcher: customEmojiFetcher)
         }
@@ -82,53 +90,13 @@ public struct CustomEmojiUploadSheet: View {
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
 
             HStack(spacing: SplickTheme.Spacing.md) {
-                ZStack {
-                    Circle()
-                        .fill(SplickTheme.Colors.secondaryBackground)
-                        .frame(width: 192, height: 192)
-                    if let previewImage {
-                        Image(uiImage: previewImage)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 150, height: 150)
-                            .clipShape(Circle())
-                            .frame(width: 176, height: 176)
-                    } else {
-                        Image(systemName: "photo.badge.plus")
-                            .font(.title2)
-                            .foregroundStyle(SplickTheme.Colors.textSecondary)
-                    }
+                PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                    Text(languageService.text(.feedCustomEmojiChoosePhoto))
+                        .font(SplickTheme.Typography.headline)
+                        .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
                 }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                        Text(languageService.text(.feedCustomEmojiChoosePhoto))
-                    }
-                    .onChange(of: selectedPhotoItem) { item in
-                        Task { await loadPreview(from: item) }
-                    }
-
-                    TextField(
-                        languageService.text(.feedCustomEmojiShortcodePlaceholder),
-                        text: $alias
-                    )
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .textFieldStyle(.roundedBorder)
-
-                    Button {
-                        Task { await upload() }
-                    } label: {
-                        if isUploading {
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                        } else {
-                            Text(languageService.text(.feedCustomEmojiUploadAction))
-                                .frame(maxWidth: .infinity)
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!canUpload)
+                .onChange(of: selectedPhotoItem) { item in
+                    Task { await openComposer(from: item) }
                 }
             }
         }
@@ -168,60 +136,17 @@ public struct CustomEmojiUploadSheet: View {
         }
     }
 
-    private var canUpload: Bool {
-        previewImage != nil && !isUploading
-    }
-
     @MainActor
-    private func loadPreview(from item: PhotosPickerItem?) async {
+    private func openComposer(from item: PhotosPickerItem?) async {
         guard let item,
               let data = try? await item.loadTransferable(type: Data.self),
               let image = UIImage(data: data)
         else {
-            previewImage = nil
+            selectedPhotoItem = nil
             return
         }
-        previewImage = image
-    }
-
-    @MainActor
-    private func upload() async {
-        guard var image = previewImage else { return }
-        isUploading = true
-        defer { isUploading = false }
-
-        do {
-            let resolvedAlias = alias.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !resolvedAlias.isEmpty {
-                guard CustomEmojiShortcodeValidator.isValid(resolvedAlias) else {
-                    throw CustomEmojiError.invalidShortcode
-                }
-            }
-            let (data, mimeType) = try CustomEmojiImageProcessor.prepareUploadData(from: image)
-            let upload = try await uploadMediaUseCase.execute(
-                imageData: data,
-                mimeType: mimeType,
-                purpose: MediaUploadPurpose.userCustomEmoji,
-                groupId: nil
-            )
-            let uploaded = try await addEmojiUseCase.execute(
-                alias: resolvedAlias.isEmpty ? nil : resolvedAlias,
-                mediaId: upload.id
-            )
-            let emoji = CustomEmoji(
-                id: uploaded.id,
-                ownerId: uploaded.ownerId ?? currentUserId,
-                shortcode: uploaded.shortcode,
-                mediaUrl: uploaded.mediaUrl,
-                createdAt: uploaded.createdAt
-            )
-            emojiStore.upsert(emoji)
-            alias = ""
-            previewImage = nil
-            selectedPhotoItem = nil
-        } catch {
-            errorMessage = languageService.localizedMessage(for: error)
-        }
+        selectedPhotoItem = nil
+        composerDraft = ComposerImageDraft(image: image)
     }
 
     @MainActor
@@ -233,4 +158,9 @@ public struct CustomEmojiUploadSheet: View {
             errorMessage = languageService.localizedMessage(for: error)
         }
     }
+}
+
+private struct ComposerImageDraft: Identifiable {
+    let id = UUID()
+    let image: UIImage
 }

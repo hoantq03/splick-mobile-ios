@@ -8,7 +8,6 @@ import SplickDomain
 public struct CustomEmojiComposerSheet: View {
     @EnvironmentObject private var languageService: LanguageService
     @EnvironmentObject private var emojiStore: CustomEmojiStore
-    @Environment(\.dismiss) private var dismiss
 
     private let sourceImage: UIImage
     private let currentUserId: UUID?
@@ -17,9 +16,6 @@ public struct CustomEmojiComposerSheet: View {
     private let onUploaded: ((CustomEmoji) -> Void)?
 
     @State private var alias = ""
-    @State private var isUploading = false
-    @State private var errorMessage: String?
-    @State private var transform = CustomEmojiCropTransform()
 
     public init(
         sourceImage: UIImage,
@@ -36,73 +32,57 @@ public struct CustomEmojiComposerSheet: View {
     }
 
     public var body: some View {
-        NavigationStack {
-            VStack(spacing: SplickTheme.Spacing.md) {
-                CustomEmojiCropEditor(
-                    sourceImage: sourceImage,
-                    transform: $transform
-                )
-                .padding(.horizontal, SplickTheme.Spacing.md)
-
-                TextField(languageService.text(.feedCustomEmojiShortcodePlaceholder), text: $alias)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .padding(SplickTheme.Spacing.sm)
-                    .background {
-                        RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.inset, style: .continuous)
-                            .fill(SplickTheme.Colors.tertiaryBackground)
-                    }
-                    .padding(.horizontal, SplickTheme.Spacing.md)
-
-                Button {
-                    Task { await upload() }
-                } label: {
-                    Group {
-                        if isUploading {
-                            ProgressView()
-                        } else {
-                            Text(languageService.text(.stickersUpload))
-                                .fontWeight(.semibold)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.white)
+        ImageCropSheet(
+            title: languageService.text(.stickersAddEmojiTitle),
+            emptyHint: languageService.text(.messagingGroupAvatarAlignHint),
+            alignHint: languageService.text(.messagingGroupAvatarAlignHint),
+            changePhotoTitle: languageService.text(.messagingGroupChangePhoto),
+            loadErrorText: languageService.text(.stickersOpenImageFailed),
+            saveTitle: languageService.text(.stickersUpload),
+            initialImage: ImageCropRenderer.downsampled(sourceImage),
+            outputSize: ImageCropRenderer.emojiOutputSize,
+            onSave: upload(cropped:)
+        ) {
+            TextField(languageService.text(.feedCustomEmojiShortcodePlaceholder), text: $alias)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .padding(SplickTheme.Spacing.sm)
                 .background {
-                    Capsule(style: .continuous)
-                        .fill(SplickTheme.Colors.primaryGradientStart)
+                    RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.inset, style: .continuous)
+                        .fill(SplickTheme.Colors.tertiaryBackground)
                 }
-                .disabled(isUploading || transform.crop.width < 2)
-                .padding(.horizontal, SplickTheme.Spacing.md)
+        }
+        .environmentObject(languageService)
+    }
 
-                Spacer(minLength: 0)
-            }
-            .padding(.top, SplickTheme.Spacing.sm)
-            .padding(.bottom, SplickTheme.Spacing.md)
-            .background(SplickTheme.Colors.background)
-            .navigationTitle(languageService.text(.stickersAddEmojiTitle))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(languageService.text(.commonCancel)) { dismiss() }
-                }
-            }
-            .alert(
-                languageService.text(.commonError),
-                isPresented: Binding(
-                    get: { errorMessage != nil },
-                    set: { if !$0 { errorMessage = nil } }
-                )
-            ) {
-                Button(languageService.text(.commonOK), role: .cancel) { errorMessage = nil }
-            } message: {
-                Text(errorMessage ?? "")
+    private func upload(cropped: UIImage) async throws {
+        let resolvedAlias = normalizeAlias(alias)
+        if !resolvedAlias.isEmpty {
+            guard CustomEmojiShortcodeValidator.isValid(resolvedAlias) else {
+                throw CustomEmojiError.invalidShortcode
             }
         }
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
+
+        let (data, mimeType) = try CustomEmojiImageProcessor.prepareUploadData(from: cropped)
+        let upload = try await uploadMediaUseCase.execute(
+            imageData: data,
+            mimeType: mimeType,
+            purpose: MediaUploadPurpose.userCustomEmoji,
+            groupId: nil
+        )
+        let uploaded = try await addEmojiUseCase.execute(
+            alias: resolvedAlias.isEmpty ? nil : resolvedAlias,
+            mediaId: upload.id
+        )
+        let emoji = CustomEmoji(
+            id: uploaded.id,
+            ownerId: uploaded.ownerId ?? currentUserId,
+            shortcode: uploaded.shortcode,
+            mediaUrl: uploaded.mediaUrl,
+            createdAt: uploaded.createdAt
+        )
+        emojiStore.upsert(emoji)
+        onUploaded?(emoji)
     }
 
     private func normalizeAlias(_ rawValue: String) -> String {
@@ -124,45 +104,5 @@ public struct CustomEmojiComposerSheet: View {
             }
         }
         return normalized.trimmingCharacters(in: CharacterSet(charactersIn: "_"))
-    }
-
-    @MainActor
-    private func upload() async {
-        isUploading = true
-        defer { isUploading = false }
-
-        do {
-            let resolvedAlias = normalizeAlias(alias)
-            if !resolvedAlias.isEmpty {
-                guard CustomEmojiShortcodeValidator.isValid(resolvedAlias) else {
-                    throw CustomEmojiError.invalidShortcode
-                }
-            }
-
-            let image = CustomEmojiCropRenderer.render(source: sourceImage, transform: transform)
-            let (data, mimeType) = try CustomEmojiImageProcessor.prepareUploadData(from: image)
-            let upload = try await uploadMediaUseCase.execute(
-                imageData: data,
-                mimeType: mimeType,
-                purpose: MediaUploadPurpose.userCustomEmoji,
-                groupId: nil
-            )
-            let uploaded = try await addEmojiUseCase.execute(
-                alias: resolvedAlias.isEmpty ? nil : resolvedAlias,
-                mediaId: upload.id
-            )
-            let emoji = CustomEmoji(
-                id: uploaded.id,
-                ownerId: uploaded.ownerId ?? currentUserId,
-                shortcode: uploaded.shortcode,
-                mediaUrl: uploaded.mediaUrl,
-                createdAt: uploaded.createdAt
-            )
-            emojiStore.upsert(emoji)
-            onUploaded?(emoji)
-            dismiss()
-        } catch {
-            errorMessage = languageService.localizedMessage(for: error)
-        }
     }
 }

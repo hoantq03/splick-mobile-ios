@@ -28,7 +28,10 @@ let package = Package(
         ),
         .testTarget(
             name: "FeatureStickersTests",
-            dependencies: ["FeatureStickers"],
+            dependencies: [
+                "FeatureStickers",
+                .product(name: "DesignSystem", package: "SplickCore"),
+            ],
             path: "Tests/FeatureStickersTests"
         ),
     ]

@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 import Localization
 
-public struct AvatarCropTransform: Equatable {
+public struct ImageCropTransform: Equatable {
     public var viewportSize: CGSize = .zero
     public var imageScale: CGFloat = 1
     public var offset: CGSize = .zero
@@ -11,56 +11,80 @@ public struct AvatarCropTransform: Equatable {
     public var crop: CGRect = .zero
 
     public init() {}
+
+    public init(
+        viewportSize: CGSize,
+        imageScale: CGFloat,
+        offset: CGSize,
+        rotationDegrees: CGFloat,
+        flipHorizontal: Bool,
+        crop: CGRect
+    ) {
+        self.viewportSize = viewportSize
+        self.imageScale = imageScale
+        self.offset = offset
+        self.rotationDegrees = rotationDegrees
+        self.flipHorizontal = flipHorizontal
+        self.crop = crop
+    }
 }
 
-public struct AvatarCropEditor: View {
+public struct ImageCropEditor: View {
     @EnvironmentObject private var languageService: LanguageService
 
     let sourceImage: UIImage
-    @Binding var transform: AvatarCropTransform
+    @Binding var transform: ImageCropTransform
 
     private let maxScale: CGFloat = 6
 
     @State private var gestureScale: CGFloat = 1
     @State private var gestureOffset: CGSize = .zero
 
-    public init(sourceImage: UIImage, transform: Binding<AvatarCropTransform>) {
+    public init(
+        sourceImage: UIImage,
+        transform: Binding<ImageCropTransform>
+    ) {
         self.sourceImage = sourceImage
         self._transform = transform
     }
 
     public var body: some View {
         VStack(spacing: SplickTheme.Spacing.sm) {
-            GeometryReader { geo in
-                let size = geo.size
-                ZStack {
-                    Image(uiImage: sourceImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: size.width, height: size.height)
-                        .scaleEffect(
-                            x: displayedScale * (transform.flipHorizontal ? -1 : 1),
-                            y: displayedScale
-                        )
-                        .rotationEffect(.degrees(transform.rotationDegrees))
-                        .offset(displayedOffset)
-                        .frame(width: size.width, height: size.height)
-                        .clipped()
+            Color.clear
+                .aspectRatio(1, contentMode: .fit)
+                .frame(maxWidth: .infinity)
+                .overlay {
+                    GeometryReader { geo in
+                        let size = geo.size
+                        ZStack {
+                            Image(uiImage: sourceImage)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: size.width, height: size.height)
+                                .scaleEffect(
+                                    x: displayedScale * (transform.flipHorizontal ? -1 : 1),
+                                    y: displayedScale
+                                )
+                                .rotationEffect(.degrees(transform.rotationDegrees))
+                                .offset(displayedOffset)
+                                .frame(width: size.width, height: size.height)
+                                .clipped()
 
-                    CircleCropOverlay(crop: transform.crop)
-                        .allowsHitTesting(false)
+                            CropMaskOverlay(crop: transform.crop)
+                                .frame(width: size.width, height: size.height)
+                                .allowsHitTesting(false)
+                        }
+                        .frame(width: size.width, height: size.height)
+                        .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous))
+                        .contentShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous))
+                        .gesture(magnifyGesture)
+                        .simultaneousGesture(dragGesture(in: size))
+                        .onAppear { ensureViewport(size) }
+                        .onChange(of: size) { newSize in
+                            ensureViewport(newSize)
+                        }
+                    }
                 }
-                .frame(width: size.width, height: size.height)
-                .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous))
-                .contentShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous))
-                .gesture(magnifyGesture)
-                .simultaneousGesture(panGesture)
-                .onAppear { ensureViewport(size) }
-                .onChange(of: size) { newSize in
-                    ensureViewport(newSize)
-                }
-            }
-            .aspectRatio(1, contentMode: .fit)
 
             HStack(spacing: SplickTheme.Spacing.sm) {
                 toolButton(
@@ -109,7 +133,7 @@ public struct AvatarCropEditor: View {
             }
     }
 
-    private var panGesture: some Gesture {
+    private func dragGesture(in viewport: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 2)
             .onChanged { value in
                 gestureOffset = value.translation
@@ -125,8 +149,12 @@ public struct AvatarCropEditor: View {
 
     private func ensureViewport(_ size: CGSize) {
         guard size.width > 1, size.height > 1 else { return }
+        let previous = transform.viewportSize
         transform.viewportSize = size
-        transform.crop = defaultCrop(in: size)
+        let sizeChanged = abs(previous.width - size.width) > 0.5 || abs(previous.height - size.height) > 0.5
+        if transform.crop.width < 2 || sizeChanged {
+            transform.crop = defaultCrop(in: size)
+        }
     }
 
     private func defaultCrop(in size: CGSize) -> CGRect {
@@ -152,14 +180,14 @@ public struct AvatarCropEditor: View {
     }
 }
 
-private struct CircleCropOverlay: View {
+private struct CropMaskOverlay: View {
     let crop: CGRect
 
     var body: some View {
         Canvas { context, size in
             guard crop.width > 1 else { return }
-            var outside = Path(CGRect(origin: .zero, size: size))
             let circle = Path(ellipseIn: crop)
+            var outside = Path(CGRect(origin: .zero, size: size))
             outside.addPath(circle)
             context.fill(outside, with: .color(.black.opacity(0.55)), style: FillStyle(eoFill: true))
 
@@ -180,12 +208,20 @@ private struct CircleCropOverlay: View {
     }
 }
 
-public enum AvatarCropRenderer {
-    public static func render(source: UIImage, transform: AvatarCropTransform, outputSize: CGFloat = 512) -> UIImage {
+public enum ImageCropRenderer {
+    public static let avatarOutputSize: CGFloat = 512
+    public static let emojiOutputSize: CGFloat = 256
+
+    public static func render(
+        source: UIImage,
+        transform: ImageCropTransform,
+        outputSize: CGFloat = avatarOutputSize
+    ) -> UIImage {
         let crop = transform.crop
         let viewport = transform.viewportSize
-        guard crop.width > 1, viewport.width > 1, viewport.height > 1, let cgImage = source.cgImage else {
-            return source
+        let oriented = normalizeOrientation(source)
+        guard crop.width > 1, viewport.width > 1, viewport.height > 1, oriented.cgImage != nil else {
+            return oriented
         }
 
         let format = UIGraphicsImageRendererFormat.default()
@@ -207,20 +243,43 @@ public enum AvatarCropRenderer {
             let flip: CGFloat = transform.flipHorizontal ? -1 : 1
             cg.scaleBy(x: transform.imageScale * flip, y: transform.imageScale)
 
-            let fitted = aspectFit(imageSize: CGSize(width: cgImage.width, height: cgImage.height), in: viewport)
+            let fitted = aspectFit(imageSize: oriented.size, in: viewport)
             let drawRect = CGRect(
                 x: -fitted.width / 2,
                 y: -fitted.height / 2,
                 width: fitted.width,
                 height: fitted.height
             )
-            source.draw(in: drawRect)
+            oriented.draw(in: drawRect)
         }
     }
 
-    private static func aspectFit(imageSize: CGSize, in bounds: CGSize) -> CGSize {
+    public static func aspectFit(imageSize: CGSize, in bounds: CGSize) -> CGSize {
         guard imageSize.width > 0, imageSize.height > 0 else { return bounds }
         let ratio = min(bounds.width / imageSize.width, bounds.height / imageSize.height)
         return CGSize(width: imageSize.width * ratio, height: imageSize.height * ratio)
+    }
+
+    public static func downsampled(_ image: UIImage, maxSide: CGFloat = 2048) -> UIImage {
+        let size = image.size
+        let longest = max(size.width, size.height)
+        guard longest > maxSide else { return image }
+        let scale = maxSide / longest
+        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: newSize, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: newSize))
+        }
+    }
+
+    public static func normalizeOrientation(_ image: UIImage) -> UIImage {
+        guard image.imageOrientation != .up else { return image }
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = image.scale
+        format.opaque = false
+        return UIGraphicsImageRenderer(size: image.size, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: image.size))
+        }
     }
 }

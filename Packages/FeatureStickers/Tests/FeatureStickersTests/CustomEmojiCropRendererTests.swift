@@ -1,10 +1,11 @@
 import UIKit
 import XCTest
+import DesignSystem
 @testable import FeatureStickers
 
 final class CustomEmojiCropRendererTests: XCTestCase {
     func testAspectFitKeepsWideImageRatio() {
-        let fitted = CustomEmojiCropRenderer.aspectFit(
+        let fitted = ImageCropRenderer.aspectFit(
             imageSize: CGSize(width: 40, height: 20),
             in: CGSize(width: 100, height: 100)
         )
@@ -14,7 +15,7 @@ final class CustomEmojiCropRendererTests: XCTestCase {
 
     func testRenderDoesNotSquashWideImageIntoSquareViewport() {
         let source = makeSolidImage(width: 40, height: 20, color: .red)
-        let rendered = CustomEmojiCropRenderer.render(
+        let rendered = ImageCropRenderer.render(
             source: source,
             transform: fullViewportTransform(),
             outputSize: 100
@@ -32,7 +33,7 @@ final class CustomEmojiCropRendererTests: XCTestCase {
         let tagged = UIImage(cgImage: landscapePixels.cgImage!, scale: 1, orientation: .right)
         XCTAssertEqual(tagged.size, CGSize(width: 20, height: 40))
 
-        let rendered = CustomEmojiCropRenderer.render(
+        let rendered = ImageCropRenderer.render(
             source: tagged,
             transform: fullViewportTransform(),
             outputSize: 100
@@ -54,8 +55,8 @@ final class CustomEmojiCropRendererTests: XCTestCase {
         XCTAssertEqual(uploaded.size.height, CustomEmojiImageProcessor.targetSize.height, accuracy: 0.5)
     }
 
-    private func fullViewportTransform() -> CustomEmojiCropTransform {
-        CustomEmojiCropTransform(
+    private func fullViewportTransform() -> ImageCropTransform {
+        ImageCropTransform(
             viewportSize: CGSize(width: 100, height: 100),
             imageScale: 1,
             offset: .zero,
