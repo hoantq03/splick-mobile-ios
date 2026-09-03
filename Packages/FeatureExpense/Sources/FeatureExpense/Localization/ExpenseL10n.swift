@@ -33,6 +33,8 @@ extension ExpenseDebtFilter {
             return languageService.text(.expenseDebtOwedPaid)
         case .pendingApproval:
             return languageService.text(.expenseFilterPendingApproval)
+        case .awaitingMyReview:
+            return languageService.text(.expenseFilterAwaitingMyReview)
         case .repaid:
             return languageService.text(.expenseFilterRepaidSuccess)
         }
@@ -49,6 +51,8 @@ extension ExpenseDebtFilter {
             return languageService.text(.expenseFilterOwedUnpaid)
         case .pendingApproval:
             return languageService.text(.expenseFilterPendingApproval)
+        case .awaitingMyReview:
+            return languageService.text(.expenseFilterAwaitingMyReview)
         case .repaid:
             return languageService.text(.expenseFilterRepaidSuccess)
         case .owePaid, .owedPaid:

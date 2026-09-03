@@ -23,7 +23,9 @@ final class ExpenseDebtFilterTests: XCTestCase {
         XCTAssertFalse(ExpenseDebtFilter.oweUnpaid.matches(expense: pending, userId: me.id))
         XCTAssertTrue(ExpenseDebtFilter.oweUnpaid.matches(expense: unpaid, userId: me.id))
         XCTAssertTrue(ExpenseDebtFilter.pendingApproval.matches(expense: pending, userId: me.id))
-        XCTAssertTrue(ExpenseDebtFilter.pendingApproval.matches(expense: pending, userId: friend.id))
+        XCTAssertFalse(ExpenseDebtFilter.awaitingMyReview.matches(expense: pending, userId: me.id))
+        XCTAssertFalse(ExpenseDebtFilter.pendingApproval.matches(expense: pending, userId: friend.id))
+        XCTAssertTrue(ExpenseDebtFilter.awaitingMyReview.matches(expense: pending, userId: friend.id))
         XCTAssertFalse(ExpenseDebtFilter.pendingApproval.matches(expense: unpaid, userId: me.id))
     }
 
@@ -40,15 +42,18 @@ final class ExpenseDebtFilterTests: XCTestCase {
         let unpaid = expense(mePays: true, paid: false, status: .unpaid)
         XCTAssertFalse(ExpenseDebtFilter.owedUnpaid.matches(expense: pending, userId: me.id))
         XCTAssertTrue(ExpenseDebtFilter.owedUnpaid.matches(expense: unpaid, userId: me.id))
-        XCTAssertTrue(ExpenseDebtFilter.pendingApproval.matches(expense: pending, userId: me.id))
+        XCTAssertFalse(ExpenseDebtFilter.pendingApproval.matches(expense: pending, userId: me.id))
+        XCTAssertTrue(ExpenseDebtFilter.awaitingMyReview.matches(expense: pending, userId: me.id))
     }
 
-    func testHistoryCasesIncludePendingAndRepaid() {
+    func testHistoryCasesAreSelectableChipsWithoutAll() {
+        XCTAssertFalse(ExpenseDebtFilter.historyCases.contains(.all))
         XCTAssertTrue(ExpenseDebtFilter.historyCases.contains(.pendingApproval))
+        XCTAssertTrue(ExpenseDebtFilter.historyCases.contains(.awaitingMyReview))
         XCTAssertTrue(ExpenseDebtFilter.historyCases.contains(.repaid))
     }
 
-    func testPendingApprovalIncludesGuestSplitsWaitingForHost() {
+    func testGuestPendingSplitIsAwaitingHostReviewNotSubmittedChip() {
         let guest = UserSummary(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000099")!,
             username: "guest",
@@ -73,8 +78,9 @@ final class ExpenseDebtFilterTests: XCTestCase {
             status: .pending,
             createdAt: Date()
         )
-        XCTAssertTrue(ExpenseDebtFilter.pendingApproval.matches(expense: expense, userId: me.id))
-        XCTAssertFalse(ExpenseDebtFilter.pendingApproval.matches(expense: expense, userId: friend.id))
+        XCTAssertFalse(ExpenseDebtFilter.pendingApproval.matches(expense: expense, userId: me.id))
+        XCTAssertTrue(ExpenseDebtFilter.awaitingMyReview.matches(expense: expense, userId: me.id))
+        XCTAssertFalse(ExpenseDebtFilter.awaitingMyReview.matches(expense: expense, userId: friend.id))
     }
 
     private func expense(

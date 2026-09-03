@@ -8,18 +8,19 @@ public enum ExpenseDebtFilter: String, CaseIterable, Identifiable {
     case owedUnpaid
     case owedPaid
     case pendingApproval
+    case awaitingMyReview
     case repaid
 
     public var id: String { rawValue }
 
     /// Settlement chips on the history tab.
     public static var historyCases: [ExpenseDebtFilter] {
-        [.all, .oweUnpaid, .owedUnpaid, .pendingApproval, .repaid]
+        [.oweUnpaid, .owedUnpaid, .pendingApproval, .awaitingMyReview, .repaid]
     }
 
     public var matchingDebtState: ExpenseUserDebtState? {
         switch self {
-        case .all, .pendingApproval, .repaid: return nil
+        case .all, .pendingApproval, .awaitingMyReview, .repaid: return nil
         case .oweUnpaid: return .oweUnpaid
         case .owePaid: return .owePaid
         case .owedUnpaid: return .owedUnpaid
@@ -43,6 +44,9 @@ public enum ExpenseDebtFilter: String, CaseIterable, Identifiable {
             return expense.userDebtState(userId: userId) == .owedPaid
         case .pendingApproval:
             return expense.hasPendingPaymentEvidence(userId: userId)
+                && !expense.awaitingMyPaymentApproval(userId: userId)
+        case .awaitingMyReview:
+            return expense.awaitingMyPaymentApproval(userId: userId)
         case .repaid:
             return expense.userPaymentDisplayStatus(userId: userId) == .paid
         }

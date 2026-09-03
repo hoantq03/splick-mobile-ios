@@ -334,7 +334,9 @@ public final class ExpenseListViewModel: ObservableObject {
     }
 
     func setDebtStatus(_ status: ExpenseDebtFilter) {
-        mutateFilters { $0.debtStatus = status }
+        mutateFilters {
+            $0.debtStatus = $0.debtStatus == status ? .all : status
+        }
     }
 
     func applyOverviewDebtFilter(_ status: ExpenseDebtFilter) {
@@ -510,7 +512,7 @@ public final class ExpenseListViewModel: ObservableObject {
             guard debt.owes else { return false }
         case .owedUnpaid, .owedPaid:
             guard debt.isOwed else { return false }
-        case .pendingApproval:
+        case .pendingApproval, .awaitingMyReview:
             return false
         case .repaid:
             guard !debt.owes && !debt.isOwed else { return false }
