@@ -6,6 +6,7 @@ enum StringsFeatureVi {
         .feedEmptyTitle: "Chưa có bài đăng",
         .feedEmptyMessage: "Chia sẻ khoảnh khắc với bạn bè để bắt đầu!",
         .feedEmptyAction: "Chụp ảnh",
+        .feedNewPostsCount: "%d tin mới",
         .feedEndReachedTitle: "Hết tin rồi đó",
         .feedEndReachedMessage: "Bạn đã lướt sạch feed. Đi đời thật một chút — tin mới sẽ chờ bạn quay lại.",
         .feedPhotoAlbumAccessibility: "Album ảnh",

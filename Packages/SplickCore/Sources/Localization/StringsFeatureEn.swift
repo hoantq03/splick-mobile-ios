@@ -6,6 +6,7 @@ enum StringsFeatureEn {
         .feedEmptyTitle: "No Posts Yet",
         .feedEmptyMessage: "Share a moment with your friends to get started!",
         .feedEmptyAction: "Take a Photo",
+        .feedNewPostsCount: "%d new posts",
         .feedEndReachedTitle: "You're all caught up",
         .feedEndReachedMessage: "Every post in the feed has been judged. Go touch grass — we'll save more chaos for later.",
         .feedPhotoAlbumAccessibility: "Photo album",

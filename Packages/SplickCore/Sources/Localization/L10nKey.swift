@@ -259,6 +259,7 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case feedEmptyTitle = "feed.empty.title"
     case feedEmptyMessage = "feed.empty.message"
     case feedEmptyAction = "feed.empty.action"
+    case feedNewPostsCount = "feed.new_posts.count"
     case feedEndReachedTitle = "feed.end_reached.title"
     case feedEndReachedMessage = "feed.end_reached.message"
     case feedPhotoAlbumAccessibility = "feed.photo_album.accessibility"
