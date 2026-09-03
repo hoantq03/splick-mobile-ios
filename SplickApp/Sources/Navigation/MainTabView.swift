@@ -161,8 +161,6 @@ struct MainTabView: View {
                         notificationDismissRequest = true
                     } else {
                         appState.presentNotifications(from: bellFrame)
-                        container.badgeCountService.clearUnseenInboxBadges()
-                        Task { await container.notificationListViewModel.markInboxSeen() }
                     }
                 }
             }
