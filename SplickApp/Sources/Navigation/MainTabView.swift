@@ -255,7 +255,11 @@ struct MainTabView: View {
             }
             .onChange(of: appState.selectedTab, perform: handleSelectedTabChange)
             .onChange(of: appState.showNotifications) { isShown in
-                if !isShown { notificationIsDismissing = false }
+                if !isShown {
+                    notificationIsDismissing = false
+                } else {
+                    Task { await container.notificationListViewModel.reloadOnOpen() }
+                }
             }
         .task(id: scenePhase) {
             switch scenePhase {

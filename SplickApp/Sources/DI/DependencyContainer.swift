@@ -1149,6 +1149,10 @@ final class DependencyContainer: ObservableObject {
             userDefaultsService: userDefaultsService,
             onBadgeCountsChanged: { [weak self] in
                 await self?.badgeCountService.refresh(force: true)
+            },
+            onMarkAllReadCompleted: { [weak self] in
+                self?.badgeCountService.clearUnseenInboxBadges()
+                await self?.badgeCountService.refresh(force: true)
             }
         )
     }

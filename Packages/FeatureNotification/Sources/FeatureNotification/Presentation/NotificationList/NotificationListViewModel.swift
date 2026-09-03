@@ -24,6 +24,7 @@ public final class NotificationListViewModel: ObservableObject {
     private let userDefaultsService: UserDefaultsServiceProtocol?
     private let languageService: LanguageService
     private let onBadgeCountsChanged: (() async -> Void)?
+    private let onMarkAllReadCompleted: (() async -> Void)?
     private var currentPage = 0
     private var pullToRefreshTask: Task<Void, Never>?
 
@@ -41,7 +42,8 @@ public final class NotificationListViewModel: ObservableObject {
         languageService: LanguageService,
         friendRequestInbox: FriendRequestInboxResponding? = nil,
         userDefaultsService: UserDefaultsServiceProtocol? = nil,
-        onBadgeCountsChanged: (() async -> Void)? = nil
+        onBadgeCountsChanged: (() async -> Void)? = nil,
+        onMarkAllReadCompleted: (() async -> Void)? = nil
     ) {
         self.fetchNotificationsUseCase = fetchNotificationsUseCase
         self.markReadUseCase = markReadUseCase
@@ -51,6 +53,7 @@ public final class NotificationListViewModel: ObservableObject {
         self.userDefaultsService = userDefaultsService
         self.languageService = languageService
         self.onBadgeCountsChanged = onBadgeCountsChanged
+        self.onMarkAllReadCompleted = onMarkAllReadCompleted
         friendRequestOutcomes = FriendRequestInboxOutcomePersistence.load(from: userDefaultsService)
     }
 
@@ -63,10 +66,23 @@ public final class NotificationListViewModel: ObservableObject {
     }
 
     func selectCategory(_ category: NotificationListCategory) async {
-        guard category != selectedCategory else { return }
-        selectedCategory = category
+        guard category != .all else { return }
+        pullToRefreshTask?.cancel()
+        pullToRefreshTask = nil
+        let nextCategory: NotificationListCategory = selectedCategory == category ? .all : category
+        guard nextCategory != selectedCategory else { return }
+        selectedCategory = nextCategory
         notifications = []
         await load()
+    }
+
+    /// Fetches page 0 from the API when the inbox opens or the filter changes.
+    public func reloadOnOpen() async {
+        if notifications.isEmpty {
+            await load()
+        } else {
+            await load(isPullToRefresh: true)
+        }
     }
 
     func load(isPullToRefresh: Bool = false) async {
@@ -226,7 +242,11 @@ public final class NotificationListViewModel: ObservableObject {
         do {
             try await markReadUseCase.markAllRead()
             notifications = notifications.map { $0.markingAsRead() }
-            await onBadgeCountsChanged?()
+            if let onMarkAllReadCompleted {
+                await onMarkAllReadCompleted()
+            } else {
+                await onBadgeCountsChanged?()
+            }
         } catch {
             Log.error(error, category: .notification)
         }

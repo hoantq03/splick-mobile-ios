@@ -217,6 +217,13 @@ public enum NotificationListCategory: String, Equatable, Hashable, Sendable, Cas
     case friends
     case posts
 
+    /// Chips shown in the inbox filter bar (default/no selection is [.all]).
+    public static var filterableCases: [NotificationListCategory] {
+        allCases.filter { $0 != .all }
+    }
+
+    public var isFiltered: Bool { self != .all }
+
     public var queryValue: String? {
         switch self {
         case .all: return nil

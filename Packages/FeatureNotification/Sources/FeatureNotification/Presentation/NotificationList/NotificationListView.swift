@@ -87,16 +87,8 @@ public struct NotificationListView: View {
         }
         .onFirstAppear {
             viewModel.reloadFriendRequestOutcomes()
-            if presentedAsSheet {
-                Task {
-                    // Defer fetch until panel reveal starts — avoids jank without changing layout.
-                    try? await Task.sleep(nanoseconds: 200_000_000)
-                    guard viewModel.notifications.isEmpty else { return }
-                    await viewModel.load()
-                }
-            } else {
-                guard viewModel.notifications.isEmpty else { return }
-                Task { await viewModel.load() }
+            if !presentedAsSheet {
+                Task { await viewModel.reloadOnOpen() }
             }
         }
     }
@@ -122,14 +114,14 @@ public struct NotificationListView: View {
                     EmptyStateView(
                         icon: "bell.slash",
                         title: languageService.text(
-                            viewModel.selectedCategory == .all
-                                ? .notificationEmptyTitle
-                                : .notificationFilterEmptyTitle
+                            viewModel.selectedCategory.isFiltered
+                                ? .notificationFilterEmptyTitle
+                                : .notificationEmptyTitle
                         ),
                         message: languageService.text(
-                            viewModel.selectedCategory == .all
-                                ? .notificationEmptyMessage
-                                : .notificationFilterEmptyMessage
+                            viewModel.selectedCategory.isFiltered
+                                ? .notificationFilterEmptyMessage
+                                : .notificationEmptyMessage
                         )
                     )
                 } else {
@@ -142,7 +134,7 @@ public struct NotificationListView: View {
     private var categoryFilterBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: SplickTheme.Spacing.sm) {
-                ForEach(NotificationListCategory.allCases, id: \.self) { category in
+                ForEach(NotificationListCategory.filterableCases, id: \.self) { category in
                     categoryChip(category)
                 }
             }
@@ -181,10 +173,10 @@ public struct NotificationListView: View {
 
     private func categoryTitle(_ category: NotificationListCategory) -> String {
         switch category {
-        case .all: return languageService.text(.notificationFilterAll)
         case .expenses: return languageService.text(.notificationFilterExpenses)
         case .friends: return languageService.text(.notificationFilterFriends)
         case .posts: return languageService.text(.notificationFilterPosts)
+        case .all: return languageService.text(.notificationFilterAll)
         }
     }
 
