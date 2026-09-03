@@ -297,6 +297,7 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case feedPostCommentsFilterAll = "feed.post.comments.filter.all"
     case feedPostViewAllComments = "feed.post.view_all_comments"
     case feedPostWriteComment = "feed.post.write_comment"
+    case feedPostNewBadge = "feed.post.new_badge"
     case feedPostLoadFailed = "feed.post.load_failed"
     case feedPostUnavailableMessage = "feed.post.unavailable.message"
     case feedCompanionsEmpty = "feed.companions.empty"

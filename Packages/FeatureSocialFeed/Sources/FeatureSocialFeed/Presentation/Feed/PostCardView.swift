@@ -15,6 +15,7 @@ struct PostCardView: View, Equatable {
     let actions: PostCardActions
     /// When false (e.g. post detail), reactions/views still show; only the comment entry control is hidden.
     var showsCommentPreview: Bool = true
+    var showsNewBadge: Bool = false
     /// When true, the bill split section below media starts expanded (e.g. opened from Expenses tab).
     var initiallyExpandedBillSplit: Bool = false
     /// Restores carousel position when opening detail after swiping media in the feed.
@@ -30,11 +31,14 @@ struct PostCardView: View, Equatable {
     @State private var flyingEmojis: [FlyingEmojiFlight] = []
     @State private var cachedReactionPreview: (top: [UserReactionSummary], otherPeopleCount: Int)?
     @State private var cachedReactionVersion: UInt64?
+    @State private var newBadgeMounted = false
+    @State private var newBadgeMountedPostId: UUID?
 
     static func == (lhs: PostCardView, rhs: PostCardView) -> Bool {
         lhs.post == rhs.post
             && lhs.currentUser?.id == rhs.currentUser?.id
             && lhs.showsCommentPreview == rhs.showsCommentPreview
+            && lhs.showsNewBadge == rhs.showsNewBadge
             && lhs.initiallyExpandedBillSplit == rhs.initiallyExpandedBillSplit
             && lhs.initialMediaIndex == rhs.initialMediaIndex
             && lhs.uploadState == rhs.uploadState
@@ -89,8 +93,6 @@ struct PostCardView: View, Equatable {
 
             if let caption = post.caption, !caption.isEmpty {
                 captionSection(caption)
-            } else if post.isEdited {
-                editedBadge
             }
 
             companionsSection
@@ -106,6 +108,16 @@ struct PostCardView: View, Equatable {
             reactionSummaryRow
         }
         .splickCard()
+        .overlay(alignment: .topTrailing) {
+            if post.editedAt != nil {
+                Button {
+                    actions.onPresent(.editHistory(post))
+                } label: {
+                    FeedPostEditedBadge()
+                }
+                .buttonStyle(.plain)
+            }
+        }
         .zIndex(isMediaPinchZooming ? 100 : 0)
         .blur(radius: uploadState == .uploading ? 2.5 : 0)
         .opacity(isUploadPending ? 0.55 : 1)
@@ -203,12 +215,39 @@ struct PostCardView: View, Equatable {
 
             Spacer()
 
-            Text(post.createdAt.relativeString)
-                .font(.system(size: 10))
-                .foregroundStyle(SplickTheme.Colors.textTertiary)
-                .lineLimit(1)
+            HStack(spacing: 4) {
+                if newBadgeMounted {
+                    FeedPostNewBadge(
+                        visible: showsNewBadge,
+                        onDismissed: { newBadgeMounted = false }
+                    )
+                }
+                Text(post.createdAt.relativeString)
+                    .font(.system(size: 10))
+                    .foregroundStyle(SplickTheme.Colors.textTertiary)
+                    .lineLimit(1)
+            }
 
             postOptionsMenu
+        }
+        .onAppear {
+            syncNewBadgeMount()
+        }
+        .onChange(of: showsNewBadge) { _ in
+            syncNewBadgeMount()
+        }
+        .onChange(of: post.id) { _ in
+            newBadgeMountedPostId = post.id
+            newBadgeMounted = showsNewBadge
+        }
+    }
+
+    private func syncNewBadgeMount() {
+        if newBadgeMountedPostId != post.id {
+            newBadgeMountedPostId = post.id
+            newBadgeMounted = showsNewBadge
+        } else if showsNewBadge {
+            newBadgeMounted = true
         }
     }
 
@@ -256,36 +295,20 @@ struct PostCardView: View, Equatable {
     }
 
     private func captionSection(_ caption: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            MentionText(
-                caption,
-                fontSize: 16,
-                displayNamesByUsername: post.mentionDisplayNamesByUsername,
-                onMentionTap: openMentionedUser,
-                isSelectable: true,
-                displayNamesByUserId: post.mentionDisplayNamesByUserId
-            )
-            .frame(maxWidth: .infinity, alignment: .leading)
-            if post.isEdited {
-                editedBadge
-            }
-        }
+        MentionText(
+            caption,
+            fontSize: 16,
+            displayNamesByUsername: post.mentionDisplayNamesByUsername,
+            onMentionTap: openMentionedUser,
+            isSelectable: true,
+            displayNamesByUserId: post.mentionDisplayNamesByUserId
+        )
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func openMentionedUser(_ username: String) {
         guard let user = post.userForMentionUsername(username) else { return }
         actions.onUserTap(user)
-    }
-
-    private var editedBadge: some View {
-        Button {
-            actions.onPresent(.editHistory(post))
-        } label: {
-            Text(languageService.text(.feedPostEdited))
-                .font(.caption)
-                .foregroundStyle(SplickTheme.Colors.textTertiary)
-        }
-        .buttonStyle(.plain)
     }
 
     private var resolvedMediaTap: ((Int) -> Void)? {

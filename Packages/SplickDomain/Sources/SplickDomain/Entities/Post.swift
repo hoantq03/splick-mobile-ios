@@ -291,6 +291,17 @@ public struct Post: Identifiable, Codable, Equatable, Sendable {
         return true
     }
 
+    /// Whether the given user has already seen this post (author always counts as viewed).
+    public func isViewed(
+        by userId: UUID?,
+        additionallyViewedIds: Set<UUID> = []
+    ) -> Bool {
+        guard let userId else { return true }
+        if author.id == userId { return true }
+        if additionallyViewedIds.contains(id) { return true }
+        return viewers.contains { $0.id == userId }
+    }
+
     public var hasMultipleMedia: Bool {
         displayMediaItems.count > 1
     }
