@@ -873,12 +873,20 @@ public final class FeedViewModel: ObservableObject {
 
     private func presentGuestInviteShareIfNeeded(for post: Post) {
         guard let bill = post.billSplit else { return }
-        var urls: [URL] = bill.splits.compactMap { line in
+        let personalUrls: [URL] = bill.splits.compactMap { line in
             guard let raw = line.inviteUrl, let url = URL(string: raw) else { return nil }
             return url
         }
-        if let table = bill.tableInviteUrl, let tableUrl = URL(string: table) {
-            urls.append(tableUrl)
+        let tableUrl = bill.tableInviteUrl.flatMap(URL.init(string:))
+        // One guest: share their /b/{token}. Several guests: share /b/t/{token} so they pick a name.
+        // Never concatenate both — copy/paste would include two links.
+        let urls: [URL]
+        if personalUrls.count == 1 {
+            urls = personalUrls
+        } else if let tableUrl {
+            urls = [tableUrl]
+        } else {
+            urls = personalUrls
         }
         guard !urls.isEmpty else { return }
         pendingGuestInviteShare = GuestInviteSharePayload(
