@@ -4,6 +4,7 @@ import SplickDomain
 
 enum FeedEndpoint: APIEndpoint {
     case feed(page: Int, limit: Int, authorId: UUID?)
+    case feedAheadCount(afterCreatedAt: Date, afterId: UUID)
     case photoAlbumFirstPage(limit: Int, filters: PhotoAlbumFilters)
     case photoAlbumCursor(cursor: String, limit: Int, filters: PhotoAlbumFilters)
     case post(id: UUID)
@@ -30,6 +31,7 @@ enum FeedEndpoint: APIEndpoint {
     var path: String {
         switch self {
         case .feed: return "/v1/feed"
+        case .feedAheadCount: return "/v1/feed/ahead-count"
         case .photoAlbumFirstPage, .photoAlbumCursor: return "/v1/feed/photos"
         case .post(let id), .deletePost(let id), .updatePost(let id, _): return "/v1/feed/posts/\(id)"
         case .postEdits(let id): return "/v1/feed/posts/\(id)/edits"
@@ -57,7 +59,7 @@ enum FeedEndpoint: APIEndpoint {
 
     var method: HTTPMethod {
         switch self {
-        case .feed, .post, .postReactions, .postComments, .photoAlbumFirstPage, .photoAlbumCursor,
+        case .feed, .feedAheadCount, .post, .postReactions, .postComments, .photoAlbumFirstPage, .photoAlbumCursor,
              .streakSummary, .streakCalendar, .streakDayPhotos,
              .searchLocations, .nearbyLocations, .postEdits:
             return .get
@@ -81,6 +83,11 @@ enum FeedEndpoint: APIEndpoint {
                 items.append(URLQueryItem(name: "authorId", value: authorId.uuidString))
             }
             return items
+        case .feedAheadCount(let afterCreatedAt, let afterId):
+            return [
+                URLQueryItem(name: "afterCreatedAt", value: Self.iso8601String(from: afterCreatedAt)),
+                URLQueryItem(name: "afterId", value: afterId.uuidString),
+            ]
         case .photoAlbumFirstPage(let limit, let filters):
             return Self.photoAlbumQueryItems(page: 0, limit: limit, filters: filters)
         case .photoAlbumCursor(let cursor, let limit, let filters):
@@ -141,6 +148,17 @@ enum FeedEndpoint: APIEndpoint {
             items.append(URLQueryItem(name: "q", value: query))
         }
         return items
+    }
+
+    private static let feedInstantFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        return formatter
+    }()
+
+    private static func iso8601String(from date: Date) -> String {
+        feedInstantFormatter.string(from: date)
     }
 
     var body: Encodable? {

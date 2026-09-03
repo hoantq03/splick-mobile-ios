@@ -32,6 +32,13 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
         return await resolvePosts(dtos.map(FeedMapper.toPost))
     }
 
+    public func countFeedPostsAhead(afterCreatedAt: Date, afterId: UUID) async throws -> Int {
+        let dto: FeedAheadCountDTO = try await apiClient.request(
+            FeedEndpoint.feedAheadCount(afterCreatedAt: afterCreatedAt, afterId: afterId)
+        )
+        return max(0, dto.count)
+    }
+
     public func recordPostViews(postIds: [UUID]) async throws -> [Post] {
         guard !postIds.isEmpty else { return [] }
         let dtos: [PostDTO] = try await apiClient.request(

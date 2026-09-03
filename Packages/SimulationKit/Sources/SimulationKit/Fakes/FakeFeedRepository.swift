@@ -218,6 +218,10 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
         return result
     }
 
+    public func countFeedPostsAhead(afterCreatedAt: Date, afterId: UUID) async throws -> Int {
+        0
+    }
+
     /// Mimics production list payload: empty `reactions[]` + top-3 preview.
     private static func compactFeedCard(_ post: Post) -> Post {
         let summaries = post.userReactionSummaries()

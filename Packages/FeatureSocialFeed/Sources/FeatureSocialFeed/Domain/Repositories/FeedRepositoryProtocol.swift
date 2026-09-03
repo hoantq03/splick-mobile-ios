@@ -3,6 +3,7 @@ import SplickDomain
 
 public protocol FeedRepositoryProtocol: Sendable {
     func fetchFeed(page: Int, limit: Int, authorId: UUID?) async throws -> [Post]
+    func countFeedPostsAhead(afterCreatedAt: Date, afterId: UUID) async throws -> Int
     func fetchPhotoAlbumFirstPage(limit: Int, filters: PhotoAlbumFilters) async throws -> AlbumPhotoPage
     func fetchPhotoAlbumNextPage(
         limit: Int,

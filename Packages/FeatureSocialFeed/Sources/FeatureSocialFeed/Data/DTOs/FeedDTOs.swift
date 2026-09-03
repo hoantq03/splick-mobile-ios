@@ -293,3 +293,7 @@ struct PostEditRevisionDTO: Decodable {
     let mediaItems: [PostMediaItemDTO]
 }
 
+struct FeedAheadCountDTO: Decodable {
+    let count: Int
+}
+
