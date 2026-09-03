@@ -352,7 +352,7 @@ struct PostDetailView: View {
 
             CommentComposerView(
                 placeholder: composerPlaceholder,
-                prefillMentionUsername: replyTarget?.author.username,
+                prefillMentionUser: replyTarget?.author,
                 isFocused: $composerFocused,
                 groupId: livePost.groupId,
                 fetchFriendsUseCase: fetchFriendsUseCase,

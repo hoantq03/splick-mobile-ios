@@ -4,10 +4,12 @@ import UIKit
 /// Multiline editor that styles `@username` while typing (bold blue).
 public struct MentionTextEditor: UIViewRepresentable {
     @Binding var text: String
+    @Binding var isFocused: Bool
     var fontSize: CGFloat
     var minHeight: CGFloat
     var placeholder: String
-    var isFocused: Bool
+    var displayNamesByUsername: [String: String]
+    var displayNamesByUserId: [UUID: String]
 
     /// Horizontal padding shared with `MentionTextField` placeholder.
     public static let textInsets = UIEdgeInsets(top: 0, left: 12, bottom: 0, right: 12)
@@ -25,16 +27,20 @@ public struct MentionTextEditor: UIViewRepresentable {
 
     public init(
         text: Binding<String>,
+        isFocused: Binding<Bool> = .constant(false),
         fontSize: CGFloat = 13,
         minHeight: CGFloat = 36,
         placeholder: String = "",
-        isFocused: Bool = false
+        displayNamesByUsername: [String: String] = [:],
+        displayNamesByUserId: [UUID: String] = [:]
     ) {
         _text = text
+        _isFocused = isFocused
         self.fontSize = fontSize
         self.minHeight = minHeight
         self.placeholder = placeholder
-        self.isFocused = isFocused
+        self.displayNamesByUsername = displayNamesByUsername
+        self.displayNamesByUserId = displayNamesByUserId
     }
 
     public func makeCoordinator() -> Coordinator {
@@ -53,7 +59,7 @@ public struct MentionTextEditor: UIViewRepresentable {
         textView.contentInsetAdjustmentBehavior = .never
         textView.compactMinHeight = minHeight
         textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        context.coordinator.applyStyles(to: textView, text: text)
+        context.coordinator.applyStyles(to: textView, text: text, moveCursorToEnd: false)
         return textView
     }
 
@@ -68,9 +74,9 @@ public struct MentionTextEditor: UIViewRepresentable {
             uiView.textContainerInset = Self.textInsets(minHeight: minHeight)
         }
 
-        // Sync programmatic updates (e.g. reply prefill `@username`) even while focused.
+        // Sync programmatic updates (e.g. mention insert) even while focused.
         if context.coordinator.lastSyncedText != text {
-            context.coordinator.applyStyles(to: uiView, text: text)
+            context.coordinator.applyStyles(to: uiView, text: text, moveCursorToEnd: true)
         }
 
         if isFocused {
@@ -131,17 +137,20 @@ public struct MentionTextEditor: UIViewRepresentable {
             self.parent = parent
         }
 
+        public func textViewDidBeginEditing(_ textView: UITextView) {
+            parent.isFocused = true
+        }
+
         public func textViewDidChange(_ textView: UITextView) {
             guard !isApplyingStyles else { return }
             let plain = textView.text ?? ""
             parent.text = plain
             lastSyncedText = plain
-            applyStyles(to: textView, text: plain)
+            applyStyles(to: textView, text: plain, moveCursorToEnd: false)
             (textView as? CompactCenteredTextView)?.applyCompactVerticalCentering()
         }
 
-        func applyStyles(to textView: UITextView, text: String) {
-            let previousSynced = lastSyncedText
+        func applyStyles(to textView: UITextView, text: String, moveCursorToEnd: Bool) {
             let selected = textView.selectedRange
             isApplyingStyles = true
             if text.isEmpty {
@@ -152,13 +161,21 @@ public struct MentionTextEditor: UIViewRepresentable {
             } else {
                 textView.attributedText = MentionStyler.attributedString(
                     text: text,
-                    fontSize: parent.fontSize
+                    fontSize: parent.fontSize,
+                    displayNamesByUsername: parent.displayNamesByUsername,
+                    displayNamesByUserId: parent.displayNamesByUserId
                 )
             }
             lastSyncedText = text
             let length = (textView.text as NSString).length
-            if text != previousSynced, text.hasPrefix("@") {
+            if moveCursorToEnd {
                 textView.selectedRange = NSRange(location: length, length: 0)
+                parent.isFocused = true
+                DispatchQueue.main.async {
+                    if !textView.isFirstResponder {
+                        textView.becomeFirstResponder()
+                    }
+                }
             } else {
                 let location = min(selected.location, max(0, length))
                 let lengthClamped = min(selected.length, max(0, length - location))
@@ -214,19 +231,25 @@ public struct MentionTextField: View {
     let placeholder: String
     var fontSize: CGFloat = 13
     var minHeight: CGFloat = 36
+    var displayNamesByUsername: [String: String] = [:]
+    var displayNamesByUserId: [UUID: String] = [:]
 
     public init(
         _ placeholder: String,
         text: Binding<String>,
         isFocused: Binding<Bool> = .constant(false),
         fontSize: CGFloat = 13,
-        minHeight: CGFloat = 36
+        minHeight: CGFloat = 36,
+        displayNamesByUsername: [String: String] = [:],
+        displayNamesByUserId: [UUID: String] = [:]
     ) {
         self.placeholder = placeholder
         _text = text
         _isFocused = isFocused
         self.fontSize = fontSize
         self.minHeight = minHeight
+        self.displayNamesByUsername = displayNamesByUsername
+        self.displayNamesByUserId = displayNamesByUserId
     }
 
     private var isCompactField: Bool {
@@ -248,10 +271,12 @@ public struct MentionTextField: View {
 
             MentionTextEditor(
                 text: $text,
+                isFocused: $isFocused,
                 fontSize: fontSize,
                 minHeight: minHeight,
                 placeholder: placeholder,
-                isFocused: isFocused
+                displayNamesByUsername: displayNamesByUsername,
+                displayNamesByUserId: displayNamesByUserId
             )
         }
         .frame(minHeight: minHeight, maxHeight: maxFieldHeight)

@@ -12,8 +12,8 @@ struct CommentComposerView: View {
     @Environment(\.currentUserSummary) private var currentUserSummary
 
     let placeholder: String
-    /// When set (e.g. user tapped Reply), pre-fills `@username ` for mention + server push.
-    let prefillMentionUsername: String?
+    /// When set (e.g. user tapped Reply), pre-fills a durable mention token for the author.
+    let prefillMentionUser: UserSummary?
     let groupId: UUID?
     @Binding var isFocused: Bool
     let onSubmit: (String, [CommentSubmissionAttachment]) -> Void
@@ -27,6 +27,8 @@ struct CommentComposerView: View {
     @State private var showMentionPicker = false
     @State private var activeMentionQuery = ""
     @State private var mentionViewModel: MentionFriendsViewModel?
+    @State private var mentionDisplayNamesByKey: [String: String] = [:]
+    @State private var mentionDisplayNamesByUserId: [UUID: String] = [:]
     @State private var showAttachmentPicker = false
     @State private var showEmojiInsertPicker = false
     @State private var showCustomEmojiUpload = false
@@ -53,7 +55,7 @@ struct CommentComposerView: View {
 
     init(
         placeholder: String,
-        prefillMentionUsername: String? = nil,
+        prefillMentionUser: UserSummary? = nil,
         isFocused: Binding<Bool> = .constant(false),
         groupId: UUID? = nil,
         fetchFriendsUseCase: FetchFriendsUseCaseProtocol? = nil,
@@ -61,7 +63,7 @@ struct CommentComposerView: View {
         onSubmit: @escaping (String, [CommentSubmissionAttachment]) -> Void
     ) {
         self.placeholder = placeholder
-        self.prefillMentionUsername = prefillMentionUsername
+        self.prefillMentionUser = prefillMentionUser
         _isFocused = isFocused
         self.groupId = groupId
         self.fetchFriendsUseCase = fetchFriendsUseCase
@@ -91,7 +93,9 @@ struct CommentComposerView: View {
                         text: $draft,
                         isFocused: $isFocused,
                         fontSize: 14,
-                        minHeight: Layout.fieldHeight
+                        minHeight: Layout.fieldHeight,
+                        displayNamesByUsername: mentionDisplayNamesByKey,
+                        displayNamesByUserId: mentionDisplayNamesByUserId
                     )
                     .background(
                         RoundedRectangle(cornerRadius: Layout.fieldCornerRadius)
@@ -115,12 +119,14 @@ struct CommentComposerView: View {
                 }
             )
         }
-        .animation(.easeOut(duration: 0.18), value: showMentionPicker)
-        .onChange(of: prefillMentionUsername) { username in
-            applyPrefillMention(username)
+        .onChange(of: mentionViewModel?.friends.map(\.id)) { _ in
+            mentionViewModel?.friends.forEach { registerMentionDisplayName(for: $0) }
+        }
+        .onChange(of: prefillMentionUser?.id) { _ in
+            applyPrefillMention(prefillMentionUser)
         }
         .onAppear {
-            applyPrefillMention(prefillMentionUsername)
+            applyPrefillMention(prefillMentionUser)
         }
         .sheet(isPresented: $showEmojiInsertPicker) {
             EmojiPickerSheet(
@@ -194,16 +200,25 @@ struct CommentComposerView: View {
         }
     }
 
-    private func applyPrefillMention(_ username: String?) {
-        guard let username, !username.isEmpty else {
+    private func applyPrefillMention(_ user: UserSummary?) {
+        guard let user else {
             appliedPrefillUsername = nil
             return
         }
-        let mention = "@\(username) "
-        appliedPrefillUsername = username
+        registerMentionDisplayName(for: user)
+        let mention = "\(MentionContext.token(for: user.id)) "
+        appliedPrefillUsername = user.username
         guard draft != mention else { return }
         draft = mention
         syncMentionPicker(with: draft)
+    }
+
+    private func registerMentionDisplayName(for user: UserSummary) {
+        let trimmed = user.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let display = trimmed.isEmpty ? user.username : trimmed
+        mentionDisplayNamesByKey[user.username.lowercased()] = display
+        mentionDisplayNamesByKey[user.id.uuidString.lowercased()] = display
+        mentionDisplayNamesByUserId[user.id] = display
     }
 
     private func syncMentionPicker(with text: String) {
@@ -217,23 +232,36 @@ struct CommentComposerView: View {
                 mentionViewModel = MentionFriendsViewModel(useCase: useCase)
             }
             let openingPicker = !showMentionPicker
-            showMentionPicker = true
+            if openingPicker {
+                withAnimation(.easeOut(duration: 0.18)) {
+                    showMentionPicker = true
+                }
+            } else {
+                showMentionPicker = true
+            }
             if openingPicker || context.query != activeMentionQuery {
                 activeMentionQuery = context.query
                 mentionViewModel?.reset(query: context.query)
             }
+            mentionViewModel?.friends.forEach { registerMentionDisplayName(for: $0) }
+        } else if showMentionPicker {
+            withAnimation(.easeOut(duration: 0.18)) {
+                showMentionPicker = false
+            }
+            activeMentionQuery = ""
         } else {
-            showMentionPicker = false
             activeMentionQuery = ""
         }
     }
 
     private func insertMention(_ user: UserSummary) {
-        guard let context = MentionContext.active(in: draft) else { return }
-        let mention = "@\(user.username) "
-        draft.replaceSubrange(context.replaceRange, with: mention)
-        showMentionPicker = false
+        registerMentionDisplayName(for: user)
+        guard MentionContext.insertMention(userId: user.id, in: &draft) else { return }
+        withAnimation(.easeOut(duration: 0.18)) {
+            showMentionPicker = false
+        }
         activeMentionQuery = ""
+        isFocused = true
     }
 
     private func insertEmoji(_ emoji: String) {

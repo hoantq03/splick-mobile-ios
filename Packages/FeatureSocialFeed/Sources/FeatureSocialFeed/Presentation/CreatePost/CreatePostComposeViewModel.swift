@@ -81,6 +81,8 @@ public final class CreatePostComposeViewModel: ObservableObject {
     @Published private(set) var submitState: LoadingState<Post> = .idle
     @Published private(set) var selectedMediaItems: [ComposeMediaDraft] = []
     @Published private(set) var mentionPickerViewModel: MentionFriendsViewModel?
+    @Published private(set) var mentionDisplayNamesByKey: [String: String] = [:]
+    @Published private(set) var mentionDisplayNamesByUserId: [UUID: String] = [:]
 
     private let fetchFriendsUseCase: FetchFriendsUseCaseProtocol
     private let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol
@@ -477,14 +479,22 @@ public final class CreatePostComposeViewModel: ObservableObject {
             activeMentionQuery = context.query
             mentionPickerViewModel?.reset(query: context.query)
         }
+        mentionPickerViewModel?.friends.forEach { registerMentionDisplayName(for: $0) }
     }
 
     func insertMention(_ user: UserSummary) {
-        guard let context = MentionContext.active(in: caption) else { return }
-        let mention = "@\(user.username) "
-        caption.replaceSubrange(context.replaceRange, with: mention)
+        registerMentionDisplayName(for: user)
+        guard MentionContext.insertMention(userId: user.id, in: &caption) else { return }
         activeMentionQuery = ""
         mentionPickerViewModel = nil
+    }
+
+    private func registerMentionDisplayName(for user: UserSummary) {
+        let trimmed = user.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let display = trimmed.isEmpty ? user.username : trimmed
+        mentionDisplayNamesByKey[user.username.lowercased()] = display
+        mentionDisplayNamesByKey[user.id.uuidString.lowercased()] = display
+        mentionDisplayNamesByUserId[user.id] = display
     }
 
     func addCompanion(_ user: UserSummary) {

@@ -19,4 +19,14 @@ public struct MentionContext: Equatable, Sendable {
 
         return MentionContext(query: query, replaceRange: atRange.lowerBound..<text.endIndex)
     }
+
+    public static func token(for userId: UUID) -> String {
+        "<@\(userId.uuidString)>"
+    }
+
+    public static func insertMention(userId: UUID, in text: inout String) -> Bool {
+        guard let context = active(in: text) else { return false }
+        text.replaceSubrange(context.replaceRange, with: "\(token(for: userId)) ")
+        return true
+    }
 }

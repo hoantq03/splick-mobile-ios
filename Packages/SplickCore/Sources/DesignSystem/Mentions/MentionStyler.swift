@@ -79,18 +79,18 @@ public enum MentionStyler {
     ) -> String {
         if let userId = userId(fromMentionToken: token) {
             if let displayName = displayNamesByUserId[userId], !displayName.isEmpty {
-                return "@\(displayName)"
+                return displayName
             }
             let key = userId.uuidString.lowercased()
             if let displayName = displayNamesByUsername[key], !displayName.isEmpty {
-                return "@\(displayName)"
+                return displayName
             }
             return token
         }
         let username = username(fromMentionToken: token)
         let key = username.lowercased()
         if let displayName = displayNamesByUsername[key], !displayName.isEmpty {
-            return "@\(displayName)"
+            return displayName
         }
         return token.hasPrefix("@") ? token : "@\(username)"
     }
@@ -99,7 +99,9 @@ public enum MentionStyler {
         text: String,
         fontSize: CGFloat,
         plainColor: UIColor = .label,
-        mentionColor: UIColor = UIColor(SplickTheme.Colors.info)
+        mentionColor: UIColor = UIColor(SplickTheme.Colors.info),
+        displayNamesByUsername: [String: String] = [:],
+        displayNamesByUserId: [UUID: String] = [:]
     ) -> NSAttributedString {
         let segments = segments(in: text)
         let result = NSMutableAttributedString()
@@ -111,7 +113,11 @@ public enum MentionStyler {
                 ? [.font: mentionFont, .foregroundColor: mentionColor]
                 : [.font: plainFont, .foregroundColor: plainColor]
             let displayed = segment.isMention
-                ? mentionLabel(token: segment.content)
+                ? mentionLabel(
+                    token: segment.content,
+                    displayNamesByUsername: displayNamesByUsername,
+                    displayNamesByUserId: displayNamesByUserId
+                )
                 : segment.content
             result.append(NSAttributedString(string: displayed, attributes: attributes))
         }

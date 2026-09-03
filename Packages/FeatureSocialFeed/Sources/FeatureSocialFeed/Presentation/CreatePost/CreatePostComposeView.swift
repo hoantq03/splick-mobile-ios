@@ -270,7 +270,9 @@ public struct CreatePostComposeView: View {
                 languageService.text(.feedCreateCaptionPlaceholder),
                 text: $viewModel.caption,
                 fontSize: 15,
-                minHeight: 88
+                minHeight: 88,
+                displayNamesByUsername: viewModel.mentionDisplayNamesByKey,
+                displayNamesByUserId: viewModel.mentionDisplayNamesByUserId
             )
             .padding(SplickTheme.Spacing.sm)
             .background(SplickTheme.Colors.tertiaryBackground)
