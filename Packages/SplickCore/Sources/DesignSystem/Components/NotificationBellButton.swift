@@ -9,9 +9,9 @@ public struct NotificationBellButton: View {
 
     @State private var bellFrame: CGRect = .zero
 
-    private static let bellContainerSize: CGFloat = 42
-    private static let bellIconFrameSize: CGFloat = 30
-    private static let bellIconFontSize: CGFloat = 17
+    private static let bellContainerSize = SplickToolbarCircularChromeMetrics.diameter
+    private static let bellIconFrameSize: CGFloat = 32
+    private static let bellIconFontSize: CGFloat = 18
     private static let badgeHeight: CGFloat = 20
     private static let badgeMinWidth: CGFloat = 20
     /// Room for the badge to sit on the icon corner without leaving the control's layout
@@ -59,7 +59,9 @@ public struct NotificationBellButton: View {
                 }
                 .frame(width: Self.bellContainerSize, height: Self.bellContainerSize)
                 .compositingGroup()
-                .background { bellChromeBackground }
+                .background {
+                    SplickCircularToolbarChrome(diameter: Self.bellContainerSize)
+                }
                 // Opening: match panel expand timing (same response, critically damped — no bounce on icon swap).
                 // Closing: match panel collapse timing.
                 .animation(isPresented ? SplickRevealMotion.iconSwapOpen : SplickRevealMotion.iconSwapClose, value: isPresented)
@@ -100,15 +102,5 @@ public struct NotificationBellButton: View {
                     .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
             }
             .fixedSize()
-    }
-
-    @ViewBuilder
-    private var bellChromeBackground: some View {
-        if #available(iOS 26.0, *) {
-            // System glass is hidden on this control so the badge is not masked;
-            // keep a circular plate so the trailing action still matches the header.
-            Circle()
-                .fill(.ultraThinMaterial)
-        }
     }
 }

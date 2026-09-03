@@ -93,26 +93,51 @@ private struct SplickProfileToolbarModifier: ViewModifier {
         content
             .navigationBarTitleDisplayMode(titleDisplayMode)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    if !isSuppressed, let openProfileSettings, let user = currentUserSummary {
-                        Button(action: openProfileSettings) {
-                            AvatarView(
-                                imageURL: user.avatarURL,
-                                name: user.displayName,
-                                size: .small
-                            )
-                            .frame(width: 38, height: 38)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(
-                            languageService?.text(.profileSettingsAccessibility)
-                                ?? L10n.string(.profileSettingsAccessibility, locale: .default)
-                        )
-                    }
-                }
-
+                leadingAvatarToolbarItem
                 trailingBellToolbarItem
             }
+    }
+
+    @ViewBuilder
+    private var avatarToolbarButton: some View {
+        if !isSuppressed, let openProfileSettings, let user = currentUserSummary {
+            Button(action: openProfileSettings) {
+                ZStack {
+                    SplickCircularToolbarChrome()
+                    AvatarView(
+                        imageURL: user.avatarURL,
+                        name: user.displayName,
+                        size: .compact
+                    )
+                }
+                .frame(
+                    width: SplickToolbarCircularChromeMetrics.diameter,
+                    height: SplickToolbarCircularChromeMetrics.diameter
+                )
+            }
+            .buttonStyle(.plain)
+            .contentShape(Circle())
+            .accessibilityLabel(
+                languageService?.text(.profileSettingsAccessibility)
+                    ?? L10n.string(.profileSettingsAccessibility, locale: .default)
+            )
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var leadingAvatarToolbarItem: some ToolbarContent {
+        if #available(iOS 26.0, *) {
+            ToolbarItem(placement: .topBarLeading) {
+                avatarToolbarButton
+                    .frame(width: SplickTabHeaderSlotMetrics.width, alignment: .center)
+            }
+            .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .topBarLeading) {
+                avatarToolbarButton
+                    .frame(width: SplickTabHeaderSlotMetrics.width, alignment: .center)
+            }
+        }
     }
 
     private var bellButton: some View {
@@ -134,11 +159,13 @@ private struct SplickProfileToolbarModifier: ViewModifier {
         if #available(iOS 26.0, *) {
             ToolbarItem(placement: .topBarTrailing) {
                 bellButton
+                    .frame(width: SplickTabHeaderSlotMetrics.width, alignment: .center)
             }
             .sharedBackgroundVisibility(.hidden)
         } else {
             ToolbarItem(placement: .topBarTrailing) {
                 bellButton
+                    .frame(width: SplickTabHeaderSlotMetrics.width, alignment: .center)
             }
         }
     }

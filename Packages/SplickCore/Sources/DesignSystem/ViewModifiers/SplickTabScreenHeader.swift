@@ -1,5 +1,12 @@
 import SwiftUI
 
+/// Shared widths for feed-tab toolbar leading/trailing slots so `.principal` content
+/// (segment pills / title) stays visually centered on screen.
+public enum SplickTabHeaderSlotMetrics {
+    /// Matches circular toolbar chrome + bell badge clearance.
+    public static let width: CGFloat = SplickToolbarCircularChromeMetrics.toolbarSlotWidth
+}
+
 private struct SplickTabNavigationBarChromeModifier: ViewModifier {
     var showsBell: Bool = true
     @Environment(\.notificationsPresented) private var notificationsPresented
