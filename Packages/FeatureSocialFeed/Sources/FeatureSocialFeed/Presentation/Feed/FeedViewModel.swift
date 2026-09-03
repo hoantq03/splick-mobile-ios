@@ -18,6 +18,7 @@ public final class FeedViewModel: ObservableObject {
     @Published var isLoadingMore = false
     @Published private(set) var hasReachedFeedEnd = false
     @Published private(set) var isRefreshing = false
+    @Published private(set) var newPostsCount = 0
     @Published var alertMessage: String?
     @Published var pendingStreakDelete: PendingStreakDelete?
     private(set) var currentUserId: UUID?
@@ -227,6 +228,50 @@ public final class FeedViewModel: ObservableObject {
         return succeeded
     }
 
+    /// Polls for posts newer than the current feed head while the Feed tab is visible.
+    func pollNewPostsWhileActive() async {
+        while !Task.isCancelled {
+            await pollAheadCountOnce()
+            do {
+                try await Task.sleep(for: .seconds(10))
+            } catch {
+                return
+            }
+        }
+    }
+
+    func revealNewPosts() {
+        newPostsCount = 0
+        NotificationCenter.default.post(name: FeedSameTabNotification.scrollToTop, object: nil)
+        NotificationCenter.default.post(name: FeedSameTabNotification.refresh, object: nil)
+    }
+
+    func refreshNewPostsCountIfNeeded() async {
+        await pollAheadCountOnce()
+    }
+
+    private func pollAheadCountOnce() async {
+        guard !isRefreshing, let frontier = feedHeadFrontier(), let feedRepository else { return }
+        do {
+            let count = try await feedRepository.countFeedPostsAhead(
+                afterCreatedAt: frontier.createdAt,
+                afterId: frontier.id
+            )
+            newPostsCount = max(0, count)
+        } catch {
+            // Keep the last pill; polling is best-effort.
+            Log.debug(
+                "Feed ahead-count poll failed",
+                category: .feed,
+                metadata: ["error": error.localizedDescription]
+            )
+        }
+    }
+
+    private func feedHeadFrontier() -> Post? {
+        posts.first { postUploadStates[$0.id] == nil }
+    }
+
     /// Ensures refresh UI never stays stuck if a task was cancelled mid-flight.
     func endRefreshingIfNeeded() {
         isRefreshing = false
@@ -237,6 +282,7 @@ public final class FeedViewModel: ObservableObject {
         let signpost = FeedSignposts.beginFeedLoad(pullToRefresh: isPullToRefresh)
         if isPullToRefresh {
             isRefreshing = true
+            newPostsCount = 0
             cancelViewTrackFlush()
         } else if posts.isEmpty {
             state = .loading
@@ -279,6 +325,7 @@ public final class FeedViewModel: ObservableObject {
             prefetchImages(for: self.posts)
             persistFeedCache()
             await onFeedLoaded?(self.posts, currentUserId)
+            newPostsCount = 0
             return true
         } catch {
             FeedSignposts.endFeedLoad(signpost, count: 0)

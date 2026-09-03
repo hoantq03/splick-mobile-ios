@@ -25,6 +25,7 @@ public struct FeedView: View {
     @Environment(\.notificationsPresented) private var notificationsPresented
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.sameTabTapHandlingEnabled) private var sameTabTapHandlingEnabled
+    @Environment(\.scenePhase) private var scenePhase
     private let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
     private let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol?
     private let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
@@ -117,6 +118,14 @@ public struct FeedView: View {
             }
             .overlay(alignment: .top) {
                 FeedScrollTopFadeOverlay()
+            }
+            .overlay(alignment: .top) {
+                if selectedSegment == .feed, navigationPath.isEmpty, !notificationsPresented {
+                    FeedNewPostsPillOverlay(
+                        count: viewModel.isRefreshing ? 0 : viewModel.newPostsCount,
+                        onTap: { viewModel.revealNewPosts() }
+                    )
+                }
             }
             .navigationDestination(for: FeedPostDestination.self) { destination in
                 PostDetailContainerView(
@@ -213,6 +222,14 @@ public struct FeedView: View {
             }
         }
         .environment(\.feedTabIsActive, isTabActive && selectedSegment == .feed)
+        .task(id: "\(isTabActive)-\(selectedSegment)-\(scenePhase)") {
+            guard isTabActive, selectedSegment == .feed, scenePhase == .active else { return }
+            await viewModel.pollNewPostsWhileActive()
+        }
+        .onChange(of: viewModel.posts.first?.id) { _ in
+            guard isTabActive, selectedSegment == .feed, scenePhase == .active else { return }
+            Task { await viewModel.refreshNewPostsCountIfNeeded() }
+        }
         .onReceive(sameTabTapPublisher) { _ in
             handleSameTabTap()
         }
