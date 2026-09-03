@@ -1,6 +1,12 @@
 import SwiftUI
 import UIKit
 
+/// Views marked with this accessibility identifier are treated as text inputs by
+/// `dismissKeyboardOnTap()` so tapping them does not resign first responder.
+public enum KeyboardDismissExempt {
+    public static let accessibilityIdentifier = "splick.keep-keyboard"
+}
+
 private struct SuppressKeyboardAutoFocusKey: EnvironmentKey {
     static let defaultValue = false
 }
@@ -167,7 +173,13 @@ private struct DismissKeyboardTapInstaller: UIViewRepresentable {
         /// Text inputs keep the IME; so do buttons (send, composer actions) so
         /// tapping send does not resign first responder.
         private static func shouldKeepKeyboard(for view: UIView) -> Bool {
+            if view.accessibilityIdentifier == KeyboardDismissExempt.accessibilityIdentifier {
+                return true
+            }
             if view is UITextField || view is UITextView || view is UISearchBar {
+                return true
+            }
+            if view is UITextInput {
                 return true
             }
             if view is UIControl {
@@ -177,7 +189,13 @@ private struct DismissKeyboardTapInstaller: UIViewRepresentable {
                 return true
             }
             let typeName = String(describing: type(of: view))
-            return typeName.contains("Button")
+            if typeName.contains("Button") {
+                return true
+            }
+            // SwiftUI `TextField` hit-testing often lands on layout/canvas views, not UITextField.
+            return typeName.contains("TextField")
+                || typeName.contains("TextInput")
+                || typeName.contains("UITextLayout")
         }
 
         func gestureRecognizer(

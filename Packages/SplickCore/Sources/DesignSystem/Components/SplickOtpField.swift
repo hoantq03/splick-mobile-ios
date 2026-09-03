@@ -57,14 +57,21 @@ public struct SplickOtpField: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .focused($isFocused)
-                        .font(.system(size: 1))
+                        .font(.system(size: 24, weight: .semibold, design: .rounded))
                         .foregroundStyle(.clear)
                         .tint(.clear)
+                        .opacity(0.02)
                         .textFieldStyle(.plain)
                         .frame(maxWidth: .infinity, minHeight: boxHeight, maxHeight: boxHeight)
                         .contentShape(Rectangle())
                         .accessibilityLabel("Verification code, \(length) digits")
+                        .simultaneousGesture(
+                            TapGesture().onEnded {
+                                focusFromUserTap()
+                            }
+                        )
                 }
+                .accessibilityIdentifier(KeyboardDismissExempt.accessibilityIdentifier)
                 .frame(height: boxHeight)
             }
             .frame(height: boxHeight)
@@ -183,8 +190,24 @@ public struct SplickOtpField: View {
         guard autoFocus, !suppressKeyboardAutoFocus else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             guard autoFocus, !suppressKeyboardAutoFocus else { return }
-            ignoreKeyboardHideUntil = Date().addingTimeInterval(0.8)
-            isFocused = true
+            applyFocus()
         }
+    }
+
+    /// Tapping the boxes after the keyboard was dismissed must set `@FocusState` again.
+    /// SwiftUI can ignore a no-op `isFocused = true` after `keyboardDidHide`, so bounce
+    /// focus on the next run loop when the field is not currently focused.
+    private func focusFromUserTap() {
+        guard !suppressKeyboardAutoFocus else { return }
+        ignoreKeyboardHideUntil = Date().addingTimeInterval(1)
+        guard !isFocused else { return }
+        DispatchQueue.main.async {
+            self.applyFocus()
+        }
+    }
+
+    private func applyFocus() {
+        ignoreKeyboardHideUntil = Date().addingTimeInterval(1)
+        isFocused = true
     }
 }
