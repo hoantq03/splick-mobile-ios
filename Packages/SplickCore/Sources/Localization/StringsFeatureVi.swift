@@ -316,7 +316,7 @@ enum StringsFeatureVi {
         .expenseFilterStatus: "Trạng thái",
         .expenseFilterIOweUnpaid: "Tôi chưa trả",
         .expenseFilterOwedUnpaid: "Chưa trả tôi",
-        .expenseFilterPendingApproval: "Chờ duyệt",
+        .expenseFilterPendingApproval: "Chờ tôi duyệt",
         .expenseFilterRepaidSuccess: "Đã trả",
         .expenseFilterFriends: "Bạn bè",
         .expenseFilterSearchFriends: "Tìm bạn bè",

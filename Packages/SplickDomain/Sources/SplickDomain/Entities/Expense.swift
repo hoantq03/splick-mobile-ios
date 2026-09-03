@@ -124,6 +124,12 @@ public struct Expense: Identifiable, Codable, Equatable, Sendable {
         return .neutral
     }
 
+    /// Host inbox: current user paid the bill and at least one split is waiting for their review.
+    public func awaitingMyPaymentApproval(userId: UUID?) -> Bool {
+        guard let userId, paidBy.id == userId else { return false }
+        return userPaymentDisplayStatus(userId: userId) == .pendingApproval
+    }
+
     /// Amount attributed to the current user for overview totals in a given debt state.
     public func userDebtAmount(userId: UUID?, state: ExpenseUserDebtState) -> Decimal {
         guard userDebtState(userId: userId) == state else { return .zero }

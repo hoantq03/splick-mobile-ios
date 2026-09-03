@@ -316,7 +316,7 @@ enum StringsFeatureEn {
         .expenseFilterStatus: "Status",
         .expenseFilterIOweUnpaid: "I haven't paid",
         .expenseFilterOwedUnpaid: "Unpaid to me",
-        .expenseFilterPendingApproval: "Pending approval",
+        .expenseFilterPendingApproval: "Awaiting my review",
         .expenseFilterRepaidSuccess: "Repaid successfully",
         .expenseFilterFriends: "Friends",
         .expenseFilterSearchFriends: "Search friends",

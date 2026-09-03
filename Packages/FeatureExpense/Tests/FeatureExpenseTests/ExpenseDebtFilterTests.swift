@@ -22,7 +22,8 @@ final class ExpenseDebtFilterTests: XCTestCase {
         let unpaid = expense(mePays: false, paid: false, status: .unpaid)
         XCTAssertFalse(ExpenseDebtFilter.oweUnpaid.matches(expense: pending, userId: me.id))
         XCTAssertTrue(ExpenseDebtFilter.oweUnpaid.matches(expense: unpaid, userId: me.id))
-        XCTAssertTrue(ExpenseDebtFilter.pendingApproval.matches(expense: pending, userId: me.id))
+        XCTAssertFalse(ExpenseDebtFilter.pendingApproval.matches(expense: pending, userId: me.id))
+        XCTAssertTrue(ExpenseDebtFilter.pendingApproval.matches(expense: pending, userId: friend.id))
         XCTAssertFalse(ExpenseDebtFilter.pendingApproval.matches(expense: unpaid, userId: me.id))
     }
 
@@ -45,6 +46,35 @@ final class ExpenseDebtFilterTests: XCTestCase {
     func testHistoryCasesIncludePendingAndRepaid() {
         XCTAssertTrue(ExpenseDebtFilter.historyCases.contains(.pendingApproval))
         XCTAssertTrue(ExpenseDebtFilter.historyCases.contains(.repaid))
+    }
+
+    func testPendingApprovalIncludesGuestSplitsWaitingForHost() {
+        let guest = UserSummary(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000099")!,
+            username: "guest",
+            displayName: "Guest",
+            avatarURL: nil
+        )
+        let expense = Expense(
+            id: UUID(),
+            description: "Dinner",
+            totalAmount: 80,
+            paidBy: me,
+            splits: [
+                ExpenseSplit(
+                    id: UUID(),
+                    user: guest,
+                    amount: 80,
+                    isPaid: false,
+                    paymentStatus: .pendingApproval
+                ),
+            ],
+            category: .food,
+            status: .pending,
+            createdAt: Date()
+        )
+        XCTAssertTrue(ExpenseDebtFilter.pendingApproval.matches(expense: expense, userId: me.id))
+        XCTAssertFalse(ExpenseDebtFilter.pendingApproval.matches(expense: expense, userId: friend.id))
     }
 
     private func expense(

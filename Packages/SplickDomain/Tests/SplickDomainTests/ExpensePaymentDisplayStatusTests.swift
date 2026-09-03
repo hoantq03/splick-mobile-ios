@@ -76,6 +76,31 @@ final class ExpensePaymentDisplayStatusTests: XCTestCase {
         )
         XCTAssertEqual(expense.userPaymentDisplayStatus(userId: me.id), .pendingApproval)
         XCTAssertEqual(expense.userPaymentDisplayStatus(userId: other.id), .unpaid)
+        XCTAssertTrue(expense.awaitingMyPaymentApproval(userId: me.id))
+        XCTAssertFalse(expense.awaitingMyPaymentApproval(userId: other.id))
+    }
+
+    func testGuestPendingSplitIsAwaitingHostApproval() {
+        let guest = UserSummary(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000099")!,
+            username: "guest",
+            displayName: "Guest",
+            avatarURL: nil
+        )
+        let expense = expense(
+            paidBy: me,
+            splits: [
+                ExpenseSplit(
+                    id: UUID(),
+                    user: guest,
+                    amount: 100,
+                    isPaid: false,
+                    paymentStatus: .pendingApproval
+                ),
+            ]
+        )
+        XCTAssertEqual(expense.userPaymentDisplayStatus(userId: me.id), .pendingApproval)
+        XCTAssertTrue(expense.awaitingMyPaymentApproval(userId: me.id))
     }
 
     func testOmittingPaymentStatusWhenRebuildingSplitDropsPendingApproval() {

@@ -123,6 +123,33 @@ private final class ExpensePagerActivityState: ObservableObject {
     }
 }
 
+/// Nested chip bars / carousels that should own horizontal pans instead of the segment pager.
+private enum ExpensePagerNestedHorizontalScroll {
+    static func contains(from view: UIView) -> Bool {
+        var current: UIView? = view
+        while let candidate = current {
+            if let scrollView = candidate as? UIScrollView, isNestedHorizontalScroller(scrollView) {
+                return true
+            }
+            current = candidate.superview
+        }
+        return false
+    }
+
+    static func isNestedHorizontalScroller(_ scrollView: UIScrollView) -> Bool {
+        if scrollView.isPagingEnabled { return true }
+
+        let contentWidth = scrollView.contentSize.width
+        let contentHeight = scrollView.contentSize.height
+        let boundsWidth = max(scrollView.bounds.width, 1)
+        let boundsHeight = max(scrollView.bounds.height, 1)
+        let canScrollHorizontally = contentWidth > boundsWidth + 1
+        let isPrimarilyVertical =
+            contentHeight > boundsHeight * 1.05 && contentWidth <= boundsWidth * 1.05
+        return canScrollHorizontally && !isPrimarilyVertical
+    }
+}
+
 private final class ExpensePagerGestureCoordinator: NSObject, UIGestureRecognizerDelegate {
     let state = ExpensePagerState()
     var onSelectionChanged: ((ExpenseContentSegment) -> Void)?
@@ -183,7 +210,8 @@ private final class ExpensePagerGestureCoordinator: NSObject, UIGestureRecognize
     private func lockVerticalScrollingIfNeeded() {
         guard scrollLockStates.isEmpty, let hostView else { return }
         func walk(_ view: UIView) {
-            if let scrollView = view as? UIScrollView {
+            if let scrollView = view as? UIScrollView,
+               !ExpensePagerNestedHorizontalScroll.isNestedHorizontalScroller(scrollView) {
                 scrollLockStates.append((scrollView, scrollView.isScrollEnabled))
                 scrollView.isScrollEnabled = false
             }
@@ -200,6 +228,13 @@ private final class ExpensePagerGestureCoordinator: NSObject, UIGestureRecognize
     func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
         guard let pan = recognizer as? UIPanGestureRecognizer,
               let hostView = pan.view else { return true }
+
+        let location = pan.location(in: hostView)
+        if let hitView = hostView.hitTest(location, with: nil),
+           ExpensePagerNestedHorizontalScroll.contains(from: hitView) {
+            return false
+        }
+
         let velocity = pan.velocity(in: hostView)
         let total = abs(velocity.x) + abs(velocity.y)
         guard total > 20 else { return true }
@@ -208,9 +243,22 @@ private final class ExpensePagerGestureCoordinator: NSObject, UIGestureRecognize
 
     func gestureRecognizer(
         _ recognizer: UIGestureRecognizer,
+        shouldRequireFailureOf otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        guard otherGestureRecognizer is UIPanGestureRecognizer,
+              let scrollView = otherGestureRecognizer.view as? UIScrollView else { return false }
+        return ExpensePagerNestedHorizontalScroll.isNestedHorizontalScroller(scrollView)
+    }
+
+    func gestureRecognizer(
+        _ recognizer: UIGestureRecognizer,
         shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
     ) -> Bool {
         guard other is UIPanGestureRecognizer else { return false }
+        if let scrollView = other.view as? UIScrollView,
+           ExpensePagerNestedHorizontalScroll.isNestedHorizontalScroller(scrollView) {
+            return false
+        }
         return dragAxis != .horizontal
     }
 }

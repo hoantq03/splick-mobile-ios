@@ -128,7 +128,7 @@ struct ExpenseFilterBarView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
-                    ForEach(ExpenseDebtFilter.allCases) { status in
+                    ForEach(ExpenseDebtFilter.historyCases) { status in
                         statusFilterChip(status)
                     }
                 }
@@ -141,7 +141,7 @@ struct ExpenseFilterBarView: View {
         return Button {
             viewModel.setDebtStatus(status)
         } label: {
-            Text(status.title(using: languageService))
+            Text(status.historyTitle(using: languageService))
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(
                     isSelected
