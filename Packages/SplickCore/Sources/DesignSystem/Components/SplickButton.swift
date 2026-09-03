@@ -83,3 +83,31 @@ public struct SplickButton: View {
         }
     }
 }
+
+/// Compact header chip that pairs with the 32pt circular close control.
+public struct SplickHeaderActionChip: View {
+    let title: String
+    let action: () -> Void
+
+    public init(title: String, action: @escaping () -> Void) {
+        self.title = title
+        self.action = action
+    }
+
+    public var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .padding(.horizontal, 12)
+                .frame(height: 32)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(SplickTheme.Colors.secondaryBackground.opacity(0.85))
+                )
+        }
+        .buttonStyle(.plain)
+    }
+}
