@@ -74,6 +74,11 @@ public struct PostPeekOverlay: View {
             mediaPreview
         }
         .splickCard()
+        .overlay(alignment: .topTrailing) {
+            if post.isEdited {
+                FeedPostEditedBadge()
+            }
+        }
         .contentShape(
             RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous)
         )
