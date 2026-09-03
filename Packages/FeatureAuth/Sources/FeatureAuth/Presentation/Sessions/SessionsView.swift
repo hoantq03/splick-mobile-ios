@@ -144,12 +144,38 @@ public struct SessionsView: View {
                 .fill(SplickTheme.Colors.primaryGradientStart.opacity(0.14))
                 .frame(width: 48, height: 48)
 
-            Image(systemName: session.deviceKind.systemImageName)
-                .font(.system(size: 22, weight: .medium))
-                .foregroundStyle(SplickTheme.Colors.primaryGradient)
-                .symbolRenderingMode(.hierarchical)
+            if session.deviceKind == .phone || session.deviceKind == .tablet {
+                phoneBrandIcon(kind: session.deviceKind, brand: session.deviceBrand)
+            } else {
+                Image(systemName: session.deviceKind.systemImageName)
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(SplickTheme.Colors.primaryGradient)
+                    .symbolRenderingMode(.hierarchical)
+            }
         }
         .accessibilityHidden(true)
+    }
+
+    private func phoneBrandIcon(kind: SessionDeviceKind, brand: SessionDeviceBrand) -> some View {
+        let isTablet = kind == .tablet
+        return ZStack {
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .strokeBorder(SplickTheme.Colors.primaryGradient, lineWidth: 1.6)
+                .frame(width: isTablet ? 26 : 18, height: isTablet ? 20 : 28)
+
+            switch brand {
+            case .apple:
+                Image(systemName: "apple.logo")
+                    .font(.system(size: isTablet ? 11 : 10, weight: .semibold))
+                    .foregroundStyle(SplickTheme.Colors.primaryGradient)
+            case .android:
+                AndroidMark()
+                    .foregroundStyle(SplickTheme.Colors.primaryGradient)
+                    .frame(width: isTablet ? 13 : 12, height: isTablet ? 13 : 12)
+            case .unknown:
+                EmptyView()
+            }
+        }
     }
 
     private var currentDeviceBadge: some View {
@@ -184,6 +210,35 @@ public struct SessionsView: View {
                     .font(SplickTheme.Typography.callout)
                     .foregroundStyle(isPlaceholder ? SplickTheme.Colors.textTertiary : SplickTheme.Colors.textSecondary)
             }
+        }
+    }
+}
+
+private struct AndroidMark: View {
+    var body: some View {
+        Canvas { context, size in
+            let width = size.width
+            let height = size.height
+            let head = Path(
+                roundedRect: CGRect(
+                    x: width * 0.14,
+                    y: height * 0.40,
+                    width: width * 0.72,
+                    height: height * 0.48
+                ),
+                cornerRadius: width * 0.16
+            )
+            context.fill(head, with: .foreground)
+
+            var leftAntenna = Path()
+            leftAntenna.move(to: CGPoint(x: width * 0.34, y: height * 0.42))
+            leftAntenna.addLine(to: CGPoint(x: width * 0.22, y: height * 0.12))
+            var rightAntenna = Path()
+            rightAntenna.move(to: CGPoint(x: width * 0.66, y: height * 0.42))
+            rightAntenna.addLine(to: CGPoint(x: width * 0.78, y: height * 0.12))
+            let antenna = StrokeStyle(lineWidth: max(1.2, width * 0.1), lineCap: .round)
+            context.stroke(leftAntenna, with: .foreground, style: antenna)
+            context.stroke(rightAntenna, with: .foreground, style: antenna)
         }
     }
 }

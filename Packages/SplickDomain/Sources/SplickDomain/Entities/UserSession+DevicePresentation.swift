@@ -5,10 +5,16 @@ extension UserSession {
         SessionDeviceKind.detect(deviceName: deviceName, deviceInfo: deviceInfo)
     }
 
+    public var deviceBrand: SessionDeviceBrand {
+        SessionDeviceBrand.detect(deviceName: deviceName, deviceInfo: deviceInfo)
+    }
+
     /// Primary line — hardware name when available (e.g. "iPhone 16 Pro").
     public var displayTitle: String {
         if let parsed = parsedDeviceInfoComponents {
-            if !parsed.hardware.isEmpty, parsed.hardware != "Unknown device" {
+            if !parsed.hardware.isEmpty,
+               parsed.hardware != "Unknown device",
+               !parsed.hardware.isOsOnlyLabel {
                 return parsed.hardware
             }
         }
@@ -23,8 +29,13 @@ extension UserSession {
 
     /// Secondary line — OS / platform (e.g. "iOS 18.2").
     public var displayPlatform: String? {
-        if let parsed = parsedDeviceInfoComponents, let platform = parsed.platform, !platform.isEmpty {
-            return platform
+        if let parsed = parsedDeviceInfoComponents {
+            if let platform = parsed.platform, !platform.isEmpty {
+                return platform
+            }
+            if parsed.hardware.isOsOnlyLabel {
+                return parsed.hardware
+            }
         }
         return inferredPlatform(from: deviceName) ?? inferredPlatform(from: deviceInfo)
     }
@@ -78,5 +89,18 @@ extension UserSession {
             return value
         }
         return nil
+    }
+}
+
+private extension String {
+    var isOsOnlyLabel: Bool {
+        let lower = trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return lower.hasPrefix("android")
+            || lower == "ios"
+            || lower.hasPrefix("ios ")
+            || lower.hasPrefix("ipados")
+            || lower.hasPrefix("macos")
+            || lower.hasPrefix("mac os")
+            || lower.hasPrefix("windows")
     }
 }

@@ -61,3 +61,30 @@ public enum SessionDeviceKind: String, Sendable, Equatable {
         return .unknown
     }
 }
+
+public enum SessionDeviceBrand: String, Sendable, Equatable {
+    case apple
+    case android
+    case unknown
+
+    public static func detect(deviceName: String?, deviceInfo: String?) -> SessionDeviceBrand {
+        let haystack = [deviceName, deviceInfo]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+            .lowercased()
+
+        guard !haystack.isEmpty else { return .unknown }
+        if haystack.contains("android") { return .android }
+        if haystack.contains("iphone")
+            || haystack.contains("ipad")
+            || haystack.contains("ios")
+            || haystack.contains("ipados")
+            || haystack.contains("macos")
+            || haystack.contains("mac os")
+            || haystack.contains("apple") {
+            return .apple
+        }
+        return .unknown
+    }
+}

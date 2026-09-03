@@ -20,16 +20,19 @@ enum SessionMetadata {
         "\(DeviceMetadata.marketingName) · \(DeviceMetadata.platformLine)"
     }
 
-    /// Approximate location without GPS permission (region + timezone).
+    /// Fallback when the server cannot geolocate the login IP (local/dev).
     static var loginLocation: String? {
         var parts: [String] = []
-        if let region = Locale.current.region?.identifier {
-            parts.append(Locale.current.localizedString(forRegionCode: region) ?? region)
+        let zone = TimeZone.current.identifier.replacingOccurrences(of: "_", with: " ")
+        if let city = zone.split(separator: "/").last, !city.isEmpty {
+            parts.append(String(city))
         }
-        let offset = TimeZone.current.secondsFromGMT()
-        let hours = offset / 3600
-        let sign = hours >= 0 ? "+" : ""
-        parts.append("UTC\(sign)\(hours)")
+        if let region = Locale.current.region?.identifier {
+            let country = Locale.current.localizedString(forRegionCode: region) ?? region
+            if parts.contains(where: { $0.caseInsensitiveCompare(country) == .orderedSame }) == false {
+                parts.append(country)
+            }
+        }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }
