@@ -41,6 +41,10 @@ enum SocialEndpoint: APIEndpoint {
     case generateMyQr
     case revokeMyQr
     case bulkMessagingPresence(userIds: [UUID])
+    case getDiscoveryPreference
+    case updateDiscoveryPreference(nearbyEnabled: Bool)
+    case findNearbyUsers(lat: Double, lon: Double)
+    case leaveNearbySession
 
     var path: String {
         switch self {
@@ -112,23 +116,27 @@ enum SocialEndpoint: APIEndpoint {
             return "/v1/social/qr/me"
         case .bulkMessagingPresence:
             return "/v1/messaging/presence/bulk"
+        case .getDiscoveryPreference, .updateDiscoveryPreference:
+            return "/v1/social/me/discovery"
+        case .findNearbyUsers, .leaveNearbySession:
+            return "/v1/social/users/nearby"
         }
     }
 
     var method: HTTPMethod {
         switch self {
         case .getUserProfile, .getFriendPaymentProfile, .searchUsers, .listFriends, .listIncomingFriendRequests, .listOutgoingFriendRequests,
-             .listBlockedUsers, .listMyGroups, .listGroupMembers, .getActiveGroupInviteCode, .getGroup:
+             .listBlockedUsers, .listMyGroups, .listGroupMembers, .getActiveGroupInviteCode, .getGroup, .getDiscoveryPreference:
             return .get
         case .sendFriendRequest, .sendFriendRequestByQr, .generateMyQr, .acceptFriendRequest,
              .rejectFriendRequest, .createGroup, .generateGroupInviteCode, .inviteFriendsToGroup,
              .blockUser, .joinGroupByCode, .joinGroupByQr, .generateGroupQr, .approveGroupMember,
-             .rejectGroupMember, .transferGroupOwnership, .bulkMessagingPresence:
+             .rejectGroupMember, .transferGroupOwnership, .bulkMessagingPresence, .findNearbyUsers:
             return .post
         case .revokeMyQr, .cancelFriendRequest, .removeFriend, .unblockUser, .deleteGroup,
-             .revokeGroupInviteCode, .revokeGroupQr, .removeGroupMember, .leaveGroup:
+             .revokeGroupInviteCode, .revokeGroupQr, .removeGroupMember, .leaveGroup, .leaveNearbySession:
             return .delete
-        case .setFriendNickname, .updateGroup, .updateGroupAvatar:
+        case .setFriendNickname, .updateGroup, .updateGroupAvatar, .updateDiscoveryPreference:
             return .patch
         }
     }
@@ -192,6 +200,10 @@ enum SocialEndpoint: APIEndpoint {
             return BlockUserBodyDTO(userId: userId)
         case .bulkMessagingPresence(let userIds):
             return BulkPresenceRequestDTO(userIds: userIds)
+        case .updateDiscoveryPreference(let nearbyEnabled):
+            return UpdateDiscoveryPreferenceBodyDTO(nearbyEnabled: nearbyEnabled)
+        case .findNearbyUsers(let lat, let lon):
+            return NearbyUsersBodyDTO(lat: lat, lon: lon)
         default:
             return nil
         }

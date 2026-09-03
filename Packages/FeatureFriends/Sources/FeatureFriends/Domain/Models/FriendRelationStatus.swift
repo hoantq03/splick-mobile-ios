@@ -18,12 +18,14 @@ public enum FriendRelationStatus: String, Sendable, Equatable {
 public struct UserSearchResult: Identifiable, Sendable, Equatable {
     public let user: UserSummary
     public let friendStatus: FriendRelationStatus
+    public let distanceMeters: Int?
 
     public var id: UUID { user.id }
 
-    public init(user: UserSummary, friendStatus: FriendRelationStatus) {
+    public init(user: UserSummary, friendStatus: FriendRelationStatus, distanceMeters: Int? = nil) {
         self.user = user
         self.friendStatus = friendStatus
+        self.distanceMeters = distanceMeters
     }
 }
 

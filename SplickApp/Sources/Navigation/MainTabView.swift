@@ -371,6 +371,7 @@ struct MainTabView: View {
             rejectFriendRequestUseCase: container.rejectFriendRequestUseCase,
             fetchOutgoingFriendRequestsUseCase: container.fetchOutgoingFriendRequestsUseCase,
             cancelFriendRequestUseCase: container.cancelFriendRequestUseCase,
+            nearbyDiscoveryUseCase: container.nearbyDiscoveryUseCase,
             removeFriendUseCase: container.removeFriendUseCase,
             setFriendNicknameUseCase: container.setFriendNicknameUseCase,
             blockUserUseCase: container.blockUserUseCase,
@@ -537,6 +538,7 @@ struct ProfileSettingsView: View {
     @State private var birthdayError: String?
     @State private var showChangeUsername = false
     @State private var showNotifications = false
+    @State private var showNearbyDiscovery = false
     @State private var showTheme = false
     @State private var showAppIcon = false
     @State private var showWidget = false
@@ -782,6 +784,10 @@ struct ProfileSettingsView: View {
             }
             .navigationDestination(isPresented: $showNotifications) {
                 NotificationsSettingsView()
+                    .environmentObject(languageService)
+            }
+            .navigationDestination(isPresented: $showNearbyDiscovery) {
+                NearbyDiscoverySettingsView(nearbyDiscoveryUseCase: container.nearbyDiscoveryUseCase)
                     .environmentObject(languageService)
             }
             .navigationDestination(isPresented: $showTheme) {
@@ -1119,6 +1125,11 @@ struct ProfileSettingsView: View {
                     icon: "bell",
                     title: languageService.text(.profileNotifications),
                     action: { showNotifications = true }
+                ),
+                ProfileSettingsItem(
+                    icon: "location",
+                    title: languageService.text(.profileNearbyDiscovery),
+                    action: { showNearbyDiscovery = true }
                 ),
                 ProfileSettingsItem(
                     icon: "globe",

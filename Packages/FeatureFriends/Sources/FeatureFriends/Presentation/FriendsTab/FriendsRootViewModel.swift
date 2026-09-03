@@ -76,6 +76,10 @@ public final class FriendsRootViewModel: ObservableObject {
     @Published private(set) var isLoadingMoreSearch = false
     @Published private(set) var incomingRequestCount = 0
     @Published private(set) var outgoingRequestCount = 0
+    @Published var nearbyEnabled = false
+    @Published var nearbyPermissionNeeded = false
+    @Published var nearbyUsers: [UserSearchResult] = []
+    @Published var nearbyLoading = false
 
     private(set) var cachedIncomingRequests: [IncomingFriendRequest] = []
     private(set) var cachedOutgoingRequests: [OutgoingFriendRequest] = []
@@ -88,13 +92,17 @@ public final class FriendsRootViewModel: ObservableObject {
     private let fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol
     private let fetchOutgoingFriendRequestsUseCase: FetchOutgoingFriendRequestsUseCaseProtocol
     private let cancelFriendRequestUseCase: CancelFriendRequestUseCaseProtocol
+    private let nearbyDiscoveryUseCase: NearbyDiscoveryUseCaseProtocol
     private let languageService: LanguageService
     private let onDirectoryLoaded: (([SplickDomain.Group]) async -> Void)?
     private let onFriendRequestsLoaded: (([IncomingFriendRequest]) async -> Void)?
     private var searchTask: Task<Void, Never>?
+    private var nearbyTask: Task<Void, Never>?
+    private let locationProvider = NearbyLocationProvider()
     private var refreshTask: Task<Void, Never>?
     private var backgroundFriendsLoadTask: Task<Void, Never>?
     private var inFlightRelationActionUserIds: Set<UUID> = []
+    private var relationOverrides: [UUID: FriendRelationStatus] = [:]
     private var currentUserId: UUID?
     private var friendsPage = 0
     private var searchPage = 0
@@ -114,6 +122,7 @@ public final class FriendsRootViewModel: ObservableObject {
         fetchIncomingFriendRequestsUseCase: FetchIncomingFriendRequestsUseCaseProtocol,
         fetchOutgoingFriendRequestsUseCase: FetchOutgoingFriendRequestsUseCaseProtocol,
         cancelFriendRequestUseCase: CancelFriendRequestUseCaseProtocol,
+        nearbyDiscoveryUseCase: NearbyDiscoveryUseCaseProtocol,
         languageService: LanguageService,
         onDirectoryLoaded: (([SplickDomain.Group]) async -> Void)? = nil,
         onFriendRequestsLoaded: (([IncomingFriendRequest]) async -> Void)? = nil
@@ -126,9 +135,113 @@ public final class FriendsRootViewModel: ObservableObject {
         self.fetchIncomingFriendRequestsUseCase = fetchIncomingFriendRequestsUseCase
         self.fetchOutgoingFriendRequestsUseCase = fetchOutgoingFriendRequestsUseCase
         self.cancelFriendRequestUseCase = cancelFriendRequestUseCase
+        self.nearbyDiscoveryUseCase = nearbyDiscoveryUseCase
         self.languageService = languageService
         self.onDirectoryLoaded = onDirectoryLoaded
         self.onFriendRequestsLoaded = onFriendRequestsLoaded
+    }
+
+    func startRadarSession() {
+        nearbyTask?.cancel()
+        locationProvider.onAuthorizationChange = { [weak self] in
+            Task { @MainActor in
+                await self?.refreshNearby()
+            }
+        }
+        nearbyTask = Task { @MainActor in
+            do {
+                nearbyEnabled = try await nearbyDiscoveryUseCase.setPreference(true)
+            } catch {
+                nearbyEnabled = (try? await nearbyDiscoveryUseCase.preference()) ?? false
+            }
+            nearbyPermissionNeeded = !locationProvider.hasAuthorization
+            if nearbyPermissionNeeded {
+                locationProvider.requestAuthorization()
+            }
+            while !Task.isCancelled {
+                await refreshNearby()
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+        }
+    }
+
+    func stopRadarSession() {
+        nearbyTask?.cancel()
+        nearbyTask = nil
+        locationProvider.onAuthorizationChange = nil
+        relationOverrides.removeAll()
+        Task {
+            try? await nearbyDiscoveryUseCase.leaveSession()
+            nearbyUsers = []
+            nearbyLoading = false
+            nearbyPermissionNeeded = false
+        }
+    }
+
+    func setNearbyEnabled(_ enabled: Bool) {
+        Task {
+            do {
+                nearbyEnabled = try await nearbyDiscoveryUseCase.setPreference(enabled)
+                nearbyPermissionNeeded = nearbyEnabled && !locationProvider.hasAuthorization
+                if nearbyEnabled {
+                    if !locationProvider.hasAuthorization {
+                        locationProvider.requestAuthorization()
+                    }
+                    await refreshNearby()
+                } else {
+                    nearbyUsers = []
+                }
+            } catch {
+                alertMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func requestNearbyLocationAccess() {
+        locationProvider.requestAuthorization()
+        Task { await refreshNearby() }
+    }
+
+    private func refreshNearby() async {
+        if !locationProvider.hasAuthorization {
+            nearbyPermissionNeeded = true
+            nearbyLoading = false
+            return
+        }
+        nearbyPermissionNeeded = false
+        if nearbyUsers.isEmpty {
+            nearbyLoading = true
+        }
+        guard let coordinate = await locationProvider.currentCoordinate() else {
+            nearbyLoading = false
+            return
+        }
+        do {
+            nearbyUsers = applyRelationOverrides(
+                try await nearbyDiscoveryUseCase.nearbyUsers(
+                    lat: coordinate.latitude,
+                    lon: coordinate.longitude
+                )
+            )
+            nearbyLoading = false
+        } catch let error as NetworkError {
+            nearbyLoading = false
+            switch error {
+            case .forbidden:
+                nearbyEnabled = false
+                nearbyUsers = []
+            default:
+                break
+            }
+        } catch let error as AppError {
+            nearbyLoading = false
+            if case .network(.forbidden) = error {
+                nearbyEnabled = false
+                nearbyUsers = []
+            }
+        } catch {
+            nearbyLoading = false
+        }
     }
 
     func load(userId: UUID? = nil) async {
@@ -794,9 +907,14 @@ public final class FriendsRootViewModel: ObservableObject {
     }
 
     func updateUserRelationStatus(userId: UUID, status: FriendRelationStatus) {
+        relationOverrides[userId] = status
         searchResults = searchResults.map { item in
             guard item.user.id == userId else { return item }
-            return UserSearchResult(user: item.user, friendStatus: status)
+            return UserSearchResult(user: item.user, friendStatus: status, distanceMeters: item.distanceMeters)
+        }
+        nearbyUsers = nearbyUsers.map { item in
+            guard item.user.id == userId else { return item }
+            return UserSearchResult(user: item.user, friendStatus: status, distanceMeters: item.distanceMeters)
         }
         if case .loaded = searchState {
             searchState = .loaded(searchResults)
@@ -826,6 +944,21 @@ public final class FriendsRootViewModel: ObservableObject {
                 await refreshIncomingRequestCount()
                 await refreshOutgoingRequestCount()
             }
+        }
+    }
+
+    private func applyRelationOverrides(_ users: [UserSearchResult]) -> [UserSearchResult] {
+        users.map { item in
+            guard let override = relationOverrides[item.user.id] else { return item }
+            if item.friendStatus == override {
+                relationOverrides.removeValue(forKey: item.user.id)
+                return item
+            }
+            return UserSearchResult(
+                user: item.user,
+                friendStatus: override,
+                distanceMeters: item.distanceMeters
+            )
         }
     }
 }

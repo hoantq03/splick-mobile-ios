@@ -114,6 +114,31 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
         return await resolveSearchResults(response.content.map(FriendsMapper.toUserSearchResult))
     }
 
+    public func discoveryPreference() async throws -> Bool {
+        let response: DiscoveryPreferenceResponseDTO = try await apiClient.request(
+            SocialEndpoint.getDiscoveryPreference
+        )
+        return response.nearbyEnabled
+    }
+
+    public func updateDiscoveryPreference(nearbyEnabled: Bool) async throws -> Bool {
+        let response: DiscoveryPreferenceResponseDTO = try await apiClient.request(
+            SocialEndpoint.updateDiscoveryPreference(nearbyEnabled: nearbyEnabled)
+        )
+        return response.nearbyEnabled
+    }
+
+    public func findNearbyUsers(lat: Double, lon: Double) async throws -> [UserSearchResult] {
+        let response: SocialPageUserSearchResponseDTO = try await apiClient.request(
+            SocialEndpoint.findNearbyUsers(lat: lat, lon: lon)
+        )
+        return await resolveSearchResults(response.content.map(FriendsMapper.toUserSearchResult))
+    }
+
+    public func leaveNearbySession() async throws {
+        try await apiClient.request(SocialEndpoint.leaveNearbySession)
+    }
+
     public func searchUser(username: String) async throws -> UserSummary? {
         let normalized = username
             .trimmingCharacters(in: .whitespacesAndNewlines)

@@ -27,7 +27,11 @@ extension FriendDisplayNameStore {
     }
 
     func resolve(_ result: UserSearchResult) -> UserSearchResult {
-        UserSearchResult(user: resolve(result.user), friendStatus: result.friendStatus)
+        UserSearchResult(
+            user: resolve(result.user),
+            friendStatus: result.friendStatus,
+            distanceMeters: result.distanceMeters
+        )
     }
 
     func resolve(_ results: [UserSearchResult]) -> [UserSearchResult] {

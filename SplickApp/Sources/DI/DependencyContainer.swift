@@ -411,6 +411,10 @@ final class DependencyContainer: ObservableObject {
         SearchUsersUseCase(repository: friendsManagementRepository)
     }()
 
+    lazy var nearbyDiscoveryUseCase: NearbyDiscoveryUseCaseProtocol = {
+        NearbyDiscoveryUseCase(repository: friendsManagementRepository)
+    }()
+
     lazy var expenseFriendSearchUseCase: UserSearchUseCaseProtocol = {
         FriendsUserSearchAdapter(fetchFriendsUseCase: fetchFriendsUseCase)
     }()

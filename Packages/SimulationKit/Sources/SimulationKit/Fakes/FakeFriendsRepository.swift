@@ -87,6 +87,18 @@ public actor FakeFriendsRepository: FriendsRepositoryProtocol, FriendsManagement
         return []
     }
 
+    public func discoveryPreference() async throws -> Bool { false }
+
+    public func updateDiscoveryPreference(nearbyEnabled: Bool) async throws -> Bool { nearbyEnabled }
+
+    public func findNearbyUsers(lat: Double, lon: Double) async throws -> [UserSearchResult] {
+        _ = lat
+        _ = lon
+        return []
+    }
+
+    public func leaveNearbySession() async throws {}
+
     public func searchUser(username: String) async throws -> UserSummary? {
         _ = username
         return nil

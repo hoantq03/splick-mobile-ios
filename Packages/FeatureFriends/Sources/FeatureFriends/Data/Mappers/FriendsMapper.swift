@@ -41,7 +41,8 @@ enum FriendsMapper {
     static func toUserSearchResult(_ dto: UserSearchResponseDTO) -> UserSearchResult {
         UserSearchResult(
             user: toUserSummary(dto),
-            friendStatus: mapFriendStatus(dto.friendStatus)
+            friendStatus: mapFriendStatus(dto.friendStatus),
+            distanceMeters: dto.distanceMeters
         )
     }
 

@@ -55,6 +55,7 @@ public struct FriendsRootView: View {
     @State private var showOutgoingRequests = false
     @State private var showBlockedUsers = false
     @State private var showPeopleYouMayKnow = false
+    @State private var showNearbyRadar = false
     @State private var isJoiningGroupFromSearch = false
     @State private var profileRoute: UserProfileRoute?
     @State private var scrollTopSignal = 0
@@ -104,6 +105,7 @@ public struct FriendsRootView: View {
         rejectFriendRequestUseCase: RejectFriendRequestUseCaseProtocol,
         fetchOutgoingFriendRequestsUseCase: FetchOutgoingFriendRequestsUseCaseProtocol,
         cancelFriendRequestUseCase: CancelFriendRequestUseCaseProtocol,
+        nearbyDiscoveryUseCase: NearbyDiscoveryUseCaseProtocol,
         removeFriendUseCase: RemoveFriendUseCaseProtocol,
         setFriendNicknameUseCase: SetFriendNicknameUseCaseProtocol,
         blockUserUseCase: BlockUserUseCaseProtocol,
@@ -148,6 +150,7 @@ public struct FriendsRootView: View {
             fetchIncomingFriendRequestsUseCase: fetchIncomingFriendRequestsUseCase,
             fetchOutgoingFriendRequestsUseCase: fetchOutgoingFriendRequestsUseCase,
             cancelFriendRequestUseCase: cancelFriendRequestUseCase,
+            nearbyDiscoveryUseCase: nearbyDiscoveryUseCase,
             languageService: languageService,
             onDirectoryLoaded: onDirectoryLoaded,
             onFriendRequestsLoaded: onFriendRequestsLoaded
@@ -379,6 +382,27 @@ public struct FriendsRootView: View {
                     onProfileTap: openUserProfile
                 )
             }
+            .fullScreenCover(isPresented: $showNearbyRadar, onDismiss: {
+                viewModel.stopRadarSession()
+            }) {
+                NearbyRadarSheet(
+                    permissionNeeded: viewModel.nearbyPermissionNeeded,
+                    users: viewModel.nearbyUsers,
+                    loading: viewModel.nearbyLoading,
+                    onClose: {
+                        showNearbyRadar = false
+                        viewModel.stopRadarSession()
+                    },
+                    onRequestLocation: {
+                        viewModel.requestNearbyLocationAccess()
+                    },
+                    onOpenUser: { result in
+                        openUserProfile(user: result.user, status: result.friendStatus)
+                    },
+                    actionForResult: actionForSearchResult
+                )
+                .environmentObject(languageService)
+            }
             .sheet(isPresented: $showPeopleYouMayKnow) {
                 PeopleYouMayKnowSheet(
                     viewModel: peopleYouMayKnowViewModel,
@@ -456,6 +480,12 @@ public struct FriendsRootView: View {
                 pendingUserProfileUserId?.wrappedValue = nil
             }
         }
+        .onDisappear {
+            if showNearbyRadar {
+                showNearbyRadar = false
+                viewModel.stopRadarSession()
+            }
+        }
     }
 
     private func openUserProfile(user: UserSummary, status: FriendRelationStatus) {
@@ -530,6 +560,27 @@ public struct FriendsRootView: View {
         }
         .padding(.top, SplickTheme.Spacing.sm)
         .padding(.bottom, SplickTheme.Spacing.xxxs)
+    }
+
+    private var nearbySection: some View {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+            Text(languageService.text(.friendsNearbyTitle))
+                .font(SplickTheme.Typography.headline)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
+                .padding(.top, SplickTheme.Spacing.sm)
+
+            VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+                Text(languageService.text(.friendsNearbySessionHint))
+                    .font(SplickTheme.Typography.body)
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                SplickButton(languageService.text(.friendsNearbyOpen), style: .primary) {
+                    showNearbyRadar = true
+                    viewModel.startRadarSession()
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .splickCard()
+        }
     }
 
     private func friendRequestShortcut(
@@ -920,6 +971,7 @@ public struct FriendsRootView: View {
                     LazyVStack(spacing: SplickTheme.Spacing.xs) {
                         Color.clear.frame(height: 0).id("directoryScrollTop")
                         friendRequestsRow
+                        nearbySection
                         friendsDirectoryListHeader
                         if items.isEmpty {
                             directoryEmptyStateCard

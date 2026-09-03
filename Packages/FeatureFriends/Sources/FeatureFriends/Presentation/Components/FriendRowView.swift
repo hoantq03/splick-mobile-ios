@@ -9,15 +9,18 @@ struct FriendRowView: View {
     @EnvironmentObject private var presenceStore: PresenceStore
     let user: UserSummary
     var friendStatus: FriendRelationStatus?
+    var subtitle: String? = nil
     var isProcessing: Bool = false
+    var compact: Bool = false
     var onProfileTap: (() -> Void)?
     var onAddFriend: (() -> Void)?
     var onRejectFriend: (() -> Void)?
     var onUnblock: (() -> Void)?
 
     private let rowCornerRadius = SplickTheme.CornerRadius.pill
+    private var rowPadding: CGFloat { compact ? SplickTheme.Spacing.xxxs : SplickTheme.Spacing.xs }
+
     private let actionIconSize: CGFloat = 32
-    private let rowPadding = SplickTheme.Spacing.xs
 
     var body: some View {
         Group {
@@ -58,25 +61,32 @@ struct FriendRowView: View {
             AvatarWithPresenceView(
                 imageURL: user.avatarURL,
                 name: user.preferredName,
-                size: .compact,
+                size: compact ? .small : .compact,
                 userId: user.id,
                 showOnlineIndicator: PresenceDisplayPolicy.shouldShowOnlineIndicator(
                     isOnline: resolvedPresence.isOnline
                 ),
-                lastSeenLabel: PresenceDisplayPolicy.compactLastSeenLabel(
-                    isOnline: resolvedPresence.isOnline,
-                    lastSeenAt: resolvedPresence.lastSeenAt,
-                    appLocale: languageService.locale
-                )
+                lastSeenLabel: compact
+                    ? nil
+                    : PresenceDisplayPolicy.compactLastSeenLabel(
+                        isOnline: resolvedPresence.isOnline,
+                        lastSeenAt: resolvedPresence.lastSeenAt,
+                        appLocale: languageService.locale
+                    )
             )
 
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
                 Text(user.dualDisplayName)
-                    .font(SplickTheme.Typography.headline)
+                    .font(compact ? SplickTheme.Typography.callout.weight(.semibold) : SplickTheme.Typography.headline)
                     .foregroundStyle(SplickTheme.Colors.textPrimary)
                 Text("@\(user.username)")
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                }
             }
         }
     }

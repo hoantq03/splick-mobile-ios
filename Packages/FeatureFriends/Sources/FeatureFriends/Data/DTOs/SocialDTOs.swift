@@ -34,6 +34,7 @@ struct UserSearchResponseDTO: Decodable {
     let displayName: String
     let avatarUrl: String?
     let friendStatus: String?
+    let distanceMeters: Int?
 }
 
 struct SocialPageMetaDTO: Decodable {
@@ -253,4 +254,17 @@ struct PresenceSnapshotDTO: Decodable {
 
 struct BulkPresenceResponseDTO: Decodable {
     let items: [PresenceSnapshotDTO]
+}
+
+struct NearbyUsersBodyDTO: Encodable {
+    let lat: Double
+    let lon: Double
+}
+
+struct UpdateDiscoveryPreferenceBodyDTO: Encodable {
+    let nearbyEnabled: Bool
+}
+
+struct DiscoveryPreferenceResponseDTO: Decodable {
+    let nearbyEnabled: Bool
 }

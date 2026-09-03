@@ -10,6 +10,10 @@ public protocol FriendsManagementRepositoryProtocol: Sendable {
     func fetchUserProfile(userId: UUID) async throws -> PublicUserProfile
     func fetchFriendPaymentProfile(userId: UUID) async throws -> PaymentProfile
     func searchUsers(query: String, page: Int, size: Int) async throws -> [UserSearchResult]
+    func discoveryPreference() async throws -> Bool
+    func updateDiscoveryPreference(nearbyEnabled: Bool) async throws -> Bool
+    func findNearbyUsers(lat: Double, lon: Double) async throws -> [UserSearchResult]
+    func leaveNearbySession() async throws
     func searchUser(username: String) async throws -> UserSummary?
     func addFriend(username: String, message: String?) async throws -> UserSummary
     func fetchAllIncomingFriendRequests() async throws -> [IncomingFriendRequest]
