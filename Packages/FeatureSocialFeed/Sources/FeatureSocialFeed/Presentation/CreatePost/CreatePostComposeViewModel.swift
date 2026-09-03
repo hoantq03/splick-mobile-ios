@@ -763,7 +763,8 @@ public final class CreatePostComposeViewModel: ObservableObject {
                     )
                 }
                 : [],
-            audience: audience
+            audience: audience,
+            groupId: enableBillSplit ? selectedCompanionGroup?.id : nil
         )
     }
 
