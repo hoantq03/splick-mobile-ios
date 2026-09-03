@@ -82,6 +82,12 @@ public final class FeedViewModel: ObservableObject {
     private var postIndexById: [UUID: Int] = [:]
     /// Cached companion group names — invalidated on full-feed replace.
     private var cachedCompanionGroupNames: [UUID: String] = [:]
+
+    /// Pinned frontier for new-posts polling.
+    /// Set only when a full feed load from the server succeeds — never mutated by ensurePostLoaded,
+    /// prependCreatedPost, or any other local-only operation that corrupts posts[0].
+    private var feedFrontierPostId: UUID?
+    private var feedFrontierCreatedAt: Date?
     private var companionIndexDirty = true
 
     public init(
@@ -251,11 +257,17 @@ public final class FeedViewModel: ObservableObject {
     }
 
     private func pollAheadCountOnce() async {
-        guard !isRefreshing, let frontier = feedHeadFrontier(), let feedRepository else { return }
+        // Use the pinned frontier rather than posts.first to avoid stale reads caused by
+        // ensurePostLoaded (album / streak deep-link) inserting old posts at index 0.
+        guard !isRefreshing,
+              let createdAt = feedFrontierCreatedAt,
+              let id = feedFrontierPostId,
+              let feedRepository
+        else { return }
         do {
             let count = try await feedRepository.countFeedPostsAhead(
-                afterCreatedAt: frontier.createdAt,
-                afterId: frontier.id
+                afterCreatedAt: createdAt,
+                afterId: id
             )
             newPostsCount = max(0, count)
         } catch {
@@ -268,13 +280,16 @@ public final class FeedViewModel: ObservableObject {
         }
     }
 
-    private func feedHeadFrontier() -> Post? {
-        posts.first { postUploadStates[$0.id] == nil }
-    }
-
     /// Ensures refresh UI never stays stuck if a task was cancelled mid-flight.
     func endRefreshingIfNeeded() {
         isRefreshing = false
+    }
+
+    /// Marks pull-to-refresh as active before the network call starts (spinner overlay).
+    func beginPullToRefreshIfNeeded() {
+        guard !isRefreshing else { return }
+        isRefreshing = true
+        newPostsCount = 0
     }
 
     @discardableResult
@@ -325,6 +340,11 @@ public final class FeedViewModel: ObservableObject {
             prefetchImages(for: self.posts)
             persistFeedCache()
             await onFeedLoaded?(self.posts, currentUserId)
+            // Pin the polling frontier to the first server post of this load.
+            // hydratedPosts is derived directly from the network response — not mutated by
+            // ensurePostLoaded or prependCreatedPost — so it is safe to use as a stable anchor.
+            feedFrontierPostId = hydratedPosts.first?.id
+            feedFrontierCreatedAt = hydratedPosts.first?.createdAt
             newPostsCount = 0
             return true
         } catch {
