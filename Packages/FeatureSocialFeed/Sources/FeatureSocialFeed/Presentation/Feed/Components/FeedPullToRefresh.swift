@@ -6,11 +6,6 @@ enum FeedScrollAnchor {
     static let coordinateSpace = "feedPullScroll"
 }
 
-private enum FeedProgrammaticRefreshMetrics {
-    static let headerHeight: CGFloat = 52
-    static let overshootHeight: CGFloat = 88
-}
-
 /// Feed scroll container with native gesture pull-to-refresh and same-tab programmatic reload.
 struct FeedPullToRefreshScrollView<Content: View>: View {
     let onRefresh: () async -> Bool
@@ -18,24 +13,13 @@ struct FeedPullToRefreshScrollView<Content: View>: View {
 
     @StateObject private var refreshHost = SplickScrollRefreshHost()
     @State private var isRefreshing = false
-    /// Fallback only when native `UIRefreshControl` cannot be resolved.
-    @State private var programmaticHeaderHeight: CGFloat = 0
+    /// Shown as a safeAreaInset spinner when the native UIRefreshControl cannot be resolved.
+    @State private var showsFallbackSpinner = false
 
     var body: some View {
         ScrollViewReader { scrollProxy in
             ScrollView {
                 VStack(spacing: 0) {
-                    ZStack {
-                        if programmaticHeaderHeight > 0.5 {
-                            ProgressView()
-                                .controlSize(.regular)
-                                .tint(SplickTheme.Colors.primaryGradientStart)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: programmaticHeaderHeight)
-                    .clipped()
-
                     Color.clear
                         .frame(height: 0)
                         .id(FeedScrollAnchor.top)
@@ -54,6 +38,19 @@ struct FeedPullToRefreshScrollView<Content: View>: View {
             .refreshable {
                 await performRefresh(scrollProxy: scrollProxy, preferNativeHeader: false)
             }
+            // Fallback spinner slides in from the top as a safe-area inset so it is always
+            // visible above the scroll content regardless of the current scroll position.
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if showsFallbackSpinner {
+                    ProgressView()
+                        .controlSize(.regular)
+                        .tint(SplickTheme.Colors.primaryGradientStart)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .animation(.spring(response: 0.3, dampingFraction: 0.75), value: showsFallbackSpinner)
             .environment(\.pullToRefreshActive, isRefreshing)
             .preference(key: PullToRefreshActivePreferenceKey.self, value: isRefreshing)
             .onReceive(NotificationCenter.default.publisher(for: FeedSameTabNotification.scrollToTop)) { _ in
@@ -77,11 +74,13 @@ struct FeedPullToRefreshScrollView<Content: View>: View {
 
         var usedNative = false
         if preferNativeHeader {
-            // Keep content at top so the native UIRefreshControl is visible under chrome.
+            // Snap to top first so the native UIRefreshControl is within the visible area.
             scrollProxy.scrollTo(FeedScrollAnchor.top, anchor: .top)
+            // Yield one runloop turn so SwiftUI flushes the scroll before UIKit takes over.
+            await Task.yield()
             usedNative = await refreshHost.beginRefreshing()
             if !usedNative {
-                await playFallbackPullBounce()
+                await showFallbackSpinner()
             }
         }
 
@@ -89,16 +88,22 @@ struct FeedPullToRefreshScrollView<Content: View>: View {
 
         if preferNativeHeader {
             if usedNative {
+                // endRefreshing() collapses the spinner and repositions the scroll view
+                // via UIKit. Do not call scrollProxy.scrollTo right after — it conflicts
+                // with UIKit's own spring-back animation and pushes content too high.
                 refreshHost.endRefreshing()
             } else {
                 withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
-                    programmaticHeaderHeight = 0
+                    showsFallbackSpinner = false
                 }
             }
         }
         isRefreshing = false
 
-        if succeeded {
+        // For PTR triggered by the user (preferNativeHeader = false), scroll back to the
+        // anchor after the data lands. For programmatic refresh the scroll position is
+        // already correct after endRefreshing() / fallback collapse.
+        if succeeded, !preferNativeHeader {
             withAnimation(.easeOut(duration: 0.18)) {
                 scrollProxy.scrollTo(FeedScrollAnchor.top, anchor: .top)
             }
@@ -106,15 +111,12 @@ struct FeedPullToRefreshScrollView<Content: View>: View {
     }
 
     @MainActor
-    private func playFallbackPullBounce() async {
-        withAnimation(.easeOut(duration: 0.14)) {
-            programmaticHeaderHeight = FeedProgrammaticRefreshMetrics.overshootHeight
+    private func showFallbackSpinner() async {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+            showsFallbackSpinner = true
         }
-        try? await Task.sleep(nanoseconds: 140_000_000)
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.62)) {
-            programmaticHeaderHeight = FeedProgrammaticRefreshMetrics.headerHeight
-        }
-        try? await Task.sleep(nanoseconds: 220_000_000)
+        // Keep the spinner visible for a brief beat so the user knows a refresh is in flight.
+        try? await Task.sleep(for: .milliseconds(300))
     }
 }
 
