@@ -9,6 +9,9 @@ struct FeedNewPostsPillOverlay: View {
 
     var body: some View {
         GeometryReader { geometry in
+            // Mirror the same coordinate origin as FeedScrollTopFadeOverlay:
+            // ignoresSafeArea(.top) → frame starts at y=0 → safeAreaInsets.top includes
+            // the actual status-bar + navigation-bar height reported by the OS.
             let topInset = geometry.safeAreaInsets.top
                 + FeedSegmentChromeMetrics.navigationBarHeight
                 + FeedSegmentChromeMetrics.segmentRowHeight
@@ -21,6 +24,7 @@ struct FeedNewPostsPillOverlay: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
+        .ignoresSafeArea(edges: .top)
         .allowsHitTesting(count > 0)
     }
 }
