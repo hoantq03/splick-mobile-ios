@@ -4,6 +4,7 @@ import DesignSystem
 import Localization
 import SplickDomain
 import FeatureStickers
+import FeatureMessaging
 
 /// Sheet / picker presentation requested by a post card — hosted once at list/detail level.
 enum PostCardPresentation: Identifiable {
@@ -75,6 +76,7 @@ struct PostCardPresentationHost: ViewModifier {
     let onSubmitPaymentEvidence: ((UUID, UUID, String?, [CommentSubmissionAttachment]) async throws -> Void)?
     let loadPostEdits: ((UUID) async throws -> [PostEditRevision])?
     let customEmojiDependencies: CustomEmojiDependencies?
+    @Environment(\.makeSharePostViewModel) private var makeSharePostViewModel
 
     func body(content: Content) -> some View {
         content
@@ -123,10 +125,12 @@ struct PostCardPresentationHost: ViewModifier {
                 }
             )
         case .share(let post):
-            SharePostSheet(
-                post: post,
-                fallbackCaption: languageService.text(.feedShareFallbackCaption)
-            )
+            let shareText = post.caption ?? languageService.text(.feedShareFallbackCaption)
+            if let factory = makeSharePostViewModel {
+                SharePostToChatHost(post: post, shareText: shareText, factory: factory)
+            } else {
+                SharePostSheet(post: post, fallbackCaption: shareText)
+            }
         case .editHistory(let post):
             PostEditHistorySheet(postId: post.id) {
                 try await loadPostEdits?(post.id) ?? []
@@ -184,5 +188,19 @@ extension View {
                 customEmojiDependencies: customEmojiDependencies
             )
         )
+    }
+}
+
+private struct SharePostToChatHost: View {
+    let shareText: String
+    @StateObject private var viewModel: SharePostViewModel
+
+    init(post: Post, shareText: String, factory: @escaping SharePostViewModelFactory) {
+        self.shareText = shareText
+        _viewModel = StateObject(wrappedValue: factory(post.shareURL))
+    }
+
+    var body: some View {
+        SharePostToChatSheet(viewModel: viewModel, shareText: shareText)
     }
 }

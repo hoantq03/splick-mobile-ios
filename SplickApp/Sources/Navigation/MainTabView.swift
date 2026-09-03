@@ -323,6 +323,9 @@ struct MainTabView: View {
                 )
             }
         )
+        .environment(\.makeSharePostViewModel) { url in
+            container.makeSharePostViewModel(shareURL: url, currentUserId: appState.currentUser?.id)
+        }
         .environment(\.sameTabTapHandlingEnabled, settledPagerTab == .feed)
     }
 

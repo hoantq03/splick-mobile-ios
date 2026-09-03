@@ -455,11 +455,21 @@ struct MessageBubble: View {
     }
 
     private func messageTextLabel(lineLimit: Int?) -> some View {
-        Text(message.body)
-            .font(SplickTheme.Typography.body)
-            .foregroundStyle(isOutgoing ? .white : SplickTheme.Colors.textPrimary)
-            .multilineTextAlignment(.leading)
-            .lineLimit(lineLimit)
+        Text(
+            MessageBodyLinkifier.attributed(
+                message.body,
+                textColor: isOutgoing ? .white : SplickTheme.Colors.textPrimary,
+                linkColor: isOutgoing ? .white : SplickTheme.Colors.primaryGradientStart
+            )
+        )
+        .font(SplickTheme.Typography.body)
+        .tint(isOutgoing ? .white : SplickTheme.Colors.primaryGradientStart)
+        .multilineTextAlignment(.leading)
+        .lineLimit(lineLimit)
+        .environment(\.openURL, OpenURLAction { url in
+            UIApplication.shared.open(url)
+            return .handled
+        })
     }
 
     @ViewBuilder

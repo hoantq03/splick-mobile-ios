@@ -34,7 +34,7 @@ public struct User: Identifiable, Codable, Equatable, Sendable {
     }
 }
 
-public struct UserSummary: Identifiable, Codable, Equatable, Sendable {
+public struct UserSummary: Identifiable, Codable, Equatable, Hashable, Sendable {
     public let id: UUID
     public let username: String
     public let displayName: String

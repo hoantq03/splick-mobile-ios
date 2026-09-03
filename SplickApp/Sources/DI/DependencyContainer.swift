@@ -726,6 +726,30 @@ final class DependencyContainer: ObservableObject {
         SendMessageUseCase(repository: messagingRepository)
     }()
 
+    private lazy var sharePostToChatUseCase: SharePostToChatUseCase = {
+        SharePostToChatUseCase(
+            repository: messagingRepository,
+            sendMessageUseCase: sendMessageUseCase
+        )
+    }()
+
+    func makeSharePostViewModel(shareURL: URL, currentUserId: UUID?) -> SharePostViewModel {
+        SharePostViewModel(
+            shareURL: shareURL,
+            currentUserId: currentUserId,
+            shareUseCase: sharePostToChatUseCase,
+            fetchConversationsUseCase: fetchConversationsUseCase,
+            friendsProvider: { [fetchMyFriendsUseCase] in
+                try await fetchMyFriendsUseCase.execute()
+            },
+            searchUsersProvider: { [searchUsersUseCase] query in
+                let results = try await searchUsersUseCase.execute(query: query, page: 0, size: 20)
+                return results.map(\.user)
+            },
+            languageService: languageService
+        )
+    }
+
     private lazy var reactToMessageUseCase: ReactToMessageUseCase = {
         ReactToMessageUseCase(repository: messagingRepository)
     }()

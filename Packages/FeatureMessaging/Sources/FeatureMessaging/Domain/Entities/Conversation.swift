@@ -1,7 +1,7 @@
 import Foundation
 import SplickDomain
 
-public enum ConversationType: String, Equatable, Sendable {
+public enum ConversationType: String, Equatable, Hashable, Sendable {
     case direct = "DIRECT"
     case group = "GROUP"
 }
