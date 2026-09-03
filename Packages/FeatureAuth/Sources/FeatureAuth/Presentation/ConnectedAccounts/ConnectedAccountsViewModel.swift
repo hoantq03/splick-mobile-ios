@@ -239,7 +239,7 @@ public final class ConnectedAccountsViewModel: ObservableObject {
         defer { isRequestingEmailCode = false }
 
         do {
-            try await linkEmailAccountUseCase.requestOtp(email: isPhoneOnlyAccount ? email : nil)
+            try await linkEmailAccountUseCase.requestOtp(email: email)
             hasSentEmailCode = true
             emailSheetInfo = languageService.format(.changePasswordCodeSent, email)
             startResendCountdown(for: .email)

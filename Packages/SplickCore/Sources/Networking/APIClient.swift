@@ -264,7 +264,13 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
         case "ACCOUNT_LOCKED":
             return AuthError.accountLocked
         case "ACCOUNT_INACTIVE":
-            return AuthError.accountInactive
+            return AuthError.accountInactive(
+                DeactivatedAccountInfo(
+                    deactivatedAt: body.deactivatedAt,
+                    scheduledDeletionAt: body.scheduledDeletionAt,
+                    reactivationToken: body.reactivationToken ?? ""
+                )
+            )
         case "CANNOT_UNLINK_LAST_AUTH_METHOD":
             return AuthError.cannotUnlinkLastAuthMethod
         case "GOOGLE_ALREADY_LINKED":
@@ -272,7 +278,11 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
         case "PROVIDER_ALREADY_LINKED":
             return AuthError.providerAlreadyLinked
         case "CONFLICT":
-            return AuthError.emailAlreadyExists
+            return NetworkError.apiError(
+                code: "CONFLICT",
+                message: body.message.isEmpty ? "That action conflicts with existing data." : body.message,
+                traceId: resolvedTraceId
+            )
         case "EMAIL_ALREADY_REGISTERED":
             return AuthError.emailAlreadyExists
         case "EMAIL_USE_GOOGLE":

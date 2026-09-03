@@ -122,12 +122,24 @@ public enum StorageError: Error, Equatable {
     }
 }
 
+public struct DeactivatedAccountInfo: Equatable, Sendable {
+    public let deactivatedAt: Date?
+    public let scheduledDeletionAt: Date?
+    public let reactivationToken: String
+
+    public init(deactivatedAt: Date?, scheduledDeletionAt: Date?, reactivationToken: String) {
+        self.deactivatedAt = deactivatedAt
+        self.scheduledDeletionAt = scheduledDeletionAt
+        self.reactivationToken = reactivationToken
+    }
+}
+
 public enum AuthError: Error, Equatable {
     case invalidCredentials
     case tokenExpired
     case refreshFailed
     case accountLocked
-    case accountInactive
+    case accountInactive(DeactivatedAccountInfo)
     case cannotUnlinkLastAuthMethod
     case googleAlreadyLinked
     case providerAlreadyLinked

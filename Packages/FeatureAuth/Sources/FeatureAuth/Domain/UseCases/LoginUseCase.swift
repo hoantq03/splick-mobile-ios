@@ -19,7 +19,9 @@ public final class LoginUseCase: LoginUseCaseProtocol, Sendable {
         do {
             let session = try await repository.login(email: email, password: password)
             if session.user.status == .inactive {
-                throw AuthError.accountInactive
+                throw AuthError.accountInactive(
+                    DeactivatedAccountInfo(deactivatedAt: nil, scheduledDeletionAt: nil, reactivationToken: "")
+                )
             }
             guard session.user.status.allowsSignIn else {
                 throw AuthError.accountLocked

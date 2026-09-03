@@ -180,6 +180,13 @@ struct AccountActionRequestDTO: Encodable {
     let otpCode: String?
 }
 
+struct ReactivateAccountRequestDTO: Encodable {
+    let reactivationToken: String
+    let deviceInfo: String?
+    let deviceName: String?
+    let loginLocation: String?
+}
+
 struct LinkGoogleRequestDTO: Encodable {
     let idToken: String
 }

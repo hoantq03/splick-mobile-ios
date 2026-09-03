@@ -73,6 +73,16 @@ final class MockAppleSignInUseCase: AppleSignInUseCaseProtocol, Sendable {
     }
 }
 
+final class MockReactivateAccountUseCase: ReactivateAccountUseCaseProtocol, Sendable {
+    func execute(reactivationToken: String) async throws -> AuthSession {
+        try await Task.sleep(for: .milliseconds(300))
+        return AuthSession(
+            user: PreviewData.currentUser,
+            token: AuthToken(accessToken: "mock-token", refreshToken: "mock-refresh", expiresIn: 3600)
+        )
+    }
+}
+
 final class MockForgotPasswordUseCase: ForgotPasswordUseCaseProtocol, Sendable {
     func execute(email: String) async throws {
         try await Task.sleep(for: .milliseconds(300))
@@ -130,6 +140,7 @@ private let previewLanguageService = LanguageService(userDefaults: UserDefaultsS
                 verifyPhoneOtpUseCase: MockVerifyPhoneOtpUseCase(),
                 googleSignInUseCase: MockGoogleSignInUseCase(),
                 appleSignInUseCase: MockAppleSignInUseCase(),
+                reactivateAccountUseCase: MockReactivateAccountUseCase(),
                 languageService: previewLanguageService
             ),
             forgotPasswordViewModelFactory: {

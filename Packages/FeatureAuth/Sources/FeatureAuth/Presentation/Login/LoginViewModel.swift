@@ -50,6 +50,8 @@ public final class LoginViewModel: ObservableObject {
     @Published var showErrorAlert = false
     @Published var hasAcceptedLegalTerms = true
     @Published var legalConsentError: String?
+    @Published var deactivatedAccount: DeactivatedAccountInfo?
+    @Published var deactivatedAccountError: String?
 
     @Published private(set) var lookupState: IdentifierLookupState = .pending
     @Published private(set) var identifierStatus: FieldValidationStatus = .neutral
@@ -67,6 +69,7 @@ public final class LoginViewModel: ObservableObject {
     private let verifyPhoneOtpUseCase: VerifyPhoneOtpUseCaseProtocol
     private let googleSignInUseCase: GoogleSignInUseCaseProtocol
     private let appleSignInUseCase: AppleSignInUseCaseProtocol
+    private let reactivateAccountUseCase: ReactivateAccountUseCaseProtocol
     private let languageService: LanguageService
     private weak var googleSignInPresenter: GoogleSignInPresenting?
     private weak var appleSignInPresenter: AppleSignInPresenting?
@@ -126,6 +129,7 @@ public final class LoginViewModel: ObservableObject {
         verifyPhoneOtpUseCase: VerifyPhoneOtpUseCaseProtocol,
         googleSignInUseCase: GoogleSignInUseCaseProtocol,
         appleSignInUseCase: AppleSignInUseCaseProtocol,
+        reactivateAccountUseCase: ReactivateAccountUseCaseProtocol,
         languageService: LanguageService,
         googleSignInPresenter: GoogleSignInPresenting? = nil,
         appleSignInPresenter: AppleSignInPresenting? = nil
@@ -138,6 +142,7 @@ public final class LoginViewModel: ObservableObject {
         self.verifyPhoneOtpUseCase = verifyPhoneOtpUseCase
         self.googleSignInUseCase = googleSignInUseCase
         self.appleSignInUseCase = appleSignInUseCase
+        self.reactivateAccountUseCase = reactivateAccountUseCase
         self.languageService = languageService
         self.googleSignInPresenter = googleSignInPresenter
         self.appleSignInPresenter = appleSignInPresenter
@@ -473,7 +478,11 @@ public final class LoginViewModel: ObservableObject {
             )
             setState(.loaded(session))
         } catch let error as AuthError {
-            applyOtpVerifyError(error)
+            if case .accountInactive = error {
+                applySignInFailure(error)
+            } else {
+                applyOtpVerifyError(error)
+            }
         } catch let error as NetworkError where error.isConnectivityIssue {
             setState(.failed(error.userMessage))
         } catch {
@@ -506,18 +515,12 @@ public final class LoginViewModel: ObservableObject {
             shouldCompleteOAuthProfile = session.isNewUser
             setState(.loaded(session))
             Log.info("Google sign-in successful for \(session.user.username)", category: .auth)
-        } catch let error as NetworkError where error.isConnectivityIssue {
-            setState(.failed(error.userMessage))
-        } catch let error as NetworkError {
-            setState(.failed(error.userMessage))
-        } catch let error as AuthError {
-            setState(.failed(error.userMessage))
         } catch {
             let nsError = error as NSError
             if nsError.domain == "com.google.GIDSignIn" && nsError.code == -5 {
                 setState(.idle)
             } else {
-                setState(.failed(error.localizedDescription))
+                applySignInFailure(error)
             }
         }
     }
@@ -537,14 +540,8 @@ public final class LoginViewModel: ObservableObject {
             Log.info("Apple sign-in successful for \(session.user.username)", category: .auth)
         } catch AppleSignInError.cancelled {
             setState(.idle)
-        } catch let error as NetworkError where error.isConnectivityIssue {
-            setState(.failed(error.userMessage))
-        } catch let error as NetworkError {
-            setState(.failed(error.userMessage))
-        } catch let error as AuthError {
-            setState(.failed(error.userMessage))
         } catch {
-            setState(.failed(error.localizedDescription))
+            applySignInFailure(error)
         }
     }
 
@@ -621,13 +618,57 @@ public final class LoginViewModel: ObservableObject {
             )
             setState(.loaded(session))
             Log.info("Login successful for \(session.user.username)", category: .auth)
-        } catch let error as AuthError {
-            setState(.failed(error.userMessage))
-        } catch let error as NetworkError where error.isConnectivityIssue {
-            setState(.failed(error.userMessage))
         } catch {
-            setState(.failed(AuthError.invalidCredentials.userMessage))
+            applySignInFailure(error)
         }
+    }
+
+    func reactivateDeactivatedAccount() async {
+        guard let token = deactivatedAccount?.reactivationToken, !token.isEmpty else { return }
+        deactivatedAccountError = nil
+        setState(.loading, loadingAction: .credentials)
+        do {
+            let session = try await reactivateAccountUseCase.execute(reactivationToken: token)
+            deactivatedAccount = nil
+            setState(.loaded(session))
+        } catch {
+            loadingAction = nil
+            state = .idle
+            let message = languageService.localizedMessage(for: error)
+            deactivatedAccountError = message.isEmpty
+                ? languageService.text(.deactivatedAccountReactivateFailed)
+                : message
+        }
+    }
+
+    func useAnotherAccount() {
+        deactivatedAccount = nil
+        deactivatedAccountError = nil
+        resetLookupState()
+        identifier = ""
+        password = ""
+        step = .credentials
+        state = .idle
+        loadingAction = nil
+    }
+
+    private func applySignInFailure(_ error: Error) {
+        if let authError = error as? AuthError, case .accountInactive(let info) = authError {
+            deactivatedAccount = info
+            deactivatedAccountError = nil
+            loadingAction = nil
+            state = .idle
+            return
+        }
+        if let authError = error as? AuthError {
+            setState(.failed(authError.userMessage))
+            return
+        }
+        if let networkError = error as? NetworkError {
+            setState(.failed(networkError.userMessage))
+            return
+        }
+        setState(.failed(AuthError.invalidCredentials.userMessage))
     }
 
     private func setState(_ newState: LoadingState<AuthSession>, loadingAction action: LoadingAction? = nil) {

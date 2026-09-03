@@ -290,6 +290,19 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
         try await apiClient.request(AuthEndpoint.deactivateAccount(dto))
     }
 
+    public func reactivateAccount(reactivationToken: String) async throws -> AuthSession {
+        let session = SessionMetadata.current
+        let dto = ReactivateAccountRequestDTO(
+            reactivationToken: reactivationToken,
+            deviceInfo: session.deviceInfo,
+            deviceName: session.deviceName,
+            loginLocation: session.loginLocation
+        )
+        let response: AuthResponseDTO = try await apiClient.request(AuthEndpoint.reactivateAccount(dto))
+        try await persistSession(response)
+        return AuthMapper.toAuthSession(response)
+    }
+
     public func deleteAccount(currentPassword: String?, otpCode: String?) async throws {
         let dto = AccountActionRequestDTO(currentPassword: currentPassword, otpCode: otpCode)
         try await apiClient.request(AuthEndpoint.deleteAccount(dto))

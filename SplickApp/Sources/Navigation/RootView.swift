@@ -181,6 +181,7 @@ struct RootView: View {
                     verifyPhoneOtpUseCase: container.verifyPhoneOtpUseCase,
                     googleSignInUseCase: container.googleSignInUseCase,
                     appleSignInUseCase: container.appleSignInUseCase,
+                    reactivateAccountUseCase: container.reactivateAccountUseCase,
                     languageService: container.languageService,
                     googleSignInPresenter: GoogleSignInClient.shared,
                     appleSignInPresenter: AppleSignInClient.shared

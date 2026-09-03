@@ -85,7 +85,16 @@ public struct LoginView: View {
             VStack(spacing: SplickTheme.Spacing.lg) {
                 headerSection
 
-                switch viewModel.step {
+                if let deactivated = viewModel.deactivatedAccount {
+                    DeactivatedAccountView(
+                        info: deactivated,
+                        isLoading: viewModel.state.isLoading,
+                        errorMessage: viewModel.deactivatedAccountError,
+                        onReactivate: { Task { await viewModel.reactivateDeactivatedAccount() } },
+                        onUseAnotherAccount: { viewModel.useAnotherAccount() }
+                    )
+                } else {
+                    switch viewModel.step {
                 case .credentials:
                     credentialsSection
                     credentialsActions
@@ -125,12 +134,13 @@ public struct LoginView: View {
                         onBack: { viewModel.goBackFromRegisterOtp() }
                     )
                 }
+                }
 
-                if viewModel.step == .credentials {
+                if viewModel.deactivatedAccount == nil, viewModel.step == .credentials {
                     credentialsLegalFooter
                 }
 
-                if viewModel.step == .credentials, showsSocialSignIn {
+                if viewModel.deactivatedAccount == nil, viewModel.step == .credentials, showsSocialSignIn {
                     socialSignInSection
                 }
             }

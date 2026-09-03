@@ -28,6 +28,7 @@ enum AuthEndpoint: APIEndpoint {
     case revokeAllSessions
     case revokeSession(UUID)
     case deactivateAccount(AccountActionRequestDTO)
+    case reactivateAccount(ReactivateAccountRequestDTO)
     case deleteAccount(AccountActionRequestDTO)
     case connectedAccounts
     case linkGoogle(LinkGoogleRequestDTO)
@@ -60,8 +61,9 @@ enum AuthEndpoint: APIEndpoint {
             return "/v1/auth/me/payment-profile"
         case .listSessions: return "/v1/auth/sessions"
         case .revokeAllSessions: return "/v1/auth/sessions/revoke-all"
-        case .revokeSession(let id): return "/v1/auth/sessions/\(id.uuidString)"
+        case .revokeSession(let id): return "/v1/auth/sessions/\(id.uuidString.lowercased())"
         case .deactivateAccount: return "/v1/auth/account/deactivate"
+        case .reactivateAccount: return "/v1/auth/account/reactivate"
         case .deleteAccount: return "/v1/auth/account"
         case .connectedAccounts: return "/v1/auth/connected-accounts"
         case .linkGoogle: return "/v1/auth/connected-accounts/google"
@@ -78,7 +80,7 @@ enum AuthEndpoint: APIEndpoint {
         case .checkIdentifier, .googleSignIn, .appleSignIn, .login, .requestEmailOtp, .requestPhoneOtp, .verifyPhoneOtp,
              .registerEmail, .registerPhone, .refreshToken,
              .forgotPassword, .verifyResetPasswordOtp, .resetPassword, .changePassword, .verifyPasswordChange, .logout, .revokeAllSessions,
-             .deactivateAccount, .linkGoogle, .requestLinkPhoneOtp, .linkPhone,
+             .deactivateAccount, .reactivateAccount, .linkGoogle, .requestLinkPhoneOtp, .linkPhone,
              .requestLinkEmailOtp, .linkEmail, .checkUsername:
             return .post
         case .me, .listSessions, .connectedAccounts, .paymentProfile:
@@ -112,6 +114,7 @@ enum AuthEndpoint: APIEndpoint {
         case .verifyPasswordChange(let dto): return dto
         case .logout(let dto): return dto
         case .deactivateAccount(let dto): return dto
+        case .reactivateAccount(let dto): return dto
         case .deleteAccount(let dto): return dto
         case .linkGoogle(let dto): return dto
         case .unlinkGoogle(let dto): return dto
@@ -144,7 +147,7 @@ enum AuthEndpoint: APIEndpoint {
         switch self {
         case .checkIdentifier, .googleSignIn, .appleSignIn, .login, .requestEmailOtp, .requestPhoneOtp, .verifyPhoneOtp,
              .registerEmail, .registerPhone, .refreshToken,
-             .forgotPassword, .verifyResetPasswordOtp, .resetPassword:
+             .forgotPassword, .verifyResetPasswordOtp, .resetPassword, .reactivateAccount:
             return false
         case .checkUsername:
             return true

@@ -121,6 +121,10 @@ final class DependencyContainer: ObservableObject {
         DeactivateAccountUseCase(repository: authRepository, sessionManager: sessionManager)
     }()
 
+    lazy var reactivateAccountUseCase: ReactivateAccountUseCaseProtocol = {
+        ReactivateAccountUseCase(repository: authRepository, sessionManager: sessionManager)
+    }()
+
     lazy var deleteAccountUseCase: DeleteAccountUseCaseProtocol = {
         DeleteAccountUseCase(repository: authRepository, sessionManager: sessionManager)
     }()

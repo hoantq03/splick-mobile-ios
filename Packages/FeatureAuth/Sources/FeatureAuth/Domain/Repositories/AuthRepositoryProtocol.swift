@@ -50,6 +50,7 @@ public protocol AuthRepositoryProtocol: Sendable {
     func revokeSession(id: UUID) async throws
     func revokeAllSessions() async throws
     func deactivateAccount(currentPassword: String?, otpCode: String?) async throws
+    func reactivateAccount(reactivationToken: String) async throws -> AuthSession
     func deleteAccount(currentPassword: String?, otpCode: String?) async throws
     func getConnectedAccounts() async throws -> ConnectedAccounts
     func linkGoogleAccount(idToken: String) async throws

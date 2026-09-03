@@ -8,6 +8,7 @@ public struct AccountClosureSheet: View {
 
     @State private var isPasswordVisible = false
     @State private var confirmedRevealStep = 0
+    @State private var showDeactivateConfirm = false
 
     @Binding private var isPresented: Bool
 
@@ -52,10 +53,14 @@ public struct AccountClosureSheet: View {
                                 isLoading: viewModel.isExecuting,
                                 isDisabled: viewModel.isExecuting
                             ) {
-                                Task {
-                                    let success = await viewModel.executeAction()
-                                    if success {
-                                        isPresented = false
+                                if viewModel.action == .deactivate {
+                                    showDeactivateConfirm = true
+                                } else {
+                                    Task {
+                                        let success = await viewModel.executeAction()
+                                        if success {
+                                            isPresented = false
+                                        }
                                     }
                                 }
                             }
@@ -91,6 +96,22 @@ public struct AccountClosureSheet: View {
                 } else {
                     confirmedRevealStep = 0
                 }
+            }
+            .alert(
+                languageService.text(.accountClosureDeactivateConfirmTitle),
+                isPresented: $showDeactivateConfirm
+            ) {
+                Button(languageService.text(.commonCancel), role: .cancel) {}
+                Button(languageService.text(.accountClosureConfirmDeactivate), role: .destructive) {
+                    Task {
+                        let success = await viewModel.executeAction()
+                        if success {
+                            isPresented = false
+                        }
+                    }
+                }
+            } message: {
+                Text(languageService.text(.accountClosureDeactivateConfirmMessage))
             }
         }
         .presentationDetents([.medium, .large])
