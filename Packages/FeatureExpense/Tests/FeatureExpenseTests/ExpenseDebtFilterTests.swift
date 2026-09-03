@@ -22,7 +22,7 @@ final class ExpenseDebtFilterTests: XCTestCase {
         let unpaid = expense(mePays: false, paid: false, status: .unpaid)
         XCTAssertFalse(ExpenseDebtFilter.oweUnpaid.matches(expense: pending, userId: me.id))
         XCTAssertTrue(ExpenseDebtFilter.oweUnpaid.matches(expense: unpaid, userId: me.id))
-        XCTAssertFalse(ExpenseDebtFilter.pendingApproval.matches(expense: pending, userId: me.id))
+        XCTAssertTrue(ExpenseDebtFilter.pendingApproval.matches(expense: pending, userId: me.id))
         XCTAssertTrue(ExpenseDebtFilter.pendingApproval.matches(expense: pending, userId: friend.id))
         XCTAssertFalse(ExpenseDebtFilter.pendingApproval.matches(expense: unpaid, userId: me.id))
     }

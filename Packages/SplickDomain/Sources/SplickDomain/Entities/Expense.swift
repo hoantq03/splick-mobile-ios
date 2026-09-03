@@ -130,6 +130,11 @@ public struct Expense: Identifiable, Codable, Equatable, Sendable {
         return userPaymentDisplayStatus(userId: userId) == .pendingApproval
     }
 
+    /// History chip: proof was submitted and is still waiting for host review (payer or debtor).
+    public func hasPendingPaymentEvidence(userId: UUID?) -> Bool {
+        userPaymentDisplayStatus(userId: userId) == .pendingApproval
+    }
+
     /// Amount attributed to the current user for overview totals in a given debt state.
     public func userDebtAmount(userId: UUID?, state: ExpenseUserDebtState) -> Decimal {
         guard userDebtState(userId: userId) == state else { return .zero }

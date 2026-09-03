@@ -39,6 +39,8 @@ final class ExpensePaymentDisplayStatusTests: XCTestCase {
         XCTAssertEqual(expense.userPaymentDisplayStatus(userId: me.id), .pendingApproval)
         XCTAssertEqual(expense.userDebtState(userId: me.id), .oweUnpaid)
         XCTAssertEqual(expense.userPaymentDisplayStatus(userId: friend.id), .pendingApproval)
+        XCTAssertTrue(expense.hasPendingPaymentEvidence(userId: me.id))
+        XCTAssertTrue(expense.hasPendingPaymentEvidence(userId: friend.id))
     }
 
     func testPaidSplitIsPaidDisplayStatus() {

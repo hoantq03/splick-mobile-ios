@@ -42,7 +42,7 @@ public enum ExpenseDebtFilter: String, CaseIterable, Identifiable {
         case .owedPaid:
             return expense.userDebtState(userId: userId) == .owedPaid
         case .pendingApproval:
-            return expense.awaitingMyPaymentApproval(userId: userId)
+            return expense.hasPendingPaymentEvidence(userId: userId)
         case .repaid:
             return expense.userPaymentDisplayStatus(userId: userId) == .paid
         }
