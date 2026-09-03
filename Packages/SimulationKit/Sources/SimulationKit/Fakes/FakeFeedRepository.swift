@@ -677,7 +677,7 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
 
         let todayPhotos = streakPhotos(on: Date())
         return StreakSummary(
-            currentStreak: todayPhotos.isEmpty ? 0 : 3,
+            currentStreak: simulatedCurrentStreak(),
             hasTodayPhoto: !todayPhotos.isEmpty
         )
     }
@@ -738,6 +738,34 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
                 lon: lon
             )
         ]
+    }
+
+    private func simulatedCurrentStreak() -> Int {
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(secondsFromGMT: 0)!
+        let today = utc.startOfDay(for: Date())
+        let daysWithPhoto = Set(
+            filteredAlbumPhotos(filters: PhotoAlbumFilters()).map {
+                utc.startOfDay(for: $0.createdAt)
+            }
+        )
+        let cursor: Date
+        if daysWithPhoto.contains(today) {
+            cursor = today
+        } else if let yesterday = utc.date(byAdding: .day, value: -1, to: today),
+                  daysWithPhoto.contains(yesterday) {
+            cursor = yesterday
+        } else {
+            return 0
+        }
+        var streak = 0
+        var day = cursor
+        while daysWithPhoto.contains(day) {
+            streak += 1
+            guard let previous = utc.date(byAdding: .day, value: -1, to: day) else { break }
+            day = previous
+        }
+        return streak
     }
 
     private func streakPhotos(on date: Date) -> [AlbumPhoto] {
