@@ -48,6 +48,20 @@ extension View {
     public func splickWideInteractivePop(fraction: CGFloat = 0.25, minimumWidth: CGFloat = 0) -> some View {
         background(SplickWideInteractivePopInstaller(fraction: fraction, minimumWidth: minimumWidth))
     }
+
+    /// Post detail: widened swipe-back only when the drag is clearly horizontal so pull-to-refresh
+    /// does not accidentally pop. On iOS 18 zoom, filters the system edge pop the same way.
+    public func splickHorizontalDominantInteractivePop(
+        fraction: CGFloat = 0.25,
+        minimumWidth: CGFloat = 0
+    ) -> some View {
+        background(
+            SplickHorizontalDominantInteractivePopInstaller(
+                fraction: fraction,
+                minimumWidth: minimumWidth
+            )
+        )
+    }
 }
 
 private struct SplickInteractivePopEnabler: UIViewControllerRepresentable {
@@ -180,6 +194,162 @@ private struct SplickWideInteractivePopInstaller: UIViewControllerRepresentable 
     }
 }
 
+/// Post detail only: requires a clearly horizontal drag before interactive pop begins.
+private struct SplickHorizontalDominantInteractivePopInstaller: UIViewControllerRepresentable {
+    var fraction: CGFloat
+    var minimumWidth: CGFloat
+
+    func makeUIViewController(context: Context) -> SplickHorizontalDominantInteractivePopHostController {
+        let host = SplickHorizontalDominantInteractivePopHostController()
+        host.fraction = fraction
+        host.minimumWidth = minimumWidth
+        return host
+    }
+
+    func updateUIViewController(
+        _ uiViewController: SplickHorizontalDominantInteractivePopHostController,
+        context: Context
+    ) {
+        uiViewController.fraction = fraction
+        uiViewController.minimumWidth = minimumWidth
+        uiViewController.installIfNeeded()
+    }
+
+    static func dismantleUIViewController(
+        _ uiViewController: SplickHorizontalDominantInteractivePopHostController,
+        coordinator: ()
+    ) {
+        uiViewController.deactivateIfNeeded()
+    }
+}
+
+private final class SplickHorizontalDominantInteractivePopHostController: UIViewController {
+    var fraction: CGFloat = 0.25
+    var minimumWidth: CGFloat = 0
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        installIfNeeded()
+    }
+
+    override func didMove(toParent parent: UIViewController?) {
+        super.didMove(toParent: parent)
+        if parent == nil {
+            deactivateIfNeeded()
+        } else {
+            installIfNeeded()
+        }
+    }
+
+    func installIfNeeded() {
+        guard let nav = navigationController ?? ancestorNavigationController() else { return }
+        SplickHorizontalDominantPopMode.activate(on: nav, fraction: fraction, minimumWidth: minimumWidth)
+        SplickWidePopGesture.install(on: nav, fraction: fraction, minimumWidth: minimumWidth)
+        SplickZoomPopHorizontalGuard.refresh(on: nav)
+    }
+
+    func deactivateIfNeeded() {
+        guard let nav = navigationController ?? ancestorNavigationController() else { return }
+        SplickHorizontalDominantPopMode.deactivate(on: nav)
+    }
+
+    private func ancestorNavigationController() -> UINavigationController? {
+        var responder: UIResponder? = view
+        while let current = responder {
+            if let nav = current as? UINavigationController {
+                return nav
+            }
+            responder = current.next
+        }
+        return nil
+    }
+}
+
+private final class SplickHorizontalDominantPopMode {
+    private static var associatedKey: UInt8 = 0
+
+    var fraction: CGFloat = 0.25
+    var minimumWidth: CGFloat = 0
+
+    static func activate(on nav: UINavigationController, fraction: CGFloat, minimumWidth: CGFloat) {
+        let mode = SplickHorizontalDominantPopMode()
+        mode.fraction = fraction
+        mode.minimumWidth = minimumWidth
+        objc_setAssociatedObject(nav, &associatedKey, mode, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+    }
+
+    static func deactivate(on nav: UINavigationController) {
+        objc_setAssociatedObject(nav, &associatedKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        SplickZoomPopHorizontalGuard.uninstall(on: nav)
+        SplickWidePopGesture.refresh(on: nav)
+        SplickInteractivePopConfigurator.apply(to: nav)
+    }
+
+    static func isActive(on nav: UINavigationController) -> Bool {
+        objc_getAssociatedObject(nav, &associatedKey) is SplickHorizontalDominantPopMode
+    }
+}
+
+/// Filters iOS 18 zoom interactive pop so vertical pulls (e.g. refresh) do not dismiss.
+private final class SplickZoomPopHorizontalGuard: NSObject, UIGestureRecognizerDelegate {
+    private static var associatedKey: UInt8 = 0
+
+    private weak var navigationController: UINavigationController?
+
+    static func refresh(on nav: UINavigationController) {
+        guard SplickHorizontalDominantPopMode.isActive(on: nav), splickNavigationUsesZoom(nav) else {
+            uninstall(on: nav)
+            return
+        }
+        install(on: nav)
+    }
+
+    static func install(on nav: UINavigationController) {
+        guard let pop = nav.interactivePopGestureRecognizer else { return }
+        let guardObj: SplickZoomPopHorizontalGuard
+        if let existing = objc_getAssociatedObject(nav, &associatedKey) as? SplickZoomPopHorizontalGuard {
+            guardObj = existing
+        } else {
+            guardObj = SplickZoomPopHorizontalGuard()
+            objc_setAssociatedObject(nav, &associatedKey, guardObj, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
+        guardObj.navigationController = nav
+        pop.delegate = guardObj
+    }
+
+    static func uninstall(on nav: UINavigationController) {
+        guard let guardObj = objc_getAssociatedObject(nav, &associatedKey) as? SplickZoomPopHorizontalGuard else {
+            return
+        }
+        if nav.interactivePopGestureRecognizer?.delegate === guardObj {
+            nav.interactivePopGestureRecognizer?.delegate = nil
+        }
+        objc_setAssociatedObject(nav, &associatedKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+    }
+
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard let nav = navigationController,
+              gestureRecognizer === nav.interactivePopGestureRecognizer,
+              nav.viewControllers.count > 1,
+              let pan = gestureRecognizer as? UIPanGestureRecognizer,
+              let view = nav.view else {
+            return false
+        }
+        let translation = pan.translation(in: view)
+        let rtl = view.effectiveUserInterfaceLayoutDirection == .rightToLeft
+        return SplickInteractivePopAxis.isOutwardHorizontalPop(
+            translation: translation,
+            isRightToLeft: rtl
+        )
+    }
+}
+
 private final class SplickWideInteractivePopHostController: UIViewController {
     var fraction: CGFloat = 0.25
     var minimumWidth: CGFloat = 0
@@ -214,6 +384,36 @@ private final class SplickWideInteractivePopHostController: UIViewController {
             responder = current.next
         }
         return nil
+    }
+}
+
+/// Shared axis checks for interactive pop gestures (wide band, zoom edge pop, post detail).
+public enum SplickInteractivePopAxis {
+    public static let horizontalDominanceRatio: CGFloat = 1.75
+    public static let minimumHorizontalTranslation: CGFloat = 12
+
+    public static func isHorizontalDominant(
+        translation: CGPoint,
+        ratio: CGFloat = horizontalDominanceRatio,
+        minimumHorizontal: CGFloat = minimumHorizontalTranslation
+    ) -> Bool {
+        let dx = abs(translation.x)
+        let dy = abs(translation.y)
+        return dx >= minimumHorizontal && dx > dy * ratio
+    }
+
+    public static func isOutwardHorizontalPop(
+        translation: CGPoint,
+        isRightToLeft: Bool,
+        ratio: CGFloat = horizontalDominanceRatio,
+        minimumHorizontal: CGFloat = minimumHorizontalTranslation
+    ) -> Bool {
+        let outward = isRightToLeft ? translation.x < 0 : translation.x > 0
+        return outward && isHorizontalDominant(
+            translation: translation,
+            ratio: ratio,
+            minimumHorizontal: minimumHorizontal
+        )
     }
 }
 
@@ -498,7 +698,8 @@ private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate 
             return
         }
 
-        systemPop.isEnabled = canPop
+        let usesZoom = splickNavigationUsesZoom(nav)
+        let horizontalDominant = SplickHorizontalDominantPopMode.isActive(on: nav)
 
         if pan == nil {
             let gesture = UIPanGestureRecognizer()
@@ -510,10 +711,23 @@ private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate 
 
         bindTargets(from: systemPop, onto: pan)
 
-        let usesZoom = splickNavigationUsesZoom(nav)
-        // Zoom interactive dismiss is bound to the system edge recognizer.
-        // A second pan with copied targets pops on lift instead of tracking the finger.
-        pan?.isEnabled = canPop && !usesZoom
+        if horizontalDominant && usesZoom {
+            // Zoom dismiss stays on the system edge recognizer; filter vertical pulls there.
+            systemPop.isEnabled = canPop
+            pan?.isEnabled = false
+            SplickZoomPopHorizontalGuard.refresh(on: nav)
+        } else if horizontalDominant {
+            // Wide band only — stock pop tries first and steals pull-to-refresh near the edge.
+            systemPop.isEnabled = false
+            pan?.isEnabled = canPop
+            SplickZoomPopHorizontalGuard.uninstall(on: nav)
+        } else {
+            systemPop.isEnabled = canPop
+            // Zoom interactive dismiss is bound to the system edge recognizer.
+            // A second pan with copied targets pops on lift instead of tracking the finger.
+            pan?.isEnabled = canPop && !usesZoom
+            SplickZoomPopHorizontalGuard.uninstall(on: nav)
+        }
     }
 
     static func refresh(on nav: UINavigationController) {
@@ -561,6 +775,12 @@ private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate 
         }
         let translation = pan.translation(in: view)
         let rtl = view.effectiveUserInterfaceLayoutDirection == .rightToLeft
+        if SplickHorizontalDominantPopMode.isActive(on: nav) {
+            return SplickInteractivePopAxis.isOutwardHorizontalPop(
+                translation: translation,
+                isRightToLeft: rtl
+            )
+        }
         let outward = rtl ? translation.x < 0 : translation.x > 0
         return outward && abs(translation.x) > abs(translation.y)
     }
@@ -569,7 +789,11 @@ private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate 
         _ gestureRecognizer: UIGestureRecognizer,
         shouldRequireFailureOf otherGestureRecognizer: UIGestureRecognizer
     ) -> Bool {
-        otherGestureRecognizer === navigationController?.interactivePopGestureRecognizer
+        guard let nav = navigationController else { return false }
+        if SplickHorizontalDominantPopMode.isActive(on: nav) {
+            return false
+        }
+        return otherGestureRecognizer === nav.interactivePopGestureRecognizer
     }
 
     func gestureRecognizer(
@@ -802,6 +1026,9 @@ private enum SplickInteractivePopConfigurator {
         if usesZoom {
             if pop.delegate is SplickNavigationDelegateProxy {
                 pop.delegate = nil
+            }
+            if SplickHorizontalDominantPopMode.isActive(on: nav) {
+                SplickZoomPopHorizontalGuard.refresh(on: nav)
             }
         } else if let gestureDelegate {
             let waitForZoomCheck = retryZoomDetection && nav.viewControllers.count > 1

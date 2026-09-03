@@ -26,4 +26,19 @@ final class SplickEdgeInteractivePopTests: XCTestCase {
             SplickEdgeInteractivePop.isInLeadingEdgeBand(x: 0, viewWidth: 390, isRightToLeft: true)
         )
     }
+
+    func testHorizontalDominantPopRejectsVerticalPull() {
+        XCTAssertFalse(
+            SplickInteractivePopAxis.isOutwardHorizontalPop(
+                translation: CGPoint(x: 4, y: -28),
+                isRightToLeft: false
+            )
+        )
+        XCTAssertTrue(
+            SplickInteractivePopAxis.isOutwardHorizontalPop(
+                translation: CGPoint(x: 24, y: 6),
+                isRightToLeft: false
+            )
+        )
+    }
 }
