@@ -10,47 +10,40 @@ struct NotificationsSettingsView: View {
     var body: some View {
         List {
             Section(languageService.text(.notificationSettingsStatusSection)) {
-                HStack {
+                HStack(spacing: 10) {
                     Text(languageService.text(.notificationSettingsPermissionLabel))
-                    Spacer()
+                    Spacer(minLength: 8)
                     Text(permissionStatusText)
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
-                }
-
-                HStack {
-                    Text(languageService.text(.notificationSettingsDeviceRegistrationLabel))
-                    Spacer()
-                    Text(deviceRegistrationStatusText)
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+                        .foregroundStyle(permissionStatusColor)
+                        .lineLimit(1)
+                    Rectangle()
+                        .fill(SplickTheme.Colors.textSecondary.opacity(0.35))
+                        .frame(width: 1, height: 14)
+                    Button(languageService.text(.notificationSettingsOpenSystemSettingsAction)) {
+                        pushNotificationCoordinator.openSystemSettings()
+                    }
+                    .buttonStyle(.borderless)
                 }
             }
 
-            Section(languageService.text(.notificationSettingsSoundSection)) {
-                ForEach(AppNotificationSound.allCases, id: \.self) { sound in
-                    Button {
-                        pushNotificationCoordinator.setNotificationSound(sound)
-                        PushNotificationCoordinator.playNotificationSound(sound)
-                    } label: {
-                        HStack {
-                            Text(soundTitle(sound))
-                                .foregroundStyle(SplickTheme.Colors.textPrimary)
-                            Spacer()
-                            if pushNotificationCoordinator.notificationSound == sound {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+            if isNotificationsAllowed {
+                Section(languageService.text(.notificationSettingsSoundSection)) {
+                    ForEach(AppNotificationSound.allCases, id: \.self) { sound in
+                        Button {
+                            pushNotificationCoordinator.setNotificationSound(sound)
+                            PushNotificationCoordinator.playNotificationSound(sound)
+                        } label: {
+                            HStack {
+                                Text(soundTitle(sound))
+                                    .foregroundStyle(SplickTheme.Colors.textPrimary)
+                                Spacer()
+                                if pushNotificationCoordinator.notificationSound == sound {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                                }
                             }
                         }
                     }
-                }
-            }
-
-            Section(languageService.text(.notificationSettingsActionSection)) {
-                Button(languageService.text(.notificationSettingsEnableAction)) {
-                    pushNotificationCoordinator.requestAuthorizationIfNeeded()
-                }
-
-                Button(languageService.text(.notificationSettingsOpenSystemSettingsAction)) {
-                    pushNotificationCoordinator.openSystemSettings()
                 }
             }
 
@@ -68,6 +61,15 @@ struct NotificationsSettingsView: View {
         }
     }
 
+    private var isNotificationsAllowed: Bool {
+        switch pushNotificationCoordinator.authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            return true
+        default:
+            return false
+        }
+    }
+
     private var permissionStatusText: String {
         switch pushNotificationCoordinator.authorizationStatus {
         case .authorized, .provisional, .ephemeral:
@@ -81,14 +83,13 @@ struct NotificationsSettingsView: View {
         }
     }
 
-    private var deviceRegistrationStatusText: String {
-        if pushNotificationCoordinator.isRegisteredOnServer {
-            return languageService.text(.notificationSettingsRegistrationSynced)
+    private var permissionStatusColor: Color {
+        switch pushNotificationCoordinator.authorizationStatus {
+        case .denied:
+            return SplickTheme.Colors.error
+        default:
+            return SplickTheme.Colors.textSecondary
         }
-        if pushNotificationCoordinator.storedDeviceToken != nil {
-            return languageService.text(.notificationSettingsRegistrationPending)
-        }
-        return languageService.text(.notificationSettingsRegistrationUnavailable)
     }
 
     private func soundTitle(_ sound: AppNotificationSound) -> String {
