@@ -175,6 +175,24 @@ struct PostDetailView: View {
         } message: {
             Text(feedViewModel.alertMessage ?? "")
         }
+        .alert(
+            languageService.text(.feedPostDelete),
+            isPresented: Binding(
+                get: { feedViewModel.pendingStreakDelete != nil },
+                set: { if !$0 { feedViewModel.dismissPendingStreakDelete() } }
+            )
+        ) {
+            Button(languageService.text(.commonCancel), role: .cancel) {
+                feedViewModel.dismissPendingStreakDelete()
+            }
+            Button(languageService.text(.feedPostDelete), role: .destructive) {
+                Task { await feedViewModel.confirmPendingStreakDelete() }
+            }
+        } message: {
+            if let days = feedViewModel.pendingStreakDelete?.streakDays {
+                Text(languageService.format(.feedPostDeleteStreakWarning, days))
+            }
+        }
         .task {
             // Keep the feed card as-is; only append comments. Pull-to-refresh still
             // reloads the post when the user asks.
@@ -598,7 +616,7 @@ struct PostDetailView: View {
             }
         }
         cardActions.onDelete = { postId in
-            Task { await feedViewModel.deletePost(id: postId) }
+            Task { await feedViewModel.requestDelete(id: postId) }
         }
         cardActions.onEdit = { post in
             editingPost = post

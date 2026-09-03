@@ -19,6 +19,7 @@ public final class FeedViewModel: ObservableObject {
     @Published private(set) var hasReachedFeedEnd = false
     @Published private(set) var isRefreshing = false
     @Published var alertMessage: String?
+    @Published var pendingStreakDelete: PendingStreakDelete?
     private(set) var currentUserId: UUID?
     var currentUser: UserSummary? { currentUserSummary }
 
@@ -40,6 +41,7 @@ public final class FeedViewModel: ObservableObject {
     private let friendDisplayNameStore: FriendDisplayNameStore?
     private let languageService: LanguageService
     private let onFeedLoaded: (([Post], UUID?) async -> Void)?
+    private let onPostsMutated: (() async -> Void)?
     private var friendDisplayNameObserver: NSObjectProtocol?
     private var currentPage = 0
     private var canLoadMore = true
@@ -101,7 +103,8 @@ public final class FeedViewModel: ObservableObject {
         friendDisplayNameStore: FriendDisplayNameStore? = nil,
         currentUserId: UUID? = nil,
         currentUser: UserSummary? = nil,
-        onFeedLoaded: (([Post], UUID?) async -> Void)? = nil
+        onFeedLoaded: (([Post], UUID?) async -> Void)? = nil,
+        onPostsMutated: (() async -> Void)? = nil
     ) {
         self.fetchFeedUseCase = fetchFeedUseCase
         self.fetchPostUseCase = fetchPostUseCase
@@ -121,6 +124,7 @@ public final class FeedViewModel: ObservableObject {
         self.friendDisplayNameStore = friendDisplayNameStore
         self.languageService = languageService
         self.onFeedLoaded = onFeedLoaded
+        self.onPostsMutated = onPostsMutated
         self.currentUserId = currentUserId
         self.currentUserSummary = currentUser
 
@@ -733,6 +737,38 @@ public final class FeedViewModel: ObservableObject {
         markPostsLoaded()
     }
 
+    func requestDelete(id: UUID) async {
+        guard let index = indexOfPost(id: id) else { return }
+        let post = posts[index]
+
+        if postUploadStates[id] != nil {
+            await deletePost(id: id)
+            return
+        }
+
+        guard post.canDelete else {
+            alertMessage = languageService.text(.feedPostDeleteHasEvidence)
+            return
+        }
+
+        if let streakDays = await streakDaysIfDeleteBreaks(post) {
+            pendingStreakDelete = PendingStreakDelete(postId: id, streakDays: streakDays)
+            return
+        }
+
+        await deletePost(id: id)
+    }
+
+    func confirmPendingStreakDelete() async {
+        guard let pending = pendingStreakDelete else { return }
+        pendingStreakDelete = nil
+        await deletePost(id: pending.postId)
+    }
+
+    func dismissPendingStreakDelete() {
+        pendingStreakDelete = nil
+    }
+
     func deletePost(id: UUID) async {
         guard let index = indexOfPost(id: id) else { return }
         let post = posts[index]
@@ -759,10 +795,21 @@ public final class FeedViewModel: ObservableObject {
                 cachedCompanionGroupNames.removeValue(forKey: id)
             }
             markPostsLoaded()
+            await onPostsMutated?()
         } catch {
             alertMessage = languageService.localizedMessage(for: error)
             Log.error(error, category: .feed)
         }
+    }
+
+    private func streakDaysIfDeleteBreaks(_ post: Post) async -> Int? {
+        guard let feedRepository else { return nil }
+        return await DeleteStreakRisk.streakDaysIfDeleteBreaks(
+            post: post,
+            knownPosts: posts,
+            fetchSummary: { try await feedRepository.fetchStreakSummary() },
+            fetchDayPhotos: { try await feedRepository.fetchStreakDayPhotos(date: $0) }
+        )
     }
 
     func updatePost(_ input: UpdatePostInput) async throws -> Post {

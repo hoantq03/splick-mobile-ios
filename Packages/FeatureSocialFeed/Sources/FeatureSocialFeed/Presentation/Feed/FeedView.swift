@@ -139,6 +139,24 @@ public struct FeedView: View {
             } message: {
                 Text(viewModel.alertMessage ?? "")
             }
+            .alert(
+                languageService.text(.feedPostDelete),
+                isPresented: Binding(
+                    get: { viewModel.pendingStreakDelete != nil },
+                    set: { if !$0 { viewModel.dismissPendingStreakDelete() } }
+                )
+            ) {
+                Button(languageService.text(.commonCancel), role: .cancel) {
+                    viewModel.dismissPendingStreakDelete()
+                }
+                Button(languageService.text(.feedPostDelete), role: .destructive) {
+                    Task { await viewModel.confirmPendingStreakDelete() }
+                }
+            } message: {
+                if let days = viewModel.pendingStreakDelete?.streakDays {
+                    Text(languageService.format(.feedPostDeleteStreakWarning, days))
+                }
+            }
         }
         .environment(\.feedSegmentScrollState, scrollChrome.feedSegment)
         .environment(\.feedPostZoomNamespace, postZoomNamespace)
@@ -333,7 +351,7 @@ private struct FeedPrimaryPage: View {
             }
         }
         cardActions.onDelete = { postId in
-            Task { await viewModel.deletePost(id: postId) }
+            Task { await viewModel.requestDelete(id: postId) }
         }
         cardActions.onEdit = { post in
             editingPost = post

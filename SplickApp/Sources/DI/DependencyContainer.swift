@@ -1062,6 +1062,9 @@ final class DependencyContainer: ObservableObject {
             friendDisplayNameStore: friendDisplayNameStore,
             onFeedLoaded: { [weak self] posts, userId in
                 await self?.widgetSyncBridge.syncFeed(posts: posts, currentUserId: userId)
+            },
+            onPostsMutated: { [weak self] in
+                await self?.streakViewModel.refresh()
             }
         )
     }
