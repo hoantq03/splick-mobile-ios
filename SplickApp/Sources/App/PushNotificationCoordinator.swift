@@ -21,6 +21,7 @@ final class PushNotificationCoordinator: ObservableObject {
     @Published private(set) var authorizationStatus: UNAuthorizationStatus = .notDetermined
     @Published private(set) var isRegisteredOnServer = false
     @Published private(set) var localDeviceToken: String?
+    @Published private(set) var notificationSound: AppNotificationSound = .default
     @Published var pendingDestination: NotificationDestination?
 
     private var deviceTokenService: DeviceTokenServiceProtocol?
@@ -46,6 +47,9 @@ final class PushNotificationCoordinator: ObservableObject {
         self.friendRequestInbox = friendRequestInbox
         self.languageService = languageService
         localDeviceToken = userDefaultsService.get(for: AppConstants.UserDefaults.pushNotificationDeviceToken)
+        notificationSound = AppNotificationSound.resolved(
+            userDefaultsService.get(for: AppConstants.UserDefaults.pushNotificationSound)
+        )
         registerNotificationCategories()
 
         Log.info(
@@ -241,6 +245,15 @@ final class PushNotificationCoordinator: ObservableObject {
     func openSystemSettings() {
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(url)
+    }
+
+    func setNotificationSound(_ sound: AppNotificationSound) {
+        notificationSound = sound
+        userDefaultsService?.set(sound.rawValue, for: AppConstants.UserDefaults.pushNotificationSound)
+    }
+
+    func foregroundPresentationOptions() -> UNNotificationPresentationOptions {
+        notificationSound.isSilent ? [.banner, .badge] : [.banner, .badge, .sound]
     }
 
     var storedDeviceToken: String? {

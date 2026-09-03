@@ -249,6 +249,7 @@ enum StringsEn {
         .notificationSettingsRegistrationUnavailable: "No device token yet",
         .notificationSettingsEnableAction: "Enable notifications",
         .notificationSettingsOpenSystemSettingsAction: "Open system settings",
+        .notificationSettingsSoundSection: "Notification sound",
         .notificationSettingsDescription: "Splick uses APNs to deliver real-time alerts. Allow notifications and keep a valid session to receive them on this device.",
     ]
 }

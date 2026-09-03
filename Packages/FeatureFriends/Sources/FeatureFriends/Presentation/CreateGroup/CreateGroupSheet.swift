@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import Common
 import DesignSystem
 import FeatureMedia
 import Localization
@@ -119,6 +120,8 @@ public struct CreateGroupSheet: View {
                 .padding(.bottom, SplickTheme.Spacing.xl)
             }
             .background(SplickTheme.Colors.background)
+            .dismissKeyboardOnTap()
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle(languageService.text(.friendsCreateGroup))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

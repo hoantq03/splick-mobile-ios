@@ -237,11 +237,11 @@ public struct ChatThreadView: View {
         }
         .sheet(isPresented: $showNotificationSettings) {
             if let displayConversation, let repository {
-                ChatNotificationSettingsSheet(conversation: displayConversation) { enabled, sound in
+                ChatNotificationSettingsSheet(conversation: displayConversation) { enabled in
                     let updated = try await repository.updateNotificationSettings(
                         conversationId: displayConversation.id,
                         notificationsEnabled: enabled,
-                        notificationSound: sound
+                        notificationSound: displayConversation.notificationSound
                     )
                     applyConversationUpdate(
                         displayConversation.updatingNotificationSettings(
@@ -532,7 +532,7 @@ public struct ChatThreadView: View {
             showNotificationSettings = true
         } label: {
             Label(
-                languageService.text(.messagingChatNotificationSounds),
+                languageService.text(.messagingChatNotificationsToggle),
                 systemImage: (displayConversation?.notificationsEnabled ?? true) ? "bell" : "bell.slash"
             )
         }

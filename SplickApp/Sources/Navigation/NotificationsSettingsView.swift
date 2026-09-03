@@ -1,4 +1,6 @@
 import SwiftUI
+import AudioToolbox
+import Common
 import Localization
 import DesignSystem
 
@@ -21,6 +23,25 @@ struct NotificationsSettingsView: View {
                     Spacer()
                     Text(deviceRegistrationStatusText)
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
+                }
+            }
+
+            Section(languageService.text(.notificationSettingsSoundSection)) {
+                ForEach(AppNotificationSound.allCases, id: \.self) { sound in
+                    Button {
+                        pushNotificationCoordinator.setNotificationSound(sound)
+                        preview(sound)
+                    } label: {
+                        HStack {
+                            Text(soundTitle(sound))
+                                .foregroundStyle(SplickTheme.Colors.textPrimary)
+                            Spacer()
+                            if pushNotificationCoordinator.notificationSound == sound {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                            }
+                        }
+                    }
                 }
             }
 
@@ -69,5 +90,28 @@ struct NotificationsSettingsView: View {
             return languageService.text(.notificationSettingsRegistrationPending)
         }
         return languageService.text(.notificationSettingsRegistrationUnavailable)
+    }
+
+    private func soundTitle(_ sound: AppNotificationSound) -> String {
+        switch sound {
+        case .default: return languageService.text(.messagingChatNotificationSoundDefault)
+        case .note: return languageService.text(.messagingChatNotificationSoundNote)
+        case .chime: return languageService.text(.messagingChatNotificationSoundChime)
+        case .pop: return languageService.text(.messagingChatNotificationSoundPop)
+        case .silent: return languageService.text(.messagingChatNotificationSoundSilent)
+        }
+    }
+
+    private func preview(_ sound: AppNotificationSound) {
+        guard sound != .silent else { return }
+        let systemSoundId: SystemSoundID
+        switch sound {
+        case .default: systemSoundId = 1007
+        case .note: systemSoundId = 1013
+        case .chime: systemSoundId = 1016
+        case .pop: systemSoundId = 1104
+        case .silent: return
+        }
+        AudioServicesPlaySystemSound(systemSoundId)
     }
 }

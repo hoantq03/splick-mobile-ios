@@ -112,8 +112,8 @@ public actor FakeMessagingRepository: MessagingRepositoryProtocol {
         )
     }
 
-    public func addGroupMember(groupId: UUID, memberUserId: UUID) async throws {
-        logger.log("addGroupMember groupId=\(groupId) memberUserId=\(memberUserId)")
+    public func addGroupMember(groupId: UUID, memberUserId: UUID, shareChatHistory: Bool) async throws {
+        logger.log("addGroupMember groupId=\(groupId) memberUserId=\(memberUserId) shareChatHistory=\(shareChatHistory)")
     }
 
     public func listGroupMembers(groupId: UUID) async throws -> [GroupChatMember] {

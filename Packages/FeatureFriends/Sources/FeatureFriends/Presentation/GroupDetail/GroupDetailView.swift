@@ -163,12 +163,12 @@ struct GroupDetailView: View {
                 addFriendUseCase: addFriendUseCase,
                 inviteFriendsUseCase: inviteFriendsUseCase,
                 languageService: languageService,
-                onInvited: { invitedIds in
+                onInvited: { invitedIds, shareChatHistory in
                     Task {
                         await viewModel.loadMembers()
                         await viewModel.loadPendingMembers()
                         if let addMembers = addMembersToGroupConversation {
-                            await addMembers(viewModel.group.id, invitedIds)
+                            await addMembers(viewModel.group.id, invitedIds, shareChatHistory)
                         }
                     }
                 }

@@ -60,7 +60,7 @@ public final class StreakViewModel: ObservableObject {
         }
     }
 
-    func refresh() async {
+    public func refresh() async {
         loadTask?.cancel()
         let task = Task { await performRefresh() }
         loadTask = task

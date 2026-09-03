@@ -198,8 +198,12 @@ struct MainTabView: View {
             .environment(\.presentInviteFriendsToGroup) { request in
                 inviteFriendsToGroupRequest = request
             }
-            .environment(\.addMembersToGroupConversation) { groupId, userIds in
-                await container.addMembersToGroupConversation(groupId: groupId, userIds: userIds)
+            .environment(\.addMembersToGroupConversation) { groupId, userIds, shareChatHistory in
+                await container.addMembersToGroupConversation(
+                    groupId: groupId,
+                    userIds: userIds,
+                    shareChatHistory: shareChatHistory
+                )
             }
             .environment(\.leaveSocialGroupMembership) { groupId in
                 try await container.leaveGroupUseCase.execute(groupId: groupId)
@@ -229,11 +233,12 @@ struct MainTabView: View {
                     addFriendUseCase: container.addFriendUseCase,
                     inviteFriendsUseCase: container.inviteFriendsToGroupUseCase,
                     languageService: container.languageService,
-                    onInvited: { invitedIds in
+                    onInvited: { invitedIds, shareChatHistory in
                         Task {
                             await container.addMembersToGroupConversation(
                                 groupId: request.groupId,
-                                userIds: invitedIds
+                                userIds: invitedIds,
+                                shareChatHistory: shareChatHistory
                             )
                         }
                     }

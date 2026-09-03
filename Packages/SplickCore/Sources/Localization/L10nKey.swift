@@ -679,6 +679,7 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case notificationSettingsRegistrationUnavailable = "notification.settings.registration_unavailable"
     case notificationSettingsEnableAction = "notification.settings.enable_action"
     case notificationSettingsOpenSystemSettingsAction = "notification.settings.open_system_settings_action"
+    case notificationSettingsSoundSection = "notification.settings.sound_section"
     case notificationSettingsDescription = "notification.settings.description"
 
     // Tab
@@ -1131,6 +1132,10 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case friendsInviteSuccessCount = "friends.invite.success_count"
     case friendsInviteFailedReason = "friends.invite.failed_reason"
     case friendsInviteNone = "friends.invite.none"
+    case friendsInviteShareHistoryTitle = "friends.invite.share_history_title"
+    case friendsInviteShareHistoryMessage = "friends.invite.share_history_message"
+    case friendsInviteShareHistoryAll = "friends.invite.share_history_all"
+    case friendsInviteShareHistoryNone = "friends.invite.share_history_none"
     case friendsTransferNoMembersTitle = "friends.transfer.no_members_title"
     case friendsTransferNoMembersMessage = "friends.transfer.no_members_message"
     case friendsTransferTitle = "friends.transfer.title"

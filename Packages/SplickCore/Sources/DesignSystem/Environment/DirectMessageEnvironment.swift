@@ -42,7 +42,7 @@ private struct PresentInviteFriendsToGroupKey: EnvironmentKey {
 }
 
 private struct AddMembersToGroupConversationKey: EnvironmentKey {
-    static let defaultValue: ((UUID, [UUID]) async -> Void)? = nil
+    static let defaultValue: ((UUID, [UUID], Bool) async -> Void)? = nil
 }
 
 private struct LeaveSocialGroupMembershipKey: EnvironmentKey {
@@ -80,7 +80,7 @@ extension EnvironmentValues {
     }
 
     /// Adds invited users to an existing group conversation when one already exists.
-    public var addMembersToGroupConversation: ((UUID, [UUID]) async -> Void)? {
+    public var addMembersToGroupConversation: ((UUID, [UUID], Bool) async -> Void)? {
         get { self[AddMembersToGroupConversationKey.self] }
         set { self[AddMembersToGroupConversationKey.self] = newValue }
     }

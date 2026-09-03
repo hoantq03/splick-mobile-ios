@@ -956,9 +956,17 @@ final class DependencyContainer: ObservableObject {
         return conversation.id
     }
 
-    func addMembersToGroupConversation(groupId: UUID, userIds: [UUID]) async {
+    func addMembersToGroupConversation(
+        groupId: UUID,
+        userIds: [UUID],
+        shareChatHistory: Bool
+    ) async {
         for userId in userIds {
-            try? await messagingRepository.addGroupMember(groupId: groupId, memberUserId: userId)
+            try? await messagingRepository.addGroupMember(
+                groupId: groupId,
+                memberUserId: userId,
+                shareChatHistory: shareChatHistory
+            )
         }
     }
 

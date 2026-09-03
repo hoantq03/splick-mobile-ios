@@ -18,6 +18,7 @@ final class InviteFriendsToGroupViewModel: ObservableObject {
     @Published var selectedIds: Set<UUID> = []
     @Published var alertMessage: String?
     @Published var successMessage: String?
+    @Published var showHistoryShareConfirm = false
 
     private let groupId: UUID
     private let existingMemberIds: Set<UUID>
@@ -27,7 +28,7 @@ final class InviteFriendsToGroupViewModel: ObservableObject {
     private let addFriendUseCase: AddFriendUseCaseProtocol
     private let inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol
     private let languageService: LanguageService
-    private let onInvited: ([UUID]) -> Void
+    private let onInvited: ([UUID], Bool) -> Void
     private var searchTask: Task<Void, Never>?
     private var inFlightRelationActionUserIds: Set<UUID> = []
 
@@ -53,7 +54,7 @@ final class InviteFriendsToGroupViewModel: ObservableObject {
         addFriendUseCase: AddFriendUseCaseProtocol,
         inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol,
         languageService: LanguageService,
-        onInvited: @escaping ([UUID]) -> Void
+        onInvited: @escaping ([UUID], Bool) -> Void
     ) {
         self.groupId = groupId
         self.existingMemberIds = existingMemberIds
@@ -125,11 +126,20 @@ final class InviteFriendsToGroupViewModel: ObservableObject {
         }
     }
 
-    func submit() async {
+    func requestSubmit() {
         guard !selectedIds.isEmpty else {
             alertMessage = languageService.text(.friendsInviteNeedSelection)
             return
         }
+        showHistoryShareConfirm = true
+    }
+
+    func submit(shareChatHistory: Bool) async {
+        guard !selectedIds.isEmpty else {
+            alertMessage = languageService.text(.friendsInviteNeedSelection)
+            return
+        }
+        showHistoryShareConfirm = false
         state = .submitting
         do {
             let result = try await inviteFriendsUseCase.execute(
@@ -140,7 +150,7 @@ final class InviteFriendsToGroupViewModel: ObservableObject {
             let skippedCount = result.skipped.count
             if invitedCount > 0 {
                 successMessage = languageService.format(.friendsInviteSuccessCount, invitedCount)
-                onInvited(result.invited)
+                onInvited(result.invited, shareChatHistory)
             } else if skippedCount > 0 {
                 alertMessage = languageService.text(.friendsInviteFailedReason)
             } else {

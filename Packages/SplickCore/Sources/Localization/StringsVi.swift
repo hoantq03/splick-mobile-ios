@@ -249,6 +249,7 @@ enum StringsVi {
         .notificationSettingsRegistrationUnavailable: "Chưa có device token",
         .notificationSettingsEnableAction: "Bật thông báo",
         .notificationSettingsOpenSystemSettingsAction: "Mở cài đặt hệ thống",
+        .notificationSettingsSoundSection: "Âm thanh thông báo",
         .notificationSettingsDescription: "Splick dùng APNs để gửi thông báo theo thời gian thực. Hãy cho phép thông báo và duy trì phiên đăng nhập hợp lệ để nhận thông báo trên thiết bị này.",
     ]
 }

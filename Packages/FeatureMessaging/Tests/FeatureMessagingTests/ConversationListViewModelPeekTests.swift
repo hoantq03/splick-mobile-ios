@@ -45,7 +45,7 @@ private actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
     ) async throws -> Conversation {
         makeConversation(id: groupId ?? UUID())
     }
-    func addGroupMember(groupId: UUID, memberUserId: UUID) async throws {}
+    func addGroupMember(groupId: UUID, memberUserId: UUID, shareChatHistory: Bool) async throws {}
     func listGroupMembers(groupId: UUID) async throws -> [GroupChatMember] { [] }
     func removeGroupMember(groupId: UUID, memberUserId: UUID) async throws {}
     func leaveGroup(groupId: UUID) async throws {}

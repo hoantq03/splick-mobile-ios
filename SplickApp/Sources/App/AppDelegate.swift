@@ -59,7 +59,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             userInfo: notification.request.content.userInfo,
             queueDestination: false
         )
-        completionHandler([.banner, .badge, .sound])
+        completionHandler(PushNotificationCoordinator.shared.foregroundPresentationOptions())
     }
 
     func userNotificationCenter(

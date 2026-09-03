@@ -188,6 +188,7 @@ struct CreateGroupConversationRequestDTO: Encodable {
 
 struct AddGroupMemberRequestDTO: Encodable {
     let memberUserId: UUID
+    let shareChatHistory: Bool
 }
 
 struct RenameGroupRequestDTO: Encodable {

@@ -18,7 +18,7 @@ public struct InviteFriendsToGroupSheet: View {
         addFriendUseCase: AddFriendUseCaseProtocol,
         inviteFriendsUseCase: InviteFriendsToGroupUseCaseProtocol,
         languageService: LanguageService,
-        onInvited: @escaping ([UUID]) -> Void
+        onInvited: @escaping ([UUID], Bool) -> Void
     ) {
         _viewModel = StateObject(
             wrappedValue: InviteFriendsToGroupViewModel(
@@ -54,10 +54,27 @@ public struct InviteFriendsToGroupSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(languageService.text(.friendsInviteAction)) {
-                        Task { await viewModel.submit() }
+                        viewModel.requestSubmit()
                     }
                     .disabled(viewModel.selectedIds.isEmpty || viewModel.state == .submitting)
                 }
+            }
+            .confirmationDialog(
+                languageService.text(.friendsInviteShareHistoryTitle),
+                isPresented: $viewModel.showHistoryShareConfirm,
+                titleVisibility: .visible
+            ) {
+                Button(languageService.text(.friendsInviteShareHistoryAll)) {
+                    Task { await viewModel.submit(shareChatHistory: true) }
+                }
+                Button(languageService.text(.friendsInviteShareHistoryNone)) {
+                    Task { await viewModel.submit(shareChatHistory: false) }
+                }
+                Button(languageService.text(.commonCancel), role: .cancel) {
+                    viewModel.showHistoryShareConfirm = false
+                }
+            } message: {
+                Text(languageService.text(.friendsInviteShareHistoryMessage))
             }
             .task {
                 await viewModel.loadFriendsIfNeeded()

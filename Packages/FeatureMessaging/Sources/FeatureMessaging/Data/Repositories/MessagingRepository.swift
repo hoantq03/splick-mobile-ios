@@ -60,11 +60,11 @@ public final class MessagingRepository: MessagingRepositoryProtocol, Sendable {
         return await resolveConversation(MessagingMapper.toConversation(dto))
     }
 
-    public func addGroupMember(groupId: UUID, memberUserId: UUID) async throws {
+    public func addGroupMember(groupId: UUID, memberUserId: UUID, shareChatHistory: Bool) async throws {
         try await apiClient.request(
             MessagingEndpoint.addGroupMember(
                 groupId: groupId,
-                AddGroupMemberRequestDTO(memberUserId: memberUserId)
+                AddGroupMemberRequestDTO(memberUserId: memberUserId, shareChatHistory: shareChatHistory)
             )
         )
     }
