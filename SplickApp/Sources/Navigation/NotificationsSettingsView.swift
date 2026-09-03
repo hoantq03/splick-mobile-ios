@@ -1,5 +1,4 @@
 import SwiftUI
-import AudioToolbox
 import Common
 import Localization
 import DesignSystem
@@ -30,7 +29,7 @@ struct NotificationsSettingsView: View {
                 ForEach(AppNotificationSound.allCases, id: \.self) { sound in
                     Button {
                         pushNotificationCoordinator.setNotificationSound(sound)
-                        preview(sound)
+                        PushNotificationCoordinator.playNotificationSound(sound)
                     } label: {
                         HStack {
                             Text(soundTitle(sound))
@@ -100,18 +99,5 @@ struct NotificationsSettingsView: View {
         case .pop: return languageService.text(.messagingChatNotificationSoundPop)
         case .silent: return languageService.text(.messagingChatNotificationSoundSilent)
         }
-    }
-
-    private func preview(_ sound: AppNotificationSound) {
-        guard sound != .silent else { return }
-        let systemSoundId: SystemSoundID
-        switch sound {
-        case .default: systemSoundId = 1007
-        case .note: systemSoundId = 1013
-        case .chime: systemSoundId = 1016
-        case .pop: systemSoundId = 1104
-        case .silent: return
-        }
-        AudioServicesPlaySystemSound(systemSoundId)
     }
 }

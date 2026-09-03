@@ -2,7 +2,8 @@ import UniformTypeIdentifiers
 import UserNotifications
 
 /// Downloads `actorAvatarUrl` from the APNs payload and attaches it so the lock-screen /
-/// banner shows the actor photo instead of only the app icon.
+/// banner shows the actor photo instead of only the app icon. Also applies the user's
+/// globally selected notification sound from the app group.
 final class NotificationService: UNNotificationServiceExtension {
     private var contentHandler: ((UNNotificationContent) -> Void)?
     private var bestAttemptContent: UNMutableNotificationContent?
@@ -19,6 +20,8 @@ final class NotificationService: UNNotificationServiceExtension {
             contentHandler(request.content)
             return
         }
+
+        applySelectedSound(to: bestAttemptContent)
 
         guard let avatarURL = Self.actorAvatarURL(from: request.content.userInfo) else {
             contentHandler(bestAttemptContent)
@@ -73,6 +76,23 @@ final class NotificationService: UNNotificationServiceExtension {
         downloadTask?.cancel()
         if let contentHandler, let bestAttemptContent {
             contentHandler(bestAttemptContent)
+        }
+    }
+
+    private func applySelectedSound(to content: UNMutableNotificationContent) {
+        let raw = UserDefaults(suiteName: "group.com.splick.app")?
+            .string(forKey: "pushNotificationSound")
+        switch raw {
+        case "silent":
+            content.sound = UNNotificationSound(named: UNNotificationSoundName("splick_notif_silent.wav"))
+        case "note":
+            content.sound = UNNotificationSound(named: UNNotificationSoundName("splick_notif_note.wav"))
+        case "chime":
+            content.sound = UNNotificationSound(named: UNNotificationSoundName("splick_notif_chime.wav"))
+        case "pop":
+            content.sound = UNNotificationSound(named: UNNotificationSoundName("splick_notif_pop.wav"))
+        default:
+            content.sound = UNNotificationSound(named: UNNotificationSoundName("splick_notif_default.wav"))
         }
     }
 

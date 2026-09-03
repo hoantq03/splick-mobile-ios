@@ -86,7 +86,7 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
         createdAt: Date,
         updatedAt: Date,
         notificationsEnabled: Bool = true,
-        notificationSound: String = ConversationNotificationSound.default.rawValue,
+        notificationSound: String = ConversationNotificationSound.`default`.rawValue,
         leftAt: Date? = nil
     ) {
         self.id = id

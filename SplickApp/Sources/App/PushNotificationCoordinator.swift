@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import UIKit
 import UserNotifications
+import AudioToolbox
 import Common
 import FeatureMessaging
 import FeatureNotification
@@ -48,8 +49,12 @@ final class PushNotificationCoordinator: ObservableObject {
         self.languageService = languageService
         localDeviceToken = userDefaultsService.get(for: AppConstants.UserDefaults.pushNotificationDeviceToken)
         notificationSound = AppNotificationSound.resolved(
-            userDefaultsService.get(for: AppConstants.UserDefaults.pushNotificationSound)
+            UserDefaults(suiteName: AppConstants.UserDefaults.appGroup)?
+                .string(forKey: AppConstants.UserDefaults.pushNotificationSound)
+                ?? userDefaultsService.get(for: AppConstants.UserDefaults.pushNotificationSound)
         )
+        UserDefaults(suiteName: AppConstants.UserDefaults.appGroup)?
+            .set(notificationSound.rawValue, forKey: AppConstants.UserDefaults.pushNotificationSound)
         registerNotificationCategories()
 
         Log.info(
@@ -250,10 +255,32 @@ final class PushNotificationCoordinator: ObservableObject {
     func setNotificationSound(_ sound: AppNotificationSound) {
         notificationSound = sound
         userDefaultsService?.set(sound.rawValue, for: AppConstants.UserDefaults.pushNotificationSound)
+        UserDefaults(suiteName: AppConstants.UserDefaults.appGroup)?
+            .set(sound.rawValue, forKey: AppConstants.UserDefaults.pushNotificationSound)
     }
 
     func foregroundPresentationOptions() -> UNNotificationPresentationOptions {
-        notificationSound.isSilent ? [.banner, .badge] : [.banner, .badge, .sound]
+        if notificationSound.isSilent {
+            return [.banner, .badge]
+        }
+        playSelectedSound()
+        // Omit `.sound` so APNs "default" does not override the bundled tone.
+        return [.banner, .badge]
+    }
+
+    func playSelectedSound() {
+        Self.playNotificationSound(notificationSound)
+    }
+
+    static func playNotificationSound(_ sound: AppNotificationSound) {
+        guard !sound.isSilent else { return }
+        let fileName = sound.bundledFileName
+        let name = (fileName as NSString).deletingPathExtension
+        let ext = (fileName as NSString).pathExtension
+        guard let url = Bundle.main.url(forResource: name, withExtension: ext) else { return }
+        var soundId: SystemSoundID = 0
+        AudioServicesCreateSystemSoundID(url as CFURL, &soundId)
+        AudioServicesPlaySystemSound(soundId)
     }
 
     var storedDeviceToken: String? {

@@ -78,6 +78,16 @@ targets:
         buildPhase: resources
       - path: SplickApp/PrivacyInfo.xcprivacy
         buildPhase: resources
+      - path: SplickApp/Resources/splick_notif_default.wav
+        buildPhase: resources
+      - path: SplickApp/Resources/splick_notif_note.wav
+        buildPhase: resources
+      - path: SplickApp/Resources/splick_notif_chime.wav
+        buildPhase: resources
+      - path: SplickApp/Resources/splick_notif_pop.wav
+        buildPhase: resources
+      - path: SplickApp/Resources/splick_notif_silent.wav
+        buildPhase: resources
     dependencies:
       - package: SplickCore
         product: Networking
@@ -181,6 +191,11 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         SKIP_INSTALL: YES
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
+      configs:
+        Debug:
+          CODE_SIGN_ENTITLEMENTS: SplickNotificationServiceExtension/SplickNotificationServiceExtension.entitlements
+        Release:
+          CODE_SIGN_ENTITLEMENTS: SplickNotificationServiceExtension/SplickNotificationServiceExtension.entitlements
 
 schemes:
   SplickApp:

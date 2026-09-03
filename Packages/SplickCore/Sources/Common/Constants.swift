@@ -32,6 +32,7 @@ public enum AppConstants {
         public static let isOnboardingCompleted = "isOnboardingCompleted"
         public static let lastSyncTimestamp = "lastSyncTimestamp"
         public static let selectedTheme = "selectedTheme"
+        public static let appGroup = "group.com.splick.app"
         public static let pushNotificationsEnabled = "pushNotificationsEnabled"
         public static let pushNotificationDeviceToken = "pushNotificationDeviceToken"
         public static let pushNotificationPermissionRequested = "pushNotificationPermissionRequested"
