@@ -108,16 +108,6 @@ struct PostCardView: View, Equatable {
             reactionSummaryRow
         }
         .splickCard()
-        .overlay(alignment: .topTrailing) {
-            if post.editedAt != nil {
-                Button {
-                    actions.onPresent(.editHistory(post))
-                } label: {
-                    FeedPostEditedBadge()
-                }
-                .buttonStyle(.plain)
-            }
-        }
         .zIndex(isMediaPinchZooming ? 100 : 0)
         .blur(radius: uploadState == .uploading ? 2.5 : 0)
         .opacity(isUploadPending ? 0.55 : 1)

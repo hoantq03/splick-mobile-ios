@@ -135,11 +135,14 @@ final class MockFetchStreakUseCase: FetchStreakUseCaseProtocol, Sendable {
                     id: item.id,
                     postId: post.id,
                     author: post.author,
+                    caption: post.caption,
                     mediaURL: item.mediaURL,
                     thumbnailURL: item.thumbnailURL,
                     mediaType: item.mediaType,
                     sortOrder: item.sortOrder,
-                    createdAt: post.createdAt
+                    createdAt: post.createdAt,
+                    checkInPlace: post.checkInPlace,
+                    companions: post.companions
                 )
             }
         }
@@ -157,11 +160,14 @@ final class MockFetchPhotoAlbumUseCase: FetchPhotoAlbumUseCaseProtocol, Sendable
                         id: item.id,
                         postId: post.id,
                         author: post.author,
+                        caption: post.caption,
                         mediaURL: item.mediaURL,
                         thumbnailURL: item.thumbnailURL,
                         mediaType: item.mediaType,
                         sortOrder: item.sortOrder,
-                        createdAt: post.createdAt
+                        createdAt: post.createdAt,
+                        checkInPlace: post.checkInPlace,
+                        companions: post.companions
                     )
                 }
         }
@@ -222,6 +228,7 @@ final class MockFetchPhotoAlbumUseCase: FetchPhotoAlbumUseCaseProtocol, Sendable
         ),
         actions: PostCardActions()
     )
+    .feedPostEditedBadge(isEdited: PreviewData.samplePost.isEdited) {}
     .padding()
     .environmentObject(previewLanguageService)
 }

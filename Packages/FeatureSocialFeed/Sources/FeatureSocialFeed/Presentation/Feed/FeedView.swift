@@ -559,6 +559,9 @@ private struct FeedPrimaryPage: View {
                     )
                     .equatable()
                     .feedPostZoomSource(postId: post.id)
+                    .feedPostEditedBadge(isEdited: post.isEdited) {
+                        cardActions.onPresent(.editHistory(post))
+                    }
                     .background {
                         FeedPostVisibilityReporter(postId: post.id)
                     }

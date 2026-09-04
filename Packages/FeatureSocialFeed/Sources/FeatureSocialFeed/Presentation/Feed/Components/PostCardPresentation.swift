@@ -132,7 +132,7 @@ struct PostCardPresentationHost: ViewModifier {
                 SharePostSheet(post: post, fallbackCaption: shareText)
             }
         case .editHistory(let post):
-            PostEditHistorySheet(postId: post.id) {
+            PostEditHistorySheet(post: post) {
                 try await loadPostEdits?(post.id) ?? []
             }
         case .customEmojiUpload:

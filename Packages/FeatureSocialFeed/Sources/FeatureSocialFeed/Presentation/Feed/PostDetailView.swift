@@ -105,6 +105,9 @@ struct PostDetailView: View {
                         initiallyExpandedBillSplit: expandBillSplitInitially,
                         initialMediaIndex: initialMediaIndex
                     )
+                    .feedPostEditedBadge(isEdited: livePost.isEdited) {
+                        cardActions.onPresent(.editHistory(livePost))
+                    }
                     .id("\(post.id.uuidString)-\(mediaTapReady)")
 
                     commentsSection
