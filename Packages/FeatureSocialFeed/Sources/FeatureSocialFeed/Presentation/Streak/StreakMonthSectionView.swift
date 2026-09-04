@@ -10,7 +10,7 @@ struct StreakMonthSectionView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
             Text(section.title)
-                .font(.system(size: 17, weight: .semibold))
+                .font(.system(size: 22, weight: .semibold))
                 .foregroundStyle(SplickTheme.Colors.textPrimary)
                 .padding(.leading, SplickTheme.Spacing.xxs)
 

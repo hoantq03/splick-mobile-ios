@@ -198,7 +198,7 @@ public final class StreakViewModel: ObservableObject {
 
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
-        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.timeZone = TimeZone.current
         let dateString = formatter.string(from: day.date)
 
         do {

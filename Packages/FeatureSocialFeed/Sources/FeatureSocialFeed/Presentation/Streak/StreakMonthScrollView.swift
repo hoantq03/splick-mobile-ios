@@ -10,8 +10,8 @@ private enum StreakScrollAnchor {
 }
 
 /// Continuous vertical month list.
-/// Current month is at the top; older months load below as the user scrolls down.
-struct StreakMonthScrollView: View {
+/// Current month is at the top; pull down to reload, older months load below.
+struct StreakMonthScrollView<Header: View>: View {
     @EnvironmentObject private var languageService: LanguageService
     /// True only while the Chuỗi pager page is the active segment.
     @Environment(\.scrollChromeTrackingEnabled) private var isStreakSegmentActive
@@ -25,6 +25,7 @@ struct StreakMonthScrollView: View {
     let onLoadOlder: (StreakMonthSection) async -> Bool
     let onDayTap: (StreakDay) -> Void
     let onRefresh: () async -> Void
+    @ViewBuilder var header: () -> Header
 
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @State private var refreshController = SplickRefreshController()
@@ -37,86 +38,105 @@ struct StreakMonthScrollView: View {
     @StateObject private var scrollHost = StreakScrollHost()
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                Color.clear
-                    .frame(height: 0)
-                    .id(StreakScrollAnchor.top)
+        VStack(spacing: 0) {
+            header()
+                .frame(maxWidth: .infinity)
+                .background(SplickTheme.Colors.background)
+                .zIndex(1)
 
-                LazyVStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
-                    ForEach(sections) { section in
-                        StreakMonthSectionView(section: section, onDayTap: onDayTap)
-                            .id(section.id)
-                            .onAppear {
-                                requestOlderMonthIfNeeded(for: section)
-                            }
-                    }
+            ZStack(alignment: .top) {
+                ScrollViewReader { proxy in
+                ScrollView {
+                    Color.clear
+                        .frame(height: 0)
+                        .id(StreakScrollAnchor.top)
 
-                    if isLoadingOlder || isOlderLoadInFlight {
-                        ProgressView()
-                            .controlSize(.regular)
-                            .tint(SplickTheme.Colors.primaryGradientStart)
-                            .padding(.vertical, SplickTheme.Spacing.sm)
-                            .frame(maxWidth: .infinity)
-                            .accessibilityLabel(languageService.text(.feedStreakLoading))
-                    }
+                    LazyVStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
+                        ForEach(sections) { section in
+                            StreakMonthSectionView(section: section, onDayTap: onDayTap)
+                                .id(section.id)
+                                .onAppear {
+                                    requestOlderMonthIfNeeded(for: section)
+                                }
+                        }
 
-                    if hasReachedOldestMonth, !isLoadingOlder, !isOlderLoadInFlight {
-                        Text(languageService.text(.feedStreakEndOfHistory))
-                            .font(.footnote.weight(.medium))
-                            .foregroundStyle(SplickTheme.Colors.textTertiary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, SplickTheme.Spacing.sm)
+                        if isLoadingOlder || isOlderLoadInFlight {
+                            ProgressView()
+                                .controlSize(.regular)
+                                .tint(SplickTheme.Colors.primaryGradientStart)
+                                .padding(.vertical, SplickTheme.Spacing.sm)
+                                .frame(maxWidth: .infinity)
+                                .accessibilityLabel(languageService.text(.feedStreakLoading))
+                        }
+
+                        if hasReachedOldestMonth, !isLoadingOlder, !isOlderLoadInFlight {
+                            Text(languageService.text(.feedStreakEndOfHistory))
+                                .font(.footnote.weight(.medium))
+                                .foregroundStyle(SplickTheme.Colors.textTertiary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, SplickTheme.Spacing.sm)
+                        }
                     }
+                    .padding(.top, 36)
+                    .padding(.bottom, SplickTheme.Spacing.xl)
+
+                    Color.clear
+                        .frame(height: 1)
+                        .id(StreakScrollAnchor.bottom)
                 }
-                .padding(.top, SplickTheme.Spacing.xs)
-                .padding(.bottom, SplickTheme.Spacing.xl)
+                .scrollContentBackground(.hidden)
+                .background(SplickTheme.Colors.background)
+                .background {
+                    StreakScrollViewAnchor(host: scrollHost)
+                }
+                .feedScrollSoftTopEdge()
+                .feedScrollBounceAlways()
+                .scrollChromeTracking()
+                .splickNativeRefreshable(controller: refreshController) {
+                    await onRefresh()
+                }
+                .splickSameTabTapBehavior(
+                    scrollTopID: StreakScrollAnchor.top,
+                    scrollProxy: proxy,
+                    refreshController: refreshController,
+                    isAtTop: { tabBarScrollState?.isAtTop == true }
+                )
+                .onAppear {
+                    trackedSectionCount = sections.count
+                    schedulePinToStartIfNeeded(using: proxy)
+                }
+                .onChange(of: isStreakSegmentActive) { active in
+                    guard active else { return }
+                    didPinToStart = false
+                    schedulePinToStartIfNeeded(using: proxy)
+                }
+                .onChange(of: scrollToEndToken) { token in
+                    guard token != lastScrollToEndToken else { return }
+                    lastScrollToEndToken = token
+                    resetPaginationGates()
+                    trackedSectionCount = sections.count
+                    schedulePinToStartIfNeeded(using: proxy)
+                }
+                .onChange(of: sections.count) { newCount in
+                    let oldCount = trackedSectionCount
+                    trackedSectionCount = newCount
+                    handleSectionCountChange(oldCount: oldCount, newCount: newCount, proxy: proxy)
+                }
+                .onChange(of: scrollHost.isNearBottom) { nearBottom in
+                    guard nearBottom, didPinToStart, let oldest = sections.last else { return }
+                    requestOlderMonthIfNeeded(for: oldest)
+                }
+                }
 
-                Color.clear
-                    .frame(height: 1)
-                    .id(StreakScrollAnchor.bottom)
-            }
-            .scrollContentBackground(.hidden)
-            .background(SplickTheme.Colors.background)
-            .background {
-                StreakScrollViewAnchor(host: scrollHost)
-            }
-            .feedScrollSoftTopEdge()
-            .scrollChromeTracking()
-            .onChange(of: refreshController.requestID) { requestID in
-                guard requestID > 0 else { return }
-                Task { await onRefresh() }
-            }
-            .splickSameTabTapBehavior(
-                scrollTopID: StreakScrollAnchor.top,
-                scrollProxy: proxy,
-                refreshController: refreshController,
-                isAtTop: { tabBarScrollState?.isAtTop == true }
-            )
-            .onAppear {
-                trackedSectionCount = sections.count
-                schedulePinToStartIfNeeded(using: proxy)
-            }
-            .onChange(of: isStreakSegmentActive) { active in
-                guard active else { return }
-                didPinToStart = false
-                schedulePinToStartIfNeeded(using: proxy)
-            }
-            .onChange(of: scrollToEndToken) { token in
-                guard token != lastScrollToEndToken else { return }
-                lastScrollToEndToken = token
-                resetPaginationGates()
-                trackedSectionCount = sections.count
-                schedulePinToStartIfNeeded(using: proxy)
-            }
-            .onChange(of: sections.count) { newCount in
-                let oldCount = trackedSectionCount
-                trackedSectionCount = newCount
-                handleSectionCountChange(oldCount: oldCount, newCount: newCount, proxy: proxy)
-            }
-            .onChange(of: scrollHost.isNearBottom) { nearBottom in
-                guard nearBottom, didPinToStart, let oldest = sections.last else { return }
-                requestOlderMonthIfNeeded(for: oldest)
+                LinearGradient(
+                    stops: SplickScrollChromeFadeMetrics.backgroundStops,
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 52)
+                .frame(maxWidth: .infinity, alignment: .top)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
             }
         }
     }
@@ -144,9 +164,6 @@ struct StreakMonthScrollView: View {
                 transaction.disablesAnimations = true
                 withTransaction(transaction) {
                     proxy.scrollTo(StreakScrollAnchor.top, anchor: .top)
-                    if !anchorMonthID.isEmpty {
-                        proxy.scrollTo(anchorMonthID, anchor: .top)
-                    }
                 }
                 _ = scrollHost.scrollToTop()
 

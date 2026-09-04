@@ -27,9 +27,9 @@ public struct StreakDay: Identifiable, Equatable, Sendable {
 
 /// Summary of the user's posting streak.
 public struct StreakSummary: Equatable, Sendable {
-    /// Consecutive UTC days ending today with at least one IMAGE post. 0 means no active streak.
+    /// Consecutive calendar days in the user's IANA time zone with at least one IMAGE post.
     public let currentStreak: Int
-    /// Whether the user has already posted an IMAGE today (UTC).
+    /// Whether the user has already posted an IMAGE today in that time zone.
     public let hasTodayPhoto: Bool
 
     public init(currentStreak: Int, hasTodayPhoto: Bool) {

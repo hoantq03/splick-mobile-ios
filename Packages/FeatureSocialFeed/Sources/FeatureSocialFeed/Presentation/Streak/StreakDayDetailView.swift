@@ -142,6 +142,8 @@ private struct StreakDayLegacyCarousel: View {
 // MARK: - Carousel card
 
 private struct StreakDayCarouselCard: View {
+    @EnvironmentObject private var languageService: LanguageService
+
     let photo: AlbumPhoto
     let width: CGFloat
     let onTap: () -> Void
@@ -151,9 +153,9 @@ private struct StreakDayCarouselCard: View {
 
     var body: some View {
         Button(action: onTap) {
-            VStack(spacing: SplickTheme.Spacing.sm) {
+            VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
                 photoImage
-                timestampLabel
+                photoMeta
             }
             .frame(width: width)
         }
@@ -178,24 +180,50 @@ private struct StreakDayCarouselCard: View {
         .shadow(color: .black.opacity(0.12), radius: 10, x: 0, y: 4)
     }
 
-    private var timestampLabel: some View {
-        Text(StreakDayPhotoTimestampFormatter.string(from: photo.createdAt))
-            .font(.subheadline.weight(.medium))
-            .foregroundStyle(SplickTheme.Colors.textSecondary)
-            .multilineTextAlignment(.center)
-            .frame(maxWidth: .infinity)
-    }
-}
+    @ViewBuilder
+    private var photoMeta: some View {
+        let caption = photo.caption?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let place = photo.checkInPlace?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasCaption = !(caption ?? "").isEmpty
+        let hasCompanions = !photo.companions.isEmpty
+        let hasPlace = !(place ?? "").isEmpty
 
-private enum StreakDayPhotoTimestampFormatter {
-    private static let formatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter
-    }()
+        if hasCaption || hasCompanions || hasPlace {
+            VStack(alignment: .leading, spacing: 6) {
+                if let caption, !caption.isEmpty {
+                    Text(caption)
+                        .font(.subheadline)
+                        .foregroundStyle(SplickTheme.Colors.textPrimary)
+                        .lineLimit(3)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
 
-    static func string(from date: Date) -> String {
-        formatter.string(from: date)
+                if hasCompanions {
+                    HStack(alignment: .center, spacing: 6) {
+                        Image(systemName: "person.2.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                        CompanionsSummaryText(
+                            companions: photo.companions,
+                            groupName: nil,
+                            currentUserId: nil
+                        )
+                    }
+                }
+
+                if let place, !place.isEmpty {
+                    HStack(alignment: .center, spacing: 6) {
+                        Image(systemName: "mappin.and.ellipse")
+                            .font(.system(size: 10))
+                            .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                        Text(languageService.format(.feedCheckInAt, place))
+                            .font(.system(size: 11))
+                            .foregroundStyle(SplickTheme.Colors.textSecondary)
+                            .lineLimit(2)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }

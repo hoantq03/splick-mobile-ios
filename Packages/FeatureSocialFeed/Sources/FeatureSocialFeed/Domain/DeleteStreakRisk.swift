@@ -2,12 +2,12 @@ import Foundation
 import SplickDomain
 
 enum DeleteStreakRisk {
-    /// Warn only when the live streak is greater than 2 (i.e. 3+ days).
-    static let minimumStreakToWarn = 3
+    /// Warn whenever deleting would drop a live streak (1+ days).
+    static let minimumStreakToWarn = 1
 
     static func utcDateString(_ date: Date) -> String {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        calendar.timeZone = TimeZone.current
         let components = calendar.dateComponents([.year, .month, .day], from: date)
         return String(
             format: "%04d-%02d-%02d",

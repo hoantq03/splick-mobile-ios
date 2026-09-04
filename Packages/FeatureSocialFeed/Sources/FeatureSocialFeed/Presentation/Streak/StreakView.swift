@@ -41,28 +41,27 @@ public struct StreakView: View {
 
     @ViewBuilder
     private var loadedContent: some View {
-        VStack(spacing: 0) {
+        StreakMonthScrollView(
+            sections: viewModel.monthSections,
+            anchorMonthID: viewModel.anchorMonthID,
+            scrollToEndToken: viewModel.scrollToEndToken,
+            isLoadingOlder: viewModel.isLoadingOlderMonths,
+            hasReachedOldestMonth: viewModel.hasReachedOldestMonth,
+            canLoadOlder: !viewModel.hasReachedOldestMonth,
+            onLoadOlder: { section in
+                await viewModel.loadOlderMonthIfNeeded(for: section)
+            },
+            onDayTap: { day in
+                viewModel.selectDay(day)
+            },
+            onRefresh: {
+                await viewModel.refresh()
+            }
+        ) {
             streakHeader
                 .padding(.horizontal, SplickTheme.Spacing.md)
-                .padding(.bottom, SplickTheme.Spacing.md)
-
-            StreakMonthScrollView(
-                sections: viewModel.monthSections,
-                anchorMonthID: viewModel.anchorMonthID,
-                scrollToEndToken: viewModel.scrollToEndToken,
-                isLoadingOlder: viewModel.isLoadingOlderMonths,
-                hasReachedOldestMonth: viewModel.hasReachedOldestMonth,
-                canLoadOlder: !viewModel.hasReachedOldestMonth,
-                onLoadOlder: { section in
-                    await viewModel.loadOlderMonthIfNeeded(for: section)
-                },
-                onDayTap: { day in
-                    viewModel.selectDay(day)
-                },
-                onRefresh: {
-                    await viewModel.refresh()
-                }
-            )
+                .padding(.top, 0)
+                .padding(.bottom, SplickTheme.Spacing.xxs)
         }
         .feedPagerPageTopInset(isEnabled: true)
         .background(SplickTheme.Colors.background)
@@ -98,30 +97,15 @@ public struct StreakView: View {
     // MARK: - Header
 
     private var streakHeader: some View {
-        VStack(spacing: 4) {
-            HStack(spacing: 8) {
-                Image(systemName: viewModel.currentStreak > 0 ? "flame.fill" : "flame")
-                    .font(.system(size: 48))
-                    .foregroundStyle(
-                        viewModel.currentStreak > 0
-                            ? Color.orange
-                            : SplickTheme.Colors.textSecondary
-                    )
+        VStack(spacing: 6) {
+            HStack(spacing: 11) {
+                StreakFlameView(isLit: viewModel.currentStreak > 0, size: 67)
 
-                Group {
-                    if #available(iOS 17.0, *) {
-                        Text("\(viewModel.currentStreak)")
-                            .contentTransition(.numericText())
-                    } else {
-                        Text("\(viewModel.currentStreak)")
-                    }
-                }
-                .font(.system(size: 56, weight: .bold, design: .rounded))
-                .foregroundStyle(SplickTheme.Colors.textPrimary)
+                StreakCountView(count: viewModel.currentStreak)
             }
 
             Text(languageService.text(.feedStreakDays))
-                .font(.subheadline)
+                .font(.system(size: 21, weight: .medium))
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
 
             streakQuoteLine
@@ -135,13 +119,13 @@ public struct StreakView: View {
                     .padding(.top, 2)
             }
         }
-        .padding(.top, SplickTheme.Spacing.md)
+        .padding(.top, 0)
         .animation(.spring(response: 0.4, dampingFraction: 0.7), value: viewModel.currentStreak)
     }
 
     private var streakQuoteLine: some View {
         Text("“\(streakQuoteText)”")
-            .font(.footnote)
+            .font(.system(size: 18))
             .italic()
             .foregroundStyle(SplickTheme.Colors.textTertiary)
             .multilineTextAlignment(.center)
