@@ -54,6 +54,25 @@ public final class ExpenseRepository: ExpenseRepositoryProtocol, Sendable {
     return ExpenseMapper.toMonthlySummary(dto)
   }
 
+  public func fetchOverview() async throws -> ExpenseOverview {
+    let dto: ExpenseOverviewDTO = try await apiClient.request(ExpenseEndpoint.overview)
+    return ExpenseMapper.toOverview(dto)
+  }
+
+  public func fetchSpendingAnalytics(period: SpendingAnalyticsPeriod, months: Int) async throws
+    -> SpendingAnalytics
+  {
+    let dto: SpendingAnalyticsDTO = try await apiClient.request(
+      ExpenseEndpoint.spendingAnalytics(period: period, months: months)
+    )
+    return ExpenseMapper.toSpendingAnalytics(dto)
+  }
+
+  public func fetchGroupExpenseSummary() async throws -> GroupExpenseSummary {
+    let dto: GroupExpenseSummaryDTO = try await apiClient.request(ExpenseEndpoint.groupSummary)
+    return ExpenseMapper.toGroupSummary(dto)
+  }
+
   public func fetchExpenses(
     counterpartyId: UUID,
     page: Int,

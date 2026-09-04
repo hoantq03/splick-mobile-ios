@@ -39,6 +39,7 @@ public struct ExpenseListView: View {
     private let makeFriendDetailViewModel: ((DebtSummary) -> ExpenseFriendDetailViewModel)?
     private let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol?
     private let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
+    private let overviewViewModel: ExpenseOverviewViewModel?
 
     private var sameTabTapPublisher: AnyPublisher<Void, Never> {
         tabBarScrollState?.sameTabTapSubject.eraseToAnyPublisher()
@@ -54,7 +55,8 @@ public struct ExpenseListView: View {
         fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol? = nil,
         profileDependencies: FriendUserProfileDependencies? = nil,
         friendListViewModel: ExpenseFriendListViewModel? = nil,
-        makeFriendDetailViewModel: ((DebtSummary) -> ExpenseFriendDetailViewModel)? = nil
+        makeFriendDetailViewModel: ((DebtSummary) -> ExpenseFriendDetailViewModel)? = nil,
+        overviewViewModel: ExpenseOverviewViewModel? = nil
     ) {
         self.viewModel = viewModel
         self.currentUser = currentUser
@@ -65,6 +67,7 @@ public struct ExpenseListView: View {
         self.profileDependencies = profileDependencies
         self.friendListViewModel = friendListViewModel
         self.makeFriendDetailViewModel = makeFriendDetailViewModel
+        self.overviewViewModel = overviewViewModel
     }
 
     public var body: some View {
@@ -124,6 +127,9 @@ public struct ExpenseListView: View {
             viewModel.updateCurrentUserId(currentUserId)
             guard isTabActive else { return }
             Task { await viewModel.loadIfNeeded() }
+            if let overviewViewModel {
+                Task { await overviewViewModel.loadIfNeeded() }
+            }
         }
         .onChange(of: isTabActive) { active in
             guard active else { return }
@@ -135,6 +141,9 @@ public struct ExpenseListView: View {
                 tabBarScrollState?.reset()
             }
             Task { await viewModel.loadIfNeeded() }
+            if let overviewViewModel {
+                Task { await overviewViewModel.loadIfNeeded() }
+            }
         }
         .onReceive(sameTabTapPublisher) { _ in
             handleSameTabTap()
@@ -142,6 +151,9 @@ public struct ExpenseListView: View {
         .onReceive(NotificationCenter.default.publisher(for: .paymentEvidenceStatusDidChange)) { _ in
             guard isTabActive else { return }
             Task { await viewModel.load(isPullToRefresh: true) }
+            if let overviewViewModel {
+                Task { await overviewViewModel.load(isPullToRefresh: true) }
+            }
         }
         .onChange(of: currentUserId) { userId in
             viewModel.updateCurrentUserId(userId)
@@ -210,11 +222,16 @@ public struct ExpenseListView: View {
 
     @ViewBuilder
     private var overviewPage: some View {
-        ExpenseOverviewPage(
-            viewModel: viewModel,
-            refreshController: overviewRefreshController,
-            overviewScrollTopSignal: overviewScrollTopSignal
-        )
+        if let overviewViewModel {
+            ExpenseOverviewTab(
+                viewModel: overviewViewModel,
+                refreshController: overviewRefreshController,
+                overviewScrollTopSignal: overviewScrollTopSignal
+            )
+        } else {
+            LoadingView(message: languageService.text(.expenseLoading))
+                .splickSegmentPagerPageTopInset(isEnabled: true)
+        }
     }
 
     @ViewBuilder
@@ -257,193 +274,6 @@ public struct ExpenseListView: View {
     }
 }
 
-private struct ExpenseOverviewPage: View {
-    @ObservedObject var viewModel: ExpenseListViewModel
-    @ObservedObject var refreshController: SplickRefreshController
-    @EnvironmentObject private var languageService: LanguageService
-    @Environment(\.pullToRefreshActive) private var pullToRefreshActive
-
-    let overviewScrollTopSignal: Int
-    @State private var chartMode: ExpenseChartMode = .income
-
-    var body: some View {
-        Group {
-            switch viewModel.state {
-            case .idle, .loading:
-                LoadingView(message: languageService.text(.expenseLoading))
-                    .splickSegmentPagerPageTopInset(isEnabled: true)
-
-            case .failed(let message):
-                ErrorView(message: message) {
-                    Task { await viewModel.load() }
-                }
-                .splickSegmentPagerPageTopInset(isEnabled: true)
-
-            default:
-                overviewContent
-            }
-        }
-    }
-
-    private var overviewContent: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(spacing: SplickTheme.Spacing.md) {
-                    Color.clear.frame(height: 0).id("expenseOverviewScrollTop")
-
-                    ExpenseOverviewSummaryBoxes(
-                        received: viewModel.currentMonthReceived,
-                        paid: viewModel.currentMonthPaid,
-                        currency: viewModel.monthlySummaryCurrency,
-                        incomeLabel: languageService.text(.expenseOverviewIncome),
-                        expenditureLabel: languageService.text(.expenseOverviewExpenditure),
-                        thisMonthLabel: languageService.text(.expenseOverviewThisMonth),
-                        todayNet: viewModel.todayNetUnpaid,
-                        todayTitle: languageService.text(.expenseOverviewTodayTitle),
-                        othersOweYouLabel: languageService.text(.expenseYouAreOwed),
-                        youOweOthersLabel: languageService.text(.expenseYouOwe),
-                        todayBalancedLabel: languageService.text(.expenseOverviewTodayBalanced)
-                    )
-
-                    ExpenseMonthlyBarChart(
-                        data: viewModel.chartData,
-                        currency: viewModel.monthlySummaryCurrency,
-                        selectedMode: $chartMode,
-                        incomeLabel: languageService.text(.expenseOverviewIncome),
-                        expenditureLabel: languageService.text(.expenseOverviewExpenditure),
-                        chartTitle: languageService.text(.expenseOverviewChartTitle)
-                    )
-
-                    debtSummaryCard
-                }
-                .padding(.horizontal, SplickTheme.Spacing.md)
-                .padding(.top, SplickTheme.Spacing.md)
-                .padding(
-                    .bottom,
-                    SplickTabBarMetrics.floatingClearance + SplickTheme.Spacing.md
-                )
-                .transaction { transaction in
-                    if pullToRefreshActive {
-                        transaction.animation = nil
-                    }
-                }
-            }
-            .scrollChromeTracking()
-            .splickSegmentPagerScrollInsets()
-            .splickScrollSoftTopEdge()
-            .splickNativeRefreshable(controller: refreshController) {
-                await viewModel.load(isPullToRefresh: true)
-            }
-            .onChange(of: overviewScrollTopSignal) { _ in
-                withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
-                    proxy.scrollTo("expenseOverviewScrollTop", anchor: .top)
-                }
-            }
-        }
-    }
-
-    private var debtSummaryCard: some View {
-        VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
-            overviewSectionHeader
-            overviewDebtCharts(showsDetailedLegend: true)
-        }
-        .splickCard(
-            padding: SplickTheme.Spacing.md,
-            cornerRadius: ExpenseScreenChrome.cardRadius
-        )
-    }
-
-    private func overviewDebtCharts(showsDetailedLegend: Bool) -> some View {
-        HStack(alignment: .top, spacing: SplickTheme.Spacing.md) {
-            ExpenseDebtDonutChart(
-                title: languageService.text(.expenseYouOwe),
-                unpaidAmount: viewModel.overviewOweUnpaidTotal,
-                paidAmount: viewModel.overviewOwePaidTotal,
-                unpaidCount: viewModel.overviewOweUnpaidCount,
-                paidCount: viewModel.overviewOwePaidCount,
-                unpaidFilter: .oweUnpaid,
-                paidFilter: .owePaid,
-                selectedFilter: viewModel.filters.debtStatus,
-                showsDetailedLegend: showsDetailedLegend,
-                unpaidLabel: languageService.text(.expenseOverviewUnpaid),
-                paidLabel: languageService.text(.expenseOverviewPaid),
-                emptyLabel: languageService.text(.expenseOverviewEmptyChart),
-                countFormat: { languageService.format(.expenseOverviewOweUnpaidCount, $0) },
-                filterHint: languageService.text(.expenseOverviewFilterHint),
-                onSelect: selectOverviewDebtFilter,
-                onExpandRequest: {}
-            )
-
-            ExpenseDebtDonutChart(
-                title: languageService.text(.expenseYouAreOwed),
-                unpaidAmount: viewModel.overviewOwedUnpaidTotal,
-                paidAmount: viewModel.overviewOwedPaidTotal,
-                unpaidCount: viewModel.overviewOwedUnpaidCount,
-                paidCount: viewModel.overviewOwedPaidCount,
-                unpaidFilter: .owedUnpaid,
-                paidFilter: .owedPaid,
-                selectedFilter: viewModel.filters.debtStatus,
-                showsDetailedLegend: showsDetailedLegend,
-                unpaidLabel: languageService.text(.expenseOverviewUnpaid),
-                paidLabel: languageService.text(.expenseOverviewPaid),
-                emptyLabel: languageService.text(.expenseOverviewEmptyChart),
-                countFormat: { languageService.format(.expenseOverviewOwedUnpaidCount, $0) },
-                filterHint: languageService.text(.expenseOverviewFilterHint),
-                onSelect: selectOverviewDebtFilter,
-                onExpandRequest: {}
-            )
-        }
-    }
-
-    private func selectOverviewDebtFilter(_ status: ExpenseDebtFilter) {
-        viewModel.applyOverviewDebtFilter(status)
-    }
-
-    private var overviewSectionHeader: some View {
-        HStack(spacing: SplickTheme.Spacing.xs) {
-            Image(systemName: "person.2.fill")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(SplickTheme.Colors.info)
-                .frame(width: 22, height: 22)
-                .background {
-                    Circle()
-                        .fill(SplickTheme.Colors.info.opacity(0.14))
-                }
-
-            HStack(spacing: SplickTheme.Spacing.xxxs) {
-                Text(languageService.text(.expenseOverviewDebtSectionTitle))
-                    .font(SplickTheme.Typography.captionBold)
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
-                    .textCase(.uppercase)
-                    .lineLimit(1)
-
-                if let periodLabel = datePeriodSubtitle {
-                    Text(periodLabel)
-                        .font(SplickTheme.Typography.caption)
-                        .foregroundStyle(SplickTheme.Colors.textTertiary)
-                        .lineLimit(1)
-                }
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, SplickTheme.Spacing.xxs)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(languageService.text(.expenseOverviewSectionTitle))
-        .accessibilityValue(datePeriodSubtitle ?? "")
-    }
-
-    private var datePeriodSubtitle: String? {
-        switch viewModel.filters.activeDatePreset {
-        case .week:
-            return languageService.text(.expenseRecordsSectionThisWeek)
-        case .month:
-            return languageService.text(.expenseRecordsSectionThisMonth)
-        case .all:
-            return languageService.text(.expenseRecordsSectionAllTime)
-        }
-    }
-}
 
 private struct ExpenseHistoryPage: View {
     @ObservedObject var viewModel: ExpenseListViewModel
@@ -1389,257 +1219,6 @@ enum ExpenseScreenChrome {
     static let controlRadius: CGFloat = SplickTheme.CornerRadius.medium
 }
 
-private struct ExpenseDebtDonutChart: View {
-    let title: String
-    let unpaidAmount: Decimal
-    let paidAmount: Decimal
-    let unpaidCount: Int
-    let paidCount: Int
-    let unpaidFilter: ExpenseDebtFilter
-    let paidFilter: ExpenseDebtFilter
-    let selectedFilter: ExpenseDebtFilter
-    let showsDetailedLegend: Bool
-    let unpaidLabel: String
-    let paidLabel: String
-    let emptyLabel: String
-    let countFormat: (Int) -> String
-    let filterHint: String
-    let onSelect: (ExpenseDebtFilter) -> Void
-    var onExpandRequest: (() -> Void)? = nil
-
-    private var unpaidColor: Color { SplickTheme.Colors.error }
-    private var paidColor: Color { SplickTheme.Colors.success }
-    private let chartSize: CGFloat = 124
-    private let ringWidth: CGFloat = 18
-    private var chartCornerRadius: CGFloat { ExpenseScreenChrome.insetRadius }
-    private var rowCornerRadius: CGFloat { ExpenseScreenChrome.controlRadius }
-
-    private var totalAmount: Decimal { unpaidAmount + paidAmount }
-    private var hasData: Bool { totalAmount > 0 }
-    private var unpaidSelected: Bool { selectedFilter == unpaidFilter }
-    private var paidSelected: Bool { selectedFilter == paidFilter }
-    private var groupSelected: Bool { unpaidSelected || paidSelected }
-
-    private var unpaidFraction: CGFloat {
-        guard hasData else { return 0 }
-        return CGFloat(NSDecimalNumber(decimal: unpaidAmount / totalAmount).doubleValue)
-    }
-
-    private var paidFraction: CGFloat { 1 - unpaidFraction }
-
-    private func chartAmount(_ amount: Decimal) -> String {
-        amount.chartAmountString(currencyCode: "VND")
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Text(title)
-                .font(SplickTheme.Typography.captionBold)
-                .foregroundStyle(SplickTheme.Colors.textSecondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-                .frame(maxWidth: .infinity)
-                .padding(.bottom, SplickTheme.Spacing.md)
-
-            donut
-                .frame(width: chartSize, height: chartSize)
-                .frame(maxWidth: .infinity)
-
-            if showsDetailedLegend {
-                VStack(spacing: SplickTheme.Spacing.xxs) {
-                    detailRow(
-                        label: unpaidLabel,
-                        amount: unpaidAmount,
-                        count: unpaidCount,
-                        tint: unpaidColor,
-                        filter: unpaidFilter,
-                        isSelected: unpaidSelected
-                    )
-                    detailRow(
-                        label: paidLabel,
-                        amount: paidAmount,
-                        count: paidCount,
-                        tint: paidColor,
-                        filter: paidFilter,
-                        isSelected: paidSelected
-                    )
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.top, SplickTheme.Spacing.md)
-            }
-        }
-        .padding(SplickTheme.Spacing.md)
-        .frame(maxWidth: .infinity, alignment: .top)
-        .background {
-            RoundedRectangle(cornerRadius: chartCornerRadius, style: .continuous)
-                .fill(SplickTheme.Colors.background.opacity(groupSelected ? 0.98 : 0.88))
-                .overlay {
-                    RoundedRectangle(cornerRadius: chartCornerRadius, style: .continuous)
-                        .strokeBorder(
-                            SplickTheme.Colors.textTertiary.opacity(groupSelected ? 0.28 : 0.12),
-                            lineWidth: groupSelected ? 1.5 : 1
-                        )
-                }
-        }
-    }
-
-    private var donut: some View {
-        ZStack {
-            Circle()
-                .stroke(SplickTheme.Colors.tertiaryBackground, lineWidth: ringWidth)
-
-            if hasData {
-                donutSlices
-            }
-
-            VStack(spacing: 2) {
-                if hasData {
-                    Text(chartAmount(totalAmount))
-                        .font(.system(size: 13, weight: .bold).monospacedDigit())
-                        .foregroundStyle(SplickTheme.Colors.textPrimary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.42)
-                        .allowsTightening(true)
-                        .multilineTextAlignment(.center)
-                } else {
-                    Text(emptyLabel)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(SplickTheme.Colors.textTertiary)
-                        .multilineTextAlignment(.center)
-                }
-            }
-            .padding(.horizontal, 4)
-            .frame(width: chartSize - ringWidth * 2 - 4)
-        }
-        .contentShape(Circle())
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onEnded { value in
-                    if !showsDetailedLegend {
-                        onExpandRequest?()
-                        return
-                    }
-                    guard hasData else { return }
-                    onSelect(filter(at: value.location))
-                }
-        )
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilitySummary)
-        .accessibilityHint(filterHint)
-        .accessibilityAddTraits(.isButton)
-    }
-
-    @ViewBuilder
-    private var donutSlices: some View {
-        let unpaidIsDominant = unpaidFraction >= paidFraction
-
-        if unpaidIsDominant {
-            // Smaller paid slice — rounded ends (under the larger C tips).
-            if paidFraction > 0 {
-                Circle()
-                    .trim(from: unpaidFraction, to: 1)
-                    .stroke(
-                        paidColor,
-                        style: StrokeStyle(lineWidth: ringWidth, lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(-90))
-                    .opacity(unpaidSelected && !paidSelected ? 0.35 : 1)
-            }
-
-            // Larger unpaid C — round tips sit over the junction.
-            Circle()
-                .trim(from: 0, to: unpaidFraction)
-                .stroke(
-                    unpaidColor,
-                    style: StrokeStyle(lineWidth: ringWidth, lineCap: .round)
-                )
-                .rotationEffect(.degrees(-90))
-                .opacity(paidSelected && !unpaidSelected ? 0.35 : 1)
-        } else {
-            // Smaller unpaid slice — rounded ends (under the larger C tips).
-            if unpaidFraction > 0 {
-                Circle()
-                    .trim(from: 0, to: unpaidFraction)
-                    .stroke(
-                        unpaidColor,
-                        style: StrokeStyle(lineWidth: ringWidth, lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(-90))
-                    .opacity(paidSelected && !unpaidSelected ? 0.35 : 1)
-            }
-
-            // Larger paid C — round tips sit over the junction.
-            Circle()
-                .trim(from: unpaidFraction, to: 1)
-                .stroke(
-                    paidColor,
-                    style: StrokeStyle(lineWidth: ringWidth, lineCap: .round)
-                )
-                .rotationEffect(.degrees(-90))
-                .opacity(unpaidSelected && !paidSelected ? 0.35 : 1)
-        }
-    }
-
-    private func detailRow(
-        label: String,
-        amount: Decimal,
-        count: Int,
-        tint: Color,
-        filter: ExpenseDebtFilter,
-        isSelected: Bool
-    ) -> some View {
-        Button {
-            onSelect(filter)
-        } label: {
-            VStack(spacing: 2) {
-                HStack(spacing: SplickTheme.Spacing.xxs) {
-                    Circle()
-                        .fill(tint)
-                        .frame(width: 7, height: 7)
-                    Text(label)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
-                        .lineLimit(1)
-                }
-
-                Text(chartAmount(amount))
-                    .font(.system(size: 13, weight: .bold).monospacedDigit())
-                    .foregroundStyle(tint)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.55)
-
-                Text(countFormat(count))
-                    .font(.system(size: 10, weight: .regular))
-                    .foregroundStyle(SplickTheme.Colors.textTertiary)
-                    .lineLimit(1)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, SplickTheme.Spacing.sm)
-            .padding(.horizontal, SplickTheme.Spacing.xs)
-            .background {
-                RoundedRectangle(cornerRadius: rowCornerRadius, style: .continuous)
-                    .fill(tint.opacity(isSelected ? 0.14 : 0))
-            }
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(label), \(chartAmount(amount)), \(countFormat(count))")
-        .accessibilityHint(filterHint)
-    }
-
-    private func filter(at location: CGPoint) -> ExpenseDebtFilter {
-        let center = CGPoint(x: chartSize / 2, y: chartSize / 2)
-        let dx = location.x - center.x
-        let dy = location.y - center.y
-        var degrees = atan2(dy, dx) * 180 / .pi + 90
-        if degrees < 0 { degrees += 360 }
-        let unpaidDegrees = Double(unpaidFraction) * 360
-        return degrees <= unpaidDegrees ? unpaidFilter : paidFilter
-    }
-
-    private var accessibilitySummary: String {
-        "\(title), \(unpaidLabel) \(chartAmount(unpaidAmount)), \(paidLabel) \(chartAmount(paidAmount))"
-    }
-}
 
 private enum ExpenseAgeUrgency {
     case fresh

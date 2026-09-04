@@ -8,6 +8,9 @@ enum ExpenseEndpoint: APIEndpoint {
   case settle(expenseId: UUID, SettleExpenseRequestDTO)
   case debtSummary(groupId: UUID?)
   case monthlySummary(months: Int)
+  case overview
+  case spendingAnalytics(period: SpendingAnalyticsPeriod, months: Int)
+  case groupSummary
   case withCounterparty(
     id: UUID, page: Int, limit: Int, status: CounterpartyExpenseStatus, cursor: String?
   )
@@ -25,6 +28,9 @@ enum ExpenseEndpoint: APIEndpoint {
     case .settle(let expenseId, _): return "/v1/expenses/\(expenseId)/settle"
     case .debtSummary: return "/v1/expenses/debts"
     case .monthlySummary: return "/v1/expenses/monthly-summary"
+    case .overview: return "/v1/expenses/overview"
+    case .spendingAnalytics: return "/v1/expenses/spending-analytics"
+    case .groupSummary: return "/v1/expenses/group-summary"
     case .withCounterparty(let id, _, _, _, _): return "/v1/expenses/with-user/\(id)"
     case .netting(let counterpartyId): return "/v1/expenses/netting/\(counterpartyId)"
     case .submitBulkSettlement(let counterpartyId, _):
@@ -40,7 +46,9 @@ enum ExpenseEndpoint: APIEndpoint {
 
   var method: HTTPMethod {
     switch self {
-    case .list, .detail, .debtSummary, .monthlySummary, .withCounterparty, .netting: return .get
+    case .list, .detail, .debtSummary, .monthlySummary, .overview, .spendingAnalytics,
+      .groupSummary, .withCounterparty, .netting:
+      return .get
     case .create, .settle, .submitBulkSettlement, .approveBulkSettlement,
       .rejectBulkSettlement, .claimBillInvite:
       return .post
@@ -69,6 +77,12 @@ enum ExpenseEndpoint: APIEndpoint {
 
     case .monthlySummary(let months):
       return [URLQueryItem(name: "months", value: "\(months)")]
+
+    case .spendingAnalytics(let period, let months):
+      return [
+        URLQueryItem(name: "period", value: period.rawValue),
+        URLQueryItem(name: "months", value: "\(months)"),
+      ]
 
     case .withCounterparty(_, let page, let limit, let status, let cursor):
       var items = [

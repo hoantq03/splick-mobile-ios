@@ -565,6 +565,18 @@ final class DependencyContainer: ObservableObject {
         FetchMonthlySummaryUseCase(repository: expenseRepository)
     }()
 
+    lazy var fetchExpenseOverviewUseCase: FetchExpenseOverviewUseCaseProtocol = {
+        FetchExpenseOverviewUseCase(repository: expenseRepository)
+    }()
+
+    lazy var fetchSpendingAnalyticsUseCase: FetchSpendingAnalyticsUseCaseProtocol = {
+        FetchSpendingAnalyticsUseCase(repository: expenseRepository)
+    }()
+
+    lazy var fetchGroupExpenseSummaryUseCase: FetchGroupExpenseSummaryUseCaseProtocol = {
+        FetchGroupExpenseSummaryUseCase(repository: expenseRepository)
+    }()
+
     lazy var fetchCounterpartyExpensesUseCase: FetchCounterpartyExpensesUseCaseProtocol = {
         FetchCounterpartyExpensesUseCase(repository: expenseRepository)
     }()
@@ -591,6 +603,13 @@ final class DependencyContainer: ObservableObject {
 
     lazy var expenseFriendListViewModel = ExpenseFriendListViewModel(
         fetchDebtSummaryUseCase: fetchDebtSummaryUseCase,
+        languageService: languageService
+    )
+
+    lazy var expenseOverviewViewModel = ExpenseOverviewViewModel(
+        fetchOverviewUseCase: fetchExpenseOverviewUseCase,
+        fetchAnalyticsUseCase: fetchSpendingAnalyticsUseCase,
+        fetchGroupsUseCase: fetchGroupExpenseSummaryUseCase,
         languageService: languageService
     )
 
@@ -1037,6 +1056,12 @@ final class DependencyContainer: ObservableObject {
         streakViewModel = makeStreakViewModel()
         notificationListViewModel = makeNotificationListViewModel()
         expenseListViewModel = makeExpenseListViewModel()
+        expenseOverviewViewModel = ExpenseOverviewViewModel(
+            fetchOverviewUseCase: fetchExpenseOverviewUseCase,
+            fetchAnalyticsUseCase: fetchSpendingAnalyticsUseCase,
+            fetchGroupsUseCase: fetchGroupExpenseSummaryUseCase,
+            languageService: languageService
+        )
         expenseFriendListViewModel = ExpenseFriendListViewModel(
             fetchDebtSummaryUseCase: fetchDebtSummaryUseCase,
             languageService: languageService

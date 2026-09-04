@@ -121,6 +121,91 @@ enum ExpenseMapper {
     )
   }
 
+  static func toOverview(_ dto: ExpenseOverviewDTO) -> ExpenseOverview {
+    ExpenseOverview(
+      balance: ExpenseBalanceSection(
+        youOwe: Decimal(string: dto.balance.youOwe) ?? .zero,
+        owedToYou: Decimal(string: dto.balance.owedToYou) ?? .zero,
+        netBalance: Decimal(string: dto.balance.netBalance) ?? .zero,
+        currency: dto.balance.currency,
+        topBalances: dto.balance.topBalances.map(toDebtSummary)
+      ),
+      needsAttention: ExpenseNeedsAttentionSection(
+        pendingPaymentRequestCount: dto.needsAttention.pendingPaymentRequestCount,
+        expensesNeedingConfirmationCount: dto.needsAttention.expensesNeedingConfirmationCount,
+        outstandingSettlementCount: dto.needsAttention.outstandingSettlementCount,
+        totalActionItems: dto.needsAttention.totalActionItems,
+        items: dto.needsAttention.items.map(toNeedsAttentionItem)
+      ),
+      recentExpenses: dto.recentExpenses.map(toRecentExpense),
+      totalSpending: ExpenseTotalSpendingSection(
+        currentPeriodTotal: Decimal(string: dto.totalSpending.currentPeriodTotal) ?? .zero,
+        previousPeriodTotal: Decimal(string: dto.totalSpending.previousPeriodTotal) ?? .zero,
+        percentageChange: Decimal(string: dto.totalSpending.percentageChange) ?? .zero,
+        currency: dto.totalSpending.currency
+      )
+    )
+  }
+
+  static func toNeedsAttentionItem(_ dto: ExpenseNeedsAttentionItemDTO) -> ExpenseNeedsAttentionItem {
+    ExpenseNeedsAttentionItem(
+      type: ExpenseNeedsAttentionType(rawValue: dto.type) ?? .paymentRequest,
+      id: dto.id,
+      title: dto.title,
+      amount: Decimal(string: dto.amount) ?? .zero,
+      currency: dto.currency,
+      counterparty: dto.counterparty.map(toUserSummary),
+      createdAt: dto.createdAt
+    )
+  }
+
+  static func toRecentExpense(_ dto: RecentExpenseItemDTO) -> RecentExpenseItem {
+    RecentExpenseItem(
+      id: dto.id,
+      description: dto.description,
+      amount: Decimal(string: dto.amount) ?? .zero,
+      currency: dto.currency,
+      category: ExpenseCategory(rawValue: dto.category) ?? .general,
+      paidBy: toUserSummary(dto.paidBy),
+      participants: dto.participants.map(toUserSummary),
+      createdAt: dto.createdAt,
+      groupId: dto.groupId
+    )
+  }
+
+  static func toSpendingAnalytics(_ dto: SpendingAnalyticsDTO) -> SpendingAnalytics {
+    SpendingAnalytics(
+      trend: dto.trend.map {
+        SpendingTrendPoint(bucketStart: $0.bucketStart, amount: Decimal(string: $0.amount) ?? .zero)
+      },
+      categories: dto.categories.map {
+        SpendingCategoryBreakdown(
+          category: ExpenseCategory(rawValue: $0.category) ?? .general,
+          amount: Decimal(string: $0.amount) ?? .zero,
+          percentage: Decimal(string: $0.percentage) ?? .zero
+        )
+      },
+      currency: dto.currency
+    )
+  }
+
+  static func toGroupSummary(_ dto: GroupExpenseSummaryDTO) -> GroupExpenseSummary {
+    GroupExpenseSummary(
+      groups: dto.groups.map { item in
+        GroupExpenseItem(
+          groupId: item.groupId,
+          groupName: item.groupName,
+          groupAvatarURL: item.groupAvatarUrl.flatMap(URL.init(string:)),
+          totalGroupSpending: Decimal(string: item.totalGroupSpending) ?? .zero,
+          userPaidTotal: Decimal(string: item.userPaidTotal) ?? .zero,
+          userBalance: Decimal(string: item.userBalance) ?? .zero,
+          currency: item.currency,
+          memberAvatars: item.memberAvatars.map(toUserSummary)
+        )
+      }
+    )
+  }
+
   static func toRequestDTO(_ request: CreateExpenseRequest) -> CreateExpenseRequestDTO {
     var customAmountsDTO: [String: String]?
     if let customAmounts = request.customAmounts {

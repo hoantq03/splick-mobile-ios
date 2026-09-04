@@ -8,6 +8,10 @@ public protocol ExpenseRepositoryProtocol: Sendable {
   func settleExpense(expenseId: UUID, splitId: UUID) async throws
   func fetchDebtSummary(groupId: UUID?) async throws -> [DebtSummary]
   func fetchMonthlySummary(months: Int) async throws -> MonthlyExpenseSummary
+  func fetchOverview() async throws -> ExpenseOverview
+  func fetchSpendingAnalytics(period: SpendingAnalyticsPeriod, months: Int) async throws
+    -> SpendingAnalytics
+  func fetchGroupExpenseSummary() async throws -> GroupExpenseSummary
   func fetchExpenses(
     counterpartyId: UUID,
     page: Int,

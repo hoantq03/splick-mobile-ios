@@ -352,7 +352,8 @@ struct MainTabView: View {
                     debt: debt,
                     currentUserId: appState.currentUser?.id
                 )
-            }
+            },
+            overviewViewModel: container.expenseOverviewViewModel
         )
         .environment(\.sameTabTapHandlingEnabled, settledPagerTab == .expenses)
     }

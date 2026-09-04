@@ -196,6 +196,82 @@ public actor FakeExpenseRepository: ExpenseRepositoryProtocol {
         return MonthlyExpenseSummary(currency: "VND", currentMonth: current, months: series)
     }
 
+    public func fetchOverview() async throws -> ExpenseOverview {
+        ExpenseOverview(
+            balance: ExpenseBalanceSection(
+                youOwe: 100000,
+                owedToYou: 150000,
+                netBalance: 50000,
+                currency: "VND",
+                topBalances: [
+                    DebtSummary(user: friend1, amount: 150000, currency: "VND"),
+                    DebtSummary(user: friend2, amount: -100000, currency: "VND"),
+                ]
+            ),
+            needsAttention: ExpenseNeedsAttentionSection(
+                pendingPaymentRequestCount: 1,
+                expensesNeedingConfirmationCount: 0,
+                outstandingSettlementCount: 0,
+                totalActionItems: 1,
+                items: [
+                    ExpenseNeedsAttentionItem(
+                        type: .paymentRequest,
+                        id: UUID(),
+                        title: "Korean BBQ dinner",
+                        amount: 150000,
+                        currency: "VND",
+                        counterparty: friend1,
+                        createdAt: Date().addingTimeInterval(-3600)
+                    )
+                ]
+            ),
+            recentExpenses: expenses.prefix(5).map { expense in
+                RecentExpenseItem(
+                    id: expense.id,
+                    description: expense.description,
+                    amount: expense.totalAmount,
+                    currency: expense.currency,
+                    category: expense.category,
+                    paidBy: expense.paidBy,
+                    participants: expense.splits.map(\.user),
+                    createdAt: expense.createdAt,
+                    groupId: expense.groupId
+                )
+            },
+            totalSpending: ExpenseTotalSpendingSection(
+                currentPeriodTotal: 1_200_000,
+                previousPeriodTotal: 1_000_000,
+                percentageChange: 20,
+                currency: "VND"
+            )
+        )
+    }
+
+    public func fetchSpendingAnalytics(period: SpendingAnalyticsPeriod, months: Int) async throws
+        -> SpendingAnalytics
+    {
+        let now = Date()
+        let trend = (0..<7).map { offset in
+            SpendingTrendPoint(
+                bucketStart: Calendar.current.date(byAdding: .day, value: offset - 6, to: now)
+                    ?? now,
+                amount: Decimal((offset + 1) * 80_000)
+            )
+        }
+        return SpendingAnalytics(
+            trend: trend,
+            categories: [
+                SpendingCategoryBreakdown(category: .food, amount: 450000, percentage: 60),
+                SpendingCategoryBreakdown(category: .transport, amount: 300000, percentage: 40),
+            ],
+            currency: "VND"
+        )
+    }
+
+    public func fetchGroupExpenseSummary() async throws -> GroupExpenseSummary {
+        GroupExpenseSummary(groups: [])
+    }
+
     public func fetchExpenses(
         counterpartyId: UUID,
         page: Int,
