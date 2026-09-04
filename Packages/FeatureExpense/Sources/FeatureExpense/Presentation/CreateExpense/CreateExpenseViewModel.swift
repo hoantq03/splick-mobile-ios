@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Common
+import Localization
 import SplickDomain
 
 @MainActor
@@ -16,10 +17,16 @@ public final class CreateExpenseViewModel: ObservableObject {
 
     private let createExpenseUseCase: CreateExpenseUseCaseProtocol
     private let groupId: UUID?
+    private let languageService: LanguageService
 
-    public init(createExpenseUseCase: CreateExpenseUseCaseProtocol, groupId: UUID? = nil) {
+    public init(
+        createExpenseUseCase: CreateExpenseUseCaseProtocol,
+        groupId: UUID? = nil,
+        languageService: LanguageService
+    ) {
         self.createExpenseUseCase = createExpenseUseCase
         self.groupId = groupId
+        self.languageService = languageService
     }
 
     func createExpense() async {
@@ -39,9 +46,9 @@ public final class CreateExpenseViewModel: ObservableObject {
             state = .loaded(expense)
             Log.info("Expense created: \(expense.id)", category: .expense)
         } catch let error as AppError {
-            state = .failed(error.userMessage)
+            state = .failed(languageService.localizedMessage(for: error))
         } catch {
-            state = .failed("Failed to create expense")
+            state = .failed(languageService.text(.expenseCreateFailed))
             Log.error(error, category: .expense)
         }
     }
@@ -52,18 +59,23 @@ public final class CreateExpenseViewModel: ObservableObject {
         amountError = nil
 
         if description.trimmed.isEmpty {
-            descriptionError = "Description is required"
+            descriptionError = languageService.text(.expenseDescriptionRequired)
             isValid = false
         }
 
         guard let amountValue = Decimal(string: amount), amountValue > 0 else {
-            amountError = "Enter a valid amount"
+            amountError = languageService.text(.expenseAmountInvalid)
             isValid = false
             return isValid
         }
 
+        if !VndAmountRules.isAtLeastMinimum(amountValue) {
+            amountError = languageService.text(.expenseAmountMinimum)
+            isValid = false
+        }
+
         if selectedParticipants.isEmpty {
-            state = .failed("Select at least one participant")
+            state = .failed(languageService.text(.expenseNeedParticipant))
             isValid = false
         }
 

@@ -1,0 +1,376 @@
+import Foundation
+import Networking
+import SplickDomain
+import Storage
+import Common
+
+public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
+    private let apiClient: APIClientProtocol
+    private let presenceStore: PresenceStore?
+    private let friendDisplayNameStore: FriendDisplayNameStore?
+    private static let maxCachedFriends = 200
+    private static let presenceBulkLimit = 100
+
+    public init(
+        apiClient: APIClientProtocol,
+        presenceStore: PresenceStore? = nil,
+        friendDisplayNameStore: FriendDisplayNameStore? = nil
+    ) {
+        self.apiClient = apiClient
+        self.presenceStore = presenceStore
+        self.friendDisplayNameStore = friendDisplayNameStore
+    }
+
+    public func fetchMyFriends() async throws -> [UserSummary] {
+        let friends = try await SocialPageFetcher.fetchAll { page, size in
+            let response: SocialPageFriendResponseDTO = try await apiClient.request(
+                SocialEndpoint.listFriends(page: page, size: size)
+            )
+            return (response.content, response.page)
+        }
+        await syncPresence(from: friends)
+        await hydrateMessagingPresence(userIds: friends.map(\.friendId))
+        let mapped = friends.map(FriendsMapper.toUserSummary)
+        await syncFriendDisplayNames(mapped)
+        return mapped
+    }
+
+    public func fetchMyFriendsPage(page: Int, size: Int) async throws -> FriendsPageResult {
+        let response: SocialPageFriendResponseDTO = try await apiClient.request(
+            SocialEndpoint.listFriends(page: page, size: size)
+        )
+        await syncPresence(from: response.content)
+        await hydrateMessagingPresence(userIds: response.content.map(\.friendId))
+        let friends = response.content.map(FriendsMapper.toUserSummary)
+        await syncFriendDisplayNames(friends)
+        let hasMore = page + 1 < max(response.page.totalPages, 1) && !response.content.isEmpty
+        return FriendsPageResult(friends: friends, page: page, hasMore: hasMore)
+    }
+
+    public func loadCachedFriends(userId: UUID) async -> [UserSummary]? {
+        let friends = await DiskCache.shared.read(FriendsCachePayload.self, key: Self.cacheKey(for: userId))?.friends
+        if let friends {
+            await syncFriendDisplayNames(friends)
+        }
+        return friends
+    }
+
+    public func saveCachedFriends(_ friends: [UserSummary], userId: UUID) async {
+        let capped = Array(friends.prefix(Self.maxCachedFriends))
+        await DiskCache.shared.write(FriendsCachePayload(friends: capped), key: Self.cacheKey(for: userId))
+    }
+
+    public func invalidateCachedFriends(userId: UUID) async {
+        await DiskCache.shared.remove(key: Self.cacheKey(for: userId))
+    }
+
+    private static func cacheKey(for userId: UUID) -> String {
+        "friends.directory.\(userId.uuidString)"
+    }
+
+    public func fetchUserProfile(userId: UUID) async throws -> PublicUserProfile {
+        let response: UserProfileResponseDTO = try await apiClient.request(
+            SocialEndpoint.getUserProfile(userId: userId)
+        )
+        if let state = FriendsMapper.presenceState(from: response), let presenceStore {
+            await presenceStore.apply(state)
+        }
+        await hydrateMessagingPresence(userIds: [userId])
+        let profile = FriendsMapper.toPublicUserProfile(response)
+        if profile.friendStatus == .friends, let friendDisplayNameStore {
+            await friendDisplayNameStore.upsert(from: profile.user)
+        }
+        return profile
+    }
+
+    public func fetchFriendPaymentProfile(userId: UUID) async throws -> PaymentProfile {
+        let response: PaymentProfileResponseDTO = try await apiClient.request(
+            SocialEndpoint.getFriendPaymentProfile(userId: userId)
+        )
+        return FriendsMapper.toPaymentProfile(response)
+    }
+
+    public func searchUsers(query: String, page: Int, size: Int) async throws -> [UserSearchResult] {
+        let normalized = query
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "@", with: "")
+
+        if normalized.isEmpty {
+            let response: SocialPageFriendResponseDTO = try await apiClient.request(
+                SocialEndpoint.listFriends(page: page, size: size)
+            )
+            let results = response.content
+                .map { UserSearchResult(user: FriendsMapper.toUserSummary($0), friendStatus: .friends) }
+                .sorted {
+                    $0.user.displayName.localizedCaseInsensitiveCompare($1.user.displayName)
+                        == .orderedAscending
+                }
+            return await resolveSearchResults(results)
+        }
+
+        let response: SocialPageUserSearchResponseDTO = try await apiClient.request(
+            SocialEndpoint.searchUsers(query: normalized, page: page, size: size)
+        )
+        return await resolveSearchResults(response.content.map(FriendsMapper.toUserSearchResult))
+    }
+
+    public func discoveryPreference() async throws -> Bool {
+        let response: DiscoveryPreferenceResponseDTO = try await apiClient.request(
+            SocialEndpoint.getDiscoveryPreference
+        )
+        return response.nearbyEnabled
+    }
+
+    public func updateDiscoveryPreference(nearbyEnabled: Bool) async throws -> Bool {
+        let response: DiscoveryPreferenceResponseDTO = try await apiClient.request(
+            SocialEndpoint.updateDiscoveryPreference(nearbyEnabled: nearbyEnabled)
+        )
+        return response.nearbyEnabled
+    }
+
+    public func findNearbyUsers(lat: Double, lon: Double) async throws -> [UserSearchResult] {
+        let response: SocialPageUserSearchResponseDTO = try await apiClient.request(
+            SocialEndpoint.findNearbyUsers(lat: lat, lon: lon)
+        )
+        return await resolveSearchResults(response.content.map(FriendsMapper.toUserSearchResult))
+    }
+
+    public func leaveNearbySession() async throws {
+        try await apiClient.request(SocialEndpoint.leaveNearbySession)
+    }
+
+    public func searchUser(username: String) async throws -> UserSummary? {
+        let normalized = username
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "@", with: "")
+        guard !normalized.isEmpty else { return nil }
+
+        let results = try await searchUsers(query: normalized, page: 0, size: 20)
+        return results.first {
+            $0.user.username.caseInsensitiveCompare(normalized) == .orderedSame
+        }?.user
+    }
+
+    public func addFriend(username: String, message: String?) async throws -> UserSummary {
+        let normalized = username
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "@", with: "")
+        guard !normalized.isEmpty else {
+            throw FriendsError.invalidUsername
+        }
+
+        let trimmedMessage = message?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+
+        let response: FriendRequestResponseDTO = try await apiClient.request(
+            SocialEndpoint.sendFriendRequest(username: normalized, message: trimmedMessage)
+        )
+        return UserSummary(
+            id: response.addresseeId,
+            username: normalized,
+            displayName: normalized,
+            avatarURL: nil
+        )
+    }
+
+    public func fetchIncomingFriendRequests(page: Int, size: Int) async throws -> [IncomingFriendRequest] {
+        let response: SocialPageIncomingFriendRequestResponseDTO = try await apiClient.request(
+            SocialEndpoint.listIncomingFriendRequests(page: page, size: size)
+        )
+        return response.content.map(FriendsMapper.toIncomingFriendRequest)
+    }
+
+    public func fetchAllIncomingFriendRequests() async throws -> [IncomingFriendRequest] {
+        let items = try await SocialPageFetcher.fetchAll { page, size in
+            let response: SocialPageIncomingFriendRequestResponseDTO = try await apiClient.request(
+                SocialEndpoint.listIncomingFriendRequests(page: page, size: size)
+            )
+            return (response.content, response.page)
+        }
+        return items.map(FriendsMapper.toIncomingFriendRequest)
+    }
+
+    public func acceptFriendRequest(requestId: UUID) async throws {
+        try await apiClient.request(SocialEndpoint.acceptFriendRequest(requestId: requestId))
+    }
+
+    public func rejectFriendRequest(requestId: UUID) async throws {
+        try await apiClient.request(SocialEndpoint.rejectFriendRequest(requestId: requestId))
+    }
+
+    public func cancelFriendRequest(requestId: UUID) async throws {
+        try await apiClient.request(SocialEndpoint.cancelFriendRequest(requestId: requestId))
+    }
+
+    public func fetchOutgoingFriendRequests(page: Int, size: Int) async throws -> [OutgoingFriendRequest] {
+        let response: SocialPageFriendRequestResponseDTO = try await apiClient.request(
+            SocialEndpoint.listOutgoingFriendRequests(page: page, size: size)
+        )
+        return response.content.map(FriendsMapper.toOutgoingFriendRequest)
+    }
+
+    public func fetchAllOutgoingFriendRequests() async throws -> [OutgoingFriendRequest] {
+        let items = try await SocialPageFetcher.fetchAll { page, size in
+            let response: SocialPageFriendRequestResponseDTO = try await apiClient.request(
+                SocialEndpoint.listOutgoingFriendRequests(page: page, size: size)
+            )
+            return (response.content, response.page)
+        }
+        return items.map(FriendsMapper.toOutgoingFriendRequest)
+    }
+
+    public func removeFriend(friendUserId: UUID) async throws {
+        try await apiClient.request(SocialEndpoint.removeFriend(friendUserId: friendUserId))
+        if let friendDisplayNameStore {
+            await friendDisplayNameStore.remove(userId: friendUserId)
+        }
+    }
+
+    public func setFriendNickname(friendUserId: UUID, nickname: String?) async throws -> UserSummary {
+        let response: FriendResponseDTO = try await apiClient.request(
+            SocialEndpoint.setFriendNickname(friendUserId: friendUserId, nickname: nickname)
+        )
+        let user = FriendsMapper.toUserSummary(response)
+        if let friendDisplayNameStore {
+            await friendDisplayNameStore.upsert(from: user)
+        }
+        return user
+    }
+
+    public func fetchBlockedUsers(page: Int, size: Int) async throws -> [BlockedUser] {
+        let response: SocialPageBlockedUserResponseDTO = try await apiClient.request(
+            SocialEndpoint.listBlockedUsers(page: page, size: size)
+        )
+        return response.content.map(FriendsMapper.toBlockedUser)
+    }
+
+    public func fetchAllBlockedUsers() async throws -> [BlockedUser] {
+        let items = try await SocialPageFetcher.fetchAll { page, size in
+            let response: SocialPageBlockedUserResponseDTO = try await apiClient.request(
+                SocialEndpoint.listBlockedUsers(page: page, size: size)
+            )
+            return (response.content, response.page)
+        }
+        return items.map(FriendsMapper.toBlockedUser)
+    }
+
+    public func blockUser(userId: UUID) async throws {
+        try await apiClient.request(SocialEndpoint.blockUser(userId: userId))
+    }
+
+    public func unblockUser(userId: UUID) async throws {
+        try await apiClient.request(SocialEndpoint.unblockUser(userId: userId))
+    }
+
+    public func addFriendFromQRCode(_ raw: String) async throws -> UserSummary {
+        guard let action = SplickQRParser.parse(raw) else {
+            throw FriendsError.invalidQRCode
+        }
+
+        switch action {
+        case .addFriend(let username):
+            return try await addFriend(username: username, message: nil)
+        case .addFriendByServerPayload(let payload):
+            let response: FriendRequestResponseDTO = try await apiClient.request(
+                SocialEndpoint.sendFriendRequestByQr(qrPayload: payload, message: nil)
+            )
+            let username = response.addresseeUsername ?? "user"
+            let displayName = response.addresseeDisplayName ?? username
+            return UserSummary(
+                id: response.addresseeId,
+                username: username,
+                displayName: displayName,
+                avatarURL: nil
+            )
+        case .joinGroup, .joinGroupByServerPayload, .claimBill:
+            throw FriendsError.invalidQRCode
+        }
+    }
+
+    public func generateMyQr() async throws -> PersonalQRCode {
+        let response: MyQRResponseDTO = try await apiClient.request(SocialEndpoint.generateMyQr)
+        return PersonalQRCode(
+            payload: response.payload,
+            version: response.version,
+            issuedAt: response.issuedAt
+        )
+    }
+
+    public func revokeMyQr() async throws {
+        try await apiClient.request(SocialEndpoint.revokeMyQr)
+    }
+
+    private func syncPresence(from friends: [FriendResponseDTO]) async {
+        guard let presenceStore else { return }
+        let states = friends.compactMap(FriendsMapper.presenceState(from:))
+        await presenceStore.applyBulk(states)
+    }
+
+    private func hydrateMessagingPresence(userIds: [UUID]) async {
+        guard let presenceStore, !userIds.isEmpty else { return }
+        var index = 0
+        while index < userIds.count {
+            let end = min(index + Self.presenceBulkLimit, userIds.count)
+            let chunk = Array(userIds[index..<end])
+            do {
+                let response: BulkPresenceResponseDTO = try await apiClient.request(
+                    SocialEndpoint.bulkMessagingPresence(userIds: chunk)
+                )
+                let states = response.items.map { item in
+                    UserPresenceState(
+                        userId: item.userId,
+                        isOnline: item.online,
+                        lastSeenAt: item.lastSeenAt
+                    )
+                }
+                await presenceStore.applyBulk(states)
+            } catch {
+                // Fail soft: friends DTO + WS catch-up still apply.
+            }
+            index = end
+        }
+    }
+
+    private func syncFriendDisplayNames(_ friends: [UserSummary]) async {
+        guard let friendDisplayNameStore else { return }
+        await friendDisplayNameStore.sync(from: friends)
+    }
+
+    private func resolveSearchResults(_ results: [UserSearchResult]) async -> [UserSearchResult] {
+        guard let friendDisplayNameStore else { return results }
+        return await friendDisplayNameStore.resolve(results)
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
+    }
+}
+
+public enum FriendsError: LocalizedError {
+    case notImplemented
+    case invalidUsername
+    case userNotFound
+    case alreadyFriends
+    case invalidQRCode
+    case groupNotFound
+    case alreadyInGroup
+    case invalidGroupName
+    case invalidInviteSelection
+
+    public var errorDescription: String? {
+        switch self {
+        case .notImplemented: return "This feature is not available yet."
+        case .invalidGroupName: return "Enter a group name."
+        case .invalidInviteSelection: return "Chọn ít nhất một bạn bè."
+        case .invalidUsername: return "Enter a valid username."
+        case .userNotFound: return "User not found."
+        case .alreadyFriends: return "You are already friends."
+        case .invalidQRCode: return "Invalid QR code."
+        case .groupNotFound: return "Group not found."
+        case .alreadyInGroup: return "You are already in this group."
+        }
+    }
+}

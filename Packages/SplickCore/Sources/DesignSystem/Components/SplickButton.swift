@@ -12,6 +12,7 @@ public struct SplickButton: View {
     private let style: Style
     private let isLoading: Bool
     private let isDisabled: Bool
+    private let cornerRadius: CGFloat
     private let action: () -> Void
 
     public init(
@@ -19,12 +20,14 @@ public struct SplickButton: View {
         style: Style = .primary,
         isLoading: Bool = false,
         isDisabled: Bool = false,
+        cornerRadius: CGFloat = SplickTheme.CornerRadius.control,
         action: @escaping () -> Void
     ) {
         self.title = title
         self.style = style
         self.isLoading = isLoading
         self.isDisabled = isDisabled
+        self.cornerRadius = cornerRadius
         self.action = action
     }
 
@@ -38,15 +41,16 @@ public struct SplickButton: View {
                 Text(title)
                     .font(SplickTheme.Typography.headline)
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, alignment: .center)
             .padding(.vertical, SplickTheme.Spacing.sm)
             .padding(.horizontal, SplickTheme.Spacing.lg)
             .background(backgroundColor)
             .foregroundStyle(foregroundColor)
-            .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium))
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay {
                 if style == .secondary || style == .ghost {
-                    RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium)
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                         .strokeBorder(borderColor, lineWidth: style == .ghost ? 0 : 1.5)
                 }
             }
@@ -77,5 +81,33 @@ public struct SplickButton: View {
         case .secondary: return SplickTheme.Colors.primaryGradientStart
         default: return .clear
         }
+    }
+}
+
+/// Compact header chip that pairs with the 32pt circular close control.
+public struct SplickHeaderActionChip: View {
+    let title: String
+    let action: () -> Void
+
+    public init(title: String, action: @escaping () -> Void) {
+        self.title = title
+        self.action = action
+    }
+
+    public var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .padding(.horizontal, 12)
+                .frame(height: 32)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(SplickTheme.Colors.secondaryBackground.opacity(0.85))
+                )
+        }
+        .buttonStyle(.plain)
     }
 }

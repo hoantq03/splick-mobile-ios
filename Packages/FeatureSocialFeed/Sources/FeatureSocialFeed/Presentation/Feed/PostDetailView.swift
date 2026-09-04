@@ -1,0 +1,736 @@
+import SwiftUI
+import UIKit
+import DesignSystem
+import Common
+import Localization
+import SplickDomain
+import FeatureFriends
+import FeatureStickers
+
+struct PostDetailView: View {
+    @EnvironmentObject private var languageService: LanguageService
+    let post: Post
+    let initialMediaIndex: Int
+    @ObservedObject var feedViewModel: FeedViewModel
+    let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
+    let profileDependencies: FriendUserProfileDependencies?
+    let makeGifPickerViewModel: GifPickerViewModelFactory?
+    let expandBillSplitInitially: Bool
+    let focusComposerOnAppear: Bool
+    let initialCommentId: UUID?
+
+    @Environment(\.tabBarScrollState) private var tabBarScrollState
+    @Environment(\.currentUserSummary) private var currentUserSummary
+
+    @Environment(\.customEmojiDependencies) private var customEmojiDependencies
+    @StateObject private var commentPager: PostDetailViewModel
+    @State private var profileRoute: ProfileRoute?
+    @State private var companionsRoute: CompanionsSheetRoute?
+    @State private var replyTarget: PostComment?
+    @State private var commentScrollRequest: CommentScrollRequest?
+    @State private var showEmojiPicker = false
+    @State private var mediaViewerRoute: MediaViewerRoute?
+    @State private var composerFocused = false
+    @State private var composerHitTestingEnabled = false
+    @State private var rejectEvidenceTarget: PostComment?
+    @State private var rejectReason = ""
+    @State private var gifPickerViewModel: GifPickerViewModel?
+    @State private var detailScrollLocked = false
+    @State private var cardPresentation: PostCardPresentation?
+    @State private var editingPost: Post?
+    @State private var observedPendingCommentIds = Set<UUID>()
+    @State private var commentsListMinHeight: CGFloat = 0
+    @StateObject private var cardActions = PostCardActions()
+    @State private var commentsRevealed = false
+    @State private var mediaTapReady = false
+
+    init(
+        post: Post,
+        initialMediaIndex: Int = 0,
+        feedViewModel: FeedViewModel,
+        fetchFriendsUseCase: FetchFriendsUseCaseProtocol? = nil,
+        profileDependencies: FriendUserProfileDependencies? = nil,
+        makeGifPickerViewModel: GifPickerViewModelFactory? = nil,
+        expandBillSplitInitially: Bool = false,
+        focusComposerOnAppear: Bool = false,
+        initialCommentId: UUID? = nil
+    ) {
+        self.post = post
+        self.initialMediaIndex = initialMediaIndex
+        self.feedViewModel = feedViewModel
+        self.fetchFriendsUseCase = fetchFriendsUseCase
+        self.profileDependencies = profileDependencies
+        self.makeGifPickerViewModel = makeGifPickerViewModel
+        self.expandBillSplitInitially = expandBillSplitInitially
+        self.focusComposerOnAppear = focusComposerOnAppear
+        self.initialCommentId = initialCommentId
+        _commentPager = StateObject(
+            wrappedValue: PostDetailViewModel(postId: post.id) { postId, page, limit, filter in
+                try await feedViewModel.fetchPostComments(
+                    postId: postId,
+                    page: page,
+                    limit: limit,
+                    filter: filter
+                )
+            }
+        )
+    }
+
+    private var livePost: Post {
+        feedViewModel.post(byId: post.id) ?? post
+    }
+
+    private var highlightedCommentId: UUID? {
+        replyTarget?.id ?? initialCommentId
+    }
+
+    var body: some View {
+        ScrollViewReader { scrollProxy in
+            ScrollView {
+                // VStack (not LazyVStack) so comment `.id`s stay in the hierarchy and
+                // ScrollViewReader can jump to a newly sent row below the fold.
+                VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+                    Color.clear
+                        .frame(height: 0)
+                        .id(PostDetailScrollAnchor.top)
+                        .background {
+                            SplickRefreshableScrollBootstrap()
+                        }
+
+                    PostCardView(
+                        post: livePost,
+                        currentUser: feedViewModel.currentUser ?? currentUserSummary,
+                        actions: cardActions,
+                        showsCommentPreview: false,
+                        initiallyExpandedBillSplit: expandBillSplitInitially,
+                        initialMediaIndex: initialMediaIndex
+                    )
+                    .feedPostEditedBadge(isEdited: livePost.isEdited) {
+                        cardActions.onPresent(.editHistory(livePost))
+                    }
+                    .id("\(post.id.uuidString)-\(mediaTapReady)")
+
+                    commentsSection
+                        .opacity(commentsRevealed ? 1 : 0)
+                }
+                .padding(.horizontal, SplickTheme.Spacing.md)
+                .splickDetailScrollContentTopPadding()
+            }
+            .refreshable {
+                await feedViewModel.refreshPost(id: post.id, allowingConcurrentFeedRefresh: true)
+                await commentPager.reload()
+            }
+            .scrollDisabled(detailScrollLocked)
+            .splickDetailScrollInsets()
+            .splickScrollSoftTopEdge()
+            .onAppear {
+                configureCardActions()
+                mediaTapReady = true
+                scrollProxy.scrollTo(PostDetailScrollAnchor.top, anchor: .top)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: FeedScrollLock.notification)) { notification in
+                detailScrollLocked = notification.userInfo?["locked"] as? Bool ?? false
+            }
+            .onChange(of: commentScrollRequest) { request in
+                guard let request else { return }
+                scrollToComment(request, proxy: scrollProxy)
+            }
+            .onChange(of: feedViewModel.pendingCommentIds) { pendingIds in
+                let newlyPending = pendingIds.subtracting(observedPendingCommentIds)
+                observedPendingCommentIds = pendingIds
+                guard let pendingId = livePost.comments.last(where: { newlyPending.contains($0.id) })?.id,
+                      let pending = livePost.comments.first(where: { $0.id == pendingId })
+                else { return }
+                let expectsMedia = pending.attachments.isEmpty == false
+                commentPager.upsertOptimistic(pending)
+                commentPager.ensureCommentVisible(pendingId)
+                if let parentId = pending.parentCommentId {
+                    commentPager.expandReplies(for: parentId)
+                }
+                requestScroll(to: pendingId, expectsMedia: expectsMedia)
+            }
+            .onChange(of: replyTarget) { target in
+                guard let target else { return }
+                composerFocused = true
+                scrollReplyParent(target.id, proxy: scrollProxy)
+            }
+        }
+        .navigationTitle(languageService.text(.feedPostCommentsTitle))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbar(mediaViewerRoute == nil ? .visible : .hidden, for: .navigationBar)
+        .splickInteractivePopEnabled()
+        .splickHorizontalDominantInteractivePop()
+        .overlay(alignment: .top) {
+            SplickScrollTopFadeOverlay(mode: .detailScreen)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            commentComposerInset
+        }
+        .alert(
+            languageService.text(.commonError),
+            isPresented: Binding(
+                get: { feedViewModel.alertMessage != nil },
+                set: { if !$0 { feedViewModel.alertMessage = nil } }
+            )
+        ) {
+            Button(languageService.text(.commonOK), role: .cancel) { feedViewModel.alertMessage = nil }
+        } message: {
+            Text(feedViewModel.alertMessage ?? "")
+        }
+        .alert(
+            languageService.text(.feedPostDelete),
+            isPresented: Binding(
+                get: { feedViewModel.pendingStreakDelete != nil },
+                set: { if !$0 { feedViewModel.dismissPendingStreakDelete() } }
+            )
+        ) {
+            Button(languageService.text(.commonCancel), role: .cancel) {
+                feedViewModel.dismissPendingStreakDelete()
+            }
+            Button(languageService.text(.feedPostDelete), role: .destructive) {
+                Task { await feedViewModel.confirmPendingStreakDelete() }
+            }
+        } message: {
+            if let days = feedViewModel.pendingStreakDelete?.streakDays {
+                Text(languageService.format(.feedPostDeleteStreakWarning, days))
+            }
+        }
+        .task {
+            // Keep the feed card as-is; only append comments. Pull-to-refresh still
+            // reloads the post when the user asks.
+            FeedScrollLock.forceUnlock()
+            detailScrollLocked = false
+            configureCardActions()
+            feedViewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
+            enableComposerInteraction()
+            async let comments: Void = {
+                if let initialCommentId {
+                    await commentPager.reload(ensureVisibleId: initialCommentId)
+                } else {
+                    await commentPager.loadInitial()
+                }
+            }()
+            try? await Task.sleep(for: .milliseconds(380))
+            guard !Task.isCancelled else { return }
+            tabBarScrollState?.hide(flushToBottom: true)
+            withAnimation(.easeOut(duration: 0.16)) {
+                commentsRevealed = true
+            }
+            await comments
+            if let initialCommentId {
+                let expectsMedia = commentPager.allComments.first(where: { $0.id == initialCommentId })?
+                    .attachments.isEmpty == false
+                requestScroll(to: initialCommentId, expectsMedia: expectsMedia)
+            }
+        }
+        .onDisappear {
+            tabBarScrollState?.show()
+        }
+        .postCardPresentationHost(
+            presentation: $cardPresentation,
+            currentUser: feedViewModel.currentUser,
+            languageService: languageService,
+            onUserTap: openProfile,
+            onReact: { postId, emoji in
+                if let error = feedViewModel.react(to: postId, emoji: emoji) {
+                    feedViewModel.alertMessage = error
+                }
+            },
+            loadReactions: { postId in
+                try await feedViewModel.loadPostReactions(postId: postId)
+            },
+            onSubmitPaymentEvidence: { postId, splitId, message, attachments in
+                try await feedViewModel.submitPaymentEvidence(
+                    postId: postId,
+                    splitId: splitId,
+                    message: message,
+                    submissionAttachments: attachments
+                )
+                await reloadEvidenceComments()
+            },
+            loadPostEdits: { postId in
+                try await feedViewModel.fetchPostEdits(postId: postId)
+            },
+            customEmojiDependencies: customEmojiDependencies
+        )
+        .fullScreenCover(item: $editingPost) { post in
+            EditPostComposeView(
+                post: post,
+                updatePost: { try await feedViewModel.updatePost($0) },
+                onSaved: { _ in editingPost = nil },
+                onCancel: { editingPost = nil }
+            )
+            .environmentObject(languageService)
+        }
+        .sheet(item: $profileRoute) { route in
+            if let profileDependencies {
+                FriendUserProfileView(
+                    viewModel: profileDependencies.makeViewModel(
+                        user: route.user,
+                        currentUserId: currentUserSummary?.id
+                    )
+                )
+            }
+        }
+        .sheet(item: $companionsRoute) { route in
+            CompanionsListSheet(
+                companions: route.companions,
+                currentUserId: currentUserSummary?.id
+            ) { user in
+                companionsRoute = nil
+                openProfile(for: user)
+            }
+        }
+        .sheet(isPresented: $showEmojiPicker) {
+            EmojiPickerSheet(currentUserId: currentUserSummary?.id) { emoji in
+                if let error = feedViewModel.react(to: post.id, emoji: emoji) {
+                    feedViewModel.alertMessage = error
+                }
+            }
+        }
+        .splickWindowFullScreenCover(item: $mediaViewerRoute) { route in
+            let mediaItems = livePost.displayMediaItems
+            if !mediaItems.isEmpty {
+                MediaViewerView(
+                    items: mediaItems,
+                    initialIndex: min(route.index, mediaItems.count - 1),
+                    isPresented: Binding(
+                        get: { mediaViewerRoute != nil },
+                        set: { if !$0 { mediaViewerRoute = nil } }
+                    )
+                )
+                .environmentObject(languageService)
+            }
+        }
+        .alert(
+            languageService.text(.feedPaymentEvidenceReject),
+            isPresented: Binding(
+                get: { rejectEvidenceTarget != nil },
+                set: { if !$0 { rejectEvidenceTarget = nil } }
+            )
+        ) {
+            TextField(
+                languageService.text(.feedPaymentEvidenceRejectReasonPlaceholder),
+                text: $rejectReason
+            )
+            Button(languageService.text(.feedPaymentEvidenceReject), role: .destructive) {
+                guard let target = rejectEvidenceTarget,
+                      let evidenceId = target.evidenceId else { return }
+                let reason = rejectReason.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !reason.isEmpty else { return }
+                Task {
+                    await feedViewModel.rejectPaymentEvidence(
+                        postId: post.id,
+                        evidenceId: evidenceId,
+                        reason: reason
+                    )
+                    await commentPager.reload()
+                }
+                rejectEvidenceTarget = nil
+            }
+            Button(languageService.text(.commonCancel), role: .cancel) {
+                rejectEvidenceTarget = nil
+            }
+        } message: {
+            Text(languageService.text(.feedPaymentEvidenceRejectReasonPlaceholder))
+        }
+    }
+
+    private var commentComposerInset: some View {
+        VStack(spacing: SplickTheme.Spacing.xs) {
+            if let replyTarget {
+                CommentReplyBanner(replyingTo: replyTarget.author) {
+                    withAnimation(Self.replyBannerAnimation) {
+                        self.replyTarget = nil
+                    }
+                }
+                .transition(
+                    .asymmetric(
+                        insertion: .move(edge: .bottom).combined(with: .opacity),
+                        removal: .move(edge: .bottom).combined(with: .opacity)
+                    )
+                )
+            }
+
+            CommentComposerView(
+                placeholder: composerPlaceholder,
+                prefillMentionUser: replyTarget?.author,
+                isFocused: $composerFocused,
+                groupId: livePost.groupId,
+                fetchFriendsUseCase: fetchFriendsUseCase,
+                gifPickerViewModel: gifPickerViewModel
+            ) { text, attachments in
+                Task { await submitComment(text: text, attachments: attachments) }
+            }
+        }
+        .animation(Self.replyBannerAnimation, value: replyTarget?.id)
+        .padding(.horizontal, SplickTheme.Spacing.md)
+        .padding(.top, SplickTheme.Spacing.sm)
+        .padding(.bottom, SplickTheme.Spacing.sm)
+        .frame(maxWidth: .infinity)
+        .fixedSize(horizontal: false, vertical: true)
+        .background { commentComposerDockBackground }
+        .allowsHitTesting(composerHitTestingEnabled)
+        .onAppear {
+            if gifPickerViewModel == nil {
+                gifPickerViewModel = makeGifPickerViewModel?(livePost.groupId)
+            }
+        }
+    }
+
+    private static let replyBannerAnimation = Animation.spring(
+        response: 0.36,
+        dampingFraction: 0.88
+    )
+
+    private var commentComposerDockBackground: some View {
+        UnevenRoundedRectangle(
+            topLeadingRadius: SplickTheme.CornerRadius.card,
+            topTrailingRadius: SplickTheme.CornerRadius.card
+        )
+        .fill(SplickTheme.Colors.cardBackground)
+        .overlay {
+            UnevenRoundedRectangle(
+                topLeadingRadius: SplickTheme.CornerRadius.card,
+                topTrailingRadius: SplickTheme.CornerRadius.card
+            )
+            .strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5)
+        }
+        .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: -3)
+        .ignoresSafeArea(.container, edges: .bottom)
+    }
+
+    private var composerPlaceholder: String {
+        if let replyTarget {
+            return languageService.format(.feedCommentReplyPlaceholder, replyTarget.author.displayName)
+        }
+        return languageService.text(.feedPostWriteComment)
+    }
+
+    private func submitComment(text: String, attachments: [CommentSubmissionAttachment]) async {
+        let parentId = replyTarget?.id
+        let expectsMedia = !attachments.isEmpty
+
+        let result = await feedViewModel.addComment(
+            to: post.id,
+            text: text,
+            submissionAttachments: attachments,
+            parentCommentId: parentId
+        )
+        if let error = result.error {
+            feedViewModel.alertMessage = error
+            return
+        }
+
+        withAnimation(Self.replyBannerAnimation) {
+            replyTarget = nil
+        }
+        composerFocused = false
+
+        // Sync pager from the comments API — don't wait for embedded GET post comments.
+        await commentPager.reload(
+            ensureVisibleId: result.createdCommentId,
+            loadThroughEnd: result.createdCommentId == nil
+        )
+        if let parentId {
+            commentPager.expandReplies(for: parentId)
+        }
+        let targetId = result.createdCommentId
+            ?? commentPager.latestMatchingCommentId(
+                authorId: feedViewModel.currentUser?.id,
+                parentCommentId: parentId
+            )
+        if let targetId {
+            commentPager.ensureCommentVisible(targetId)
+            requestScroll(to: targetId, expectsMedia: expectsMedia)
+        }
+    }
+
+    private func requestScroll(to commentId: UUID, expectsMedia: Bool) {
+        commentScrollRequest = CommentScrollRequest(
+            commentId: commentId,
+            nonce: UUID(),
+            expectsMedia: expectsMedia
+        )
+    }
+
+    private func scrollReplyParent(_ commentId: UUID, proxy: ScrollViewProxy) {
+        Task { @MainActor in
+            commentPager.ensureCommentVisible(commentId)
+            // Wait for reply banner slide-in + keyboard before pinning the parent.
+            try? await Task.sleep(nanoseconds: 120_000_000)
+            withAnimation(.easeInOut(duration: 0.34)) {
+                // Keep parent comment just above the reply dock / composer.
+                proxy.scrollTo(commentId, anchor: UnitPoint(x: 0.5, y: 0.82))
+            }
+            try? await Task.sleep(nanoseconds: 280_000_000)
+            withAnimation(.easeInOut(duration: 0.28)) {
+                proxy.scrollTo(commentId, anchor: UnitPoint(x: 0.5, y: 0.82))
+            }
+        }
+    }
+
+    private func scrollToComment(
+        _ request: CommentScrollRequest,
+        proxy: ScrollViewProxy
+    ) {
+        let commentId = request.commentId
+        Task { @MainActor in
+            commentPager.ensureCommentVisible(commentId)
+            // Wait for thread insert + keyboard collapse so the row has a real frame.
+            let initialDelay: UInt64 = request.expectsMedia ? 280_000_000 : 120_000_000
+            let retryDelay: UInt64 = request.expectsMedia ? 360_000_000 : 200_000_000
+            try? await Task.sleep(nanoseconds: initialDelay)
+            guard commentScrollRequest == request else { return }
+            withAnimation(.easeInOut(duration: 0.35)) {
+                proxy.scrollTo(commentId, anchor: UnitPoint(x: 0.5, y: 0.62))
+            }
+            try? await Task.sleep(nanoseconds: retryDelay)
+            guard commentScrollRequest == request else { return }
+            withAnimation(.easeInOut(duration: 0.28)) {
+                proxy.scrollTo(commentId, anchor: UnitPoint(x: 0.5, y: 0.62))
+            }
+            if request.expectsMedia {
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                guard commentScrollRequest == request else { return }
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    proxy.scrollTo(commentId, anchor: UnitPoint(x: 0.5, y: 0.62))
+                }
+            }
+            if commentScrollRequest == request {
+                commentScrollRequest = nil
+            }
+        }
+    }
+
+    private var commentsSection: some View {
+        ZStack(alignment: .topLeading) {
+            Color.clear
+                .frame(minHeight: commentsListMinHeight)
+                .frame(maxWidth: .infinity)
+            VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+                HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
+                    Text(languageService.text(.feedPostCommentsHeader))
+                        .font(SplickTheme.Typography.headline)
+                    Spacer(minLength: 8)
+                    CommentThreadFilterBar(
+                        selected: commentPager.commentFilter,
+                        onSelect: { filter in
+                            Task { await commentPager.setFilter(filter) }
+                        }
+                    )
+                }
+
+                if commentPager.commentsLoaded && commentPager.displayedTopLevel.isEmpty {
+                    Text(
+                        languageService.text(
+                            commentPager.commentFilter == .evidence
+                                ? .feedPostCommentsEmptyEvidence
+                                : .feedPostCommentsEmpty
+                        )
+                    )
+                    .font(.system(size: 12))
+                    .foregroundStyle(SplickTheme.Colors.textTertiary)
+                } else if !commentPager.commentsLoaded
+                    && commentPager.displayedTopLevel.isEmpty
+                    && commentPager.isLoadingPage {
+                    SplickSpinner(size: .small)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, SplickTheme.Spacing.sm)
+                }
+
+                CommentThreadView(
+                    post: livePost,
+                    comments: commentPager.allComments,
+                    roots: commentPager.displayedTopLevel,
+                    expandedParents: commentPager.expandedParents,
+                    highlightedCommentId: highlightedCommentId,
+                    pendingCommentIds: feedViewModel.pendingCommentIds,
+                    repliesPreviewCount: commentPager.repliesPreviewCount,
+                    canReplyToComment: { feedViewModel.canReply(to: $0) },
+                    canModerateEvidence: { feedViewModel.canModerateEvidence(on: $0, post: livePost) },
+                    onReply: { comment in
+                        guard feedViewModel.canReply(to: comment) else { return }
+                        commentPager.expandAncestorChain(of: comment)
+                        withAnimation(Self.replyBannerAnimation) {
+                            replyTarget = comment
+                        }
+                    },
+                    onUserTap: { openProfile(for: $0) },
+                    onViewMoreReplies: { parentId in
+                        commentPager.expandReplies(for: parentId)
+                    },
+                    onApproveEvidence: { comment in
+                        guard let evidenceId = comment.evidenceId else { return }
+                        Task {
+                            await feedViewModel.approvePaymentEvidence(postId: post.id, evidenceId: evidenceId)
+                            await commentPager.reload()
+                        }
+                    },
+                    onRejectEvidence: { comment in
+                        rejectEvidenceTarget = comment
+                        rejectReason = ""
+                    }
+                )
+
+                if commentPager.canLoadMore {
+                    Button {
+                        Task { await commentPager.loadNextPage() }
+                    } label: {
+                        if commentPager.isLoadingPage {
+                            SplickSpinner(size: .small)
+                        } else {
+                            Text(languageService.text(.feedPostCommentsLoadMore))
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, SplickTheme.Spacing.sm)
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .background {
+                GeometryReader { geo in
+                    Color.clear.preference(key: CommentListHeightKey.self, value: geo.size.height)
+                }
+            }
+        }
+        .onPreferenceChange(CommentListHeightKey.self) { height in
+            guard commentPager.commentsLoaded, height > 0 else { return }
+            commentsListMinHeight = height
+        }
+        .animation(.easeOut(duration: 0.32), value: commentPager.commentsLoaded)
+        .animation(.easeOut(duration: 0.28), value: commentPager.commentFilter)
+    }
+
+    private func openProfile(for user: UserSummary) {
+        profileRoute = ProfileRoute(user: user)
+    }
+
+    private func configureCardActions() {
+        cardActions.onReact = { postId, emoji in
+            if let error = feedViewModel.react(to: postId, emoji: emoji) {
+                feedViewModel.alertMessage = error
+            }
+        }
+        cardActions.onDelete = { postId in
+            Task { await feedViewModel.requestDelete(id: postId) }
+        }
+        cardActions.onEdit = { post in
+            editingPost = post
+        }
+        cardActions.onUserTap = { openProfile(for: $0) }
+        cardActions.onOpenComments = { _ in }
+        cardActions.onShowCompanions = { post in
+            companionsRoute = CompanionsSheetRoute(id: post.id, companions: post.companions)
+        }
+        cardActions.onMediaTap = { _, index in
+            mediaViewerRoute = MediaViewerRoute(index: index)
+        }
+        cardActions.onPresent = { presentation in
+            cardPresentation = presentation
+        }
+        cardActions.onSendBillReminder = { postId, targetUserIds, message, attachments in
+            let result = try await feedViewModel.sendBillReminder(
+                postId: postId,
+                targetUserIds: targetUserIds,
+                message: message,
+                submissionAttachments: attachments
+            )
+            await commentPager.reload()
+            return result
+        }
+        cardActions.onSubmitPaymentEvidence = { postId, splitId, message, attachments in
+            try await feedViewModel.submitPaymentEvidence(
+                postId: postId,
+                splitId: splitId,
+                message: message,
+                submissionAttachments: attachments
+            )
+            await reloadEvidenceComments()
+        }
+        cardActions.makeGifPickerViewModel = makeGifPickerViewModel
+    }
+
+    /// Prevents the feed comment-row tap from passing through to the docked composer after push.
+    private func enableComposerInteraction() {
+        composerHitTestingEnabled = false
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            composerHitTestingEnabled = true
+            if focusComposerOnAppear {
+                composerFocused = true
+            }
+        }
+    }
+
+    private func reloadEvidenceComments() async {
+        if commentPager.commentFilter != .evidence {
+            await commentPager.setFilter(.evidence)
+        } else {
+            await commentPager.reload()
+        }
+    }
+}
+
+private enum PostDetailScrollAnchor {
+    static let top = "postDetailTop"
+}
+
+private struct CommentScrollRequest: Equatable {
+    let commentId: UUID
+    let nonce: UUID
+    let expectsMedia: Bool
+}
+
+private struct CommentThreadFilterBar: View {
+    @EnvironmentObject private var languageService: LanguageService
+    let selected: CommentThreadFilter
+    let onSelect: (CommentThreadFilter) -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(CommentThreadFilter.allCases, id: \.self) { filter in
+                let isSelected = filter == selected
+                Button {
+                    onSelect(filter)
+                } label: {
+                    Text(label(for: filter))
+                        .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background {
+                            if isSelected {
+                                Capsule().fill(SplickTheme.Colors.cardBackground)
+                                    .shadow(color: Color.black.opacity(0.12), radius: 3, y: 1)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(3)
+        .background(SplickTheme.Colors.secondaryBackground.opacity(0.85), in: Capsule())
+    }
+
+    private func label(for filter: CommentThreadFilter) -> String {
+        switch filter {
+        case .comments: return languageService.text(.feedPostCommentsFilterComments)
+        case .evidence: return languageService.text(.feedPostCommentsFilterEvidence)
+        case .all: return languageService.text(.feedPostCommentsFilterAll)
+        }
+    }
+}
+
+private struct CommentListHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct ProfileRoute: Identifiable {
+    let user: UserSummary
+    var id: UUID { user.id }
+}

@@ -1,19 +1,36 @@
 name: Splick
+
+# Per-developer signing (Team ID). Copy project.local.yml.example → project.local.yml
+include:
+  - path: project.local.yml
+    optional: true
+
 options:
   bundleIdPrefix: com.splick
+  developmentLanguage: vi
   deploymentTarget:
     iOS: "16.0"
   xcodeVersion: "15.0"
-  generateEmptyDirectories: true
+  generateEmptyDirectories: false
+  # Keep local SPM packages under Package Dependencies only — avoids "Couldn't load project" folder refs.
+  localPackagesGroup: ""
   groupSortPosition: top
+
+configFiles:
+  Debug: Config/Secrets.xcconfig
+  Release: Config/Secrets.xcconfig
 
 settings:
   base:
     SWIFT_VERSION: "5.9"
-    MARKETING_VERSION: "1.0.0"
-    CURRENT_PROJECT_VERSION: 1
-    DEVELOPMENT_TEAM: ""
+    DEVELOPMENT_LANGUAGE: vi
+    MARKETING_VERSION: "1.0.2"
+    CURRENT_PROJECT_VERSION: 3
+    # DEVELOPMENT_TEAM: set in project.local.yml (see project.local.yml.example)
     CODE_SIGN_STYLE: Automatic
+    ONLY_ACTIVE_ARCH: YES
+    # Apple Silicon simulators are arm64-only; avoid x86_64 SplickApp vs arm64 SPM mismatch
+    EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
 
 packages:
   SplickCore:
@@ -30,6 +47,22 @@ packages:
     path: Packages/FeatureExpense
   FeatureNotification:
     path: Packages/FeatureNotification
+  FeatureFriends:
+    path: Packages/FeatureFriends
+  FeatureMessaging:
+    path: Packages/FeatureMessaging
+  FeatureStickers:
+    path: Packages/FeatureStickers
+  SimulationKit:
+    path: Packages/SimulationKit
+  SplickWidgetKit:
+    path: Packages/SplickWidgetKit
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    from: "8.0.0"
+  Nuke:
+    url: https://github.com/kean/Nuke.git
+    exactVersion: 12.9.0
 
 targets:
   SplickApp:
@@ -37,8 +70,24 @@ targets:
     platform: iOS
     sources:
       - path: SplickApp/Sources
-    resources:
-      - path: SplickApp/Resources
+      - path: SplickApp/Resources/Assets.xcassets
+        buildPhase: resources
+      - path: SplickApp/Resources/en.lproj
+        buildPhase: resources
+      - path: SplickApp/Resources/vi.lproj
+        buildPhase: resources
+      - path: SplickApp/PrivacyInfo.xcprivacy
+        buildPhase: resources
+      - path: SplickApp/Resources/splick_notif_default.wav
+        buildPhase: resources
+      - path: SplickApp/Resources/splick_notif_note.wav
+        buildPhase: resources
+      - path: SplickApp/Resources/splick_notif_chime.wav
+        buildPhase: resources
+      - path: SplickApp/Resources/splick_notif_pop.wav
+        buildPhase: resources
+      - path: SplickApp/Resources/splick_notif_silent.wav
+        buildPhase: resources
     dependencies:
       - package: SplickCore
         product: Networking
@@ -48,6 +97,8 @@ targets:
         product: DesignSystem
       - package: SplickCore
         product: Common
+      - package: SplickCore
+        product: Localization
       - package: SplickDomain
         product: SplickDomain
       - package: FeatureAuth
@@ -60,33 +111,120 @@ targets:
         product: FeatureExpense
       - package: FeatureNotification
         product: FeatureNotification
+      - package: FeatureFriends
+        product: FeatureFriends
+      - package: FeatureMessaging
+        product: FeatureMessaging
+      - package: FeatureStickers
+        product: FeatureStickers
+      - package: SimulationKit
+        product: SimulationKit
+      - package: SplickWidgetKit
+        product: SplickWidgetKit
+      - package: GoogleSignIn
+        product: GoogleSignIn
+      - target: SplickWidgetExtension
+        embed: true
+      - target: SplickNotificationServiceExtension
+        embed: true
+    attributes:
+      SystemCapabilities:
+        com.apple.Push:
+          enabled: 1
+        com.apple.AssociatedDomains:
+          enabled: 1
     settings:
       base:
+        PRODUCT_NAME: SplickApp
+        # Xcode 26 debug dylib can abort during dyld/xpc init (before main). Framework Previews still work.
+        ENABLE_DEBUG_DYLIB: NO
         INFOPLIST_FILE: SplickApp/Resources/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
         PRODUCT_BUNDLE_IDENTIFIER: com.splick.app
         TARGETED_DEVICE_FAMILY: 1
-    info:
-      path: SplickApp/Resources/Info.plist
-      properties:
-        CFBundleName: Splick
-        CFBundleDisplayName: Splick
-        CFBundleShortVersionString: "$(MARKETING_VERSION)"
-        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
-        UILaunchScreen: {}
-        UISupportedInterfaceOrientations:
-          - UIInterfaceOrientationPortrait
-        NSCameraUsageDescription: "Splick needs camera access to capture and share moments with friends."
-        NSPhotoLibraryUsageDescription: "Splick needs photo library access to share photos with friends."
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+      configs:
+        Debug:
+          APS_ENVIRONMENT: development
+          CODE_SIGN_ENTITLEMENTS: SplickApp/SplickApp.entitlements
+        Release:
+          APS_ENVIRONMENT: production
+          CODE_SIGN_ENTITLEMENTS: SplickApp/SplickApp.entitlements
+
+  SplickWidgetExtension:
+    type: app-extension
+    platform: iOS
+    deploymentTarget:
+      iOS: "16.0"
+    sources:
+      - path: SplickWidgetExtension/Sources
+    dependencies:
+      - package: SplickWidgetKit
+        product: SplickWidgetKit
+    settings:
+      base:
+        PRODUCT_NAME: SplickWidgetExtension
+        PRODUCT_BUNDLE_IDENTIFIER: com.splick.app.widgets
+        INFOPLIST_FILE: SplickWidgetExtension/Resources/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
+      configs:
+        Debug:
+          CODE_SIGN_ENTITLEMENTS: SplickWidgetExtension/SplickWidgetExtension.entitlements
+        Release:
+          CODE_SIGN_ENTITLEMENTS: SplickWidgetExtension/SplickWidgetExtension.entitlements
+
+  SplickNotificationServiceExtension:
+    type: app-extension
+    platform: iOS
+    deploymentTarget:
+      iOS: "16.0"
+    sources:
+      - path: SplickNotificationServiceExtension/Sources
+    settings:
+      base:
+        PRODUCT_NAME: SplickNotificationServiceExtension
+        PRODUCT_BUNDLE_IDENTIFIER: com.splick.app.NotificationService
+        INFOPLIST_FILE: SplickNotificationServiceExtension/Resources/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
+      configs:
+        Debug:
+          CODE_SIGN_ENTITLEMENTS: SplickNotificationServiceExtension/SplickNotificationServiceExtension.entitlements
+        Release:
+          CODE_SIGN_ENTITLEMENTS: SplickNotificationServiceExtension/SplickNotificationServiceExtension.entitlements
 
 schemes:
   SplickApp:
     build:
       targets:
         SplickApp: all
+        SplickWidgetExtension: all
+        SplickNotificationServiceExtension: all
     run:
       config: Debug
     test:
       config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
+
+  # Xcode 26 can fail to launch under LLDB (launchd spawn / SBMainWorkspace denied).
+  # Use this scheme when ▶ Run fails but the app installs fine via simctl.
+  SplickApp-Run:
+    build:
+      targets:
+        SplickApp: all
+        SplickNotificationServiceExtension: all
+    run:
+      config: Debug
+      debugEnabled: false
     profile:
       config: Release
     analyze:

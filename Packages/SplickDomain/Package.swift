@@ -13,5 +13,10 @@ let package = Package(
             name: "SplickDomain",
             path: "Sources/SplickDomain"
         ),
+        .testTarget(
+            name: "SplickDomainTests",
+            dependencies: ["SplickDomain"],
+            path: "Tests/SplickDomainTests"
+        ),
     ]
 )

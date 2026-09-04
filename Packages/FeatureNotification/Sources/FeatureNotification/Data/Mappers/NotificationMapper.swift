@@ -10,6 +10,11 @@ enum NotificationMapper {
             body: dto.body,
             isRead: dto.isRead,
             referenceId: dto.referenceId,
+            destination: dto.destination.map {
+                NotificationDestination(screen: $0.screen, postId: $0.postId, commentId: $0.commentId)
+            },
+            actorUserId: dto.actorUserId,
+            actorAvatarURL: dto.actorAvatarUrl.flatMap(URL.init(string:)),
             createdAt: dto.createdAt
         )
     }

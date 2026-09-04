@@ -2,54 +2,114 @@ import Foundation
 import SplickDomain
 
 public protocol ExpenseRepositoryProtocol: Sendable {
-    func fetchExpenses(groupId: UUID?, page: Int, limit: Int) async throws -> [Expense]
-    func fetchExpense(id: UUID) async throws -> Expense
-    func createExpense(_ request: CreateExpenseRequest) async throws -> Expense
-    func settleExpense(expenseId: UUID, splitId: UUID) async throws
-    func fetchDebtSummary(groupId: UUID?) async throws -> [DebtSummary]
+  func fetchExpenses(groupId: UUID?, page: Int, limit: Int, cursor: String?) async throws -> [Expense]
+  func fetchExpense(id: UUID) async throws -> Expense
+  func createExpense(_ request: CreateExpenseRequest) async throws -> Expense
+  func settleExpense(expenseId: UUID, splitId: UUID) async throws
+  func fetchDebtSummary(groupId: UUID?) async throws -> [DebtSummary]
+  func fetchMonthlySummary(months: Int) async throws -> MonthlyExpenseSummary
+  func fetchExpenses(
+    counterpartyId: UUID,
+    page: Int,
+    limit: Int,
+    status: CounterpartyExpenseStatus,
+    cursor: String?
+  ) async throws -> ExpensePage
+  func fetchNetting(counterpartyId: UUID) async throws -> NettingSummary
+  func submitBulkSettlement(
+    counterpartyId: UUID,
+    evidenceURL: URL,
+    note: String?
+  ) async throws -> BulkSettlement
+  func approveBulkSettlement(id: UUID) async throws -> BulkSettlement
+  func rejectBulkSettlement(id: UUID, reason: String?) async throws -> BulkSettlement
+  func claimBillInvite(token: String, splitId: UUID?) async throws -> ClaimBillInviteResult
+}
+
+public struct ClaimBillInviteResult: Equatable, Sendable {
+  public let expenseId: UUID
+  public let postId: UUID?
+  public let splitId: UUID
+
+  public init(expenseId: UUID, postId: UUID?, splitId: UUID) {
+    self.expenseId = expenseId
+    self.postId = postId
+    self.splitId = splitId
+  }
+}
+
+public struct ExpensePage: Equatable, Sendable {
+  public let expenses: [Expense]
+  public let page: Int
+  public let totalPages: Int
+  public let totalItems: Int
+  public let hasNext: Bool
+  public let nextCursor: String?
+
+  public init(
+    expenses: [Expense],
+    page: Int,
+    totalPages: Int,
+    totalItems: Int,
+    hasNext: Bool,
+    nextCursor: String? = nil
+  ) {
+    self.expenses = expenses
+    self.page = page
+    self.totalPages = totalPages
+    self.totalItems = totalItems
+    self.hasNext = hasNext
+    self.nextCursor = nextCursor
+  }
+}
+
+public enum CounterpartyExpenseStatus: String, CaseIterable, Sendable {
+  case open = "OPEN"
+  case settled = "SETTLED"
+  case all = "ALL"
 }
 
 public struct CreateExpenseRequest: Sendable {
-    public let description: String
-    public let totalAmount: Decimal
-    public let currency: String
-    public let groupId: UUID?
-    public let category: ExpenseCategory
-    public let splitType: SplitType
-    public let participants: [UUID]
-    public let customAmounts: [UUID: Decimal]?
+  public let description: String
+  public let totalAmount: Decimal
+  public let currency: String
+  public let groupId: UUID?
+  public let category: ExpenseCategory
+  public let splitType: SplitType
+  public let participants: [UUID]
+  public let customAmounts: [UUID: Decimal]?
 
-    public init(
-        description: String,
-        totalAmount: Decimal,
-        currency: String = "VND",
-        groupId: UUID? = nil,
-        category: ExpenseCategory = .general,
-        splitType: SplitType = .equal,
-        participants: [UUID],
-        customAmounts: [UUID: Decimal]? = nil
-    ) {
-        self.description = description
-        self.totalAmount = totalAmount
-        self.currency = currency
-        self.groupId = groupId
-        self.category = category
-        self.splitType = splitType
-        self.participants = participants
-        self.customAmounts = customAmounts
-    }
+  public init(
+    description: String,
+    totalAmount: Decimal,
+    currency: String = "VND",
+    groupId: UUID? = nil,
+    category: ExpenseCategory = .general,
+    splitType: SplitType = .equal,
+    participants: [UUID],
+    customAmounts: [UUID: Decimal]? = nil
+  ) {
+    self.description = description
+    self.totalAmount = totalAmount
+    self.currency = currency
+    self.groupId = groupId
+    self.category = category
+    self.splitType = splitType
+    self.participants = participants
+    self.customAmounts = customAmounts
+  }
 }
 
 public enum SplitType: String, Codable, CaseIterable, Sendable {
-    case equal = "EQUAL"
-    case exact = "EXACT"
-    case percentage = "PERCENTAGE"
+  case equal = "EQUAL"
+  case exact = "EXACT"
+  case percentage = "PERCENTAGE"
 
-    public var displayName: String {
-        switch self {
-        case .equal: return "Split Equally"
-        case .exact: return "Exact Amounts"
-        case .percentage: return "By Percentage"
-        }
+  public var displayName: String {
+    switch self {
+    case .equal: return "Split Equally"
+    case .exact: return "Exact Amounts"
+    case .percentage: return "By Percentage"
     }
+  }
 }

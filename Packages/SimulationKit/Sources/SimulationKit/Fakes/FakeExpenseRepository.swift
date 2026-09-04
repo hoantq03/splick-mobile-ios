@@ -27,6 +27,9 @@ public actor FakeExpenseRepository: ExpenseRepositoryProtocol {
     }
 
     public func seed() {
+        let grabSettledAt = Date().addingTimeInterval(-82800)
+        let internetPartialPaidAt = Date().addingTimeInterval(-86400)
+
         expenses = [
             Expense(
                 id: UUID(), description: "Korean BBQ dinner",
@@ -34,7 +37,10 @@ public actor FakeExpenseRepository: ExpenseRepositoryProtocol {
                 paidBy: friend1,
                 splits: [
                     ExpenseSplit(id: UUID(), user: currentUser, amount: 150000, isPaid: false),
-                    ExpenseSplit(id: UUID(), user: friend1, amount: 150000, isPaid: true),
+                    ExpenseSplit(
+                        id: UUID(), user: friend1, amount: 150000, isPaid: true,
+                        paidAt: Date().addingTimeInterval(-3500)
+                    ),
                     ExpenseSplit(id: UUID(), user: friend2, amount: 150000, isPaid: false),
                 ],
                 category: .food, status: .pending,
@@ -45,11 +51,16 @@ public actor FakeExpenseRepository: ExpenseRepositoryProtocol {
                 totalAmount: 85000, currency: "VND",
                 paidBy: currentUser,
                 splits: [
-                    ExpenseSplit(id: UUID(), user: friend1, amount: 42500, isPaid: true),
-                    ExpenseSplit(id: UUID(), user: currentUser, amount: 42500, isPaid: true),
+                    ExpenseSplit(
+                        id: UUID(), user: friend1, amount: 42500, isPaid: true, paidAt: grabSettledAt
+                    ),
+                    ExpenseSplit(
+                        id: UUID(), user: currentUser, amount: 42500, isPaid: true, paidAt: grabSettledAt
+                    ),
                 ],
                 category: .transport, status: .settled,
-                createdAt: Date().addingTimeInterval(-86400)
+                createdAt: Date().addingTimeInterval(-86400),
+                settledAt: grabSettledAt
             ),
             Expense(
                 id: UUID(), description: "Monthly internet bill",
@@ -57,8 +68,13 @@ public actor FakeExpenseRepository: ExpenseRepositoryProtocol {
                 paidBy: friend2,
                 splits: [
                     ExpenseSplit(id: UUID(), user: currentUser, amount: 100000, isPaid: false),
-                    ExpenseSplit(id: UUID(), user: friend1, amount: 100000, isPaid: true),
-                    ExpenseSplit(id: UUID(), user: friend2, amount: 100000, isPaid: true),
+                    ExpenseSplit(
+                        id: UUID(), user: friend1, amount: 100000, isPaid: true, paidAt: internetPartialPaidAt
+                    ),
+                    ExpenseSplit(
+                        id: UUID(), user: friend2, amount: 100000, isPaid: true,
+                        paidAt: Date().addingTimeInterval(-170000)
+                    ),
                 ],
                 category: .utilities, status: .partiallySettled,
                 createdAt: Date().addingTimeInterval(-172800)
@@ -68,8 +84,12 @@ public actor FakeExpenseRepository: ExpenseRepositoryProtocol {
         logger.log("Seeded \(expenses.count) expenses")
     }
 
-    public func fetchExpenses(groupId: UUID?, page: Int, limit: Int) async throws -> [Expense] {
-        logger.log("Fetch expenses: page=\(page), limit=\(limit), groupId=\(groupId?.uuidString.prefix(8) ?? "nil")")
+    public func fetchExpenses(groupId: UUID?, page: Int, limit: Int, cursor: String?) async throws
+        -> [Expense]
+    {
+        logger.log(
+            "Fetch expenses: page=\(page), limit=\(limit), cursor=\(cursor ?? "nil"), groupId=\(groupId?.uuidString.prefix(8) ?? "nil")"
+        )
         try await Task.sleep(for: .milliseconds(400))
 
         var filtered = expenses
@@ -146,5 +166,128 @@ public actor FakeExpenseRepository: ExpenseRepositoryProtocol {
 
         logger.success("Debts: owed=150,000₫, owing=100,000₫")
         return debts
+    }
+
+    public func fetchMonthlySummary(months: Int) async throws -> MonthlyExpenseSummary {
+        logger.log("Fetch monthly summary months=\(months)")
+        try await Task.sleep(for: .milliseconds(200))
+
+        let calendar = Calendar.current
+        let now = Date()
+        var series: [MonthData] = []
+        for offset in stride(from: months - 1, through: 0, by: -1) {
+            guard let date = calendar.date(byAdding: .month, value: -offset, to: now) else {
+                continue
+            }
+            let components = calendar.dateComponents([.year, .month], from: date)
+            let factor = Decimal(months - offset)
+            series.append(
+                MonthData(
+                    year: components.year ?? 2026,
+                    month: components.month ?? 1,
+                    totalSettledReceived: 800_000 * factor / Decimal(months),
+                    totalSettledPaid: 1_200_000 * factor / Decimal(months)
+                )
+            )
+        }
+        let current = series.last ?? MonthData(
+            year: 2026, month: 7, totalSettledReceived: 0, totalSettledPaid: 0
+        )
+        return MonthlyExpenseSummary(currency: "VND", currentMonth: current, months: series)
+    }
+
+    public func fetchExpenses(
+        counterpartyId: UUID,
+        page: Int,
+        limit: Int,
+        status: CounterpartyExpenseStatus,
+        cursor: String?
+    ) async throws -> ExpensePage {
+        let matching = expenses.filter { expense in
+            expense.paidBy.id == counterpartyId
+                || expense.splits.contains { $0.user.id == counterpartyId }
+        }
+        let start = page * limit
+        let pageExpenses = start < matching.count
+            ? Array(matching[start..<min(start + limit, matching.count)])
+            : []
+        let hasNext = start + limit < matching.count
+        return ExpensePage(
+            expenses: pageExpenses,
+            page: page,
+            totalPages: max(1, Int(ceil(Double(matching.count) / Double(limit)))),
+            totalItems: matching.count,
+            hasNext: hasNext,
+            nextCursor: hasNext ? "fake-cursor" : nil
+        )
+    }
+
+    public func fetchNetting(counterpartyId: UUID) async throws -> NettingSummary {
+        let counterparty = counterpartyId == friend1.id ? friend1 : friend2
+        return NettingSummary(
+            counterparty: counterparty,
+            actorOwesTotal: counterpartyId == friend2.id ? 100000 : 0,
+            counterpartyOwesTotal: counterpartyId == friend1.id ? 150000 : 0,
+            netAmount: counterpartyId == friend1.id ? 150000 : 100000,
+            netDirection: counterpartyId == friend1.id ? .counterpartyOwes : .actorOwes,
+            currency: "VND",
+            unpaidSplitCount: 1,
+            expensesInvolved: 1
+        )
+    }
+
+    public func submitBulkSettlement(
+        counterpartyId: UUID,
+        evidenceURL: URL,
+        note: String?
+    ) async throws -> BulkSettlement {
+        BulkSettlement(
+            id: UUID(),
+            debtorUserId: currentUser.id,
+            creditorUserId: counterpartyId,
+            amount: 100000,
+            currency: "VND",
+            evidenceURL: evidenceURL,
+            note: note,
+            status: .pending,
+            splitCount: 1,
+            createdAt: .now
+        )
+    }
+
+    public func approveBulkSettlement(id: UUID) async throws -> BulkSettlement {
+        BulkSettlement(
+            id: id,
+            debtorUserId: currentUser.id,
+            creditorUserId: friend1.id,
+            amount: 100000,
+            currency: "VND",
+            evidenceURL: URL(string: "https://example.com/evidence.jpg")!,
+            status: .approved,
+            splitCount: 1,
+            createdAt: .now,
+            reviewedAt: .now
+        )
+    }
+
+    public func rejectBulkSettlement(id: UUID, reason: String?) async throws -> BulkSettlement {
+        BulkSettlement(
+            id: id,
+            debtorUserId: currentUser.id,
+            creditorUserId: friend1.id,
+            amount: 100000,
+            currency: "VND",
+            evidenceURL: URL(string: "https://example.com/evidence.jpg")!,
+            note: reason,
+            status: .rejected,
+            splitCount: 1,
+            createdAt: .now,
+            reviewedAt: .now,
+            rejectReason: reason
+        )
+    }
+
+    public func claimBillInvite(token: String, splitId: UUID?) async throws -> ClaimBillInviteResult {
+        ClaimBillInviteResult(expenseId: UUID(), postId: nil, splitId: UUID())
     }
 }

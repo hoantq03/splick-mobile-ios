@@ -1,32 +1,33 @@
-# API Stubs — Offline Backend Simulation
+# API Stubs — Offline feature simulation
 
-Lightweight JSON stub server for development without the real backend.
+JSON stub server for **feed, expense, and notifications** during development.
+
+Authentication is **not** stubbed — use `splick-backend` (gateway `:8080`) from the iOS app.
 
 ## Setup
 
 ```bash
-# Install json-server (one-time)
 npm install -g json-server
-
-# Run stub server on port 8080
 json-server --watch db.json --routes routes.json --port 8080
 ```
 
-## Available Endpoints
+Note: port `8080` conflicts with the API gateway. Use stubs only when the gateway is stopped, or run json-server on another port and adjust non-auth client base URLs if needed.
+
+## Stubbed endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | /api/v1/auth/login | Returns mock auth session |
-| POST | /api/v1/auth/register | Returns mock auth session |
-| GET | /api/v1/feed | Returns paginated posts |
-| GET | /api/v1/expenses | Returns expense list |
-| GET | /api/v1/expenses/debts | Returns debt summary |
-| GET | /api/v1/notifications | Returns notifications |
+| GET | /api/v1/feed | Paginated posts |
+| GET | /api/v1/expenses | Expense list |
+| GET | /api/v1/expenses/debts | Debt summary |
+| GET | /api/v1/notifications | Notifications |
 
-## Custom Responses
+## Auth (live backend)
 
-Edit `db.json` to add/modify test data. The server auto-reloads on file changes.
+| Method | Path | Backend |
+|--------|------|---------|
+| POST | /api/v1/auth/login | auth-service via gateway |
+| POST | /api/v1/auth/register | auth-service via gateway |
+| POST | /api/v1/auth/email/otp/request | auth-service via gateway |
 
-## Usage with iOS Code
-
-Set `AppConstants.API.baseURL` to `http://localhost:8080/api` (already configured for DEBUG builds).
+Run auth-service and communication-service with Gmail SMTP configured in `splick-backend/.env` (see `docs/email-smtp.md`).
