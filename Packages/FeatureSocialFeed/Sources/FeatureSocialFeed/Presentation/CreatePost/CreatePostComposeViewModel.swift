@@ -1,10 +1,10 @@
 import Foundation
 import UIKit
+import Combine
 import DesignSystem
 import Common
 import Localization
 import SplickDomain
-import AVFoundation
 import FeatureFriends
 
 public enum ComposeBillSplitMode: String, CaseIterable, Identifiable {
@@ -52,6 +52,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
     @Published private(set) var selectedPlace: PostPlace?
     @Published private(set) var nearbyPlaces: [PostPlace] = []
     @Published private(set) var searchPlaces: [PostPlace] = []
+    @Published private(set) var isSearchingPlaces = false
     @Published private(set) var locationGpsAvailable = false
     @Published var friendSearchQuery = ""
     @Published private(set) var friendSearchResults: [UserSummary] = []
@@ -94,6 +95,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
     private var friendSearchTask: Task<Void, Never>?
     private var companionGroupMembersTask: Task<Void, Never>?
     private var locationSearchTask: Task<Void, Never>?
+    private var locationSearchCancellable: AnyCancellable?
     private var audienceFriendSearchTask: Task<Void, Never>?
     private var activeMentionQuery = ""
     private var friendSearchPage = 0
@@ -114,12 +116,9 @@ public final class CreatePostComposeViewModel: ObservableObject {
     }
 
     private let maxImages = 5
-    private let maxVideos = 3
 
     public init(
         previewImages: [UIImage] = [],
-        videoURL: URL? = nil,
-        mediaType: PostMediaType = .image,
         fetchFriendsUseCase: FetchFriendsUseCaseProtocol,
         fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol,
         fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol,
@@ -135,31 +134,25 @@ public final class CreatePostComposeViewModel: ObservableObject {
         self.currentUser = currentUser
         self.currentUserId = currentUserId ?? currentUser?.id
         self.feedRepository = feedRepository
+        selectedMediaItems = previewImages.compactMap(Self.makeImageDraft)
+        observeLocationQuery()
+    }
 
-        if mediaType == .video,
-           let videoURL,
-           let data = try? Data(contentsOf: videoURL) {
-            selectedMediaItems = [
-                ComposeMediaDraft(
-                    previewImage: Self.videoThumbnail(videoURL),
-                    mediaType: .video,
-                    data: data,
-                    mimeType: "video/mp4",
-                    videoDurationSeconds: Self.videoDurationSeconds(from: videoURL)
-                )
-            ]
-        } else {
-            selectedMediaItems = previewImages.compactMap(Self.makeImageDraft)
-        }
+    private func observeLocationQuery() {
+        locationSearchCancellable = $location
+            .dropFirst()
+            .removeDuplicates()
+            .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.locationQueryDidChange()
+            }
     }
 
     var remainingImageSlots: Int {
         max(0, maxImages - selectedMediaItems.filter { $0.mediaType == .image }.count)
     }
 
-    var remainingVideoSlots: Int {
-        max(0, maxVideos - selectedMediaItems.filter { $0.mediaType == .video }.count)
-    }
+    var composerUser: UserSummary? { currentUser }
 
     func addImages(_ images: [UIImage]) {
         for image in images {
@@ -174,8 +167,6 @@ public final class CreatePostComposeViewModel: ObservableObject {
     }
 
     var filteredCompanionGroups: [Group] {
-        guard enableBillSplit else { return [] }
-
         let query = friendSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         let candidates = availableAudienceGroups.filter { $0.id != selectedCompanionGroup?.id }
 
@@ -278,9 +269,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
         }
 
         selectedCompanions.forEach(append)
-        if enableBillSplit {
-            selectedCompanionGroup?.members.forEach(append)
-        }
+        selectedCompanionGroup?.members.forEach(append)
 
         return companions
     }
@@ -389,7 +378,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
     }
 
     var canAddMoreMedia: Bool {
-        selectedMediaItems.count < maxImages + maxVideos
+        remainingImageSlots > 0
     }
 
     func removeMediaItem(id: UUID) {
@@ -414,15 +403,8 @@ public final class CreatePostComposeViewModel: ObservableObject {
     }
 
     func addMediaDraft(_ media: ComposeMediaDraft) {
-        guard canAddMoreMedia else { return }
-        if media.mediaType == .video,
-           selectedMediaItems.filter({ $0.mediaType == .video }).count >= maxVideos {
-            return
-        }
-        if media.mediaType == .image,
-           selectedMediaItems.filter({ $0.mediaType == .image }).count >= maxImages {
-            return
-        }
+        guard media.mediaType == .image else { return }
+        guard remainingImageSlots > 0 else { return }
         selectedMediaItems.append(media)
     }
 
@@ -721,13 +703,14 @@ public final class CreatePostComposeViewModel: ObservableObject {
             return nil
         }
 
+        if isLoadingCompanionGroupMembers ||
+            (selectedCompanionGroup?.members.isEmpty == true &&
+             (selectedCompanionGroup?.memberCount ?? 0) > 0) {
+            submitState = .failed(languageService.text(.feedCreateLoadGroupMembersFailed))
+            return nil
+        }
+
         if enableBillSplit {
-            if isLoadingCompanionGroupMembers ||
-                (selectedCompanionGroup?.members.isEmpty == true &&
-                 (selectedCompanionGroup?.memberCount ?? 0) > 0) {
-                submitState = .failed(languageService.text(.feedCreateLoadGroupMembersFailed))
-                return nil
-            }
             if companionUsersForSubmit.isEmpty && pendingGuests.isEmpty {
                 submitState = .failed(languageService.text(.feedCreateBillNeedPeople))
                 return nil
@@ -757,7 +740,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
             },
             caption: caption.nilIfBlank,
             companionIds: companionUsersForSubmit.map(\.id),
-            companionGroupName: enableBillSplit ? selectedCompanionGroup?.name : nil,
+            companionGroupName: selectedCompanionGroup?.name,
             checkInPlace: selectedPlace?.displayName ?? location.nilIfBlank,
             location: selectedPlace?.hasCoordinates == true ? selectedPlace : nil,
             feedKind: enableBillSplit ? .shareBill : .checkIn,
@@ -774,7 +757,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
                 }
                 : [],
             audience: audience,
-            groupId: enableBillSplit ? selectedCompanionGroup?.id : nil
+            groupId: selectedCompanionGroup?.id
         )
     }
 
@@ -889,12 +872,17 @@ public final class CreatePostComposeViewModel: ObservableObject {
         let query = location.trimmingCharacters(in: .whitespacesAndNewlines)
         guard query.count >= 2 else {
             searchPlaces = []
+            isSearchingPlaces = false
             return
         }
+        isSearchingPlaces = true
         locationSearchTask = Task {
-            try? await Task.sleep(nanoseconds: 300_000_000)
+            try? await Task.sleep(nanoseconds: 50_000_000)
             guard !Task.isCancelled else { return }
-            guard let feedRepository else { return }
+            guard let feedRepository else {
+                isSearchingPlaces = false
+                return
+            }
             do {
                 let results = try await feedRepository.searchLocations(
                     query: query,
@@ -902,10 +890,17 @@ public final class CreatePostComposeViewModel: ObservableObject {
                     lon: deviceLon
                 )
                 guard !Task.isCancelled else { return }
+                guard location.trimmingCharacters(in: .whitespacesAndNewlines) == query else {
+                    isSearchingPlaces = false
+                    return
+                }
                 searchPlaces = results
             } catch {
-                searchPlaces = []
+                if !Task.isCancelled {
+                    searchPlaces = []
+                }
             }
+            isSearchingPlaces = false
         }
     }
 
@@ -1026,23 +1021,6 @@ public final class CreatePostComposeViewModel: ObservableObject {
             mimeType: jpegData != nil ? "image/jpeg" : "image/png",
             videoDurationSeconds: nil
         )
-    }
-
-    private static func videoDurationSeconds(from url: URL) -> Int? {
-        let asset = AVURLAsset(url: url)
-        let seconds = CMTimeGetSeconds(asset.duration)
-        guard seconds.isFinite else { return nil }
-        return Int(seconds.rounded())
-    }
-
-    private static func videoThumbnail(_ url: URL) -> UIImage? {
-        let asset = AVURLAsset(url: url)
-        let generator = AVAssetImageGenerator(asset: asset)
-        generator.appliesPreferredTrackTransform = true
-        guard let cgImage = try? generator.copyCGImage(at: .zero, actualTime: nil) else {
-            return nil
-        }
-        return UIImage(cgImage: cgImage)
     }
 }
 

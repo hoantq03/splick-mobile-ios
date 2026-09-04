@@ -1,7 +1,4 @@
 import SwiftUI
-import PhotosUI
-import AVFoundation
-import UniformTypeIdentifiers
 import UIKit
 import CoreLocation
 import DesignSystem
@@ -16,8 +13,59 @@ private enum ComposeMetrics {
     static let companionNameWidth: CGFloat = 64
 }
 
-private enum ComposeOptionRoute: Hashable {
+private struct ThoughtBubbleShape: Shape {
+    var tailCenterY: CGFloat = 18
+    var tailLength: CGFloat = 8
+    var tailSpread: CGFloat = 14
+    var cornerRadius: CGFloat = 16
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let width = rect.width
+        let height = rect.height
+        let radius = min(cornerRadius, min(width - tailLength, height) / 2)
+        let bodyLeft = tailLength
+        let halfTail = tailSpread / 2
+        let tipY = min(max(tailCenterY, radius + halfTail), height - radius - halfTail)
+
+        path.move(to: CGPoint(x: bodyLeft + radius, y: 0))
+        path.addLine(to: CGPoint(x: width - radius, y: 0))
+        path.addQuadCurve(to: CGPoint(x: width, y: radius), control: CGPoint(x: width, y: 0))
+        path.addLine(to: CGPoint(x: width, y: height - radius))
+        path.addQuadCurve(
+            to: CGPoint(x: width - radius, y: height),
+            control: CGPoint(x: width, y: height)
+        )
+        path.addLine(to: CGPoint(x: bodyLeft + radius, y: height))
+        path.addQuadCurve(
+            to: CGPoint(x: bodyLeft, y: height - radius),
+            control: CGPoint(x: bodyLeft, y: height)
+        )
+        path.addLine(to: CGPoint(x: bodyLeft, y: tipY + halfTail))
+        path.addCurve(
+            to: CGPoint(x: 0, y: tipY),
+            control1: CGPoint(x: bodyLeft - tailLength * 0.18, y: tipY + halfTail * 0.28),
+            control2: CGPoint(x: 0, y: tipY + 2)
+        )
+        path.addCurve(
+            to: CGPoint(x: bodyLeft, y: tipY - halfTail),
+            control1: CGPoint(x: 0, y: tipY - 2),
+            control2: CGPoint(x: bodyLeft - tailLength * 0.18, y: tipY - halfTail * 0.28)
+        )
+        path.addLine(to: CGPoint(x: bodyLeft, y: radius))
+        path.addQuadCurve(
+            to: CGPoint(x: bodyLeft + radius, y: 0),
+            control: CGPoint(x: bodyLeft, y: 0)
+        )
+        path.closeSubpath()
+        return path
+    }
+}
+
+private enum ExpandedComposeOption {
+    case bill
     case companions
+    case audience
     case location
 }
 
@@ -34,11 +82,10 @@ public struct CreatePostComposeView: View {
     private let nearbyDiscoveryUseCase: NearbyDiscoveryUseCaseProtocol?
     let onPostSubmit: (PreparedPostSubmit) -> Void
     let onCancel: () -> Void
-    @State private var photoPickerItems: [PhotosPickerItem] = []
     @State private var showPhotoLibraryPicker = false
     @State private var showCameraCapture = false
     @State private var reviewingMediaID: UUID?
-    @State private var showAudiencePicker = false
+    @State private var expandedComposeOption: ExpandedComposeOption?
     @State private var profileRoute: ComposeProfileRoute?
 
     public init(
@@ -57,14 +104,17 @@ public struct CreatePostComposeView: View {
 
     public var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
+            VStack(alignment: .leading, spacing: 0) {
+                captionComposer
+                    .padding(.horizontal, SplickTheme.Spacing.md)
+                    .padding(.top, SplickTheme.Spacing.sm)
                 mediaPreview
-                captionSection
-                billSplitSection
-                companionsSection
-                additionalOptionsSection
+                    .padding(.horizontal, SplickTheme.Spacing.md)
+                    .padding(.top, SplickTheme.Spacing.sm)
+                    .padding(.bottom, SplickTheme.Spacing.xs)
+                Divider().opacity(0.55)
+                composeActions
             }
-            .padding(SplickTheme.Spacing.md)
             .padding(.bottom, SplickTheme.Spacing.xl)
         }
         .navigationTitle(languageService.text(.feedCreateTitle))
@@ -134,27 +184,11 @@ public struct CreatePostComposeView: View {
                 )
             }
         }
-        .sheet(isPresented: $showAudiencePicker) {
-            PostAudiencePickerSheet(viewModel: viewModel, onUserTap: openProfile)
-        }
         .sheet(item: $profileRoute) { route in
             if let profileDependencies {
                 FriendUserProfileView(
                     viewModel: profileDependencies.makeViewModel(user: route.user)
                 )
-            }
-        }
-        .navigationDestination(for: ComposeOptionRoute.self) { route in
-            switch route {
-            case .companions:
-                ComposeCompanionsEditorView(
-                    viewModel: viewModel,
-                    onUserTap: openProfile,
-                    nearbyDiscoveryUseCase: nearbyDiscoveryUseCase,
-                    profileDependencies: profileDependencies
-                )
-            case .location:
-                ComposeLocationEditorView(viewModel: viewModel)
             }
         }
     }
@@ -198,7 +232,7 @@ public struct CreatePostComposeView: View {
                                     }
                                 }
                             }
-                            .frame(width: 140, height: 180)
+                            .frame(width: 108, height: 136)
                             .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium))
 
                             Button {
@@ -214,26 +248,15 @@ public struct CreatePostComposeView: View {
 
                     if viewModel.canAddMoreMedia {
                         Menu {
-                            if viewModel.remainingImageSlots > 0 {
-                                Button {
-                                    showCameraCapture = true
-                                } label: {
-                                    Label(languageService.text(.feedCreateTakePhoto), systemImage: "camera")
-                                }
-                                Button {
-                                    showPhotoLibraryPicker = true
-                                } label: {
-                                    Label(languageService.text(.feedCreatePickLibrary), systemImage: "photo.on.rectangle")
-                                }
+                            Button {
+                                showCameraCapture = true
+                            } label: {
+                                Label(languageService.text(.feedCreateTakePhoto), systemImage: "camera")
                             }
-                            if viewModel.remainingVideoSlots > 0 {
-                                PhotosPicker(
-                                    selection: $photoPickerItems,
-                                    maxSelectionCount: 1,
-                                    matching: .videos
-                                ) {
-                                    Label(languageService.text(.feedCreatePickVideo), systemImage: "video")
-                                }
+                            Button {
+                                showPhotoLibraryPicker = true
+                            } label: {
+                                Label(languageService.text(.feedCreatePickLibrary), systemImage: "photo.on.rectangle")
                             }
                         } label: {
                             VStack(spacing: 8) {
@@ -243,15 +266,9 @@ public struct CreatePostComposeView: View {
                                     .font(SplickTheme.Typography.caption)
                             }
                             .foregroundStyle(SplickTheme.Colors.textSecondary)
-                            .frame(width: 140, height: 180)
+                            .frame(width: 108, height: 136)
                             .background(SplickTheme.Colors.tertiaryBackground)
                             .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.medium))
-                        }
-                        .onChange(of: photoPickerItems) { items in
-                            Task {
-                                await importSelectedMediaItems(items)
-                                photoPickerItems = []
-                            }
                         }
                     }
                 }
@@ -262,82 +279,205 @@ public struct CreatePostComposeView: View {
         }
     }
 
-    private var captionSection: some View {
-        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-            Text(languageService.text(.feedCreateCaption))
-                .font(SplickTheme.Typography.headline)
-            MentionTextField(
-                languageService.text(.feedCreateCaptionPlaceholder),
-                text: $viewModel.caption,
-                fontSize: 15,
-                minHeight: 88,
-                displayNamesByUsername: viewModel.mentionDisplayNamesByKey,
-                displayNamesByUserId: viewModel.mentionDisplayNamesByUserId
+    private var captionComposer: some View {
+        let tailLength: CGFloat = 8
+        return HStack(alignment: .top, spacing: 6) {
+            AvatarView(
+                imageURL: viewModel.composerUser?.avatarURL,
+                name: viewModel.composerUser?.displayName ?? "",
+                size: .small
             )
-            .padding(SplickTheme.Spacing.sm)
-            .background(SplickTheme.Colors.tertiaryBackground)
-            .clipShape(
-                RoundedRectangle(
-                    cornerRadius: ComposeMetrics.fieldCornerRadius,
-                    style: .continuous
-                )
-            )
-            .onChange(of: viewModel.caption) { newValue in
-                viewModel.syncMentionPicker(with: newValue)
-            }
+            .padding(.top, 2)
 
-            if let mentionViewModel = viewModel.mentionPickerViewModel {
-                MentionPickerPopup(viewModel: mentionViewModel) { user in
-                    viewModel.insertMention(user)
+            VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+                MentionTextField(
+                    languageService.text(.feedCreateCaptionPlaceholder),
+                    text: $viewModel.caption,
+                    fontSize: 16,
+                    minHeight: 36,
+                    displayNamesByUsername: viewModel.mentionDisplayNamesByKey,
+                    displayNamesByUserId: viewModel.mentionDisplayNamesByUserId
+                )
+                .onChange(of: viewModel.caption) { newValue in
+                    viewModel.syncMentionPicker(with: newValue)
+                }
+
+                if let mentionViewModel = viewModel.mentionPickerViewModel {
+                    MentionPickerPopup(viewModel: mentionViewModel) { user in
+                        viewModel.insertMention(user)
+                    }
                 }
             }
+            .padding(.leading, 12 + tailLength)
+            .padding(.trailing, 12)
+            .padding(.vertical, 10)
+            .background(
+                SplickTheme.Colors.tertiaryBackground,
+                in: ThoughtBubbleShape(tailCenterY: 18)
+            )
         }
-        .splickCard()
     }
 
-    private var additionalOptionsSection: some View {
-        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-            Text(languageService.text(.feedCreateMoreOptions))
-                .font(SplickTheme.Typography.headline)
+    private var composeActions: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: SplickTheme.Spacing.sm) {
+                Button {
+                    toggleBillDetails()
+                } label: {
+                    HStack(spacing: SplickTheme.Spacing.sm) {
+                        Image(systemName: "banknote")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                            .frame(width: 22)
+                        Text(languageService.text(.feedBillSplitTitle))
+                            .font(SplickTheme.Typography.body)
+                            .fontWeight(.medium)
+                            .foregroundStyle(SplickTheme.Colors.textPrimary)
+                        Spacer()
+                    }
+                }
+                .buttonStyle(.plain)
+
+                Toggle(
+                    "",
+                    isOn: Binding(
+                        get: { viewModel.enableBillSplit },
+                        set: { isEnabled in
+                            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                                viewModel.enableBillSplit = isEnabled
+                                if isEnabled {
+                                    expandedComposeOption = .bill
+                                } else if expandedComposeOption == .bill {
+                                    expandedComposeOption = nil
+                                }
+                            }
+                        }
+                    )
+                )
+                .labelsHidden()
+
+                Button {
+                    toggleBillDetails()
+                } label: {
+                    Image(systemName: expandedComposeOption == .bill ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(SplickTheme.Colors.textTertiary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, SplickTheme.Spacing.md)
+            .padding(.vertical, 8)
+
+            if viewModel.enableBillSplit, expandedComposeOption == .bill {
+                billSplitDetails
+                    .padding(.horizontal, SplickTheme.Spacing.md)
+                    .padding(.bottom, SplickTheme.Spacing.sm)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
+            insetDivider
+
+            if !viewModel.enableBillSplit {
+                Button {
+                    toggleComposeOption(.companions)
+                } label: {
+                    composeListRow(
+                        icon: "person.crop.circle.badge.plus",
+                        title: companionsSectionTitle,
+                        summary: companionsSummaryText,
+                        expanded: expandedComposeOption == .companions
+                    )
+                }
+                .buttonStyle(.plain)
+
+                if expandedComposeOption == .companions {
+                    ComposeCompanionsEditorView(
+                        viewModel: viewModel,
+                        onUserTap: openProfile,
+                        nearbyDiscoveryUseCase: nearbyDiscoveryUseCase,
+                        profileDependencies: profileDependencies,
+                        embedded: true
+                    )
+                    .padding(.leading, 36)
+                    .padding(.trailing, SplickTheme.Spacing.md)
+                    .padding(.bottom, SplickTheme.Spacing.sm)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+
+                insetDivider
+            }
 
             Button {
-                showAudiencePicker = true
+                toggleComposeOption(.audience)
             } label: {
-                optionRow(
+                composeListRow(
                     icon: "eye",
                     title: languageService.text(.feedAudienceTitle),
-                    summary: audienceOptionSummaryText
+                    summary: audienceOptionSummaryText,
+                    expanded: expandedComposeOption == .audience
                 )
             }
             .buttonStyle(.plain)
 
-            NavigationLink(value: ComposeOptionRoute.location) {
-                optionRow(
+            if expandedComposeOption == .audience {
+                PostAudiencePickerSheet(
+                    viewModel: viewModel,
+                    onUserTap: openProfile,
+                    embedded: true
+                )
+                .padding(.leading, 36)
+                .padding(.trailing, SplickTheme.Spacing.md)
+                .padding(.bottom, SplickTheme.Spacing.sm)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
+            insetDivider
+
+            Button {
+                toggleComposeOption(.location)
+            } label: {
+                composeListRow(
                     icon: "mappin.and.ellipse",
                     title: languageService.text(.feedCreateLocation),
-                    summary: locationSummaryText
+                    summary: locationSummaryText,
+                    expanded: expandedComposeOption == .location
                 )
             }
             .buttonStyle(.plain)
+
+            if expandedComposeOption == .location {
+                ComposeLocationEditorView(viewModel: viewModel, embedded: true)
+                    .padding(.leading, 36)
+                    .padding(.trailing, SplickTheme.Spacing.md)
+                    .padding(.bottom, SplickTheme.Spacing.sm)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
-        .splickCard()
+        .animation(.spring(response: 0.32, dampingFraction: 0.86), value: viewModel.enableBillSplit)
+        .animation(.spring(response: 0.32, dampingFraction: 0.86), value: expandedComposeOption)
     }
 
-    private var companionsSection: some View {
-        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-            Text(companionsSectionTitle)
-                .font(SplickTheme.Typography.headline)
-
-            NavigationLink(value: ComposeOptionRoute.companions) {
-                optionRow(
-                    icon: "person.crop.circle.badge.plus",
-                    title: companionsSectionTitle,
-                    summary: companionsSummaryText
-                )
-            }
-            .buttonStyle(.plain)
+    private func toggleComposeOption(_ option: ExpandedComposeOption) {
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+            expandedComposeOption = expandedComposeOption == option ? nil : option
         }
-        .splickCard()
+    }
+
+    private func toggleBillDetails() {
+        if viewModel.enableBillSplit {
+            toggleComposeOption(.bill)
+        } else {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                viewModel.enableBillSplit = true
+                expandedComposeOption = .bill
+            }
+        }
+    }
+
+    private var insetDivider: some View {
+        Divider()
+            .padding(.leading, 52)
+            .opacity(0.55)
     }
 
     private var audienceOptionSummaryText: String {
@@ -348,8 +488,7 @@ public struct CreatePostComposeView: View {
         let companionNames = viewModel.selectedCompanions.map(\.displayName)
             + (viewModel.enableBillSplit ? viewModel.pendingGuests.map(\.displayName) : [])
 
-        if viewModel.enableBillSplit,
-           let groupName = viewModel.selectedCompanionGroup?.name,
+        if let groupName = viewModel.selectedCompanionGroup?.name,
            !groupName.isEmpty {
             let otherCount = companionNames.count
             if otherCount == 0 {
@@ -377,9 +516,7 @@ public struct CreatePostComposeView: View {
     }
 
     private var companionsSectionTitle: String {
-        viewModel.enableBillSplit
-            ? languageService.text(.feedCreateBillWith)
-            : languageService.text(.feedCreateMomentWith)
+        languageService.text(.feedCreateMomentWith)
     }
 
     private var locationSummaryText: String {
@@ -387,92 +524,66 @@ public struct CreatePostComposeView: View {
         return trimmed.isEmpty ? languageService.text(.feedCreateLocationHint) : trimmed
     }
 
-    private func optionRow(icon: String, title: String, summary: String) -> some View {
+    private func composeListRow(icon: String, title: String, summary: String, expanded: Bool) -> some View {
         HStack(spacing: SplickTheme.Spacing.sm) {
             Image(systemName: icon)
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                .frame(width: 40, height: 40)
-                .background(SplickTheme.Colors.primaryGradientStart.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .frame(width: 22)
 
-            VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
-                Text(title)
-                    .font(SplickTheme.Typography.callout)
-                    .foregroundStyle(SplickTheme.Colors.textPrimary)
-                Text(summary)
-                    .font(SplickTheme.Typography.caption)
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
-                    .lineLimit(2)
-            }
+            Text(title)
+                .font(SplickTheme.Typography.body)
+                .fontWeight(.medium)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
+                .lineLimit(1)
 
-            Spacer()
+            Spacer(minLength: SplickTheme.Spacing.xs)
 
-            Image(systemName: "chevron.right")
-                .font(.system(size: 14, weight: .semibold))
+            Text(summary)
+                .font(SplickTheme.Typography.caption)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                .lineLimit(1)
+
+            Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(SplickTheme.Colors.textTertiary)
         }
-        .padding(SplickTheme.Spacing.sm)
-        .background(SplickTheme.Colors.tertiaryBackground)
-        .clipShape(
-            RoundedRectangle(
-                cornerRadius: ComposeMetrics.fieldCornerRadius,
-                style: .continuous
-            )
-        )
+        .padding(.horizontal, SplickTheme.Spacing.md)
+        .padding(.vertical, 14)
+        .contentShape(Rectangle())
     }
 
-    private var billSplitSection: some View {
-        VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
-            Toggle(
-                languageService.text(.feedBillSplitTitle),
-                isOn: Binding(
-                    get: { viewModel.enableBillSplit },
-                    set: { isEnabled in
-                        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
-                            viewModel.enableBillSplit = isEnabled
-                        }
-                    }
-                )
-            )
-                .font(SplickTheme.Typography.headline)
+    private var billSplitDetails: some View {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+            totalAmountField
 
-            if viewModel.enableBillSplit {
-                VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
-                    totalAmountField
-
-                    Picker(languageService.text(.expenseCreateSplitType), selection: $viewModel.splitMode) {
-                        ForEach(ComposeBillSplitMode.allCases) { mode in
-                            Text(languageService.text(mode.titleKey)).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-
-                    if viewModel.billSplitParticipants.isEmpty && viewModel.pendingGuests.isEmpty {
-                        Text(languageService.text(.feedCreateTagFriendsHint))
-                            .font(SplickTheme.Typography.caption)
-                            .foregroundStyle(SplickTheme.Colors.textSecondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(SplickTheme.Spacing.sm)
-                            .background(SplickTheme.Colors.tertiaryBackground)
-                            .clipShape(
-                                RoundedRectangle(
-                                    cornerRadius: ComposeMetrics.fieldCornerRadius,
-                                    style: .continuous
-                                )
-                            )
-                    } else {
-                        billSplitDetailFields
-                    }
-
-                    Toggle(languageService.text(.feedCreateAutoReminder), isOn: $viewModel.autoReminderEnabled)
-                        .font(SplickTheme.Typography.callout)
+            Picker(languageService.text(.expenseCreateSplitType), selection: $viewModel.splitMode) {
+                ForEach(ComposeBillSplitMode.allCases) { mode in
+                    Text(languageService.text(mode.titleKey)).tag(mode)
                 }
-                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+            .pickerStyle(.segmented)
+
+            Toggle(languageService.text(.feedCreateAutoReminder), isOn: $viewModel.autoReminderEnabled)
+                .font(SplickTheme.Typography.callout)
+
+            Text(languageService.text(.feedCreateBillWith))
+                .font(SplickTheme.Typography.callout)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+
+            ComposeCompanionsEditorView(
+                viewModel: viewModel,
+                onUserTap: openProfile,
+                nearbyDiscoveryUseCase: nearbyDiscoveryUseCase,
+                profileDependencies: profileDependencies,
+                embedded: true
+            )
+
+            if !viewModel.billSplitParticipants.isEmpty || !viewModel.pendingGuests.isEmpty {
+                billSplitDetailFields
             }
         }
-        .animation(.spring(response: 0.32, dampingFraction: 0.86), value: viewModel.enableBillSplit)
-        .splickCard()
+        .padding(.leading, 8)
     }
 
     private var totalAmountField: some View {
@@ -484,7 +595,7 @@ public struct CreatePostComposeView: View {
             HStack(spacing: SplickTheme.Spacing.sm) {
                 LiveVNDMoneyTextField(
                     text: $viewModel.billTotalText,
-                    font: .systemFont(ofSize: 28, weight: .bold),
+                    font: .systemFont(ofSize: 22, weight: .bold),
                     textColor: UIColor(SplickTheme.Colors.primaryGradientStart)
                 )
 
@@ -729,38 +840,6 @@ public struct CreatePostComposeView: View {
             set: { viewModel.exactAmountTexts[userId] = $0 }
         )
     }
-
-    @MainActor
-    private func importSelectedMediaItems(_ items: [PhotosPickerItem]) async {
-        for item in items {
-            guard viewModel.canAddMoreMedia else { break }
-            let isVideo = item.supportedContentTypes.contains(where: { $0.conforms(to: UTType.movie) })
-            guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
-
-            if isVideo {
-                viewModel.addMediaDraft(
-                    ComposeMediaDraft(
-                        previewImage: nil,
-                        mediaType: .video,
-                        data: data,
-                        mimeType: "video/mp4",
-                        videoDurationSeconds: nil
-                    )
-                )
-            } else {
-                guard let image = UIImage(data: data) else { continue }
-                viewModel.addMediaDraft(
-                    ComposeMediaDraft(
-                        previewImage: image,
-                        mediaType: .image,
-                        data: data,
-                        mimeType: "image/jpeg",
-                        videoDurationSeconds: nil
-                    )
-                )
-            }
-        }
-    }
 }
 
 private struct ComposeCompanionsEditorView: View {
@@ -769,6 +848,7 @@ private struct ComposeCompanionsEditorView: View {
     let onUserTap: (UserSummary) -> Void
     let nearbyDiscoveryUseCase: NearbyDiscoveryUseCaseProtocol?
     let profileDependencies: FriendUserProfileDependencies?
+    var embedded: Bool = false
     @FocusState private var isFriendSearchFocused: Bool
     @State private var showAddGuestSheet = false
 
@@ -779,18 +859,45 @@ private struct ComposeCompanionsEditorView: View {
     }
 
     private var friendSearchPlaceholder: String {
-        viewModel.enableBillSplit
-            ? languageService.text(.feedCreateSearchFriendsGroups)
-            : languageService.text(.feedCreateSearchFriends)
+        languageService.text(.feedCreateSearchFriendsGroups)
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
-                VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-                    Text(companionsTitle)
-                        .font(SplickTheme.Typography.headline)
+        Group {
+            if embedded {
+                companionFields
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
+                        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+                            Text(companionsTitle)
+                                .font(SplickTheme.Typography.headline)
+                            companionFields
+                        }
+                        .splickCard()
+                    }
+                    .padding(SplickTheme.Spacing.md)
+                    .padding(.bottom, SplickTheme.Spacing.xl)
+                }
+                .navigationTitle(companionsTitle)
+                .navigationBarTitleDisplayMode(.inline)
+            }
+        }
+        .task {
+            await viewModel.preloadFriendSuggestionsIfNeeded()
+            await viewModel.loadCompanionGroupsIfNeeded()
+        }
+        .sheet(isPresented: $showAddGuestSheet) {
+            AddGuestWithoutAppSheet { email in
+                viewModel.addPendingGuest(displayName: "", email: email)
+            }
+            .environmentObject(languageService)
+        }
+    }
 
+    @ViewBuilder
+    private var companionFields: some View {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
                     HStack(spacing: SplickTheme.Spacing.xs) {
                         Image(systemName: "magnifyingglass")
                             .foregroundStyle(SplickTheme.Colors.textTertiary)
@@ -814,7 +921,7 @@ private struct ComposeCompanionsEditorView: View {
                         )
                     )
 
-                    if viewModel.enableBillSplit, let group = viewModel.selectedCompanionGroup {
+                    if let group = viewModel.selectedCompanionGroup {
                         selectedCompanionGroupCard(group)
                     }
 
@@ -826,28 +933,11 @@ private struct ComposeCompanionsEditorView: View {
                         billShareAddActions
                     }
 
-                    if viewModel.enableBillSplit || viewModel.shouldShowFriendSuggestions {
+                    if !viewModel.filteredCompanionGroups.isEmpty
+                        || viewModel.enableBillSplit
+                        || viewModel.shouldShowFriendSuggestions {
                         friendSearchResultsList
                     }
-                }
-                .splickCard()
-            }
-            .padding(SplickTheme.Spacing.md)
-            .padding(.bottom, SplickTheme.Spacing.xl)
-        }
-        .navigationTitle(companionsTitle)
-        .navigationBarTitleDisplayMode(.inline)
-        .task {
-            await viewModel.preloadFriendSuggestionsIfNeeded()
-            if viewModel.enableBillSplit {
-                await viewModel.loadCompanionGroupsIfNeeded()
-            }
-        }
-        .sheet(isPresented: $showAddGuestSheet) {
-            AddGuestWithoutAppSheet { email in
-                viewModel.addPendingGuest(displayName: "", email: email)
-            }
-            .environmentObject(languageService)
         }
     }
 
@@ -1004,7 +1094,7 @@ private struct ComposeCompanionsEditorView: View {
     @ViewBuilder
     private var friendSearchResultsList: some View {
         VStack(spacing: 0) {
-            let showsGroups = viewModel.enableBillSplit && !viewModel.filteredCompanionGroups.isEmpty
+            let showsGroups = !viewModel.filteredCompanionGroups.isEmpty
             let showsFriends = !viewModel.friendSearchResults.isEmpty
 
             if !showsGroups && !showsFriends {
@@ -1272,19 +1362,79 @@ private struct ComposeCompanionsEditorView: View {
 private struct ComposeLocationEditorView: View {
     @EnvironmentObject private var languageService: LanguageService
     @ObservedObject var viewModel: CreatePostComposeViewModel
+    var embedded: Bool = false
     @StateObject private var locationProvider = WhenInUseLocationProvider()
 
     var body: some View {
+        Group {
+            if embedded {
+                compactLocationContent
+            } else {
+                fullLocationList
+            }
+        }
+        .onAppear { locationProvider.requestIfAuthorized() }
+        .onReceive(locationProvider.$coordinate) { coordinate in
+            if let coordinate {
+                viewModel.onDeviceCoordinates(lat: coordinate.latitude, lon: coordinate.longitude)
+            }
+        }
+        .onReceive(locationProvider.$didFinishRequest) { finished in
+            if finished, locationProvider.coordinate == nil {
+                viewModel.onLocationPermissionDenied()
+            }
+        }
+    }
+
+    private var compactLocationContent: some View {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+            SplickTextField(languageService.text(.feedCreateLocationPlaceholder), text: $viewModel.location)
+            if !viewModel.locationGpsAvailable {
+                Button {
+                    locationProvider.request()
+                } label: {
+                    Text(languageService.text(.feedCreateLocationEnableGps))
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.primary)
+                }
+                .buttonStyle(.plain)
+            }
+            if viewModel.isSearchingPlaces {
+                ProgressView()
+                    .controlSize(.small)
+            }
+            if showsCustomPlaceRow {
+                Button {
+                    viewModel.useTypedLocation()
+                } label: {
+                    Text(languageService.format(.feedCreateLocationUseTyped, trimmedQuery))
+                }
+            }
+            if trimmedQuery.count >= 2 {
+                ForEach(Array(viewModel.searchPlaces.prefix(6).enumerated()), id: \.offset) { _, place in
+                    placeButton(place)
+                }
+            } else {
+                ForEach(Array(viewModel.nearbyPlaces.prefix(6).enumerated()), id: \.offset) { _, place in
+                    placeButton(place)
+                }
+            }
+        }
+    }
+
+    private var fullLocationList: some View {
         List {
             Section {
                 SplickTextField(languageService.text(.feedCreateLocationPlaceholder), text: $viewModel.location)
-                    .onChange(of: viewModel.location) { _ in
-                        viewModel.locationQueryDidChange()
-                    }
                 if !viewModel.locationGpsAvailable {
-                    Text(languageService.text(.feedCreateLocationEnableGps))
-                        .font(SplickTheme.Typography.caption)
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    Button {
+                        locationProvider.request()
+                    } label: {
+                        Text(languageService.text(.feedCreateLocationEnableGps))
+                            .font(SplickTheme.Typography.caption)
+                            .foregroundStyle(SplickTheme.Colors.primary)
+                    }
+                    .buttonStyle(.plain)
                 }
             } header: {
                 Text(languageService.text(.feedCreateLocation))
@@ -1319,17 +1469,6 @@ private struct ComposeLocationEditorView: View {
         .listStyle(.insetGrouped)
         .navigationTitle(languageService.text(.feedCreateLocation))
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { locationProvider.request() }
-        .onReceive(locationProvider.$coordinate) { coordinate in
-            if let coordinate {
-                viewModel.onDeviceCoordinates(lat: coordinate.latitude, lon: coordinate.longitude)
-            }
-        }
-        .onReceive(locationProvider.$didFinishRequest) { finished in
-            if finished, locationProvider.coordinate == nil {
-                viewModel.onLocationPermissionDenied()
-            }
-        }
     }
 
     private var trimmedQuery: String {
@@ -1542,6 +1681,18 @@ private final class WhenInUseLocationProvider: NSObject, ObservableObject, CLLoc
         super.init()
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+    }
+
+    func requestIfAuthorized() {
+        switch manager.authorizationStatus {
+        case .authorizedWhenInUse, .authorizedAlways:
+            manager.requestLocation()
+        case .denied, .restricted:
+            didFinishRequest = true
+            coordinate = nil
+        default:
+            break
+        }
     }
 
     func request() {

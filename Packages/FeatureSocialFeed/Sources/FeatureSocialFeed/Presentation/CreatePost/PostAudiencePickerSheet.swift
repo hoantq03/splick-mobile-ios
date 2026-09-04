@@ -16,51 +16,65 @@ struct PostAudiencePickerSheet: View {
     @EnvironmentObject private var languageService: LanguageService
     @ObservedObject var viewModel: CreatePostComposeViewModel
     let onUserTap: ((UserSummary) -> Void)?
+    var embedded: Bool = false
     @Environment(\.dismiss) private var dismiss
     @State private var selectedDetent: PresentationDetent = .medium
 
     var body: some View {
-        NavigationStack {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
-                        audienceModeSection
-
-                        if viewModel.audienceMode != .friends {
-                            selectionDetailSection
-                                .id(AudiencePickerScrollTarget.selectionDetails)
+        Group {
+            if embedded {
+                audiencePickerContent
+                    .task { await loadAudienceData() }
+            } else {
+                NavigationStack {
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            audiencePickerContent
+                                .padding(SplickTheme.Spacing.md)
+                                .padding(.bottom, SplickTheme.Spacing.xl)
+                        }
+                        .navigationTitle("")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Text(languageService.text(.feedAudienceTitle))
+                                    .font(SplickTheme.Typography.headline)
+                            }
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button(languageService.text(.commonDone)) { dismiss() }
+                            }
+                        }
+                        .onChange(of: viewModel.audienceMode) { mode in
+                            guard mode != .friends else { return }
+                            revealSelectionDetails(with: proxy)
                         }
                     }
-                    .padding(SplickTheme.Spacing.md)
-                    .padding(.bottom, SplickTheme.Spacing.xl)
                 }
-                .navigationTitle("")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Text(languageService.text(.feedAudienceTitle))
-                            .font(SplickTheme.Typography.headline)
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button(languageService.text(.commonDone)) { dismiss() }
-                    }
-                }
-                .onChange(of: viewModel.audienceMode) { mode in
-                    guard mode != .friends else { return }
-                    revealSelectionDetails(with: proxy)
-                }
+                .presentationDetents([.medium, .large], selection: $selectedDetent)
+                .task { await loadAudienceData() }
             }
         }
-        .presentationDetents([.medium, .large], selection: $selectedDetent)
-        .task {
-            switch viewModel.audienceMode {
-            case .friends:
-                break
-            case .groups:
-                await viewModel.loadAudienceGroupsIfNeeded()
-            case .specificUsers, .friendsExcept:
-                await viewModel.loadAudienceFriendsIfNeeded()
+    }
+
+    private var audiencePickerContent: some View {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
+            audienceModeSection
+
+            if viewModel.audienceMode != .friends {
+                selectionDetailSection
+                    .id(AudiencePickerScrollTarget.selectionDetails)
             }
+        }
+    }
+
+    private func loadAudienceData() async {
+        switch viewModel.audienceMode {
+        case .friends:
+            break
+        case .groups:
+            await viewModel.loadAudienceGroupsIfNeeded()
+        case .specificUsers, .friendsExcept:
+            await viewModel.loadAudienceFriendsIfNeeded()
         }
     }
 
