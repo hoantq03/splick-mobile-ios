@@ -38,3 +38,18 @@ public struct FeedPostEditedBadge: View {
         )
     }
 }
+
+extension View {
+    /// Sit this *outside* `matchedTransitionSource` — iOS 18 zoom clips overlays
+    /// on the source view and the feed-list marker disappears after some pushes.
+    public func feedPostEditedBadge(isEdited: Bool, action: @escaping () -> Void) -> some View {
+        overlay(alignment: .topTrailing) {
+            if isEdited {
+                Button(action: action) {
+                    FeedPostEditedBadge()
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}
