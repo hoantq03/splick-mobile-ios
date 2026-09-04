@@ -187,7 +187,11 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
     private func configureIfNeeded() {
         guard !didConfigure else { return }
         session.beginConfiguration()
-        session.sessionPreset = .photo
+        if session.canSetSessionPreset(.photo) {
+            session.sessionPreset = .photo
+        } else if session.canSetSessionPreset(.high) {
+            session.sessionPreset = .high
+        }
 
         setCamera(position: .back, inConfiguration: true)
 
@@ -198,6 +202,11 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
         videoOutput.setSampleBufferDelegate(self, queue: sessionQueue)
         if session.canAddOutput(videoOutput) {
             session.addOutput(videoOutput)
+        } else if session.canSetSessionPreset(.high) {
+            session.sessionPreset = .high
+            if session.canAddOutput(videoOutput) {
+                session.addOutput(videoOutput)
+            }
         }
         if session.canAddOutput(photoOutput) {
             session.addOutput(photoOutput)
@@ -217,6 +226,7 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
             session.canAddInput(input)
         else {
             if !inConfiguration { session.commitConfiguration() }
+            DispatchQueue.main.async { self.lastErrorMessage = "camera_unavailable" }
             return
         }
         session.addInput(input)
@@ -229,16 +239,25 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
 
     private func configureConnections() {
         if let connection = videoOutput.connection(with: .video) {
-            if connection.isVideoOrientationSupported {
-                connection.videoOrientation = .portrait
-            }
+            applyPortraitRotation(connection)
             disableVideoMirroring(connection)
         }
         if let connection = photoOutput.connection(with: .video) {
-            if connection.isVideoOrientationSupported {
-                connection.videoOrientation = .portrait
-            }
+            applyPortraitRotation(connection)
             disableVideoMirroring(connection)
+        }
+    }
+
+    /// Portrait finder: iOS 17+ ignores `videoOrientation` on some outputs.
+    private func applyPortraitRotation(_ connection: AVCaptureConnection) {
+        if #available(iOS 17.0, *) {
+            if connection.isVideoRotationAngleSupported(90) {
+                connection.videoRotationAngle = 90
+                return
+            }
+        }
+        if connection.isVideoOrientationSupported {
+            connection.videoOrientation = .portrait
         }
     }
 
@@ -452,7 +471,7 @@ private extension AVCameraSessionModel {
     func previewCIImage(from pixelBuffer: CVPixelBuffer, connection: AVCaptureConnection) -> CIImage {
         let image = CIImage(cvPixelBuffer: pixelBuffer)
         let upright: CIImage
-        if connection.isVideoOrientationSupported, connection.videoOrientation == .portrait {
+        if isPortraitOutput(connection) {
             upright = image
         } else {
             upright = image.oriented(previewExifOrientation(for: connection))
@@ -461,9 +480,19 @@ private extension AVCameraSessionModel {
         return upright.oriented(.upMirrored)
     }
 
+    func isPortraitOutput(_ connection: AVCaptureConnection) -> Bool {
+        if #available(iOS 17.0, *) {
+            if abs(connection.videoRotationAngle - 90) < 0.5
+                || abs(connection.videoRotationAngle - 270) < 0.5 {
+                return true
+            }
+        }
+        return connection.isVideoOrientationSupported && connection.videoOrientation == .portrait
+    }
+
     func visionOrientation(for connection: AVCaptureConnection?) -> CGImagePropertyOrientation {
         guard let connection else { return .up }
-        if connection.isVideoOrientationSupported, connection.videoOrientation == .portrait {
+        if isPortraitOutput(connection) {
             return .up
         }
         return previewExifOrientation(for: connection)

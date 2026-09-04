@@ -4,40 +4,38 @@ import SwiftUI
 
 struct CameraCaptureToolsRow: View {
     @EnvironmentObject private var languageService: LanguageService
+    var metrics: CameraChromeMetrics
     let onTextMode: () -> Void
     let onBoomerang: () -> Void
     let onHandsFree: () -> Void
     let onFilter: () -> Void
 
     var body: some View {
-        HStack(alignment: .bottom) {
+        HStack(alignment: .bottom, spacing: 0) {
             tool(icon: "textformat", label: .mediaCameraToolText, action: onTextMode)
-            Spacer(minLength: 0)
             tool(icon: "infinity", label: .mediaCameraToolBoomerang, action: onBoomerang)
-            Spacer(minLength: 0)
             tool(icon: "timer", label: .mediaCameraToolHandsFree, action: onHandsFree)
-            Spacer(minLength: 0)
             tool(icon: "camera.filters", label: .mediaCameraToolFilter, action: onFilter)
         }
-        .padding(.horizontal, SplickTheme.Spacing.sm)
+        .padding(.horizontal, 8)
     }
 
     private func tool(icon: String, label: L10nKey, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(spacing: 4) {
                 Image(systemName: icon)
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.system(size: metrics.toolIconSize * 0.42, weight: .semibold))
                     .foregroundStyle(SplickTheme.Colors.textPrimary)
-                    .frame(width: 44, height: 44)
+                    .frame(width: metrics.toolIconSize, height: metrics.toolIconSize)
                     .background(Circle().fill(SplickTheme.Colors.textPrimary.opacity(0.12)))
 
                 Text(languageService.text(label))
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: metrics.toolLabelSize, weight: .medium))
                     .foregroundStyle(SplickTheme.Colors.textPrimary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .minimumScaleFactor(0.7)
             }
-            .frame(width: 64)
+            .frame(maxWidth: .infinity)
         }
         .buttonStyle(.plain)
     }
@@ -48,7 +46,7 @@ enum CameraBottomBarMetrics {
     static let sideControlDiameter: CGFloat = 44
     static let galleryDiameter: CGFloat = 50
     /// Width / height. 4:3 frame raised 50% → 8:9.
-    static let previewAspect: CGFloat = 8 / 9
+    static let previewAspect: CGFloat = CameraChromeLayout.previewAspect
     static let previewInset: CGFloat = 12
     static let previewLift: CGFloat = 24
 }

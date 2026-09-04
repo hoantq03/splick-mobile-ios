@@ -36,80 +36,40 @@ struct CameraPickerView: View {
     }
 
     var body: some View {
-        ZStack {
-            SplickTheme.Colors.background.ignoresSafeArea()
+        GeometryReader { geo in
+            let metrics = CameraChromeLayout.metrics(
+                in: geo.size,
+                safeArea: CameraChromeLayout.windowSafeAreaInsets()
+            )
+            ZStack {
+                SplickTheme.Colors.background.ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                topBar
-                GeometryReader { geo in
-                    let lift = CameraBottomBarMetrics.previewLift
-                    let maxWidth = geo.size.width - (CameraBottomBarMetrics.previewInset * 2)
-                    let maxHeight = max(geo.size.height - lift - 16, 1)
-                    let frameWidth = min(maxWidth, maxHeight * CameraBottomBarMetrics.previewAspect)
-                    let frameHeight = frameWidth / CameraBottomBarMetrics.previewAspect
-                    let areaHeight = geo.size.height
-                    let liftedTop = (areaHeight - frameHeight) / 2 - lift
-                    let frameBottom = liftedTop + frameHeight
-                    let zoomCenterY = max(frameBottom, 0) + 16 + 18
-                    ZStack {
-                        previewLayer
-                            .frame(width: frameWidth, height: frameHeight)
-                            .clipShape(finderShape)
-                            .compositingGroup()
-                            .overlay {
-                                ZStack {
-                                    finderShape.strokeBorder(SplickTheme.Colors.divider, lineWidth: 0.5)
-                                    if let indicator = session.focusIndicator {
-                                        CameraFocusReticle(indicator: indicator)
-                                    }
-                                }
-                            }
-                            .contentShape(finderShape)
-                            .highPriorityGesture(
-                                SpatialTapGesture()
-                                    .onEnded { event in
-                                        guard !(session.filterPreset == .ar && faceTrackingSupported) else { return }
-                                        session.focus(at: event.location, viewSize: CGSize(width: frameWidth, height: frameHeight))
-                                    }
-                            )
-                            .simultaneousGesture(
-                                MagnificationGesture()
-                                    .onChanged { session.updatePinch(magnification: $0) }
-                                    .onEnded { _ in session.endPinch() }
-                            )
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                            .offset(y: -lift)
+                VStack(spacing: 0) {
+                    topBar
+                        .padding(.top, metrics.topPadding)
 
-                        if !(session.filterPreset == .ar && faceTrackingSupported) {
-                            CameraNativeZoomChrome(
-                                displayZoom: session.zoomFactor,
-                                onTap: { session.cycleZoomStep() }
-                            )
-                            .position(x: geo.size.width / 2, y: zoomCenterY)
-                        }
-                    }
+                    finder(metrics: metrics)
+
+                    bottomBar(metrics: metrics)
                 }
 
-                bottomBar
-                    .padding(.bottom, 16)
-            }
-
-            if handsFreeSeconds > 0 {
-                Text(String(format: languageService.text(.mediaCameraTimerSeconds), handsFreeSeconds))
-                    .font(.system(size: 48, weight: .bold))
-                    .foregroundStyle(.white)
-            }
-
-            if let toastMessage {
-                VStack {
-                    Spacer()
-                    Text(toastMessage)
-                        .font(.caption.weight(.semibold))
+                if handsFreeSeconds > 0 {
+                    Text(String(format: languageService.text(.mediaCameraTimerSeconds), handsFreeSeconds))
+                        .font(.system(size: 48, weight: .bold))
                         .foregroundStyle(.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(Capsule().fill(Color.black.opacity(0.75)))
-                        .padding(.bottom, 140)
+                }
+
+                if let toastMessage {
+                    VStack {
+                        Spacer()
+                        Text(toastMessage)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(Capsule().fill(Color.black.opacity(0.75)))
+                            .padding(.bottom, 140)
+                    }
                 }
             }
         }
@@ -137,6 +97,59 @@ struct CameraPickerView: View {
                     handsFreeSeconds -= 1
                 }
             }
+        }
+    }
+
+    private func finder(metrics: CameraChromeMetrics) -> some View {
+        GeometryReader { geo in
+            let lift = metrics.previewLift
+            let zoomReserve: CGFloat = 44
+            let maxWidth = geo.size.width - (metrics.previewInset * 2)
+            let maxHeight = max(geo.size.height - lift - zoomReserve, 1)
+            let frameWidth = min(maxWidth, maxHeight * CameraChromeLayout.previewAspect)
+            let frameHeight = frameWidth / CameraChromeLayout.previewAspect
+            ZStack {
+                previewLayer
+                    .frame(width: frameWidth, height: frameHeight)
+                    .clipShape(finderShape)
+                    .compositingGroup()
+                    .overlay {
+                        ZStack {
+                            finderShape.strokeBorder(SplickTheme.Colors.divider, lineWidth: 0.5)
+                            if let indicator = session.focusIndicator {
+                                CameraFocusReticle(indicator: indicator)
+                            }
+                        }
+                    }
+                    .contentShape(finderShape)
+                    .highPriorityGesture(
+                        SpatialTapGesture()
+                            .onEnded { event in
+                                guard !(session.filterPreset == .ar && faceTrackingSupported) else { return }
+                                session.focus(
+                                    at: event.location,
+                                    viewSize: CGSize(width: frameWidth, height: frameHeight)
+                                )
+                            }
+                    )
+                    .simultaneousGesture(
+                        MagnificationGesture()
+                            .onChanged { session.updatePinch(magnification: $0) }
+                            .onEnded { _ in session.endPinch() }
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                    .offset(y: -lift)
+
+                if !(session.filterPreset == .ar && faceTrackingSupported) {
+                    CameraNativeZoomChrome(
+                        displayZoom: session.zoomFactor,
+                        onTap: { session.cycleZoomStep() }
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .padding(.bottom, 4)
+                }
+            }
+            .clipped()
         }
     }
 
@@ -169,62 +182,65 @@ struct CameraPickerView: View {
         .padding(.bottom, 6)
     }
 
-    private var bottomBar: some View {
-        HStack(alignment: .bottom, spacing: 28) {
-            ZStack(alignment: .topTrailing) {
-                circleButton(
-                    systemName: "photo.on.rectangle",
-                    size: CameraBottomBarMetrics.galleryDiameter
-                ) { onResult(.openLibrary) }
-                .padding(.bottom, shutterVerticalInset(for: CameraBottomBarMetrics.galleryDiameter))
-                if accumulatedCount > 0 {
-                    Text("\(accumulatedCount)")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 22, height: 22)
-                        .background(Circle().fill(Color.orange))
-                        .offset(x: 8, y: -8)
-                }
-            }
+    private func bottomBar(metrics: CameraChromeMetrics) -> some View {
+        VStack(spacing: metrics.toolsToShutterSpacing) {
+            CameraCaptureToolsRow(
+                metrics: metrics,
+                onTextMode: { onResult(.openTextCreation) },
+                onBoomerang: { showComingSoon() },
+                onHandsFree: cycleHandsFree,
+                onFilter: cycleFilter
+            )
 
-            VStack(spacing: 12) {
-                CameraCaptureToolsRow(
-                    onTextMode: { onResult(.openTextCreation) },
-                    onBoomerang: { showComingSoon() },
-                    onHandsFree: cycleHandsFree,
-                    onFilter: cycleFilter
-                )
-
-                Button(action: capture) {
-                    Circle()
-                        .fill(Color.white)
-                        .frame(
-                            width: CameraBottomBarMetrics.shutterDiameter,
-                            height: CameraBottomBarMetrics.shutterDiameter
-                        )
-                        .overlay(
-                            Circle()
-                                .stroke(Color.black.opacity(0.15), lineWidth: 3)
-                                .padding(6)
-                        )
-                        .scaleEffect(isCapturing ? 0.9 : 1)
+            HStack(alignment: .bottom, spacing: 16) {
+                ZStack(alignment: .topTrailing) {
+                    circleButton(
+                        systemName: "photo.on.rectangle",
+                        size: metrics.galleryDiameter
+                    ) { onResult(.openLibrary) }
+                    .padding(.bottom, shutterVerticalInset(metrics.shutterDiameter, metrics.galleryDiameter))
+                    if accumulatedCount > 0 {
+                        Text("\(accumulatedCount)")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 22, height: 22)
+                            .background(Circle().fill(Color.orange))
+                            .offset(x: 8, y: -8)
+                    }
                 }
-                .disabled(isCapturing)
-                .accessibilityLabel(languageService.text(.mediaTypePhoto))
-            }
-            .overlay(alignment: .top) {
-                if session.filterPreset != .none {
-                    CameraFilterNameBadge(title: activeFilterTitle)
-                        .offset(y: -28)
-                        .allowsHitTesting(false)
-                }
-            }
 
-            circleButton(systemName: "arrow.triangle.2.circlepath") { session.flipCamera() }
-                .padding(.bottom, shutterVerticalInset(for: CameraBottomBarMetrics.sideControlDiameter))
+                Spacer(minLength: 0)
+
+                ZStack(alignment: .top) {
+                    Button(action: capture) {
+                        Circle()
+                            .fill(Color.white)
+                            .frame(width: metrics.shutterDiameter, height: metrics.shutterDiameter)
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.black.opacity(0.15), lineWidth: 3)
+                                    .padding(6)
+                            )
+                            .scaleEffect(isCapturing ? 0.9 : 1)
+                    }
+                    .disabled(isCapturing)
+                    .accessibilityLabel(languageService.text(.mediaTypePhoto))
+
+                    if session.filterPreset != .none {
+                        CameraFilterNameBadge(title: activeFilterTitle)
+                            .offset(y: -28)
+                            .allowsHitTesting(false)
+                    }
+                }
+
+                Spacer(minLength: 0)
+
+                circleButton(systemName: "arrow.triangle.2.circlepath") { session.flipCamera() }
+                    .padding(.bottom, shutterVerticalInset(metrics.shutterDiameter, metrics.sideControlDiameter))
+            }
+            .padding(.horizontal, metrics.shutterRowHorizontalPadding)
         }
-        .padding(.horizontal, 12)
-        .padding(.bottom, 12)
+        .padding(.bottom, metrics.bottomPadding)
     }
 
     private var activeFilterTitle: String {
@@ -237,8 +253,8 @@ struct CameraPickerView: View {
         return languageService.text(session.filterPreset.titleKey)
     }
 
-    private func shutterVerticalInset(for controlDiameter: CGFloat) -> CGFloat {
-        max((CameraBottomBarMetrics.shutterDiameter - controlDiameter) / 2, 0)
+    private func shutterVerticalInset(_ shutterDiameter: CGFloat, _ controlDiameter: CGFloat) -> CGFloat {
+        max((shutterDiameter - controlDiameter) / 2, 0)
     }
 
     private var flashSymbol: String {
@@ -302,7 +318,7 @@ struct CameraPickerView: View {
             isCapturing = false
             let framed = PhotoEditorImageProcessor.cropToAspectFill(
                 PhotoEditorImageProcessor.normalizeOrientation(snapshot),
-                aspectRatio: CameraBottomBarMetrics.previewAspect
+                aspectRatio: CameraChromeLayout.previewAspect
             )
             onResult(.image(framed, initialFilter: .none))
             return
@@ -326,7 +342,7 @@ struct CameraPickerView: View {
                 }
                 output = PhotoEditorImageProcessor.cropToAspectFill(
                     output,
-                    aspectRatio: CameraBottomBarMetrics.previewAspect
+                    aspectRatio: CameraChromeLayout.previewAspect
                 )
                 await MainActor.run {
                     isCapturing = false

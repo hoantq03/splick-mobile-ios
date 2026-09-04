@@ -111,7 +111,7 @@ private struct ModernSplickTabBar: View {
         let isSelected = selectedTab == .camera
         return Button {
             selectedTab = .camera
-            tabBarScrollState.show()
+            tabBarScrollState.hide(flushToBottom: true)
         } label: {
             Circle()
                 .fill(SplickTheme.Colors.tabCameraRing)
@@ -213,7 +213,7 @@ private struct LegacySplickTabBar: View {
     private var cameraButton: some View {
         Button {
             selectedTab = .camera
-            tabBarScrollState.show()
+            tabBarScrollState.hide(flushToBottom: true)
         } label: {
             Image(systemName: "camera.fill")
                 .font(.system(size: 22, weight: .semibold))

@@ -1,5 +1,4 @@
 import SwiftUI
-import AVFoundation
 import UIKit
 import FeatureMedia
 import FeatureSocialFeed
@@ -24,7 +23,14 @@ struct PostCaptureFlowView: View {
                 }
             } else {
                 MediaCaptureView(
-                    onMediaCaptured: { capturedMedia = $0 },
+                    onMediaCaptured: { media in
+                        switch media {
+                        case .video:
+                            break
+                        case .image, .images:
+                            capturedMedia = media
+                        }
+                    },
                     onCancel: onDismiss,
                     stickerPickerBuilder: makeStickerPicker,
                     filterCatalogRepository: container.filterCatalogRepository
@@ -35,7 +41,7 @@ struct PostCaptureFlowView: View {
 
     @ViewBuilder
     private func composeScreen(for media: CapturedMedia) -> some View {
-        let payload = mediaPayload(media)
+        let images = mediaImages(media)
         let currentUser = appState.currentUser.map {
             UserSummary(
                 id: $0.id,
@@ -46,9 +52,7 @@ struct PostCaptureFlowView: View {
         }
         CreatePostComposeView(
             viewModel: CreatePostComposeViewModel(
-                previewImages: payload.images,
-                videoURL: payload.videoURL,
-                mediaType: payload.mediaType,
+                previewImages: images,
                 fetchFriendsUseCase: container.fetchFriendsUseCase,
                 fetchMyGroupsUseCase: container.fetchMyGroupsUseCase,
                 fetchGroupMembersUseCase: container.fetchGroupMembersUseCase,
@@ -102,14 +106,14 @@ struct PostCaptureFlowView: View {
         )
     }
 
-    private func mediaPayload(_ media: CapturedMedia) -> (images: [UIImage], videoURL: URL?, mediaType: PostMediaType) {
+    private func mediaImages(_ media: CapturedMedia) -> [UIImage] {
         switch media {
         case .image(let image, _):
-            return ([image], nil, .image)
+            return [image]
         case .images(let images):
-            return (images, nil, .image)
-        case .video(let url):
-            return ([], url, .video)
+            return images
+        case .video:
+            return []
         }
     }
 }
