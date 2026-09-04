@@ -299,7 +299,11 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
     }
 
     private func filteredAlbumPhotos(filters: PhotoAlbumFilters) -> [AlbumPhoto] {
-        var allPhotos: [AlbumPhoto] = posts.flatMap { post in
+        var sourcePosts = posts
+        if let feedKind = filters.feedKind {
+            sourcePosts = sourcePosts.filter { $0.feedKind == feedKind }
+        }
+        var allPhotos: [AlbumPhoto] = sourcePosts.flatMap { post in
             post.displayMediaItems
                 .filter { $0.mediaType == .image }
                 .map { item in
@@ -313,7 +317,9 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
                         thumbnailURL: item.thumbnailURL,
                         mediaType: item.mediaType,
                         sortOrder: item.sortOrder,
-                        createdAt: post.createdAt
+                        createdAt: post.createdAt,
+                        checkInPlace: post.checkInPlace,
+                        companions: post.companions
                     )
                 }
         }
@@ -716,7 +722,7 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
 
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
-        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.timeZone = TimeZone.current
         guard let dayDate = formatter.date(from: date) else { return [] }
         return streakPhotos(on: dayDate)
     }
@@ -741,18 +747,18 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
     }
 
     private func simulatedCurrentStreak() -> Int {
-        var utc = Calendar(identifier: .gregorian)
-        utc.timeZone = TimeZone(secondsFromGMT: 0)!
-        let today = utc.startOfDay(for: Date())
+        var vietnam = Calendar(identifier: .gregorian)
+        vietnam.timeZone = TimeZone.current
+        let today = vietnam.startOfDay(for: Date())
         let daysWithPhoto = Set(
             filteredAlbumPhotos(filters: PhotoAlbumFilters()).map {
-                utc.startOfDay(for: $0.createdAt)
+                vietnam.startOfDay(for: $0.createdAt)
             }
         )
         let cursor: Date
         if daysWithPhoto.contains(today) {
             cursor = today
-        } else if let yesterday = utc.date(byAdding: .day, value: -1, to: today),
+        } else if let yesterday = vietnam.date(byAdding: .day, value: -1, to: today),
                   daysWithPhoto.contains(yesterday) {
             cursor = yesterday
         } else {
@@ -762,7 +768,7 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
         var day = cursor
         while daysWithPhoto.contains(day) {
             streak += 1
-            guard let previous = utc.date(byAdding: .day, value: -1, to: day) else { break }
+            guard let previous = vietnam.date(byAdding: .day, value: -1, to: day) else { break }
             day = previous
         }
         return streak

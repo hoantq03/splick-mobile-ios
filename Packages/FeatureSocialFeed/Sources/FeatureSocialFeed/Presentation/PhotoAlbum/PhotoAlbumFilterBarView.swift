@@ -30,8 +30,12 @@ struct PhotoAlbumFilterBarView: View {
             filterHeader
 
             if isExpanded {
-                peopleChip
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+                VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+                    kindChips
+                    peopleChip
+                }
+                .animation(expandAnimation, value: selectedPeopleItems.map(\.id))
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
             if filters.hasAnyFilter {
@@ -121,48 +125,156 @@ struct PhotoAlbumFilterBarView: View {
         .buttonStyle(.plain)
     }
 
-    private var peopleChip: some View {
-        let meLabel = languageService.text(.commonMe)
-        let names = filters.authors.map { author in
-            author.id == currentUser?.id ? meLabel : author.displayName
-        } + filters.groups.map(\.name)
-        let title: String = {
-            if names.isEmpty {
-                return languageService.text(.feedAlbumPickPeople)
-            }
-            if names.count == 1 {
-                return names[0]
-            }
-            return languageService.format(.feedAlbumSelectedCount, names.count)
-        }()
-        let isActive = !filters.authors.isEmpty || !filters.groups.isEmpty
-        let enabled = currentUser != nil || fetchMyFriendsUseCase != nil || fetchMyGroupsUseCase != nil
+    private var peoplePickerEnabled: Bool {
+        currentUser != nil || fetchMyFriendsUseCase != nil || fetchMyGroupsUseCase != nil
+    }
 
-        return Button {
+    private var selectedPeopleItems: [AlbumSelectedFilter] {
+        filters.authors.map { .author($0) } + filters.groups.map { .group($0) }
+    }
+
+    @ViewBuilder
+    private var peopleChip: some View {
+        if selectedPeopleItems.isEmpty {
+            emptyPeopleChip
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+        } else {
+            selectedPeopleRow
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+        }
+    }
+
+    private var emptyPeopleChip: some View {
+        Button {
             showPeoplePicker = true
         } label: {
             HStack(spacing: SplickTheme.Spacing.sm) {
                 Image(systemName: "person.2")
-                Text(title)
+                Text(languageService.text(.feedAlbumPickPeople))
                     .lineLimit(1)
                 Spacer(minLength: 0)
             }
             .font(.system(size: 14, weight: .medium))
-            .foregroundStyle(isActive ? SplickTheme.Colors.primary : SplickTheme.Colors.textPrimary)
+            .foregroundStyle(SplickTheme.Colors.textPrimary)
             .padding(.horizontal, SplickTheme.Spacing.md)
             .padding(.vertical, 10)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(
-                        isActive
-                            ? SplickTheme.Colors.primary.opacity(0.12)
-                            : SplickTheme.Colors.tertiaryBackground
-                    )
+                    .fill(SplickTheme.Colors.tertiaryBackground)
             )
         }
         .buttonStyle(.plain)
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.5)
+        .disabled(!peoplePickerEnabled)
+        .opacity(peoplePickerEnabled ? 1 : 0.5)
+    }
+
+    private var selectedPeopleRow: some View {
+        HStack(spacing: SplickTheme.Spacing.sm) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: SplickTheme.Spacing.md) {
+                    ForEach(selectedPeopleItems) { item in
+                        removableFilterAvatar(item)
+                    }
+                }
+                .padding(.top, 8)
+                .padding(.trailing, 6)
+                .animation(expandAnimation, value: selectedPeopleItems.map(\.id))
+            }
+            Button {
+                showPeoplePicker = true
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(SplickTheme.Colors.primary)
+                    .frame(width: 40, height: 40)
+                    .background(
+                        Circle().strokeBorder(
+                            SplickTheme.Colors.primary.opacity(0.35),
+                            style: StrokeStyle(lineWidth: 1.5, dash: [5, 4])
+                        )
+                    )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(languageService.text(.feedAlbumPickPeople))
+            .disabled(!peoplePickerEnabled)
+        }
+    }
+
+    private func removableFilterAvatar(_ item: AlbumSelectedFilter) -> some View {
+        ZStack(alignment: .topTrailing) {
+            AvatarView(
+                imageURL: item.avatarURL,
+                name: item.displayName,
+                size: .compact,
+                userId: item.userId
+            )
+            Button {
+                removeSelectedFilter(item)
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 18, height: 18)
+                    .background(Circle().fill(Color.black.opacity(0.72)))
+            }
+            .buttonStyle(.plain)
+            .offset(x: 4, y: -4)
+            .accessibilityLabel(
+                languageService.format(.feedAlbumRemoveSelectedA11y, item.displayName)
+            )
+        }
+        .transition(.asymmetric(
+            insertion: .scale(scale: 0.72).combined(with: .opacity),
+            removal: .scale(scale: 0.72).combined(with: .opacity)
+        ))
+    }
+
+    private func removeSelectedFilter(_ item: AlbumSelectedFilter) {
+        var updated = filters
+        switch item {
+        case .author(let user):
+            updated.authors.removeAll { $0.id == user.id }
+        case .group(let group):
+            updated.groups.removeAll { $0.id == group.id }
+        }
+        Task { await viewModel.applyFilters(updated) }
+    }
+
+    private var kindChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: SplickTheme.Spacing.xs) {
+                kindChip(title: languageService.text(.feedAlbumKindAll), kind: nil)
+                kindChip(title: languageService.text(.feedAlbumKindMoment), kind: .checkIn)
+                kindChip(title: languageService.text(.feedAlbumKindBill), kind: .shareBill)
+            }
+        }
+    }
+
+    private func kindChip(title: String, kind: PostFeedKind?) -> some View {
+        let isActive = filters.feedKind == kind
+        return Button {
+            Task {
+                var updated = filters
+                updated.feedKind = kind
+                await viewModel.applyFilters(updated)
+            }
+        } label: {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .lineLimit(1)
+                .padding(.horizontal, SplickTheme.Spacing.md)
+                .padding(.vertical, 8)
+                .foregroundStyle(isActive ? SplickTheme.Colors.primary : SplickTheme.Colors.textPrimary)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(
+                            isActive
+                                ? SplickTheme.Colors.primary.opacity(0.12)
+                                : SplickTheme.Colors.tertiaryBackground
+                        )
+                )
+        }
+        .buttonStyle(.plain)
     }
 
     private var clearButton: some View {
@@ -406,5 +518,38 @@ private struct PhotoAlbumPeoplePickerSheet: View {
     private func loadGroups() async -> [AlbumGroup] {
         guard let fetchMyGroupsUseCase else { return [] }
         return (try? await fetchMyGroupsUseCase.execute()) ?? []
+    }
+}
+
+private enum AlbumSelectedFilter: Identifiable, Equatable {
+    case author(UserSummary)
+    case group(AlbumGroup)
+
+    var id: String {
+        switch self {
+        case .author(let user): return "u-\(user.id.uuidString)"
+        case .group(let group): return "g-\(group.id.uuidString)"
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .author(let user): return user.displayName
+        case .group(let group): return group.name
+        }
+    }
+
+    var avatarURL: URL? {
+        switch self {
+        case .author(let user): return user.avatarURL
+        case .group(let group): return group.avatarURL
+        }
+    }
+
+    var userId: UUID? {
+        switch self {
+        case .author(let user): return user.id
+        case .group: return nil
+        }
     }
 }

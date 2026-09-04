@@ -213,7 +213,9 @@ public actor FriendDisplayNameStore {
             thumbnailURL: photo.thumbnailURL,
             mediaType: photo.mediaType,
             sortOrder: photo.sortOrder,
-            createdAt: photo.createdAt
+            createdAt: photo.createdAt,
+            checkInPlace: photo.checkInPlace,
+            companions: resolve(photo.companions)
         )
     }
 

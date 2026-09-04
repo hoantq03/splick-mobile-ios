@@ -5,15 +5,18 @@ public struct PhotoAlbumFilters: Equatable, Sendable {
     public var authors: [UserSummary]
     public var groups: [Group]
     public var captionQuery: String
+    public var feedKind: PostFeedKind?
 
     public init(
         authors: [UserSummary] = [],
         groups: [Group] = [],
-        captionQuery: String = ""
+        captionQuery: String = "",
+        feedKind: PostFeedKind? = nil
     ) {
         self.authors = authors
         self.groups = groups
         self.captionQuery = captionQuery
+        self.feedKind = feedKind
     }
 
     public var trimmedCaptionQuery: String {
@@ -27,12 +30,13 @@ public struct PhotoAlbumFilters: Equatable, Sendable {
     }
 
     public var hasAnyFilter: Bool {
-        !authors.isEmpty || !groups.isEmpty || apiCaptionQuery != nil
+        !authors.isEmpty || !groups.isEmpty || apiCaptionQuery != nil || feedKind != nil
     }
 
     public mutating func clearAll() {
         authors = []
         groups = []
         captionQuery = ""
+        feedKind = nil
     }
 }

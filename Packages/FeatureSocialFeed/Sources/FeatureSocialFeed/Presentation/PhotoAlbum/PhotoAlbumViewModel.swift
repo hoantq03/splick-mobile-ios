@@ -83,7 +83,9 @@ public final class PhotoAlbumViewModel: ObservableObject {
 
     func applyFilters(_ newFilters: PhotoAlbumFilters) async {
         guard newFilters != filters else { return }
-        filters = newFilters
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
+            filters = newFilters
+        }
         await loadAlbum(isPullToRefresh: false)
     }
 

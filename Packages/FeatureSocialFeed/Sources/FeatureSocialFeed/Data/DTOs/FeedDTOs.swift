@@ -160,6 +160,9 @@ struct AlbumPhotoDTO: Decodable {
     let mediaType: String
     let sortOrder: Int
     let createdAt: Date
+    let checkInPlace: String?
+    let location: PostLocationDTO?
+    let companions: [AuthorDTO]?
 }
 
 struct CreateReactionRequestDTO: Encodable {

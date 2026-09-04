@@ -184,6 +184,7 @@ public struct PhotoAlbumView: View {
                                 }
                             }
                         }
+                        .id(section.id)
                     }
                 }
                 .padding(.horizontal, SplickTheme.Spacing.md)

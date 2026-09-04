@@ -147,6 +147,9 @@ enum FeedEndpoint: APIEndpoint {
         if let query = filters.apiCaptionQuery {
             items.append(URLQueryItem(name: "q", value: query))
         }
+        if let feedKind = filters.feedKind {
+            items.append(URLQueryItem(name: "feedKind", value: feedKind.rawValue))
+        }
         return items
     }
 

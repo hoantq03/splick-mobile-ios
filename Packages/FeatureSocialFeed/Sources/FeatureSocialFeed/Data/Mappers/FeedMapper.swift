@@ -161,7 +161,9 @@ enum FeedMapper {
             thumbnailURL: dto.thumbnailUrl.flatMap(URL.init(string:)),
             mediaType: mediaType,
             sortOrder: dto.sortOrder,
-            createdAt: dto.createdAt
+            createdAt: dto.createdAt,
+            checkInPlace: dto.location?.displayName ?? dto.checkInPlace,
+            companions: dto.companions?.map(toUserSummary) ?? []
         )
     }
 
@@ -202,7 +204,7 @@ enum FeedMapper {
     static func toStreakDay(_ dto: StreakDayDTO) -> StreakDay? {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
-        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.timeZone = TimeZone.current
         guard let date = formatter.date(from: dto.date) else { return nil }
         return StreakDay(
             date: date,

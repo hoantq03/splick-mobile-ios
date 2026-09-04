@@ -12,6 +12,8 @@ public struct AlbumPhoto: Identifiable, Equatable, Sendable {
     public let mediaType: PostMediaType
     public let sortOrder: Int
     public let createdAt: Date
+    public let checkInPlace: String?
+    public let companions: [UserSummary]
 
     public init(
         id: UUID,
@@ -23,7 +25,9 @@ public struct AlbumPhoto: Identifiable, Equatable, Sendable {
         thumbnailURL: URL?,
         mediaType: PostMediaType,
         sortOrder: Int,
-        createdAt: Date
+        createdAt: Date,
+        checkInPlace: String? = nil,
+        companions: [UserSummary] = []
     ) {
         self.id = id
         self.postId = postId
@@ -35,5 +39,7 @@ public struct AlbumPhoto: Identifiable, Equatable, Sendable {
         self.mediaType = mediaType
         self.sortOrder = sortOrder
         self.createdAt = createdAt
+        self.checkInPlace = checkInPlace
+        self.companions = companions
     }
 }
