@@ -86,7 +86,8 @@ public final class ChangeUsernameSheetViewModel: ObservableObject {
                 avatarUrl: nil,
                 preferredLocale: nil,
                 dateOfBirth: nil,
-                username: usernameDraft.trimmed
+                username: usernameDraft.trimmed,
+                timezone: nil
             )
         } catch {
             saveError = languageService.localizedMessage(for: error)

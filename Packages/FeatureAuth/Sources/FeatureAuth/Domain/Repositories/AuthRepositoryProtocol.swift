@@ -44,7 +44,8 @@ public protocol AuthRepositoryProtocol: Sendable {
         avatarUrl: String?,
         preferredLocale: String?,
         dateOfBirth: Date?,
-        username: String?
+        username: String?,
+        timezone: String?
     ) async throws -> User
     func listSessions() async throws -> [UserSession]
     func revokeSession(id: UUID) async throws

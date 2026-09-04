@@ -134,7 +134,8 @@ public final class CompleteOAuthProfileViewModel: ObservableObject {
                 avatarUrl: avatarToSend,
                 preferredLocale: nil,
                 dateOfBirth: dateOfBirth,
-                username: nil
+                username: nil,
+                timezone: nil
             )
             state = .loaded(user)
             return user

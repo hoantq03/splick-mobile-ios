@@ -97,6 +97,7 @@ struct UserDTO: Decodable {
     let avatarUrl: String?
     let status: String?
     let preferredLocale: String?
+    let timezone: String?
     let dateOfBirth: String?
     let createdAt: Date
 }
@@ -106,6 +107,7 @@ struct UpdateUserProfileRequestDTO: Encodable {
     let username: String?
     let avatarUrl: String?
     let preferredLocale: String?
+    let timezone: String?
     let dateOfBirth: String?
 }
 

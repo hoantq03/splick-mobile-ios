@@ -81,7 +81,8 @@ public final class EditProfileViewModel: ObservableObject {
                 avatarUrl: avatarToSend,
                 preferredLocale: nil,
                 dateOfBirth: nil,
-                username: nil
+                username: nil,
+                timezone: nil
             )
             state = .loaded(user)
             return user

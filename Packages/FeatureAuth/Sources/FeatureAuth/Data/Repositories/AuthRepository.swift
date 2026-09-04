@@ -238,7 +238,8 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
         avatarUrl: String?,
         preferredLocale: String? = nil,
         dateOfBirth: Date? = nil,
-        username: String? = nil
+        username: String? = nil,
+        timezone: String? = nil
     ) async throws -> User {
         let trimmedName = displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedName = (trimmedName?.isEmpty == false) ? trimmedName : nil
@@ -249,12 +250,15 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
         let resolvedDateOfBirth = dateOfBirth?.apiCalendarDateString
         let trimmedUsername = username?.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedUsername = (trimmedUsername?.isEmpty == false) ? trimmedUsername : nil
+        let resolvedTimezone = timezone?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedTimezone = (resolvedTimezone?.isEmpty == false) ? resolvedTimezone : nil
 
         if resolvedName == nil
             && resolvedAvatar == nil
             && normalizedLocale == nil
             && resolvedDateOfBirth == nil
-            && resolvedUsername == nil {
+            && resolvedUsername == nil
+            && normalizedTimezone == nil {
             throw AppError.validation("Enter at least one field to update.")
         }
 
@@ -264,6 +268,7 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
                 username: resolvedUsername,
                 avatarUrl: resolvedAvatar,
                 preferredLocale: normalizedLocale,
+                timezone: normalizedTimezone,
                 dateOfBirth: resolvedDateOfBirth
             ))
         )

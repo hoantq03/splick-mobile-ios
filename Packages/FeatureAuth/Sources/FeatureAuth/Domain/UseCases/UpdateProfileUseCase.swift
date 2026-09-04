@@ -7,7 +7,8 @@ public protocol UpdateProfileUseCaseProtocol: Sendable {
         avatarUrl: String?,
         preferredLocale: String?,
         dateOfBirth: Date?,
-        username: String?
+        username: String?,
+        timezone: String?
     ) async throws -> User
 }
 
@@ -25,14 +26,16 @@ public final class UpdateProfileUseCase: UpdateProfileUseCaseProtocol, Sendable 
         avatarUrl: String?,
         preferredLocale: String? = nil,
         dateOfBirth: Date? = nil,
-        username: String? = nil
+        username: String? = nil,
+        timezone: String? = nil
     ) async throws -> User {
         let user = try await repository.updateProfile(
             displayName: displayName,
             avatarUrl: avatarUrl,
             preferredLocale: preferredLocale,
             dateOfBirth: dateOfBirth,
-            username: username
+            username: username,
+            timezone: timezone
         )
         if let session = await sessionManager.currentSession() {
             await sessionManager.setSession(AuthSession(user: user, token: session.token))
@@ -52,7 +55,8 @@ public extension UpdateProfileUseCaseProtocol {
             avatarUrl: avatarUrl,
             preferredLocale: preferredLocale,
             dateOfBirth: nil,
-            username: nil
+            username: nil,
+            timezone: nil
         )
     }
 
@@ -67,7 +71,8 @@ public extension UpdateProfileUseCaseProtocol {
             avatarUrl: avatarUrl,
             preferredLocale: preferredLocale,
             dateOfBirth: dateOfBirth,
-            username: nil
+            username: nil,
+            timezone: nil
         )
     }
 }

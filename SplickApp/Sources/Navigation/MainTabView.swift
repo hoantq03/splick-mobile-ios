@@ -431,7 +431,6 @@ struct MainTabView: View {
         PostCaptureFlowView(onDismiss: {
             appState.selectedTab = .feed
         })
-        .ignoresSafeArea()
     }
 
     private func handleSelectedTabChange(_ tab: Tab) {
@@ -1416,8 +1415,27 @@ struct ProfileSettingsView: View {
             let user = try await container.refreshProfileUseCase.execute()
             appState.updateAuthenticatedUser(user)
             languageService.applyFromServer(user.preferredLocale)
+            await syncDeviceTimezoneIfNeeded(user)
         } catch {
             profileError = languageService.text(.profileRefreshFailed)
+        }
+    }
+
+    private func syncDeviceTimezoneIfNeeded(_ user: User) async {
+        let deviceZone = TimeZone.current.identifier
+        guard user.timezone != deviceZone else { return }
+        do {
+            let updated = try await container.updateProfileUseCase.execute(
+                displayName: nil,
+                avatarUrl: nil,
+                preferredLocale: nil,
+                dateOfBirth: nil,
+                username: nil,
+                timezone: deviceZone
+            )
+            appState.updateAuthenticatedUser(updated)
+        } catch {
+            Log.error("Failed to sync device timezone: \(error)", category: .auth)
         }
     }
 }
