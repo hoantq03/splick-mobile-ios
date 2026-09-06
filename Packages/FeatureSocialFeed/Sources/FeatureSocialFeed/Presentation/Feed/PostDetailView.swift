@@ -103,7 +103,8 @@ struct PostDetailView: View {
                         actions: cardActions,
                         showsCommentPreview: false,
                         initiallyExpandedBillSplit: expandBillSplitInitially,
-                        initialMediaIndex: initialMediaIndex
+                        initialMediaIndex: initialMediaIndex,
+                        uploadState: feedViewModel.postUploadState(for: post.id)
                     )
                     .feedPostEditedBadge(isEdited: livePost.isEdited) {
                         cardActions.onPresent(.editHistory(livePost))
@@ -192,8 +193,15 @@ struct PostDetailView: View {
                 Task { await feedViewModel.confirmPendingStreakDelete() }
             }
         } message: {
-            if let days = feedViewModel.pendingStreakDelete?.streakDays {
-                Text(languageService.format(.feedPostDeleteStreakWarning, days))
+            if let pending = feedViewModel.pendingStreakDelete {
+                Text(
+                    languageService.format(
+                        pending.isToday
+                            ? .feedPostDeleteStreakWarning
+                            : .feedPostDeleteStreakPastWarning,
+                        pending.streakDays
+                    )
+                )
             }
         }
         .task {
@@ -624,6 +632,9 @@ struct PostDetailView: View {
         cardActions.onOpenComments = { _ in }
         cardActions.onShowCompanions = { post in
             companionsRoute = CompanionsSheetRoute(id: post.id, companions: post.companions)
+        }
+        cardActions.onRetryUpload = { postId in
+            feedViewModel.retryPostUpload(localPostId: postId)
         }
         cardActions.onMediaTap = { _, index in
             mediaViewerRoute = MediaViewerRoute(index: index)

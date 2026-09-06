@@ -164,8 +164,15 @@ public struct FeedView: View {
                     Task { await viewModel.confirmPendingStreakDelete() }
                 }
             } message: {
-                if let days = viewModel.pendingStreakDelete?.streakDays {
-                    Text(languageService.format(.feedPostDeleteStreakWarning, days))
+                if let pending = viewModel.pendingStreakDelete {
+                    Text(
+                        languageService.format(
+                            pending.isToday
+                                ? .feedPostDeleteStreakWarning
+                                : .feedPostDeleteStreakPastWarning,
+                            pending.streakDays
+                        )
+                    )
                 }
             }
         }
@@ -433,6 +440,9 @@ private struct FeedPrimaryPage: View {
                     )
                 )
             }
+        }
+        cardActions.onRetryUpload = { postId in
+            viewModel.retryPostUpload(localPostId: postId)
         }
         cardActions.onOpenDetail = { post, mediaIndex in
             guard viewModel.postUploadState(for: post.id) == nil else { return }

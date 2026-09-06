@@ -114,8 +114,11 @@ struct PostCardView: View, Equatable {
         .allowsHitTesting(uploadState != .uploading)
         .overlay {
             if let uploadState {
-                PostUploadOverlay(state: uploadState)
-                    .allowsHitTesting(uploadState == .uploading)
+                PostUploadOverlay(state: uploadState) {
+                    if case .failed = uploadState {
+                        actions.onRetryUpload(post.id)
+                    }
+                }
             }
         }
         .onAppear {

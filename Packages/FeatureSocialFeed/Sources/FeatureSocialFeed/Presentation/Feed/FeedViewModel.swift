@@ -82,6 +82,7 @@ public final class FeedViewModel: ObservableObject {
     @Published private(set) var postUploadStates: [UUID: PostUploadState] = [:]
     @Published var pendingGuestInviteShare: GuestInviteSharePayload?
     private var postUploadTasks: [UUID: Task<Void, Never>] = [:]
+    private var pendingPostUploadInputs: [UUID: CreatePostInput] = [:]
 
     /// O(1) lookup for post mutations — rebuilt on full-feed assign, patched on insert/remove.
     private var postIndexById: [UUID: Int] = [:]
@@ -404,8 +405,19 @@ public final class FeedViewModel: ObservableObject {
     public func enqueuePostUpload(optimisticPost: Post, input: CreatePostInput) {
         let localPostId = optimisticPost.id
         prependCreatedPost(optimisticPost)
+        pendingPostUploadInputs[localPostId] = input
         postUploadStates[localPostId] = .uploading
+        startPostUpload(localPostId: localPostId, input: input)
+    }
 
+    public func retryPostUpload(localPostId: UUID) {
+        guard let input = pendingPostUploadInputs[localPostId] else { return }
+        guard case .failed = postUploadStates[localPostId] else { return }
+        postUploadStates[localPostId] = .uploading
+        startPostUpload(localPostId: localPostId, input: input)
+    }
+
+    private func startPostUpload(localPostId: UUID, input: CreatePostInput) {
         postUploadTasks[localPostId]?.cancel()
         postUploadTasks[localPostId] = Task { [weak self] in
             await self?.performBackgroundPostUpload(localPostId: localPostId, input: input)
@@ -870,8 +882,8 @@ public final class FeedViewModel: ObservableObject {
             return
         }
 
-        if let streakDays = await streakDaysIfDeleteBreaks(post) {
-            pendingStreakDelete = PendingStreakDelete(postId: id, streakDays: streakDays)
+        if let warning = await streakWarningIfDeleteBreaks(post) {
+            pendingStreakDelete = PendingStreakDelete(postId: id, warning: warning)
             return
         }
 
@@ -921,7 +933,7 @@ public final class FeedViewModel: ObservableObject {
         }
     }
 
-    private func streakDaysIfDeleteBreaks(_ post: Post) async -> Int? {
+    private func streakWarningIfDeleteBreaks(_ post: Post) async -> StreakDeleteWarning? {
         guard let feedRepository else { return nil }
         return await DeleteStreakRisk.streakDaysIfDeleteBreaks(
             post: post,
@@ -959,13 +971,13 @@ public final class FeedViewModel: ObservableObject {
             let serverPost = try await createPostUseCase.execute(input)
             replaceOptimisticPost(localId: localPostId, with: serverPost)
             postUploadStates.removeValue(forKey: localPostId)
+            pendingPostUploadInputs.removeValue(forKey: localPostId)
             OptimisticPostBuilder.cleanupPendingMedia(postId: localPostId)
             presentGuestInviteShareIfNeeded(for: serverPost)
         } catch {
             if error.isRequestCancellation { return }
-            postUploadStates[localPostId] = .failed(message: languageService.localizedMessage(for: error))
+            postUploadStates[localPostId] = .failed(message: postUploadFailureMessage(for: error))
             Log.error(error, category: .feed)
-            alertMessage = languageService.text(.feedCreateRetryFailed)
         }
     }
 
@@ -1184,7 +1196,13 @@ public final class FeedViewModel: ObservableObject {
         postUploadTasks[postId]?.cancel()
         postUploadTasks[postId] = nil
         postUploadStates.removeValue(forKey: postId)
+        pendingPostUploadInputs.removeValue(forKey: postId)
         OptimisticPostBuilder.cleanupPendingMedia(postId: postId)
+    }
+
+    private func postUploadFailureMessage(for error: Error) -> String {
+        let localized = languageService.localizedMessage(for: error).trimmingCharacters(in: .whitespacesAndNewlines)
+        return localized.isEmpty ? languageService.text(.feedUploadFailed) : localized
     }
 
     public enum PostLoadResult: Equatable {
