@@ -10,7 +10,6 @@ struct FeedVideoPosterView: View {
     var displayHeight: CGFloat = FeedMediaLayout.defaultHeight
 
     @State private var generatedFrame: UIImage?
-    @State private var loadFailed = false
 
     private var remoteImageURL: URL? {
         Self.usableImageURL(posterURL, videoURL: videoURL)
@@ -31,21 +30,13 @@ struct FeedVideoPosterView: View {
                     case .failure:
                         generatedOrPlaceholder
                     case .empty:
-                        if let generatedFrame {
-                            Image(uiImage: generatedFrame).resizable().scaledToFill()
-                        } else {
-                            placeholder
-                        }
+                        generatedOrPlaceholder
                     @unknown default:
-                        placeholder
+                        generatedOrPlaceholder
                     }
                 }
-            } else if let generatedFrame {
-                Image(uiImage: generatedFrame)
-                    .resizable()
-                    .scaledToFill()
             } else {
-                placeholder
+                generatedOrPlaceholder
             }
         }
         .task(id: videoURL) {
@@ -72,13 +63,11 @@ struct FeedVideoPosterView: View {
     }
 
     private func ensureFirstFrameIfNeeded() async {
-        if remoteImageURL != nil, generatedFrame != nil { return }
         if let cached = await FeedVideoFirstFrameCache.shared.image(for: videoURL) {
             generatedFrame = cached
             return
         }
         guard let frame = await FeedVideoFirstFrameCache.shared.generate(for: videoURL) else {
-            loadFailed = true
             return
         }
         generatedFrame = frame
@@ -132,18 +121,19 @@ actor FeedVideoFirstFrameCache {
     }
 
     private static func makeFirstFrame(url: URL) async -> UIImage? {
-        let asset = AVURLAsset(url: url)
-        let generator = AVAssetImageGenerator(asset: asset)
-        generator.appliesPreferredTrackTransform = true
-        generator.maximumSize = CGSize(
-            width: FeedMediaLayout.decodeMaxPixelSide,
-            height: FeedMediaLayout.decodeMaxPixelSide
-        )
-        do {
-            let cgImage = try await generator.image(at: .zero).image
+        await Task.detached(priority: .utility) {
+            let asset = AVURLAsset(url: url)
+            let generator = AVAssetImageGenerator(asset: asset)
+            generator.appliesPreferredTrackTransform = true
+            generator.maximumSize = CGSize(
+                width: FeedMediaLayout.decodeMaxPixelSide,
+                height: FeedMediaLayout.decodeMaxPixelSide
+            )
+            // Prefer the sync ImageIO path used elsewhere — reliable on iOS 16+.
+            guard let cgImage = try? generator.copyCGImage(at: .zero, actualTime: nil) else {
+                return nil
+            }
             return UIImage(cgImage: cgImage)
-        } catch {
-            return nil
-        }
+        }.value
     }
 }
