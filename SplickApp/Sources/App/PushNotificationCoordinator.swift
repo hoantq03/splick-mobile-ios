@@ -29,6 +29,7 @@ final class PushNotificationCoordinator: ObservableObject {
     private var userDefaultsService: UserDefaultsServiceProtocol?
     private var hasAccessToken: (@Sendable () async -> Bool)?
     private var friendRequestInbox: FriendRequestInboxResponding?
+    private var messagingRepository: MessagingRepositoryProtocol?
     private var languageService: LanguageService?
     private var serverSyncInFlight = false
     private var lastSyncedToken: String?
@@ -40,21 +41,21 @@ final class PushNotificationCoordinator: ObservableObject {
         userDefaultsService: UserDefaultsServiceProtocol,
         hasAccessToken: @escaping @Sendable () async -> Bool,
         friendRequestInbox: FriendRequestInboxResponding? = nil,
+        messagingRepository: MessagingRepositoryProtocol? = nil,
         languageService: LanguageService? = nil
     ) {
         self.deviceTokenService = deviceTokenService
         self.userDefaultsService = userDefaultsService
         self.hasAccessToken = hasAccessToken
         self.friendRequestInbox = friendRequestInbox
+        self.messagingRepository = messagingRepository
         self.languageService = languageService
         localDeviceToken = userDefaultsService.get(for: AppConstants.UserDefaults.pushNotificationDeviceToken)
         notificationSound = AppNotificationSound.resolved(
-            UserDefaults(suiteName: AppConstants.UserDefaults.appGroup)?
-                .string(forKey: AppConstants.UserDefaults.pushNotificationSound)
+            AppNotificationSound.loadRawFromAppGroup()
                 ?? userDefaultsService.get(for: AppConstants.UserDefaults.pushNotificationSound)
         )
-        UserDefaults(suiteName: AppConstants.UserDefaults.appGroup)?
-            .set(notificationSound.rawValue, forKey: AppConstants.UserDefaults.pushNotificationSound)
+        AppNotificationSound.persistToAppGroup(notificationSound)
         registerNotificationCategories()
 
         Log.info(
@@ -181,6 +182,14 @@ final class PushNotificationCoordinator: ObservableObject {
             await respondToFriendRequest(accept: true, userInfo: userInfo)
         case PushNotificationAction.reject:
             await respondToFriendRequest(accept: false, userInfo: userInfo)
+        case PushNotificationAction.messageReply:
+            acknowledgeMessagingDeliveryIfNeeded(userInfo: userInfo)
+            await replyToMessageFromNotification(response)
+        case PushNotificationAction.messageReactHeart,
+             PushNotificationAction.messageReactThumb,
+             PushNotificationAction.messageReactLaugh:
+            acknowledgeMessagingDeliveryIfNeeded(userInfo: userInfo)
+            await reactToMessageFromNotification(response)
         default:
             handleRemoteNotification(userInfo: userInfo)
         }
@@ -255,17 +264,33 @@ final class PushNotificationCoordinator: ObservableObject {
     func setNotificationSound(_ sound: AppNotificationSound) {
         notificationSound = sound
         userDefaultsService?.set(sound.rawValue, for: AppConstants.UserDefaults.pushNotificationSound)
-        UserDefaults(suiteName: AppConstants.UserDefaults.appGroup)?
-            .set(sound.rawValue, forKey: AppConstants.UserDefaults.pushNotificationSound)
+        AppNotificationSound.persistToAppGroup(sound)
     }
 
-    func foregroundPresentationOptions() -> UNNotificationPresentationOptions {
+    func foregroundPresentationOptions(
+        userInfo: [AnyHashable: Any] = [:]
+    ) -> UNNotificationPresentationOptions {
+        if shouldSuppressForegroundChatBanner(userInfo: userInfo) {
+            return []
+        }
         if notificationSound.isSilent {
             return [.banner, .badge]
         }
         playSelectedSound()
         // Omit `.sound` so APNs "default" does not override the bundled tone.
         return [.banner, .badge]
+    }
+
+    private func shouldSuppressForegroundChatBanner(userInfo: [AnyHashable: Any]) -> Bool {
+        guard UIApplication.shared.applicationState == .active else {
+            return false
+        }
+        guard let destination = NotificationDestination.fromPushUserInfo(userInfo),
+              destination.screen == .messages
+        else {
+            return false
+        }
+        return VisibleChatThreadStore.shared.matches(destination.conversationId)
     }
 
     func playSelectedSound() {
@@ -279,8 +304,12 @@ final class PushNotificationCoordinator: ObservableObject {
         let ext = (fileName as NSString).pathExtension
         guard let url = Bundle.main.url(forResource: name, withExtension: ext) else { return }
         var soundId: SystemSoundID = 0
-        AudioServicesCreateSystemSoundID(url as CFURL, &soundId)
-        AudioServicesPlaySystemSound(soundId)
+        guard AudioServicesCreateSystemSoundID(url as CFURL, &soundId) == kAudioServicesNoError else {
+            return
+        }
+        AudioServicesPlayAlertSoundWithCompletion(soundId) {
+            AudioServicesDisposeSystemSoundID(soundId)
+        }
     }
 
     var storedDeviceToken: String? {
@@ -464,7 +493,96 @@ final class PushNotificationCoordinator: ObservableObject {
             intentIdentifiers: [],
             options: []
         )
-        UNUserNotificationCenter.current().setNotificationCategories([friendRequest])
+        let message = UNNotificationCategory(
+            identifier: PushNotificationAction.messageCategory,
+            actions: messageQuickReplyActions(),
+            intentIdentifiers: [],
+            options: []
+        )
+        UNUserNotificationCenter.current().setNotificationCategories([friendRequest, message])
+    }
+
+    private func messageQuickReplyActions() -> [UNNotificationAction] {
+        let replyTitle = languageService?.text(.messagingReplyAction) ?? "Reply"
+        let sendTitle = languageService?.text(.messagingSend) ?? "Send"
+        let placeholder = languageService?.text(.messagingNotificationReplyPlaceholder) ?? "Message"
+        let reply = UNTextInputNotificationAction(
+            identifier: PushNotificationAction.messageReply,
+            title: replyTitle,
+            options: [],
+            textInputButtonTitle: sendTitle,
+            textInputPlaceholder: placeholder
+        )
+        let heart = UNNotificationAction(
+            identifier: PushNotificationAction.messageReactHeart,
+            title: "❤️",
+            options: []
+        )
+        let thumb = UNNotificationAction(
+            identifier: PushNotificationAction.messageReactThumb,
+            title: "👍",
+            options: []
+        )
+        let laugh = UNNotificationAction(
+            identifier: PushNotificationAction.messageReactLaugh,
+            title: "😂",
+            options: []
+        )
+        return [reply, heart, thumb, laugh]
+    }
+
+    private func replyToMessageFromNotification(_ response: UNNotificationResponse) async {
+        let userInfo = response.notification.request.content.userInfo
+        guard let conversationId = conversationId(from: userInfo) else {
+            Log.warning("Message reply push action missing conversationId", category: .notification)
+            return
+        }
+        let body = (response as? UNTextInputNotificationResponse)?
+            .userText
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !body.isEmpty else { return }
+        guard let messagingRepository else { return }
+        let replyTo = parseUUID(userInfo["messageId"]) ?? parseUUID(userInfo["referenceId"])
+        do {
+            _ = try await messagingRepository.sendMessage(
+                conversationId: conversationId,
+                body: body,
+                clientMessageId: UUID(),
+                imageAttachments: [],
+                replyToMessageId: replyTo
+            )
+        } catch {
+            Log.error(error, category: .notification, metadata: ["action": "messageReply"])
+        }
+    }
+
+    private func reactToMessageFromNotification(_ response: UNNotificationResponse) async {
+        let userInfo = response.notification.request.content.userInfo
+        guard let conversationId = conversationId(from: userInfo),
+              let messageId = parseUUID(userInfo["messageId"]) ?? parseUUID(userInfo["referenceId"]),
+              let emoji = PushNotificationAction.reactionEmoji(for: response.actionIdentifier)
+        else {
+            Log.warning("Message react push action missing ids", category: .notification)
+            return
+        }
+        guard let messagingRepository else { return }
+        do {
+            _ = try await messagingRepository.addReaction(
+                conversationId: conversationId,
+                messageId: messageId,
+                emoji: emoji
+            )
+        } catch {
+            Log.error(error, category: .notification, metadata: ["action": "messageReact"])
+        }
+    }
+
+    private func conversationId(from userInfo: [AnyHashable: Any]) -> UUID? {
+        if let destination = NotificationDestination.fromPushUserInfo(userInfo),
+           let conversationId = destination.conversationId ?? destination.postId {
+            return conversationId
+        }
+        return parseUUID(userInfo["conversationId"]) ?? parseUUID(userInfo["postId"])
     }
 
     private func respondToFriendRequest(accept: Bool, userInfo: [AnyHashable: Any]) async {

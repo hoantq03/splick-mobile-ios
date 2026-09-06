@@ -3,7 +3,7 @@ import UIKit
 import UserNotifications
 
 @MainActor
-final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+final class AppDelegate: NSObject, UIApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate {
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
@@ -59,7 +59,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             userInfo: notification.request.content.userInfo,
             queueDestination: false
         )
-        completionHandler(PushNotificationCoordinator.shared.foregroundPresentationOptions())
+        completionHandler(PushNotificationCoordinator.shared.foregroundPresentationOptions(
+            userInfo: notification.request.content.userInfo
+        ))
     }
 
     func userNotificationCenter(

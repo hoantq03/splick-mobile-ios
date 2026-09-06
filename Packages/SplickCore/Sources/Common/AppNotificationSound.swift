@@ -2,24 +2,54 @@ import Foundation
 
 public enum AppNotificationSound: String, CaseIterable, Sendable {
     case `default` = "default"
-    case note = "note"
-    case chime = "chime"
-    case pop = "pop"
-    case silent = "silent"
 
-    public var isSilent: Bool { self == .silent }
+    public var isSilent: Bool { false }
 
-    public var bundledFileName: String {
-        switch self {
-        case .default: return "splick_notif_default.wav"
-        case .note: return "splick_notif_note.wav"
-        case .chime: return "splick_notif_chime.wav"
-        case .pop: return "splick_notif_pop.wav"
-        case .silent: return "splick_notif_silent.wav"
-        }
-    }
+    public var bundledFileName: String { "splick_notif_default.wav" }
 
     public static func resolved(_ raw: String?) -> AppNotificationSound {
-        AppNotificationSound(rawValue: raw ?? Self.`default`.rawValue) ?? .default
+        _ = raw
+        return .default
+    }
+
+    public static func persistToAppGroup(_ sound: AppNotificationSound) {
+        let suite = UserDefaults(suiteName: AppConstants.UserDefaults.appGroup)
+        suite?.set(sound.rawValue, forKey: AppConstants.UserDefaults.pushNotificationSound)
+        suite?.synchronize()
+        guard let directory = FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: AppConstants.UserDefaults.appGroup
+        ) else {
+            return
+        }
+        try? sound.rawValue.write(
+            to: directory.appendingPathComponent("pushNotificationSound.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+    }
+
+    public static func loadRawFromAppGroup() -> String? {
+        if let directory = FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: AppConstants.UserDefaults.appGroup
+        ) {
+            let fileURL = directory.appendingPathComponent("pushNotificationSound.txt")
+            if let raw = try? String(contentsOf: fileURL, encoding: .utf8) {
+                return resolved(raw).rawValue
+            }
+        }
+        let suite = UserDefaults(suiteName: AppConstants.UserDefaults.appGroup)
+        if let raw = suite?.string(forKey: AppConstants.UserDefaults.pushNotificationSound),
+           !raw.isEmpty {
+            return resolved(raw).rawValue
+        }
+        if let data = suite?.data(forKey: AppConstants.UserDefaults.pushNotificationSound),
+           let decoded = try? JSONDecoder().decode(String.self, from: data) {
+            return resolved(decoded).rawValue
+        }
+        return nil
+    }
+
+    public static func loadFromAppGroup() -> AppNotificationSound {
+        resolved(loadRawFromAppGroup())
     }
 }

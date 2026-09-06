@@ -80,20 +80,7 @@ final class NotificationService: UNNotificationServiceExtension {
     }
 
     private func applySelectedSound(to content: UNMutableNotificationContent) {
-        let raw = UserDefaults(suiteName: "group.com.splick.app")?
-            .string(forKey: "pushNotificationSound")
-        switch raw {
-        case "silent":
-            content.sound = UNNotificationSound(named: UNNotificationSoundName("splick_notif_silent.wav"))
-        case "note":
-            content.sound = UNNotificationSound(named: UNNotificationSoundName("splick_notif_note.wav"))
-        case "chime":
-            content.sound = UNNotificationSound(named: UNNotificationSoundName("splick_notif_chime.wav"))
-        case "pop":
-            content.sound = UNNotificationSound(named: UNNotificationSoundName("splick_notif_pop.wav"))
-        default:
-            content.sound = UNNotificationSound(named: UNNotificationSoundName("splick_notif_default.wav"))
-        }
+        content.sound = UNNotificationSound(named: UNNotificationSoundName("splick_notif_default.wav"))
     }
 
     private static func actorAvatarURL(from userInfo: [AnyHashable: Any]) -> URL? {

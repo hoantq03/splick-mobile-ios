@@ -18,6 +18,20 @@ public enum PushNotificationAction {
     public static let friendRequestCategory = "FRIEND_REQUEST"
     public static let accept = "FRIEND_REQUEST_ACCEPT"
     public static let reject = "FRIEND_REQUEST_REJECT"
+    public static let messageCategory = "MESSAGE"
+    public static let messageReply = "MESSAGE_REPLY"
+    public static let messageReactHeart = "MESSAGE_REACT_HEART"
+    public static let messageReactThumb = "MESSAGE_REACT_THUMB"
+    public static let messageReactLaugh = "MESSAGE_REACT_LAUGH"
+
+    public static func reactionEmoji(for actionIdentifier: String) -> String? {
+        switch actionIdentifier {
+        case messageReactHeart: return "❤️"
+        case messageReactThumb: return "👍"
+        case messageReactLaugh: return "😂"
+        default: return nil
+        }
+    }
 }
 
 public enum FriendRequestInboxOutcomePersistence {

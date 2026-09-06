@@ -27,6 +27,7 @@ struct SplickApp: App {
                 rejectUseCase: container.rejectFriendRequestUseCase,
                 fetchIncomingUseCase: container.fetchIncomingFriendRequestsUseCase
             ),
+            messagingRepository: container.messagingRepository,
             languageService: container.languageService
         )
     }

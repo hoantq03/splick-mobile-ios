@@ -93,12 +93,6 @@ struct NotificationsSettingsView: View {
     }
 
     private func soundTitle(_ sound: AppNotificationSound) -> String {
-        switch sound {
-        case .default: return languageService.text(.messagingChatNotificationSoundDefault)
-        case .note: return languageService.text(.messagingChatNotificationSoundNote)
-        case .chime: return languageService.text(.messagingChatNotificationSoundChime)
-        case .pop: return languageService.text(.messagingChatNotificationSoundPop)
-        case .silent: return languageService.text(.messagingChatNotificationSoundSilent)
-        }
+        languageService.text(.messagingChatNotificationSoundDefault)
     }
 }

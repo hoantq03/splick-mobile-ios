@@ -80,14 +80,6 @@ targets:
         buildPhase: resources
       - path: SplickApp/Resources/splick_notif_default.wav
         buildPhase: resources
-      - path: SplickApp/Resources/splick_notif_note.wav
-        buildPhase: resources
-      - path: SplickApp/Resources/splick_notif_chime.wav
-        buildPhase: resources
-      - path: SplickApp/Resources/splick_notif_pop.wav
-        buildPhase: resources
-      - path: SplickApp/Resources/splick_notif_silent.wav
-        buildPhase: resources
     dependencies:
       - package: SplickCore
         product: Networking
@@ -183,6 +175,8 @@ targets:
       iOS: "16.0"
     sources:
       - path: SplickNotificationServiceExtension/Sources
+      - path: SplickApp/Resources/splick_notif_default.wav
+        buildPhase: resources
     settings:
       base:
         PRODUCT_NAME: SplickNotificationServiceExtension
