@@ -392,6 +392,7 @@ public struct FriendsRootView: View {
                     permissionNeeded: viewModel.nearbyPermissionNeeded,
                     users: viewModel.nearbyUsers,
                     loading: viewModel.nearbyLoading,
+                    locationDisabled: viewModel.nearbyLocationDisabled,
                     onClose: {
                         showNearbyRadar = false
                         viewModel.stopRadarSession()

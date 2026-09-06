@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Combine
 import Common
 import DesignSystem
 import Localization
@@ -78,6 +79,7 @@ public final class FriendsRootViewModel: ObservableObject {
     @Published private(set) var outgoingRequestCount = 0
     @Published var nearbyEnabled = false
     @Published var nearbyPermissionNeeded = false
+    @Published var nearbyLocationDisabled = false
     @Published var nearbyUsers: [UserSearchResult] = []
     @Published var nearbyLoading = false
 
@@ -99,6 +101,7 @@ public final class FriendsRootViewModel: ObservableObject {
     private var searchTask: Task<Void, Never>?
     private var nearbyTask: Task<Void, Never>?
     private let locationProvider = NearbyLocationProvider()
+    private var leftNearbyAfterUnavailable = false
     private var refreshTask: Task<Void, Never>?
     private var backgroundFriendsLoadTask: Task<Void, Never>?
     private var inFlightRelationActionUserIds: Set<UUID> = []
@@ -112,6 +115,8 @@ public final class FriendsRootViewModel: ObservableObject {
     public var isSearching: Bool {
         !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
+
+    private var groupsDirectoryObserver: AnyCancellable?
 
     public init(
         fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol,
@@ -139,6 +144,13 @@ public final class FriendsRootViewModel: ObservableObject {
         self.languageService = languageService
         self.onDirectoryLoaded = onDirectoryLoaded
         self.onFriendRequestsLoaded = onFriendRequestsLoaded
+        groupsDirectoryObserver = NotificationCenter.default
+            .publisher(for: GroupsDirectoryChange.notification)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                Task { await self.loadGroups(isPullToRefresh: true) }
+            }
     }
 
     func startRadarSession() {
@@ -170,11 +182,13 @@ public final class FriendsRootViewModel: ObservableObject {
         nearbyTask = nil
         locationProvider.onAuthorizationChange = nil
         relationOverrides.removeAll()
+        leftNearbyAfterUnavailable = false
         Task {
             try? await nearbyDiscoveryUseCase.leaveSession()
             nearbyUsers = []
             nearbyLoading = false
             nearbyPermissionNeeded = false
+            nearbyLocationDisabled = false
         }
     }
 
@@ -203,17 +217,24 @@ public final class FriendsRootViewModel: ObservableObject {
     }
 
     private func refreshNearby() async {
-        if !locationProvider.hasAuthorization {
-            nearbyPermissionNeeded = true
-            nearbyLoading = false
+        if !locationProvider.hasAuthorization || !locationProvider.isLocationServicesEnabled {
+            await haltNearbyScan(
+                permissionNeeded: !locationProvider.hasAuthorization,
+                locationDisabled: locationProvider.hasAuthorization && !locationProvider.isLocationServicesEnabled
+            )
             return
         }
+        leftNearbyAfterUnavailable = false
         nearbyPermissionNeeded = false
+        nearbyLocationDisabled = false
         if nearbyUsers.isEmpty {
             nearbyLoading = true
         }
         guard let coordinate = await locationProvider.currentCoordinate() else {
-            nearbyLoading = false
+            await haltNearbyScan(
+                permissionNeeded: !locationProvider.hasAuthorization,
+                locationDisabled: locationProvider.hasAuthorization && !locationProvider.isLocationServicesEnabled
+            )
             return
         }
         do {
@@ -242,6 +263,17 @@ public final class FriendsRootViewModel: ObservableObject {
         } catch {
             nearbyLoading = false
         }
+    }
+
+    private func haltNearbyScan(permissionNeeded: Bool, locationDisabled: Bool) async {
+        if !leftNearbyAfterUnavailable {
+            try? await nearbyDiscoveryUseCase.leaveSession()
+            leftNearbyAfterUnavailable = true
+        }
+        nearbyPermissionNeeded = permissionNeeded
+        nearbyLocationDisabled = locationDisabled
+        nearbyUsers = []
+        nearbyLoading = false
     }
 
     func load(userId: UUID? = nil) async {

@@ -5,6 +5,7 @@ import SplickDomain
 @MainActor
 public final class NearbyRadarSessionViewModel: ObservableObject {
     @Published public var nearbyPermissionNeeded = false
+    @Published public var nearbyLocationDisabled = false
     @Published public var nearbyUsers: [UserSearchResult] = []
     @Published public var nearbyLoading = false
     @Published public var alertMessage: String?
@@ -18,6 +19,7 @@ public final class NearbyRadarSessionViewModel: ObservableObject {
     private let languageService: LanguageService
     private let locationProvider = NearbyLocationProvider()
     private var nearbyTask: Task<Void, Never>?
+    private var leftNearbyAfterUnavailable = false
     private var inFlightRelationActionUserIds: Set<UUID> = []
     private var relationOverrides: [UUID: FriendRelationStatus] = [:]
 
@@ -64,11 +66,13 @@ public final class NearbyRadarSessionViewModel: ObservableObject {
         nearbyTask = nil
         locationProvider.onAuthorizationChange = nil
         relationOverrides.removeAll()
+        leftNearbyAfterUnavailable = false
         Task {
             try? await nearbyDiscoveryUseCase.leaveSession()
             nearbyUsers = []
             nearbyLoading = false
             nearbyPermissionNeeded = false
+            nearbyLocationDisabled = false
         }
     }
 
@@ -91,17 +95,24 @@ public final class NearbyRadarSessionViewModel: ObservableObject {
     }
 
     private func refreshNearby() async {
-        if !locationProvider.hasAuthorization {
-            nearbyPermissionNeeded = true
-            nearbyLoading = false
+        if !locationProvider.hasAuthorization || !locationProvider.isLocationServicesEnabled {
+            await haltNearbyScan(
+                permissionNeeded: !locationProvider.hasAuthorization,
+                locationDisabled: locationProvider.hasAuthorization && !locationProvider.isLocationServicesEnabled
+            )
             return
         }
+        leftNearbyAfterUnavailable = false
         nearbyPermissionNeeded = false
+        nearbyLocationDisabled = false
         if nearbyUsers.isEmpty {
             nearbyLoading = true
         }
         guard let coordinate = await locationProvider.currentCoordinate() else {
-            nearbyLoading = false
+            await haltNearbyScan(
+                permissionNeeded: !locationProvider.hasAuthorization,
+                locationDisabled: locationProvider.hasAuthorization && !locationProvider.isLocationServicesEnabled
+            )
             return
         }
         do {
@@ -115,6 +126,17 @@ public final class NearbyRadarSessionViewModel: ObservableObject {
         } catch {
             nearbyLoading = false
         }
+    }
+
+    private func haltNearbyScan(permissionNeeded: Bool, locationDisabled: Bool) async {
+        if !leftNearbyAfterUnavailable {
+            try? await nearbyDiscoveryUseCase.leaveSession()
+            leftNearbyAfterUnavailable = true
+        }
+        nearbyPermissionNeeded = permissionNeeded
+        nearbyLocationDisabled = locationDisabled
+        nearbyUsers = []
+        nearbyLoading = false
     }
 
     private func sendFriendRequest(to result: UserSearchResult) {

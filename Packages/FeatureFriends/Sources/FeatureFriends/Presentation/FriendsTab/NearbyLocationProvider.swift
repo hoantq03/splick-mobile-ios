@@ -8,7 +8,7 @@ final class NearbyLocationProvider: NSObject, ObservableObject, CLLocationManage
     var onAuthorizationChange: (() -> Void)?
 
     private let manager = CLLocationManager()
-    private var continuation: CheckedContinuation<CLLocationCoordinate2D?, Never>?
+    private var continuations: [CheckedContinuation<CLLocationCoordinate2D?, Never>] = []
 
     override init() {
         super.init()
@@ -25,11 +25,19 @@ final class NearbyLocationProvider: NSObject, ObservableObject, CLLocationManage
         }
     }
 
+    var isLocationServicesEnabled: Bool {
+        CLLocationManager.locationServicesEnabled()
+    }
+
     func requestAuthorization() {
         manager.requestWhenInUseAuthorization()
     }
 
     func currentCoordinate() async -> CLLocationCoordinate2D? {
+        guard CLLocationManager.locationServicesEnabled() else {
+            coordinate = nil
+            return nil
+        }
         switch manager.authorizationStatus {
         case .notDetermined:
             manager.requestWhenInUseAuthorization()
@@ -40,12 +48,11 @@ final class NearbyLocationProvider: NSObject, ObservableObject, CLLocationManage
             authorizationDenied = true
             return nil
         }
-        if continuation != nil {
-            return coordinate
-        }
         return await withCheckedContinuation { continuation in
-            self.continuation = continuation
-            manager.requestLocation()
+            continuations.append(continuation)
+            if continuations.count == 1 {
+                manager.requestLocation()
+            }
         }
     }
 
@@ -62,13 +69,21 @@ final class NearbyLocationProvider: NSObject, ObservableObject, CLLocationManage
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard CLLocationManager.locationServicesEnabled() else {
+            finishRequest(nil)
+            return
+        }
         coordinate = locations.last?.coordinate
-        continuation?.resume(returning: coordinate)
-        continuation = nil
+        finishRequest(coordinate)
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        continuation?.resume(returning: nil)
-        continuation = nil
+        finishRequest(nil)
+    }
+
+    private func finishRequest(_ value: CLLocationCoordinate2D?) {
+        let waiting = continuations
+        continuations = []
+        waiting.forEach { $0.resume(returning: value) }
     }
 }

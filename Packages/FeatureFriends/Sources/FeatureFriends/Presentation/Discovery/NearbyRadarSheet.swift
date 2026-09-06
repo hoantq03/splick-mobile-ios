@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import DesignSystem
 import Localization
 import SplickDomain
@@ -6,6 +7,7 @@ import SplickDomain
 public struct NearbyRadarSheet: View {
     @EnvironmentObject private var languageService: LanguageService
     let permissionNeeded: Bool
+    let locationDisabled: Bool
     let users: [UserSearchResult]
     let loading: Bool
     let selectionMode: Bool
@@ -21,6 +23,7 @@ public struct NearbyRadarSheet: View {
         permissionNeeded: Bool,
         users: [UserSearchResult],
         loading: Bool,
+        locationDisabled: Bool = false,
         selectionMode: Bool = false,
         selectedUserIds: Set<UUID> = [],
         onClose: @escaping () -> Void,
@@ -31,6 +34,7 @@ public struct NearbyRadarSheet: View {
         onConfirmSelection: (() -> Void)? = nil
     ) {
         self.permissionNeeded = permissionNeeded
+        self.locationDisabled = locationDisabled
         self.users = users
         self.loading = loading
         self.selectionMode = selectionMode
@@ -60,7 +64,15 @@ public struct NearbyRadarSheet: View {
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
                         .multilineTextAlignment(.center)
 
-                    if permissionNeeded {
+                    if locationDisabled {
+                        SplickButton(languageService.text(.friendsNearbyLocationOffAction), style: .primary) {
+                            openSystemSettings()
+                        }
+                        Text(languageService.text(.friendsNearbyLocationOff))
+                            .font(SplickTheme.Typography.caption)
+                            .foregroundStyle(SplickTheme.Colors.textSecondary)
+                            .multilineTextAlignment(.center)
+                    } else if permissionNeeded {
                         SplickButton(languageService.text(.friendsNearbyPermission), style: .primary) {
                             onRequestLocation()
                         }
@@ -69,7 +81,7 @@ public struct NearbyRadarSheet: View {
                 .padding(.horizontal, SplickTheme.Spacing.md)
                 .padding(.bottom, SplickTheme.Spacing.sm)
 
-                if !permissionNeeded {
+                if !permissionNeeded && !locationDisabled {
                     ScrollView {
                         LazyVStack(spacing: SplickTheme.Spacing.xs) {
                             if users.isEmpty {
@@ -110,6 +122,11 @@ public struct NearbyRadarSheet: View {
                 }
             }
         }
+    }
+
+    private func openSystemSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
     }
 
     @ViewBuilder
