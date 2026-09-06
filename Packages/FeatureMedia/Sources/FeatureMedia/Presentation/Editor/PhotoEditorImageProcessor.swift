@@ -58,6 +58,25 @@ enum PhotoEditorImageProcessor {
         }
     }
 
+    /// AVFoundation stills are true-to-life. The live finder is mirrored for selfies,
+    /// so flip front captures horizontally to match Android and the preview.
+    static func matchSelfieFinder(_ image: UIImage, isFrontCamera: Bool) -> UIImage {
+        guard isFrontCamera else { return image }
+        return mirrorHorizontally(image)
+    }
+
+    static func mirrorHorizontally(_ image: UIImage) -> UIImage {
+        let source = normalizeOrientation(image)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = source.scale
+        format.opaque = false
+        return UIGraphicsImageRenderer(size: source.size, format: format).image { ctx in
+            ctx.cgContext.translateBy(x: source.size.width, y: 0)
+            ctx.cgContext.scaleBy(x: -1, y: 1)
+            source.draw(in: CGRect(origin: .zero, size: source.size))
+        }
+    }
+
     /// Center-crops so the result matches the phone viewport (what the live finder shows).
     static func cropToAspectFill(_ image: UIImage, aspectRatio: CGFloat) -> UIImage {
         let size = image.size

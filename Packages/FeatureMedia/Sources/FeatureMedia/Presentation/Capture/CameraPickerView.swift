@@ -314,13 +314,17 @@ struct CameraPickerView: View {
 
     private func capture() {
         isCapturing = true
+        let fromFront = session.isFrontCamera
         if session.filterPreset == .ar, faceTrackingSupported, let snapshot = arHandle.snapshot() {
             isCapturing = false
             let framed = PhotoEditorImageProcessor.cropToAspectFill(
                 PhotoEditorImageProcessor.normalizeOrientation(snapshot),
                 aspectRatio: CameraChromeLayout.previewAspect
             )
-            onResult(.image(framed, initialFilter: .none))
+            onResult(.image(
+                PhotoEditorImageProcessor.matchSelfieFinder(framed, isFrontCamera: true),
+                initialFilter: .none
+            ))
             return
         }
         Task {
@@ -344,6 +348,7 @@ struct CameraPickerView: View {
                     output,
                     aspectRatio: CameraChromeLayout.previewAspect
                 )
+                output = PhotoEditorImageProcessor.matchSelfieFinder(output, isFrontCamera: fromFront)
                 await MainActor.run {
                     isCapturing = false
                     onResult(.image(output, initialFilter: initialFilter))
