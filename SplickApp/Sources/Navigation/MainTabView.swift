@@ -172,6 +172,9 @@ struct MainTabView: View {
             .environment(\.openLinkedPost) { postId, expandBillSplit in
                 appState.openLinkedPost(postId, expandBillSplit: expandBillSplit)
             }
+            .environment(\.fetchSharedPost) { postId in
+                try await container.fetchPostUseCase.execute(postId: postId)
+            }
             .environment(\.openDirectMessage) { friendUserId in
                 guard let conversationId = await container.getOrCreateConversationId(friendUserId: friendUserId) else {
                     return nil

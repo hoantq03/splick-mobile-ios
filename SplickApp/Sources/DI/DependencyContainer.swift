@@ -702,14 +702,14 @@ final class DependencyContainer: ObservableObject {
     // MARK: - Messaging
 
     lazy var messagingWebSocketClient: MessagingWebSocketClient = {
+        // Capture on the main actor once — provider is `@Sendable` and may run off-main.
+        let deviceId = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
         let client = MessagingWebSocketClient(
             ticketProvider: { [weak self] in
                 guard let self else { throw URLError(.cancelled) }
                 return try await self.messagingRepository.requestWsTicket()
             },
-            deviceIdProvider: {
-                UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
-            },
+            deviceIdProvider: { deviceId },
             forceTokenRefresh: { [weak self] in
                 guard let self else { return }
                 try? await self.refreshTokenUseCase.refreshSession()
@@ -724,7 +724,7 @@ final class DependencyContainer: ObservableObject {
     let pendingMessageStore = PendingMessageStore()
     let networkPathMonitor = NetworkPathMonitor()
 
-    private lazy var messagingRepository: MessagingRepositoryProtocol = {
+    lazy var messagingRepository: MessagingRepositoryProtocol = {
         MessagingRepository(apiClient: apiClient, friendDisplayNameStore: friendDisplayNameStore)
     }()
 
@@ -873,6 +873,7 @@ final class DependencyContainer: ObservableObject {
             conversationListViewModel.conversations,
             totalUnreadCount: conversationListViewModel.unreadConversationCount
         )
+        GroupsDirectoryChange.post()
     }
 
     @MainActor

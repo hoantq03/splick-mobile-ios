@@ -70,6 +70,7 @@ public struct GroupsRepository: GroupsRepositoryProtocol {
 
     public func deleteGroup(groupId: UUID) async throws {
         try await apiClient.request(SocialEndpoint.deleteGroup(groupId: groupId))
+        GroupsDirectoryChange.post()
     }
 
     public func fetchActiveInviteCode(groupId: UUID) async throws -> GroupInviteCode? {
@@ -133,6 +134,7 @@ public struct GroupsRepository: GroupsRepositoryProtocol {
         let joinResponse: JoinGroupResponseDTO = try await apiClient.request(
             SocialEndpoint.joinGroupByCode(code: normalized)
         )
+        GroupsDirectoryChange.post()
         return try await fetchGroup(groupId: joinResponse.groupId)
     }
 
@@ -146,6 +148,7 @@ public struct GroupsRepository: GroupsRepositoryProtocol {
                 let joinResponse: JoinGroupResponseDTO = try await apiClient.request(
                     SocialEndpoint.joinGroupByQr(qrPayload: serverPayload)
                 )
+                GroupsDirectoryChange.post()
                 return try await fetchGroup(groupId: joinResponse.groupId)
             case .addFriend, .addFriendByServerPayload, .claimBill:
                 throw FriendsError.invalidQRCode
@@ -154,6 +157,7 @@ public struct GroupsRepository: GroupsRepositoryProtocol {
         let joinResponse: JoinGroupResponseDTO = try await apiClient.request(
             SocialEndpoint.joinGroupByQr(qrPayload: trimmed)
         )
+        GroupsDirectoryChange.post()
         return try await fetchGroup(groupId: joinResponse.groupId)
     }
 
@@ -177,6 +181,7 @@ public struct GroupsRepository: GroupsRepositoryProtocol {
 
     public func leaveGroup(groupId: UUID) async throws {
         try await apiClient.request(SocialEndpoint.leaveGroup(groupId: groupId))
+        GroupsDirectoryChange.post()
     }
 
     public func transferOwnership(groupId: UUID, newOwnerId: UUID) async throws -> Group {

@@ -47,6 +47,7 @@ public struct ChatThreadView: View {
     @Environment(\.chatGroupManagementActions) private var groupManagementActions
     @Environment(\.presentInviteFriendsToGroup) private var presentInviteFriendsToGroup
     @Environment(\.transferSocialGroupOwnership) private var transferSocialGroupOwnership
+    @Environment(\.leaveSocialGroupMembership) private var leaveSocialGroupMembership
     @Environment(\.dismiss) private var dismiss
     @Environment(\.messagingReactionPicker) private var reactionPicker
 
@@ -111,14 +112,16 @@ public struct ChatThreadView: View {
                                 name: navigationTitle,
                                 size: .compact,
                                 userId: peer.userId,
-                                showOnlineIndicator: PresenceDisplayPolicy.shouldShowOnlineIndicator(
+                                showOnlineIndicator: showsPeerPresence && PresenceDisplayPolicy.shouldShowOnlineIndicator(
                                     isOnline: resolvedPresence(for: peer).isOnline
                                 ),
-                                lastSeenLabel: PresenceDisplayPolicy.compactLastSeenLabel(
-                                    isOnline: resolvedPresence(for: peer).isOnline,
-                                    lastSeenAt: resolvedPresence(for: peer).lastSeenAt,
-                                    appLocale: languageService.locale
-                                )
+                                lastSeenLabel: showsPeerPresence
+                                    ? PresenceDisplayPolicy.compactLastSeenLabel(
+                                        isOnline: resolvedPresence(for: peer).isOnline,
+                                        lastSeenAt: resolvedPresence(for: peer).lastSeenAt,
+                                        appLocale: languageService.locale
+                                    )
+                                    : nil
                             )
                         } else {
                             AvatarView(
@@ -708,8 +711,14 @@ public struct ChatThreadView: View {
             switch confirm {
             case .removeFriend:
                 await relationshipViewModel.removeFriend()
+                if !relationshipViewModel.canRemoveFriend, let peer {
+                    presenceStore.clear(userId: peer.userId)
+                }
             case .blockUser:
                 await relationshipViewModel.blockUser()
+                if relationshipViewModel.isBlocked, let peer {
+                    presenceStore.clear(userId: peer.userId)
+                }
             case nil:
                 break
             }
@@ -734,6 +743,21 @@ public struct ChatThreadView: View {
         guard let displayConversation, let repository else { return }
         do {
             try await repository.leaveGroup(groupId: displayConversation.id)
+            if let leaveSocialGroupMembership {
+                do {
+                    try await leaveSocialGroupMembership(displayConversation.id)
+                } catch {
+                    if error.isOwnershipTransferRequired {
+                        showTransferBeforeLeave = true
+                        return
+                    }
+                    if !error.isIgnorableSocialLeaveAfterMessaging {
+                        leaveError = languageService.localizedMessage(for: error)
+                        return
+                    }
+                }
+            }
+            GroupsDirectoryChange.post()
             onConversationDeleted?(displayConversation.id)
             dismiss()
         } catch {
@@ -1078,6 +1102,15 @@ public struct ChatThreadView: View {
         return trimmed
     }
 
+    private var showsPeerPresence: Bool {
+        switch relationshipViewModel.status {
+        case .unknown, .friends:
+            return true
+        default:
+            return false
+        }
+    }
+
     private func resolvedPresence(for peer: ConversationPeer) -> (isOnline: Bool, lastSeenAt: Date?) {
         let stored = presenceStore.state(for: peer.userId)
         let isOnline = (stored?.isOnline ?? false) || (peer.isOnline ?? false)
@@ -1095,6 +1128,16 @@ private extension Error {
     }
 
     var isIgnorableSocialOwnershipTransfer: Bool {
+        guard let network = self as? NetworkError else { return false }
+        switch network {
+        case .forbidden, .notFound:
+            return true
+        default:
+            return false
+        }
+    }
+
+    var isIgnorableSocialLeaveAfterMessaging: Bool {
         guard let network = self as? NetworkError else { return false }
         switch network {
         case .forbidden, .notFound:
