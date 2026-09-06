@@ -344,7 +344,7 @@ public struct ExpenseFriendDetailView: View {
     let tint = netDirectionTint(summary.netDirection)
     return HStack(alignment: .center, spacing: SplickTheme.Spacing.sm) {
       VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxxs) {
-        Text(languageService.text(.expenseFriendNetAmount))
+        Text(languageService.text(netTitleKey(summary)))
           .font(SplickTheme.Typography.captionBold)
           .foregroundStyle(tint)
         Text(signedNetAmount(summary))
@@ -385,16 +385,19 @@ public struct ExpenseFriendDetailView: View {
     }
   }
 
-  private func signedNetAmount(_ summary: NettingSummary) -> String {
-    let amount = summary.netAmount.chartAmountString(currencyCode: summary.currency)
+  private func netTitleKey(_ summary: NettingSummary) -> L10nKey {
     switch summary.netDirection {
     case .actorOwes:
-      return "−" + amount
+      return .expenseOverviewNetYouNeedToPay
     case .counterpartyOwes:
-      return "+" + amount
+      return .expenseOverviewNetYouGetBack
     case .settled:
-      return amount
+      return .expenseOverviewNetEven
     }
+  }
+
+  private func signedNetAmount(_ summary: NettingSummary) -> String {
+    summary.netAmount.chartAmountString(currencyCode: summary.currency)
   }
 
   @ViewBuilder

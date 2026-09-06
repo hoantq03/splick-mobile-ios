@@ -130,9 +130,9 @@ struct ExpenseGroupDetailView: View {
           signPrefix: "-"
         )
         overviewMetric(
-          languageService.text(.expenseOverviewGroupBalance),
+          languageService.text(overviewNetBalanceTitleKey(viewModel.group.userBalance)),
           viewModel.group.userBalance,
-          signPrefix: nil
+          signPrefix: ""
         )
       }
     }
@@ -239,7 +239,7 @@ struct ExpenseGroupDetailView: View {
     let body = formattedAmount(abs(amount), currency: viewModel.group.currency)
     if amount == 0 { return body }
     if let prefix {
-      return prefix + body
+      return prefix.isEmpty ? body : prefix + body
     }
     return (amount > 0 ? "+" : "−") + body
   }

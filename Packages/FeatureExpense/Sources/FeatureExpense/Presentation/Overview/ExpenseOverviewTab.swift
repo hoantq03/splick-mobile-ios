@@ -108,12 +108,15 @@ struct ExpenseBalanceSectionView: View {
           sign: .plus
         )
         metric(
-          title: languageService.text(.expenseOverviewNetBalance),
+          title: languageService.text(overviewNetBalanceTitleKey(section.netBalance)),
           amount: section.netBalance,
           color: signedColor(section.netBalance),
-          sign: .fromValue
+          sign: .none
         )
       }
+      Text(languageService.text(.expenseOverviewNetHint))
+        .font(SplickTheme.Typography.caption)
+        .foregroundStyle(SplickTheme.Colors.textSecondary)
       if !section.topBalances.isEmpty {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
           ForEach(visibleMembers, id: \.user.id) { debt in
@@ -173,7 +176,7 @@ struct ExpenseBalanceSectionView: View {
       Text(title)
         .font(SplickTheme.Typography.caption)
         .foregroundStyle(SplickTheme.Colors.textSecondary)
-        .lineLimit(1)
+        .lineLimit(2)
         .minimumScaleFactor(0.8)
       Text(formatSigned(amount, currency: section.currency, sign: sign))
         .font(SplickTheme.Typography.headline)
@@ -197,10 +200,17 @@ struct ExpenseBalanceSectionView: View {
   }
 }
 
+func overviewNetBalanceTitleKey(_ amount: Decimal) -> L10nKey {
+  if amount > 0 { return .expenseOverviewNetYouGetBack }
+  if amount < 0 { return .expenseOverviewNetYouNeedToPay }
+  return .expenseOverviewNetEven
+}
+
 private enum AmountSign {
   case plus
   case minus
   case fromValue
+  case none
 }
 
 private func overviewAmountBody(_ amount: Decimal, currency: String) -> String {
@@ -222,6 +232,8 @@ private func overviewSignedAmount(
     return "-\(body)"
   case .fromValue:
     return amount > 0 ? "+\(body)" : "-\(body)"
+  case .none:
+    return body
   }
 }
 
@@ -231,7 +243,7 @@ private func signedColor(_ amount: Decimal, sign: AmountSign = .fromValue) -> Co
     return SplickTheme.Colors.success
   case .minus:
     return SplickTheme.Colors.error
-  case .fromValue:
+  case .fromValue, .none:
     if amount > 0 { return SplickTheme.Colors.success }
     if amount < 0 { return SplickTheme.Colors.error }
     return SplickTheme.Colors.textPrimary
@@ -702,10 +714,10 @@ struct ExpenseGroupsSectionView: View {
             sign: .minus
           )
           labeled(
-            languageService.text(.expenseOverviewGroupBalance),
+            languageService.text(overviewNetBalanceTitleKey(group.userBalance)),
             group.userBalance,
             group.currency,
-            sign: .fromValue
+            sign: .none
           )
         }
         HStack(spacing: -8) {
