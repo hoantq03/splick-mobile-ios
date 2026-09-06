@@ -197,39 +197,32 @@ extension View {
     }
 }
 
-/// Reports how much of a video cell sits in the window so scroll position drives autoplay.
+/// Marks a feed video cell as an autoplay candidate while it is on-screen.
 ///
-/// Ratios are bucketed before publishing so GeometryReader sub-pixel jitter does not
-/// continuously invalidate the feed PreferenceKey pass (main-thread thrash / freeze).
+/// Uses appear/disappear (not GeometryReader preferences). Nested GeometryReader
+/// ratios often stay stale inside LazyVStack and were wiping active autoplay.
 struct FeedVideoVisibilityReporter: View {
     let postId: UUID
     @Environment(\.feedTabIsActive) private var feedTabIsActive
     @Environment(\.feedVideoCoordinator) private var coordinator
 
     var body: some View {
-        GeometryReader { geo in
-            let frame = geo.frame(in: .global)
-            let screen = UIScreen.main.bounds
-            let visibleHeight = max(0, min(frame.maxY, screen.maxY) - max(frame.minY, screen.minY))
-            let rawRatio = frame.height > 0 ? visibleHeight / frame.height : 0
-            let ratio = Self.bucketedRatio(rawRatio)
-            Color.clear
-                .preference(
-                    key: FeedVideoVisibilityPreferenceKey.self,
-                    value: feedTabIsActive && ratio > 0.01
-                        ? [FeedVideoVisibilityReport(postId: postId, ratio: ratio)]
-                        : []
-                )
-                .onDisappear {
+        Color.clear
+            .frame(height: 0)
+            .allowsHitTesting(false)
+            .onAppear {
+                guard feedTabIsActive else { return }
+                coordinator?.updateVisibility(postId: postId, ratio: 1)
+            }
+            .onDisappear {
+                coordinator?.clearPost(postId)
+            }
+            .onChange(of: feedTabIsActive) { isActive in
+                if isActive {
+                    coordinator?.updateVisibility(postId: postId, ratio: 1)
+                } else {
                     coordinator?.clearPost(postId)
                 }
-        }
-        .allowsHitTesting(false)
-    }
-
-    /// Snap visibility into coarse steps so Equatable preference updates stay rare.
-    private static func bucketedRatio(_ ratio: CGFloat) -> CGFloat {
-        guard ratio > 0.01 else { return 0 }
-        return (ratio * 10).rounded() / 10
+            }
     }
 }
