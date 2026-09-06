@@ -51,10 +51,10 @@ public struct EmojiPickerSheet: View {
     @State private var selectedSlot: Int?
     @State private var selectedTab: EmojiPickerTab
     @State private var selectedUploadPhotoItem: PhotosPickerItem?
-    @State private var uploadSourceImage: UIImage?
+    @State private var isPhotoPickerPresented = false
+    @State private var composerDraft: EmojiComposerDraft?
     @State private var isPreparingUpload = false
     @State private var uploadPreparationError: String?
-    @State private var showEmojiComposer = false
     @State private var searchQuery = ""
 
     public init(
@@ -141,6 +141,11 @@ public struct EmojiPickerSheet: View {
                 guard item != nil else { return }
                 Task { await prepareUploadImage(from: item) }
             }
+            .photosPicker(
+                isPresented: $isPhotoPickerPresented,
+                selection: $selectedUploadPhotoItem,
+                matching: .images
+            )
             .alert(
                 languageService.text(.commonError),
                 isPresented: Binding(
@@ -155,12 +160,10 @@ public struct EmojiPickerSheet: View {
         }
         .searchable(text: $searchQuery, placement: .navigationBarDrawer(displayMode: .always), prompt: languageService.text(.stickersEmojiSearch))
         .presentationDetents([.medium, .large])
-        .sheet(isPresented: $showEmojiComposer, onDismiss: {
-            uploadSourceImage = nil
-        }) {
-            if let uploadSourceImage, let customEmojiDependencies {
+        .sheet(item: $composerDraft) { draft in
+            if let customEmojiDependencies {
                 CustomEmojiComposerSheet(
-                    sourceImage: uploadSourceImage,
+                    sourceImage: draft.image,
                     currentUserId: currentUserId,
                     uploadMediaUseCase: customEmojiDependencies.uploadMediaUseCase,
                     addEmojiUseCase: customEmojiDependencies.addEmojiUseCase,
@@ -327,7 +330,9 @@ public struct EmojiPickerSheet: View {
 
     @ViewBuilder
     private func uploadPickerButton(style: UploadPickerButtonStyle) -> some View {
-        PhotosPicker(selection: $selectedUploadPhotoItem, matching: .images) {
+        Button {
+            isPhotoPickerPresented = true
+        } label: {
             if style == .iconOnly {
                 if isPreparingUpload {
                     ProgressView()
@@ -351,6 +356,7 @@ public struct EmojiPickerSheet: View {
                 .clipShape(Capsule())
             }
         }
+        .buttonStyle(.plain)
         .disabled(isPreparingUpload || customEmojiDependencies == nil)
     }
 
@@ -368,14 +374,13 @@ public struct EmojiPickerSheet: View {
             selectedUploadPhotoItem = nil
         }
 
-        guard let data = try? await item.loadTransferable(type: Data.self),
-              let image = UIImage(data: data) else {
+        do {
+            let image = try await item.loadSplickUIImage()
+            try? await Task.sleep(for: .milliseconds(250))
+            composerDraft = EmojiComposerDraft(image: image)
+        } catch {
             uploadPreparationError = languageService.text(.stickersOpenImageFailed)
-            return
         }
-
-        uploadSourceImage = image
-        showEmojiComposer = true
     }
 
     private func matchesSearch(_ entry: AllEmojiEntry) -> Bool {
@@ -414,4 +419,9 @@ public struct EmojiPickerSheet: View {
 private enum UploadPickerButtonStyle {
     case iconOnly
     case textOnly
+}
+
+private struct EmojiComposerDraft: Identifiable {
+    let id = UUID()
+    let image: UIImage
 }

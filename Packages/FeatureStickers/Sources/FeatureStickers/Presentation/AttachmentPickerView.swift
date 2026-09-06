@@ -240,8 +240,11 @@ public struct AttachmentPickerView: View {
 
     private func handleStickerSelection(_ sticker: Sticker) {
         guard options.allowsGifSelection else { return }
-        viewModel.selectSticker(sticker)
-        onSelectGif(sticker)
+        let selected = sticker
+        Task { @MainActor in
+            onSelectGif(selected)
+            viewModel.selectSticker(selected)
+        }
     }
 
     @ViewBuilder
@@ -301,13 +304,16 @@ public struct AttachmentPickerView: View {
 
     private func gifThumbnail(url: URL) -> some View {
         let shape = RoundedRectangle(cornerRadius: GridLayout.cornerRadius, style: .continuous)
-        let maxPixelSize = RemoteImageMetrics.inlineAttachmentMaxPixelWidth(pointWidth: 88)
+        let isGif = ["gif", "webp"].contains(url.pathExtension.lowercased())
+        let maxPixelSize = isGif
+            ? nil
+            : RemoteImageMetrics.inlineAttachmentMaxPixelWidth(pointWidth: 88)
 
         return shape
             .fill(SplickTheme.Colors.secondaryBackground)
             .aspectRatio(1, contentMode: .fit)
             .overlay {
-                // Still frames only — animating every grid cell spikes CPU hard.
+                // Still frames only — skip Nuke Resize on GIF/WebP; processors can drop the first frame.
                 RemoteImage(url: url, maxPixelSize: maxPixelSize) { phase in
                     switch phase {
                     case .success(let image):

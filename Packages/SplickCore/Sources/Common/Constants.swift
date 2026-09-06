@@ -69,7 +69,12 @@ public enum AppConstants {
     public enum Klipy {
         /// Read from `KLIPY_API_KEY` injected via `.env` → `Config/Secrets.xcconfig` → Info.plist.
         public static var apiKey: String {
-            Bundle.main.object(forInfoDictionaryKey: "KLIPY_API_KEY") as? String ?? ""
+            let raw = (Bundle.main.object(forInfoDictionaryKey: "KLIPY_API_KEY") as? String ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if raw.isEmpty || raw.hasPrefix("$(") {
+                return ""
+            }
+            return raw
         }
 
         public static let baseURL = "https://api.klipy.com/v2"
@@ -78,8 +83,9 @@ public enum AppConstants {
         public static let attributionURL = URL(string: "https://klipy.com")!
 
         public static var locale: String {
-            let identifier = Locale.current.identifier.replacingOccurrences(of: "-", with: "_")
-            return identifier.isEmpty ? "vi_VN" : identifier
+            let language = Locale.current.language.languageCode?.identifier ?? "vi"
+            let region = Locale.current.region?.identifier ?? "VN"
+            return "\(language)_\(region)"
         }
 
         public static var country: String {

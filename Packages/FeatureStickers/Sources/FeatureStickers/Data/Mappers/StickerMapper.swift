@@ -3,10 +3,12 @@ import SplickDomain
 
 enum StickerMapper {
     static func toSticker(_ dto: KlipyGifDTO) -> Sticker? {
-        let asset = dto.mediaFormats.gif ?? dto.mediaFormats.mediumGif ?? dto.mediaFormats.tinyGif
+        let asset = dto.mediaFormats?.gif
+            ?? dto.mediaFormats?.mediumGif
+            ?? dto.mediaFormats?.tinyGif
         guard let asset, let url = URL(string: asset.url) else { return nil }
 
-        let previewURL = dto.mediaFormats.tinyGif.flatMap { URL(string: $0.url) }
+        let previewURL = dto.mediaFormats?.tinyGif.flatMap { URL(string: $0.url) }
         return Sticker(
             id: dto.id,
             url: url,

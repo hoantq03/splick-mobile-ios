@@ -16,9 +16,18 @@ final class KlipyDataSource: KlipyDataSourceProtocol, @unchecked Sendable {
     private let session: URLSession
     private let decoder: JSONDecoder
 
-    init(session: URLSession = .splick) {
+    init(session: URLSession = KlipyDataSource.makeUnauthenticatedSession()) {
         self.session = session
         self.decoder = JSONDecoder()
+    }
+
+    private static func makeUnauthenticatedSession() -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 25
+        configuration.timeoutIntervalForResource = 30
+        configuration.waitsForConnectivity = false
+        configuration.httpAdditionalHeaders = ["Accept": "application/json"]
+        return URLSession(configuration: configuration)
     }
 
     func search(query: String, position: String? = nil) async throws -> StickerFetchResult {
@@ -151,6 +160,10 @@ final class KlipyDataSource: KlipyDataSourceProtocol, @unchecked Sendable {
             throw StickerError.network("KLIPY trả về mã \(httpResponse.statusCode).")
         }
 
-        return try decoder.decode(T.self, from: data)
+        do {
+            return try decoder.decode(T.self, from: data)
+        } catch {
+            throw StickerError.network("Không đọc được dữ liệu GIF.")
+        }
     }
 }

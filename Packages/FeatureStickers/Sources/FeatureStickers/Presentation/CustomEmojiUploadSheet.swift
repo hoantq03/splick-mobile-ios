@@ -138,15 +138,14 @@ public struct CustomEmojiUploadSheet: View {
 
     @MainActor
     private func openComposer(from item: PhotosPickerItem?) async {
-        guard let item,
-              let data = try? await item.loadTransferable(type: Data.self),
-              let image = UIImage(data: data)
-        else {
-            selectedPhotoItem = nil
-            return
+        guard let item else { return }
+        defer { selectedPhotoItem = nil }
+        do {
+            let image = try await item.loadSplickUIImage()
+            composerDraft = ComposerImageDraft(image: image)
+        } catch {
+            errorMessage = languageService.text(.stickersOpenImageFailed)
         }
-        selectedPhotoItem = nil
-        composerDraft = ComposerImageDraft(image: image)
     }
 
     @MainActor
