@@ -41,6 +41,7 @@ public struct CreatePostInput: Sendable {
     public let pendingCompanions: [PendingCompanionInput]
     public let audience: PostAudience
     public let groupId: UUID?
+    public let groupIds: [UUID]
 
     public init(
         mediaItems: [CreatePostMediaInput],
@@ -55,7 +56,8 @@ public struct CreatePostInput: Sendable {
         autoReminderEnabled: Bool = false,
         pendingCompanions: [PendingCompanionInput] = [],
         audience: PostAudience = .friends,
-        groupId: UUID? = nil
+        groupId: UUID? = nil,
+        groupIds: [UUID] = []
     ) {
         self.mediaItems = mediaItems
         self.caption = caption
@@ -70,5 +72,6 @@ public struct CreatePostInput: Sendable {
         self.pendingCompanions = pendingCompanions
         self.audience = audience
         self.groupId = groupId
+        self.groupIds = groupIds
     }
 }

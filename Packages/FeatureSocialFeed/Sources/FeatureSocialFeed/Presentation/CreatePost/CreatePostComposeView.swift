@@ -11,6 +11,20 @@ private enum ComposeMetrics {
     static let fieldCornerRadius: CGFloat = SplickTheme.CornerRadius.inset
     static let companionTileWidth: CGFloat = 72
     static let companionNameWidth: CGFloat = 64
+    static let searchResultsMaxHeight: CGFloat = 240
+}
+
+enum ComposeSearchAnchor: Hashable {
+    case companions
+    case audience
+}
+
+func revealComposeSearch(_ proxy: ScrollViewProxy, _ id: ComposeSearchAnchor) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.34) {
+        withAnimation(.easeInOut(duration: 0.25)) {
+            proxy.scrollTo(id, anchor: .bottom)
+        }
+    }
 }
 
 private struct ThoughtBubbleShape: Shape {
@@ -103,6 +117,7 @@ public struct CreatePostComposeView: View {
     }
 
     public var body: some View {
+        ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 captionComposer
@@ -113,9 +128,14 @@ public struct CreatePostComposeView: View {
                     .padding(.top, SplickTheme.Spacing.sm)
                     .padding(.bottom, SplickTheme.Spacing.xs)
                 Divider().opacity(0.55)
-                composeActions
+                composeActions(onRevealCompanionsSearch: {
+                    revealComposeSearch(proxy, .companions)
+                }, onRevealAudienceSearch: {
+                    revealComposeSearch(proxy, .audience)
+                })
             }
             .padding(.bottom, SplickTheme.Spacing.xl)
+        }
         }
         .navigationTitle(languageService.text(.feedCreateTitle))
         .navigationBarTitleDisplayMode(.inline)
@@ -142,7 +162,10 @@ public struct CreatePostComposeView: View {
         } message: {
             Text(viewModel.submitState.error ?? "")
         }
-        .onAppear { tabBarScrollState?.hide() }
+        .onAppear {
+            tabBarScrollState?.hide()
+            viewModel.startCompanionDirectoryLoadIfNeeded()
+        }
         .onDisappear { tabBarScrollState?.show() }
         .fullScreenCover(isPresented: $showPhotoLibraryPicker) {
             MultiPhotoLibraryPickerView(
@@ -311,14 +334,21 @@ public struct CreatePostComposeView: View {
             .padding(.leading, 12 + tailLength)
             .padding(.trailing, 12)
             .padding(.vertical, 10)
-            .background(
-                SplickTheme.Colors.tertiaryBackground,
-                in: ThoughtBubbleShape(tailCenterY: 18)
-            )
+            .background {
+                ThoughtBubbleShape(tailCenterY: 18)
+                    .fill(SplickTheme.Colors.secondaryBackground)
+            }
+            .overlay {
+                ThoughtBubbleShape(tailCenterY: 18)
+                    .stroke(SplickTheme.Colors.divider, lineWidth: 1)
+            }
         }
     }
 
-    private var composeActions: some View {
+    private func composeActions(
+        onRevealCompanionsSearch: @escaping () -> Void,
+        onRevealAudienceSearch: @escaping () -> Void
+    ) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: SplickTheme.Spacing.sm) {
                 Button {
@@ -347,6 +377,7 @@ public struct CreatePostComposeView: View {
                                 viewModel.enableBillSplit = isEnabled
                                 if isEnabled {
                                     expandedComposeOption = .bill
+                                    viewModel.startCompanionDirectoryLoadIfNeeded()
                                 } else if expandedComposeOption == .bill {
                                     expandedComposeOption = nil
                                 }
@@ -369,7 +400,7 @@ public struct CreatePostComposeView: View {
             .padding(.vertical, 8)
 
             if viewModel.enableBillSplit, expandedComposeOption == .bill {
-                billSplitDetails
+                billSplitDetails(onRevealCompanionsSearch: onRevealCompanionsSearch)
                     .padding(.horizontal, SplickTheme.Spacing.md)
                     .padding(.bottom, SplickTheme.Spacing.sm)
                     .transition(.opacity.combined(with: .move(edge: .top)))
@@ -396,7 +427,8 @@ public struct CreatePostComposeView: View {
                         onUserTap: openProfile,
                         nearbyDiscoveryUseCase: nearbyDiscoveryUseCase,
                         profileDependencies: profileDependencies,
-                        embedded: true
+                        embedded: true,
+                        onSearchFocused: onRevealCompanionsSearch
                     )
                     .padding(.leading, 36)
                     .padding(.trailing, SplickTheme.Spacing.md)
@@ -423,7 +455,8 @@ public struct CreatePostComposeView: View {
                 PostAudiencePickerSheet(
                     viewModel: viewModel,
                     onUserTap: openProfile,
-                    embedded: true
+                    embedded: true,
+                    onSearchFocused: onRevealAudienceSearch
                 )
                 .padding(.leading, 36)
                 .padding(.trailing, SplickTheme.Spacing.md)
@@ -471,6 +504,7 @@ public struct CreatePostComposeView: View {
                 viewModel.enableBillSplit = true
                 expandedComposeOption = .bill
             }
+            viewModel.startCompanionDirectoryLoadIfNeeded()
         }
     }
 
@@ -488,7 +522,7 @@ public struct CreatePostComposeView: View {
         let companionNames = viewModel.selectedCompanions.map(\.displayName)
             + (viewModel.enableBillSplit ? viewModel.pendingGuests.map(\.displayName) : [])
 
-        if let groupName = viewModel.selectedCompanionGroup?.name,
+        if let groupName = viewModel.companionGroupDisplayName,
            !groupName.isEmpty {
             let otherCount = companionNames.count
             if otherCount == 0 {
@@ -553,7 +587,7 @@ public struct CreatePostComposeView: View {
         .contentShape(Rectangle())
     }
 
-    private var billSplitDetails: some View {
+    private func billSplitDetails(onRevealCompanionsSearch: @escaping () -> Void) -> some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
             totalAmountField
 
@@ -567,6 +601,10 @@ public struct CreatePostComposeView: View {
             Toggle(languageService.text(.feedCreateAutoReminder), isOn: $viewModel.autoReminderEnabled)
                 .font(SplickTheme.Typography.callout)
 
+            if !viewModel.billSplitParticipants.isEmpty || !viewModel.pendingGuests.isEmpty {
+                billSplitDetailFields
+            }
+
             Text(languageService.text(.feedCreateBillWith))
                 .font(SplickTheme.Typography.callout)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
@@ -576,12 +614,9 @@ public struct CreatePostComposeView: View {
                 onUserTap: openProfile,
                 nearbyDiscoveryUseCase: nearbyDiscoveryUseCase,
                 profileDependencies: profileDependencies,
-                embedded: true
+                embedded: true,
+                onSearchFocused: onRevealCompanionsSearch
             )
-
-            if !viewModel.billSplitParticipants.isEmpty || !viewModel.pendingGuests.isEmpty {
-                billSplitDetailFields
-            }
         }
         .padding(.leading, 8)
     }
@@ -849,6 +884,7 @@ private struct ComposeCompanionsEditorView: View {
     let nearbyDiscoveryUseCase: NearbyDiscoveryUseCaseProtocol?
     let profileDependencies: FriendUserProfileDependencies?
     var embedded: Bool = false
+    var onSearchFocused: (() -> Void)? = nil
     @FocusState private var isFriendSearchFocused: Bool
     @State private var showAddGuestSheet = false
 
@@ -866,26 +902,38 @@ private struct ComposeCompanionsEditorView: View {
         Group {
             if embedded {
                 companionFields
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
-                        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-                            Text(companionsTitle)
-                                .font(SplickTheme.Typography.headline)
-                            companionFields
+                    .onChange(of: isFriendSearchFocused) { focused in
+                        handleFriendSearchFocus(focused) {
+                            onSearchFocused?()
                         }
-                        .splickCard()
                     }
-                    .padding(SplickTheme.Spacing.md)
-                    .padding(.bottom, SplickTheme.Spacing.xl)
+            } else {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
+                            VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+                                Text(companionsTitle)
+                                    .font(SplickTheme.Typography.headline)
+                                companionFields
+                            }
+                            .splickCard()
+                        }
+                        .padding(SplickTheme.Spacing.md)
+                        .padding(.bottom, SplickTheme.Spacing.xl)
+                    }
+                    .scrollDismissesKeyboard(.never)
+                    .navigationTitle(companionsTitle)
+                    .navigationBarTitleDisplayMode(.inline)
+                    .onChange(of: isFriendSearchFocused) { focused in
+                        handleFriendSearchFocus(focused) {
+                            revealComposeSearch(proxy, .companions)
+                        }
+                    }
                 }
-                .navigationTitle(companionsTitle)
-                .navigationBarTitleDisplayMode(.inline)
             }
         }
-        .task {
-            await viewModel.preloadFriendSuggestionsIfNeeded()
-            await viewModel.loadCompanionGroupsIfNeeded()
+        .onAppear {
+            viewModel.startCompanionDirectoryLoadIfNeeded()
         }
         .sheet(isPresented: $showAddGuestSheet) {
             AddGuestWithoutAppSheet { email in
@@ -898,31 +946,10 @@ private struct ComposeCompanionsEditorView: View {
     @ViewBuilder
     private var companionFields: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-                    HStack(spacing: SplickTheme.Spacing.xs) {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundStyle(SplickTheme.Colors.textTertiary)
-                        TextField(friendSearchPlaceholder, text: $viewModel.friendSearchQuery)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .focused($isFriendSearchFocused)
-                            .onChange(of: isFriendSearchFocused) { focused in
-                                viewModel.setFriendSearchActive(focused)
-                            }
-                            .onChange(of: viewModel.friendSearchQuery) { query in
-                                viewModel.updateFriendSearch(query)
-                            }
-                    }
-                    .padding(SplickTheme.Spacing.sm)
-                    .background(SplickTheme.Colors.tertiaryBackground)
-                    .clipShape(
-                        RoundedRectangle(
-                            cornerRadius: ComposeMetrics.fieldCornerRadius,
-                            style: .continuous
-                        )
-                    )
-
-                    if let group = viewModel.selectedCompanionGroup {
-                        selectedCompanionGroupCard(group)
+                    if !viewModel.selectedCompanionGroups.isEmpty {
+                        ForEach(viewModel.selectedCompanionGroups) { group in
+                            selectedCompanionGroupCard(group)
+                        }
                     }
 
                     if !viewModel.selectedCompanions.isEmpty || !viewModel.pendingGuests.isEmpty {
@@ -933,23 +960,58 @@ private struct ComposeCompanionsEditorView: View {
                         billShareAddActions
                     }
 
-                    if !viewModel.filteredCompanionGroups.isEmpty
-                        || viewModel.enableBillSplit
-                        || viewModel.shouldShowFriendSuggestions {
-                        friendSearchResultsList
+                    VStack(spacing: 0) {
+                        HStack(spacing: SplickTheme.Spacing.xs) {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundStyle(SplickTheme.Colors.textTertiary)
+                            TextField(friendSearchPlaceholder, text: $viewModel.friendSearchQuery)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .focused($isFriendSearchFocused)
+                                .onChange(of: viewModel.friendSearchQuery) { query in
+                                    viewModel.updateFriendSearch(query)
+                                }
+                        }
+                        .padding(SplickTheme.Spacing.sm)
+
+                        if isFriendSearchFocused {
+                            Divider()
+                            friendSearchResultsList
+                        }
                     }
+                    .id(ComposeSearchAnchor.companions)
+                    .background(SplickTheme.Colors.tertiaryBackground)
+                    .clipShape(
+                        RoundedRectangle(
+                            cornerRadius: ComposeMetrics.fieldCornerRadius,
+                            style: .continuous
+                        )
+                    )
         }
+    }
+
+    private func handleFriendSearchFocus(_ focused: Bool, reveal: () -> Void) {
+        viewModel.setFriendSearchActive(focused)
+        if focused {
+            reveal()
+        }
+    }
+
+    private func addCompanionKeepingSearchFocus(_ friend: UserSummary) {
+        viewModel.addCompanion(friend)
+        isFriendSearchFocused = true
     }
 
     private var billShareAddActions: some View {
         HStack(spacing: SplickTheme.Spacing.sm) {
-            addGuestWithoutAppButton
             if let nearbyDiscoveryUseCase, let profileDependencies {
                 ComposeNearbyRadarButton(
                     nearbyDiscoveryUseCase: nearbyDiscoveryUseCase,
                     profileDependencies: profileDependencies,
                     languageService: languageService,
-                    selectedCompanionIds: Set(viewModel.selectedCompanions.map(\.id)),
+                    selectedCompanionIds: viewModel.selectedCompanionIds.union(
+                        viewModel.selectedCompanionGroupMemberIds
+                    ),
                     onAddCompanion: { user in
                         viewModel.addCompanion(user)
                     },
@@ -958,6 +1020,7 @@ private struct ComposeCompanionsEditorView: View {
                     }
                 )
             }
+            addGuestWithoutAppButton
         }
     }
 
@@ -1093,6 +1156,7 @@ private struct ComposeCompanionsEditorView: View {
 
     @ViewBuilder
     private var friendSearchResultsList: some View {
+        ScrollView {
         VStack(spacing: 0) {
             let showsGroups = !viewModel.filteredCompanionGroups.isEmpty
             let showsFriends = !viewModel.friendSearchResults.isEmpty
@@ -1122,7 +1186,7 @@ private struct ComposeCompanionsEditorView: View {
                 ForEach(viewModel.friendSearchResults) { friend in
                     HStack(spacing: SplickTheme.Spacing.sm) {
                         Button {
-                            viewModel.addCompanion(friend)
+                            addCompanionKeepingSearchFocus(friend)
                         } label: {
                             HStack(spacing: SplickTheme.Spacing.sm) {
                                 AvatarView(
@@ -1149,7 +1213,7 @@ private struct ComposeCompanionsEditorView: View {
                         .buttonStyle(.plain)
 
                         Button {
-                            viewModel.addCompanion(friend)
+                            addCompanionKeepingSearchFocus(friend)
                         } label: {
                             Image(systemName: "plus.circle.fill")
                                 .font(.system(size: 18))
@@ -1177,13 +1241,8 @@ private struct ComposeCompanionsEditorView: View {
                 }
             }
         }
-        .background(SplickTheme.Colors.tertiaryBackground)
-        .clipShape(
-            RoundedRectangle(
-                cornerRadius: ComposeMetrics.fieldCornerRadius,
-                style: .continuous
-            )
-        )
+        }
+        .frame(maxHeight: ComposeMetrics.searchResultsMaxHeight)
     }
 
     private var groupSearchResultsSection: some View {
@@ -1201,6 +1260,7 @@ private struct ComposeCompanionsEditorView: View {
             ForEach(viewModel.filteredCompanionGroups) { group in
                 Button {
                     viewModel.selectCompanionGroup(group)
+                    isFriendSearchFocused = true
                 } label: {
                     companionGroupRow(group)
                 }
@@ -1225,7 +1285,7 @@ private struct ComposeCompanionsEditorView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                 Button {
-                    viewModel.toggleCompanionGroupMembersExpanded()
+                    viewModel.toggleCompanionGroupMembersExpanded(group)
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(group.name)
@@ -1237,19 +1297,19 @@ private struct ComposeCompanionsEditorView: View {
                         HStack(spacing: 4) {
                             Text(
                                 languageService.text(
-                                    viewModel.companionGroupMembersExpanded
+                                    viewModel.isCompanionGroupMembersExpanded(group)
                                         ? .feedCreateHideGroupMembers
                                         : .feedCreateShowGroupMembers
                                 )
                             )
                             .font(SplickTheme.Typography.caption)
                             .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                            if viewModel.isLoadingCompanionGroupMembers {
+                            if viewModel.isLoadingCompanionGroupMembers(group) {
                                 ProgressView()
                                     .controlSize(.mini)
                             } else {
                                 Image(
-                                    systemName: viewModel.companionGroupMembersExpanded
+                                    systemName: viewModel.isCompanionGroupMembersExpanded(group)
                                         ? "chevron.up"
                                         : "chevron.down"
                                 )
@@ -1264,7 +1324,7 @@ private struct ComposeCompanionsEditorView: View {
                 .buttonStyle(.plain)
 
                 Button {
-                    viewModel.removeCompanionGroup()
+                    viewModel.removeCompanionGroup(group)
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 18))
@@ -1273,10 +1333,10 @@ private struct ComposeCompanionsEditorView: View {
                 .buttonStyle(.plain)
             }
 
-            if viewModel.companionGroupMembersExpanded, !group.members.isEmpty {
+            if viewModel.isCompanionGroupMembersExpanded(group), !group.members.isEmpty {
                 VStack(spacing: SplickTheme.Spacing.xs) {
                     ForEach(group.members) { member in
-                        companionGroupMemberRow(member)
+                        companionGroupMemberRow(member, group: group)
                     }
                 }
             }
@@ -1291,7 +1351,7 @@ private struct ComposeCompanionsEditorView: View {
         )
     }
 
-    private func companionGroupMemberRow(_ member: UserSummary) -> some View {
+    private func companionGroupMemberRow(_ member: UserSummary, group: SplickDomain.Group) -> some View {
         HStack(spacing: SplickTheme.Spacing.sm) {
             AvatarView(
                 imageURL: member.avatarURL,
@@ -1311,7 +1371,7 @@ private struct ComposeCompanionsEditorView: View {
 
             if !viewModel.isCurrentUser(member) {
                 Button {
-                    viewModel.removeCompanionGroupMember(member)
+                    viewModel.removeCompanionGroupMember(member, from: group)
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 16))

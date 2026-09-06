@@ -10,6 +10,7 @@ private enum AudiencePickerScrollTarget: Hashable {
 private enum AudienceSelectionMetrics {
     static let tileWidth: CGFloat = 72
     static let nameWidth: CGFloat = 64
+    static let resultsMaxHeight: CGFloat = 240
 }
 
 struct PostAudiencePickerSheet: View {
@@ -17,19 +18,26 @@ struct PostAudiencePickerSheet: View {
     @ObservedObject var viewModel: CreatePostComposeViewModel
     let onUserTap: ((UserSummary) -> Void)?
     var embedded: Bool = false
+    var onSearchFocused: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var selectedDetent: PresentationDetent = .medium
+    @FocusState private var isAudienceSearchFocused: Bool
 
     var body: some View {
         Group {
             if embedded {
                 audiencePickerContent
+                    .id(ComposeSearchAnchor.audience)
+                    .onChange(of: isAudienceSearchFocused) { focused in
+                        if focused { onSearchFocused?() }
+                    }
                     .task { await loadAudienceData() }
             } else {
                 NavigationStack {
                     ScrollViewReader { proxy in
                         ScrollView {
                             audiencePickerContent
+                                .id(ComposeSearchAnchor.audience)
                                 .padding(SplickTheme.Spacing.md)
                                 .padding(.bottom, SplickTheme.Spacing.xl)
                         }
@@ -47,6 +55,11 @@ struct PostAudiencePickerSheet: View {
                         .onChange(of: viewModel.audienceMode) { mode in
                             guard mode != .friends else { return }
                             revealSelectionDetails(with: proxy)
+                        }
+                        .onChange(of: isAudienceSearchFocused) { focused in
+                            if focused {
+                                revealComposeSearch(proxy, .audience)
+                            }
                         }
                     }
                 }
@@ -339,6 +352,7 @@ struct PostAudiencePickerSheet: View {
     }
 
     private var audienceGroupResultsList: some View {
+        ScrollView {
         VStack(spacing: 0) {
             ForEach(viewModel.filteredAudienceGroups) { group in
                 Button {
@@ -381,6 +395,8 @@ struct PostAudiencePickerSheet: View {
                 }
             }
         }
+        }
+        .frame(maxHeight: AudienceSelectionMetrics.resultsMaxHeight)
         .background(SplickTheme.Colors.tertiaryBackground)
         .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.inset, style: .continuous))
     }
@@ -440,6 +456,7 @@ struct PostAudiencePickerSheet: View {
     }
 
     private var audienceUserResultsList: some View {
+        ScrollView {
         VStack(spacing: 0) {
             ForEach(viewModel.audienceFriendOptions) { user in
                 HStack(spacing: SplickTheme.Spacing.sm) {
@@ -499,6 +516,8 @@ struct PostAudiencePickerSheet: View {
                     .padding(.vertical, SplickTheme.Spacing.sm)
             }
         }
+        }
+        .frame(maxHeight: AudienceSelectionMetrics.resultsMaxHeight)
         .background(SplickTheme.Colors.tertiaryBackground)
         .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.inset, style: .continuous))
     }
@@ -550,6 +569,7 @@ struct PostAudiencePickerSheet: View {
             TextField(placeholder, text: text)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                .focused($isAudienceSearchFocused)
         }
         .padding(SplickTheme.Spacing.sm)
         .background(SplickTheme.Colors.tertiaryBackground)

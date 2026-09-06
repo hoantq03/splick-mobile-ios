@@ -17,6 +17,8 @@ struct LiveVNDMoneyTextField: UIViewRepresentable {
         field.placeholder = placeholder
         field.borderStyle = .none
         field.text = text
+        field.setContentHuggingPriority(.required, for: .vertical)
+        field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         return field
     }
 

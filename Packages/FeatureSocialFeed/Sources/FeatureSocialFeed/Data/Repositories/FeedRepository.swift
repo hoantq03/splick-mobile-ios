@@ -166,6 +166,7 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
         let request = CreatePostRequestDTO(
             caption: input.caption,
             groupId: input.groupId,
+            groupIds: input.groupIds.isEmpty ? nil : input.groupIds,
             feedKind: input.feedKind.rawValue,
             checkInPlace: input.checkInPlace,
             location: input.location.flatMap { place in

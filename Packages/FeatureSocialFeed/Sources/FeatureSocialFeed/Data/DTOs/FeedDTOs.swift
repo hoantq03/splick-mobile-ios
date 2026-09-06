@@ -191,6 +191,7 @@ struct LocationSearchResponseDTO: Decodable {
 struct CreatePostRequestDTO: Encodable {
     let caption: String?
     let groupId: UUID?
+    let groupIds: [UUID]?
     let feedKind: String
     let checkInPlace: String?
     let location: CreatePostLocationRequestDTO?
