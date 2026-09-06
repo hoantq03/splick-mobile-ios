@@ -25,7 +25,12 @@ struct CameraPickerView: View {
     @State private var isCapturing = false
     @State private var catalogItems: [FilterCatalogItem] = []
     @State private var toastMessage: String?
-    @State private var handsFreeSeconds = 0
+    @State private var timerModeSeconds = 0
+    @State private var countdownRemaining = 0
+    @State private var boomerangMode = false
+    @State private var boomerangProgress: CGFloat = 0
+    @State private var shutterPressActive = false
+    @State private var shortVideoHoldStarted = false
 
     private var faceTrackingSupported: Bool {
         ARFaceTrackingConfiguration.isSupported
@@ -53,10 +58,18 @@ struct CameraPickerView: View {
                     bottomBar(metrics: metrics)
                 }
 
-                if handsFreeSeconds > 0 {
-                    Text(String(format: languageService.text(.mediaCameraTimerSeconds), handsFreeSeconds))
+                if countdownRemaining > 0 {
+                    Text(String(format: languageService.text(.mediaCameraTimerSeconds), countdownRemaining))
                         .font(.system(size: 48, weight: .bold))
                         .foregroundStyle(.white)
+                }
+
+                if isCapturing, !session.isRecordingBoomerang {
+                    Color.black.opacity(0.35).ignoresSafeArea()
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .tint(.white)
+                        .scaleEffect(1.2)
                 }
 
                 if let toastMessage {
@@ -85,16 +98,30 @@ struct CameraPickerView: View {
                 session.start()
             }
         }
-        .task(id: handsFreeSeconds) {
-            guard handsFreeSeconds > 0 else { return }
+        .task(id: session.isRecordingBoomerang) {
+            guard session.isRecordingBoomerang else {
+                boomerangProgress = 0
+                return
+            }
+            let started = Date()
+            while session.isRecordingBoomerang {
+                boomerangProgress = min(
+                    Date().timeIntervalSince(started) / BoomerangTimeline.captureDuration,
+                    1
+                )
+                try? await Task.sleep(for: .milliseconds(16))
+            }
+        }
+        .task(id: countdownRemaining) {
+            guard countdownRemaining > 0 else { return }
             try? await Task.sleep(for: .seconds(1))
             await MainActor.run {
-                guard handsFreeSeconds > 0 else { return }
-                if handsFreeSeconds == 1 {
-                    handsFreeSeconds = 0
-                    capture()
+                guard countdownRemaining > 0 else { return }
+                if countdownRemaining == 1 {
+                    countdownRemaining = 0
+                    performCapture()
                 } else {
-                    handsFreeSeconds -= 1
+                    countdownRemaining -= 1
                 }
             }
         }
@@ -186,8 +213,11 @@ struct CameraPickerView: View {
         VStack(spacing: metrics.toolsToShutterSpacing) {
             CameraCaptureToolsRow(
                 metrics: metrics,
+                boomerangSelected: boomerangMode,
+                timerSelected: timerModeSeconds > 0,
+                timerSeconds: timerModeSeconds,
                 onTextMode: { onResult(.openTextCreation) },
-                onBoomerang: { showComingSoon() },
+                onBoomerang: toggleBoomerang,
                 onHandsFree: cycleHandsFree,
                 onFilter: cycleFilter
             )
@@ -212,19 +242,12 @@ struct CameraPickerView: View {
                 Spacer(minLength: 0)
 
                 ZStack(alignment: .top) {
-                    Button(action: capture) {
-                        Circle()
-                            .fill(Color.white)
-                            .frame(width: metrics.shutterDiameter, height: metrics.shutterDiameter)
-                            .overlay(
-                                Circle()
-                                    .stroke(Color.black.opacity(0.15), lineWidth: 3)
-                                    .padding(6)
-                            )
-                            .scaleEffect(isCapturing ? 0.9 : 1)
-                    }
-                    .disabled(isCapturing)
-                    .accessibilityLabel(languageService.text(.mediaTypePhoto))
+                    shutterButton
+                        .accessibilityLabel(
+                            boomerangMode
+                                ? languageService.text(.mediaCameraToolBoomerang)
+                                : languageService.text(.mediaTypePhoto)
+                        )
 
                     if session.filterPreset != .none {
                         CameraFilterNameBadge(title: activeFilterTitle)
@@ -257,6 +280,38 @@ struct CameraPickerView: View {
         max((shutterDiameter - controlDiameter) / 2, 0)
     }
 
+    private var shutterButton: some View {
+        let diameter = CameraBottomBarMetrics.shutterDiameter
+        let recording = session.isRecordingBoomerang
+        let visual = ZStack {
+            Circle()
+                .fill(boomerangMode ? SplickTheme.Colors.primary : (recording ? Color.red : Color.white))
+                .frame(width: diameter, height: diameter)
+                .overlay(
+                    Circle()
+                        .stroke(Color.black.opacity(0.15), lineWidth: 3)
+                        .padding(6)
+                )
+            if recording {
+                Circle()
+                    .trim(from: 0, to: boomerangProgress)
+                    .stroke(Color.white, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .frame(width: diameter, height: diameter)
+            }
+        }
+        .scaleEffect((isCapturing || recording) ? 0.9 : 1)
+
+        return visual
+            .contentShape(Circle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in shutterPressBegan() }
+                    .onEnded { _ in shutterPressEnded() }
+            )
+            .disabled((isCapturing && !recording) || countdownRemaining > 0)
+    }
+
     private var flashSymbol: String {
         switch session.flashMode {
         case .auto: return "bolt.badge.automatic"
@@ -275,19 +330,26 @@ struct CameraPickerView: View {
         }
     }
 
-    private func showComingSoon() {
-        toastMessage = languageService.text(.mediaEditorComingSoon)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            toastMessage = nil
+    private func toggleBoomerang() {
+        guard !isCapturing else { return }
+        boomerangMode.toggle()
+        if boomerangMode, session.filterPreset == .ar {
+            session.filterPreset = .none
+            if !session.isRunning { session.start() }
         }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
     private func cycleHandsFree() {
-        switch handsFreeSeconds {
-        case 0: handsFreeSeconds = 3
-        case 3: handsFreeSeconds = 10
-        default: handsFreeSeconds = 0
+        countdownRemaining = 0
+        switch timerModeSeconds {
+        case 0: timerModeSeconds = 5
+        case 5: timerModeSeconds = 10
+        case 10: timerModeSeconds = 15
+        case 15: timerModeSeconds = 30
+        default: timerModeSeconds = 0
         }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
     private func cycleFilter() {
@@ -312,7 +374,107 @@ struct CameraPickerView: View {
         }
     }
 
-    private func capture() {
+    private func captureBoomerang() {
+        guard !isCapturing else { return }
+        isCapturing = true
+        Task {
+            do {
+                let frames = try await session.captureBoomerang()
+                let url = try await BoomerangClipComposer.writeLoopingClip(images: frames)
+                await MainActor.run {
+                    isCapturing = false
+                    onResult(.video(url))
+                }
+            } catch {
+                await MainActor.run {
+                    isCapturing = false
+                    toastMessage = languageService.text(.mediaCameraBoomerangFailed)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        toastMessage = nil
+                    }
+                }
+            }
+        }
+    }
+
+    private func captureShortVideo() {
+        guard !isCapturing else { return }
+        isCapturing = true
+        Task {
+            do {
+                let frames = try await session.captureBoomerang()
+                let url = try await BoomerangClipComposer.writeForwardClip(images: frames)
+                await MainActor.run {
+                    isCapturing = false
+                    onResult(.video(url))
+                }
+            } catch {
+                await MainActor.run {
+                    isCapturing = false
+                    toastMessage = languageService.text(.mediaLoadFailed)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        toastMessage = nil
+                    }
+                }
+            }
+        }
+    }
+
+    private func shutterPressBegan() {
+        guard countdownRemaining == 0 else { return }
+        if boomerangMode {
+            beginBoomerangHold()
+            return
+        }
+        guard !shutterPressActive else { return }
+        shutterPressActive = true
+        shortVideoHoldStarted = false
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(220))
+            guard shutterPressActive, !boomerangMode, !isCapturing else { return }
+            shortVideoHoldStarted = true
+            captureShortVideo()
+        }
+    }
+
+    private func shutterPressEnded() {
+        if boomerangMode {
+            endBoomerangHold()
+            return
+        }
+        let startedVideo = shortVideoHoldStarted || session.isRecordingBoomerang
+        shutterPressActive = false
+        shortVideoHoldStarted = false
+        if startedVideo {
+            session.stopBoomerangCapture()
+        } else if !isCapturing {
+            shutterTapped()
+        }
+    }
+
+    private func beginBoomerangHold() {
+        guard boomerangMode, !isCapturing, countdownRemaining == 0 else { return }
+        captureBoomerang()
+    }
+
+    private func endBoomerangHold() {
+        session.stopBoomerangCapture()
+    }
+
+    private func shutterTapped() {
+        guard !boomerangMode else { return }
+        guard !isCapturing, countdownRemaining == 0 else { return }
+        if timerModeSeconds > 0 {
+            countdownRemaining = timerModeSeconds
+            return
+        }
+        performCapture()
+    }
+
+    private func performCapture() {
+        if boomerangMode {
+            return
+        }
         isCapturing = true
         let fromFront = session.isFrontCamera
         if session.filterPreset == .ar, faceTrackingSupported, let snapshot = arHandle.snapshot() {

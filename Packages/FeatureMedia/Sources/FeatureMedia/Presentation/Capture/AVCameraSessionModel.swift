@@ -1,6 +1,7 @@
 import AVFoundation
 import Combine
 import CoreImage
+import QuartzCore
 import UIKit
 import Vision
 
@@ -23,6 +24,7 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
     @Published var maxZoom: CGFloat = 1
     @Published var focusIndicator: CameraFocusIndicator?
     @Published private(set) var zoomHardware = CameraZoom.hardware(minVideo: 1, maxVideo: 1, switchOverVideo: [])
+    @Published private(set) var isRecordingBoomerang = false
 
     let filterEngine = CameraFilterEngine()
 
@@ -32,6 +34,10 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
     private let photoOutput = AVCapturePhotoOutput()
     private var currentInput: AVCaptureDeviceInput?
     private var photoContinuation: CheckedContinuation<UIImage, Error>?
+    private var boomerangContinuation: CheckedContinuation<[UIImage], Error>?
+    private var boomerangFrames: [UIImage] = []
+    private var boomerangStartedAt: TimeInterval = 0
+    private var lastBoomerangFrameAt: TimeInterval = 0
     private var isDetectingFace = false
     private var pinchBase: CGFloat = 1
     private var isPinching = false
@@ -69,7 +75,14 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
     func stop() {
         hideFocusTask?.cancel()
         sessionQueue.async { [weak self] in
-            guard let self, self.session.isRunning else { return }
+            guard let self else { return }
+            if let continuation = self.boomerangContinuation {
+                self.boomerangContinuation = nil
+                self.boomerangFrames = []
+                DispatchQueue.main.async { self.isRecordingBoomerang = false }
+                continuation.resume(throwing: CameraSessionError.captureFailed)
+            }
+            guard self.session.isRunning else { return }
             self.session.stopRunning()
             DispatchQueue.main.async {
                 self.isRunning = false
@@ -179,6 +192,30 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
                 }
                 self.photoOutput.capturePhoto(with: settings, delegate: self)
             }
+        }
+    }
+
+    func captureBoomerang() async throws -> [UIImage] {
+        try await withCheckedThrowingContinuation { continuation in
+            sessionQueue.async {
+                if self.photoContinuation != nil || self.boomerangContinuation != nil {
+                    continuation.resume(throwing: CameraSessionError.busy)
+                    return
+                }
+                self.boomerangFrames = []
+                self.boomerangStartedAt = CACurrentMediaTime()
+                self.lastBoomerangFrameAt = 0
+                self.boomerangContinuation = continuation
+                DispatchQueue.main.async { self.isRecordingBoomerang = true }
+            }
+        }
+    }
+
+    /// Ends an in-progress hold-to-record boomerang early (finger up).
+    func stopBoomerangCapture() {
+        sessionQueue.async {
+            guard self.boomerangContinuation != nil else { return }
+            self.finishBoomerang()
         }
     }
 
@@ -421,6 +458,7 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
 enum CameraSessionError: Error {
     case busy
     case captureFailed
+    case boomerangTooShort
 }
 
 extension AVCameraSessionModel: AVCaptureVideoDataOutputSampleBufferDelegate {
@@ -437,8 +475,44 @@ extension AVCameraSessionModel: AVCaptureVideoDataOutputSampleBufferDelegate {
         if preset == .ar {
             detectFaceIfNeeded(pixelBuffer)
         }
+        if boomerangContinuation != nil {
+            appendBoomerangFrame(filtered)
+        }
         DispatchQueue.main.async {
             self.previewImage = filtered
+        }
+    }
+
+    private func appendBoomerangFrame(_ image: CIImage) {
+        let now = CACurrentMediaTime()
+        if now - lastBoomerangFrameAt < BoomerangTimeline.minFrameInterval {
+            if now - boomerangStartedAt >= BoomerangTimeline.captureDuration {
+                finishBoomerang()
+            }
+            return
+        }
+        lastBoomerangFrameAt = now
+        if let uiImage = filterEngine.renderUIImage(from: image) {
+            boomerangFrames.append(BoomerangClipComposer.prepareFrame(uiImage))
+        }
+        let reachedLimit = boomerangFrames.count >= BoomerangTimeline.maxFrames
+        let reachedDuration = now - boomerangStartedAt >= BoomerangTimeline.captureDuration
+        if reachedLimit || reachedDuration {
+            finishBoomerang()
+        }
+    }
+
+    private func finishBoomerang() {
+        let continuation = boomerangContinuation
+        boomerangContinuation = nil
+        let frames = boomerangFrames
+        boomerangFrames = []
+        DispatchQueue.main.async { self.isRecordingBoomerang = false }
+        guard let continuation else { return }
+        if frames.count < BoomerangTimeline.minFrames {
+            continuation.resume(throwing: CameraSessionError.boomerangTooShort)
+        } else {
+            continuation.resume(returning: frames)
         }
     }
 

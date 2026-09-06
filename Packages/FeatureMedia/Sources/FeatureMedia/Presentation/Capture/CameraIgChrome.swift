@@ -5,6 +5,9 @@ import SwiftUI
 struct CameraCaptureToolsRow: View {
     @EnvironmentObject private var languageService: LanguageService
     var metrics: CameraChromeMetrics
+    var boomerangSelected = false
+    var timerSelected = false
+    var timerSeconds = 0
     let onTextMode: () -> Void
     let onBoomerang: () -> Void
     let onHandsFree: () -> Void
@@ -13,31 +16,66 @@ struct CameraCaptureToolsRow: View {
     var body: some View {
         HStack(alignment: .bottom, spacing: 0) {
             tool(icon: "textformat", label: .mediaCameraToolText, action: onTextMode)
-            tool(icon: "infinity", label: .mediaCameraToolBoomerang, action: onBoomerang)
-            tool(icon: "timer", label: .mediaCameraToolHandsFree, action: onHandsFree)
+            tool(
+                icon: "infinity",
+                label: .mediaCameraToolBoomerang,
+                selected: boomerangSelected,
+                action: onBoomerang
+            )
+            tool(
+                icon: "timer",
+                label: .mediaCameraToolHandsFree,
+                selected: timerSelected,
+                badge: timerSeconds > 0 ? "\(timerSeconds)" : nil,
+                action: onHandsFree
+            )
             tool(icon: "camera.filters", label: .mediaCameraToolFilter, action: onFilter)
         }
         .padding(.horizontal, 8)
     }
 
-    private func tool(icon: String, label: L10nKey, action: @escaping () -> Void) -> some View {
+    private func tool(
+        icon: String,
+        label: L10nKey,
+        selected: Bool = false,
+        badge: String? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
             VStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.system(size: metrics.toolIconSize * 0.42, weight: .semibold))
-                    .foregroundStyle(SplickTheme.Colors.textPrimary)
-                    .frame(width: metrics.toolIconSize, height: metrics.toolIconSize)
-                    .background(Circle().fill(SplickTheme.Colors.textPrimary.opacity(0.12)))
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: icon)
+                        .font(.system(size: metrics.toolIconSize * 0.42, weight: .semibold))
+                        .foregroundStyle(selected ? Color.white : SplickTheme.Colors.textPrimary)
+                        .frame(width: metrics.toolIconSize, height: metrics.toolIconSize)
+                        .background(
+                            Circle().fill(
+                                selected
+                                    ? SplickTheme.Colors.primary
+                                    : SplickTheme.Colors.textPrimary.opacity(0.12)
+                            )
+                        )
+                    if let badge {
+                        Text(badge)
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Capsule().fill(Color.orange))
+                            .offset(x: 4, y: -4)
+                    }
+                }
 
                 Text(languageService.text(label))
                     .font(.system(size: metrics.toolLabelSize, weight: .medium))
-                    .foregroundStyle(SplickTheme.Colors.textPrimary)
+                    .foregroundStyle(selected ? SplickTheme.Colors.primary : SplickTheme.Colors.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 

@@ -12,7 +12,7 @@ struct PostCaptureFlowView: View {
     let onDismiss: () -> Void
 
     @State private var capturedMedia: CapturedMedia?
-    @State private var gifPickerViewModel: GifPickerViewModel?
+    @StateObject private var gifPickerStore = EditorGifPickerStore()
 
     var body: some View {
         Group {
@@ -23,14 +23,7 @@ struct PostCaptureFlowView: View {
                 }
             } else {
                 MediaCaptureView(
-                    onMediaCaptured: { media in
-                        switch media {
-                        case .video:
-                            break
-                        case .image, .images:
-                            capturedMedia = media
-                        }
-                    },
+                    onMediaCaptured: { capturedMedia = $0 },
                     onCancel: onDismiss,
                     stickerPickerBuilder: makeStickerPicker,
                     filterCatalogRepository: container.filterCatalogRepository
@@ -53,6 +46,8 @@ struct PostCaptureFlowView: View {
         CreatePostComposeView(
             viewModel: CreatePostComposeViewModel(
                 previewImages: images,
+                previewVideoURL: mediaVideoURL(media),
+                previewVideoURLs: mediaVideoURLs(media),
                 fetchFriendsUseCase: container.fetchFriendsUseCase,
                 fetchMyGroupsUseCase: container.fetchMyGroupsUseCase,
                 fetchGroupMembersUseCase: container.fetchGroupMembersUseCase,
@@ -63,6 +58,7 @@ struct PostCaptureFlowView: View {
             ),
             profileDependencies: container.friendUserProfileDependencies,
             nearbyDiscoveryUseCase: container.nearbyDiscoveryUseCase,
+            stickerPickerBuilder: makeStickerPicker,
             onPostSubmit: { prepared in
                 container.feedViewModel.enqueuePostUpload(
                     optimisticPost: prepared.optimisticPost,
@@ -80,24 +76,31 @@ struct PostCaptureFlowView: View {
         onSelectGifURL: @escaping (URL) -> Void,
         onSelectEmoji: @escaping (String) -> Void
     ) -> AnyView {
-        if gifPickerViewModel == nil {
-            gifPickerViewModel = container.makeGifPickerViewModel(groupId: nil)
-        }
-        guard let gifPickerViewModel else {
-            return AnyView(EmptyView())
+        let viewModel: GifPickerViewModel
+        if let existing = gifPickerStore.viewModel {
+            viewModel = existing
+        } else {
+            let created = container.makeGifPickerViewModel(groupId: nil)
+            gifPickerStore.viewModel = created
+            viewModel = created
         }
 
         return AnyView(
             AttachmentPickerView(
-                viewModel: gifPickerViewModel,
+                viewModel: viewModel,
                 currentUserId: appState.currentUser?.id,
                 onSelectGif: { sticker in
-                    onDismiss()
-                    onSelectGifURL(sticker.url)
+                    let url = sticker.url
+                    Task { @MainActor in
+                        onDismiss()
+                        onSelectGifURL(url)
+                    }
                 },
                 onSelectEmoji: { emoji in
-                    onDismiss()
-                    onSelectEmoji(emoji)
+                    Task { @MainActor in
+                        onDismiss()
+                        onSelectEmoji(emoji)
+                    }
                 }
             )
             .environmentObject(container.languageService)
@@ -114,6 +117,22 @@ struct PostCaptureFlowView: View {
             return images
         case .video:
             return []
+        case .mixed(let images, _):
+            return images
         }
     }
+
+    private func mediaVideoURL(_ media: CapturedMedia) -> URL? {
+        if case .video(let url) = media { return url }
+        return nil
+    }
+
+    private func mediaVideoURLs(_ media: CapturedMedia) -> [URL] {
+        if case .mixed(_, let videos) = media { return videos }
+        return []
+    }
+}
+
+private final class EditorGifPickerStore: ObservableObject {
+    var viewModel: GifPickerViewModel?
 }

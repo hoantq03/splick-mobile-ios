@@ -17,18 +17,20 @@ public struct MediaCaptureView: View {
     @State private var workingFilter: FilterPreset = .none
     @State private var cameraSessionID = UUID()
 
-    private let maxLibrarySelection = 5
+    private let maxLibrarySelection: Int
 
     public init(
         onMediaCaptured: @escaping (CapturedMedia) -> Void,
         onCancel: @escaping () -> Void,
         stickerPickerBuilder: MediaStickerPickerBuilder? = nil,
-        filterCatalogRepository: FilterCatalogRepositoryProtocol? = nil
+        filterCatalogRepository: FilterCatalogRepositoryProtocol? = nil,
+        maxLibrarySelection: Int = 10
     ) {
         self.onMediaCaptured = onMediaCaptured
         self.onCancel = onCancel
         self.stickerPickerBuilder = stickerPickerBuilder
         self.filterCatalogRepository = filterCatalogRepository
+        self.maxLibrarySelection = max(1, maxLibrarySelection)
     }
 
     public var body: some View {
@@ -49,7 +51,7 @@ public struct MediaCaptureView: View {
             case .library:
                 MultiPhotoLibraryPickerView(
                     maxSelectionCount: maxLibrarySelection,
-                    onConfirm: { images in handleLibraryImages(images) },
+                    onConfirm: { items in handleLibraryMedia(items) },
                     onCancel: {
                         if isCameraAccessible {
                             reopenCamera()
@@ -84,6 +86,7 @@ public struct MediaCaptureView: View {
                             reopenCamera()
                         }
                     )
+                    .ignoresSafeArea(.keyboard)
                     .transition(.opacity)
                 }
             }
@@ -153,12 +156,26 @@ public struct MediaCaptureView: View {
         route = .camera
     }
 
-    private func handleLibraryImages(_ images: [UIImage]) {
-        guard !images.isEmpty else {
+    private func handleLibraryMedia(_ items: [LibraryPickedMedia]) {
+        guard !items.isEmpty else {
             if isCameraAccessible { reopenCamera() } else { route = .camera }
             return
         }
-        onMediaCaptured(images.count == 1 ? .image(images[0]) : .images(images))
+        let images = items.compactMap { item -> UIImage? in
+            if case .image(let image) = item { return image }
+            return nil
+        }
+        let videos = items.compactMap { item -> URL? in
+            if case .video(let url) = item { return url }
+            return nil
+        }
+        if videos.isEmpty {
+            onMediaCaptured(images.count == 1 ? .image(images[0]) : .images(images))
+        } else if images.isEmpty, videos.count == 1 {
+            onMediaCaptured(.video(videos[0]))
+        } else {
+            onMediaCaptured(.mixed(images: images, videos: videos))
+        }
     }
 
     private func handleCameraResult(_ result: CameraPickerView.Result) {
