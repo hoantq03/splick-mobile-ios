@@ -6,8 +6,8 @@ enum EditorStickerRenderer {
         switch kind {
         case .symbol, .emoji:
             return CGSize(width: 72, height: 72)
-        case .gif:
-            if let gifData, let image = EditorGifDecoder.firstFrame(from: gifData) {
+        case .gif, .image:
+            if let gifData, let image = EditorGifDecoder.firstFrame(from: gifData) ?? UIImage(data: gifData) {
                 let maxSide = max(max(image.size.width, image.size.height), 1)
                 let ratio = 120 / maxSide
                 return CGSize(width: image.size.width * ratio, height: image.size.height * ratio)
@@ -27,7 +27,11 @@ enum EditorStickerRenderer {
         guard targetPixelSize.width > 0, targetPixelSize.height > 0 else { return nil }
 
         if case .gif = kind, let gifData {
-            return renderGif(data: gifData, targetPixelSize: targetPixelSize)
+            return renderGif(data: gifData, targetPixelSize: targetPixelSize, rounded: true)
+        }
+        if case .image = kind, let gifData,
+           let image = EditorGifDecoder.firstFrame(from: gifData) ?? UIImage(data: gifData) {
+            return renderStill(image, targetPixelSize: targetPixelSize)
         }
 
         let layoutSize = baseSize(for: kind, gifData: gifData)
@@ -59,16 +63,24 @@ enum EditorStickerRenderer {
         }
     }
 
-    private static func renderGif(data: Data, targetPixelSize: CGSize) -> UIImage? {
+    private static func renderGif(data: Data, targetPixelSize: CGSize, rounded: Bool) -> UIImage? {
         guard let image = EditorGifDecoder.firstFrame(from: data, scale: 1) else { return nil }
+        return renderStill(image, targetPixelSize: targetPixelSize, rounded: rounded)
+    }
 
+    private static func renderStill(_ image: UIImage, targetPixelSize: CGSize, rounded: Bool = false) -> UIImage {
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         format.opaque = false
 
         return UIGraphicsImageRenderer(size: targetPixelSize, format: format).image { context in
             context.cgContext.interpolationQuality = .high
-            image.draw(in: CGRect(origin: .zero, size: targetPixelSize))
+            let drawRect = CGRect(origin: .zero, size: targetPixelSize)
+            if rounded {
+                let radius = EditorGifStyle.cornerRadius(for: targetPixelSize)
+                UIBezierPath(roundedRect: drawRect, cornerRadius: radius).addClip()
+            }
+            image.draw(in: drawRect)
         }
     }
 }

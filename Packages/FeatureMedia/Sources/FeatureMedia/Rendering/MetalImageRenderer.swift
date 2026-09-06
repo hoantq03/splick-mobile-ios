@@ -9,7 +9,7 @@ actor MetalImageRenderer {
         maxDimension: CGFloat,
         ignoreCrop: Bool
     ) async -> UIImage? {
-        var image = pipeline(state, from: original, ignoreCrop: ignoreCrop)
+        var image = pipeline(state, from: original, ignoreCrop: ignoreCrop, includeAdjustments: false)
         image = scaled(image, maxDimension: maxDimension)
         return FilterEngine.renderUIImage(from: image)
     }
@@ -19,18 +19,36 @@ actor MetalImageRenderer {
         from original: CIImage,
         ignoreCrop: Bool = false
     ) async -> UIImage? {
-        let image = pipeline(state, from: original, ignoreCrop: ignoreCrop)
+        let image = pipeline(state, from: original, ignoreCrop: ignoreCrop, includeAdjustments: true)
         return FilterEngine.renderUIImage(from: image)
     }
 
-    private func pipeline(_ state: EditState, from original: CIImage, ignoreCrop: Bool) -> CIImage {
+    private func pipeline(
+        _ state: EditState,
+        from original: CIImage,
+        ignoreCrop: Bool,
+        includeAdjustments: Bool
+    ) -> CIImage {
         var image = FilterEngine.apply(original, preset: state.activeFilter, intensity: 1)
-        image = FilterEngine.applyAdjustments(image, state.adjustments)
+        if includeAdjustments {
+            image = FilterEngine.applyAdjustments(image, state.adjustments)
+        }
         image = rotated(image, quarters: state.normalizedRotation)
+        if state.isFlippedHorizontally {
+            image = flippedHorizontally(image)
+        }
         if !ignoreCrop, state.isEffectiveCrop {
             image = cropped(image, normalized: state.cropRect)
         }
         return image
+    }
+
+    private func flippedHorizontally(_ image: CIImage) -> CIImage {
+        let extent = image.extent
+        let transform = CGAffineTransform(translationX: -extent.midX, y: -extent.midY)
+            .concatenating(CGAffineTransform(scaleX: -1, y: 1))
+            .concatenating(CGAffineTransform(translationX: extent.midX, y: extent.midY))
+        return image.transformed(by: transform)
     }
 
     private func rotated(_ image: CIImage, quarters: Int) -> CIImage {

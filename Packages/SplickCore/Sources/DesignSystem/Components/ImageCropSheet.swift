@@ -1,5 +1,7 @@
 import SwiftUI
 import PhotosUI
+import UniformTypeIdentifiers
+import CoreTransferable
 import UIKit
 import Localization
 
@@ -118,14 +120,15 @@ public struct ImageCropSheet<EmptyContent: View, Accessory: View>: View {
 
     private func loadSelectedPhoto() async {
         guard let selectedPhotoItem else { return }
-        guard let data = try? await selectedPhotoItem.loadTransferable(type: Data.self),
-              let image = UIImage(data: data) else {
+        defer { self.selectedPhotoItem = nil }
+        do {
+            let image = try await selectedPhotoItem.loadSplickUIImage()
+            sourceImage = ImageCropRenderer.downsampled(image)
+            cropTransform = ImageCropTransform()
+            errorMessage = nil
+        } catch {
             errorMessage = loadErrorText
-            return
         }
-        sourceImage = ImageCropRenderer.downsampled(image)
-        cropTransform = ImageCropTransform()
-        errorMessage = nil
     }
 
     private func save() async {
@@ -233,5 +236,38 @@ public extension ImageCropSheet where EmptyContent == EmptyView {
             emptyContent: { EmptyView() },
             accessory: accessory
         )
+    }
+}
+
+public enum PhotosPickerImageLoadError: Error {
+    case empty
+    case undecodable
+}
+
+public extension PhotosPickerItem {
+    func loadSplickImageData() async throws -> Data {
+        if let packed = try await loadTransferable(type: SplickPickerImageData.self),
+           !packed.data.isEmpty {
+            return packed.data
+        }
+        throw PhotosPickerImageLoadError.empty
+    }
+
+    func loadSplickUIImage() async throws -> UIImage {
+        let data = try await loadSplickImageData()
+        if let image = UIImage(data: data) {
+            return image
+        }
+        throw PhotosPickerImageLoadError.undecodable
+    }
+}
+
+struct SplickPickerImageData: Transferable {
+    let data: Data
+
+    static var transferRepresentation: some TransferRepresentation {
+        DataRepresentation(importedContentType: UTType.image) { data in
+            SplickPickerImageData(data: data)
+        }
     }
 }

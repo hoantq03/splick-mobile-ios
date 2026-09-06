@@ -1,5 +1,6 @@
 import DesignSystem
 import Localization
+import Networking
 import SwiftUI
 import UIKit
 
@@ -19,13 +20,9 @@ struct PhotoEditorView: View {
     @EnvironmentObject private var languageService: LanguageService
     @StateObject private var viewModel: PhotoEditorViewModel
     @State private var layoutMetrics = ImageDisplayMetrics(imageSize: .zero, displayFrame: .zero)
-    @State private var editingText = ""
-    @State private var isEditingNewItem = false
     @State private var activeComposerTool: ComposerTool?
     @State private var showStickerPicker = false
-    @State private var showMoreSheet = false
     @State private var toastMessage: String?
-    @FocusState private var isTextFieldFocused: Bool
 
     let stickerPickerBuilder: MediaStickerPickerBuilder?
     let onDone: (UIImage) -> Void
@@ -71,11 +68,13 @@ struct PhotoEditorView: View {
             .allowsHitTesting(viewModel.isChromeVisible)
 
             if viewModel.isChromeVisible,
-               activeComposerTool == .text || viewModel.activeTool == .text,
-               viewModel.selectedTextID != nil {
+               activeComposerTool == .sticker || viewModel.activeTool == .sticker {
                 VStack {
                     Spacer()
-                    textInputBar
+                    EditorStickerPickerBar(
+                        viewModel: viewModel,
+                        onOpenGifPack: stickerPickerBuilder == nil ? nil : { showStickerPicker = true }
+                    )
                 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -102,68 +101,43 @@ struct PhotoEditorView: View {
                 .transition(.opacity)
             }
         }
+        .ignoresSafeArea(.keyboard)
         .animation(.easeOut(duration: 0.2), value: viewModel.activeTool)
         .animation(.easeOut(duration: 0.2), value: activeComposerTool)
         .editorStatusBarHidden(true)
         .sheet(isPresented: $showStickerPicker) {
             if let stickerPickerBuilder {
                 stickerPickerBuilder(
-                    { showStickerPicker = false },
+                    {
+                        Task { @MainActor in
+                            showStickerPicker = false
+                        }
+                    },
                     { url in
-                        showStickerPicker = false
-                        Task { await importGif(from: url) }
+                        Task { @MainActor in
+                            showStickerPicker = false
+                            await importStickerMedia(from: url)
+                        }
                     },
                     { emoji in
-                        showStickerPicker = false
-                        viewModel.addSticker(.emoji(emoji))
+                        Task { @MainActor in
+                            showStickerPicker = false
+                            viewModel.addSticker(.emoji(emoji))
+                        }
                     }
                 )
-                .presentationDetents([.medium, .large])
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .presentationDetents([.large, .medium])
                 .presentationDragIndicator(.visible)
             }
         }
-        .sheet(isPresented: $showMoreSheet) {
-            EditorMoreOptionsSheet(viewModel: viewModel) {
-                showMoreSheet = false
-            }
-            .environmentObject(languageService)
-            .presentationDetents([.medium])
-        }
         .onChange(of: viewModel.selectedTextID) { id in
-            guard let id,
-                  let item = viewModel.textItems.first(where: { $0.id == id }) else {
-                isTextFieldFocused = false
-                return
-            }
-            let isNew = item.text == EditorTextItem.placeholderText
-            isEditingNewItem = isNew
-            editingText = isNew ? "" : item.text
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                isTextFieldFocused = true
+            guard id != nil else { return }
+            activeComposerTool = .text
+            if viewModel.activeTool != .text {
+                viewModel.selectTool(.text)
             }
         }
-    }
-
-    private var textInputBar: some View {
-        HStack(spacing: SplickTheme.Spacing.sm) {
-            TextField(languageService.text(.mediaTextPlaceholder), text: $editingText)
-                .textFieldStyle(.roundedBorder)
-                .focused($isTextFieldFocused)
-                .submitLabel(.done)
-                .onSubmit(commitTextEditing)
-                .onChange(of: editingText) { newValue in
-                    guard let id = viewModel.selectedTextID else { return }
-                    let displayText = newValue.isEmpty && isEditingNewItem
-                        ? EditorTextItem.placeholderText
-                        : newValue
-                    viewModel.updateText(id, text: displayText)
-                }
-
-            Button(languageService.text(.commonDone), action: commitTextEditing)
-                .font(SplickTheme.Typography.callout.weight(.semibold))
-        }
-        .padding(SplickTheme.Spacing.md)
-        .background(.ultraThinMaterial)
     }
 
     private func handleComposerTool(_ tool: ComposerTool) {
@@ -172,44 +146,26 @@ struct PhotoEditorView: View {
         switch tool {
         case .text:
             viewModel.selectTool(.text)
-        case .sticker:
-            if stickerPickerBuilder != nil {
-                showStickerPicker = true
-            } else {
-                viewModel.selectTool(.sticker)
+            if viewModel.selectedTextID == nil {
+                viewModel.addText(at: CGPoint(x: 0.5, y: 0.42))
             }
-        case .audio:
-            showToast(languageService.text(.mediaEditorComingSoon))
+        case .sticker:
+            viewModel.selectTool(.sticker)
         case .effects:
             viewModel.selectTool(.filter)
-        case .mention:
-            showToast(languageService.text(.mediaEditorComingSoon))
         case .draw:
             viewModel.selectTool(.draw)
         case .download:
             Task { await downloadEditedImage() }
-        case .more:
-            showMoreSheet = true
+        case .edit:
+            viewModel.clearCanvasTool()
+            activeComposerTool = .edit
         }
     }
 
     private func handleTextTap(at normalized: CGPoint) {
         activeComposerTool = .text
         viewModel.addText(at: normalized)
-    }
-
-    private func commitTextEditing() {
-        guard let id = viewModel.selectedTextID else { return }
-        if editingText.isEmpty && isEditingNewItem {
-            viewModel.removeTextItem(id)
-        } else {
-            let finalText = editingText.isEmpty ? EditorTextItem.placeholderText : editingText
-            viewModel.updateText(id, text: finalText)
-            viewModel.commitTextEdit()
-        }
-        viewModel.selectedTextID = nil
-        isTextFieldFocused = false
-        isEditingNewItem = false
     }
 
     private func downloadEditedImage() async {
@@ -223,15 +179,30 @@ struct PhotoEditorView: View {
         )
     }
 
-    private func importGif(from url: URL) async {
+    private func importStickerMedia(from url: URL) async {
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, response) = try await URLSession.splick.data(from: url)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard (200 ... 299).contains(status), !data.isEmpty else {
+                await MainActor.run {
+                    showToast(languageService.text(.mediaLoadFailed))
+                }
+                return
+            }
             await MainActor.run {
-                viewModel.addGifSticker(data: data)
+                let before = viewModel.stickerItems.count
+                viewModel.addMediaSticker(data: data)
+                if viewModel.stickerItems.count == before {
+                    showToast(languageService.text(.mediaLoadFailed))
+                    return
+                }
                 activeComposerTool = .sticker
+                viewModel.selectTool(.sticker)
             }
         } catch {
-            showToast(languageService.text(.mediaLoadFailed))
+            await MainActor.run {
+                showToast(languageService.text(.mediaLoadFailed))
+            }
         }
     }
 
@@ -269,7 +240,7 @@ private struct EditorCanvasView: View {
             )
 
             ZStack {
-                EditorImageView(image: viewModel.baseImage)
+                EditorImageView(image: viewModel.baseImage, adjustments: viewModel.adjustments)
                     .frame(width: metrics.displayFrame.width, height: metrics.displayFrame.height)
                     .position(x: metrics.displayFrame.midX, y: metrics.displayFrame.midY)
                     .scaleEffect(viewModel.rotatePulse ? 1.02 : 1)
@@ -278,6 +249,19 @@ private struct EditorCanvasView: View {
                         isEnabled: viewModel.shouldToggleChromeOnImageTap,
                         onTap: { viewModel.toggleChromeFromImageTap() }
                     ))
+                    .modifier(TextTapGestureModifier(
+                        isEnabled: viewModel.activeTool == .text && viewModel.selectedTextID == nil,
+                        metrics: metrics,
+                        onTextTap: onTextTap
+                    ))
+
+                Color.clear
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        viewModel.deselectCanvasOverlays()
+                    }
+                    .allowsHitTesting(viewModel.selectedTextID != nil || viewModel.selectedStickerID != nil)
 
                 PhotoEditorDrawCanvas(
                     drawing: viewModel.drawingForDisplay(canvasSize: metrics.displayFrame.size),
@@ -290,19 +274,7 @@ private struct EditorCanvasView: View {
                 )
                 .frame(width: metrics.displayFrame.width, height: metrics.displayFrame.height)
                 .position(x: metrics.displayFrame.midX, y: metrics.displayFrame.midY)
-                .opacity(viewModel.activeTool == .draw ? 1 : 0)
                 .allowsHitTesting(viewModel.activeTool == .draw)
-
-                if !viewModel.drawing.bounds.isEmpty && viewModel.activeTool != .draw {
-                    PhotoEditorDrawingOverlay(
-                        drawing: viewModel.drawingForDisplay(canvasSize: metrics.displayFrame.size),
-                        canvasSize: metrics.displayFrame.size
-                    )
-                    .frame(width: metrics.displayFrame.width, height: metrics.displayFrame.height)
-                    .position(x: metrics.displayFrame.midX, y: metrics.displayFrame.midY)
-                    .allowsHitTesting(false)
-                    .transition(.identity)
-                }
 
                 if !viewModel.textItems.isEmpty || viewModel.activeTool == .text {
                     PhotoEditorTextLayer(viewModel: viewModel, displayMetrics: metrics)
@@ -324,16 +296,15 @@ private struct EditorCanvasView: View {
                     Color.clear
                         .contentShape(Rectangle())
                         .onTapGesture {
+                            if viewModel.selectedTextID != nil || viewModel.selectedStickerID != nil {
+                                viewModel.deselectCanvasOverlays()
+                            }
                             viewModel.showChrome()
                         }
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
-            .modifier(TextTapGestureModifier(
-                isEnabled: viewModel.activeTool == .text && viewModel.selectedTextID == nil,
-                metrics: metrics,
-                onTextTap: onTextTap
-            ))
+            .ignoresSafeArea(.keyboard)
             .onAppear { reportLayout(containerSize: proxy.size) }
             .onChange(of: proxy.size.width) { _ in reportLayout(containerSize: proxy.size) }
             .onChange(of: proxy.size.height) { _ in reportLayout(containerSize: proxy.size) }
@@ -368,14 +339,14 @@ private struct TextTapGestureModifier: ViewModifier {
         if isEnabled {
             content
                 .contentShape(Rectangle())
-                .highPriorityGesture(
+                .gesture(
                     SpatialTapGesture()
                         .onEnded { value in
-                            let frame = metrics.displayFrame
-                            guard frame.contains(value.location) else { return }
+                            let size = metrics.displayFrame.size
+                            guard size.width > 0, size.height > 0 else { return }
                             let normalized = CGPoint(
-                                x: (value.location.x - frame.minX) / frame.width,
-                                y: (value.location.y - frame.minY) / frame.height
+                                x: min(max(value.location.x / size.width, 0), 1),
+                                y: min(max(value.location.y / size.height, 0), 1)
                             )
                             onTextTap(normalized)
                         }

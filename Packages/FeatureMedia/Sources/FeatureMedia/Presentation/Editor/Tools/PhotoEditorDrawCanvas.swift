@@ -24,6 +24,7 @@ struct PhotoEditorDrawCanvas: UIViewRepresentable {
         canvas.tool = PKInkingTool(.pen, color: inkColor, width: inkWidth)
         context.coordinator.wasEnabled = isEnabled
         context.coordinator.lastAppliedSyncRevision = drawingSyncRevision
+        context.coordinator.lastCommittedDrawing = drawing
         return canvas
     }
 
@@ -35,39 +36,25 @@ struct PhotoEditorDrawCanvas: UIViewRepresentable {
         let coordinator = context.coordinator
         coordinator.onStrokeEnded = onStrokeEnded
 
-        // Flush if explicitly requested (e.g. finalize or tool switch).
         if coordinator.lastFlushToken != flushToken {
             coordinator.lastFlushToken = flushToken
             coordinator.flush(canvas)
         }
 
-        // Sync from ViewModel on undo/redo (drawingSyncRevision increments).
-        if coordinator.lastAppliedSyncRevision != drawingSyncRevision,
-           !coordinator.isStrokeActive {
-            canvas.drawing = drawing
+        if coordinator.lastAppliedSyncRevision != drawingSyncRevision {
             coordinator.lastAppliedSyncRevision = drawingSyncRevision
-            // Re-arm lastCommittedDrawing so we don't re-flush undo-restored strokes.
-            coordinator.lastCommittedDrawing = drawing
+            coordinator.applyProgrammaticDrawing(drawing, on: canvas)
         }
 
         let wasEnabled = coordinator.wasEnabled
-        if wasEnabled, !isEnabled, !coordinator.isStrokeActive {
+        if wasEnabled, !isEnabled {
             coordinator.flush(canvas)
         }
         coordinator.wasEnabled = isEnabled
 
-        // When switching back TO draw mode, restore the current ViewModel drawing so
-        // the user continues on top of their existing strokes.
-        // (We never bake on tool switch, so drawing may be non-empty here.)
         let switchingToEnabled = !wasEnabled && isEnabled
-        if switchingToEnabled, canvas.drawing != drawing, !coordinator.isStrokeActive {
-            canvas.drawing = drawing
-            coordinator.lastCommittedDrawing = drawing
-        }
-
-        // Keep canvas in sync when draw tool is inactive and no stroke is live.
-        if !isEnabled, !coordinator.isStrokeActive, canvas.drawing != drawing {
-            canvas.drawing = drawing
+        if switchingToEnabled {
+            coordinator.applyProgrammaticDrawing(drawing, on: canvas)
         }
 
         canvas.isUserInteractionEnabled = isEnabled
@@ -80,33 +67,40 @@ struct PhotoEditorDrawCanvas: UIViewRepresentable {
         var wasEnabled = true
         var lastFlushToken = 0
         var lastAppliedSyncRevision = 0
-        /// Tracks the last drawing we committed to avoid redundant callbacks.
         var lastCommittedDrawing = PKDrawing()
+        private var isApplyingProgrammaticDrawing = false
 
         init(onStrokeEnded: @escaping (PKDrawing) -> Void) {
             self.onStrokeEnded = onStrokeEnded
         }
 
         func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
+            guard !isApplyingProgrammaticDrawing else { return }
             isStrokeActive = true
         }
 
         func canvasViewDidEndUsingTool(_ canvasView: PKCanvasView) {
+            guard !isApplyingProgrammaticDrawing else { return }
             guard isStrokeActive else { return }
             isStrokeActive = false
             commit(canvasView.drawing)
         }
 
         func flush(_ canvasView: PKCanvasView) {
-            guard !canvasView.drawing.bounds.isEmpty else { return }
             isStrokeActive = false
             commit(canvasView.drawing)
         }
 
+        func applyProgrammaticDrawing(_ drawing: PKDrawing, on canvasView: PKCanvasView) {
+            isApplyingProgrammaticDrawing = true
+            canvasView.drawing = drawing
+            lastCommittedDrawing = drawing
+            isStrokeActive = false
+            isApplyingProgrammaticDrawing = false
+        }
+
         private func commit(_ drawing: PKDrawing) {
             guard !drawing.bounds.isEmpty else { return }
-            // Skip if we already committed this exact drawing (avoids double-bake
-            // when flush is called multiple times after a tool switch without new strokes).
             guard drawing != lastCommittedDrawing else { return }
             lastCommittedDrawing = drawing
             onStrokeEnded(drawing)

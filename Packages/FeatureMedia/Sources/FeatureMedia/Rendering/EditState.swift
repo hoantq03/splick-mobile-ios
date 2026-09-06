@@ -22,6 +22,7 @@ struct ImageAdjustments: Equatable {
 struct EditState: Equatable {
     var cropRect: CGRect
     var rotationQuarters: Int
+    var isFlippedHorizontally: Bool
     var drawing: PKDrawing
     var textItems: [EditorTextItem]
     var stickerItems: [EditorStickerItem]
@@ -35,6 +36,7 @@ struct EditState: Equatable {
         EditState(
             cropRect: fullImageCropRect,
             rotationQuarters: 0,
+            isFlippedHorizontally: false,
             drawing: PKDrawing(),
             textItems: [],
             stickerItems: [],

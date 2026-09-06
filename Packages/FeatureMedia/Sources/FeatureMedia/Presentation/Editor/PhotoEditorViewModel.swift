@@ -8,6 +8,7 @@ import UIKit
 enum EditorTool: String, CaseIterable, Identifiable {
     case crop
     case rotate
+    case flip
     case filter
     case adjust
     case draw
@@ -21,6 +22,7 @@ enum EditorTool: String, CaseIterable, Identifiable {
         switch self {
         case .crop: return languageService.text(.mediaToolCrop)
         case .rotate: return languageService.text(.mediaToolRotate)
+        case .flip: return languageService.text(.mediaToolFlip)
         case .filter: return languageService.text(.mediaToolFilter)
         case .adjust: return languageService.text(.mediaToolAdjust)
         case .draw: return languageService.text(.mediaToolDraw)
@@ -33,6 +35,7 @@ enum EditorTool: String, CaseIterable, Identifiable {
         switch self {
         case .crop: return "crop"
         case .rotate: return "rotate.right"
+        case .flip: return "arrow.left.and.right.righttriangle.left.righttriangle.right"
         case .filter: return "camera.filters"
         case .adjust: return "slider.horizontal.3"
         case .draw: return "scribble.variable"
@@ -102,8 +105,13 @@ final class PhotoEditorViewModel: ObservableObject {
     private let originalCIImage: CIImage
     private let renderer = MetalImageRenderer()
     private var rotationQuarters = 0
+    private var isFlippedHorizontally = false
     private var undoStack: [EditState] = []
     private var redoStack: [EditState] = []
+    private var strokeRedoStack: [PKStroke] = []
+    private var previewBusy = false
+    private var pendingLivePreview = false
+    private var isAdjustingLive = false
     private var previewGeneration = 0
     private var previewTask: Task<Void, Never>?
     private(set) var lastDisplayMetrics: ImageDisplayMetrics?
@@ -138,6 +146,12 @@ final class PhotoEditorViewModel: ObservableObject {
 
     var canUndo: Bool { undoStack.count > 1 }
     var canRedo: Bool { !redoStack.isEmpty }
+    var canUndoStroke: Bool {
+        let canvasSize = lastDisplayMetrics?.displayFrame.size ?? drawingCanvasSize
+        guard canvasSize.width > 0 else { return !drawing.strokes.isEmpty }
+        return !drawingForDisplay(canvasSize: canvasSize).strokes.isEmpty
+    }
+    var canRedoStroke: Bool { !strokeRedoStack.isEmpty }
 
     var showsFullImageForCrop: Bool { activeTool == .crop }
 
@@ -150,6 +164,13 @@ final class PhotoEditorViewModel: ObservableObject {
             commitLeavingToolIfNeeded()
             activeTool = .rotate
             rotateClockwise()
+            return
+        }
+
+        if tool == .flip {
+            commitLeavingToolIfNeeded()
+            activeTool = .flip
+            flipHorizontally()
             return
         }
 
@@ -183,20 +204,24 @@ final class PhotoEditorViewModel: ObservableObject {
         switch activeTool {
         case .none:
             return true
-        case .text, .draw, .crop, .sticker, .filter, .adjust, .rotate:
+        case .text, .draw, .crop, .sticker, .filter, .adjust, .rotate, .flip:
             return false
         }
     }
 
     func enterViewMode() {
+        clearCanvasTool()
+        isChromeVisible = false
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        schedulePreviewRefresh()
+    }
+
+    func clearCanvasTool() {
         commitLeavingToolIfNeeded()
         finalizeFlushToken += 1
         activeTool = nil
         selectedTextID = nil
         selectedStickerID = nil
-        isChromeVisible = false
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        schedulePreviewRefresh()
     }
 
     func showChrome() {
@@ -219,6 +244,28 @@ final class PhotoEditorViewModel: ObservableObject {
         if activeTool == .crop {
             schedulePreviewRefresh()
         }
+    }
+
+    func undoLastStroke() {
+        let canvasSize = lastDisplayMetrics?.displayFrame.size ?? drawingCanvasSize
+        guard canvasSize.width > 0, canvasSize.height > 0 else { return }
+        var strokes = drawingForDisplay(canvasSize: canvasSize).strokes
+        guard !strokes.isEmpty else { return }
+        strokeRedoStack.append(strokes.removeLast())
+        drawing = storeDrawing(PKDrawing(strokes: strokes), canvasSize: canvasSize)
+        drawingSyncRevision += 1
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    }
+
+    func redoLastStroke() {
+        guard let stroke = strokeRedoStack.popLast() else { return }
+        let canvasSize = lastDisplayMetrics?.displayFrame.size ?? drawingCanvasSize
+        guard canvasSize.width > 0, canvasSize.height > 0 else { return }
+        var strokes = drawingForDisplay(canvasSize: canvasSize).strokes
+        strokes.append(stroke)
+        drawing = storeDrawing(PKDrawing(strokes: strokes), canvasSize: canvasSize)
+        drawingSyncRevision += 1
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
 
     func undo() {
@@ -253,6 +300,14 @@ final class PhotoEditorViewModel: ObservableObject {
         }
         drawing = drawing.transformed(using: CGAffineTransform(a: 0, b: 1, c: -1, d: 0, tx: 1, ty: 0))
         drawingSyncRevision += 1
+        rotatePulse.toggle()
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        pushSnapshotIfNeeded()
+        schedulePreviewRefresh()
+    }
+
+    func flipHorizontally() {
+        isFlippedHorizontally.toggle()
         rotatePulse.toggle()
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         pushSnapshotIfNeeded()
@@ -302,10 +357,14 @@ final class PhotoEditorViewModel: ObservableObject {
 
     func setAdjustments(_ value: ImageAdjustments) {
         adjustments = value
-        schedulePreviewRefresh()
+    }
+
+    func setAdjustingLive(_ editing: Bool) {
+        isAdjustingLive = editing
     }
 
     func commitAdjustments() {
+        isAdjustingLive = false
         pushSnapshotIfNeeded()
     }
 
@@ -343,11 +402,24 @@ final class PhotoEditorViewModel: ObservableObject {
 
     func removeTextItem(_ id: UUID) {
         textItems.removeAll { $0.id == id }
+        if selectedTextID == id {
+            selectedTextID = nil
+        }
         pushSnapshotIfNeeded()
     }
 
     func commitTextEdit() {
         pushSnapshotIfNeeded()
+    }
+
+    func deselectEditingText() {
+        selectedTextID = nil
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+
+    func deselectCanvasOverlays() {
+        deselectEditingText()
+        selectedStickerID = nil
     }
 
     func commitTextTransform() {
@@ -369,15 +441,21 @@ final class PhotoEditorViewModel: ObservableObject {
     }
 
     func addGifSticker(data: Data) {
-        guard EditorGifDecoder.isGif(data) else { return }
+        addMediaSticker(data: data)
+    }
+
+    func addMediaSticker(data: Data) {
+        let image = EditorGifDecoder.firstFrame(from: data, scale: 1) ?? UIImage(data: data)
+        guard image != nil || EditorGifDecoder.isGif(data) else { return }
         let stickerID = UUID()
         gifStickerData[stickerID] = data
-        if !gifGallery.contains(where: { $0.data == data }) {
+        let isGif = EditorGifDecoder.isGif(data)
+        if isGif, !gifGallery.contains(where: { $0.data == data }) {
             gifGallery.insert(EditorGifSample(data: data), at: 0)
         }
         let offset = CGFloat(stickerItems.count % 5) * 0.04
         let item = EditorStickerItem(
-            kind: .gif(stickerID),
+            kind: isGif ? .gif(stickerID) : .image(stickerID),
             normalizedPosition: storedNormalized(fromVisible: CGPoint(x: 0.5 + offset, y: 0.45 + offset))
         )
         stickerItems.append(item)
@@ -407,8 +485,12 @@ final class PhotoEditorViewModel: ObservableObject {
     }
 
     func gifData(for kind: EditorStickerKind) -> Data? {
-        guard case .gif(let id) = kind else { return nil }
-        return gifStickerData[id]
+        switch kind {
+        case .gif(let id), .image(let id):
+            return gifStickerData[id]
+        default:
+            return nil
+        }
     }
 
     func updateStickerPosition(id: UUID, normalizedPosition: CGPoint) {
@@ -438,9 +520,13 @@ final class PhotoEditorViewModel: ObservableObject {
 
     func deleteSelectedSticker() {
         guard let id = selectedStickerID else { return }
-        if let item = stickerItems.first(where: { $0.id == id }),
-           case .gif(let gifID) = item.kind {
-            gifStickerData.removeValue(forKey: gifID)
+        if let item = stickerItems.first(where: { $0.id == id }) {
+            switch item.kind {
+            case .gif(let mediaID), .image(let mediaID):
+                gifStickerData.removeValue(forKey: mediaID)
+            default:
+                break
+            }
         }
         stickerItems.removeAll { $0.id == id }
         selectedStickerID = nil
@@ -452,6 +538,7 @@ final class PhotoEditorViewModel: ObservableObject {
         guard canvasSize.width > 0, canvasSize.height > 0 else { return }
         drawingCanvasSize = canvasSize
         drawing = storeDrawing(newDrawing, canvasSize: canvasSize)
+        strokeRedoStack.removeAll()
         pushSnapshotIfNeeded()
     }
 
@@ -514,6 +601,7 @@ final class PhotoEditorViewModel: ObservableObject {
         EditState(
             cropRect: normalizedCropRect,
             rotationQuarters: rotationQuarters,
+            isFlippedHorizontally: isFlippedHorizontally,
             drawing: drawing,
             textItems: textItems,
             stickerItems: stickerItems,
@@ -523,23 +611,32 @@ final class PhotoEditorViewModel: ObservableObject {
         )
     }
 
-    private func schedulePreviewRefresh() {
-        previewTask?.cancel()
-        previewGeneration += 1
-        let generation = previewGeneration
+    private func schedulePreviewRefresh(live: Bool = false) {
+        if previewBusy {
+            pendingLivePreview = true
+            return
+        }
+        previewBusy = true
         let state = currentEditState()
         let ignoreCrop = showsFullImageForCrop
         let original = originalCIImage
+        let maxDimension: CGFloat = (live || isAdjustingLive) ? 640 : 1600
         previewTask = Task { [renderer] in
             let preview = await renderer.renderPreview(
                 state,
                 from: original,
-                maxDimension: 1600,
+                maxDimension: maxDimension,
                 ignoreCrop: ignoreCrop
             )
             await MainActor.run {
-                guard generation == self.previewGeneration, let preview else { return }
-                self.baseImage = preview
+                self.previewBusy = false
+                if let preview {
+                    self.baseImage = preview
+                }
+                if self.pendingLivePreview {
+                    self.pendingLivePreview = false
+                    self.schedulePreviewRefresh(live: self.isAdjustingLive)
+                }
             }
         }
     }
@@ -671,8 +768,12 @@ final class PhotoEditorViewModel: ObservableObject {
         let displayScale = imageSize.width / max(displayFrame.width, 1)
         let stickerImageScale = item.scale * displayScale
         let gifData: Data? = {
-            guard case .gif(let id) = item.kind else { return nil }
-            return state.gifStickerData[id]
+            switch item.kind {
+            case .gif(let id), .image(let id):
+                return state.gifStickerData[id]
+            default:
+                return nil
+            }
         }()
         let layoutSize = EditorStickerRenderer.baseSize(for: item.kind, gifData: gifData)
         let targetPixelSize = CGSize(
@@ -721,6 +822,7 @@ final class PhotoEditorViewModel: ObservableObject {
     private func restore(_ snapshot: EditState) {
         normalizedCropRect = snapshot.cropRect
         rotationQuarters = snapshot.rotationQuarters
+        isFlippedHorizontally = snapshot.isFlippedHorizontally
         drawing = snapshot.drawing
         textItems = snapshot.textItems
         stickerItems = snapshot.stickerItems

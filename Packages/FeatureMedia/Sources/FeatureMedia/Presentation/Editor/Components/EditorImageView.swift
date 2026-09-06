@@ -1,9 +1,11 @@
+import CoreImage
 import SwiftUI
 import UIKit
 
 /// Pins image to SwiftUI layout bounds — prevents oversized intrinsic content from zooming the preview.
 struct EditorImageView: UIViewRepresentable {
     let image: UIImage
+    var adjustments: ImageAdjustments = .identity
 
     func makeUIView(context: Context) -> UIView {
         let container = UIView()
@@ -28,7 +30,16 @@ struct EditorImageView: UIViewRepresentable {
     }
 
     func updateUIView(_ container: UIView, context: Context) {
-        context.coordinator.imageView?.image = image
+        guard let imageView = context.coordinator.imageView else { return }
+        if adjustments.isIdentity {
+            imageView.image = image
+            return
+        }
+        guard let ciImage = CIImage(image: image) else {
+            imageView.image = image
+            return
+        }
+        imageView.image = FilterEngine.renderUIImage(from: FilterEngine.applyAdjustments(ciImage, adjustments)) ?? image
     }
 
     func makeCoordinator() -> Coordinator {

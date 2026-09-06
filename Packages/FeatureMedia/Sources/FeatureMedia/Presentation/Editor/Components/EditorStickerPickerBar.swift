@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 struct EditorStickerPickerBar: View {
     @EnvironmentObject private var languageService: LanguageService
     @ObservedObject var viewModel: PhotoEditorViewModel
+    var onOpenGifPack: (() -> Void)? = nil
     @State private var category: EditorStickerCategory = .widget
     @State private var symbolCategory: EditorSymbolCategory = .popular
     @State private var emojiCategory: EditorEmojiCategory = .smileys
@@ -33,6 +34,11 @@ struct EditorStickerPickerBar: View {
         .background(.ultraThinMaterial.opacity(0.92))
         .onChange(of: gifPickerItems) { items in
             Task { await importGifItems(items) }
+        }
+        .onChange(of: category) { tab in
+            if tab == .gif {
+                onOpenGifPack?()
+            }
         }
     }
 
@@ -190,33 +196,50 @@ struct EditorStickerPickerBar: View {
                 }
             }
         case .gif:
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                PhotosPicker(selection: $gifPickerItems, maxSelectionCount: 1, matching: .any(of: [.images])) {
-                    VStack(spacing: 6) {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title2)
-                        Text(languageService.text(.mediaLibraryTitle))
-                            .font(.caption2.weight(.semibold))
-                    }
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 88)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.12)))
-                }
-                .buttonStyle(.plain)
-
-                ForEach(viewModel.gifGallery) { sample in
-                    Button {
-                        viewModel.addGifStickerFromGallery(sample)
-                        haptic()
-                    } label: {
-                        EditorGifImageView(data: sample.data)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 88)
-                            .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.08)))
-                            .clipped()
+            VStack(spacing: 10) {
+                if let onOpenGifPack {
+                    Button(action: onOpenGifPack) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "photo.on.rectangle.angled")
+                            Text(languageService.text(.mediaStickerTabGif))
+                                .font(.subheadline.weight(.semibold))
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                        }
+                        .foregroundStyle(.white)
+                        .padding(12)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(SplickTheme.Colors.primaryGradient))
                     }
                     .buttonStyle(.plain)
+                }
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    PhotosPicker(selection: $gifPickerItems, maxSelectionCount: 1, matching: .any(of: [.images])) {
+                        VStack(spacing: 6) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.title2)
+                            Text(languageService.text(.mediaLibraryTitle))
+                                .font(.caption2.weight(.semibold))
+                        }
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 88)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.12)))
+                    }
+                    .buttonStyle(.plain)
+
+                    ForEach(viewModel.gifGallery) { sample in
+                        Button {
+                            viewModel.addGifStickerFromGallery(sample)
+                            haptic()
+                        } label: {
+                            EditorGifImageView(data: sample.data)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 88)
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.08)))
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
         }
@@ -255,9 +278,8 @@ struct EditorStickerPickerBar: View {
     private func importGifItems(_ items: [PhotosPickerItem]) async {
         defer { gifPickerItems = [] }
         guard let item = items.first,
-              let data = try? await item.loadTransferable(type: Data.self),
-              EditorGifDecoder.isGif(data) else { return }
-        viewModel.addGifSticker(data: data)
+              let data = try? await item.loadSplickImageData() else { return }
+        viewModel.addMediaSticker(data: data)
         haptic()
     }
 

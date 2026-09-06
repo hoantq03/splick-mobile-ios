@@ -1,5 +1,6 @@
 import DesignSystem
 import SwiftUI
+import UIKit
 
 struct EditorStickerContentView: View {
     let kind: EditorStickerKind
@@ -27,8 +28,26 @@ struct EditorStickerContentView: View {
             if let gifData {
                 EditorGifImageView(data: gifData)
                     .frame(width: 120, height: 120)
+                    .clipShape(RoundedRectangle(
+                        cornerRadius: EditorGifStyle.cornerRadius(for: CGSize(width: 120, height: 120)),
+                        style: .continuous
+                    ))
             } else {
                 Image(systemName: "photo.on.rectangle.angled")
+                    .font(.largeTitle)
+                    .foregroundStyle(.white.opacity(0.5))
+                    .frame(width: 120, height: 120)
+            }
+
+        case .image:
+            if let gifData,
+               let image = EditorGifDecoder.firstFrame(from: gifData) ?? UIImage(data: gifData) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 120, height: 120)
+            } else {
+                Image(systemName: "photo")
                     .font(.largeTitle)
                     .foregroundStyle(.white.opacity(0.5))
                     .frame(width: 120, height: 120)

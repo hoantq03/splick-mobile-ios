@@ -6,7 +6,7 @@ struct PhotoEditorStickerLayer: View {
     let isEditing: Bool
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .topLeading) {
             ForEach(viewModel.stickerItems) { item in
                 StickerOverlayItemView(
                     item: item,
@@ -15,7 +15,9 @@ struct PhotoEditorStickerLayer: View {
                     isInteractive: isEditing,
                     displayFrame: displayMetrics.displayFrame,
                     gifData: viewModel.gifData(for: item.kind),
+                    baseSize: EditorStickerRenderer.baseSize(for: item.kind, gifData: viewModel.gifData(for: item.kind)),
                     onSelect: { viewModel.selectedStickerID = item.id },
+                    onDelete: { viewModel.deleteSelectedSticker() },
                     onMove: { viewModel.updateStickerPosition(id: item.id, normalizedPosition: $0) },
                     onScale: { viewModel.updateStickerScale(id: item.id, scale: $0) },
                     onRotate: { viewModel.updateStickerRotation(id: item.id, rotation: $0) },
@@ -23,7 +25,12 @@ struct PhotoEditorStickerLayer: View {
                 )
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .coordinateSpace(name: Self.canvasSpace)
+        .allowsHitTesting(isEditing)
     }
+
+    static let canvasSpace = "editorStickerCanvas"
 }
 
 private struct StickerOverlayItemView: View {
@@ -33,7 +40,9 @@ private struct StickerOverlayItemView: View {
     let isInteractive: Bool
     let displayFrame: CGRect
     let gifData: Data?
+    let baseSize: CGSize
     let onSelect: () -> Void
+    let onDelete: () -> Void
     let onMove: (CGPoint) -> Void
     let onScale: (CGFloat) -> Void
     let onRotate: (Angle) -> Void
@@ -44,8 +53,35 @@ private struct StickerOverlayItemView: View {
     @State private var liveRotation: Angle = .zero
 
     var body: some View {
+        visual
+            .frame(width: baseSize.width, height: baseSize.height)
+            .contentShape(Rectangle())
+            .highPriorityGesture(
+                dragGesture,
+                including: isInteractive && isSelected ? .all : .none
+            )
+            .simultaneousGesture(
+                magnifyGesture,
+                including: isInteractive && isSelected ? .all : .none
+            )
+            .simultaneousGesture(
+                rotateGesture,
+                including: isInteractive && isSelected ? .all : .none
+            )
+            .onTapGesture {
+                guard isInteractive else { return }
+                onSelect()
+            }
+            .allowsHitTesting(isInteractive)
+            .offset(
+                x: center.x + dragOffset.width - baseSize.width / 2,
+                y: center.y + dragOffset.height - baseSize.height / 2
+            )
+            .transaction { $0.animation = nil }
+    }
+
+    private var visual: some View {
         EditorStickerContentView(kind: item.kind, gifData: gifData)
-            .fixedSize(horizontal: true, vertical: true)
             .scaleEffect(item.scale * liveScale)
             .rotationEffect(item.rotation + liveRotation)
             .overlay {
@@ -55,20 +91,25 @@ private struct StickerOverlayItemView: View {
                         .padding(-6)
                 }
             }
-            .position(x: center.x + dragOffset.width, y: center.y + dragOffset.height)
-            .allowsHitTesting(isInteractive)
-            .gesture(dragGesture)
-            .simultaneousGesture(magnifyGesture)
-            .simultaneousGesture(rotateGesture)
-            .onTapGesture {
-                guard isInteractive else { return }
-                onSelect()
+            .overlay(alignment: .topTrailing) {
+                if isSelected, isInteractive {
+                    Button(action: onDelete) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundStyle(.white)
+                            .background(Circle().fill(Color.black.opacity(0.55)))
+                    }
+                    .buttonStyle(.plain)
+                    .offset(x: 8, y: -8)
+                }
             }
     }
 
     private var dragGesture: some Gesture {
-        DragGesture(minimumDistance: 2)
-            .onChanged { dragOffset = $0.translation }
+        DragGesture(minimumDistance: 1, coordinateSpace: .named(PhotoEditorStickerLayer.canvasSpace))
+            .onChanged { value in
+                dragOffset = value.translation
+            }
             .onEnded { value in
                 let location = CGPoint(
                     x: center.x + value.translation.width,
@@ -84,7 +125,7 @@ private struct StickerOverlayItemView: View {
         MagnificationGesture()
             .onChanged { liveScale = $0 }
             .onEnded { scale in
-                onScale(max(0.4, min(item.scale * scale, 3)))
+                onScale(max(0.25, min(item.scale * scale, 8)))
                 liveScale = 1
                 onTransformEnd()
             }

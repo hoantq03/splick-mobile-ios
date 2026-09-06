@@ -70,6 +70,7 @@ enum EditorStickerKind: Equatable {
     case emoji(String)
     case widget(WidgetStickerTemplate)
     case gif(UUID)
+    case image(UUID)
 }
 
 struct EditorGifSample: Identifiable, Equatable {

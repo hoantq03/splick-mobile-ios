@@ -1,6 +1,7 @@
 import DesignSystem
 import Localization
 import SwiftUI
+import UIKit
 
 struct EditorToolbar: View {
     @EnvironmentObject private var languageService: LanguageService
@@ -62,6 +63,10 @@ struct EditorToolbar: View {
             drawOptionsBar
                 .transition(.move(edge: .bottom).combined(with: .opacity))
         }
+        if viewModel.isChromeVisible, activeComposerTool == .edit {
+            editSubtoolsBar
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
         if viewModel.isChromeVisible, viewModel.activeTool == .crop {
             cropOptionsBar
                 .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -79,41 +84,103 @@ struct EditorToolbar: View {
     }
 
     private var drawOptionsBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        VStack(spacing: SplickTheme.Spacing.sm) {
             HStack(spacing: SplickTheme.Spacing.md) {
-                ForEach(Array(PhotoEditorViewModel.inkPalette.enumerated()), id: \.offset) { _, color in
-                    Button {
-                        viewModel.inkColor = color
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    } label: {
-                        Circle()
-                            .fill(Color(color))
-                            .frame(width: 30, height: 30)
-                            .overlay {
-                                if viewModel.inkColor.isEqual(color) {
-                                    Circle().strokeBorder(Color.white, lineWidth: 2.5)
-                                }
-                            }
-                            .shadow(color: .black.opacity(0.2), radius: 2, y: 1)
-                    }
+                Button {
+                    viewModel.undoLastStroke()
+                } label: {
+                    Image(systemName: "arrow.uturn.backward")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(viewModel.canUndoStroke ? .white : .white.opacity(0.35))
                 }
+                .disabled(!viewModel.canUndoStroke)
+                .accessibilityLabel(languageService.text(.mediaUndoA11y))
+
+                Button {
+                    viewModel.redoLastStroke()
+                } label: {
+                    Image(systemName: "arrow.uturn.forward")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(viewModel.canRedoStroke ? .white : .white.opacity(0.35))
+                }
+                .disabled(!viewModel.canRedoStroke)
+                .accessibilityLabel(languageService.text(.mediaRedoA11y))
 
                 Divider().frame(height: 28).overlay(Color.white.opacity(0.25))
 
-                ForEach([3, 5, 8, 12], id: \.self) { width in
-                    Button {
-                        viewModel.inkWidth = CGFloat(width)
-                    } label: {
-                        Circle()
-                            .fill(viewModel.inkWidth == CGFloat(width) ? Color.white : Color.white.opacity(0.35))
-                            .frame(width: CGFloat(width + 6), height: CGFloat(width + 6))
+                Circle()
+                    .fill(Color(viewModel.inkColor))
+                    .frame(width: max(viewModel.inkWidth, 6), height: max(viewModel.inkWidth, 6))
+                Slider(
+                    value: Binding(
+                        get: { Double(viewModel.inkWidth) },
+                        set: { viewModel.inkWidth = CGFloat($0) }
+                    ),
+                    in: 2...28
+                )
+                .tint(.white)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: SplickTheme.Spacing.md) {
+                    ForEach(Array(PhotoEditorViewModel.inkPalette.enumerated()), id: \.offset) { _, color in
+                        Button {
+                            viewModel.inkColor = color
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        } label: {
+                            Circle()
+                                .fill(Color(color))
+                                .frame(width: 30, height: 30)
+                                .overlay {
+                                    if viewModel.inkColor.isEqual(color) {
+                                        Circle().strokeBorder(Color.white, lineWidth: 2.5)
+                                    }
+                                }
+                                .shadow(color: .black.opacity(0.2), radius: 2, y: 1)
+                        }
                     }
                 }
             }
-            .padding(.horizontal, SplickTheme.Spacing.md)
-            .padding(.vertical, SplickTheme.Spacing.sm)
         }
+        .padding(.horizontal, SplickTheme.Spacing.md)
+        .padding(.vertical, SplickTheme.Spacing.sm)
         .background(.ultraThinMaterial.opacity(0.85))
+    }
+
+    private var editSubtoolsBar: some View {
+        HStack(spacing: SplickTheme.Spacing.sm) {
+            editSubtool(title: languageService.text(.mediaToolCrop), icon: "crop") {
+                viewModel.selectTool(.crop)
+            }
+            editSubtool(title: languageService.text(.mediaToolRotate), icon: "rotate.right") {
+                viewModel.selectTool(.rotate)
+            }
+            editSubtool(title: languageService.text(.mediaToolFlip), icon: "arrow.left.and.right.righttriangle.left.righttriangle.right") {
+                viewModel.selectTool(.flip)
+            }
+            editSubtool(title: languageService.text(.mediaToolAdjust), icon: "slider.horizontal.3") {
+                viewModel.selectTool(.adjust)
+            }
+        }
+        .padding(.horizontal, SplickTheme.Spacing.md)
+        .padding(.vertical, SplickTheme.Spacing.sm)
+        .background(.ultraThinMaterial.opacity(0.85))
+    }
+
+    private func editSubtool(title: String, icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .semibold))
+                Text(title)
+                    .font(.caption2.weight(.semibold))
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.14)))
+        }
+        .buttonStyle(.plain)
     }
 
     private var cropOptionsBar: some View {
@@ -174,53 +241,23 @@ struct EditorToolbar: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.white.opacity(0.85))
                 .frame(width: 88, alignment: .leading)
-            Slider(
-                value: Binding(
-                    get: { Double(viewModel.adjustments[keyPath: keyPath]) },
-                    set: { newValue in
-                        var next = viewModel.adjustments
-                        next[keyPath: keyPath] = Float(newValue)
-                        viewModel.setAdjustments(next)
+    Slider(
+                    value: Binding(
+                        get: { Double(viewModel.adjustments[keyPath: keyPath]) },
+                        set: { newValue in
+                            var next = viewModel.adjustments
+                            next[keyPath: keyPath] = Float(newValue)
+                            viewModel.setAdjustments(next)
+                        }
+                    ),
+                    in: range,
+                    onEditingChanged: { editing in
+                        viewModel.setAdjustingLive(editing)
+                        if !editing { viewModel.commitAdjustments() }
                     }
-                ),
-                in: range,
-                onEditingChanged: { editing in
-                    if !editing { viewModel.commitAdjustments() }
-                }
-            )
+                )
             .tint(.white)
         }
     }
 }
 
-struct EditorMoreOptionsSheet: View {
-    @EnvironmentObject private var languageService: LanguageService
-    @ObservedObject var viewModel: PhotoEditorViewModel
-    let onDismiss: () -> Void
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Button(languageService.text(.mediaToolCrop)) {
-                    onDismiss()
-                    viewModel.selectTool(.crop)
-                }
-                Button(languageService.text(.mediaToolRotate)) {
-                    onDismiss()
-                    viewModel.selectTool(.rotate)
-                }
-                Button(languageService.text(.mediaToolAdjust)) {
-                    onDismiss()
-                    viewModel.selectTool(.adjust)
-                }
-            }
-            .navigationTitle(languageService.text(.mediaToolMore))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(languageService.text(.commonClose), action: onDismiss)
-                }
-            }
-        }
-    }
-}
