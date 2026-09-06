@@ -103,19 +103,22 @@ struct FeedInlineVideoPlayer: View {
             syncController(active: active)
         }
         .onAppear {
+            // Kickstart autoplay in the same turn as appear. Relying only on the
+            // background reporter can lose the race (player onAppear runs first),
+            // and PostCard `.equatable()` may swallow later activePostId updates.
+            if !usesStandalonePlayback, feedTabIsActive {
+                autoplayCoordinator?.updateVisibility(postId: postId, ratio: 1)
+            }
             syncController(active: isAutoplayActive)
         }
         .onDisappear {
             if !usesStandalonePlayback {
-                // Visibility reporter also clears; keep pool release on cell recycle.
                 autoplayCoordinator?.clearPost(postId)
             }
             standaloneController?.tearDown()
             standaloneController = nil
             controllerProxy.detach()
         }
-        // Prefer onChange over onReceive($activePostId): a fresh AnyPublisher each body
-        // pass re-subscribes, re-emits, and can thrash AVPlayer + freeze the main thread.
         .onChange(of: autoplayCoordinator?.activePostId) { activeId in
             guard !usesStandalonePlayback else { return }
             syncController(active: feedTabIsActive && activeId == postId)
@@ -123,8 +126,11 @@ struct FeedInlineVideoPlayer: View {
         .onChange(of: feedTabIsActive) { active in
             if usesStandalonePlayback {
                 syncController(active: active)
+            } else if active {
+                autoplayCoordinator?.updateVisibility(postId: postId, ratio: 1)
+                syncController(active: autoplayCoordinator?.activePostId == postId)
             } else {
-                syncController(active: active && autoplayCoordinator?.activePostId == postId)
+                syncController(active: false)
             }
         }
     }
