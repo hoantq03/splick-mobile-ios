@@ -30,6 +30,10 @@ public final class PresenceStore: ObservableObject {
         }
     }
 
+    public func clear(userId: UUID) {
+        states.removeValue(forKey: userId)
+    }
+
     /// Optional peer fields: ignore empty snapshots; never OR-sticky online.
     public func mergeFromPeer(userId: UUID, isOnline: Bool?, lastSeenAt: Date?) {
         guard isOnline != nil || lastSeenAt != nil else { return }

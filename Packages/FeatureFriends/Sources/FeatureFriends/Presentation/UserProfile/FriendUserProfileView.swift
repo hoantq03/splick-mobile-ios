@@ -38,10 +38,13 @@ public struct FriendUserProfileView: View {
                             name: viewModel.user.preferredName,
                             size: .profile,
                             userId: viewModel.user.id,
-                            showOnlineIndicator: PresenceDisplayPolicy.shouldShowOnlineIndicator(
-                                isOnline: viewModel.isOwnProfile || resolvedPresence.isOnline
+                            showOnlineIndicator: viewModel.isOwnProfile || (
+                                viewModel.friendStatus == .friends &&
+                                PresenceDisplayPolicy.shouldShowOnlineIndicator(
+                                    isOnline: resolvedPresence.isOnline
+                                )
                             ),
-                            lastSeenLabel: viewModel.isOwnProfile
+                            lastSeenLabel: viewModel.isOwnProfile || viewModel.friendStatus != .friends
                                 ? nil
                                 : PresenceDisplayPolicy.compactLastSeenLabel(
                                     isOnline: resolvedPresence.isOnline,
@@ -160,6 +163,9 @@ public struct FriendUserProfileView: View {
                         Button(languageService.text(.friendsRemoveFriendConfirmAction), role: .destructive) {
                             Task {
                                 await viewModel.removeFriend()
+                                if viewModel.friendStatus == .none {
+                                    presenceStore.clear(userId: viewModel.user.id)
+                                }
                                 dismiss()
                             }
                         }
@@ -172,6 +178,9 @@ public struct FriendUserProfileView: View {
                         Button(languageService.text(.friendsBlockConfirmAction), role: .destructive) {
                             Task {
                                 await viewModel.blockUser()
+                                if viewModel.friendStatus == .blocked {
+                                    presenceStore.clear(userId: viewModel.user.id)
+                                }
                                 dismiss()
                             }
                         }

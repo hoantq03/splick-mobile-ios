@@ -268,6 +268,8 @@ public final class FriendUserProfileViewModel: ObservableObject {
         do {
             try await removeFriendUseCase.execute(friendUserId: user.id)
             friendStatus = .none
+            profileIsOnline = false
+            profileLastSeenAt = nil
             onRelationshipChanged(user.id, .none)
         } catch {
             alertMessage = error.localizedDescription
@@ -299,6 +301,8 @@ public final class FriendUserProfileViewModel: ObservableObject {
         do {
             try await blockUserUseCase.execute(userId: user.id)
             friendStatus = .blocked
+            profileIsOnline = false
+            profileLastSeenAt = nil
             onRelationshipChanged(user.id, .blocked)
         } catch {
             alertMessage = error.localizedDescription

@@ -207,6 +207,7 @@ public final class ConversationListViewModel: ObservableObject {
 
     public func setActiveConversation(_ conversationId: UUID) {
         activeConversationId = conversationId
+        VisibleChatThreadStore.shared.set(conversationId)
         markConversationAsRead(conversationId: conversationId)
     }
 
@@ -214,6 +215,7 @@ public final class ConversationListViewModel: ObservableObject {
         if activeConversationId == conversationId {
             activeConversationId = nil
         }
+        VisibleChatThreadStore.shared.clearIfMatching(conversationId)
         markConversationAsRead(conversationId: conversationId)
     }
 

@@ -32,4 +32,13 @@ struct PresenceStoreTests {
         store.mergeFromPeer(userId: userId, isOnline: false, lastSeenAt: Date())
         #expect(store.state(for: userId)?.isOnline == false)
     }
+
+    @Test
+    func clearRemovesCachedPresence() {
+        let store = PresenceStore()
+        let userId = UUID()
+        store.apply(userId: userId, isOnline: true, lastSeenAt: Date())
+        store.clear(userId: userId)
+        #expect(store.state(for: userId) == nil)
+    }
 }
