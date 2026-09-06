@@ -12,8 +12,7 @@ public enum APIErrorLocalization {
         if let authError = error as? AuthError {
             return message(for: authError, locale: locale)
         }
-        let fallback = error.localizedDescription
-        return fallback.isEmpty ? L10n.string(.errorNetworkUnexpected, locale: locale) : fallback
+        return sanitizedFallback(error.localizedDescription, locale: locale)
     }
 
     public static func message(for error: AppError, locale: AppLocale) -> String {
@@ -27,7 +26,7 @@ public enum APIErrorLocalization {
         case .storage(let storageError):
             return storageError.userMessage
         case .unknown(let message):
-            return message
+            return sanitizedFallback(message, locale: locale)
         }
     }
 
@@ -60,9 +59,7 @@ public enum APIErrorLocalization {
         case .apiError(let code, let message, _):
             return apiBusinessMessage(for: code, fallback: message, locale: locale)
         case .unknown(let message, _):
-            return message.isEmpty
-                ? L10n.string(.errorNetworkUnexpected, locale: locale)
-                : message
+            return sanitizedFallback(message, locale: locale)
         }
     }
 
@@ -126,9 +123,46 @@ public enum APIErrorLocalization {
         case "MEDIA_FORBIDDEN":
             return L10n.string(.errorMediaForbiddenGroupAvatar, locale: locale)
         default:
-            return fallback.isEmpty
-                ? L10n.string(.errorNetworkUnexpected, locale: locale)
-                : fallback
+            return sanitizedFallback(fallback, locale: locale)
+        }
+    }
+
+    private static func sanitizedFallback(_ raw: String, locale: AppLocale) -> String {
+        let cleaned = stripSupportReference(raw)
+        if cleaned.isEmpty || looksLikeNonUserCopy(cleaned) {
+            return L10n.string(.errorNetworkUnexpected, locale: locale)
+        }
+        return cleaned
+    }
+
+    private static func stripSupportReference(_ message: String) -> String {
+        var result = message
+        let patterns = [
+            #"\s*Reference:\s*\S+"#,
+            #"\s*trace[_ ]?id\s*[:=]\s*\S+"#,
+        ]
+        for pattern in patterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) {
+                let range = NSRange(result.startIndex..<result.endIndex, in: result)
+                result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "")
+            }
+        }
+        return result.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func looksLikeNonUserCopy(_ message: String) -> Bool {
+        let lower = message.lowercased()
+        if lower.hasPrefix("http ") || lower.hasPrefix("{") || lower.contains("\"traceid\"") {
+            return true
+        }
+        switch lower {
+        case "an unexpected error occurred",
+             "internal server error",
+             "internal_error",
+             "unexpected error":
+            return true
+        default:
+            return false
         }
     }
 }
