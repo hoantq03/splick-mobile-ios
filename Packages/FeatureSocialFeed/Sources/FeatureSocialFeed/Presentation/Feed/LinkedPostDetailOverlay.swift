@@ -23,6 +23,7 @@ public struct LinkedPostDetailOverlay: View {
     let onDismiss: () -> Void
 
     @State private var dragOffset: CGFloat = 0
+    @StateObject private var videoCoordinator = FeedVideoPlaybackCoordinator()
 
     public init(
         presentation: PendingFeedPostNavigation,
@@ -57,6 +58,7 @@ public struct LinkedPostDetailOverlay: View {
                 makeGifPickerViewModel: makeGifPickerViewModel,
                 onClose: dismiss
             )
+            .environment(\.feedVideoCoordinator, videoCoordinator)
             .navigationBarBackButtonHidden(true)
             .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {

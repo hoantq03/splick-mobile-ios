@@ -104,7 +104,8 @@ struct PostDetailView: View {
                         showsCommentPreview: false,
                         initiallyExpandedBillSplit: expandBillSplitInitially,
                         initialMediaIndex: initialMediaIndex,
-                        uploadState: feedViewModel.postUploadState(for: post.id)
+                        uploadState: feedViewModel.postUploadState(for: post.id),
+                        showsVideoScrubber: true
                     )
                     .feedPostEditedBadge(isEdited: livePost.isEdited) {
                         cardActions.onPresent(.editHistory(livePost))

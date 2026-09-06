@@ -21,6 +21,7 @@ struct PostCardView: View, Equatable {
     /// Restores carousel position when opening detail after swiping media in the feed.
     var initialMediaIndex: Int = 0
     var uploadState: PostUploadState? = nil
+    var showsVideoScrubber: Bool = false
 
     @State private var mediaPageIndex = 0
     @State private var appliedInitialMediaIndex = false
@@ -42,6 +43,7 @@ struct PostCardView: View, Equatable {
             && lhs.initiallyExpandedBillSplit == rhs.initiallyExpandedBillSplit
             && lhs.initialMediaIndex == rhs.initialMediaIndex
             && lhs.uploadState == rhs.uploadState
+            && lhs.showsVideoScrubber == rhs.showsVideoScrubber
             && lhs.actions === rhs.actions
     }
 
@@ -100,7 +102,8 @@ struct PostCardView: View, Equatable {
                 post: post,
                 selectedIndex: $mediaPageIndex,
                 onTap: resolvedMediaTap,
-                isPinchZooming: $isMediaPinchZooming
+                isPinchZooming: $isMediaPinchZooming,
+                showsVideoScrubber: showsVideoScrubber
             )
             contextSection
 

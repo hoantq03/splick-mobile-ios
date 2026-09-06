@@ -9,6 +9,7 @@ struct PostMediaView: View {
     var onTap: ((Int) -> Void)?
     /// When true, the parent should lift z-index and relax clipping so pinch zoom can escape the card.
     @Binding var isPinchZooming: Bool
+    var showsVideoScrubber: Bool = false
 
     @State private var containerWidth: CGFloat = FeedMediaLayout.estimatedCardContentWidth
 
@@ -16,12 +17,14 @@ struct PostMediaView: View {
         post: Post,
         selectedIndex: Binding<Int>,
         onTap: ((Int) -> Void)? = nil,
-        isPinchZooming: Binding<Bool> = .constant(false)
+        isPinchZooming: Binding<Bool> = .constant(false),
+        showsVideoScrubber: Bool = false
     ) {
         self.post = post
         self._selectedIndex = selectedIndex
         self.onTap = onTap
         self._isPinchZooming = isPinchZooming
+        self.showsVideoScrubber = showsVideoScrubber
     }
 
     private var items: [PostMediaItem] {
@@ -105,7 +108,12 @@ struct PostMediaView: View {
 
     @ViewBuilder
     private func tappableMedia<Content: View>(index: Int, @ViewBuilder content: () -> Content) -> some View {
-        if let onTap {
+        // Videos handle their own tap-to-pause/resume; only images open the media viewer.
+        let opensViewerOnTap =
+            onTap != nil
+            && items.indices.contains(index)
+            && items[index].mediaType != .video
+        if let onTap, opensViewerOnTap {
             content()
                 .contentShape(Rectangle())
                 .highPriorityGesture(
@@ -179,7 +187,8 @@ struct PostMediaView: View {
             url: item.mediaURL,
             posterURL: item.thumbnailURL ?? item.mediaURL,
             durationSeconds: item.durationSeconds,
-            displayHeight: height
+            displayHeight: height,
+            showsScrubber: showsVideoScrubber
         )
         .frame(width: width, height: height)
         .frame(maxWidth: .infinity)

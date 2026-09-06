@@ -16,14 +16,17 @@ enum FeedVideoSpeed {
     }
 }
 
-/// Custom inline feed player: autoplay when visible, muted by default, scrubber + speed menu.
-/// Uses a pooled AVPlayer from `FeedVideoPlaybackCoordinator` — inactive cells show poster only.
+/// Custom inline feed player: autoplay when visible, muted by default.
+/// Timeline/speed live on post detail (`showsScrubber`). Inactive cells show poster only.
+/// Tap the surface to pause/resume without opening a fullscreen video viewer.
 struct FeedInlineVideoPlayer: View {
     let postId: UUID
     let url: URL
     let posterURL: URL?
     let durationSeconds: Int?
     var displayHeight: CGFloat = FeedMediaLayout.defaultHeight
+    /// Feed hides the timeline; post detail / media viewer can show it.
+    var showsScrubber: Bool = false
 
     @Environment(\.feedVideoCoordinator) private var autoplayCoordinator
     @Environment(\.feedTabIsActive) private var feedTabIsActive
@@ -32,11 +35,19 @@ struct FeedInlineVideoPlayer: View {
     @State private var showSpeedMenu = false
     /// Observe the pooled controller when this post is active.
     @StateObject private var controllerProxy = FeedVideoControllerProxy()
+    /// Used when there is no feed autoplay coordinator (e.g. linked post overlay).
+    @State private var standaloneController: FeedVideoPlaybackController?
 
     private let centerButtonSize: CGFloat = 88
 
+    /// Post detail (scrubber) and overlays without a feed pool use a dedicated controller.
+    private var usesStandalonePlayback: Bool {
+        showsScrubber || autoplayCoordinator == nil
+    }
+
     private var isAutoplayActive: Bool {
-        feedTabIsActive && autoplayCoordinator?.activePostId == postId
+        if usesStandalonePlayback { return true }
+        return feedTabIsActive && autoplayCoordinator?.activePostId == postId
     }
 
     private var controller: FeedVideoPlaybackController? {
@@ -59,6 +70,8 @@ struct FeedInlineVideoPlayer: View {
     var body: some View {
         ZStack {
             mediaLayer
+                .contentShape(Rectangle())
+                .onTapGesture { handleSurfaceTap() }
 
             if showSpeedMenu {
                 Color.black.opacity(0.001)
@@ -69,42 +82,70 @@ struct FeedInlineVideoPlayer: View {
                     }
             }
 
-            if let controller, !controller.isPlaying || controller.showsCenterTransport {
-                centerPlaybackButton
-            } else if controller == nil {
+            // Idle / autoplay: no center transport.
+            // Inactive poster: one post play affordance.
+            // After the user taps the video: show play/pause transport.
+            if controller == nil {
+                postPlayAffordance
+            } else if controller?.showsCenterTransport == true {
                 centerPlaybackButton
             }
 
             controlsOverlay
         }
         .frame(height: displayHeight)
+        .background {
+            if !usesStandalonePlayback {
+                FeedVideoVisibilityReporter(postId: postId)
+            }
+        }
         .onChange(of: isAutoplayActive) { active in
             syncController(active: active)
         }
         .onAppear {
-            guard feedTabIsActive else { return }
-            autoplayCoordinator?.updateVisibility(postId: postId, ratio: 0.85)
             syncController(active: isAutoplayActive)
         }
         .onDisappear {
-            autoplayCoordinator?.clearPost(postId)
+            if !usesStandalonePlayback {
+                // Visibility reporter also clears; keep pool release on cell recycle.
+                autoplayCoordinator?.clearPost(postId)
+            }
+            standaloneController?.tearDown()
+            standaloneController = nil
             controllerProxy.detach()
         }
-        .onChange(of: autoplayCoordinator?.activePostId) { _ in
-            syncController(active: isAutoplayActive)
+        // Prefer onChange over onReceive($activePostId): a fresh AnyPublisher each body
+        // pass re-subscribes, re-emits, and can thrash AVPlayer + freeze the main thread.
+        .onChange(of: autoplayCoordinator?.activePostId) { activeId in
+            guard !usesStandalonePlayback else { return }
+            syncController(active: feedTabIsActive && activeId == postId)
+        }
+        .onChange(of: feedTabIsActive) { active in
+            if usesStandalonePlayback {
+                syncController(active: active)
+            } else {
+                syncController(active: active && autoplayCoordinator?.activePostId == postId)
+            }
         }
     }
 
     private func syncController(active: Bool) {
+        if usesStandalonePlayback {
+            syncStandaloneController(active: active)
+            return
+        }
         guard let autoplayCoordinator else {
-            controllerProxy.detach()
+            syncStandaloneController(active: active)
             return
         }
         if active {
             let pooled = autoplayCoordinator.acquireController(for: postId, url: url)
+            let alreadyAttached = controllerProxy.controller === pooled
             controllerProxy.attach(pooled)
             pooled.setAutoplayActive(true)
-            FeedSignposts.videoPlayerAcquire(postId: postId)
+            if !alreadyAttached {
+                FeedSignposts.videoPlayerAcquire(postId: postId)
+            }
         } else {
             controller?.setAutoplayActive(false)
             // Keep poster-only for inactive cells; release pool slot on clearPost/suspend.
@@ -113,6 +154,24 @@ struct FeedInlineVideoPlayer: View {
                 controllerProxy.detach()
             }
         }
+    }
+
+    private func syncStandaloneController(active: Bool) {
+        guard active else {
+            standaloneController?.setAutoplayActive(false)
+            return
+        }
+        let owned = ensureStandaloneController()
+        controllerProxy.attach(owned)
+        owned.setAutoplayActive(true)
+        FeedSignposts.videoPlayerAcquire(postId: postId)
+    }
+
+    private func ensureStandaloneController() -> FeedVideoPlaybackController {
+        if let standaloneController { return standaloneController }
+        let created = FeedVideoPlaybackController(url: url)
+        standaloneController = created
+        return created
     }
 
     @ViewBuilder
@@ -142,16 +201,26 @@ struct FeedInlineVideoPlayer: View {
         .clipped()
     }
 
+    private var postPlayAffordance: some View {
+        Button {
+            handleSurfaceTap()
+        } label: {
+            Circle()
+                .fill(.black.opacity(0.45))
+                .frame(width: 56, height: 56)
+                .overlay {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(.white)
+                        .offset(x: 2)
+                }
+        }
+        .buttonStyle(.plain)
+    }
+
     private var centerPlaybackButton: some View {
         Button {
-            if let controller {
-                controller.togglePlaybackFromCenter()
-            } else {
-                // User tapped play on inactive cell — promote to active via coordinator.
-                autoplayCoordinator?.updateVisibility(postId: postId, ratio: 1)
-                syncController(active: true)
-                controllerProxy.controller?.togglePlaybackFromCenter()
-            }
+            handleSurfaceTap()
         } label: {
             Circle()
                 .fill(.black.opacity(0.5))
@@ -165,6 +234,22 @@ struct FeedInlineVideoPlayer: View {
         }
         .buttonStyle(.plain)
         .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
+    }
+
+    private func handleSurfaceTap() {
+        if let controller {
+            controller.togglePlaybackFromCenter()
+            return
+        }
+        // Inactive cell / first attach: promote and let autoplay start playback.
+        if usesStandalonePlayback {
+            syncStandaloneController(active: true)
+        } else if let autoplayCoordinator {
+            autoplayCoordinator.updateVisibility(postId: postId, ratio: 1)
+            syncController(active: true)
+        } else {
+            syncStandaloneController(active: true)
+        }
     }
 
     private var centerIconName: String {
@@ -188,7 +273,7 @@ struct FeedInlineVideoPlayer: View {
 
             Spacer()
 
-            if controller != nil {
+            if showsScrubber, controller != nil {
                 transportRow
                     .padding(.horizontal, 12)
                     .padding(.bottom, 10)
@@ -411,6 +496,14 @@ final class FeedVideoPlaybackController: ObservableObject {
     }
 
     func setAutoplayActive(_ active: Bool) {
+        guard autoplayActive != active else {
+            // Already in the desired mode — avoid re-entering play()/pause() which
+            // republish @Published fields and can feedback into SwiftUI layout.
+            if active, !userPaused, !isPlaying {
+                play(userInitiated: false)
+            }
+            return
+        }
         autoplayActive = active
         if !active {
             pause(userInitiated: false)
@@ -461,12 +554,14 @@ final class FeedVideoPlaybackController: ObservableObject {
         if userInitiated {
             userPaused = false
         }
-        showsVideoSurface = true
+        if !showsVideoSurface {
+            showsVideoSurface = true
+        }
         pendingPlay = true
 
         if playerItem.status == .readyToPlay {
             beginPlayback()
-        } else {
+        } else if !isPlaying {
             player.play()
         }
     }
@@ -496,9 +591,15 @@ final class FeedVideoPlaybackController: ObservableObject {
         if player.rate == 0 {
             player.play()
         }
-        player.rate = playbackRate
-        isPlaying = true
-        showsCenterTransport = false
+        if abs(player.rate - playbackRate) > 0.001 {
+            player.rate = playbackRate
+        }
+        if !isPlaying {
+            isPlaying = true
+        }
+        if showsCenterTransport {
+            showsCenterTransport = false
+        }
     }
 
     private func handlePlaybackEnded() {
@@ -506,9 +607,10 @@ final class FeedVideoPlaybackController: ObservableObject {
         progress = 0
         pause(userInitiated: false)
         userPaused = false
-        showsCenterTransport = true
         if autoplayActive {
             play(userInitiated: false)
+        } else {
+            showsCenterTransport = true
         }
     }
 

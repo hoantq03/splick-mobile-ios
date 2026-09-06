@@ -137,6 +137,7 @@ public struct FeedView: View {
                     profileDependencies: profileDependencies,
                     makeGifPickerViewModel: makeGifPickerViewModel
                 )
+                .environment(\.feedVideoCoordinator, videoCoordinator)
                 .feedPostZoomDestination(postId: destination.postId, namespace: postZoomNamespace)
             }
             .alert(
@@ -602,6 +603,7 @@ private struct FeedPrimaryPage: View {
         }
         .scrollDisabled(feedScrollLocked)
         .environment(\.feedVideoCoordinator, videoCoordinator)
+        .feedVideoVisibilityHandling(coordinator: videoCoordinator)
     }
 
     private var feedEndReachedFooter: some View {
