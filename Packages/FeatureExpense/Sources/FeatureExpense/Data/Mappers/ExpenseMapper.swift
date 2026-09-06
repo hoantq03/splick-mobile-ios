@@ -155,7 +155,8 @@ enum ExpenseMapper {
       amount: Decimal(string: dto.amount) ?? .zero,
       currency: dto.currency,
       counterparty: dto.counterparty.map(toUserSummary),
-      createdAt: dto.createdAt
+      createdAt: dto.createdAt,
+      postId: dto.postId
     )
   }
 

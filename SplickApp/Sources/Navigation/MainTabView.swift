@@ -345,6 +345,7 @@ struct MainTabView: View {
             isTabActive: settledPagerTab == .expenses,
             fetchMyFriendsUseCase: container.fetchMyFriendsUseCase,
             fetchMyGroupsUseCase: container.fetchMyGroupsUseCase,
+            fetchDebtSummaryUseCase: container.fetchDebtSummaryUseCase,
             profileDependencies: container.friendUserProfileDependencies,
             friendListViewModel: container.expenseFriendListViewModel,
             makeFriendDetailViewModel: { debt in

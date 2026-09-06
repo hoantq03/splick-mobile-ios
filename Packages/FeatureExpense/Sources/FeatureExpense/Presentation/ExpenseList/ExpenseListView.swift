@@ -39,6 +39,7 @@ public struct ExpenseListView: View {
     private let makeFriendDetailViewModel: ((DebtSummary) -> ExpenseFriendDetailViewModel)?
     private let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol?
     private let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
+    private let fetchDebtSummaryUseCase: FetchDebtSummaryUseCaseProtocol?
     private let overviewViewModel: ExpenseOverviewViewModel?
 
     private var sameTabTapPublisher: AnyPublisher<Void, Never> {
@@ -53,6 +54,7 @@ public struct ExpenseListView: View {
         isTabActive: Bool = true,
         fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol? = nil,
         fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol? = nil,
+        fetchDebtSummaryUseCase: FetchDebtSummaryUseCaseProtocol? = nil,
         profileDependencies: FriendUserProfileDependencies? = nil,
         friendListViewModel: ExpenseFriendListViewModel? = nil,
         makeFriendDetailViewModel: ((DebtSummary) -> ExpenseFriendDetailViewModel)? = nil,
@@ -64,6 +66,7 @@ public struct ExpenseListView: View {
         self.isTabActive = isTabActive
         self.fetchMyFriendsUseCase = fetchMyFriendsUseCase
         self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
+        self.fetchDebtSummaryUseCase = fetchDebtSummaryUseCase
         self.profileDependencies = profileDependencies
         self.friendListViewModel = friendListViewModel
         self.makeFriendDetailViewModel = makeFriendDetailViewModel
@@ -108,6 +111,23 @@ public struct ExpenseListView: View {
                     ExpenseFriendDetailView(
                         viewModel: makeFriendDetailViewModel(route.debtSummary)
                     )
+                }
+            }
+            .navigationDestination(for: GroupExpenseItem.self) { group in
+                if let fetchDebtSummaryUseCase {
+                    ExpenseGroupDetailView(
+                        viewModel: ExpenseGroupDetailViewModel(
+                            group: group,
+                            currentUserId: currentUserId,
+                            fetchDebtSummaryUseCase: fetchDebtSummaryUseCase,
+                            languageService: languageService
+                        )
+                    ) { debt in
+                        navigationPath.append(ExpenseFriendDetailRoute(debt: debt))
+                    }
+                } else {
+                    Text(languageService.text(.expenseGroupDetailEmpty))
+                        .navigationTitle(group.groupName)
                 }
             }
         }
@@ -226,7 +246,10 @@ public struct ExpenseListView: View {
             ExpenseOverviewTab(
                 viewModel: overviewViewModel,
                 refreshController: overviewRefreshController,
-                overviewScrollTopSignal: overviewScrollTopSignal
+                overviewScrollTopSignal: overviewScrollTopSignal,
+                onOpenNeedsAttentionItem: openNeedsAttentionItem,
+                onOpenThisMonthHistory: openThisMonthHistory,
+                onOpenGroupHistory: openGroupHistory
             )
         } else {
             LoadingView(message: languageService.text(.expenseLoading))
@@ -261,6 +284,28 @@ public struct ExpenseListView: View {
     private func openLinkedPost(for expense: Expense) {
         guard let postId = expense.postId else { return }
         openLinkedPost?(postId, true)
+    }
+
+    private func openNeedsAttentionItem(_ item: ExpenseNeedsAttentionItem) {
+        if let postId = item.postId {
+            openLinkedPost?(postId, true)
+            return
+        }
+        guard let user = item.counterparty else { return }
+        navigationPath.append(
+            ExpenseFriendDetailRoute(
+                debt: DebtSummary(user: user, amount: item.amount, currency: item.currency)
+            )
+        )
+    }
+
+    private func openThisMonthHistory() {
+        viewModel.applyDatePreset(.month)
+        selectedSegment = .history
+    }
+
+    private func openGroupHistory(_ group: GroupExpenseItem) {
+        navigationPath.append(group)
     }
 
     private func openCreatorProfile(_ user: UserSummary) {

@@ -221,7 +221,8 @@ public actor FakeExpenseRepository: ExpenseRepositoryProtocol {
                         amount: 150000,
                         currency: "VND",
                         counterparty: friend1,
-                        createdAt: Date().addingTimeInterval(-3600)
+                        createdAt: Date().addingTimeInterval(-3600),
+                        postId: expenses.first?.postId
                     )
                 ]
             ),

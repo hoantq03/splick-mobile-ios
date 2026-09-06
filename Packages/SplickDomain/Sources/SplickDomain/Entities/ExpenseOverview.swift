@@ -77,6 +77,11 @@ public struct ExpenseNeedsAttentionItem: Identifiable, Equatable, Sendable {
   public let currency: String
   public let counterparty: UserSummary?
   public let createdAt: Date
+  public let postId: UUID?
+
+  public var rowIdentity: String {
+    "\(type.rawValue)-\(id.uuidString)-\(counterparty?.id.uuidString ?? "none")"
+  }
 
   public init(
     type: ExpenseNeedsAttentionType,
@@ -85,7 +90,8 @@ public struct ExpenseNeedsAttentionItem: Identifiable, Equatable, Sendable {
     amount: Decimal,
     currency: String,
     counterparty: UserSummary?,
-    createdAt: Date
+    createdAt: Date,
+    postId: UUID?
   ) {
     self.type = type
     self.id = id
@@ -94,6 +100,7 @@ public struct ExpenseNeedsAttentionItem: Identifiable, Equatable, Sendable {
     self.currency = currency
     self.counterparty = counterparty
     self.createdAt = createdAt
+    self.postId = postId
   }
 }
 

@@ -168,6 +168,7 @@ struct ExpenseNeedsAttentionItemDTO: Decodable {
   let currency: String
   let counterparty: ExpenseUserDTO?
   let createdAt: Date
+  let postId: UUID?
 }
 
 struct RecentExpenseItemDTO: Decodable {

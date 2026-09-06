@@ -1,5 +1,6 @@
 import Foundation
 import Networking
+import SplickDomain
 
 enum ExpenseEndpoint: APIEndpoint {
   case list(groupId: UUID?, page: Int, limit: Int, cursor: String?)
@@ -72,8 +73,11 @@ enum ExpenseEndpoint: APIEndpoint {
       return items
 
     case .debtSummary(let groupId):
-      guard let groupId else { return nil }
-      return [URLQueryItem(name: "groupId", value: groupId.uuidString)]
+      var items = [URLQueryItem(name: "limit", value: "50")]
+      if let groupId {
+        items.append(URLQueryItem(name: "groupId", value: groupId.uuidString))
+      }
+      return items
 
     case .monthlySummary(let months):
       return [URLQueryItem(name: "months", value: "\(months)")]

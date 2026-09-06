@@ -8,7 +8,7 @@ public struct GroupExpenseSummary: Equatable, Sendable {
   }
 }
 
-public struct GroupExpenseItem: Identifiable, Equatable, Sendable {
+public struct GroupExpenseItem: Identifiable, Equatable, Hashable, Sendable {
   public var id: UUID { groupId }
   public let groupId: UUID
   public let groupName: String
