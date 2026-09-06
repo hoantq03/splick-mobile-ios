@@ -176,25 +176,16 @@ struct FeedInlineVideoPlayer: View {
 
     @ViewBuilder
     private var mediaLayer: some View {
-        Group {
+        ZStack {
+            FeedVideoPosterView(
+                posterURL: posterURL,
+                videoURL: url,
+                displayHeight: displayHeight
+            )
+
+            // Keep the poster underneath until the item is ready — AVPlayerLayer is black before decode.
             if let controller, controller.showsVideoSurface {
                 FeedVideoPlayerLayerView(player: controller.player)
-            } else if let posterURL {
-                RemoteImage(
-                    url: posterURL,
-                    maxPixelSize: FeedMediaLayout.feedMediaMaxDecodePixelSize(
-                        displayHeight: displayHeight
-                    )
-                ) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                    default:
-                        Color.black.opacity(0.88)
-                    }
-                }
-            } else {
-                Color.black.opacity(0.88)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -554,14 +545,12 @@ final class FeedVideoPlaybackController: ObservableObject {
         if userInitiated {
             userPaused = false
         }
-        if !showsVideoSurface {
-            showsVideoSurface = true
-        }
         pendingPlay = true
 
         if playerItem.status == .readyToPlay {
             beginPlayback()
-        } else if !isPlaying {
+        } else {
+            // Do not flip showsVideoSurface yet — poster stays visible until ready.
             player.play()
         }
     }
@@ -588,6 +577,9 @@ final class FeedVideoPlaybackController: ObservableObject {
             return
         }
 
+        if !showsVideoSurface {
+            showsVideoSurface = true
+        }
         if player.rate == 0 {
             player.play()
         }
@@ -646,9 +638,12 @@ final class FeedVideoPlaybackController: ObservableObject {
             self?.handlePlaybackEnded()
         }
 
-        statusObserver = playerItem.observe(\.status, options: [.new]) { [weak self] item, _ in
-            guard let self, item.status == .readyToPlay, self.pendingPlay else { return }
-            self.beginPlayback()
+        statusObserver = playerItem.observe(\.status, options: [.new, .initial]) { [weak self] item, _ in
+            guard item.status == .readyToPlay else { return }
+            Task { @MainActor in
+                guard let self, self.pendingPlay else { return }
+                self.beginPlayback()
+            }
         }
     }
 

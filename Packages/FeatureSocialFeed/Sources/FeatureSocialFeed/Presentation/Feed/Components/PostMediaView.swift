@@ -185,7 +185,7 @@ struct PostMediaView: View {
         return FeedInlineVideoPlayer(
             postId: post.id,
             url: item.mediaURL,
-            posterURL: item.thumbnailURL ?? item.mediaURL,
+            posterURL: item.thumbnailURL,
             durationSeconds: item.durationSeconds,
             displayHeight: height,
             showsScrubber: showsVideoScrubber
