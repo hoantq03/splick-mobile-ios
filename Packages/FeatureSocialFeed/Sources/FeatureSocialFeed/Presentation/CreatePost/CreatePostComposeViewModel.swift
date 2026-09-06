@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import AVFoundation
 import Combine
 import DesignSystem
 import Common
@@ -118,10 +119,12 @@ public final class CreatePostComposeViewModel: ObservableObject {
             || !friendSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    private let maxImages = 5
+    private let maxMediaItems = 10
 
     public init(
         previewImages: [UIImage] = [],
+        previewVideoURL: URL? = nil,
+        previewVideoURLs: [URL] = [],
         fetchFriendsUseCase: FetchFriendsUseCaseProtocol,
         fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol,
         fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol,
@@ -137,7 +140,18 @@ public final class CreatePostComposeViewModel: ObservableObject {
         self.currentUser = currentUser
         self.currentUserId = currentUserId ?? currentUser?.id
         self.feedRepository = feedRepository
-        selectedMediaItems = previewImages.compactMap(Self.makeImageDraft)
+        var drafts: [ComposeMediaDraft] = previewImages.compactMap(Self.makeImageDraft)
+        var videoURLs = previewVideoURLs
+        if let previewVideoURL {
+            videoURLs.insert(previewVideoURL, at: 0)
+        }
+        for url in videoURLs {
+            guard drafts.count < maxMediaItems else { break }
+            if let draft = Self.makeVideoDraft(from: url) {
+                drafts.append(draft)
+            }
+        }
+        selectedMediaItems = Array(drafts.prefix(maxMediaItems))
         observeLocationQuery()
     }
 
@@ -151,15 +165,18 @@ public final class CreatePostComposeViewModel: ObservableObject {
             }
     }
 
-    var remainingImageSlots: Int {
-        max(0, maxImages - selectedMediaItems.filter { $0.mediaType == .image }.count)
+    var remainingMediaSlots: Int {
+        max(0, maxMediaItems - selectedMediaItems.count)
     }
+
+    /// Legacy alias used by older call sites / previews.
+    var remainingImageSlots: Int { remainingMediaSlots }
 
     var composerUser: UserSummary? { currentUser }
 
     func addImages(_ images: [UIImage]) {
         for image in images {
-            guard remainingImageSlots > 0 else { break }
+            guard remainingMediaSlots > 0 else { break }
             guard let draft = Self.makeImageDraft(from: image) else { continue }
             selectedMediaItems.append(draft)
         }
@@ -414,7 +431,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
     }
 
     var canAddMoreMedia: Bool {
-        remainingImageSlots > 0
+        remainingMediaSlots > 0
     }
 
     func removeMediaItem(id: UUID) {
@@ -439,9 +456,13 @@ public final class CreatePostComposeViewModel: ObservableObject {
     }
 
     func addMediaDraft(_ media: ComposeMediaDraft) {
-        guard media.mediaType == .image else { return }
-        guard remainingImageSlots > 0 else { return }
+        guard remainingMediaSlots > 0 else { return }
         selectedMediaItems.append(media)
+    }
+
+    func addVideo(url: URL) {
+        guard let draft = Self.makeVideoDraft(from: url) else { return }
+        addMediaDraft(draft)
     }
 
     func startCompanionDirectoryLoadIfNeeded() {
@@ -484,7 +505,6 @@ public final class CreatePostComposeViewModel: ObservableObject {
         guard currentFriend.id != lastFriendPaginationAnchorId else { return }
         guard hasMoreFriendSearch, !isSearchingFriends else { return }
         lastFriendPaginationAnchorId = currentFriend.id
-        friendSearchTask?.cancel()
         friendSearchTask = Task {
             await fetchFriendSearchPage(page: friendSearchPage + 1, reset: false)
         }
@@ -924,8 +944,8 @@ public final class CreatePostComposeViewModel: ObservableObject {
         if reset {
             friendSearchPage = 0
             hasMoreFriendSearch = true
+            lastFriendPaginationAnchorId = nil
         }
-        isSearchingFriends = true
         friendSearchTask = Task {
             if debounce {
                 try? await Task.sleep(nanoseconds: 250_000_000)
@@ -1015,14 +1035,11 @@ public final class CreatePostComposeViewModel: ObservableObject {
     }
 
     private func fetchFriendSearchPage(page: Int, reset: Bool) async {
-        let showFullScreenSpinner = reset && friendSearchResults.isEmpty
-        if showFullScreenSpinner {
+        if !reset || friendSearchResults.isEmpty {
             isSearchingFriends = true
         }
         defer {
-            if showFullScreenSpinner {
-                isSearchingFriends = false
-            }
+            isSearchingFriends = false
         }
 
         do {
@@ -1041,16 +1058,18 @@ public final class CreatePostComposeViewModel: ObservableObject {
                 }
             if reset {
                 friendSearchResults = filtered
+                hasMoreFriendSearch = results.count == friendSearchPageSize
             } else {
                 let existingIds = Set(friendSearchResults.map(\.id))
-                friendSearchResults.append(contentsOf: filtered.filter { !existingIds.contains($0.id) })
+                let appended = filtered.filter { !existingIds.contains($0.id) }
+                friendSearchResults.append(contentsOf: appended)
                 friendSearchResults.sort {
                     $0.displayName.localizedCaseInsensitiveCompare($1.displayName)
                         == .orderedAscending
                 }
+                hasMoreFriendSearch = results.count == friendSearchPageSize && !appended.isEmpty
             }
             friendSearchPage = page
-            hasMoreFriendSearch = results.count == friendSearchPageSize
             if reset, friendSearchActiveQuery.isEmpty {
                 hasCompletedInitialFriendFetch = true
             }
@@ -1099,6 +1118,25 @@ public final class CreatePostComposeViewModel: ObservableObject {
             data: data,
             mimeType: jpegData != nil ? "image/jpeg" : "image/png",
             videoDurationSeconds: nil
+        )
+    }
+
+    private static func makeVideoDraft(from url: URL) -> ComposeMediaDraft? {
+        guard let data = try? Data(contentsOf: url), !data.isEmpty else { return nil }
+        let asset = AVURLAsset(url: url)
+        let duration = Int(round(CMTimeGetSeconds(asset.duration)))
+        var preview: UIImage?
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        if let cgImage = try? generator.copyCGImage(at: .zero, actualTime: nil) {
+            preview = UIImage(cgImage: cgImage)
+        }
+        return ComposeMediaDraft(
+            previewImage: preview,
+            mediaType: .video,
+            data: data,
+            mimeType: "video/mp4",
+            videoDurationSeconds: duration > 0 ? duration : 1
         )
     }
 }

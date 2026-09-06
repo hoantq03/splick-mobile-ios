@@ -7,5 +7,6 @@ public enum MediaUploadPurpose: String, Sendable {
     case groupCustomEmoji = "GROUP_CUSTOM_EMOJI"
     case userCustomEmoji = "USER_CUSTOM_EMOJI"
     case postImage = "POST_IMAGE"
+    case postVideo = "POST_VIDEO"
     case commentAttachment = "COMMENT_ATTACHMENT"
 }

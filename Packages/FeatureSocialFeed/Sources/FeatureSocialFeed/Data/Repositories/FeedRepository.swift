@@ -139,7 +139,7 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
             let upload = try await mediaRepository.uploadImage(
                 data: mediaItem.data,
                 mimeType: mediaItem.mimeType,
-                purpose: .postImage,
+                purpose: mediaItem.mediaType == .video ? .postVideo : .postImage,
                 groupId: input.groupId
             )
             if primaryMediaId == nil {
@@ -232,7 +232,7 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
                 let upload = try await mediaRepository.uploadImage(
                     data: data,
                     mimeType: mimeType,
-                    purpose: .postImage,
+                    purpose: mediaType == .video ? .postVideo : .postImage,
                     groupId: nil
                 )
                 requestMediaItems.append(

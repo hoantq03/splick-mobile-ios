@@ -94,6 +94,7 @@ public struct CreatePostComposeView: View {
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     private let profileDependencies: FriendUserProfileDependencies?
     private let nearbyDiscoveryUseCase: NearbyDiscoveryUseCaseProtocol?
+    private let stickerPickerBuilder: MediaStickerPickerBuilder?
     let onPostSubmit: (PreparedPostSubmit) -> Void
     let onCancel: () -> Void
     @State private var showPhotoLibraryPicker = false
@@ -106,12 +107,14 @@ public struct CreatePostComposeView: View {
         viewModel: @autoclosure @escaping () -> CreatePostComposeViewModel,
         profileDependencies: FriendUserProfileDependencies? = nil,
         nearbyDiscoveryUseCase: NearbyDiscoveryUseCaseProtocol? = nil,
+        stickerPickerBuilder: MediaStickerPickerBuilder? = nil,
         onPostSubmit: @escaping (PreparedPostSubmit) -> Void,
         onCancel: @escaping () -> Void
     ) {
         _viewModel = StateObject(wrappedValue: viewModel())
         self.profileDependencies = profileDependencies
         self.nearbyDiscoveryUseCase = nearbyDiscoveryUseCase
+        self.stickerPickerBuilder = stickerPickerBuilder
         self.onPostSubmit = onPostSubmit
         self.onCancel = onCancel
     }
@@ -169,10 +172,17 @@ public struct CreatePostComposeView: View {
         .onDisappear { tabBarScrollState?.show() }
         .fullScreenCover(isPresented: $showPhotoLibraryPicker) {
             MultiPhotoLibraryPickerView(
-                maxSelectionCount: viewModel.remainingImageSlots,
-                onConfirm: { images in
+                maxSelectionCount: viewModel.remainingMediaSlots,
+                onConfirm: { items in
                     showPhotoLibraryPicker = false
-                    viewModel.addImages(images)
+                    for item in items {
+                        switch item {
+                        case .image(let image):
+                            viewModel.addImages([image])
+                        case .video(let url):
+                            viewModel.addVideo(url: url)
+                        }
+                    }
                 },
                 onCancel: {
                     showPhotoLibraryPicker = false
@@ -188,13 +198,20 @@ public struct CreatePostComposeView: View {
                         viewModel.addImages([image])
                     case .images(let images):
                         viewModel.addImages(images)
-                    case .video:
-                        break
+                    case .video(let url):
+                        viewModel.addVideo(url: url)
+                    case .mixed(let images, let videos):
+                        viewModel.addImages(images)
+                        for url in videos {
+                            viewModel.addVideo(url: url)
+                        }
                     }
                 },
                 onCancel: {
                     showCameraCapture = false
-                }
+                },
+                stickerPickerBuilder: stickerPickerBuilder,
+                maxLibrarySelection: viewModel.remainingMediaSlots
             )
         }
         .fullScreenCover(isPresented: reviewCoverPresented) {
@@ -238,11 +255,21 @@ public struct CreatePostComposeView: View {
                             Group {
                                 if let image = item.previewImage {
                                     Button {
-                                        reviewingMediaID = item.id
+                                        if item.mediaType == .image {
+                                            reviewingMediaID = item.id
+                                        }
                                     } label: {
                                         Image(uiImage: image)
                                             .resizable()
                                             .scaledToFill()
+                                            .overlay(alignment: .bottomLeading) {
+                                                if item.mediaType == .video {
+                                                    Image(systemName: "infinity")
+                                                        .font(.system(size: 14, weight: .bold))
+                                                        .foregroundStyle(.white)
+                                                        .padding(6)
+                                                }
+                                            }
                                     }
                                     .buttonStyle(.plain)
                                     .accessibilityLabel(languageService.text(.feedCreateEditMediaA11y))
@@ -1157,7 +1184,7 @@ private struct ComposeCompanionsEditorView: View {
     @ViewBuilder
     private var friendSearchResultsList: some View {
         ScrollView {
-        VStack(spacing: 0) {
+        LazyVStack(spacing: 0) {
             let showsGroups = !viewModel.filteredCompanionGroups.isEmpty
             let showsFriends = !viewModel.friendSearchResults.isEmpty
 
@@ -1624,6 +1651,7 @@ private struct ComposeNearbyRadarButton: View {
                 permissionNeeded: nearbyRadar.nearbyPermissionNeeded,
                 users: nearbyRadar.nearbyUsers,
                 loading: nearbyRadar.nearbyLoading,
+                locationDisabled: nearbyRadar.nearbyLocationDisabled,
                 selectionMode: true,
                 selectedUserIds: selectedIds,
                 onClose: {

@@ -1,21 +1,22 @@
+import AVFoundation
 import DesignSystem
 import Localization
 import Photos
 import SwiftUI
 import UIKit
 
-/// In-app photo grid with multi-select; user confirms with the bottom bar or toolbar checkmark.
+/// In-app photo/video grid with multi-select; user confirms with the bottom bar or toolbar checkmark.
 public struct MultiPhotoLibraryPickerView: View {
     @EnvironmentObject private var languageService: LanguageService
     public let maxSelectionCount: Int
-    public let onConfirm: ([UIImage]) -> Void
+    public let onConfirm: ([LibraryPickedMedia]) -> Void
     public let onCancel: () -> Void
 
     @StateObject private var viewModel: MultiPhotoLibraryPickerViewModel
 
     public init(
-        maxSelectionCount: Int = 5,
-        onConfirm: @escaping ([UIImage]) -> Void,
+        maxSelectionCount: Int = 10,
+        onConfirm: @escaping ([LibraryPickedMedia]) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.maxSelectionCount = max(1, maxSelectionCount)
@@ -271,9 +272,9 @@ public struct MultiPhotoLibraryPickerView: View {
 
     @MainActor
     private func confirmSelection() async {
-        guard let images = await viewModel.loadSelectedImages(), !images.isEmpty else { return }
+        guard let items = await viewModel.loadSelectedMedia(), !items.isEmpty else { return }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        onConfirm(images)
+        onConfirm(items)
     }
 }
 
@@ -308,7 +309,7 @@ final class MultiPhotoLibraryPickerViewModel: ObservableObject {
             accessState = .denied
             return
         }
-        assets = fetchImageAssets()
+        assets = fetchMediaAssets()
         accessState = .ready
     }
 
@@ -331,19 +332,26 @@ final class MultiPhotoLibraryPickerViewModel: ObservableObject {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
-    func loadSelectedImages() async -> [UIImage]? {
+    func loadSelectedMedia() async -> [LibraryPickedMedia]? {
         guard !selectedAssetIDs.isEmpty else { return nil }
         isImporting = true
         defer { isImporting = false }
 
-        var images: [UIImage] = []
+        var items: [LibraryPickedMedia] = []
         for assetID in selectedAssetIDs {
             guard let asset = assets.first(where: { $0.localIdentifier == assetID }) else { continue }
-            if let image = await loadFullSizeImage(for: asset) {
-                images.append(image)
+            switch asset.mediaType {
+            case .video:
+                if let url = await exportVideo(for: asset) {
+                    items.append(.video(url))
+                }
+            default:
+                if let image = await loadFullSizeImage(for: asset) {
+                    items.append(.image(image))
+                }
             }
         }
-        return images.isEmpty ? nil : images
+        return items.isEmpty ? nil : items
     }
 
     private func requestAuthorization() async -> PHAuthorizationStatus {
@@ -354,10 +362,14 @@ final class MultiPhotoLibraryPickerViewModel: ObservableObject {
         }
     }
 
-    private func fetchImageAssets() -> [PHAsset] {
+    private func fetchMediaAssets() -> [PHAsset] {
         let options = PHFetchOptions()
         options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
-        options.predicate = NSPredicate(format: "mediaType == %d", PHAssetMediaType.image.rawValue)
+        options.predicate = NSPredicate(
+            format: "mediaType == %d OR mediaType == %d",
+            PHAssetMediaType.image.rawValue,
+            PHAssetMediaType.video.rawValue
+        )
 
         let result = PHAsset.fetchAssets(with: options)
         var fetched: [PHAsset] = []
@@ -386,6 +398,34 @@ final class MultiPhotoLibraryPickerViewModel: ObservableObject {
                     return
                 }
                 continuation.resume(returning: PhotoEditorImageProcessor.normalizeOrientation(image))
+            }
+        }
+    }
+
+    private func exportVideo(for asset: PHAsset) async -> URL? {
+        await withCheckedContinuation { continuation in
+            let options = PHVideoRequestOptions()
+            options.isNetworkAccessAllowed = true
+            options.deliveryMode = .highQualityFormat
+
+            imageManager.requestAVAsset(forVideo: asset, options: options) { avAsset, _, _ in
+                guard let urlAsset = avAsset as? AVURLAsset else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                let ext = urlAsset.url.pathExtension.isEmpty ? "mp4" : urlAsset.url.pathExtension
+                let dest = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(UUID().uuidString)
+                    .appendingPathExtension(ext)
+                do {
+                    if FileManager.default.fileExists(atPath: dest.path) {
+                        try FileManager.default.removeItem(at: dest)
+                    }
+                    try FileManager.default.copyItem(at: urlAsset.url, to: dest)
+                    continuation.resume(returning: dest)
+                } catch {
+                    continuation.resume(returning: nil)
+                }
             }
         }
     }
@@ -440,6 +480,12 @@ private struct PhotoGridCell: View {
 
                 if isSelected {
                     Color.black.opacity(0.35)
+                }
+
+                if asset.mediaType == .video {
+                    videoDurationBadge
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                        .padding(SplickTheme.Spacing.xs)
                 }
 
                 selectionBadge
@@ -503,6 +549,27 @@ private struct PhotoGridCell: View {
             }
         }
         .allowsHitTesting(false)
+    }
+
+    private var videoDurationBadge: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "play.fill")
+                .font(.system(size: 8, weight: .bold))
+            Text(Self.formatDuration(asset.duration))
+                .font(.system(size: 10, weight: .semibold))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2)
+        .background(Color.black.opacity(0.55), in: Capsule())
+        .allowsHitTesting(false)
+    }
+
+    private static func formatDuration(_ duration: TimeInterval) -> String {
+        let total = max(0, Int(duration.rounded()))
+        let minutes = total / 60
+        let seconds = total % 60
+        return String(format: "%d:%02d", minutes, seconds)
     }
 
     @MainActor

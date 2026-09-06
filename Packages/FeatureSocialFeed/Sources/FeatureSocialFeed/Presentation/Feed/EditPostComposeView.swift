@@ -1,6 +1,8 @@
 import SwiftUI
 import PhotosUI
 import UIKit
+import AVFoundation
+import UniformTypeIdentifiers
 import DesignSystem
 import Localization
 import SplickDomain
@@ -42,13 +44,26 @@ final class EditPostComposeViewModel: ObservableObject {
     }
 
     func addImageData(_ data: Data) {
-        guard items.count < 8 else { return }
+        guard items.count < 10 else { return }
         items.append(
             DraftMedia(
                 id: UUID(),
                 imageData: data,
                 mimeType: "image/jpeg",
                 mediaType: .image
+            )
+        )
+    }
+
+    func addVideo(data: Data, durationSeconds: Int?) {
+        guard items.count < 10 else { return }
+        items.append(
+            DraftMedia(
+                id: UUID(),
+                imageData: data,
+                mimeType: "video/mp4",
+                mediaType: .video,
+                durationSeconds: max(durationSeconds ?? 1, 1)
             )
         )
     }
@@ -164,10 +179,10 @@ struct EditPostComposeView: View {
                         .offset(x: 4, y: -4)
                     }
                 }
-                if viewModel.items.count < 8 {
+                if viewModel.items.count < 10 {
                     PhotosPicker(
                         selection: $pickerItems,
-                        maxSelectionCount: 8 - viewModel.items.count,
+                        maxSelectionCount: 10 - viewModel.items.count,
                         matching: .any(of: [.images, .videos])
                     ) {
                         Image(systemName: "plus")
@@ -200,11 +215,39 @@ struct EditPostComposeView: View {
 
     private func loadPickerItems(_ items: [PhotosPickerItem]) async {
         for item in items {
+            if item.supportedContentTypes.contains(where: { $0.conforms(to: .movie) }) {
+                if let movie = try? await item.loadTransferable(type: EditPostMovie.self) {
+                    await MainActor.run {
+                        viewModel.addVideo(data: movie.data, durationSeconds: movie.durationSeconds)
+                    }
+                }
+                continue
+            }
             if let data = try? await item.loadTransferable(type: Data.self) {
                 await MainActor.run { viewModel.addImageData(data) }
             }
         }
         await MainActor.run { pickerItems = [] }
+    }
+}
+
+private struct EditPostMovie: Transferable {
+    let data: Data
+    let durationSeconds: Int?
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(contentType: .movie) { movie in
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString)
+                .appendingPathExtension("mp4")
+            try movie.data.write(to: url)
+            return SentTransferredFile(url)
+        } importing: { received in
+            let data = try Data(contentsOf: received.file)
+            let asset = AVURLAsset(url: received.file)
+            let seconds = Int(round(CMTimeGetSeconds(asset.duration)))
+            return EditPostMovie(data: data, durationSeconds: seconds > 0 ? seconds : 1)
+        }
     }
 }
 
