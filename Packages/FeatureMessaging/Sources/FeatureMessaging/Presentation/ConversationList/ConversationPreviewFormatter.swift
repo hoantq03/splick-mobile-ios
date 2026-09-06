@@ -6,6 +6,7 @@ enum ConversationPreviewContent: Equatable {
     case emoji
     case gif
     case images(Int)
+    case sharedPost
     case recalled
 }
 
@@ -25,6 +26,12 @@ enum ConversationPreviewFormatter {
         }
 
         let body = message.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let share = PostShareUrlParser.parse(body) {
+            if let note = share.note, !note.isEmpty {
+                return .text(note)
+            }
+            return .sharedPost
+        }
         if isEmojiOnly(body) {
             return .emoji
         }

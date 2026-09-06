@@ -7,6 +7,7 @@ import SplickDomain
 
 struct MessageBubble: View {
     @EnvironmentObject private var languageService: LanguageService
+    @Environment(\.openLinkedPost) private var openLinkedPost
 
     enum Presentation {
         /// Full chat row with spacers, timestamps, and gestures.
@@ -336,6 +337,25 @@ struct MessageBubble: View {
         !message.recalled && !message.body.isEmpty
     }
 
+    private var postShare: PostSharePayload? {
+        guard !message.recalled, imageAttachments.isEmpty else { return nil }
+        return PostShareUrlParser.parse(message.body)
+    }
+
+    private var shareNote: String? {
+        postShare?.note
+    }
+
+    private var showsSharedPostCard: Bool {
+        postShare != nil
+    }
+
+    private var showsPlainTextBody: Bool {
+        guard hasTextBody else { return false }
+        guard let postShare else { return true }
+        return postShare.note != nil
+    }
+
     @ViewBuilder
     private var bubbleContent: some View {
         if message.recalled {
@@ -348,10 +368,10 @@ struct MessageBubble: View {
                         mediaReplyPreview(preview)
                     }
                     messageMediaAttachments
-                        .modifier(MessageDeliveryStatusAnchor(isActive: !hasTextBody))
+                        .modifier(MessageDeliveryStatusAnchor(isActive: !hasTextBody && !showsSharedPostCard))
                 }
 
-                if hasTextBody || (message.replyPreview != nil && imageAttachments.isEmpty) {
+                if showsSharedPostCard || hasTextBody || (message.replyPreview != nil && imageAttachments.isEmpty) {
                     textBubbleBody
                         .modifier(MessageDeliveryStatusAnchor(isActive: true))
                 }
@@ -415,8 +435,20 @@ struct MessageBubble: View {
                     onTap: quotedReplyTap
                 )
             }
-            if hasTextBody {
-                messageTextLabel(lineLimit: nil)
+            if showsPlainTextBody {
+                if let note = shareNote {
+                    messageTextLabel(text: note, lineLimit: nil)
+                } else {
+                    messageTextLabel(text: message.body, lineLimit: nil)
+                }
+            }
+            if let share = postShare {
+                SharedPostPreviewCard(
+                    postId: share.postId,
+                    isOutgoing: isOutgoing,
+                    enabled: presentation == .threadRow,
+                    maxWidth: textWrapMaxWidth
+                )
             }
             if message.isEdited {
                 editedCaption
@@ -454,10 +486,10 @@ struct MessageBubble: View {
         max(resolvedContentMaxWidth - MessageThreadRowLayout.bubbleHorizontalPadding * 2, 80)
     }
 
-    private func messageTextLabel(lineLimit: Int?) -> some View {
+    private func messageTextLabel(text: String, lineLimit: Int?) -> some View {
         Text(
             MessageBodyLinkifier.attributed(
-                message.body,
+                text,
                 textColor: isOutgoing ? .white : SplickTheme.Colors.textPrimary,
                 linkColor: isOutgoing ? .white : SplickTheme.Colors.primaryGradientStart
             )
@@ -467,9 +499,18 @@ struct MessageBubble: View {
         .multilineTextAlignment(.leading)
         .lineLimit(lineLimit)
         .environment(\.openURL, OpenURLAction { url in
+            if let postId = PostShareUrlParser.extractPostId(from: url.absoluteString),
+               let openLinkedPost {
+                openLinkedPost(postId, false)
+                return .handled
+            }
             UIApplication.shared.open(url)
             return .handled
         })
+    }
+
+    private func messageTextLabel(lineLimit: Int?) -> some View {
+        messageTextLabel(text: message.body, lineLimit: lineLimit)
     }
 
     @ViewBuilder
