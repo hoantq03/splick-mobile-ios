@@ -219,6 +219,7 @@ public struct CreatePostComposeView: View {
                let image = viewModel.selectedMediaItems.first(where: { $0.id == id })?.previewImage {
                 SelectedPhotoReviewView(
                     image: image,
+                    stickerPickerBuilder: stickerPickerBuilder,
                     onImageUpdated: { viewModel.updateMediaImage(id: id, image: $0) },
                     onDismiss: { reviewingMediaID = nil }
                 )

@@ -234,9 +234,16 @@ public struct FeedView: View {
         .environment(\.feedTabIsActive, isTabActive && selectedSegment == .feed)
         .task(id: "\(isTabActive)-\(selectedSegment)-\(scenePhase)") {
             guard isTabActive, selectedSegment == .feed, scenePhase == .active else { return }
+            // Immediate ahead-count check when becoming active, then keep polling.
+            await viewModel.refreshNewPostsCountIfNeeded()
             await viewModel.pollNewPostsWhileActive()
         }
         .onChange(of: viewModel.posts.first?.id) { _ in
+            guard isTabActive, selectedSegment == .feed, scenePhase == .active else { return }
+            Task { await viewModel.refreshNewPostsCountIfNeeded() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .feedContentMayHaveChanged)) { _ in
+            // ViewModel also observes this; keep a best-effort refresh while Feed is visible.
             guard isTabActive, selectedSegment == .feed, scenePhase == .active else { return }
             Task { await viewModel.refreshNewPostsCountIfNeeded() }
         }
@@ -315,7 +322,7 @@ private struct FeedPrimaryPage: View {
     @ObservedObject var viewModel: FeedViewModel
     @Binding var navigationPath: NavigationPath
     @Binding var companionsRoute: CompanionsSheetRoute?
-    let videoCoordinator: FeedVideoPlaybackCoordinator
+    @ObservedObject var videoCoordinator: FeedVideoPlaybackCoordinator
     let makeGifPickerViewModel: GifPickerViewModelFactory?
     let onOpenProfile: (UserSummary) -> Void
 
@@ -566,7 +573,8 @@ private struct FeedPrimaryPage: View {
                         currentUser: viewModel.currentUser ?? currentUserSummary,
                         actions: cardActions,
                         showsNewBadge: viewModel.showsNewBadge(for: post),
-                        uploadState: viewModel.postUploadState(for: post.id)
+                        uploadState: viewModel.postUploadState(for: post.id),
+                        autoplayVideoPostIds: videoCoordinator.activePostIds
                     )
                     .equatable()
                     .feedPostZoomSource(postId: post.id)
@@ -597,13 +605,15 @@ private struct FeedPrimaryPage: View {
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
             .padding(.top, SplickTheme.Spacing.md)
-            .onFeedPostVisibilityChange { visibleIds in
-                viewModel.onVisiblePostsChanged(feedTabIsActive ? visibleIds : [])
+            .onFeedPostVisibilityChange(threshold: 0.01) { visibleIds in
+                let ids = feedTabIsActive ? visibleIds : []
+                viewModel.onVisiblePostsChanged(ids)
+                // Autoplay every on-screen post card — do not wait for the video subframe.
+                videoCoordinator.setVisiblePostIds(ids)
             }
         }
         .scrollDisabled(feedScrollLocked)
         .environment(\.feedVideoCoordinator, videoCoordinator)
-        .feedVideoVisibilityHandling(coordinator: videoCoordinator)
     }
 
     private var feedEndReachedFooter: some View {

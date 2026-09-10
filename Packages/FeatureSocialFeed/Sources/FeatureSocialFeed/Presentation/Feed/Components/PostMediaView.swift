@@ -10,6 +10,8 @@ struct PostMediaView: View {
     /// When true, the parent should lift z-index and relax clipping so pinch zoom can escape the card.
     @Binding var isPinchZooming: Bool
     var showsVideoScrubber: Bool = false
+    /// When true, this post's video should autoplay (feed pool target).
+    var isAutoplayTarget: Bool = false
 
     @State private var containerWidth: CGFloat = FeedMediaLayout.estimatedCardContentWidth
 
@@ -18,13 +20,15 @@ struct PostMediaView: View {
         selectedIndex: Binding<Int>,
         onTap: ((Int) -> Void)? = nil,
         isPinchZooming: Binding<Bool> = .constant(false),
-        showsVideoScrubber: Bool = false
+        showsVideoScrubber: Bool = false,
+        isAutoplayTarget: Bool = false
     ) {
         self.post = post
         self._selectedIndex = selectedIndex
         self.onTap = onTap
         self._isPinchZooming = isPinchZooming
         self.showsVideoScrubber = showsVideoScrubber
+        self.isAutoplayTarget = isAutoplayTarget
     }
 
     private var items: [PostMediaItem] {
@@ -188,7 +192,8 @@ struct PostMediaView: View {
             posterURL: item.thumbnailURL,
             durationSeconds: item.durationSeconds,
             displayHeight: height,
-            showsScrubber: showsVideoScrubber
+            showsScrubber: showsVideoScrubber,
+            isAutoplayTarget: isAutoplayTarget
         )
         .frame(width: width, height: height)
         .frame(maxWidth: .infinity)
@@ -244,9 +249,17 @@ private struct PostMediaWidthReader: ViewModifier {
         content.background {
             GeometryReader { proxy in
                 Color.clear
-                    .onAppear { apply(proxy.size.width) }
-                    .onChange(of: proxy.size.width) { apply($0) }
+                    .onAppear { scheduleApply(proxy.size.width) }
+                    .onChange(of: proxy.size.width) { scheduleApply($0) }
             }
+        }
+    }
+
+    private func scheduleApply(_ width: CGFloat) {
+        // Defer out of the geometry/layout pass — updating @State synchronously from
+        // onChange(of: CGFloat) triggers "tried to update multiple times per frame".
+        DispatchQueue.main.async {
+            apply(width)
         }
     }
 

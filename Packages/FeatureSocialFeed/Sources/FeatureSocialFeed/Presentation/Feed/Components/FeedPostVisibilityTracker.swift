@@ -26,7 +26,10 @@ struct FeedPostVisibilityReporter: View {
             let frame = geo.frame(in: .global)
             let screen = UIScreen.main.bounds
             let visibleHeight = max(0, min(frame.maxY, screen.maxY) - max(frame.minY, screen.minY))
-            let ratio = frame.height > 0 ? visibleHeight / frame.height : 0
+            // Prefer viewport coverage so tall cards still count when only the header peeks on screen.
+            let cardRatio = frame.height > 0 ? visibleHeight / frame.height : 0
+            let viewportRatio = screen.height > 0 ? visibleHeight / screen.height : 0
+            let ratio = max(cardRatio, viewportRatio)
             Color.clear
                 .preference(
                     key: FeedPostVisibilityPreferenceKey.self,

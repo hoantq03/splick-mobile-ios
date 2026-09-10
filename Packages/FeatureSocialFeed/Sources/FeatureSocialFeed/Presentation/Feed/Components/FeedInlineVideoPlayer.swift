@@ -27,6 +27,8 @@ struct FeedInlineVideoPlayer: View {
     var displayHeight: CGFloat = FeedMediaLayout.defaultHeight
     /// Feed hides the timeline; post detail / media viewer can show it.
     var showsScrubber: Bool = false
+    /// Explicit feed autoplay target (avoids Equatable PostCard swallowing `@Published` updates).
+    var isAutoplayTarget: Bool = false
 
     @Environment(\.feedVideoCoordinator) private var autoplayCoordinator
     @Environment(\.feedTabIsActive) private var feedTabIsActive
@@ -47,7 +49,7 @@ struct FeedInlineVideoPlayer: View {
 
     private var isAutoplayActive: Bool {
         if usesStandalonePlayback { return true }
-        return feedTabIsActive && autoplayCoordinator?.activePostId == postId
+        return feedTabIsActive && isAutoplayTarget
     }
 
     private var controller: FeedVideoPlaybackController? {
@@ -82,55 +84,39 @@ struct FeedInlineVideoPlayer: View {
                     }
             }
 
-            // Idle / autoplay: no center transport.
-            // Inactive poster: one post play affordance.
-            // After the user taps the video: show play/pause transport.
-            if controller == nil {
-                postPlayAffordance
-            } else if controller?.showsCenterTransport == true {
+            // Autoplay / idle poster: no center transport.
+            // After the user taps: show play/pause while paused or briefly while playing.
+            if controller?.showsCenterTransport == true {
                 centerPlaybackButton
             }
 
             controlsOverlay
         }
         .frame(height: displayHeight)
-        .background {
-            if !usesStandalonePlayback {
-                FeedVideoVisibilityReporter(postId: postId)
-            }
-        }
         .onChange(of: isAutoplayActive) { active in
             syncController(active: active)
         }
         .onAppear {
-            // Kickstart autoplay in the same turn as appear. Relying only on the
-            // background reporter can lose the race (player onAppear runs first),
-            // and PostCard `.equatable()` may swallow later activePostId updates.
-            if !usesStandalonePlayback, feedTabIsActive {
-                autoplayCoordinator?.updateVisibility(postId: postId, ratio: 1)
-            }
             syncController(active: isAutoplayActive)
         }
-        .onDisappear {
-            if !usesStandalonePlayback {
-                autoplayCoordinator?.clearPost(postId)
-            }
-            standaloneController?.tearDown()
-            standaloneController = nil
-            controllerProxy.detach()
+        .onChange(of: isAutoplayTarget) { target in
+            syncController(active: feedTabIsActive && target)
         }
-        .onChange(of: autoplayCoordinator?.activePostId) { activeId in
-            guard !usesStandalonePlayback else { return }
-            syncController(active: feedTabIsActive && activeId == postId)
+        .onDisappear {
+            if usesStandalonePlayback {
+                standaloneController?.tearDown()
+                standaloneController = nil
+            } else {
+                // Soft leave — keep pooled AVPlayer warm; avoid PlayerRemoteXPC thrash on recycle.
+                controller?.setAutoplayActive(false)
+            }
+            controllerProxy.detach()
         }
         .onChange(of: feedTabIsActive) { active in
             if usesStandalonePlayback {
                 syncController(active: active)
-            } else if active {
-                autoplayCoordinator?.updateVisibility(postId: postId, ratio: 1)
-                syncController(active: autoplayCoordinator?.activePostId == postId)
             } else {
-                syncController(active: false)
+                syncController(active: active && isAutoplayTarget)
             }
         }
     }
@@ -155,7 +141,7 @@ struct FeedInlineVideoPlayer: View {
         } else {
             controller?.setAutoplayActive(false)
             // Keep poster-only for inactive cells; release pool slot on clearPost/suspend.
-            if controllerProxy.controller != nil, autoplayCoordinator.activePostId != postId {
+            if controllerProxy.controller != nil, !autoplayCoordinator.activePostIds.contains(postId) {
                 // Detach observation but leave pool entry for LRU warm reuse until evicted.
                 controllerProxy.detach()
             }
@@ -198,23 +184,6 @@ struct FeedInlineVideoPlayer: View {
         .clipped()
     }
 
-    private var postPlayAffordance: some View {
-        Button {
-            handleSurfaceTap()
-        } label: {
-            Circle()
-                .fill(.black.opacity(0.45))
-                .frame(width: 56, height: 56)
-                .overlay {
-                    Image(systemName: "play.fill")
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundStyle(.white)
-                        .offset(x: 2)
-                }
-        }
-        .buttonStyle(.plain)
-    }
-
     private var centerPlaybackButton: some View {
         Button {
             handleSurfaceTap()
@@ -247,6 +216,7 @@ struct FeedInlineVideoPlayer: View {
         } else {
             syncStandaloneController(active: true)
         }
+        controllerProxy.controller?.revealTransportAfterUserTap()
     }
 
     private var centerIconName: String {
@@ -297,6 +267,7 @@ struct FeedInlineVideoPlayer: View {
         }
         .buttonStyle(.plain)
         .disabled(controller == nil)
+        .opacity(controller == nil ? 0 : 1)
     }
 
     private var transportRow: some View {
@@ -451,10 +422,13 @@ final class FeedVideoPlaybackController: ObservableObject {
     init(url: URL) {
         playerItem = Self.makeItem(url: url)
         player = AVPlayer(playerItem: playerItem)
+        player.automaticallyWaitsToMinimizeStalling = true
+        if #available(iOS 16.0, *) {
+            player.audiovisualBackgroundPlaybackPolicy = .pauses
+        }
         Self.configureAudioSession()
         player.actionAtItemEnd = .pause
         player.isMuted = true
-        player.automaticallyWaitsToMinimizeStalling = true
         bindItemObservers()
         setupTimeObserver()
         FeedSignposts.videoPlayerCreate()
@@ -517,6 +491,22 @@ final class FeedVideoPlaybackController: ObservableObject {
             flashCenterTransport(iconIsPause: true)
         } else {
             play(userInitiated: true)
+            revealTransportAfterUserTap()
+        }
+    }
+
+    /// Brief center transport after a user tap (autoplay itself stays chrome-free).
+    func revealTransportAfterUserTap() {
+        showsCenterTransport = true
+        hideTransportTask?.cancel()
+        hideTransportTask = Task {
+            try? await Task.sleep(for: .milliseconds(750))
+            guard !Task.isCancelled else { return }
+            if userPaused || !isPlaying {
+                showsCenterTransport = true
+            } else {
+                showsCenterTransport = false
+            }
         }
     }
 
@@ -595,9 +585,6 @@ final class FeedVideoPlaybackController: ObservableObject {
         if !isPlaying {
             isPlaying = true
         }
-        if showsCenterTransport {
-            showsCenterTransport = false
-        }
     }
 
     private func handlePlaybackEnded() {
@@ -632,6 +619,7 @@ final class FeedVideoPlaybackController: ObservableObject {
             width: FeedMediaLayout.decodeMaxPixelSide,
             height: FeedMediaLayout.decodeMaxPixelSide
         )
+        item.preferredForwardBufferDuration = 2
         return item
     }
 

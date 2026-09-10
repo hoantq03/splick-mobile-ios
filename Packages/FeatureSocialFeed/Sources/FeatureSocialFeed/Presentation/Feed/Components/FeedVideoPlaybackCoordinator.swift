@@ -2,16 +2,21 @@ import SwiftUI
 import UIKit
 import AVFoundation
 
-/// Picks the most visible feed video post for autoplay and owns a small AVPlayer pool.
+/// Autoplay every on-screen feed video post (post-card visibility), with a small AVPlayer pool.
 @MainActor
 final class FeedVideoPlaybackCoordinator: ObservableObject {
-    @Published private(set) var activePostId: UUID?
+    /// All post IDs currently allowed to autoplay (any portion of the card on screen).
+    @Published private(set) var activePostIds: Set<UUID> = []
+
+    /// Back-compat for call sites that still read a single id (first active).
+    var activePostId: UUID? { activePostIds.first }
 
     private var visibilityByPost: [UUID: CGFloat] = [:]
-    private let activationThreshold: CGFloat = 0.35
+    /// Any on-screen presence of the post card is enough — do not wait for the video subframe.
+    private let activationThreshold: CGFloat = 0.01
 
-    /// Max concurrent AVPlayers kept alive for feed cells (active + one warm neighbor).
-    private let poolCapacity = 2
+    /// Concurrent AVPlayers for visible video cells (+ small warm buffer).
+    private let poolCapacity = 6
     private var pooledControllers: [UUID: FeedVideoPlaybackController] = [:]
     private var pooledURLs: [UUID: URL] = [:]
     private var lruOrder: [UUID] = []
@@ -26,15 +31,21 @@ final class FeedVideoPlaybackCoordinator: ObservableObject {
         } else {
             visibilityByPost[postId] = ratio
         }
-        pickActivePost()
+        refreshActivePosts()
+    }
+
+    /// Drive autoplay from post-card visibility (not video subframe).
+    func setVisiblePostIds(_ ids: Set<UUID>) {
+        visibilityByPost = Dictionary(uniqueKeysWithValues: ids.map { ($0, 1) })
+        refreshActivePosts()
     }
 
     func applyVisibilityReports(_ reports: [FeedVideoVisibilityReport]) {
         visibilityByPost.removeAll(keepingCapacity: true)
-        for report in reports where report.ratio > 0.01 {
+        for report in reports where report.ratio > activationThreshold {
             visibilityByPost[report.postId] = report.ratio
         }
-        pickActivePost()
+        refreshActivePosts()
     }
 
     /// Coalesces high-frequency PreferenceKey updates during fast scroll.
@@ -52,11 +63,13 @@ final class FeedVideoPlaybackCoordinator: ObservableObject {
 
     func clearPost(_ postId: UUID) {
         visibilityByPost.removeValue(forKey: postId)
-        if activePostId == postId {
-            activePostId = nil
-        }
+        activePostIds.remove(postId)
         releaseController(for: postId)
-        pickActivePost()
+        refreshActivePosts()
+    }
+
+    func isAutoplayTarget(_ postId: UUID) -> Bool {
+        activePostIds.contains(postId)
     }
 
     /// Stops autoplay when the feed tab is hidden (other tabs / background).
@@ -65,16 +78,16 @@ final class FeedVideoPlaybackCoordinator: ObservableObject {
         visibilityFlushTask = nil
         pendingVisibilityReports = nil
         visibilityByPost.removeAll()
-        activePostId = nil
+        activePostIds = []
         for controller in pooledControllers.values {
             controller.setAutoplayActive(false)
         }
         releaseAllControllers()
     }
 
-    /// Returns a pooled controller only when this post is the autoplay target (or already pooled).
+    /// Returns a pooled controller only when this post is an autoplay target (or already pooled).
     func controller(for postId: UUID, url: URL) -> FeedVideoPlaybackController? {
-        guard activePostId == postId || pooledControllers[postId] != nil else {
+        guard activePostIds.contains(postId) || pooledControllers[postId] != nil else {
             return nil
         }
         return acquireController(for: postId, url: url)
@@ -113,7 +126,7 @@ final class FeedVideoPlaybackCoordinator: ObservableObject {
 
     private func evictIfNeeded(reserving reservedId: UUID) {
         while pooledControllers.count >= poolCapacity {
-            let victim = lruOrder.first(where: { $0 != reservedId && $0 != activePostId })
+            let victim = lruOrder.first(where: { $0 != reservedId && !activePostIds.contains($0) })
                 ?? lruOrder.first(where: { $0 != reservedId })
             guard let victim else { break }
             releaseController(for: victim)
@@ -125,26 +138,21 @@ final class FeedVideoPlaybackCoordinator: ObservableObject {
         lruOrder.append(postId)
     }
 
-    private func pickActivePost() {
-        guard let best = visibilityByPost.max(by: { $0.value < $1.value }),
-              best.value >= activationThreshold else {
-            if activePostId != nil {
-                let previous = activePostId
-                activePostId = nil
-                if let previous, let controller = pooledControllers[previous] {
-                    controller.setAutoplayActive(false)
-                }
-            }
-            return
+    private func refreshActivePosts() {
+        let next = Set(
+            visibilityByPost
+                .filter { $0.value >= activationThreshold }
+                .map(\.key)
+        )
+        guard next != activePostIds else { return }
+        let removed = activePostIds.subtracting(next)
+        let added = next.subtracting(activePostIds)
+        activePostIds = next
+        for id in removed {
+            pooledControllers[id]?.setAutoplayActive(false)
         }
-        guard activePostId != best.key else { return }
-        let previous = activePostId
-        activePostId = best.key
-        if let previous, let controller = pooledControllers[previous] {
-            controller.setAutoplayActive(false)
-        }
-        if let next = pooledControllers[best.key] {
-            next.setAutoplayActive(true)
+        for id in added {
+            pooledControllers[id]?.setAutoplayActive(true)
         }
     }
 }
@@ -198,9 +206,7 @@ extension View {
 }
 
 /// Marks a feed video cell as an autoplay candidate while it is on-screen.
-///
-/// Uses appear/disappear (not GeometryReader preferences). Nested GeometryReader
-/// ratios often stay stale inside LazyVStack and were wiping active autoplay.
+/// Soft leave only — hard tearDown is pool eviction / suspendPlayback.
 struct FeedVideoVisibilityReporter: View {
     let postId: UUID
     @Environment(\.feedTabIsActive) private var feedTabIsActive
@@ -215,13 +221,13 @@ struct FeedVideoVisibilityReporter: View {
                 coordinator?.updateVisibility(postId: postId, ratio: 1)
             }
             .onDisappear {
-                coordinator?.clearPost(postId)
+                coordinator?.updateVisibility(postId: postId, ratio: 0)
             }
             .onChange(of: feedTabIsActive) { isActive in
                 if isActive {
                     coordinator?.updateVisibility(postId: postId, ratio: 1)
                 } else {
-                    coordinator?.clearPost(postId)
+                    coordinator?.updateVisibility(postId: postId, ratio: 0)
                 }
             }
     }

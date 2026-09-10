@@ -22,6 +22,8 @@ struct PostCardView: View, Equatable {
     var initialMediaIndex: Int = 0
     var uploadState: PostUploadState? = nil
     var showsVideoScrubber: Bool = false
+    /// Feed autoplay targets — included in Equatable so `.equatable()` does not swallow play/pause updates.
+    var autoplayVideoPostIds: Set<UUID> = []
 
     @State private var mediaPageIndex = 0
     @State private var appliedInitialMediaIndex = false
@@ -44,6 +46,7 @@ struct PostCardView: View, Equatable {
             && lhs.initialMediaIndex == rhs.initialMediaIndex
             && lhs.uploadState == rhs.uploadState
             && lhs.showsVideoScrubber == rhs.showsVideoScrubber
+            && lhs.autoplayVideoPostIds == rhs.autoplayVideoPostIds
             && lhs.actions === rhs.actions
     }
 
@@ -103,7 +106,8 @@ struct PostCardView: View, Equatable {
                 selectedIndex: $mediaPageIndex,
                 onTap: resolvedMediaTap,
                 isPinchZooming: $isMediaPinchZooming,
-                showsVideoScrubber: showsVideoScrubber
+                showsVideoScrubber: showsVideoScrubber,
+                isAutoplayTarget: autoplayVideoPostIds.contains(post.id)
             )
             contextSection
 

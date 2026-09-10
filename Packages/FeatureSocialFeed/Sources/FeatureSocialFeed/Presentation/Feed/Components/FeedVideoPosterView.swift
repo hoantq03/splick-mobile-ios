@@ -3,7 +3,7 @@ import AVFoundation
 import UIKit
 import DesignSystem
 
-/// Still preview for feed videos: remote thumbnail when available, otherwise the first decoded frame.
+/// Still preview for feed videos: remote thumbnail when available, otherwise a light first-frame decode.
 struct FeedVideoPosterView: View {
     let posterURL: URL?
     let videoURL: URL
@@ -39,7 +39,10 @@ struct FeedVideoPosterView: View {
                 generatedOrPlaceholder
             }
         }
-        .task(id: videoURL) {
+        .task(id: "\(videoURL.absoluteString)|\(remoteImageURL?.absoluteString ?? "")") {
+            // Skip AVAsset first-frame decode when a real image poster exists — concurrent
+            // AVURLAsset + AVPlayer on the same URL spam PlayerRemoteXPC errors in console.
+            guard remoteImageURL == nil else { return }
             await ensureFirstFrameIfNeeded()
         }
     }
@@ -56,10 +59,8 @@ struct FeedVideoPosterView: View {
     }
 
     private var placeholder: some View {
-        SkeletonBone(
-            height: displayHeight,
-            shape: .rectangle(cornerRadius: 0)
-        )
+        // Soft bone — not pure black — while the first frame is decoding.
+        Color(uiColor: .secondarySystemFill)
     }
 
     private func ensureFirstFrameIfNeeded() async {
@@ -85,6 +86,9 @@ struct FeedVideoPosterView: View {
 
 actor FeedVideoFirstFrameCache {
     static let shared = FeedVideoFirstFrameCache()
+
+    /// Keep first-frame decode cheap — posters are only placeholders until autoplay starts.
+    private static let maxDecodeSide: CGFloat = 384
 
     private var memory: [String: UIImage] = [:]
     private var inFlight: [String: Task<UIImage?, Never>] = [:]
@@ -113,8 +117,8 @@ actor FeedVideoFirstFrameCache {
     }
 
     private func trimIfNeeded() {
-        guard memory.count > 48 else { return }
-        let dropCount = memory.count - 32
+        guard memory.count > 32 else { return }
+        let dropCount = memory.count - 24
         for key in memory.keys.prefix(dropCount) {
             memory.removeValue(forKey: key)
         }
@@ -125,11 +129,7 @@ actor FeedVideoFirstFrameCache {
             let asset = AVURLAsset(url: url)
             let generator = AVAssetImageGenerator(asset: asset)
             generator.appliesPreferredTrackTransform = true
-            generator.maximumSize = CGSize(
-                width: FeedMediaLayout.decodeMaxPixelSide,
-                height: FeedMediaLayout.decodeMaxPixelSide
-            )
-            // Prefer the sync ImageIO path used elsewhere — reliable on iOS 16+.
+            generator.maximumSize = CGSize(width: maxDecodeSide, height: maxDecodeSide)
             guard let cgImage = try? generator.copyCGImage(at: .zero, actualTime: nil) else {
                 return nil
             }

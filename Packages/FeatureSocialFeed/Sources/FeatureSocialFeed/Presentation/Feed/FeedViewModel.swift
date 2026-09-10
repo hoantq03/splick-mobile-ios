@@ -46,6 +46,7 @@ public final class FeedViewModel: ObservableObject {
     private let onFeedLoaded: (([Post], UUID?) async -> Void)?
     private let onPostsMutated: (() async -> Void)?
     private var friendDisplayNameObserver: NSObjectProtocol?
+    private var feedContentObserver: NSObjectProtocol?
     private var currentPage = 0
     private var canLoadMore = true
     private var trackedViewPostIds = Set<UUID>()
@@ -156,11 +157,23 @@ public final class FeedViewModel: ObservableObject {
                 }
             }
         }
+        feedContentObserver = NotificationCenter.default.addObserver(
+            forName: FeedContentMayHaveChanged.notification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                await self?.refreshNewPostsCountIfNeeded()
+            }
+        }
     }
 
     deinit {
         if let friendDisplayNameObserver {
             NotificationCenter.default.removeObserver(friendDisplayNameObserver)
+        }
+        if let feedContentObserver {
+            NotificationCenter.default.removeObserver(feedContentObserver)
         }
     }
 
@@ -1314,7 +1327,7 @@ public final class FeedViewModel: ObservableObject {
             submissionAttachments: submissionAttachments
         )
         await refreshPost(id: postId, allowingConcurrentFeedRefresh: true)
-        NotificationCenter.default.post(name: .paymentEvidenceStatusDidChange, object: nil)
+        NotificationCenter.default.post(name: ExpensesDirectoryChange.notification, object: nil)
     }
 
     func canModerateEvidence(on comment: PostComment, post: Post) -> Bool {
@@ -1328,7 +1341,7 @@ public final class FeedViewModel: ObservableObject {
         do {
             try await approvePaymentEvidenceUseCase.execute(postId: postId, evidenceId: evidenceId)
             await refreshPost(id: postId, allowingConcurrentFeedRefresh: true)
-            NotificationCenter.default.post(name: .paymentEvidenceStatusDidChange, object: nil)
+            NotificationCenter.default.post(name: ExpensesDirectoryChange.notification, object: nil)
         } catch {
             alertMessage = languageService.localizedMessage(for: error)
             Log.error(error, category: .feed)
@@ -1343,7 +1356,7 @@ public final class FeedViewModel: ObservableObject {
                 reason: reason
             )
             await refreshPost(id: postId, allowingConcurrentFeedRefresh: true)
-            NotificationCenter.default.post(name: .paymentEvidenceStatusDidChange, object: nil)
+            NotificationCenter.default.post(name: ExpensesDirectoryChange.notification, object: nil)
         } catch {
             alertMessage = languageService.localizedMessage(for: error)
             Log.error(error, category: .feed)
