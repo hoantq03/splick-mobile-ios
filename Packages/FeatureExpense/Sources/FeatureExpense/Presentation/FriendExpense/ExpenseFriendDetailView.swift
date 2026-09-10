@@ -153,12 +153,14 @@ public final class ExpenseFriendDetailViewModel: ObservableObject {
 
   public func didSubmit(_ settlement: BulkSettlement) {
     bulkSettlement = settlement
+    ExpensesDirectoryChange.post()
   }
 
   public func approveSettlement() async {
     guard canReviewPendingSettlement, let settlement = bulkSettlement else { return }
     do {
       bulkSettlement = try await approveUseCase.execute(id: settlement.id)
+      ExpensesDirectoryChange.post()
       await refresh()
     } catch {
       state = .failed(languageService.localizedMessage(for: error))
@@ -169,6 +171,7 @@ public final class ExpenseFriendDetailViewModel: ObservableObject {
     guard canReviewPendingSettlement, let settlement = bulkSettlement else { return }
     do {
       bulkSettlement = try await rejectUseCase.execute(id: settlement.id, reason: reason)
+      ExpensesDirectoryChange.post()
       await refresh()
     } catch {
       state = .failed(languageService.localizedMessage(for: error))

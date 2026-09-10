@@ -34,7 +34,10 @@ public final class ExpenseListViewModel: ObservableObject {
     private var hasMorePages = true
     /// Single in-flight load for both cold load and pull-to-refresh.
     private var inFlightLoadTask: Task<Void, Never>?
+    private var softSyncTask: Task<Void, Never>?
+    private var visiblePollingTask: Task<Void, Never>?
     private var lastSuccessfulLoadAt: Date?
+    private let visiblePollInterval: Duration = .seconds(30)
 
     private struct ExpenseListCachePayload: Codable {
         let expenses: [Expense]
@@ -170,13 +173,61 @@ public final class ExpenseListViewModel: ObservableObject {
         await load(isPullToRefresh: false)
     }
 
-    public func load(isPullToRefresh: Bool = false) async {
-        if let existing = inFlightLoadTask {
+    /// Soft-refresh when the Expenses tab becomes visible.
+    public func onExpensesVisible() {
+        Task { @MainActor in
+            await loadIfNeeded()
+        }
+        startVisiblePolling()
+    }
+
+    public func onExpensesHidden() {
+        stopVisiblePolling()
+    }
+
+    public func startVisiblePolling() {
+        guard visiblePollingTask == nil else { return }
+        visiblePollingTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: self?.visiblePollInterval ?? .seconds(30))
+                guard !Task.isCancelled else { return }
+                await self?.softSyncDirectory()
+            }
+        }
+    }
+
+    public func stopVisiblePolling() {
+        visiblePollingTask?.cancel()
+        visiblePollingTask = nil
+    }
+
+    /// Quiet refresh that bypasses the freshness throttle (keeps existing rows on screen).
+    public func softSyncDirectory() async {
+        if let existing = softSyncTask {
             await existing.value
             return
         }
+        let task = Task { @MainActor in
+            await load(isPullToRefresh: false, force: true)
+        }
+        softSyncTask = task
+        await task.value
+        softSyncTask = nil
+    }
+
+    public func refreshBadgeCounts() async {
+        await onBadgeCountsChanged?()
+    }
+
+    public func load(isPullToRefresh: Bool = false, force: Bool = false) async {
+        if let existing = inFlightLoadTask {
+            await existing.value
+            // Non-force callers can reuse the completed load; force/PTR still re-fetch.
+            if !force && !isPullToRefresh { return }
+        }
 
         if !isPullToRefresh,
+           !force,
            case .loaded = state,
            let lastSuccessfulLoadAt,
            Date().timeIntervalSince(lastSuccessfulLoadAt) < Self.freshLoadInterval {
@@ -186,8 +237,10 @@ public final class ExpenseListViewModel: ObservableObject {
         let task = Task { @MainActor in
             if isPullToRefresh {
                 isRefreshing = true
-            } else if case .loaded = state, !expenses.isEmpty {
-                // Keep showing existing rows while refreshing in the background.
+            } else if force {
+                // Quiet soft-sync: never flip the tab into a full-screen loading state.
+            } else if case .loaded = state {
+                // Keep showing existing rows (including empty) while refreshing.
             } else {
                 state = .loading
             }
@@ -247,6 +300,10 @@ public final class ExpenseListViewModel: ObservableObject {
                 await onBadgeCountsChanged?()
             }
             await onDataLoaded?(fetchedDebts, fetchedExpenses, currentUserId)
+        } catch is CancellationError {
+            if case .loading = state {
+                state = expenses.isEmpty ? .idle : .loaded(expenses)
+            }
         } catch {
             if !expenses.isEmpty {
                 state = .loaded(expenses)

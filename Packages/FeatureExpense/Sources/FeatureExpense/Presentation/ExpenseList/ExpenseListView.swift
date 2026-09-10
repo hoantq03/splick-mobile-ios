@@ -31,6 +31,8 @@ public struct ExpenseListView: View {
     @Environment(\.openLinkedPost) private var openLinkedPost
 
     @Environment(\.notificationsPresented) private var notificationsPresented
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var hasCompletedInitialLoad = false
     private let currentUser: UserSummary?
     private let currentUserId: UUID?
     private let isTabActive: Bool
@@ -144,39 +146,53 @@ public struct ExpenseListView: View {
             }
         }
         .onFirstAppear {
-            viewModel.updateCurrentUserId(currentUserId)
-            guard isTabActive else { return }
-            Task { await viewModel.loadIfNeeded() }
-            if let overviewViewModel {
-                Task { await overviewViewModel.loadIfNeeded() }
+            Task { @MainActor in
+                viewModel.updateCurrentUserId(currentUserId)
+                // Always mark complete so later tab activation can load. The pager mounts
+                // Expenses while Feed is selected, so `isTabActive` is often false here.
+                hasCompletedInitialLoad = true
+                guard isTabActive else { return }
+                await viewModel.loadIfNeeded()
+                if let overviewViewModel {
+                    await overviewViewModel.loadIfNeeded()
+                }
+                if scenePhase == .active {
+                    viewModel.startVisiblePolling()
+                }
             }
         }
         .onChange(of: isTabActive) { active in
-            guard active else { return }
-            viewModel.updateCurrentUserId(currentUserId)
-            // Defer chrome reset so it does not fight the main-tab slide animation.
+            // Defer off the view-update turn to avoid "Publishing changes from within view updates".
             Task { @MainActor in
+                updateExpensesVisibility(isActive: active, phase: scenePhase)
+                guard active else { return }
+                viewModel.updateCurrentUserId(currentUserId)
                 try? await Task.sleep(for: .milliseconds(ExpensePagerMotion.settleMilliseconds))
                 guard isTabActive else { return }
                 tabBarScrollState?.reset()
             }
-            Task { await viewModel.loadIfNeeded() }
-            if let overviewViewModel {
-                Task { await overviewViewModel.loadIfNeeded() }
+        }
+        .onChange(of: scenePhase) { phase in
+            Task { @MainActor in
+                updateExpensesVisibility(isActive: isTabActive, phase: phase)
             }
         }
         .onReceive(sameTabTapPublisher) { _ in
             handleSameTabTap()
         }
-        .onReceive(NotificationCenter.default.publisher(for: .paymentEvidenceStatusDidChange)) { _ in
-            guard isTabActive else { return }
-            Task { await viewModel.load(isPullToRefresh: true) }
-            if let overviewViewModel {
-                Task { await overviewViewModel.load(isPullToRefresh: true) }
+        .onReceive(NotificationCenter.default.publisher(for: .expensesDirectoryDidChange)) { _ in
+            Task { @MainActor in
+                await viewModel.softSyncDirectory()
+                await viewModel.refreshBadgeCounts()
+                if let overviewViewModel {
+                    await overviewViewModel.softSync()
+                }
             }
         }
         .onChange(of: currentUserId) { userId in
-            viewModel.updateCurrentUserId(userId)
+            Task { @MainActor in
+                viewModel.updateCurrentUserId(userId)
+            }
         }
         .sheet(item: $profileRoute) { route in
             if let profileDependencies {
@@ -187,6 +203,21 @@ public struct ExpenseListView: View {
                     )
                 )
             }
+        }
+    }
+
+    private func updateExpensesVisibility(isActive: Bool, phase: ScenePhase) {
+        if isActive, phase == .active {
+            // Do not gate on hasCompletedInitialLoad — activation must always be able to fetch
+            // (Expenses often first appears while another pager tab is selected).
+            viewModel.onExpensesVisible()
+            if let overviewViewModel {
+                Task { @MainActor in
+                    await overviewViewModel.loadIfNeeded()
+                }
+            }
+        } else if hasCompletedInitialLoad {
+            viewModel.onExpensesHidden()
         }
     }
 

@@ -18,6 +18,8 @@ public final class ExpenseOverviewViewModel: ObservableObject {
   private let fetchGroupsUseCase: FetchGroupExpenseSummaryUseCaseProtocol
   private let languageService: LanguageService
   private var inFlightLoadTask: Task<Void, Never>?
+  private var lastSuccessfulLoadAt: Date?
+  private static let freshLoadInterval: TimeInterval = 30
 
   public init(
     fetchOverviewUseCase: FetchExpenseOverviewUseCaseProtocol,
@@ -32,42 +34,63 @@ public final class ExpenseOverviewViewModel: ObservableObject {
   }
 
   func loadIfNeeded() async {
-    if case .loaded = state { return }
+    if case .loaded = state,
+       let lastSuccessfulLoadAt,
+       Date().timeIntervalSince(lastSuccessfulLoadAt) < Self.freshLoadInterval {
+      return
+    }
     await load()
   }
 
-  func load(isPullToRefresh: Bool = false) async {
+  /// Quiet refresh that bypasses the once-loaded short-circuit.
+  func softSync() async {
+    await load(isPullToRefresh: false, force: true)
+  }
+
+  func load(isPullToRefresh: Bool = false, force: Bool = false) async {
     if let inFlightLoadTask {
       await inFlightLoadTask.value
-      return
+      if !force && !isPullToRefresh { return }
+      if case .loaded = state, !force { return }
     }
-    let task = Task { await performLoad(isPullToRefresh: isPullToRefresh) }
+    let task = Task { await performLoad(isPullToRefresh: isPullToRefresh, force: force) }
     inFlightLoadTask = task
     await task.value
     inFlightLoadTask = nil
   }
 
-  private func performLoad(isPullToRefresh: Bool) async {
-    if !isPullToRefresh, overview == nil {
+  private func performLoad(isPullToRefresh: Bool, force: Bool = false) async {
+    if !isPullToRefresh, !force, overview == nil {
       state = .loading
     }
     do {
       let result = try await fetchOverviewUseCase.execute()
       overview = result
       state = .loaded(result)
+      lastSuccessfulLoadAt = Date()
       await loadSecondary()
     } catch is CancellationError {
+      // Leave prior loaded/idle state; never stick on .loading after cancel.
+      if overview == nil, case .loading = state {
+        state = .idle
+      }
       return
     } catch {
       if overview == nil {
         state = .failed(languageService.localizedMessage(for: error))
+      } else if case .loading = state {
+        state = .loaded(overview!)
       }
     }
   }
 
   private func loadSecondary() async {
-    analyticsState = analytics == nil ? .loading : analyticsState
-    groupsState = groups.isEmpty ? .loading : groupsState
+    if analytics == nil {
+      analyticsState = .loading
+    }
+    if groups.isEmpty {
+      groupsState = .loading
+    }
     async let analyticsTask = fetchAnalyticsUseCase.execute(period: .month, months: 3)
     async let groupsTask = fetchGroupsUseCase.execute()
     do {
@@ -75,14 +98,18 @@ public final class ExpenseOverviewViewModel: ObservableObject {
       analytics = analyticsResult
       analyticsState = .loaded(analyticsResult)
     } catch {
-      analyticsState = .failed(languageService.localizedMessage(for: error))
+      if analytics == nil {
+        analyticsState = .failed(languageService.localizedMessage(for: error))
+      }
     }
     do {
       let groupsResult = try await groupsTask
       groups = groupsResult.groups
       groupsState = .loaded(groupsResult.groups)
     } catch {
-      groupsState = .failed(languageService.localizedMessage(for: error))
+      if groups.isEmpty {
+        groupsState = .failed(languageService.localizedMessage(for: error))
+      }
     }
   }
 }

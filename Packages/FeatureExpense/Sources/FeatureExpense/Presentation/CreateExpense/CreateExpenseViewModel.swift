@@ -44,6 +44,7 @@ public final class CreateExpenseViewModel: ObservableObject {
             )
             let expense = try await createExpenseUseCase.execute(request)
             state = .loaded(expense)
+            ExpensesDirectoryChange.post()
             Log.info("Expense created: \(expense.id)", category: .expense)
         } catch let error as AppError {
             state = .failed(languageService.localizedMessage(for: error))
