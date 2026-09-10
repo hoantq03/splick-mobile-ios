@@ -1,0 +1,32 @@
+# Copy to project.local.yml (gitignored) for optional overrides — signing, entitlements, etc.
+#
+# Secrets (API keys, Google client ID) belong in `.env`:
+#   cp .env.example .env
+#   make generate
+#
+# Find Team ID: Xcode → Settings → Accounts → your team → Team ID
+settings:
+  base:
+    DEVELOPMENT_TEAM: YOUR_TEAM_ID_HERE
+
+# --- Device build: Sign in with Apple provisioning ---
+#
+# Simulator builds ignore provisioning. A physical device needs an App ID profile that
+# includes com.apple.developer.applesignin.
+#
+# Fix (recommended — keeps Apple Sign In on device):
+#   Requires a paid Apple Developer Program membership ($99/year).
+#   Personal Team (free Apple ID) cannot provision Sign in with Apple — Xcode will show:
+#   "Personal development teams do not support the Sign In with Apple capability."
+#   1. https://developer.apple.com/account → Identifiers → com.splick.app → Sign in with Apple
+#   2. Xcode → SplickApp → Signing & Capabilities → refresh signing
+#
+# Temporary workaround (Personal Team, Debug on device only — no Apple Sign In on device):
+#   Uncomment the block below, run `make generate`, rebuild on device.
+#
+# targets:
+#   SplickApp:
+#     settings:
+#       configs:
+#         Debug:
+#           CODE_SIGN_ENTITLEMENTS: SplickApp/SplickApp.device-dev.entitlements

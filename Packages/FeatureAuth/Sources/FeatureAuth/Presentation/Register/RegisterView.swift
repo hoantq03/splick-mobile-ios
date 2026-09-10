@@ -1,21 +1,54 @@
 import SwiftUI
 import DesignSystem
 import Common
+import Localization
+import SplickDomain
 
 public struct RegisterView: View {
+    @EnvironmentObject private var languageService: LanguageService
     @StateObject private var viewModel: RegisterViewModel
-    @Environment(\.dismiss) private var dismiss
+    private let onAuthenticated: ((User) -> Void)?
 
-    public init(viewModel: @autoclosure @escaping () -> RegisterViewModel) {
+    public init(
+        viewModel: @autoclosure @escaping () -> RegisterViewModel,
+        onAuthenticated: ((User) -> Void)? = nil
+    ) {
         _viewModel = StateObject(wrappedValue: viewModel())
+        self.onAuthenticated = onAuthenticated
     }
 
     public var body: some View {
         ScrollView {
             VStack(spacing: SplickTheme.Spacing.lg) {
                 headerSection
-                formSection
-                actionSection
+
+                switch viewModel.step {
+                case .accountDetails:
+                    accountDetailsSection
+                    accountDetailsActions
+                case .otpVerification:
+                    OtpVerificationView(
+                        otpCode: $viewModel.otpCode,
+                        title: otpTitle,
+                        subtitle: otpSubtitle,
+                        submitTitle: languageService.text(.authCreateAccountTitle),
+                        otpError: viewModel.otpError,
+                        otpInfoMessage: viewModel.otpInfoMessage,
+                        isLoading: viewModel.state.isLoading,
+                        backTitle: languageService.text(.commonBack),
+                        resendTitle: languageService.text(.changePasswordResendCode),
+                        onResend: { Task { await viewModel.resendOtp() } },
+                        onSubmit: { Task { await viewModel.register() } },
+                        onBack: { viewModel.goBackToAccountDetails() }
+                    )
+                }
+
+                if let error = viewModel.state.error {
+                    Text(error)
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.error)
+                        .multilineTextAlignment(.center)
+                }
             }
             .padding(.horizontal, SplickTheme.Spacing.lg)
             .padding(.top, SplickTheme.Spacing.xl)
@@ -23,91 +56,148 @@ public struct RegisterView: View {
         .scrollDismissesKeyboard(.interactively)
         .background(SplickTheme.Colors.background)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.left")
-                        .foregroundStyle(SplickTheme.Colors.textPrimary)
-                }
+        .sheet(isPresented: $viewModel.showPasswordRequirements) {
+            PasswordRequirementsSheet(result: viewModel.passwordStrength)
+        }
+        .onChange(of: viewModel.state) { state in
+            if case .loaded(let session) = state {
+                onAuthenticated?(session.user)
             }
         }
     }
 
-    // MARK: - Sections
+    private var otpTitle: String {
+        viewModel.channel == .email
+            ? languageService.text(.authVerifyEmailTitle)
+            : languageService.text(.authVerifyPhoneTitle)
+    }
+
+    private var otpSubtitle: String {
+        switch viewModel.channel {
+        case .email:
+            return String(format: languageService.text(.authVerifyEmailSubtitle), viewModel.email)
+        case .phone:
+            return String(format: languageService.text(.authVerifyPhoneSubtitle), viewModel.phoneNumber)
+        }
+    }
 
     private var headerSection: some View {
         VStack(spacing: SplickTheme.Spacing.xs) {
-            Text("Create Account")
+            Text(languageService.text(.authCreateAccountTitle))
                 .font(SplickTheme.Typography.largeTitle)
                 .foregroundStyle(SplickTheme.Colors.textPrimary)
 
-            Text("Join your friends on Splick")
+            Text(headerSubtitle)
                 .font(SplickTheme.Typography.callout)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
         }
         .padding(.bottom, SplickTheme.Spacing.md)
     }
 
-    private var formSection: some View {
+    private var headerSubtitle: String {
+        switch viewModel.step {
+        case .accountDetails:
+            return languageService.text(.authRegisterSubtitle)
+        case .otpVerification:
+            return otpTitle
+        }
+    }
+
+    private var accountDetailsSection: some View {
         VStack(spacing: SplickTheme.Spacing.md) {
-            SplickTextField(
-                "Email",
-                text: $viewModel.email,
-                errorMessage: viewModel.emailError,
-                icon: "envelope"
+            AuthMethodPicker(
+                selection: $viewModel.channel,
+                methods: AuthRegistrationChannel.allCases,
+                title: { $0.title }
             )
-            .textContentType(.emailAddress)
-            .keyboardType(.emailAddress)
-            .autocorrectionDisabled()
-            .textInputAutocapitalization(.never)
+
+            switch viewModel.channel {
+            case .email:
+                SplickTextField(
+                    languageService.text(.authEmail),
+                    text: $viewModel.email,
+                    errorMessage: viewModel.emailError,
+                    icon: "envelope",
+                    validationStatus: viewModel.emailStatus
+                )
+                .textContentType(.emailAddress)
+                .keyboardType(.emailAddress)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .onChange(of: viewModel.email) { _ in
+                    viewModel.validateEmailField()
+                    viewModel.suggestUsernameFromEmailIfNeeded()
+                }
+
+            case .phone:
+                SplickTextField(
+                    languageService.text(.connectedAccountsPhoneField),
+                    text: $viewModel.phoneNumber,
+                    errorMessage: viewModel.phoneError,
+                    icon: "phone",
+                    validationStatus: viewModel.phoneStatus
+                )
+                .textContentType(.telephoneNumber)
+                .keyboardType(.phonePad)
+                .autocorrectionDisabled()
+                .onChange(of: viewModel.phoneNumber) { _ in viewModel.validatePhoneField() }
+            }
 
             SplickTextField(
-                "Username",
+                languageService.text(.authUsername),
                 text: $viewModel.username,
                 errorMessage: viewModel.usernameError,
-                icon: "person"
+                icon: "person",
+                validationStatus: viewModel.usernameStatus
             )
             .textContentType(.username)
             .autocorrectionDisabled()
             .textInputAutocapitalization(.never)
+            .onChange(of: viewModel.username) { _ in viewModel.validateUsernameField() }
 
             SplickTextField(
-                "Password",
+                languageService.text(.authDisplayNameOptional),
+                text: $viewModel.displayName,
+                icon: "textformat"
+            )
+            .textContentType(.name)
+
+            SplickTextField(
+                languageService.text(.authPassword),
                 text: $viewModel.password,
                 isSecure: true,
                 errorMessage: viewModel.passwordError,
-                icon: "lock"
+                icon: "lock",
+                validationStatus: viewModel.passwordStatus,
+                onValidationAccessoryTap: { viewModel.showPasswordRequirements = true },
+                passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
+                passwordHiddenAccessibilityLabel: languageService.text(.authHidePassword)
             )
             .textContentType(.newPassword)
+            .onChange(of: viewModel.password) { _ in viewModel.validatePasswordField() }
 
             SplickTextField(
-                "Confirm Password",
+                languageService.text(.authConfirmPassword),
                 text: $viewModel.confirmPassword,
                 isSecure: true,
                 errorMessage: viewModel.confirmPasswordError,
-                icon: "lock.fill"
+                icon: "lock.fill",
+                validationStatus: viewModel.confirmPasswordStatus,
+                passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
+                passwordHiddenAccessibilityLabel: languageService.text(.authHidePassword)
             )
             .textContentType(.newPassword)
+            .onChange(of: viewModel.confirmPassword) { _ in viewModel.validateConfirmPasswordField() }
         }
     }
 
-    private var actionSection: some View {
-        VStack(spacing: SplickTheme.Spacing.md) {
-            if let error = viewModel.state.error {
-                Text(error)
-                    .font(SplickTheme.Typography.caption)
-                    .foregroundStyle(SplickTheme.Colors.error)
-                    .multilineTextAlignment(.center)
-            }
-
-            SplickButton(
-                "Create Account",
-                isLoading: viewModel.state.isLoading,
-                isDisabled: viewModel.email.isEmpty || viewModel.username.isEmpty
-                    || viewModel.password.isEmpty || viewModel.confirmPassword.isEmpty
-            ) {
-                Task { await viewModel.register() }
-            }
+    private var accountDetailsActions: some View {
+        SplickButton(
+            languageService.text(.authContinue),
+            isLoading: viewModel.state.isLoading,
+            isDisabled: !viewModel.canContinueAccountDetails
+        ) {
+            Task { await viewModel.requestOtpAndContinue() }
         }
     }
 }

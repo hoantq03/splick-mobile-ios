@@ -6,6 +6,10 @@ public struct User: Identifiable, Codable, Equatable, Sendable {
     public let username: String
     public let displayName: String
     public let avatarURL: URL?
+    public let status: UserAccountStatus
+    public let preferredLocale: String
+    public let timezone: String
+    public let dateOfBirth: Date?
     public let createdAt: Date
 
     public init(
@@ -14,6 +18,10 @@ public struct User: Identifiable, Codable, Equatable, Sendable {
         username: String,
         displayName: String,
         avatarURL: URL? = nil,
+        status: UserAccountStatus = .active,
+        preferredLocale: String = "vi",
+        timezone: String = "Asia/Ho_Chi_Minh",
+        dateOfBirth: Date? = nil,
         createdAt: Date = .now
     ) {
         self.id = id
@@ -21,20 +29,50 @@ public struct User: Identifiable, Codable, Equatable, Sendable {
         self.username = username
         self.displayName = displayName
         self.avatarURL = avatarURL
+        self.status = status
+        self.preferredLocale = preferredLocale
+        self.timezone = timezone
+        self.dateOfBirth = dateOfBirth
         self.createdAt = createdAt
     }
 }
 
-public struct UserSummary: Identifiable, Codable, Equatable, Sendable {
+public struct UserSummary: Identifiable, Codable, Equatable, Hashable, Sendable {
     public let id: UUID
     public let username: String
     public let displayName: String
+    /// Legal / profile display name when `displayName` shows a friend nickname.
+    public let subtitle: String?
     public let avatarURL: URL?
+    public let viewedAt: Date?
 
-    public init(id: UUID, username: String, displayName: String, avatarURL: URL? = nil) {
+    public init(
+        id: UUID,
+        username: String,
+        displayName: String,
+        subtitle: String? = nil,
+        avatarURL: URL? = nil,
+        viewedAt: Date? = nil
+    ) {
         self.id = id
         self.username = username
         self.displayName = displayName
+        self.subtitle = subtitle
         self.avatarURL = avatarURL
+        self.viewedAt = viewedAt
+    }
+
+    /// Nickname when set, otherwise the legal/profile name.
+    public var preferredName: String { displayName }
+
+    /// `Legal (Nickname)` when both exist; otherwise `preferredName`.
+    public var dualDisplayName: String {
+        let legal = subtitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !legal.isEmpty else { return displayName }
+        let nick = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if nick.isEmpty || legal.caseInsensitiveCompare(nick) == .orderedSame {
+            return displayName
+        }
+        return "\(legal) (\(nick))"
     }
 }

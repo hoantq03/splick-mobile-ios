@@ -21,27 +21,85 @@ public enum AppError: Error, Equatable {
 public enum NetworkError: Error, Equatable {
     case noConnection
     case timeout
-    case serverError(statusCode: Int)
+    case serverError(statusCode: Int, traceId: String? = nil)
     case decodingFailed
     case invalidURL
     case unauthorized
     case forbidden
     case notFound
     case rateLimited
-    case unknown(String)
+    case serverUnreachable
+    case apiError(code: String, message: String, traceId: String? = nil)
+    case unknown(String, traceId: String? = nil)
+
+    public var supportTraceId: String? {
+        switch self {
+        case .serverError(_, let traceId), .unknown(_, let traceId), .apiError(_, _, let traceId):
+            return traceId
+        default:
+            return nil
+        }
+    }
+
+    /// True for errors where retrying after fixing network may succeed (not credential-related).
+    public var isConnectivityIssue: Bool {
+        switch self {
+        case .noConnection, .timeout, .serverUnreachable:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// True when this error must not be treated as a signed-out session (keep Keychain tokens).
+    public var shouldKeepLocalSession: Bool {
+        switch self {
+        case .unauthorized:
+            return false
+        default:
+            return true
+        }
+    }
 
     public var userMessage: String {
         switch self {
-        case .noConnection: return "No internet connection. Please check your network."
-        case .timeout: return "Request timed out. Please try again."
-        case .serverError: return "Something went wrong. Please try again later."
-        case .decodingFailed: return "Failed to process server response."
-        case .invalidURL: return "Invalid request."
-        case .unauthorized: return "Session expired. Please log in again."
-        case .forbidden: return "You don't have permission to perform this action."
-        case .notFound: return "The requested resource was not found."
-        case .rateLimited: return "Too many requests. Please wait a moment."
-        case .unknown: return "An unexpected error occurred."
+        case .noConnection: return "Looks like you're offline. Check your wifi or data and try again."
+        case .serverUnreachable:
+            #if DEBUG
+            return "Cannot reach the API server. In Terminal, run: make -C splick-mobile-ios stubs"
+            #else
+            return "Can't reach the server right now. Hang tight and try again."
+            #endif
+        case .timeout: return "That took too long. Mind giving it another go?"
+        case .serverError:
+            return "Something's a little off. Give it another try!"
+        case .decodingFailed: return "Got a weird response. Let's try that again."
+        case .invalidURL: return "That request didn't look right. Try again?"
+        case .unauthorized: return "Your session expired. Log in again to keep going."
+        case .forbidden: return "You don't have access to do that."
+        case .notFound: return "We couldn't find what you're looking for."
+        case .rateLimited: return "Whoa, slow down a sec — then try again."
+        case .apiError(_, let message, _):
+            return message.isEmpty ? "Something unexpected happened. Try again?" : message
+        case .unknown(let message, _):
+            return message.isEmpty ? "Something unexpected happened. Try again?" : message
+        }
+    }
+}
+
+extension NetworkError: LocalizedError {
+    public var errorDescription: String? {
+        userMessage
+    }
+}
+
+extension AppError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .network(let error):
+            return error.errorDescription
+        default:
+            return userMessage
         }
     }
 }
@@ -64,13 +122,34 @@ public enum StorageError: Error, Equatable {
     }
 }
 
+public struct DeactivatedAccountInfo: Equatable, Sendable {
+    public let deactivatedAt: Date?
+    public let scheduledDeletionAt: Date?
+    public let reactivationToken: String
+
+    public init(deactivatedAt: Date?, scheduledDeletionAt: Date?, reactivationToken: String) {
+        self.deactivatedAt = deactivatedAt
+        self.scheduledDeletionAt = scheduledDeletionAt
+        self.reactivationToken = reactivationToken
+    }
+}
+
 public enum AuthError: Error, Equatable {
     case invalidCredentials
     case tokenExpired
     case refreshFailed
     case accountLocked
+    case accountInactive(DeactivatedAccountInfo)
+    case cannotUnlinkLastAuthMethod
+    case googleAlreadyLinked
+    case providerAlreadyLinked
+    case invalidOtp(String)
+    case otpRateLimited
     case registrationFailed(String)
     case emailAlreadyExists
+    case emailUseGoogle
+    case phoneAlreadyExists
+    case usernameAlreadyExists
 
     public var userMessage: String {
         switch self {
@@ -78,8 +157,34 @@ public enum AuthError: Error, Equatable {
         case .tokenExpired: return "Your session has expired. Please log in again."
         case .refreshFailed: return "Failed to refresh session."
         case .accountLocked: return "Your account has been locked."
+        case .accountInactive: return "This account has been deactivated."
+        case .cannotUnlinkLastAuthMethod:
+            return "Keep at least one sign-in method on your account."
+        case .googleAlreadyLinked:
+            return "This Google account is already linked to another user."
+        case .providerAlreadyLinked:
+            return "This sign-in method is already connected."
+        case .invalidOtp(let message): return message
+        case .otpRateLimited:
+            return "Too many verification attempts. Please wait a few minutes before requesting a new code."
         case .registrationFailed(let reason): return "Registration failed: \(reason)"
-        case .emailAlreadyExists: return "An account with this email already exists."
+        case .emailAlreadyExists:
+            return "An account with this email already exists. Sign in instead."
+        case .emailUseGoogle:
+            return "This account uses Google sign-in. Tap Continue with Google on the login screen."
+        case .phoneAlreadyExists:
+            return "This phone number already has an account. Sign in with SMS instead."
+        case .usernameAlreadyExists:
+            return "That username is taken. Choose another."
+        }
+    }
+
+    public var shouldShowOnOtpStep: Bool {
+        switch self {
+        case .invalidOtp, .otpRateLimited:
+            return true
+        default:
+            return false
         }
     }
 }

@@ -15,6 +15,6 @@ public final class FetchFeedUseCase: FetchFeedUseCaseProtocol, Sendable {
     }
 
     public func execute(page: Int) async throws -> [Post] {
-        try await repository.fetchFeed(page: page, limit: pageSize)
+        try await repository.fetchFeed(page: page, limit: pageSize, authorId: nil)
     }
 }
