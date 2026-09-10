@@ -109,6 +109,8 @@ final class PhotoEditorViewModel: ObservableObject {
     private var undoStack: [EditState] = []
     private var redoStack: [EditState] = []
     private var strokeRedoStack: [PKStroke] = []
+    /// Bumped whenever undo/redo availability changes so chrome can refresh.
+    @Published private(set) var historyRevision: Int = 0
     private var previewBusy = false
     private var pendingLivePreview = false
     private var isAdjustingLive = false
@@ -817,6 +819,7 @@ final class PhotoEditorViewModel: ObservableObject {
         if undoStack.count > 20 {
             undoStack.removeFirst()
         }
+        historyRevision &+= 1
     }
 
     private func restore(_ snapshot: EditState) {
@@ -831,7 +834,9 @@ final class PhotoEditorViewModel: ObservableObject {
         adjustments = snapshot.adjustments
         selectedTextID = nil
         selectedStickerID = nil
+        strokeRedoStack.removeAll()
         drawingSyncRevision += 1
+        historyRevision &+= 1
         schedulePreviewRefresh()
     }
 

@@ -51,6 +51,7 @@ private struct StickerOverlayItemView: View {
     @State private var dragOffset: CGSize = .zero
     @State private var liveScale: CGFloat = 1
     @State private var liveRotation: Angle = .zero
+    @State private var transformLock: OverlayTransformLock = .none
 
     var body: some View {
         visual
@@ -108,35 +109,62 @@ private struct StickerOverlayItemView: View {
     private var dragGesture: some Gesture {
         DragGesture(minimumDistance: 1, coordinateSpace: .named(PhotoEditorStickerLayer.canvasSpace))
             .onChanged { value in
+                guard transformLock != .magnify, transformLock != .rotate else { return }
+                transformLock = .pan
                 dragOffset = value.translation
             }
             .onEnded { value in
+                if transformLock == .magnify || transformLock == .rotate {
+                    dragOffset = .zero
+                    return
+                }
                 let location = CGPoint(
                     x: center.x + value.translation.width,
                     y: center.y + value.translation.height
                 )
                 onMove(normalizedPoint(for: location))
                 dragOffset = .zero
+                transformLock = .none
                 onTransformEnd()
             }
     }
 
     private var magnifyGesture: some Gesture {
         MagnificationGesture()
-            .onChanged { liveScale = $0 }
+            .onChanged { value in
+                if transformLock == .none, abs(value - 1) > 0.03 {
+                    transformLock = .magnify
+                }
+                guard transformLock == .magnify else { return }
+                liveScale = value
+            }
             .onEnded { scale in
+                defer {
+                    liveScale = 1
+                    transformLock = .none
+                }
+                guard transformLock == .magnify else { return }
                 onScale(max(0.25, min(item.scale * scale, 8)))
-                liveScale = 1
                 onTransformEnd()
             }
     }
 
     private var rotateGesture: some Gesture {
         RotationGesture()
-            .onChanged { liveRotation = $0 }
+            .onChanged { angle in
+                if transformLock == .none, abs(angle.degrees) > 14 {
+                    transformLock = .rotate
+                }
+                guard transformLock == .rotate else { return }
+                liveRotation = angle
+            }
             .onEnded { angle in
+                defer {
+                    liveRotation = .zero
+                    transformLock = .none
+                }
+                guard transformLock == .rotate else { return }
                 onRotate(item.rotation + angle)
-                liveRotation = .zero
                 onTransformEnd()
             }
     }
@@ -148,4 +176,11 @@ private struct StickerOverlayItemView: View {
             y: min(max((location.y - displayFrame.minY) / displayFrame.height, 0), 1)
         )
     }
+}
+
+private enum OverlayTransformLock {
+    case none
+    case pan
+    case magnify
+    case rotate
 }

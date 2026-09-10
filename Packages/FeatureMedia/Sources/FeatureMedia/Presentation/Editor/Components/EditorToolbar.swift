@@ -39,6 +39,30 @@ struct EditorToolbar: View {
                     .background(Circle().fill(Color.white.opacity(0.14)))
             }
 
+            Button {
+                viewModel.undo()
+            } label: {
+                Image(systemName: "arrow.uturn.backward")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(viewModel.canUndo ? .white : .white.opacity(0.35))
+                    .frame(width: 40, height: 40)
+                    .background(Circle().fill(Color.white.opacity(0.14)))
+            }
+            .disabled(!viewModel.canUndo)
+            .accessibilityLabel(languageService.text(.mediaUndoA11y))
+
+            Button {
+                viewModel.redo()
+            } label: {
+                Image(systemName: "arrow.uturn.forward")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(viewModel.canRedo ? .white : .white.opacity(0.35))
+                    .frame(width: 40, height: 40)
+                    .background(Circle().fill(Color.white.opacity(0.14)))
+            }
+            .disabled(!viewModel.canRedo)
+            .accessibilityLabel(languageService.text(.mediaRedoA11y))
+
             Spacer()
 
             Button(action: onDone) {
@@ -86,28 +110,6 @@ struct EditorToolbar: View {
     private var drawOptionsBar: some View {
         VStack(spacing: SplickTheme.Spacing.sm) {
             HStack(spacing: SplickTheme.Spacing.md) {
-                Button {
-                    viewModel.undoLastStroke()
-                } label: {
-                    Image(systemName: "arrow.uturn.backward")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(viewModel.canUndoStroke ? .white : .white.opacity(0.35))
-                }
-                .disabled(!viewModel.canUndoStroke)
-                .accessibilityLabel(languageService.text(.mediaUndoA11y))
-
-                Button {
-                    viewModel.redoLastStroke()
-                } label: {
-                    Image(systemName: "arrow.uturn.forward")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(viewModel.canRedoStroke ? .white : .white.opacity(0.35))
-                }
-                .disabled(!viewModel.canRedoStroke)
-                .accessibilityLabel(languageService.text(.mediaRedoA11y))
-
-                Divider().frame(height: 28).overlay(Color.white.opacity(0.25))
-
                 Circle()
                     .fill(Color(viewModel.inkColor))
                     .frame(width: max(viewModel.inkWidth, 6), height: max(viewModel.inkWidth, 6))
