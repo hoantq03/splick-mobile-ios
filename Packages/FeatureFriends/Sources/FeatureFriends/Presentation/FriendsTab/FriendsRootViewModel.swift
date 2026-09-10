@@ -117,6 +117,10 @@ public final class FriendsRootViewModel: ObservableObject {
     }
 
     private var groupsDirectoryObserver: AnyCancellable?
+    private var friendshipsDirectoryObserver: AnyCancellable?
+    private var softSyncTask: Task<Void, Never>?
+    private var visiblePollingTask: Task<Void, Never>?
+    private let visiblePollInterval: Duration = .seconds(30)
 
     public init(
         fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol,
@@ -151,6 +155,84 @@ public final class FriendsRootViewModel: ObservableObject {
                 guard let self else { return }
                 Task { await self.loadGroups(isPullToRefresh: true) }
             }
+        friendshipsDirectoryObserver = NotificationCenter.default
+            .publisher(for: FriendshipsDirectoryChange.notification)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                Task { await self.softSyncDirectory() }
+            }
+    }
+
+    /// Soft-refresh friends + request counts when the Friends tab becomes visible.
+    func onFriendsVisible() {
+        Task { await softSyncDirectory() }
+        startVisiblePolling()
+    }
+
+    func onFriendsHidden() {
+        stopVisiblePolling()
+    }
+
+    func startVisiblePolling() {
+        guard visiblePollingTask == nil else { return }
+        visiblePollingTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: self?.visiblePollInterval ?? .seconds(30))
+                guard !Task.isCancelled else { return }
+                await self?.softSyncDirectory()
+            }
+        }
+    }
+
+    func stopVisiblePolling() {
+        visiblePollingTask?.cancel()
+        visiblePollingTask = nil
+    }
+
+    /// Quiet refresh of friends list + incoming/outgoing requests (no full-screen loading).
+    func softSyncDirectory() async {
+        if let existing = softSyncTask {
+            await existing.value
+            return
+        }
+
+        let task = Task { @MainActor in
+            await performSoftSync()
+        }
+        softSyncTask = task
+        await task.value
+        softSyncTask = nil
+    }
+
+    private func performSoftSync() async {
+        backgroundFriendsLoadTask?.cancel()
+        backgroundFriendsLoadTask = nil
+
+        async let friendsResult = fetchFriendsPageForRefresh(reset: true)
+        async let incomingResult = fetchIncomingRequestsForCache()
+        async let outgoingResult = fetchOutgoingRequestsForCache()
+
+        let (friendsPageResult, incoming, outgoing) = await (
+            friendsResult,
+            incomingResult,
+            outgoingResult
+        )
+
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            applyFriendsPageRefreshResult(friendsPageResult, replace: true)
+            cachedIncomingRequests = incoming
+            incomingRequestCount = incoming.count
+            cachedOutgoingRequests = outgoing
+            outgoingRequestCount = outgoing.count
+        }
+        await onFriendRequestsLoaded?(incoming)
+
+        if canLoadMoreFriends {
+            startBackgroundFriendsLoad()
+        }
     }
 
     func startRadarSession() {
@@ -722,11 +804,7 @@ public final class FriendsRootViewModel: ObservableObject {
 
     func onFriendAdded() {
         invalidateFriendsCache()
-        Task {
-            await loadFriends(isPullToRefresh: true)
-            await refreshIncomingRequestCount()
-            await refreshOutgoingRequestCount()
-        }
+        Task { await softSyncDirectory() }
     }
 
     func onGroupJoined() {

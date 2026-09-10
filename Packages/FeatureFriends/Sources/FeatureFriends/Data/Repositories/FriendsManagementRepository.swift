@@ -166,6 +166,7 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
         let response: FriendRequestResponseDTO = try await apiClient.request(
             SocialEndpoint.sendFriendRequest(username: normalized, message: trimmedMessage)
         )
+        FriendshipsDirectoryChange.post()
         return UserSummary(
             id: response.addresseeId,
             username: normalized,
@@ -193,14 +194,17 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
 
     public func acceptFriendRequest(requestId: UUID) async throws {
         try await apiClient.request(SocialEndpoint.acceptFriendRequest(requestId: requestId))
+        FriendshipsDirectoryChange.post()
     }
 
     public func rejectFriendRequest(requestId: UUID) async throws {
         try await apiClient.request(SocialEndpoint.rejectFriendRequest(requestId: requestId))
+        FriendshipsDirectoryChange.post()
     }
 
     public func cancelFriendRequest(requestId: UUID) async throws {
         try await apiClient.request(SocialEndpoint.cancelFriendRequest(requestId: requestId))
+        FriendshipsDirectoryChange.post()
     }
 
     public func fetchOutgoingFriendRequests(page: Int, size: Int) async throws -> [OutgoingFriendRequest] {
@@ -225,6 +229,7 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
         if let friendDisplayNameStore {
             await friendDisplayNameStore.remove(userId: friendUserId)
         }
+        FriendshipsDirectoryChange.post()
     }
 
     public func setFriendNickname(friendUserId: UUID, nickname: String?) async throws -> UserSummary {
@@ -275,6 +280,7 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
             let response: FriendRequestResponseDTO = try await apiClient.request(
                 SocialEndpoint.sendFriendRequestByQr(qrPayload: payload, message: nil)
             )
+            FriendshipsDirectoryChange.post()
             let username = response.addresseeUsername ?? "user"
             let displayName = response.addresseeDisplayName ?? username
             return UserSummary(

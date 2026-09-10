@@ -27,8 +27,10 @@ public struct FriendsRootView: View {
     @Environment(\.pullToRefreshActive) private var pullToRefreshActive
     @Environment(\.sameTabTapHandlingEnabled) private var sameTabTapHandlingEnabled
     @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
     @State private var isPullRefreshing = false
     @FocusState private var isSearchFieldFocused: Bool
+    @State private var hasCompletedInitialLoad = false
 
     private var hasSearchText: Bool {
         !viewModel.searchQuery.isEmpty
@@ -91,6 +93,7 @@ public struct FriendsRootView: View {
     private let onFriendRequestsLoaded: (([IncomingFriendRequest]) async -> Void)?
     private let pendingUserProfileUserId: Binding<UUID?>?
     private let pendingUserProfileUsername: Binding<String?>?
+    private let isTabActive: Bool
 
     public init(
         fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol,
@@ -136,13 +139,15 @@ public struct FriendsRootView: View {
         onDirectoryLoaded: (([SplickDomain.Group]) async -> Void)? = nil,
         onFriendRequestsLoaded: (([IncomingFriendRequest]) async -> Void)? = nil,
         pendingUserProfileUserId: Binding<UUID?>? = nil,
-        pendingUserProfileUsername: Binding<String?>? = nil
+        pendingUserProfileUsername: Binding<String?>? = nil,
+        isTabActive: Bool = true
     ) {
         self.onBadgeCountsChanged = onBadgeCountsChanged
         self.onDirectoryLoaded = onDirectoryLoaded
         self.onFriendRequestsLoaded = onFriendRequestsLoaded
         self.pendingUserProfileUserId = pendingUserProfileUserId
         self.pendingUserProfileUsername = pendingUserProfileUsername
+        self.isTabActive = isTabActive
         self.fetchMyFriendsUseCase = fetchMyFriendsUseCase
         let rootVM = FriendsRootViewModel(
             fetchMyFriendsUseCase: fetchMyFriendsUseCase,
@@ -452,8 +457,21 @@ public struct FriendsRootView: View {
                 async let directory: Void = viewModel.load(userId: currentUserSummary?.id)
                 async let blocked: Void = blockedUsersViewModel.load()
                 _ = await (directory, blocked)
+                hasCompletedInitialLoad = true
+                if isTabActive, scenePhase == .active {
+                    viewModel.startVisiblePolling()
+                }
                 // PYMK scans group members (N API calls) — only when user opens that sheet.
             }
+        }
+        .onChange(of: isTabActive) { active in
+            updateFriendsVisibility(isActive: active, phase: scenePhase)
+        }
+        .onChange(of: scenePhase) { phase in
+            updateFriendsVisibility(isActive: isTabActive, phase: phase)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .friendshipsDirectoryDidChange)) { _ in
+            Task { await onBadgeCountsChanged?() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .groupsDirectoryDidChange)) { _ in
             Task { await viewModel.loadGroups(isPullToRefresh: true) }
@@ -497,6 +515,17 @@ public struct FriendsRootView: View {
                 showNearbyRadar = false
                 viewModel.stopRadarSession()
             }
+            // Do not stop visible polling here — sheets / profile pushes can fire onDisappear
+            // while the Friends tab is still selected. Polling is gated by isTabActive + scenePhase.
+        }
+    }
+
+    private func updateFriendsVisibility(isActive: Bool, phase: ScenePhase) {
+        guard hasCompletedInitialLoad else { return }
+        if isActive, phase == .active {
+            viewModel.onFriendsVisible()
+        } else {
+            viewModel.onFriendsHidden()
         }
     }
 
