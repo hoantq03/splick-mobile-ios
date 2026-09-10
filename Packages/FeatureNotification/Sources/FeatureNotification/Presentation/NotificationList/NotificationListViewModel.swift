@@ -321,9 +321,12 @@ public final class NotificationListViewModel: ObservableObject {
             }
             persistOutcome(requestId, accept ? .accepted : .rejected)
             await refreshPendingIncomingFriendRequests()
+            FriendshipsDirectoryChange.post()
             if !notification.isRead {
                 markLocalAsRead(notification)
                 try? await markReadUseCase.execute(id: notification.id)
+                await onBadgeCountsChanged?()
+            } else {
                 await onBadgeCountsChanged?()
             }
         } catch {

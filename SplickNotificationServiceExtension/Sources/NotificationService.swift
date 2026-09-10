@@ -4,27 +4,36 @@ import UserNotifications
 /// Downloads `actorAvatarUrl` from the APNs payload and attaches it so the lock-screen /
 /// banner shows the actor photo instead of only the app icon. Also applies the user's
 /// globally selected notification sound from the app group.
+///
+/// After delivering, keeps the extension alive briefly and removes the delivered
+/// notification so the heads-up auto-hides outside the app (same ~2.5s as in-app).
 final class NotificationService: UNNotificationServiceExtension {
+    /// Must stay in sync with `AppConstants.PushNotifications.bannerAutoDismissDelay`.
+    private static let bannerAutoDismissSeconds: TimeInterval = 2.5
+
     private var contentHandler: ((UNNotificationContent) -> Void)?
     private var bestAttemptContent: UNMutableNotificationContent?
     private var downloadTask: URLSessionDataTask?
+    private var requestIdentifier: String = ""
+    private var didFinish = false
 
     override func didReceive(
         _ request: UNNotificationRequest,
         withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void
     ) {
         self.contentHandler = contentHandler
+        requestIdentifier = request.identifier
         bestAttemptContent = (request.content.mutableCopy() as? UNMutableNotificationContent)
 
         guard let bestAttemptContent else {
-            contentHandler(request.content)
+            finish(with: request.content)
             return
         }
 
         applySelectedSound(to: bestAttemptContent)
 
         guard let avatarURL = Self.actorAvatarURL(from: request.content.userInfo) else {
-            contentHandler(bestAttemptContent)
+            finish(with: bestAttemptContent)
             return
         }
 
@@ -33,50 +42,75 @@ final class NotificationService: UNNotificationServiceExtension {
 
         downloadTask = URLSession.shared.dataTask(with: urlRequest) { [weak self] data, response, error in
             defer { self?.downloadTask = nil }
-            guard
-                error == nil,
-                let data,
-                !data.isEmpty,
-                let http = response as? HTTPURLResponse,
-                (200 ... 299).contains(http.statusCode)
-            else {
-                contentHandler(bestAttemptContent)
-                return
-            }
+            guard let self else { return }
 
-            let fileExtension = Self.preferredFileExtension(
-                url: avatarURL,
-                mimeType: http.value(forHTTPHeaderField: "Content-Type")
-            )
-            let tempURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent(UUID().uuidString)
-                .appendingPathExtension(fileExtension)
-
-            do {
-                try data.write(to: tempURL, options: .atomic)
-                var options: [String: Any] = [:]
-                if let typeIdentifier = UTType(filenameExtension: fileExtension)?.identifier {
-                    options[UNNotificationAttachmentOptionsTypeHintKey] = typeIdentifier
-                }
-                let attachment = try UNNotificationAttachment(
-                    identifier: "actorAvatar",
-                    url: tempURL,
-                    options: options.isEmpty ? nil : options
+            var content = bestAttemptContent
+            if error == nil,
+               let data,
+               !data.isEmpty,
+               let http = response as? HTTPURLResponse,
+               (200 ... 299).contains(http.statusCode)
+            {
+                let fileExtension = Self.preferredFileExtension(
+                    url: avatarURL,
+                    mimeType: http.value(forHTTPHeaderField: "Content-Type")
                 )
-                bestAttemptContent.attachments = [attachment]
-            } catch {
-                // Fail soft — deliver original alert without attachment.
+                let tempURL = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(UUID().uuidString)
+                    .appendingPathExtension(fileExtension)
+
+                do {
+                    try data.write(to: tempURL, options: .atomic)
+                    var options: [String: Any] = [:]
+                    if let typeIdentifier = UTType(filenameExtension: fileExtension)?.identifier {
+                        options[UNNotificationAttachmentOptionsTypeHintKey] = typeIdentifier
+                    }
+                    let attachment = try UNNotificationAttachment(
+                        identifier: "actorAvatar",
+                        url: tempURL,
+                        options: options.isEmpty ? nil : options
+                    )
+                    content.attachments = [attachment]
+                } catch {
+                    // Fail soft — deliver original alert without attachment.
+                }
             }
-            contentHandler(bestAttemptContent)
+            self.finish(with: content)
         }
         downloadTask?.resume()
     }
 
     override func serviceExtensionTimeWillExpire() {
         downloadTask?.cancel()
-        if let contentHandler, let bestAttemptContent {
-            contentHandler(bestAttemptContent)
+        if let bestAttemptContent {
+            finish(with: bestAttemptContent)
         }
+    }
+
+    /// Delivers the banner, then blocks until auto-dismiss so iOS does not suspend the
+    /// extension before `removeDeliveredNotifications` runs.
+    private func finish(with content: UNNotificationContent) {
+        guard !didFinish else { return }
+        didFinish = true
+
+        let handler = contentHandler
+        contentHandler = nil
+        let identifier = requestIdentifier
+
+        handler?(content)
+
+        guard !identifier.isEmpty else { return }
+
+        let delay = Self.bannerAutoDismissSeconds
+        let group = DispatchGroup()
+        group.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
+            Thread.sleep(forTimeInterval: delay)
+            UNUserNotificationCenter.current()
+                .removeDeliveredNotifications(withIdentifiers: [identifier])
+            group.leave()
+        }
+        _ = group.wait(timeout: .now() + delay + 0.5)
     }
 
     private func applySelectedSound(to content: UNMutableNotificationContent) {
