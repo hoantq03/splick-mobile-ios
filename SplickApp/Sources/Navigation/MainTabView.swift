@@ -418,7 +418,8 @@ struct MainTabView: View {
                 container.widgetSyncBridge.syncFriendRequests(requests)
             },
             pendingUserProfileUserId: $appState.pendingUserProfileNavigation,
-            pendingUserProfileUsername: $appState.pendingUserProfileUsername
+            pendingUserProfileUsername: $appState.pendingUserProfileUsername,
+            isTabActive: settledPagerTab == .friends
         )
         .environmentObject(container.customEmojiStore)
         .environment(\.customEmojiDependencies, container.customEmojiDependencies)
@@ -427,7 +428,7 @@ struct MainTabView: View {
 
     @ViewBuilder
     private var messagesTabContent: some View {
-        MessagingTabRoot()
+        MessagingTabRoot(isTabActive: settledPagerTab == .messages)
             .environment(\.sameTabTapHandlingEnabled, settledPagerTab == .messages)
     }
 

@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 import UserNotifications
+import Common
 
 @MainActor
 final class AppDelegate: NSObject, UIApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate {
@@ -43,10 +44,32 @@ final class AppDelegate: NSObject, UIApplicationDelegate, @preconcurrency UNUser
         didReceiveRemoteNotification userInfo: [AnyHashable: Any],
         fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
     ) {
-        PushNotificationCoordinator.shared.handleRemoteNotification(
+        let coordinator = PushNotificationCoordinator.shared
+        coordinator.handleRemoteNotification(
             userInfo: userInfo,
             queueDestination: false
         )
+        // When woken for a background push (content-available), auto-hide the system banner
+        // so later notifications are not blocked behind a sticky heads-up.
+        if application.applicationState != .active {
+            var backgroundTask = UIBackgroundTaskIdentifier.invalid
+            backgroundTask = application.beginBackgroundTask(withName: "splick.banner-auto-dismiss") {
+                if backgroundTask != .invalid {
+                    application.endBackgroundTask(backgroundTask)
+                    backgroundTask = .invalid
+                }
+            }
+            coordinator.scheduleBannerAutoDismiss(userInfo: userInfo)
+            Task { @MainActor in
+                try? await Task.sleep(for: AppConstants.PushNotifications.bannerAutoDismissDelay)
+                // Extra beat so dismiss + NSE/main-app retry can finish.
+                try? await Task.sleep(for: .milliseconds(600))
+                if backgroundTask != .invalid {
+                    application.endBackgroundTask(backgroundTask)
+                    backgroundTask = .invalid
+                }
+            }
+        }
         completionHandler(.newData)
     }
 
@@ -55,13 +78,23 @@ final class AppDelegate: NSObject, UIApplicationDelegate, @preconcurrency UNUser
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        PushNotificationCoordinator.shared.handleRemoteNotification(
-            userInfo: notification.request.content.userInfo,
+        let coordinator = PushNotificationCoordinator.shared
+        let requestIdentifier = notification.request.identifier
+        let userInfo = notification.request.content.userInfo
+
+        coordinator.handleRemoteNotification(
+            userInfo: userInfo,
             queueDestination: false
         )
-        completionHandler(PushNotificationCoordinator.shared.foregroundPresentationOptions(
-            userInfo: notification.request.content.userInfo
-        ))
+        let options = coordinator.foregroundPresentationOptions(userInfo: userInfo)
+        if !options.isEmpty {
+            coordinator.dismissPendingBanners(except: requestIdentifier)
+            coordinator.scheduleBannerAutoDismiss(
+                requestIdentifier: requestIdentifier,
+                userInfo: userInfo
+            )
+        }
+        completionHandler(options)
     }
 
     func userNotificationCenter(

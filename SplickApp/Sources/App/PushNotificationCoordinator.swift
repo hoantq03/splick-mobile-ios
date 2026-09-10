@@ -2,7 +2,6 @@ import Foundation
 import Combine
 import UIKit
 import UserNotifications
-import AudioToolbox
 import Common
 import FeatureMessaging
 import FeatureNotification
@@ -33,6 +32,9 @@ final class PushNotificationCoordinator: ObservableObject {
     private var languageService: LanguageService?
     private var serverSyncInFlight = false
     private var lastSyncedToken: String?
+    private var bannerAutoDismissTasks: [String: Task<Void, Never>] = [:]
+    /// Request identifiers currently scheduled for short-lived banner display.
+    private var activeBannerRequestIdentifiers: Set<String> = []
 
     private init() {}
 
@@ -201,6 +203,10 @@ final class PushNotificationCoordinator: ObservableObject {
         }
 
         acknowledgeMessagingDeliveryIfNeeded(userInfo: userInfo)
+        invalidateFriendshipsDirectoryIfNeeded(userInfo: userInfo)
+        invalidateExpensesDirectoryIfNeeded(userInfo: userInfo)
+        invalidateFeedContentIfNeeded(userInfo: userInfo)
+        invalidateMessagingInboxIfNeeded(userInfo: userInfo)
 
         guard queueDestination else { return }
 
@@ -215,6 +221,45 @@ final class PushNotificationCoordinator: ObservableObject {
             category: .notification,
             metadata: ["screen": destination.screen.rawValue]
         )
+    }
+
+    /// Friend request pushes should refresh the Friends tab directory without requiring a manual pull.
+    private func invalidateFriendshipsDirectoryIfNeeded(userInfo: [AnyHashable: Any]) {
+        guard let type = notificationType(from: userInfo),
+              type == .friendRequestSent || type == .friendRequestAccepted
+        else { return }
+        FriendshipsDirectoryChange.post()
+    }
+
+    /// Expense / settlement / payment-evidence pushes should soft-refresh Chi tiêu.
+    private func invalidateExpensesDirectoryIfNeeded(userInfo: [AnyHashable: Any]) {
+        guard let type = notificationType(from: userInfo),
+              type.isExpensesDirectoryNotification
+        else { return }
+        ExpensesDirectoryChange.post()
+    }
+
+    /// Feed social pushes should force an ahead-count check for the new-posts pill.
+    private func invalidateFeedContentIfNeeded(userInfo: [AnyHashable: Any]) {
+        guard let type = notificationType(from: userInfo),
+              type.isFeedContentNotification
+        else { return }
+        FeedContentMayHaveChanged.post()
+    }
+
+    /// Messaging pushes should soft-refresh the inbox (filters + unread) when WS missed the event.
+    private func invalidateMessagingInboxIfNeeded(userInfo: [AnyHashable: Any]) {
+        guard let type = notificationType(from: userInfo),
+              type.isMessagingNotification
+        else { return }
+        MessagingInboxMayHaveChanged.post()
+    }
+
+    private func notificationType(from userInfo: [AnyHashable: Any]) -> NotificationType? {
+        let typeRaw =
+            (userInfo["type"] as? String)
+            ?? ((userInfo["payload"] as? [String: Any])?["type"] as? String)
+        return typeRaw.flatMap(NotificationType.init(rawValue:))
     }
 
     /// When a messaging push is presented/received, ACK delivery so the sender sees "đã nhận".
@@ -281,6 +326,96 @@ final class PushNotificationCoordinator: ObservableObject {
         return [.banner, .badge]
     }
 
+    /// iOS keeps actionable / attachment banners until the user swipes them away, which also
+    /// blocks subsequent banners. Remove the delivered notification after a short delay.
+    func scheduleBannerAutoDismiss(
+        requestIdentifier: String? = nil,
+        userInfo: [AnyHashable: Any] = [:]
+    ) {
+        if let requestIdentifier {
+            activeBannerRequestIdentifiers.insert(requestIdentifier)
+        }
+        let taskKey = requestIdentifier
+            ?? notificationIdString(from: userInfo)
+            ?? UUID().uuidString
+        bannerAutoDismissTasks[taskKey]?.cancel()
+        bannerAutoDismissTasks[taskKey] = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: AppConstants.PushNotifications.bannerAutoDismissDelay)
+            guard !Task.isCancelled else { return }
+            await self?.dismissDeliveredBanner(
+                requestIdentifier: requestIdentifier,
+                userInfo: userInfo
+            )
+            // Background deliver can lag slightly behind the wake callback — retry once.
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            await self?.dismissDeliveredBanner(
+                requestIdentifier: requestIdentifier,
+                userInfo: userInfo
+            )
+            if let requestIdentifier {
+                self?.activeBannerRequestIdentifiers.remove(requestIdentifier)
+            }
+            self?.bannerAutoDismissTasks[taskKey] = nil
+        }
+    }
+
+    /// Clears still-visible short-lived banners so a newly arrived push is not queued behind them.
+    func dismissPendingBanners(except requestIdentifier: String? = nil) {
+        let staleRequestIds = activeBannerRequestIdentifiers.filter { $0 != requestIdentifier }
+        let staleTaskKeys = bannerAutoDismissTasks.keys.filter { $0 != requestIdentifier }
+        for key in staleTaskKeys {
+            bannerAutoDismissTasks[key]?.cancel()
+            bannerAutoDismissTasks[key] = nil
+        }
+        activeBannerRequestIdentifiers.subtract(staleRequestIds)
+        guard !staleRequestIds.isEmpty else { return }
+        UNUserNotificationCenter.current()
+            .removeDeliveredNotifications(withIdentifiers: Array(staleRequestIds))
+    }
+
+    private func dismissDeliveredBanner(
+        requestIdentifier: String?,
+        userInfo: [AnyHashable: Any]
+    ) async {
+        let center = UNUserNotificationCenter.current()
+        if let requestIdentifier {
+            center.removeDeliveredNotifications(withIdentifiers: [requestIdentifier])
+            return
+        }
+
+        let targetId = notificationIdString(from: userInfo)
+        let delivered = await center.deliveredNotifications()
+        let identifiers: [String]
+        if let targetId {
+            identifiers = delivered.compactMap { notification in
+                let info = notification.request.content.userInfo
+                guard notificationIdString(from: info) == targetId else { return nil }
+                return notification.request.identifier
+            }
+        } else if !userInfo.isEmpty {
+            // Fallback: remove the newest delivered notification from this app.
+            identifiers = delivered
+                .sorted { $0.date > $1.date }
+                .prefix(1)
+                .map(\.request.identifier)
+        } else {
+            identifiers = []
+        }
+        guard !identifiers.isEmpty else { return }
+        center.removeDeliveredNotifications(withIdentifiers: identifiers)
+    }
+
+    private func notificationIdString(from userInfo: [AnyHashable: Any]) -> String? {
+        if let value = userInfo["notificationId"] as? String, !value.isEmpty {
+            return value
+        }
+        if let value = userInfo["notification_id"] as? String, !value.isEmpty {
+            return value
+        }
+        return nil
+    }
+
     private func shouldSuppressForegroundChatBanner(userInfo: [AnyHashable: Any]) -> Bool {
         guard UIApplication.shared.applicationState == .active else {
             return false
@@ -298,18 +433,7 @@ final class PushNotificationCoordinator: ObservableObject {
     }
 
     static func playNotificationSound(_ sound: AppNotificationSound) {
-        guard !sound.isSilent else { return }
-        let fileName = sound.bundledFileName
-        let name = (fileName as NSString).deletingPathExtension
-        let ext = (fileName as NSString).pathExtension
-        guard let url = Bundle.main.url(forResource: name, withExtension: ext) else { return }
-        var soundId: SystemSoundID = 0
-        guard AudioServicesCreateSystemSoundID(url as CFURL, &soundId) == kAudioServicesNoError else {
-            return
-        }
-        AudioServicesPlayAlertSoundWithCompletion(soundId) {
-            AudioServicesDisposeSystemSoundID(soundId)
-        }
+        sound.play()
     }
 
     var storedDeviceToken: String? {
@@ -600,6 +724,9 @@ final class PushNotificationCoordinator: ObservableObject {
                 try await friendRequestInbox.rejectIncomingRequest(requestId: requestId)
             }
             persistFriendRequestOutcome(requestId, accept ? .accepted : .rejected)
+            // Repository posts FriendshipsDirectoryChange; ensure badge refresh even if the
+            // Friends tab is not observing badge counts from that notification.
+            FriendshipsDirectoryChange.post()
         } catch {
             Log.error(
                 error,

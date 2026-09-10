@@ -16,6 +16,8 @@ struct MessagingTabRoot: View {
     @EnvironmentObject private var container: DependencyContainer
     @EnvironmentObject private var appState: AppState
 
+    var isTabActive: Bool = true
+
     @State private var showsReactionPicker = false
     @State private var reactionPickHandler: ((String) -> Void)?
     @State private var profileRoute: MessagingUserProfileRoute?
@@ -36,7 +38,8 @@ struct MessagingTabRoot: View {
             conversationToOpen: $conversationRouteToOpen,
             onThreadPresentedChange: { presented in
                 appState.isMessagingThreadPresented = presented
-            }
+            },
+            isTabActive: isTabActive
         )
         .environmentObject(container.customEmojiStore)
         .environment(\.customEmojiDependencies, container.customEmojiDependencies)
