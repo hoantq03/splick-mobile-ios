@@ -12,7 +12,9 @@ struct MessageTypingIndicatorBubble: View {
     var showsSenderAvatar: Bool = true
     /// Tight spacing when stacked directly under the typer's last bubble (Android `groupedWithNext`).
     var continuesMessageCluster: Bool = false
-    var reportsSenderAvatarAnchor: Bool = false
+    /// Namespace for sliding the sender avatar down from the last message bubble.
+    var typingAvatarHandoffNamespace: Namespace.ID? = nil
+    var usesTypingAvatarHandoff: Bool = false
 
     private static let bubbleCornerRadius: CGFloat = MessageThreadRowLayout.bubbleCornerRadius
     fileprivate static let dotSize: CGFloat = 7
@@ -46,6 +48,12 @@ struct MessageTypingIndicatorBubble: View {
                     size: .small,
                     userId: senderUserId
                 )
+                .modifier(
+                    TypingAvatarMatchedGeometry(
+                        namespace: typingAvatarHandoffNamespace,
+                        isEnabled: usesTypingAvatarHandoff
+                    )
+                )
             }
         }
         .frame(
@@ -54,7 +62,6 @@ struct MessageTypingIndicatorBubble: View {
             alignment: .center
         )
         .padding(.trailing, MessageThreadRowLayout.senderAvatarGap)
-        .reportTypingAvatarAnchor(slot: .typing, isEnabled: reportsSenderAvatarAnchor)
         .accessibilityHidden(!showsSenderAvatar)
         .allowsHitTesting(false)
     }
@@ -82,7 +89,7 @@ private struct TypingDot: View {
     let index: Int
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
+        TimelineView(.animation(minimumInterval: 1.0 / 12.0)) { context in
             let elapsed = context.date.timeIntervalSinceReferenceDate
             let loop = MessageTypingIndicatorBubble.cycleDuration * 2
             let phase = elapsed.truncatingRemainder(dividingBy: loop)

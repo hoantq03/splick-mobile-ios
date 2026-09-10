@@ -539,6 +539,23 @@ final class ChatThreadViewModelTests: XCTestCase {
         XCTAssertEqual(vm.scrollToBottomToken, before + 1)
     }
 
+    func test_viewportLeftBottom_showsJumpToLatest_andPinClearsIt() async {
+        let repo = StubMessagingRepository(messages: [makeMessage(body: "Hi")])
+        let wsClient = makeTestWsClient()
+        let vm = makeViewModel(repo: repo, wsClient: wsClient)
+
+        await vm.load()
+        XCTAssertFalse(vm.showJumpToLatest)
+
+        vm.onViewportLeftBottom()
+        XCTAssertTrue(vm.showJumpToLatest)
+        XCTAssertFalse(vm.autoFollowLatest)
+
+        vm.pinToLatest()
+        XCTAssertFalse(vm.showJumpToLatest)
+        XCTAssertTrue(vm.autoFollowLatest)
+    }
+
     // MARK: Pagination
 
     func test_loadOlderMessages_prependsUniqueOlderPage() async {

@@ -49,12 +49,6 @@ struct MessageComposerInputBar: View {
         validationMessage ?? errorMessage
     }
 
-    private static let sendBounce = Animation.spring(
-        response: 0.42,
-        dampingFraction: 0.68,
-        blendDuration: 0.05
-    )
-
     private static let fadeTail: CGFloat = 12
 
     var body: some View {
@@ -86,7 +80,10 @@ struct MessageComposerInputBar: View {
                     get: { displayedError },
                     set: { validationMessage = $0 }
                 ),
-                isFocused: .constant(false),
+                isFocused: Binding(
+                    get: { isFocused },
+                    set: { isFocused = $0 }
+                ),
                 configuration: composerConfiguration,
                 isExternallyDisabled: isSending,
                 onSend: onSend,
@@ -99,7 +96,9 @@ struct MessageComposerInputBar: View {
                         .padding(.vertical, SplickTheme.Spacing.xs)
                         .background(SplickTheme.Colors.secondaryBackground)
                         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                        .animation(Self.sendBounce, value: canSend)
+                        // Do not animate the focused field on canSend — layout springs
+                        // resign first responder and bounce the keyboard on every send.
+                        .accessibilityIdentifier(KeyboardDismissExempt.accessibilityIdentifier)
                 },
                 accessoryAfterPhoto: {
                     emojiMenuButton
@@ -110,6 +109,7 @@ struct MessageComposerInputBar: View {
                         .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
                         .frame(width: 36, height: 36)
+                        .accessibilityIdentifier(KeyboardDismissExempt.accessibilityIdentifier)
                 }
             )
             .padding(.horizontal, SplickTheme.Spacing.md)

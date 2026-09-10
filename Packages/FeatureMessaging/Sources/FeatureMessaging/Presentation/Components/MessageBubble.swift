@@ -46,9 +46,12 @@ struct MessageBubble: View {
     /// Incoming sender avatar (DM peer / group member). Shown on the last bubble in a cluster.
     var senderAvatarURL: URL? = nil
     var senderAvatarName: String = ""
-    /// When typing continues this cluster, hide the row avatar — overlay draws it while animating.
+    /// When typing continues this cluster, hide the row avatar — overlay slides it to typing.
     var suppressSenderAvatar: Bool = false
-    var reportsSenderAvatarAnchor: Bool = false
+   /// Namespace for sliding the sender avatar down onto the typing row.
+    var typingAvatarHandoffNamespace: Namespace.ID? = nil
+    /// True for the last incoming bubble that can hand off into the typing indicator.
+    var usesTypingAvatarHandoff: Bool = false
     var isQuotedMessageRecalled: (UUID) -> Bool = { _ in false }
 
     @State private var imageViewerRoute: AttachmentPreviewRoute?
@@ -152,14 +155,19 @@ struct MessageBubble: View {
         let showsAvatar = !suppressSenderAvatar && isClusterTail
         let name = senderAvatarName.isEmpty ? "?" : senderAvatarName
         ZStack {
-            if showsAvatar || reportsSenderAvatarAnchor {
+            if showsAvatar {
                 AvatarView(
                     imageURL: senderAvatarURL,
                     name: name,
                     size: .small,
                     userId: message.senderId
                 )
-                .opacity(showsAvatar ? 1 : 0)
+                .modifier(
+                    TypingAvatarMatchedGeometry(
+                        namespace: typingAvatarHandoffNamespace,
+                        isEnabled: usesTypingAvatarHandoff
+                    )
+                )
             }
         }
         .frame(
@@ -167,7 +175,6 @@ struct MessageBubble: View {
             height: MessageThreadRowLayout.senderAvatarSize,
             alignment: .center
         )
-        .reportTypingAvatarAnchor(slot: .message, isEnabled: reportsSenderAvatarAnchor)
         .accessibilityHidden(!showsAvatar)
         .allowsHitTesting(false)
     }
@@ -273,7 +280,13 @@ struct MessageBubble: View {
                 }
                 .padding(.bottom, showsReactionAccessory ? Self.reactionAccessoryOverlap : 0)
         }
-        .simultaneousGesture(longPressGesture)
+        // Thread row: long-press is owned by the list UILongPress (SwiftUI LongPress on
+        // iOS 17 steals horizontal reply pans on the bubble; avatar worked because it
+        // has allowsHitTesting(false)).
+        .modifier(MessageBubbleThreadLongPressModifier(
+            isEnabled: presentation != .threadRow && onLongPress != nil,
+            onLongPress: onLongPress
+        ))
         .background {
             if presentation == .threadRow {
                 // Background fills the full bubble (quote + body). Overlay UIViewRepresentable
@@ -322,15 +335,6 @@ struct MessageBubble: View {
             maxWidth: resolvedContentMaxWidth
         )
         return min(layout.occupiedWidth, resolvedContentMaxWidth)
-    }
-
-    private var longPressGesture: some Gesture {
-        LongPressGesture(minimumDuration: 0.28)
-            .onEnded { _ in
-                guard presentation == .threadRow, onLongPress != nil else { return }
-                // Haptic is fired by the list when focus actually opens.
-                onLongPress?()
-            }
     }
 
     private var hasTextBody: Bool {
@@ -422,8 +426,7 @@ struct MessageBubble: View {
     }
 
     private var textBubbleBody: some View {
-        // Quote + text share one clipped bubble. Width hugs the wider of quote
-        // (sender / snippet) or body — ViewThatFits keeps short lines compact.
+        // Quote + text share one clipped bubble. Width hugs content up to wrap max.
         let core = VStack(alignment: .leading, spacing: MessageThreadRowLayout.quoteBodySpacing) {
             if imageAttachments.isEmpty, let preview = message.replyPreview {
                 MessageQuotedReplyView(
@@ -455,22 +458,18 @@ struct MessageBubble: View {
             }
         }
 
-        return ViewThatFits(in: .horizontal) {
-            core.fixedSize(horizontal: true, vertical: true)
-            core
-                .frame(maxWidth: textWrapMaxWidth, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: textWrapMaxWidth, alignment: .leading)
-        .padding(.horizontal, MessageThreadRowLayout.bubbleHorizontalPadding)
-        .padding(.vertical, MessageThreadRowLayout.bubbleVerticalPadding)
-        .frame(
-            minWidth: textReactionMinWidth,
-            maxWidth: resolvedContentMaxWidth,
-            alignment: .leading
-        )
-        .background(bubbleBackground)
-        .clipShape(bubbleShape)
+        return core
+            .frame(maxWidth: textWrapMaxWidth, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, MessageThreadRowLayout.bubbleHorizontalPadding)
+            .padding(.vertical, MessageThreadRowLayout.bubbleVerticalPadding)
+            .frame(
+                minWidth: textReactionMinWidth,
+                maxWidth: resolvedContentMaxWidth,
+                alignment: .leading
+            )
+            .background(bubbleBackground)
+            .clipShape(bubbleShape)
     }
 
     /// Grow a short text bubble to seat reaction pills without exceeding wrap max.
@@ -490,14 +489,18 @@ struct MessageBubble: View {
         Text(
             MessageBodyLinkifier.attributed(
                 text,
-                textColor: isOutgoing ? .white : SplickTheme.Colors.textPrimary,
-                linkColor: isOutgoing ? .white : SplickTheme.Colors.primaryGradientStart
+                isOutgoing: isOutgoing
             )
         )
         .font(SplickTheme.Typography.body)
         .tint(isOutgoing ? .white : SplickTheme.Colors.primaryGradientStart)
         .multilineTextAlignment(.leading)
         .lineLimit(lineLimit)
+        // Selection / link pans on iOS 17.5 steal bubble swipe-to-reply (avatar worked).
+        // Disable Text hit-testing so list pan owns the bubble; links open via Details /
+        // shared-post card / `MessageBodyLinkifier.urls` helpers elsewhere.
+        .textSelection(.disabled)
+        .allowsHitTesting(false)
         .environment(\.openURL, OpenURLAction { url in
             if let postId = PostShareUrlParser.extractPostId(from: url.absoluteString),
                let openLinkedPost {
@@ -526,9 +529,10 @@ struct MessageBubble: View {
                 showsLoadingPlaceholder: true
             )
             .frame(maxWidth: mediaWidth)
-            .onTapGesture {
+            // simultaneous — exclusive onTapGesture steals list reply pan on iOS 17.
+            .simultaneousGesture(TapGesture().onEnded {
                 imageViewerRoute = AttachmentPreviewRoute(index: 0)
-            }
+            })
         } else {
             InlineAttachmentImageGrid(
                 images: imageAttachments.map(\.inlinePreviewImage),
@@ -623,7 +627,24 @@ private struct FailedMessageRetryTap: ViewModifier {
 
     func body(content: Content) -> some View {
         if isFailed, onRetry != nil {
-            content.onTapGesture { onRetry?() }
+            // simultaneous — exclusive tap steals reply swipe on failed bubbles (iOS 17).
+            content.simultaneousGesture(TapGesture().onEnded { onRetry?() })
+        } else {
+            content
+        }
+    }
+}
+
+/// Long-press only outside the thread list (list owns UILongPress so reply pans work on iOS 17).
+private struct MessageBubbleThreadLongPressModifier: ViewModifier {
+    let isEnabled: Bool
+    let onLongPress: (() -> Void)?
+
+    func body(content: Content) -> some View {
+        if isEnabled, onLongPress != nil {
+            content.simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.28).onEnded { _ in onLongPress?() }
+            )
         } else {
             content
         }

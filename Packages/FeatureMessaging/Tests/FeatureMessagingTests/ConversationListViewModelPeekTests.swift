@@ -16,6 +16,7 @@ private actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
     private let delayMillisecondsByConversation: [UUID: Int]
     private let shouldFailFetchingConversations: Bool
     private(set) var deletedConversationIds: [UUID] = []
+    private(set) var mutedConversationIds: [(UUID, Bool, String)] = []
 
     init(
         messagesByConversation: [UUID: [ChatMessage]] = [:],
@@ -57,7 +58,18 @@ private actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
         notificationsEnabled: Bool,
         notificationSound: String
     ) async throws -> Conversation {
-        makeConversation(id: conversationId)
+        mutedConversationIds.append((conversationId, notificationsEnabled, notificationSound))
+        // API returns unreadCount=0 — callers must patch onto the existing inbox row.
+        return Conversation(
+            id: conversationId,
+            unreadCount: 0,
+            peer: nil,
+            lastMessage: nil,
+            createdAt: .now,
+            updatedAt: .now,
+            notificationsEnabled: notificationsEnabled,
+            notificationSound: notificationSound
+        )
     }
     func renameGroup(groupId: UUID, name: String) async throws -> Conversation {
         makeConversation(id: groupId)
@@ -76,8 +88,13 @@ private actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
         if let delay = delayMillisecondsByConversation[conversationId], delay > 0 {
             try await Task.sleep(for: .milliseconds(delay))
         }
-        let items = Array((messagesByConversation[conversationId] ?? []).prefix(limit))
-        return MessagingPage(items: items, hasMore: false)
+        // API order: newest first (same as chat thread stub).
+        let all = messagesByConversation[conversationId] ?? []
+        let start = page * limit
+        guard start < all.count else { return MessagingPage(items: [], hasMore: false) }
+        let end = min(start + limit, all.count)
+        let slice = Array(all[start..<end])
+        return MessagingPage(items: slice, hasMore: end < all.count)
     }
     func sendMessage(
         conversationId: UUID,
@@ -290,5 +307,72 @@ final class ConversationListViewModelPeekTests: XCTestCase {
         XCTAssertNil(cache.entry(for: conversation.id))
         let deletedIds = await repository.deletedConversationIds
         XCTAssertEqual(deletedIds, [conversation.id])
+    }
+
+    func test_toggleMuteFromPeek_updatesInboxWithoutWipingUnread() async {
+        let conversation = Conversation(
+            id: UUID(),
+            unreadCount: 3,
+            peer: nil,
+            lastMessage: nil,
+            createdAt: .now,
+            updatedAt: .now,
+            notificationsEnabled: true,
+            notificationSound: ConversationNotificationSound.`default`.rawValue
+        )
+        let repository = PeekMessagingRepositoryStub()
+        let viewModel = makeViewModel(repository: repository)
+        viewModel.applyStartupConversations([conversation])
+        await viewModel.beginPeek(conversation: conversation)
+
+        await viewModel.toggleMuteFromPeek()
+
+        let peek = try XCTUnwrap(viewModel.peekConversation)
+        XCTAssertEqual(peek.id, conversation.id)
+        XCTAssertFalse(peek.notificationsEnabled)
+        let updated = try XCTUnwrap(viewModel.conversations.first)
+        XCTAssertEqual(updated.id, conversation.id)
+        XCTAssertFalse(updated.notificationsEnabled)
+        XCTAssertEqual(updated.unreadCount, 3)
+        let muted = await repository.mutedConversationIds
+        XCTAssertEqual(muted.count, 1)
+        XCTAssertEqual(muted.first?.0, conversation.id)
+        XCTAssertEqual(muted.first?.1, false)
+    }
+
+    func test_loadOlderPeekMessages_prependsNextPageAndKeepsPeekOpen() async {
+        let conversation = makeConversation()
+        var newestFirst: [ChatMessage] = []
+        for index in 0..<20 {
+            newestFirst.append(
+                ChatMessage(
+                    id: UUID(),
+                    conversationId: conversation.id,
+                    senderId: UUID(),
+                    body: "msg-\(index)",
+                    clientMessageId: UUID(),
+                    createdAt: Date(timeIntervalSince1970: TimeInterval(1_700_000_000 - index)),
+                    sequenceNo: Int64(20 - index)
+                )
+            )
+        }
+        let repository = PeekMessagingRepositoryStub(
+            messagesByConversation: [conversation.id: newestFirst]
+        )
+        let viewModel = makeViewModel(repository: repository)
+
+        await viewModel.beginPeek(conversation: conversation)
+
+        XCTAssertEqual(viewModel.peekMessages.count, 16)
+        XCTAssertTrue(viewModel.peekHasMoreMessages)
+        let first = try XCTUnwrap(viewModel.peekMessages.first)
+
+        await viewModel.loadOlderPeekMessagesIfNeeded(current: first)
+
+        XCTAssertEqual(viewModel.peekConversation?.id, conversation.id)
+        XCTAssertEqual(viewModel.peekMessages.count, 20)
+        XCTAssertFalse(viewModel.peekHasMoreMessages)
+        XCTAssertEqual(viewModel.peekMessages.first?.body, "msg-19")
+        XCTAssertEqual(viewModel.peekPrependAnchorMessageId, first.clientMessageId)
     }
 }

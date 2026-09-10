@@ -76,7 +76,6 @@ public struct ChatThreadView: View {
     public var body: some View {
         ZStack {
             threadContent
-                .dismissKeyboardOnTap()
             reactionFocusCover
             if isSearchingThread {
                 ChatThreadSearchOverlay(
@@ -414,8 +413,12 @@ public struct ChatThreadView: View {
                     Task { await performAddFriendBannerAction() }
                 }
             }
+            // Only the message list dismisses the keyboard on tap — never the composer.
+            // Applying dismissKeyboardOnTap to the whole thread made Send resign focus
+            // (SwiftUI button hit targets are often not UIControl / "Button").
             messageArea
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .dismissKeyboardOnTap()
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     if !isDetailsPresented {
                         bottomBar
@@ -1004,16 +1007,19 @@ public struct ChatThreadView: View {
                 },
                 reactionFocus: $reactionFocus
             )
+            .overlay(alignment: .bottom) {
+                JumpToLatestChip(
+                    visible: viewModel.showJumpToLatest,
+                    onTap: { viewModel.pinToLatest() }
+                )
+                .padding(.bottom, SplickTheme.Spacing.sm)
+            }
         }
     }
 
     @ViewBuilder
     private var inputBar: some View {
         VStack(spacing: SplickTheme.Spacing.xs) {
-            JumpToLatestChip(
-                visible: viewModel.showJumpToLatest,
-                onTap: { viewModel.pinToLatest() }
-            )
             MessageComposerInputBar(
                 text: $inputText,
                 attachmentDrafts: $viewModel.attachmentDrafts,
@@ -1034,9 +1040,10 @@ public struct ChatThreadView: View {
                 onSend: { text, submissions in
                     viewModel.stopLocalTyping()
                     let isEditing = viewModel.editDraft != nil
-                    inputText = ""
+                    // UIKit send control keeps first responder; keep FocusState aligned.
                     isInputFocused = true
-                    Task {
+                    inputText = ""
+                    Task { @MainActor in
                         await viewModel.send(body: text, submissions: submissions)
                         isInputFocused = true
                         if !isEditing {

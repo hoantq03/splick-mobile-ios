@@ -17,11 +17,14 @@ public struct ConversationListView: View {
     @Environment(\.pullToRefreshActive) private var pullToRefreshActive
     @Environment(\.sameTabTapHandlingEnabled) private var sameTabTapHandlingEnabled
     @Environment(\.currentUserSummary) private var currentUserSummary
+    @Environment(\.scenePhase) private var scenePhase
     @State private var isPullRefreshing = false
     @State private var composePresentation: NewMessageComposePresentation?
+    @State private var hasCompletedInitialLoad = false
     private let onCreateGroup: () -> Void
     private let makeComposeViewModel: () -> NewMessageComposeViewModel
     private let onThreadPresentedChange: ((Bool) -> Void)?
+    private let isTabActive: Bool
     @Binding private var conversationToOpen: ChatThreadRoute?
 
     private var suppressRefreshAnimations: Bool {
@@ -39,7 +42,6 @@ public struct ConversationListView: View {
     @State private var peekFrozenFrame: CGRect?
     @State private var peekSession = UUID()
     @State private var confirmDeletePeekedConversation = false
-    @State private var peekComingSoonTitle: String?
 
     private static let peekImpact = UIImpactFeedbackGenerator(style: .medium)
 
@@ -57,13 +59,15 @@ public struct ConversationListView: View {
         onCreateGroup: @escaping () -> Void = {},
         makeComposeViewModel: @escaping () -> NewMessageComposeViewModel,
         conversationToOpen: Binding<ChatThreadRoute?> = .constant(nil),
-        onThreadPresentedChange: ((Bool) -> Void)? = nil
+        onThreadPresentedChange: ((Bool) -> Void)? = nil,
+        isTabActive: Bool = true
     ) {
         self._viewModel = ObservedObject(wrappedValue: viewModel)
         self.onCreateGroup = onCreateGroup
         self.makeComposeViewModel = makeComposeViewModel
         self._conversationToOpen = conversationToOpen
         self.onThreadPresentedChange = onThreadPresentedChange
+        self.isTabActive = isTabActive
     }
 
     public var body: some View {
@@ -92,7 +96,11 @@ public struct ConversationListView: View {
                     suppressRefreshAnimations ? nil : MessagingSearchChromeAnimation.resultsSpring,
                     value: isSearching
                 )
-                .onPreferenceChange(PullToRefreshActivePreferenceKey.self) { isPullRefreshing = $0 }
+                .onPreferenceChange(PullToRefreshActivePreferenceKey.self) { isActive in
+                    DispatchQueue.main.async {
+                        isPullRefreshing = isActive
+                    }
+                }
                 .splickTabScreenHeader(languageService.text(.messagingTitle), showsBell: false)
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
@@ -142,16 +150,6 @@ public struct ConversationListView: View {
         } message: {
             Text(languageService.text(.messagingFilterComingSoon))
         }
-        .alert(
-            peekComingSoonTitle ?? languageService.text(.messagingChatMoreAccessibility),
-            isPresented: peekComingSoonPresented
-        ) {
-            Button(languageService.text(.commonOK), role: .cancel) {
-                peekComingSoonTitle = nil
-            }
-        } message: {
-            Text(languageService.text(.messagingFilterComingSoon))
-        }
         .confirmationDialog(
             languageService.text(.messagingChatDeleteConversationConfirmTitle),
             isPresented: $confirmDeletePeekedConversation,
@@ -167,8 +165,22 @@ public struct ConversationListView: View {
             Text(languageService.text(.messagingChatDeleteConversationConfirmMessage))
         }
         .onFirstAppear {
-            guard viewModel.conversations.isEmpty else { return }
-            Task { await viewModel.load() }
+            hasCompletedInitialLoad = true
+            if viewModel.conversations.isEmpty {
+                Task { await viewModel.load() }
+            }
+            guard isTabActive, scenePhase == .active else { return }
+            viewModel.onInboxVisible()
+        }
+        .onChange(of: isTabActive) { active in
+            Task { @MainActor in
+                updateInboxVisibility(isActive: active, phase: scenePhase)
+            }
+        }
+        .onChange(of: scenePhase) { phase in
+            Task { @MainActor in
+                updateInboxVisibility(isActive: isTabActive, phase: phase)
+            }
         }
         .onAppear {
             consumeConversationToOpen()
@@ -210,6 +222,14 @@ public struct ConversationListView: View {
         .onDisappear {
             guard viewModel.peekConversation != nil else { return }
             dismissConversationPeek()
+        }
+    }
+
+    private func updateInboxVisibility(isActive: Bool, phase: ScenePhase) {
+        if isActive, phase == .active {
+            viewModel.onInboxVisible()
+        } else if hasCompletedInitialLoad {
+            viewModel.onInboxHidden()
         }
     }
 
@@ -447,6 +467,9 @@ public struct ConversationListView: View {
                         messages: viewModel.peekMessages,
                         loadState: viewModel.peekLoadState,
                         inboxTyping: inboxTyping(for: conversation),
+                        hasMoreMessages: viewModel.peekHasMoreMessages,
+                        isLoadingOlder: viewModel.peekIsLoadingOlder,
+                        prependAnchorMessageId: viewModel.peekPrependAnchorMessageId,
                         onDismiss: dismissConversationPeek,
                         onOpen: {
                             openConversationFromPeek(conversation)
@@ -459,7 +482,13 @@ public struct ConversationListView: View {
                             }
                         },
                         onMute: {
-                            peekComingSoonTitle = languageService.text(.messagingChatMuteNotifications)
+                            Task { await viewModel.toggleMuteFromPeek() }
+                        },
+                        onLoadOlder: { message in
+                            Task { await viewModel.loadOlderPeekMessagesIfNeeded(current: message) }
+                        },
+                        onClearPrependAnchor: {
+                            viewModel.clearPeekPrependAnchor()
                         }
                     )
                     .id(peekSession)
@@ -473,11 +502,25 @@ public struct ConversationListView: View {
 
     private func openConversationPeek(_ conversation: Conversation) {
         guard viewModel.peekConversation == nil,
-              currentUserSummary?.id != nil,
-              let frame = conversationRowFrames[conversation.id],
-              frame.width > 1,
-              frame.height > 1 else { return }
+              currentUserSummary?.id != nil else { return }
 
+        // Frame updates are coalesced async — read the latest cached rect, or wait one tick.
+        if let frame = conversationRowFrames[conversation.id],
+           frame.width > 1,
+           frame.height > 1 {
+            presentConversationPeek(conversation, frame: frame)
+            return
+        }
+        DispatchQueue.main.async { [conversation] in
+            guard self.viewModel.peekConversation == nil,
+                  let frame = self.conversationRowFrames[conversation.id],
+                  frame.width > 1,
+                  frame.height > 1 else { return }
+            self.presentConversationPeek(conversation, frame: frame)
+        }
+    }
+
+    private func presentConversationPeek(_ conversation: Conversation, frame: CGRect) {
         peekFrozenFrame = frame
         peekSession = UUID()
         Self.peekImpact.impactOccurred()
@@ -503,11 +546,32 @@ public struct ConversationListView: View {
     }
 
     private func syncThreadPresentation(isPresented: Bool) {
-        onThreadPresentedChange?(isPresented)
-        if isPresented {
-            tabBarScrollState?.hide(flushToBottom: true)
-        } else {
-            tabBarScrollState?.show()
+        // Tab-bar / AppState publishes must not run mid-view-update (SwiftUI warning).
+        DispatchQueue.main.async {
+            onThreadPresentedChange?(isPresented)
+            if isPresented {
+                tabBarScrollState?.hide(flushToBottom: true)
+            } else {
+                tabBarScrollState?.show()
+            }
+        }
+    }
+
+    /// Coalesce GeometryReader preference spam — continuous global frames otherwise
+    /// rewrite `@State` multiple times per frame and re-enter layout.
+    private func applyConversationRowFrames(_ frames: [UUID: CGRect]) {
+        var next = conversationRowFrames
+        var changed = false
+        for (id, frame) in frames where frame.width > 1 && frame.height > 1 {
+            if let previous = next[id], previous.isApproximatelyEqual(to: frame) {
+                continue
+            }
+            next[id] = frame
+            changed = true
+        }
+        guard changed else { return }
+        DispatchQueue.main.async {
+            conversationRowFrames = next
         }
     }
 
@@ -523,17 +587,6 @@ public struct ConversationListView: View {
         withAnimation(.easeInOut(duration: 0.35)) {
             path = NavigationPath()
         }
-    }
-
-    private var peekComingSoonPresented: Binding<Bool> {
-        Binding(
-            get: { peekComingSoonTitle != nil },
-            set: { isPresented in
-                if !isPresented {
-                    peekComingSoonTitle = nil
-                }
-            }
-        )
     }
 
     private func inboxTyping(for conversation: Conversation) -> InboxTypingState? {
@@ -560,24 +613,23 @@ public struct ConversationListView: View {
                 LazyVStack(spacing: 0) {
                     Color.clear.frame(height: 0).id("messagingScrollTop")
                     ForEach(items) { conversation in
-                        Button {
-                            pushThread(ChatThreadRoute(conversation: conversation))
-                        } label: {
-                            ConversationRowView(
-                                conversation: conversation,
-                                inboxTyping: inboxTyping(for: conversation)
-                            )
-                            .opacity(
-                                viewModel.peekConversation?.id == conversation.id ? 0 : 1
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .highPriorityGesture(
-                            LongPressGesture(minimumDuration: 0.28)
-                                .onEnded { _ in
-                                    openConversationPeek(conversation)
-                                }
+                        ConversationRowView(
+                            conversation: conversation,
+                            inboxTyping: inboxTyping(for: conversation)
                         )
+                        .opacity(
+                            viewModel.peekConversation?.id == conversation.id ? 0 : 1
+                        )
+                        .contentShape(Rectangle())
+                        // Avoid `Button` + long-press: on iOS 17 either taps die
+                        // (`highPriorityGesture`) or peek never fires (`onLongPressGesture`).
+                        .onTapGesture {
+                            pushThread(ChatThreadRoute(conversation: conversation))
+                        }
+                        .onLongPressGesture(minimumDuration: 0.28, maximumDistance: 14) {
+                            openConversationPeek(conversation)
+                        }
+                        .accessibilityAddTraits(.isButton)
                         .allowsHitTesting(viewModel.peekConversation?.id != conversation.id)
                         .onAppear {
                             Task { await viewModel.loadMoreIfNeeded(current: conversation) }
@@ -598,9 +650,7 @@ public struct ConversationListView: View {
                 .padding(.horizontal, SplickTheme.Spacing.md)
                 .padding(.bottom, SplickTabBarMetrics.floatingClearance + SplickTheme.Spacing.md)
                 .onPreferenceChange(ConversationRowAnchorFrameKey.self) { frames in
-                    for (id, frame) in frames where frame.width > 1 && frame.height > 1 {
-                        conversationRowFrames[id] = frame
-                    }
+                    applyConversationRowFrames(frames)
                 }
                 .transaction { transaction in
                     if suppressRefreshAnimations {
@@ -833,5 +883,14 @@ public struct ConversationListView: View {
                 Capsule(style: .continuous)
                     .fill(SplickTheme.Colors.error)
             }
+    }
+}
+
+private extension CGRect {
+    func isApproximatelyEqual(to other: CGRect, tolerance: CGFloat = 0.5) -> Bool {
+        abs(minX - other.minX) <= tolerance
+            && abs(minY - other.minY) <= tolerance
+            && abs(width - other.width) <= tolerance
+            && abs(height - other.height) <= tolerance
     }
 }

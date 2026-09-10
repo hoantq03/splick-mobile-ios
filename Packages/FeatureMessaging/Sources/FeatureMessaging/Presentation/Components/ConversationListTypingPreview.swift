@@ -25,7 +25,7 @@ private struct InboxTypingBounceDot: View {
     let index: Int
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
+        TimelineView(.animation(minimumInterval: 1.0 / 12.0)) { context in
             let elapsed = context.date.timeIntervalSinceReferenceDate
             let loop = ConversationListTypingPreview.cycleDuration * 2
             let phase = elapsed.truncatingRemainder(dividingBy: loop)

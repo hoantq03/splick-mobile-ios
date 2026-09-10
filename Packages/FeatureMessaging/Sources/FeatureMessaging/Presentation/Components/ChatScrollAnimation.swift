@@ -4,6 +4,8 @@ enum ChatScrollAnimation {
     static let bottomAnchor = "chat-thread-bottom"
     static let spring = Animation.spring(response: 0.38, dampingFraction: 0.86)
     static let jumpToMessage = Animation.spring(response: 0.26, dampingFraction: 0.9)
+    /// Jump-to-latest FAB — soft slide from under the composer / peek edge.
+    static let jumpToLatestReveal = Animation.spring(response: 0.34, dampingFraction: 0.86)
     /// Noticeable hop: scale + lift, snappy so it does not wait on scroll.
     static let highlightPeakScale: CGFloat = 1.25
     static let highlightLift: CGFloat = -12

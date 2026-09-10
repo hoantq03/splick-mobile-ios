@@ -43,13 +43,17 @@ public final class ConversationListViewModel: ObservableObject {
     @Published public private(set) var peekConversation: Conversation?
     @Published public private(set) var peekMessages: [ChatMessage] = []
     @Published public private(set) var peekLoadState: PeekLoadState = .idle
+    @Published public private(set) var peekHasMoreMessages = false
+    @Published public private(set) var peekIsLoadingOlder = false
+    /// Keep scroll position when older messages prepend into the peek timeline.
+    @Published public private(set) var peekPrependAnchorMessageId: UUID?
     @Published public private(set) var typingUserIdsByConversation: [UUID: [UUID]] = [:]
 
     /// Used to decide whether an incoming WS message should bump unread.
     public var currentUserId: UUID?
 
     private static let pageSize = 20
-    private static let peekMessageLimit = 8
+    private static let peekMessageLimit = 16
     private static let wsRefreshDebounce: Duration = .seconds(30)
 
     private let fetchConversationsUseCase: FetchConversationsUseCase
@@ -65,11 +69,17 @@ public final class ConversationListViewModel: ObservableObject {
     private var refreshTask: Task<Void, Never>?
     private var loadMoreTask: Task<Void, Never>?
     private var peekTask: Task<MessagingPage<ChatMessage>, Error>?
+    private var peekHighestLoadedPage = 0
+    private var peekLoadOlderCooldownUntil = Date.distantPast
     private var debouncedRefreshTask: Task<Void, Never>?
+    private var softSyncTask: Task<Void, Never>?
+    private var visiblePollingTask: Task<Void, Never>?
+    private var inboxDirectoryObserver: AnyCancellable?
     private var remoteTypingTimeouts: [String: Task<Void, Never>] = [:]
     private var currentPage = 0
     private var pendingDeleteConversationId: UUID?
     private var refreshQueued = false
+    private let visiblePollInterval: Duration = .seconds(30)
 
     public init(
         fetchConversationsUseCase: FetchConversationsUseCase,
@@ -90,6 +100,7 @@ public final class ConversationListViewModel: ObservableObject {
         self.messageCache = messageCache
         self.onInboxLoaded = onInboxLoaded
         bindWsEvents()
+        bindInboxDirectoryChanges()
     }
 
     /// Applies a WS inbox patch without going through the live event subject (tests).
@@ -115,6 +126,10 @@ public final class ConversationListViewModel: ObservableObject {
         peekConversation = conversation
         peekMessages = []
         peekLoadState = .loading
+        peekHasMoreMessages = false
+        peekIsLoadingOlder = false
+        peekPrependAnchorMessageId = nil
+        peekHighestLoadedPage = 0
 
         let conversationId = conversation.id
         let task = Task {
@@ -133,8 +148,10 @@ public final class ConversationListViewModel: ObservableObject {
             var transaction = Transaction()
             transaction.disablesAnimations = true
             withTransaction(transaction) {
-                peekMessages = Array(page.items.reversed())
+                peekMessages = MessageTimelineOrdering.sortedChronologically(Array(page.items.reversed()))
                 peekLoadState = .loaded
+                peekHasMoreMessages = page.hasMore
+                peekHighestLoadedPage = 0
             }
         } catch is CancellationError {
             return
@@ -144,6 +161,7 @@ public final class ConversationListViewModel: ObservableObject {
             transaction.disablesAnimations = true
             withTransaction(transaction) {
                 peekLoadState = .failed
+                peekHasMoreMessages = false
             }
             Log.error(
                 error,
@@ -159,6 +177,81 @@ public final class ConversationListViewModel: ObservableObject {
         peekConversation = nil
         peekMessages = []
         peekLoadState = .idle
+        peekHasMoreMessages = false
+        peekIsLoadingOlder = false
+        peekPrependAnchorMessageId = nil
+        peekHighestLoadedPage = 0
+    }
+
+    public func clearPeekPrependAnchor() {
+        peekPrependAnchorMessageId = nil
+    }
+
+    /// Loads the next older page when the user scrolls to the top of the peek timeline.
+    public func loadOlderPeekMessagesIfNeeded(current message: ChatMessage) async {
+        guard peekHasMoreMessages, !peekIsLoadingOlder, peekLoadState == .loaded else { return }
+        guard peekMessages.first?.id == message.id else { return }
+        guard let conversationId = peekConversation?.id else { return }
+        guard Date() >= peekLoadOlderCooldownUntil else { return }
+
+        peekIsLoadingOlder = true
+        defer { peekIsLoadingOlder = false }
+
+        let nextPage = peekHighestLoadedPage + 1
+        let anchorClientId = message.clientMessageId
+        let beforeSequence = message.sequenceNo > 0 ? message.sequenceNo : nil
+
+        do {
+            let page = try await fetchMessagesUseCase.execute(
+                conversationId: conversationId,
+                page: nextPage,
+                limit: Self.peekMessageLimit,
+                before: beforeSequence
+            )
+            guard peekConversation?.id == conversationId else { return }
+            let batch = page.items
+            guard !batch.isEmpty else {
+                peekHasMoreMessages = false
+                return
+            }
+
+            let olderChronological = Array(batch.reversed()) as [ChatMessage]
+            let existingIds = Set(peekMessages.map(\.id))
+            let existingClientIds = Set(peekMessages.map(\.clientMessageId))
+            let uniqueOlder = olderChronological.filter {
+                !existingIds.contains($0.id) && !existingClientIds.contains($0.clientMessageId)
+            }
+
+            guard !uniqueOlder.isEmpty else {
+                peekHasMoreMessages = page.hasMore
+                peekHighestLoadedPage = nextPage
+                return
+            }
+
+            // Brief cooldown so LazyVStack onAppear of the new oldest row cannot
+            // chain-load before we re-pin the previous top message into view.
+            peekLoadOlderCooldownUntil = Date().addingTimeInterval(0.45)
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                peekMessages = MessageTimelineOrdering.sortedChronologically(uniqueOlder + peekMessages)
+                peekHighestLoadedPage = nextPage
+                peekHasMoreMessages = page.hasMore
+                peekPrependAnchorMessageId = anchorClientId
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            guard peekConversation?.id == conversationId else { return }
+            Log.error(
+                error,
+                category: .network,
+                metadata: [
+                    "action": "loadOlderPeekMessages",
+                    "conversationId": conversationId.uuidString,
+                ]
+            )
+        }
     }
 
     public func deletePeekedConversation() async {
@@ -185,6 +278,53 @@ public final class ConversationListViewModel: ObservableObject {
 
     public func cancelPendingDelete() {
         pendingDeleteConversationId = nil
+    }
+
+    /// Toggle mute from list peek — patches prefs onto the existing row so unread/preview stay intact
+    /// (PATCH notification-settings returns unreadCount=0). Peek stays open; header bell updates live.
+    public func toggleMuteFromPeek() async {
+        guard let peek = peekConversation else { return }
+        let nextEnabled = !peek.notificationsEnabled
+        let optimistic = peek.updatingNotificationSettings(
+            enabled: nextEnabled,
+            sound: peek.notificationSound
+        )
+        peekConversation = optimistic
+        upsertConversation(optimistic)
+        if nextEnabled {
+            // Preview the tone the user currently has selected in notification settings.
+            AppNotificationSound.playCurrentSelection()
+        }
+
+        do {
+            let updated = try await repository.updateNotificationSettings(
+                conversationId: peek.id,
+                notificationsEnabled: nextEnabled,
+                notificationSound: peek.notificationSound
+            )
+            let patched = optimistic.updatingNotificationSettings(
+                enabled: updated.notificationsEnabled,
+                sound: updated.notificationSound
+            )
+            if peekConversation?.id == patched.id {
+                peekConversation = patched
+            }
+            upsertConversation(patched)
+        } catch {
+            if peekConversation?.id == peek.id {
+                peekConversation = peek
+            }
+            upsertConversation(peek)
+            Log.error(
+                error,
+                category: .network,
+                metadata: [
+                    "action": "toggleMuteFromPeek",
+                    "conversationId": peek.id.uuidString,
+                    "notificationsEnabled": String(nextEnabled),
+                ]
+            )
+        }
     }
 
     public func hideConversationLocally(conversationId: UUID) {
@@ -224,6 +364,46 @@ public final class ConversationListViewModel: ObservableObject {
         pruneConversationsToActiveFilter()
         await refreshInboxSummary()
         pruneConversationsToActiveFilter()
+    }
+
+    /// Soft-refresh when the Messages tab becomes visible.
+    public func onInboxVisible() {
+        Task { await softSyncInbox() }
+        startVisiblePolling()
+    }
+
+    public func onInboxHidden() {
+        stopVisiblePolling()
+    }
+
+    public func startVisiblePolling() {
+        guard visiblePollingTask == nil else { return }
+        visiblePollingTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: self?.visiblePollInterval ?? .seconds(30))
+                guard !Task.isCancelled else { return }
+                await self?.softSyncInbox()
+            }
+        }
+    }
+
+    public func stopVisiblePolling() {
+        visiblePollingTask?.cancel()
+        visiblePollingTask = nil
+    }
+
+    /// Quiet inbox reload for the active filter (no full-screen loading).
+    public func softSyncInbox() async {
+        if let existing = softSyncTask {
+            await existing.value
+            return
+        }
+        let task = Task { @MainActor in
+            await refresh()
+        }
+        softSyncTask = task
+        await task.value
+        softSyncTask = nil
     }
 
     func setActiveFilterForTests(_ filter: InboxFilter?) {
@@ -580,6 +760,16 @@ public final class ConversationListViewModel: ObservableObject {
                 unreadConversationCount = max(0, unreadConversationCount + unreadDelta)
             }
         }
+    }
+
+    private func bindInboxDirectoryChanges() {
+        inboxDirectoryObserver = NotificationCenter.default
+            .publisher(for: MessagingInboxMayHaveChanged.notification)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                Task { await self.softSyncInbox() }
+            }
     }
 
     private func bindWsEvents() {

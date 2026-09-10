@@ -1,4 +1,5 @@
 import SwiftUI
+import Common
 import DesignSystem
 import Localization
 
@@ -59,6 +60,9 @@ struct ChatNotificationSettingsSheet: View {
         defer { isSaving = false }
         do {
             try await onSave(notificationsEnabled)
+            if notificationsEnabled, !conversation.notificationsEnabled {
+                AppNotificationSound.playCurrentSelection()
+            }
             dismiss()
         } catch {
             errorMessage = error.localizedDescription

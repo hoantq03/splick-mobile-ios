@@ -16,7 +16,9 @@ public final class ChatThreadViewModel: ObservableObject {
         case failed(String)
     }
 
-    @Published public private(set) var state: State = .idle
+    @Published public private(set) var state: State = .idle {
+        didSet { syncDisplayMessagesFromState() }
+    }
     @Published public private(set) var isSending = false
     @Published public var attachmentDrafts: [CommentAttachmentDraft] = []
     @Published public private(set) var scrollToBottomToken = 0
@@ -30,6 +32,8 @@ public final class ChatThreadViewModel: ObservableObject {
     @Published public private(set) var isLoadingOlder = false
     /// After older messages are prepended, the list scrolls to this client id to avoid jump.
     @Published public private(set) var prependAnchorMessageId: UUID?
+    /// Grouped timeline rows — refreshed only when `state` / visibility changes, not every list body pass.
+    @Published private(set) var displayMessages: [DisplayMessage] = []
     /// Set by the message list when the bottom anchor is visible.
     @Published public var isNearBottom = true
     /// When true, new WS messages and typing auto-scroll. Cleared only by explicit user scroll-up.
@@ -89,6 +93,8 @@ public final class ChatThreadViewModel: ObservableObject {
     private var localTypingIdleTask: Task<Void, Never>?
     private var lastTypingStartSentAt: Date?
     private var isLocallyTyping = false
+    /// Optimistic reaction UUID → server UUID after reconcile (remove can race with add).
+    private var serverReactionIdByOptimisticId: [UUID: UUID] = [:]
 
     public init(
         conversationId: UUID,
@@ -161,6 +167,22 @@ public final class ChatThreadViewModel: ObservableObject {
     public var messages: [ChatMessage] {
         if case .loaded(let msgs) = state { return visibleMessages(msgs) }
         return []
+    }
+
+    private func syncDisplayMessagesFromState() {
+        switch state {
+        case .loaded(let msgs):
+            let next = MessageTimelineGrouping.buildDisplayMessages(from: visibleMessages(msgs))
+            if next != displayMessages {
+                displayMessages = next
+            }
+        case .idle, .failed:
+            if !displayMessages.isEmpty {
+                displayMessages = []
+            }
+        case .loading:
+            break
+        }
     }
 
     public var isInitialLoading: Bool {
@@ -605,16 +627,27 @@ public final class ChatThreadViewModel: ObservableObject {
             $0.userId == currentUserId && $0.emoji == emoji
         }) {
             let snapshot = message
-            removeReaction(messageId: messageId, reactionId: existing.id)
-            Task {
+            let capturedReactionId = existing.id
+            removeReaction(messageId: messageId, reactionId: capturedReactionId)
+            Task { [weak self] in
+                guard let self else { return }
                 do {
-                    try await repository.removeReaction(
-                        conversationId: conversationId,
+                    // Prefer server id if optimistic add reconciled while this task was queued.
+                    let apiReactionId = self.resolvedReactionIdForRemoval(
+                        preferredId: capturedReactionId
+                    )
+                    try await self.repository.removeReaction(
+                        conversationId: self.conversationId,
                         messageId: messageId,
-                        reactionId: existing.id
+                        reactionId: apiReactionId
                     )
                 } catch {
-                    updateMessage(at: index, with: snapshot)
+                    // 404 = already gone / stale optimistic id — keep local removal.
+                    if Self.isNotFound(error) { return }
+                    if case .loaded(let latest) = self.state,
+                       let latestIndex = latest.firstIndex(where: { $0.id == messageId }) {
+                        self.updateMessage(at: latestIndex, with: snapshot)
+                    }
                     Log.error(error, category: .network, metadata: ["action": "removeMessageReaction"])
                 }
             }
@@ -926,14 +959,29 @@ public final class ChatThreadViewModel: ObservableObject {
 
         let message = messages[index]
         var reactions = message.reactions.filter { $0.id != optimisticId }
-        reactions.append(server)
+        // Avoid duplicating if a realtime payload already inserted the server reaction.
+        if !reactions.contains(where: { $0.id == server.id }) {
+            reactions.append(server)
+        }
         messages[index] = message.updating(reactions: reactions)
+        serverReactionIdByOptimisticId[optimisticId] = server.id
         var transaction = Transaction()
         transaction.animation = nil
         withTransaction(transaction) {
             state = .loaded(messages)
         }
         persistCache()
+    }
+
+    private func resolvedReactionIdForRemoval(preferredId: UUID) -> UUID {
+        serverReactionIdByOptimisticId[preferredId] ?? preferredId
+    }
+
+    private static func isNotFound(_ error: Error) -> Bool {
+        if let network = error as? NetworkError {
+            return network == .notFound
+        }
+        return false
     }
 
     private func removeReaction(messageId: UUID, reactionId: UUID) {
@@ -1038,14 +1086,17 @@ public final class ChatThreadViewModel: ObservableObject {
         if near {
             nearBottomFalseTask?.cancel()
             nearBottomFalseTask = nil
+            guard !isNearBottom else { return }
             isNearBottom = true
         } else {
+            guard isNearBottom else { return }
             nearBottomFalseTask?.cancel()
             nearBottomFalseTask = Task { [weak self] in
                 try? await Task.sleep(for: .milliseconds(150))
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
-                    self?.isNearBottom = false
+                    guard let self, self.isNearBottom else { return }
+                    self.isNearBottom = false
                 }
             }
         }
@@ -1060,7 +1111,9 @@ public final class ChatThreadViewModel: ObservableObject {
     public func userReturnedToLatest() {
         autoFollowLatest = true
         showJumpToLatest = false
-        isNearBottom = true
+        if !isNearBottom {
+            isNearBottom = true
+        }
     }
 
     public func onViewportReturnedToBottom() {
@@ -1073,6 +1126,7 @@ public final class ChatThreadViewModel: ObservableObject {
     public func onViewportLeftBottom() {
         userScrolledAwayFromLatest()
         noteNearBottom(false)
+        showJumpToLatest = true
     }
 
     private func requestScrollToBottom() {

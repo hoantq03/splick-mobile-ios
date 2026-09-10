@@ -2,35 +2,33 @@ import SwiftUI
 import DesignSystem
 import Localization
 
-/// Floating chip above the composer when newer messages arrived while scrolled up.
+/// Floating jump control when the user has scrolled away from the newest messages.
+/// Slides up from below on appear and slides back down on dismiss.
 struct JumpToLatestChip: View {
     @EnvironmentObject private var languageService: LanguageService
     let visible: Bool
     let onTap: () -> Void
 
+    private static let hiddenOffset: CGFloat = 56
+
     var body: some View {
-        Group {
-            if visible {
-                Button(action: onTap) {
-                    HStack(spacing: 4) {
-                        Text(languageService.text(.messagingJumpToLatest))
-                            .font(.system(size: 13, weight: .semibold, design: .rounded))
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 12, weight: .bold))
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(SplickTheme.Colors.primaryGradientStart)
-                            .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
-                    )
+        Button(action: onTap) {
+            Image(systemName: "arrow.down")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
+                .frame(width: 40, height: 40)
+                .background {
+                    Circle()
+                        .fill(SplickTheme.Colors.cardBackground)
+                        .shadow(color: .black.opacity(0.16), radius: 10, y: 4)
                 }
-                .buttonStyle(.plain)
-                .transition(.opacity.combined(with: .scale(scale: 0.92)))
-            }
         }
-        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: visible)
+        .buttonStyle(.plain)
+        .accessibilityLabel(languageService.text(.messagingJumpToLatest))
+        .accessibilityHidden(!visible)
+        .offset(y: visible ? 0 : Self.hiddenOffset)
+        .opacity(visible ? 1 : 0)
+        .allowsHitTesting(visible)
+        .animation(ChatScrollAnimation.jumpToLatestReveal, value: visible)
     }
 }

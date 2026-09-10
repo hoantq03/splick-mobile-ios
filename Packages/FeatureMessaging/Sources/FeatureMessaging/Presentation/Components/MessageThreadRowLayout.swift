@@ -11,6 +11,8 @@ enum MessageThreadRowLayout {
     static let senderAvatarSize: CGFloat = 32
     static let senderAvatarGap: CGFloat = 6
     static var senderAvatarGutter: CGFloat { senderAvatarSize + senderAvatarGap }
+    /// List horizontal inset. Avatar leading edge starts here; edge-pop may be wider
+    /// (`SplickEdgeInteractivePop.edgeWidth`) but yields when `contentOwnsTouch` hits avatar/bubble.
     static let listHorizontalPadding: CGFloat = 8
     static let statusBubbleGap: CGFloat = 6
     static let bubbleWidthFraction: CGFloat = 0.72

@@ -6,6 +6,8 @@ import SplickDomain
 /// One message cell in the thread list (bubble + optional typing row below).
 struct ChatMessageListItemRow: View {
     @EnvironmentObject private var languageService: LanguageService
+    /// Local namespace so the avatar slide stays inside this row (reliable with LazyVStack).
+    @Namespace private var typingAvatarHandoffNamespace
 
     let item: DisplayMessage
     let isOutgoing: Bool
@@ -24,10 +26,8 @@ struct ChatMessageListItemRow: View {
     let senderAvatarURL: URL?
     let senderAvatarName: String
     let suppressSenderAvatar: Bool
-    let reportsSenderAvatarAnchor: Bool
     let messageContinuesIntoTyping: Bool
     let showsTypingIndicator: Bool
-    let showAvatarHandoffOverlay: Bool
     let typingUserId: UUID?
     let typingSenderAvatarURL: URL?
     let typingSenderDisplayName: String
@@ -87,7 +87,8 @@ struct ChatMessageListItemRow: View {
             senderAvatarURL: senderAvatarURL,
             senderAvatarName: senderAvatarName,
             suppressSenderAvatar: suppressSenderAvatar,
-            reportsSenderAvatarAnchor: reportsSenderAvatarAnchor,
+            typingAvatarHandoffNamespace: typingAvatarHandoffNamespace,
+            usesTypingAvatarHandoff: messageContinuesIntoTyping,
             isQuotedMessageRecalled: isQuotedMessageRecalled
         )
         .opacity(isReactionFocusHidden ? 0 : 1)
@@ -101,15 +102,17 @@ struct ChatMessageListItemRow: View {
                 senderAvatarURL: typingSenderAvatarURL,
                 senderAvatarName: typingSenderDisplayName,
                 senderUserId: typingUserId,
-                showsSenderAvatar: !showAvatarHandoffOverlay,
+                showsSenderAvatar: true,
                 continuesMessageCluster: true,
-                reportsSenderAvatarAnchor: true
+                typingAvatarHandoffNamespace: typingAvatarHandoffNamespace,
+                usesTypingAvatarHandoff: true
             )
             .id("typing-indicator")
             .onAppear(perform: onTypingRowAppear)
+            // Opacity only — matchedGeometry owns the avatar slide; move transition fights it.
             .transition(
                 hasCompletedInitialBottomScroll
-                    ? ChatScrollAnimation.typingRow
+                    ? .opacity
                     : .identity
             )
         }

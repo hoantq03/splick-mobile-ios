@@ -46,6 +46,18 @@ struct ConversationRowView: View {
                             .font(SplickTheme.Typography.caption)
                             .foregroundStyle(SplickTheme.Colors.textTertiary)
                     }
+                    if !conversation.notificationsEnabled {
+                        Image(systemName: "bell.slash.fill")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(SplickTheme.Colors.textTertiary)
+                            .accessibilityLabel(languageService.text(.messagingChatMuteNotifications))
+                            .transition(
+                                .asymmetric(
+                                    insertion: .scale(scale: 0.55).combined(with: .opacity),
+                                    removal: .scale(scale: 0.55).combined(with: .opacity)
+                                )
+                            )
+                    }
                     Spacer()
                     if let lastMessage = conversation.lastMessage {
                         Text(lastMessage.createdAt.relativeString)
@@ -53,6 +65,7 @@ struct ConversationRowView: View {
                             .foregroundStyle(SplickTheme.Colors.textTertiary)
                     }
                 }
+                .animation(Self.muteIconMotion, value: conversation.notificationsEnabled)
 
                 HStack(spacing: SplickTheme.Spacing.xxs) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -77,10 +90,6 @@ struct ConversationRowView: View {
                             .padding(.vertical, 2)
                             .background(Color.red)
                             .clipShape(Capsule())
-                    } else if !conversation.notificationsEnabled {
-                        Image(systemName: "bell.slash")
-                            .font(.caption)
-                            .foregroundStyle(SplickTheme.Colors.textTertiary)
                     }
                 }
             }
@@ -182,4 +191,6 @@ struct ConversationRowView: View {
         let lastSeenAt = stored?.lastSeenAt ?? peer.lastSeenAt
         return (isOnline, lastSeenAt)
     }
+
+    private static let muteIconMotion = Animation.spring(response: 0.34, dampingFraction: 0.72)
 }
