@@ -1,6 +1,8 @@
 import Foundation
 
 public extension Notification.Name {
-    /// Posted when payment evidence submit/approve/reject changes expense split state.
-    static let paymentEvidenceStatusDidChange = Notification.Name("splick.paymentEvidenceStatusDidChange")
+    static let expensesDirectoryDidChange = ExpensesDirectoryChange.notification
+
+    /// Legacy alias — same bus as `ExpensesDirectoryChange` (payment evidence + broader expense updates).
+    static let paymentEvidenceStatusDidChange = ExpensesDirectoryChange.notification
 }

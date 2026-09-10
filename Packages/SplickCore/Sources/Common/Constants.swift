@@ -108,6 +108,12 @@ public enum AppConstants {
         public static let dismissDuration: Duration = .milliseconds(850)
     }
 
+    public enum PushNotifications {
+        /// System banners with action categories stay until dismissed and block newer banners.
+        /// Auto-remove delivered notifications after this delay so the next push can appear.
+        public static let bannerAutoDismissDelay: Duration = .milliseconds(2500)
+    }
+
     public enum Links {
         /// Invite / deep-link host (custom domain).
         public static let webHost = "splick.app"

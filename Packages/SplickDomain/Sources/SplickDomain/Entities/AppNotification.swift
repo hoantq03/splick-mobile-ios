@@ -176,6 +176,29 @@ public enum NotificationType: String, Codable, Sendable {
         }
     }
 
+    /// Types that should soft-refresh the Expenses (Chi tiêu) tab.
+    public var isExpensesDirectoryNotification: Bool {
+        switch self {
+        case .paymentEvidenceSubmitted, .paymentEvidenceApproved, .paymentEvidenceRejected,
+             .dailyDebtReminder, .expenseSplitBill, .expenseReminder, .expenseSettled,
+             .bulkSettlementPendingApproval, .bulkSettlementApproved, .bulkSettlementRejected:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Types that should force a feed ahead-count check (new-posts pill).
+    public var isFeedContentNotification: Bool {
+        switch self {
+        case .postReactionMilestone, .feedTaggedInPost, .feedMentionedInPost,
+             .feedMentionedInComment, .postCommented:
+            return true
+        default:
+            return false
+        }
+    }
+
     /// Compact glyph for the avatar type chip — no nested-circle symbols.
     public var icon: String {
         switch self {

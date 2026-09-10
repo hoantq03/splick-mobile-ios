@@ -1,4 +1,5 @@
 import Foundation
+import AudioToolbox
 
 public enum AppNotificationSound: String, CaseIterable, Sendable {
     case `default` = "default"
@@ -51,5 +52,25 @@ public enum AppNotificationSound: String, CaseIterable, Sendable {
 
     public static func loadFromAppGroup() -> AppNotificationSound {
         resolved(loadRawFromAppGroup())
+    }
+
+    /// Plays the tone currently stored in the app group (user's selected notification sound).
+    public static func playCurrentSelection() {
+        loadFromAppGroup().play()
+    }
+
+    public func play() {
+        guard !isSilent else { return }
+        let fileName = bundledFileName
+        let name = (fileName as NSString).deletingPathExtension
+        let ext = (fileName as NSString).pathExtension
+        guard let url = Bundle.main.url(forResource: name, withExtension: ext) else { return }
+        var soundId: SystemSoundID = 0
+        guard AudioServicesCreateSystemSoundID(url as CFURL, &soundId) == kAudioServicesNoError else {
+            return
+        }
+        AudioServicesPlayAlertSoundWithCompletion(soundId) {
+            AudioServicesDisposeSystemSoundID(soundId)
+        }
     }
 }

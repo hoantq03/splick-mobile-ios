@@ -141,16 +141,9 @@ public struct AttachmentComposerView<TextField: View, Accessory: View, SendButto
                     .layoutPriority(1)
 
                 if showsSendButton {
-                    Button(action: submit) {
+                    KeyboardStickyTapControl(isEnabled: canSubmit, action: submit) {
                         sendButton()
                     }
-                    .buttonStyle(.plain)
-                    .disabled(!canSubmit)
-                    .foregroundStyle(
-                        canSubmit
-                            ? SplickTheme.Colors.primaryGradientStart
-                            : SplickTheme.Colors.textTertiary
-                    )
                     .transition(
                         .asymmetric(
                             insertion: .scale(scale: 0.35, anchor: .center)
@@ -179,7 +172,9 @@ public struct AttachmentComposerView<TextField: View, Accessory: View, SendButto
 
     private var showsSendButton: Bool {
         if configuration.collapsesSendWhenEmpty {
-            return canSubmit
+            // Keep the send control while focused so clearing text on send does not
+            // resize the field and resign first responder (keyboard flicker).
+            return canSubmit || isFocused
         }
         return true
     }
