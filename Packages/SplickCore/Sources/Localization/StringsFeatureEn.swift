@@ -1062,5 +1062,18 @@ enum StringsFeatureEn {
         .onboardingTagline: "Click moments, Split bills, Keep relationship",
         .widgetNoMessages: "No messages",
         .widgetMessagePhoto: "📷 Photo",
+
+        // App Clip
+        .clipInviteTitle: "Invited you to connect on Splick",
+        .clipInviteSubtitle: "Splick is where friends share moments, split bills, and stay close.",
+        .clipConnectAction: "Connect on Splick",
+        .clipGetFullApp: "Get Splick App",
+        .clipOpenInAppStore: "View in App Store",
+        .clipLoadingProfile: "Loading profile...",
+        .clipNotFoundTitle: "Profile not found",
+        .clipNotFoundMessage: "The link might be invalid or the profile does not exist.",
+        .clipTagline: "Click moments · Split bills · Keep close",
+        .clipStatsFriends: "Friends",
+        .clipStatsPosts: "Posts",
     ]
 }

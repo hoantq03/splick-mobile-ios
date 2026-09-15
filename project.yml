@@ -143,6 +143,34 @@ targets:
         Release:
           APS_ENVIRONMENT: production
           CODE_SIGN_ENTITLEMENTS: SplickApp/SplickApp.entitlements
+  SplickClip:
+    type: application.on-demand-install-capable
+    platform: iOS
+    deploymentTarget:
+      iOS: "16.0"
+    sources:
+      - path: SplickClip
+    dependencies:
+      - package: SplickCore
+        product: Networking
+      - package: SplickCore
+        product: Storage
+      - package: SplickCore
+        product: Common
+    settings:
+      base:
+        PRODUCT_NAME: SplickClip
+        PRODUCT_BUNDLE_IDENTIFIER: com.splick.app.clip
+        INFOPLIST_FILE: SplickClip/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: APPCLIP
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
+      configs:
+        Debug:
+          CODE_SIGN_ENTITLEMENTS: SplickClip/SplickClip.entitlements
+        Release:
+          CODE_SIGN_ENTITLEMENTS: SplickClip/SplickClip.entitlements
+
 
   SplickWidgetExtension:
     type: app-extension

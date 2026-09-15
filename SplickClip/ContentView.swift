@@ -2,23 +2,16 @@
 //  ContentView.swift
 //  SplickClip
 //
-//  Created by Trahn Quoc Hoan on 9/10/26.
-//
 
 import SwiftUI
 
 struct ContentView: View {
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
-        }
-        .padding()
+        ProfileCardView()
     }
 }
 
 #Preview {
     ContentView()
+        .environmentObject(ClipInviteViewModel())
 }

@@ -1310,4 +1310,17 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case onboardingTagline = "onboarding.tagline"
     case widgetNoMessages = "widget.no_messages"
     case widgetMessagePhoto = "widget.message_photo"
+
+    // App Clip
+    case clipInviteTitle = "clip.invite.title"
+    case clipInviteSubtitle = "clip.invite.subtitle"
+    case clipConnectAction = "clip.connect.action"
+    case clipGetFullApp = "clip.get_full_app"
+    case clipOpenInAppStore = "clip.open_in_app_store"
+    case clipLoadingProfile = "clip.loading_profile"
+    case clipNotFoundTitle = "clip.not_found_title"
+    case clipNotFoundMessage = "clip.not_found_message"
+    case clipTagline = "clip.tagline"
+    case clipStatsFriends = "clip.stats.friends"
+    case clipStatsPosts = "clip.stats.posts"
 }

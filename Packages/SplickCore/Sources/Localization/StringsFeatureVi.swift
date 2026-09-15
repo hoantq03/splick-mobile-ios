@@ -1062,5 +1062,18 @@ enum StringsFeatureVi {
         .onboardingTagline: "Click moments, Split bills, Keep relationship",
         .widgetNoMessages: "Không có tin nhắn",
         .widgetMessagePhoto: "📷 Ảnh",
+
+        // App Clip
+        .clipInviteTitle: "Đã gửi lời mời kết nối trên Splick",
+        .clipInviteSubtitle: "Splick là nơi chia sẻ khoảnh khắc, chia tiền bill và giữ kết nối bạn bè.",
+        .clipConnectAction: "Kết bạn trên Splick",
+        .clipGetFullApp: "Cài đặt ứng dụng Splick",
+        .clipOpenInAppStore: "Xem trên App Store",
+        .clipLoadingProfile: "Đang tải hồ sơ...",
+        .clipNotFoundTitle: "Không tìm thấy hồ sơ",
+        .clipNotFoundMessage: "Đường dẫn không hợp lệ hoặc người dùng không tồn tại.",
+        .clipTagline: "Click moments · Split bills · Keep close",
+        .clipStatsFriends: "Bạn bè",
+        .clipStatsPosts: "Bài viết",
     ]
 }
