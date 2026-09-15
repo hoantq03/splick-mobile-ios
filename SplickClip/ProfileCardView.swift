@@ -171,22 +171,12 @@ private struct BackgroundAuraView: View {
 private struct SplickBrandHeader: View {
     var body: some View {
         HStack(spacing: 8) {
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color(hex: 0x5B6CFF), Color(hex: 0x00F5D4)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 14, height: 14)
-                    .shadow(color: Color(hex: 0x00F5D4).opacity(0.8), radius: 6)
-
-                Circle()
-                    .fill(.white)
-                    .frame(width: 5, height: 5)
-            }
+            Image("SplickLogoMark")
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+                .frame(width: 18, height: 24)
+                .shadow(color: Color(hex: 0x5B6CFF).opacity(0.8), radius: 8)
 
             Text("SPLICK")
                 .font(.system(.subheadline, design: .rounded, weight: .black))
@@ -195,11 +185,11 @@ private struct SplickBrandHeader: View {
 
             Text("CLIP")
                 .font(.system(size: 9, weight: .heavy, design: .rounded))
-                .tracking(1.0)
-                .foregroundStyle(Color(hex: 0x00F5D4))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(Color(hex: 0x00F5D4).opacity(0.18), in: Capsule())
+                .tracking(1.2)
+                .foregroundStyle(Color(hex: 0x4ECDC4))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(Color(hex: 0x4ECDC4).opacity(0.18), in: Capsule())
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
@@ -209,7 +199,7 @@ private struct SplickBrandHeader: View {
                 .overlay(
                     Capsule().strokeBorder(
                         LinearGradient(
-                            colors: [.white.opacity(0.25), .white.opacity(0.05)],
+                            colors: [.white.opacity(0.3), .white.opacity(0.06)],
                             startPoint: .top,
                             endPoint: .bottom
                         ),
@@ -217,7 +207,7 @@ private struct SplickBrandHeader: View {
                     )
                 )
         }
-        .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
+        .shadow(color: .black.opacity(0.35), radius: 12, y: 5)
     }
 }
 
@@ -228,19 +218,19 @@ private struct IdleScanCardView: View {
 
     var body: some View {
         VStack(spacing: 28) {
-            // 3D Concentric NFC Radar Rings
+            // 3D Concentric NFC Radar Rings with Splick Logo in center
             ZStack {
                 ForEach(0..<3) { i in
                     Circle()
                         .stroke(
                             LinearGradient(
-                                colors: [Color(hex: 0x5B6CFF), Color(hex: 0x00F5D4)],
+                                colors: [Color(hex: 0x5B6CFF), Color(hex: 0x4ECDC4)],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ),
                             lineWidth: 2
                         )
-                        .frame(width: CGFloat(90 + i * 36), height: CGFloat(90 + i * 36))
+                        .frame(width: CGFloat(94 + i * 38), height: CGFloat(94 + i * 38))
                         .scaleEffect(wavePulse ? 1.15 : 0.9)
                         .opacity(wavePulse ? (0.7 - Double(i) * 0.2) : 0.2)
                         .animation(
@@ -254,18 +244,20 @@ private struct IdleScanCardView: View {
                 Circle()
                     .fill(
                         LinearGradient(
-                            colors: [Color(hex: 0x5B6CFF), Color(hex: 0x00F5D4)],
+                            colors: [Color(hex: 0x5B6CFF), Color(hex: 0x4ECDC4)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
-                    .frame(width: 76, height: 76)
-                    .shadow(color: Color(hex: 0x00F5D4).opacity(0.6), radius: 20)
+                    .frame(width: 84, height: 84)
+                    .shadow(color: Color(hex: 0x4ECDC4).opacity(0.65), radius: 22)
 
-                Image(systemName: "wave.3.forward")
-                    .font(.system(size: 32, weight: .bold))
-                    .foregroundStyle(.white)
-                    .rotationEffect(.degrees(-90))
+                Image("SplickLogoMark")
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .frame(width: 44, height: 56)
+                    .shadow(color: Color(hex: 0x00F5D4).opacity(0.9), radius: 10)
             }
             .frame(height: 180)
             .padding(.top, 16)
@@ -478,7 +470,20 @@ private struct LoadedProfileCardContent: View {
                 }
                 .foregroundStyle(.white.opacity(0.55))
             }
-            .padding(.bottom, 4)
+            .padding(.bottom, 2)
+
+            // Brand Footer Tagline
+            HStack(spacing: 5) {
+                Image("SplickLogoMark")
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .frame(width: 12, height: 16)
+                    .opacity(0.65)
+                Text("Splick • Click and Split")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.42))
+            }
         }
         .padding(28)
         .frame(maxWidth: 360)
@@ -731,10 +736,17 @@ private struct AvatarInitialsView: View {
     var body: some View {
         ZStack {
             LinearGradient(
-                colors: [Color(hex: 0x5B6CFF), Color(hex: 0x00F5D4)],
+                colors: [Color(hex: 0x5B6CFF), Color(hex: 0x4ECDC4)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
+            Image("SplickLogoMark")
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+                .frame(width: 64, height: 84)
+                .opacity(0.18)
+
             Text(initials)
                 .font(.system(.title, design: .rounded, weight: .bold))
                 .foregroundStyle(.white)
@@ -748,26 +760,41 @@ private struct GlassCardModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .background {
-                RoundedRectangle(cornerRadius: 32, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 32, style: .continuous)
-                            .strokeBorder(
-                                LinearGradient(
-                                    stops: [
-                                        .init(color: .white.opacity(0.35), location: 0),
-                                        .init(color: .white.opacity(0.08), location: 0.4),
-                                        .init(color: Color(hex: 0x00F5D4).opacity(0.25), location: 1)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 1.2
-                            )
-                    )
+                ZStack(alignment: .topTrailing) {
+                    RoundedRectangle(cornerRadius: 32, style: .continuous)
+                        .fill(.ultraThinMaterial)
+
+                    // Subtle luxury Splick brand watermark in card background
+                    Image("SplickLogoMark")
+                        .resizable()
+                        .interpolation(.high)
+                        .scaledToFit()
+                        .frame(width: 150, height: 200)
+                        .opacity(0.06)
+                        .rotationEffect(.degrees(12))
+                        .offset(x: 35, y: -25)
+                        .blendMode(.overlay)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 32, style: .continuous)
+                        .strokeBorder(
+                            LinearGradient(
+                                stops: [
+                                    .init(color: .white.opacity(0.4), location: 0),
+                                    .init(color: .white.opacity(0.08), location: 0.4),
+                                    .init(color: Color(hex: 0x4ECDC4).opacity(0.3), location: 0.8),
+                                    .init(color: Color(hex: 0x5B6CFF).opacity(0.25), location: 1)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1.2
+                        )
+                )
             }
             .shadow(color: .black.opacity(0.45), radius: 32, y: 16)
-            .shadow(color: Color(hex: 0x5B6CFF).opacity(0.18), radius: 24, y: 8)
+            .shadow(color: Color(hex: 0x5B6CFF).opacity(0.2), radius: 24, y: 8)
             .padding(.horizontal, 20)
     }
 }
