@@ -16,7 +16,6 @@ struct ProfileCardView: View {
 
     // Interactive 3D tilt gesture state
     @State private var dragOffset: CGSize = .zero
-    @State private var isDragging: Bool = false
 
     // Ambient floating 3D breathing animation
     @State private var breathingAngle: Double = 0
@@ -88,12 +87,19 @@ struct ProfileCardView: View {
                 .gesture(
                     DragGesture()
                         .onChanged { value in
-                            isDragging = true
-                            dragOffset = value.translation
+                            withAnimation(.interactiveSpring(response: 0.18, dampingFraction: 0.88)) {
+                                dragOffset = value.translation
+                            }
                         }
-                        .onEnded { _ in
-                            isDragging = false
-                            withAnimation(.spring(response: 0.55, dampingFraction: 0.65)) {
+                        .onEnded { value in
+                            // Include slight release inertia then glide smoothly back with spring physics
+                            let momentumX = (value.predictedEndTranslation.width - value.translation.width) * 0.12
+                            let momentumY = (value.predictedEndTranslation.height - value.translation.height) * 0.12
+                            dragOffset = CGSize(
+                                width: value.translation.width + momentumX,
+                                height: value.translation.height + momentumY
+                            )
+                            withAnimation(.spring(response: 0.85, dampingFraction: 0.68, blendDuration: 0.2)) {
                                 dragOffset = .zero
                             }
                         }
@@ -122,17 +128,15 @@ struct ProfileCardView: View {
 
     // Effective tilt angles combining gesture + gentle breathing
     private var effectiveAngleX: Double {
-        if isDragging {
-            return Double(dragOffset.height / 14).clamped(to: -18...18)
-        }
-        return (breathingAngle * 2.5) - 1.25
+        let gestureTilt = Double(dragOffset.height / 12).clamped(to: -22...22)
+        let breathingTilt = (breathingAngle * 2.2) - 1.1
+        return gestureTilt + breathingTilt
     }
 
     private var effectiveAngleY: Double {
-        if isDragging {
-            return Double(dragOffset.width / 14).clamped(to: -18...18)
-        }
-        return (sin(breathingAngle * .pi) * 3.0) - 1.5
+        let gestureTilt = Double(dragOffset.width / 12).clamped(to: -22...22)
+        let breathingTilt = (sin(breathingAngle * .pi) * 2.6) - 1.3
+        return gestureTilt + breathingTilt
     }
 }
 
