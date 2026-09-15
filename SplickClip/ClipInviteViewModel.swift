@@ -78,14 +78,24 @@ final class ClipInviteViewModel: ObservableObject {
     @Published var state: ClipInviteState = .idle
     @Published var isInviting: Bool = false
 
+    @Published var lastAttemptedUsername: String?
     private let apiClient = APIClient(tokenProvider: InMemoryTokenProvider())
 
     // Called from the scene via onContinueUserActivity / onOpenURL
     func handleInviteURL(_ url: URL) {
         guard let username = extractUsername(from: url) else {
-            state = .error("Liên kết mời không hợp lệ.")
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                state = .error("Liên kết mời không hợp lệ.")
+            }
             return
         }
+        lastAttemptedUsername = username
+        Task { await loadProfile(username: username) }
+    }
+
+    /// Retries loading the last attempted username
+    func retry() {
+        guard let username = lastAttemptedUsername else { return }
         Task { await loadProfile(username: username) }
     }
 
@@ -112,14 +122,32 @@ final class ClipInviteViewModel: ObservableObject {
     // MARK: - Private
 
     private func loadProfile(username: String) async {
-        state = .loading
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            state = .loading
+        }
+        let startTime = Date()
+
         do {
             let profile: ClipPublicProfileDTO = try await apiClient.request(
                 PublicUserProfileEndpoint(username: username)
             )
-            state = .loaded(profile)
+            // Ensure shimmer skeleton renders smoothly for at least 0.5s
+            let elapsed = Date().timeIntervalSince(startTime)
+            if elapsed < 0.5 {
+                try? await Task.sleep(nanoseconds: UInt64((0.5 - elapsed) * 1_000_000_000))
+            }
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.78)) {
+                state = .loaded(profile)
+            }
         } catch {
-            state = .error(error.localizedDescription)
+            // Guarantee loading skeleton is displayed for at least 0.9s before transitioning to error
+            let elapsed = Date().timeIntervalSince(startTime)
+            if elapsed < 0.9 {
+                try? await Task.sleep(nanoseconds: UInt64((0.9 - elapsed) * 1_000_000_000))
+            }
+            withAnimation(.spring(response: 0.55, dampingFraction: 0.78)) {
+                state = .error(friendlyErrorMessage(for: error))
+            }
         }
     }
 
@@ -131,10 +159,25 @@ final class ClipInviteViewModel: ObservableObject {
             let _: Empty? = try? await apiClient.request(
                 SendFriendRequestEndpoint(targetUsername: username)
             )
-            state = .inviteSent
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                state = .inviteSent
+            }
         } catch {
-            state = .error(error.localizedDescription)
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                state = .error(friendlyErrorMessage(for: error))
+            }
         }
+    }
+
+    private func friendlyErrorMessage(for error: Error) -> String {
+        let text = error.localizedDescription.lowercased()
+        if text.contains("network") || text.contains("offline") || text.contains("internet") || text.contains("timed out") || text.contains("connection") {
+            return "Không thể kết nối đến máy chủ. Vui lòng kiểm tra lại kết nối mạng."
+        }
+        if text.contains("not found") || text.contains("404") {
+            return "Không tìm thấy hồ sơ người dùng trên Splick."
+        }
+        return "Không thể tải thông tin hồ sơ. Vui lòng thử lại sau."
     }
 
     // MARK: - Helpers
