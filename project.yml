@@ -160,7 +160,7 @@ targets:
     settings:
       base:
         PRODUCT_NAME: SplickClip
-        PRODUCT_BUNDLE_IDENTIFIER: com.splick.app.clip
+        PRODUCT_BUNDLE_IDENTIFIER: com.splick.app.Clip
         INFOPLIST_FILE: SplickClip/Info.plist
         GENERATE_INFOPLIST_FILE: NO
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: APPCLIP
