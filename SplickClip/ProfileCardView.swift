@@ -3,6 +3,7 @@
 //  SplickClip
 //
 //  Ultra-premium 3D glassmorphism profile card for Splick App Clip.
+//  Fully supports adaptive Dark Mode and Light Mode with Splick brand theme.
 //
 
 import SwiftUI
@@ -11,6 +12,7 @@ import SwiftUI
 
 struct ProfileCardView: View {
     @EnvironmentObject var viewModel: ClipInviteViewModel
+    @Environment(\.colorScheme) private var colorScheme
 
     // Interactive 3D tilt gesture state
     @State private var dragOffset: CGSize = .zero
@@ -21,7 +23,7 @@ struct ProfileCardView: View {
 
     var body: some View {
         ZStack {
-            // Dark futuristic mesh background
+            // Adaptive ambient mesh background
             BackgroundAuraView()
 
             VStack(spacing: 0) {
@@ -104,9 +106,9 @@ struct ProfileCardView: View {
                     Image(systemName: "hand.tap.fill")
                         .font(.caption2)
                     Text("Nghiêng thẻ hoặc vuốt nhẹ để tương tác 3D")
-                        .font(.system(.caption2, design: .rounded))
+                        .font(.system(.caption2, design: .rounded, weight: .medium))
                 }
-                .foregroundStyle(.white.opacity(0.32))
+                .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.35) : Color(hex: 0x64748B).opacity(0.75))
                 .padding(.bottom, 12)
             }
         }
@@ -134,29 +136,58 @@ struct ProfileCardView: View {
     }
 }
 
-// MARK: - Background Ambient Aura
+// MARK: - Background Ambient Aura (Adaptive)
 
 private struct BackgroundAuraView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @State private var pulse: Bool = false
 
     var body: some View {
         ZStack {
-            // Deep cosmic base
-            Color(hex: 0x0A0A14).ignoresSafeArea()
+            if colorScheme == .dark {
+                // Deep cosmic base
+                Color(hex: 0x0A0A14).ignoresSafeArea()
 
-            // Ambient violet orb
-            Circle()
-                .fill(Color(hex: 0x6C5CE7).opacity(pulse ? 0.35 : 0.22))
-                .frame(width: 320, height: 320)
-                .blur(radius: 80)
-                .offset(x: pulse ? -80 : -50, y: pulse ? -140 : -100)
+                // Ambient violet orb
+                Circle()
+                    .fill(Color(hex: 0x5B6CFF).opacity(pulse ? 0.35 : 0.22))
+                    .frame(width: 320, height: 320)
+                    .blur(radius: 80)
+                    .offset(x: pulse ? -80 : -50, y: pulse ? -140 : -100)
 
-            // Ambient cyan/neon orb
-            Circle()
-                .fill(Color(hex: 0x00D2D3).opacity(pulse ? 0.28 : 0.18))
-                .frame(width: 280, height: 280)
-                .blur(radius: 75)
-                .offset(x: pulse ? 90 : 60, y: pulse ? 120 : 80)
+                // Ambient teal/cyan orb
+                Circle()
+                    .fill(Color(hex: 0x00F5D4).opacity(pulse ? 0.28 : 0.18))
+                    .frame(width: 280, height: 280)
+                    .blur(radius: 75)
+                    .offset(x: pulse ? 90 : 60, y: pulse ? 120 : 80)
+            } else {
+                // Soft iridescent light background
+                LinearGradient(
+                    colors: [
+                        Color(hex: 0xF8FAFC),
+                        Color(hex: 0xEEF2FF),
+                        Color(hex: 0xF0FDFA)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+
+                // Soft pastel violet orb
+                Circle()
+                    .fill(Color(hex: 0x5B6CFF).opacity(pulse ? 0.18 : 0.10))
+                    .frame(width: 320, height: 320)
+                    .blur(radius: 70)
+                    .offset(x: pulse ? -70 : -40, y: pulse ? -120 : -90)
+
+                // Soft pastel teal orb
+                Circle()
+                    .fill(Color(hex: 0x4ECDC4).opacity(pulse ? 0.20 : 0.12))
+                    .frame(width: 300, height: 300)
+                    .blur(radius: 70)
+                    .offset(x: pulse ? 80 : 50, y: pulse ? 110 : 70)
+            }
         }
         .onAppear {
             withAnimation(.easeInOut(duration: 5.0).repeatForever(autoreverses: true)) {
@@ -166,9 +197,11 @@ private struct BackgroundAuraView: View {
     }
 }
 
-// MARK: - Brand Header
+// MARK: - Brand Header (Adaptive)
 
 private struct SplickBrandHeader: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         HStack(spacing: 8) {
             Image("SplickLogoMark")
@@ -176,20 +209,25 @@ private struct SplickBrandHeader: View {
                 .interpolation(.high)
                 .scaledToFit()
                 .frame(width: 18, height: 24)
-                .shadow(color: Color(hex: 0x5B6CFF).opacity(0.8), radius: 8)
+                .shadow(color: Color(hex: 0x5B6CFF).opacity(0.8), radius: 6)
 
             Text("SPLICK")
                 .font(.system(.subheadline, design: .rounded, weight: .black))
                 .tracking(2.5)
-                .foregroundStyle(.white)
+                .foregroundStyle(colorScheme == .dark ? .white : Color(hex: 0x0F172A))
 
             Text("CLIP")
                 .font(.system(size: 9, weight: .heavy, design: .rounded))
                 .tracking(1.2)
-                .foregroundStyle(Color(hex: 0x4ECDC4))
+                .foregroundStyle(colorScheme == .dark ? Color(hex: 0x4ECDC4) : Color(hex: 0x0D9488))
                 .padding(.horizontal, 7)
                 .padding(.vertical, 3)
-                .background(Color(hex: 0x4ECDC4).opacity(0.18), in: Capsule())
+                .background(
+                    colorScheme == .dark
+                        ? Color(hex: 0x4ECDC4).opacity(0.18)
+                        : Color(hex: 0x0D9488).opacity(0.14),
+                    in: Capsule()
+                )
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
@@ -199,7 +237,10 @@ private struct SplickBrandHeader: View {
                 .overlay(
                     Capsule().strokeBorder(
                         LinearGradient(
-                            colors: [.white.opacity(0.3), .white.opacity(0.06)],
+                            colors: [
+                                colorScheme == .dark ? .white.opacity(0.3) : .white.opacity(0.85),
+                                colorScheme == .dark ? .white.opacity(0.06) : Color(hex: 0x5B6CFF).opacity(0.15)
+                            ],
                             startPoint: .top,
                             endPoint: .bottom
                         ),
@@ -207,13 +248,18 @@ private struct SplickBrandHeader: View {
                     )
                 )
         }
-        .shadow(color: .black.opacity(0.35), radius: 12, y: 5)
+        .shadow(
+            color: colorScheme == .dark ? .black.opacity(0.35) : Color(hex: 0x5B6CFF).opacity(0.12),
+            radius: 12,
+            y: 4
+        )
     }
 }
 
-// MARK: - Idle Scanning State
+// MARK: - Idle Scanning State (Adaptive)
 
 private struct IdleScanCardView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @State private var wavePulse: Bool = false
 
     var body: some View {
@@ -265,11 +311,11 @@ private struct IdleScanCardView: View {
             VStack(spacing: 8) {
                 Text("Sẵn sàng chạm NFC")
                     .font(.system(.title3, design: .rounded, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colorScheme == .dark ? .white : Color(hex: 0x0F172A))
 
                 Text("Chạm mặt lưng iPhone vào thẻ NFC để mở hồ sơ kết bạn tức thì.")
                     .font(.system(.subheadline, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(colorScheme == .dark ? .white.opacity(0.65) : Color(hex: 0x64748B))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 16)
             }
@@ -283,9 +329,10 @@ private struct IdleScanCardView: View {
     }
 }
 
-// MARK: - Loading Skeleton with Smooth Sweeping Shimmer
+// MARK: - Loading Skeleton (Adaptive)
 
 private struct LoadingCardSkeletonView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @State private var shimmerPhase: CGFloat = 0
 
     var body: some View {
@@ -299,7 +346,10 @@ private struct LoadingCardSkeletonView: View {
                 Circle()
                     .strokeBorder(
                         LinearGradient(
-                            colors: [Color(hex: 0x5B6CFF).opacity(0.6), Color(hex: 0x00F5D4).opacity(0.4)],
+                            colors: [
+                                Color(hex: 0x5B6CFF).opacity(colorScheme == .dark ? 0.6 : 0.4),
+                                Color(hex: 0x4ECDC4).opacity(colorScheme == .dark ? 0.4 : 0.3)
+                            ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
@@ -325,7 +375,9 @@ private struct LoadingCardSkeletonView: View {
                     RoundedRectangle(cornerRadius: 6).fill(shimmerFill).frame(width: 48, height: 20)
                     RoundedRectangle(cornerRadius: 4).fill(shimmerFill).frame(width: 60, height: 12)
                 }
-                Rectangle().fill(.white.opacity(0.12)).frame(width: 1, height: 32)
+                Rectangle()
+                    .fill(colorScheme == .dark ? Color.white.opacity(0.12) : Color(hex: 0xCBD5E1))
+                    .frame(width: 1, height: 32)
                 VStack(spacing: 6) {
                     RoundedRectangle(cornerRadius: 6).fill(shimmerFill).frame(width: 48, height: 20)
                     RoundedRectangle(cornerRadius: 4).fill(shimmerFill).frame(width: 60, height: 12)
@@ -350,23 +402,36 @@ private struct LoadingCardSkeletonView: View {
     }
 
     private var shimmerFill: LinearGradient {
-        LinearGradient(
-            stops: [
-                .init(color: .white.opacity(0.06), location: 0),
-                .init(color: .white.opacity(0.24), location: 0.5),
-                .init(color: .white.opacity(0.06), location: 1)
-            ],
-            startPoint: .init(x: -1.2 + shimmerPhase * 3.2, y: 0.3),
-            endPoint: .init(x: -0.2 + shimmerPhase * 3.2, y: 0.7)
-        )
+        if colorScheme == .dark {
+            return LinearGradient(
+                stops: [
+                    .init(color: .white.opacity(0.06), location: 0),
+                    .init(color: .white.opacity(0.24), location: 0.5),
+                    .init(color: .white.opacity(0.06), location: 1)
+                ],
+                startPoint: .init(x: -1.2 + shimmerPhase * 3.2, y: 0.3),
+                endPoint: .init(x: -0.2 + shimmerPhase * 3.2, y: 0.7)
+            )
+        } else {
+            return LinearGradient(
+                stops: [
+                    .init(color: Color(hex: 0xE2E8F0).opacity(0.55), location: 0),
+                    .init(color: Color(hex: 0xF8FAFC), location: 0.5),
+                    .init(color: Color(hex: 0xE2E8F0).opacity(0.55), location: 1)
+                ],
+                startPoint: .init(x: -1.2 + shimmerPhase * 3.2, y: 0.3),
+                endPoint: .init(x: -0.2 + shimmerPhase * 3.2, y: 0.7)
+            )
+        }
     }
 }
 
-// MARK: - Loaded Profile Card Content
+// MARK: - Loaded Profile Card Content (Adaptive)
 
 private struct LoadedProfileCardContent: View {
     let profile: ClipPublicProfileDTO
     let viewModel: ClipInviteViewModel
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var avatarGlow: Bool = false
 
@@ -378,7 +443,10 @@ private struct LoadedProfileCardContent: View {
                 Circle()
                     .fill(
                         RadialGradient(
-                            colors: [Color(hex: 0x5B6CFF).opacity(0.55), .clear],
+                            colors: [
+                                Color(hex: 0x5B6CFF).opacity(colorScheme == .dark ? 0.55 : 0.25),
+                                .clear
+                            ],
                             center: .center,
                             startRadius: 20,
                             endRadius: 75
@@ -404,14 +472,20 @@ private struct LoadedProfileCardContent: View {
                     Circle()
                         .strokeBorder(
                             LinearGradient(
-                                colors: [Color(hex: 0x00F5D4), Color(hex: 0x5B6CFF), Color(hex: 0xE056FD)],
+                                colors: [Color(hex: 0x4ECDC4), Color(hex: 0x5B6CFF), Color(hex: 0xE056FD)],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ),
                             lineWidth: 3
                         )
                 )
-                .shadow(color: Color(hex: 0x00F5D4).opacity(0.4), radius: 18, y: 6)
+                .shadow(
+                    color: colorScheme == .dark
+                        ? Color(hex: 0x4ECDC4).opacity(0.4)
+                        : Color(hex: 0x5B6CFF).opacity(0.25),
+                    radius: 18,
+                    y: 6
+                )
             }
             .padding(.top, 4)
 
@@ -419,17 +493,17 @@ private struct LoadedProfileCardContent: View {
             VStack(spacing: 6) {
                 Text(profile.displayName)
                     .font(.system(.title2, design: .rounded, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colorScheme == .dark ? .white : Color(hex: 0x0F172A))
                     .multilineTextAlignment(.center)
 
                 HStack(spacing: 4) {
                     Text("@\(profile.username)")
-                        .font(.system(.subheadline, design: .rounded, weight: .medium))
-                        .foregroundStyle(Color(hex: 0x00F5D4))
+                        .font(.system(.subheadline, design: .rounded, weight: .bold))
+                        .foregroundStyle(colorScheme == .dark ? Color(hex: 0x00F5D4) : Color(hex: 0x0D9488))
 
                     Image(systemName: "checkmark.seal.fill")
                         .font(.caption)
-                        .foregroundStyle(Color(hex: 0x00F5D4))
+                        .foregroundStyle(colorScheme == .dark ? Color(hex: 0x00F5D4) : Color(hex: 0x0D9488))
                 }
             }
 
@@ -438,14 +512,19 @@ private struct LoadedProfileCardContent: View {
                 StatPillItem(value: profile.friendCount, label: "bạn bè")
 
                 Rectangle()
-                    .fill(.white.opacity(0.14))
+                    .fill(colorScheme == .dark ? Color.white.opacity(0.14) : Color(hex: 0xCBD5E1))
                     .frame(width: 1, height: 32)
 
                 StatPillItem(value: profile.postCount, label: "bài viết")
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 10)
-            .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(
+                colorScheme == .dark
+                    ? Color.white.opacity(0.04)
+                    : Color(hex: 0xF1F5F9),
+                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+            )
 
             // Action CTA Button
             ActionFriendButton(
@@ -468,7 +547,7 @@ private struct LoadedProfileCardContent: View {
                     Image(systemName: "arrow.up.right")
                         .font(.system(size: 10, weight: .bold))
                 }
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.55) : Color(hex: 0x4B5563))
             }
             .padding(.bottom, 2)
 
@@ -482,7 +561,7 @@ private struct LoadedProfileCardContent: View {
                     .opacity(0.65)
                 Text("Splick • Click and Split")
                     .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.42))
+                    .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.42) : Color(hex: 0x64748B))
             }
         }
         .padding(28)
@@ -500,12 +579,13 @@ private struct LoadedProfileCardContent: View {
     }
 }
 
-// MARK: - Action Button
+// MARK: - Action Button (Adaptive)
 
 private struct ActionFriendButton: View {
     let friendStatus: String?
     let isLoading: Bool
     let action: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
 
     private var config: (label: String, icon: String, enabled: Bool, isPrimary: Bool) {
         switch friendStatus {
@@ -524,7 +604,7 @@ private struct ActionFriendButton: View {
                 if isLoading {
                     ProgressView()
                         .progressViewStyle(.circular)
-                        .tint(.black)
+                        .tint(.white)
                         .scaleEffect(0.9)
                 } else {
                     Image(systemName: config.icon)
@@ -533,30 +613,40 @@ private struct ActionFriendButton: View {
                         .font(.system(.body, design: .rounded, weight: .bold))
                 }
             }
-            .foregroundStyle(config.isPrimary ? Color(hex: 0x0A0A14) : .white)
+            .foregroundStyle(
+                config.isPrimary
+                    ? .white
+                    : (colorScheme == .dark ? .white : Color(hex: 0x334155))
+            )
             .frame(maxWidth: .infinity)
             .frame(height: 54)
             .background {
                 if config.isPrimary {
                     LinearGradient(
-                        colors: [Color(hex: 0x00F5D4), Color(hex: 0x5B6CFF)],
+                        colors: [Color(hex: 0x5B6CFF), Color(hex: 0x4ECDC4)],
                         startPoint: .leading,
                         endPoint: .trailing
                     )
                 } else {
-                    Color.white.opacity(0.1)
+                    colorScheme == .dark
+                        ? Color.white.opacity(0.1)
+                        : Color(hex: 0xF1F5F9)
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .strokeBorder(
-                        config.isPrimary ? Color.white.opacity(0.35) : Color.white.opacity(0.12),
+                        config.isPrimary
+                            ? Color.white.opacity(0.35)
+                            : (colorScheme == .dark ? Color.white.opacity(0.12) : Color(hex: 0xE2E8F0)),
                         lineWidth: 1
                     )
             )
             .shadow(
-                color: config.isPrimary ? Color(hex: 0x00F5D4).opacity(0.4) : .clear,
+                color: config.isPrimary
+                    ? Color(hex: 0x5B6CFF).opacity(colorScheme == .dark ? 0.45 : 0.3)
+                    : .clear,
                 radius: 14,
                 y: 5
             )
@@ -566,9 +656,10 @@ private struct ActionFriendButton: View {
     }
 }
 
-// MARK: - Invite Sent Success Card
+// MARK: - Invite Sent Success Card (Adaptive)
 
 private struct InviteSuccessCardView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @State private var bounce: Bool = false
 
     var body: some View {
@@ -577,18 +668,18 @@ private struct InviteSuccessCardView: View {
                 Circle()
                     .fill(
                         LinearGradient(
-                            colors: [Color(hex: 0x00F5D4), Color(hex: 0x5B6CFF)],
+                            colors: [Color(hex: 0x5B6CFF), Color(hex: 0x4ECDC4)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
                     .frame(width: 90, height: 90)
-                    .shadow(color: Color(hex: 0x00F5D4).opacity(0.6), radius: 24)
+                    .shadow(color: Color(hex: 0x4ECDC4).opacity(0.6), radius: 24)
                     .scaleEffect(bounce ? 1.0 : 0.5)
 
                 Image(systemName: "checkmark")
                     .font(.system(size: 38, weight: .black))
-                    .foregroundStyle(Color(hex: 0x0A0A14))
+                    .foregroundStyle(.white)
                     .scaleEffect(bounce ? 1.0 : 0.3)
             }
             .padding(.top, 8)
@@ -596,11 +687,11 @@ private struct InviteSuccessCardView: View {
             VStack(spacing: 8) {
                 Text("Đã gửi lời mời!")
                     .font(.system(.title2, design: .rounded, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colorScheme == .dark ? .white : Color(hex: 0x0F172A))
 
                 Text("Lời mời kết bạn đã được chuyển đi thành công qua Splick.")
                     .font(.system(.subheadline, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.65))
+                    .foregroundStyle(colorScheme == .dark ? .white.opacity(0.65) : Color(hex: 0x64748B))
                     .multilineTextAlignment(.center)
             }
         }
@@ -616,11 +707,12 @@ private struct InviteSuccessCardView: View {
     }
 }
 
-// MARK: - Error Card with Retry Button
+// MARK: - Error Card with Retry Button (Adaptive)
 
 private struct ErrorCardView: View {
     let message: String
     let onRetry: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var errorPulse: Bool = false
 
@@ -653,11 +745,11 @@ private struct ErrorCardView: View {
             VStack(spacing: 8) {
                 Text("Không thể tải thông tin")
                     .font(.system(.title3, design: .rounded, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colorScheme == .dark ? .white : Color(hex: 0x0F172A))
 
                 Text(message)
                     .font(.system(.subheadline, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(colorScheme == .dark ? .white.opacity(0.6) : Color(hex: 0x64748B))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 8)
             }
@@ -673,14 +765,21 @@ private struct ErrorCardView: View {
                     Text("Thử lại")
                         .font(.system(.callout, design: .rounded, weight: .bold))
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(colorScheme == .dark ? .white : Color(hex: 0x0F172A))
                 .frame(maxWidth: .infinity)
                 .frame(height: 48)
-                .background(Color.white.opacity(0.12))
+                .background(
+                    colorScheme == .dark
+                        ? Color.white.opacity(0.12)
+                        : Color(hex: 0xF1F5F9)
+                )
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(.white.opacity(0.2), lineWidth: 1)
+                        .strokeBorder(
+                            colorScheme == .dark ? Color.white.opacity(0.2) : Color(hex: 0xCBD5E1),
+                            lineWidth: 1
+                        )
                 )
             }
             .padding(.horizontal, 16)
@@ -697,21 +796,22 @@ private struct ErrorCardView: View {
     }
 }
 
-// MARK: - Reusable Helpers
+// MARK: - Reusable Helpers (Adaptive)
 
 private struct StatPillItem: View {
     let value: Int
     let label: String
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(spacing: 2) {
             Text(formatCount(value))
                 .font(.system(.title3, design: .rounded, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(colorScheme == .dark ? .white : Color(hex: 0x0F172A))
 
             Text(label)
                 .font(.system(.caption2, design: .rounded, weight: .medium))
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.5) : Color(hex: 0x64748B))
         }
     }
 
@@ -754,15 +854,17 @@ private struct AvatarInitialsView: View {
     }
 }
 
-// MARK: - Glass Card Modifier
+// MARK: - Glass Card Modifier (Adaptive)
 
 private struct GlassCardModifier: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
     func body(content: Content) -> some View {
         content
             .background {
                 ZStack(alignment: .topTrailing) {
                     RoundedRectangle(cornerRadius: 32, style: .continuous)
-                        .fill(.ultraThinMaterial)
+                        .fill(colorScheme == .dark ? .ultraThinMaterial : .regularMaterial)
 
                     // Subtle luxury Splick brand watermark in card background
                     Image("SplickLogoMark")
@@ -770,10 +872,10 @@ private struct GlassCardModifier: ViewModifier {
                         .interpolation(.high)
                         .scaledToFit()
                         .frame(width: 150, height: 200)
-                        .opacity(0.06)
+                        .opacity(colorScheme == .dark ? 0.06 : 0.05)
                         .rotationEffect(.degrees(12))
                         .offset(x: 35, y: -25)
-                        .blendMode(.overlay)
+                        .blendMode(colorScheme == .dark ? .overlay : .multiply)
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
                 .overlay(
@@ -781,10 +883,22 @@ private struct GlassCardModifier: ViewModifier {
                         .strokeBorder(
                             LinearGradient(
                                 stops: [
-                                    .init(color: .white.opacity(0.4), location: 0),
-                                    .init(color: .white.opacity(0.08), location: 0.4),
-                                    .init(color: Color(hex: 0x4ECDC4).opacity(0.3), location: 0.8),
-                                    .init(color: Color(hex: 0x5B6CFF).opacity(0.25), location: 1)
+                                    .init(
+                                        color: colorScheme == .dark ? .white.opacity(0.4) : .white.opacity(0.9),
+                                        location: 0
+                                    ),
+                                    .init(
+                                        color: colorScheme == .dark ? .white.opacity(0.08) : Color(hex: 0xCBD5E1).opacity(0.4),
+                                        location: 0.4
+                                    ),
+                                    .init(
+                                        color: Color(hex: 0x4ECDC4).opacity(colorScheme == .dark ? 0.3 : 0.35),
+                                        location: 0.8
+                                    ),
+                                    .init(
+                                        color: Color(hex: 0x5B6CFF).opacity(colorScheme == .dark ? 0.25 : 0.3),
+                                        location: 1
+                                    )
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
@@ -793,8 +907,18 @@ private struct GlassCardModifier: ViewModifier {
                         )
                 )
             }
-            .shadow(color: .black.opacity(0.45), radius: 32, y: 16)
-            .shadow(color: Color(hex: 0x5B6CFF).opacity(0.2), radius: 24, y: 8)
+            .shadow(
+                color: colorScheme == .dark
+                    ? .black.opacity(0.45)
+                    : Color(hex: 0x0F172A).opacity(0.08),
+                radius: colorScheme == .dark ? 32 : 24,
+                y: colorScheme == .dark ? 16 : 10
+            )
+            .shadow(
+                color: Color(hex: 0x5B6CFF).opacity(colorScheme == .dark ? 0.2 : 0.1),
+                radius: 20,
+                y: 6
+            )
             .padding(.horizontal, 20)
     }
 }
@@ -825,9 +949,9 @@ private extension Color {
     }
 }
 
-// MARK: - Xcode Previews
+// MARK: - Xcode Previews (Both Light & Dark)
 
-#Preview("3D Loaded Profile") {
+#Preview("Dark Mode — Loaded") {
     let vm = ClipInviteViewModel()
     vm.state = .loaded(ClipPublicProfileDTO(
         userId: "abc",
@@ -838,17 +962,39 @@ private extension Color {
         postCount: 42,
         friendStatus: "NONE"
     ))
-    return ProfileCardView().environmentObject(vm)
+    return ProfileCardView()
+        .environmentObject(vm)
+        .preferredColorScheme(.dark)
 }
 
-#Preview("3D Loading Skeleton") {
+#Preview("Light Mode — Loaded") {
+    let vm = ClipInviteViewModel()
+    vm.state = .loaded(ClipPublicProfileDTO(
+        userId: "abc",
+        username: "hoan03",
+        displayName: "Hoàn Trần",
+        avatarUrl: nil,
+        friendCount: 348,
+        postCount: 42,
+        friendStatus: "NONE"
+    ))
+    return ProfileCardView()
+        .environmentObject(vm)
+        .preferredColorScheme(.light)
+}
+
+#Preview("Light Mode — Skeleton") {
     let vm = ClipInviteViewModel()
     vm.state = .loading
-    return ProfileCardView().environmentObject(vm)
+    return ProfileCardView()
+        .environmentObject(vm)
+        .preferredColorScheme(.light)
 }
 
-#Preview("3D Error with Retry") {
+#Preview("Light Mode — Error Retry") {
     let vm = ClipInviteViewModel()
     vm.state = .error("Không thể kết nối đến máy chủ. Vui lòng thử lại.")
-    return ProfileCardView().environmentObject(vm)
+    return ProfileCardView()
+        .environmentObject(vm)
+        .preferredColorScheme(.light)
 }
