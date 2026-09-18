@@ -19,8 +19,7 @@ struct SocialSignInIconButton: View {
                 if isLoading {
                     ZStack {
                         providerBackground
-                        ProgressView()
-                            .tint(provider == .apple ? .white : nil)
+                        SplickSpinner(size: .small)
                     }
                 } else {
                     providerContent

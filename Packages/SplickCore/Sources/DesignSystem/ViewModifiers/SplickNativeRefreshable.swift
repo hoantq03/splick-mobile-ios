@@ -71,9 +71,7 @@ private struct SplickNativeRefreshableWithController: ViewModifier {
             }
             .safeAreaInset(edge: .top, spacing: 0) {
                 if showsFallbackHeader {
-                    ProgressView()
-                        .controlSize(.regular)
-                        .tint(SplickTheme.Colors.primaryGradientStart)
+                    SplickSpinner(size: .medium)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                         .transition(.move(edge: .top).combined(with: .opacity))

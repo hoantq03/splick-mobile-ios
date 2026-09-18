@@ -45,8 +45,7 @@ struct MentionPickerPopup: View {
                     }
 
                     if viewModel.isLoading {
-                        ProgressView()
-                            .controlSize(.small)
+                        SplickSpinner(size: .small)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
                     }

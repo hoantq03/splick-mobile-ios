@@ -1191,8 +1191,7 @@ private struct ComposeCompanionsEditorView: View {
 
             if !showsGroups && !showsFriends {
                 if viewModel.isSearchingFriends {
-                    ProgressView()
-                        .controlSize(.small)
+                    SplickSpinner(size: .small)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, SplickTheme.Spacing.md)
                 } else {
@@ -1262,8 +1261,7 @@ private struct ComposeCompanionsEditorView: View {
                 }
 
                 if viewModel.isSearchingFriends {
-                    ProgressView()
-                        .controlSize(.small)
+                    SplickSpinner(size: .small)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, SplickTheme.Spacing.sm)
                 }
@@ -1333,8 +1331,7 @@ private struct ComposeCompanionsEditorView: View {
                             .font(SplickTheme.Typography.caption)
                             .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
                             if viewModel.isLoadingCompanionGroupMembers(group) {
-                                ProgressView()
-                                    .controlSize(.mini)
+                                SplickSpinner(size: .small)
                             } else {
                                 Image(
                                     systemName: viewModel.isCompanionGroupMembersExpanded(group)
@@ -1488,8 +1485,7 @@ private struct ComposeLocationEditorView: View {
                 .buttonStyle(.plain)
             }
             if viewModel.isSearchingPlaces {
-                ProgressView()
-                    .controlSize(.small)
+                SplickSpinner(size: .small)
             }
             if showsCustomPlaceRow {
                 Button {

@@ -72,8 +72,7 @@ public struct AvatarView: View {
                     case .failure:
                         placeholderView
                     default:
-                        ProgressView()
-                            .controlSize(loadingControlSize)
+                        SplickSpinner(size: loadingSpinnerSize)
                     }
                 }
             } else {
@@ -84,11 +83,11 @@ public struct AvatarView: View {
         .clipShape(Circle())
     }
 
-    private var loadingControlSize: ControlSize {
+    private var loadingSpinnerSize: SplickSpinner.Size {
         switch size {
-        case .small: return .mini
+        case .small: return .small
         case .compact, .medium: return .small
-        case .large, .profile: return .regular
+        case .large, .profile: return .medium
         }
     }
 
