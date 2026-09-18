@@ -1,6 +1,7 @@
 import Foundation
 import SplickDomain
 import UIKit
+import DesignSystem
 
 @MainActor
 public final class PaymentProfileManageViewModel: ObservableObject {
@@ -11,8 +12,12 @@ public final class PaymentProfileManageViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var isSaving = false
     @Published var isDeleting = false
+    @Published var isUploadingQr = false
+    @Published var qrUploadPreview: UIImage?
     @Published var errorMessage: String?
     @Published var showDeleteConfirm = false
+
+    private var savedSnapshot = FormSnapshot()
 
     private let fetchMyPaymentProfileUseCase: FetchMyPaymentProfileUseCaseProtocol
     private let upsertMyPaymentProfileUseCase: UpsertMyPaymentProfileUseCaseProtocol
@@ -48,23 +53,31 @@ public final class PaymentProfileManageViewModel: ObservableObject {
     }
 
     func uploadQrImage(_ image: UIImage) async {
-        isSaving = true
+        qrUploadPreview = image
+        isUploadingQr = true
         errorMessage = nil
-        defer { isSaving = false }
-
+        let started = ContinuousClock.now
         do {
             let url = try await uploadPaymentQr(image)
             qrImageURL = url
         } catch {
             errorMessage = error.localizedDescription
         }
+        await holdMinimumLoading(from: started)
+        qrUploadPreview = nil
+        isUploadingQr = false
+    }
+
+    func removeQrImage() {
+        qrImageURL = nil
+        qrUploadPreview = nil
+        errorMessage = nil
     }
 
     func save() async -> Bool {
         isSaving = true
         errorMessage = nil
-        defer { isSaving = false }
-
+        let started = ContinuousClock.now
         do {
             try PaymentProfileFormValidator.validate(
                 qrImageUrl: qrImageURL?.absoluteString,
@@ -82,12 +95,18 @@ public final class PaymentProfileManageViewModel: ObservableObject {
             )
             apply(profile)
             onProfileChanged?(profile.hasAnyContent ? profile : nil)
+            await holdMinimumLoading(from: started)
+            isSaving = false
             return true
         } catch let formError as PaymentProfileFormError {
             errorMessage = formError.localizedDescription
+            await holdMinimumLoading(from: started)
+            isSaving = false
             return false
         } catch {
             errorMessage = error.localizedDescription
+            await holdMinimumLoading(from: started)
+            isSaving = false
             return false
         }
     }
@@ -95,15 +114,18 @@ public final class PaymentProfileManageViewModel: ObservableObject {
     func deleteProfile() async -> Bool {
         isDeleting = true
         errorMessage = nil
-        defer { isDeleting = false }
-
+        let started = ContinuousClock.now
         do {
             try await deleteMyPaymentProfileUseCase.execute()
             clearForm()
             onProfileChanged?(nil)
+            await holdMinimumLoading(from: started)
+            isDeleting = false
             return true
         } catch {
             errorMessage = error.localizedDescription
+            await holdMinimumLoading(from: started)
+            isDeleting = false
             return false
         }
     }
@@ -115,18 +137,49 @@ public final class PaymentProfileManageViewModel: ObservableObject {
             || !bankName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    var hasUnsavedChanges: Bool {
+        currentSnapshot != savedSnapshot
+    }
+
+    private func holdMinimumLoading(from started: ContinuousClock.Instant) async {
+        let minimum = Duration.nanoseconds(Int64(SplickButton.minimumLoadingNanoseconds))
+        let elapsed = started.duration(to: .now)
+        if elapsed < minimum {
+            try? await Task.sleep(for: minimum - elapsed)
+        }
+    }
+
     private func apply(_ profile: PaymentProfile) {
         qrImageURL = profile.qrImageURL
         accountName = profile.accountName ?? ""
         accountNumber = profile.accountNumber ?? ""
         bankName = profile.bankName ?? ""
+        savedSnapshot = currentSnapshot
     }
 
     private func clearForm() {
         qrImageURL = nil
+        qrUploadPreview = nil
         accountName = ""
         accountNumber = ""
         bankName = ""
+        savedSnapshot = currentSnapshot
+    }
+
+    private var currentSnapshot: FormSnapshot {
+        FormSnapshot(
+            qrImageURL: qrImageURL?.absoluteString,
+            accountName: accountName.trimmingCharacters(in: .whitespacesAndNewlines),
+            accountNumber: accountNumber.trimmingCharacters(in: .whitespacesAndNewlines),
+            bankName: bankName.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+    }
+
+    private struct FormSnapshot: Equatable {
+        var qrImageURL: String?
+        var accountName = ""
+        var accountNumber = ""
+        var bankName = ""
     }
 
     private func nilIfEmpty(_ value: String) -> String? {
