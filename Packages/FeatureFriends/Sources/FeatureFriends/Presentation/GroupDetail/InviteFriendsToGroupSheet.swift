@@ -151,8 +151,7 @@ public struct InviteFriendsToGroupSheet: View {
                             }
                     }
                     if viewModel.isLoadingMore {
-                        ProgressView()
-                            .controlSize(.regular)
+                        SplickSpinner()
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, SplickTheme.Spacing.sm)
                     }

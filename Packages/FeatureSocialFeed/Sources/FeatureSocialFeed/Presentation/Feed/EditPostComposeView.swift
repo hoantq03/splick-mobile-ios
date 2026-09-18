@@ -140,7 +140,7 @@ struct EditPostComposeView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     if viewModel.isSaving {
-                        ProgressView()
+                        SplickSpinner()
                     } else {
                         Button(languageService.text(.commonSave)) {
                             Task {

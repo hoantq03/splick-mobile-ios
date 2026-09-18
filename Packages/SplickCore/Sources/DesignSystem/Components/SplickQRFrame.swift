@@ -209,9 +209,7 @@ public struct SplickQRFrame<Content: View>: View {
                 if isBusy {
                     RoundedRectangle(cornerRadius: radius, style: .continuous)
                         .fill(Color.white.opacity(0.82))
-                    ProgressView()
-                        .controlSize(.regular)
-                        .tint(SplickTheme.Colors.primaryGradientStart)
+                    SplickSpinner()
                 }
             }
 

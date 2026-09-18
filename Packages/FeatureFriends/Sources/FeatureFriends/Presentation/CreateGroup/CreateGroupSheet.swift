@@ -188,7 +188,7 @@ public struct CreateGroupSheet: View {
 
             if viewModel.isLoadingFriends {
                 HStack(spacing: SplickTheme.Spacing.sm) {
-                    ProgressView()
+                    SplickSpinner()
                     Text(languageService.text(.commonLoading))
                         .font(SplickTheme.Typography.caption)
                         .foregroundStyle(SplickTheme.Colors.textSecondary)

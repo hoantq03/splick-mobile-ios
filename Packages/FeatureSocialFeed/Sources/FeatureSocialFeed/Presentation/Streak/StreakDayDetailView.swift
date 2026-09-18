@@ -20,7 +20,7 @@ struct StreakDayDetailView: View {
                 SplickTheme.Colors.background.ignoresSafeArea()
 
                 if isLoading {
-                    ProgressView()
+                    SplickSpinner()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if photos.isEmpty {
                     EmptyStateView(

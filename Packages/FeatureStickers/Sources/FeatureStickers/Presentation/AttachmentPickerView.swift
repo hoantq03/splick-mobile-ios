@@ -224,7 +224,7 @@ public struct AttachmentPickerView: View {
                         }
 
                         if viewModel.isLoadingMore {
-                            ProgressView()
+                            SplickSpinner()
                                 .frame(maxWidth: .infinity)
                                 .gridCellColumns(GridLayout.columnsPerRow)
                                 .padding(.vertical, SplickTheme.Spacing.sm)

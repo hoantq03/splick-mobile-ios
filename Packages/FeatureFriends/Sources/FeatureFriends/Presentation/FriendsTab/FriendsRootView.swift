@@ -932,8 +932,7 @@ public struct FriendsRootView: View {
     }
 
     private var searchFetchingIndicator: some View {
-        ProgressView()
-            .controlSize(.regular)
+        SplickSpinner()
             .frame(maxWidth: .infinity)
     }
 
@@ -994,8 +993,7 @@ public struct FriendsRootView: View {
                 Spacer()
 
                 if isJoiningGroupFromSearch {
-                    ProgressView()
-                        .controlSize(.small)
+                    SplickSpinner(size: .small)
                 } else {
                     Text(languageService.text(.friendsJoinGroupAction))
                         .font(SplickTheme.Typography.caption.weight(.semibold))
@@ -1048,8 +1046,7 @@ public struct FriendsRootView: View {
                             }
 
                             if viewModel.isLoadingMoreFriends {
-                                ProgressView()
-                                    .controlSize(.regular)
+                                SplickSpinner()
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, SplickTheme.Spacing.sm)
                             }

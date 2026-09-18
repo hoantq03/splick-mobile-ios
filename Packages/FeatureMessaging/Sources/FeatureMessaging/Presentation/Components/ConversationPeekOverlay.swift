@@ -249,7 +249,7 @@ struct ConversationPeekOverlay: View {
         switch loadState {
         case .idle, .loading:
             VStack(spacing: SplickTheme.Spacing.sm) {
-                ProgressView()
+                SplickSpinner()
                 Text(languageService.text(.messagingChatLoading))
                     .font(SplickTheme.Typography.callout)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
@@ -301,7 +301,7 @@ struct ConversationPeekOverlay: View {
 
                             if hasMoreMessages || isLoadingOlder {
                                 ZStack {
-                                    ProgressView()
+                                    SplickSpinner()
                                         .opacity(isLoadingOlder ? 1 : 0)
                                 }
                                 .frame(height: Self.olderLoaderSlotHeight)

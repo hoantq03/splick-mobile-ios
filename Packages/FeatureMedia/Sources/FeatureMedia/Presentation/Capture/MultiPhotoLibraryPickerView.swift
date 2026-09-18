@@ -149,9 +149,7 @@ public struct MultiPhotoLibraryPickerView: View {
 
     private var loadingView: some View {
         VStack(spacing: SplickTheme.Spacing.md) {
-            ProgressView()
-                .tint(.white)
-                .scaleEffect(1.1)
+            SplickSpinner(usesBrandColors: false)
             Text(languageService.text(.mediaLibraryLoading))
                 .font(SplickTheme.Typography.callout)
                 .foregroundStyle(.white.opacity(0.7))
@@ -259,8 +257,7 @@ public struct MultiPhotoLibraryPickerView: View {
         ZStack {
             Color.black.opacity(0.5).ignoresSafeArea()
             VStack(spacing: SplickTheme.Spacing.sm) {
-                ProgressView()
-                    .tint(.white)
+                SplickSpinner(usesBrandColors: false)
                 Text(languageService.text(.mediaLoadingSelected))
                     .font(SplickTheme.Typography.callout)
                     .foregroundStyle(.white)
@@ -521,9 +518,7 @@ private struct PhotoGridCell: View {
         } else {
             ZStack {
                 Color.white.opacity(0.06)
-                ProgressView()
-                    .tint(.white.opacity(0.5))
-                    .scaleEffect(0.7)
+                SplickSpinner(size: .small, usesBrandColors: false)
             }
             .frame(width: cellSide, height: cellSide)
         }

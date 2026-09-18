@@ -40,8 +40,7 @@ struct ChatThreadSearchOverlay: View {
                 .focused($isSearchFocused)
 
                 if case .loading = viewModel.threadSearchState, viewModel.threadSearchHits.isEmpty {
-                    ProgressView()
-                        .controlSize(.small)
+                    SplickSpinner(size: .small)
                 }
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
@@ -119,7 +118,7 @@ struct ChatThreadSearchOverlay: View {
     private func placeholder(message: String, showsSpinner: Bool) -> some View {
         VStack(spacing: SplickTheme.Spacing.sm) {
             if showsSpinner {
-                ProgressView()
+                SplickSpinner()
             }
             Text(message)
                 .font(SplickTheme.Typography.callout)

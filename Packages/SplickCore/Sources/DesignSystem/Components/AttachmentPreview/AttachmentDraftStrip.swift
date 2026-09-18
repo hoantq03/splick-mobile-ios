@@ -195,14 +195,9 @@ public struct AttachmentDraftStrip: View {
     @ViewBuilder
     private func nativeUploadProgressIndicator(light: Bool) -> some View {
         if light {
-            ProgressView()
-                .progressViewStyle(.circular)
-                .controlSize(.regular)
-                .tint(.white)
+            SplickSpinner(usesBrandColors: false)
         } else {
-            ProgressView()
-                .progressViewStyle(.circular)
-                .controlSize(.regular)
+            SplickSpinner()
         }
     }
 
@@ -399,8 +394,7 @@ public struct RemoteImageFullscreenPreview: View {
                                         .resizable()
                                         .scaledToFit()
                                 default:
-                                    ProgressView()
-                                        .tint(.white)
+                                    SplickSpinner(usesBrandColors: false)
                                 }
                             }
                         }

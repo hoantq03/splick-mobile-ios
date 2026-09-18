@@ -140,8 +140,7 @@ struct GroupInviteQRSheet: View {
         Button(action: action) {
             Group {
                 if isLoading {
-                    ProgressView()
-                        .controlSize(.small)
+                    SplickSpinner(size: .small)
                 } else {
                     VStack(spacing: 4) {
                         Image(systemName: icon)

@@ -102,8 +102,7 @@ struct FriendRowView: View {
     @ViewBuilder
     private func relationAction(for status: FriendRelationStatus) -> some View {
         if isProcessing {
-            ProgressView()
-                .controlSize(.regular)
+            SplickSpinner()
                 .frame(width: actionIconSize, height: actionIconSize)
         } else {
             switch status {

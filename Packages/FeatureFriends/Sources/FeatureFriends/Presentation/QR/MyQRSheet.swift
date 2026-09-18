@@ -119,8 +119,7 @@ struct MyQRSheet: View {
             } label: {
                 Group {
                     if isSavingImage {
-                        ProgressView()
-                            .controlSize(.small)
+                        SplickSpinner(size: .small)
                     } else {
                         Label(languageService.text(.profilePaymentSaveImage), systemImage: "square.and.arrow.down")
                     }

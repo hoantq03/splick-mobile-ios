@@ -299,7 +299,7 @@ struct ChatMessageListView: View {
 
         LazyVStack(spacing: 0) {
             if viewModel.isLoadingOlder {
-                ProgressView()
+                SplickSpinner()
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, SplickTheme.Spacing.sm)
             }

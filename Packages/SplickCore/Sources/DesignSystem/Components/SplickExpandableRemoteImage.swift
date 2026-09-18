@@ -34,7 +34,7 @@ public struct SplickExpandableRemoteImage: View {
                         .frame(maxWidth: .infinity, minHeight: 80)
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
                 default:
-                    ProgressView()
+                    SplickSpinner()
                         .frame(maxWidth: .infinity, minHeight: 80)
                 }
             }
@@ -52,17 +52,23 @@ public struct SplickExpandableRemoteImage: View {
     }
 }
 
-struct SplickFullscreenRemoteImageOverlay: View {
+public struct SplickFullscreenRemoteImageOverlay: View {
     let url: URL
     let closeLabel: String
     var onDismiss: () -> Void
+
+    public init(url: URL, closeLabel: String, onDismiss: @escaping () -> Void) {
+        self.url = url
+        self.closeLabel = closeLabel
+        self.onDismiss = onDismiss
+    }
 
     @State private var scale: CGFloat = 1
     @GestureState private var pinchScale: CGFloat = 1
     @State private var offset: CGSize = .zero
     @GestureState private var dragOffset: CGSize = .zero
 
-    var body: some View {
+    public var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
                 .onTapGesture(perform: onDismiss)
@@ -86,8 +92,7 @@ struct SplickFullscreenRemoteImageOverlay: View {
                         .font(.system(size: 64))
                         .foregroundStyle(.white)
                 default:
-                    ProgressView()
-                        .tint(.white)
+                    SplickSpinner(usesBrandColors: false)
                 }
             }
             .padding(SplickTheme.Spacing.md)

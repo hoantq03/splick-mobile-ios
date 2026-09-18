@@ -273,7 +273,7 @@ public struct FriendUserProfileView: View {
             .padding(.horizontal, SplickTheme.Spacing.md)
 
             if viewModel.isLoadingMorePosts {
-                ProgressView()
+                SplickSpinner()
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, SplickTheme.Spacing.md)
             } else if let postsError = viewModel.postsError {
@@ -443,8 +443,7 @@ public struct FriendUserProfileView: View {
             }
 
             if viewModel.isProcessing {
-                ProgressView()
-                    .controlSize(.regular)
+                SplickSpinner()
             }
         }
     }

@@ -854,10 +854,7 @@ private struct CommentGifAttachmentFrame: View {
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .fill(Color.black.opacity(0.22))
                             .overlay {
-                                ProgressView()
-                                    .progressViewStyle(.circular)
-                                    .controlSize(.regular)
-                                    .tint(.white)
+                                SplickSpinner(usesBrandColors: false)
                             }
                             .allowsHitTesting(false)
                             .accessibilityLabel("Đang gửi bình luận")
@@ -875,10 +872,7 @@ private struct CommentGifAttachmentFrame: View {
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .fill(Color.black.opacity(0.22))
                                 .overlay {
-                                    ProgressView()
-                                        .progressViewStyle(.circular)
-                                        .controlSize(.regular)
-                                        .tint(.white)
+                                    SplickSpinner(usesBrandColors: false)
                                 }
                         }
                     }

@@ -28,8 +28,7 @@ public struct LegalDocumentView: View {
             )
 
             if isLoading {
-                ProgressView()
-                    .controlSize(.regular)
+                SplickSpinner()
             }
         }
         .background(Color(red: 250 / 255, green: 250 / 255, blue: 250 / 255))

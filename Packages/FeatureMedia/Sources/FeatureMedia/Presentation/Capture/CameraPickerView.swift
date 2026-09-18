@@ -66,10 +66,7 @@ struct CameraPickerView: View {
 
                 if isCapturing, !session.isRecordingBoomerang {
                     Color.black.opacity(0.35).ignoresSafeArea()
-                    ProgressView()
-                        .progressViewStyle(.circular)
-                        .tint(.white)
-                        .scaleEffect(1.2)
+                    SplickSpinner(size: .large, usesBrandColors: false)
                 }
 
                 if let toastMessage {

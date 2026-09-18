@@ -26,8 +26,7 @@ struct FriendPaymentProfileSheet: View {
             ScrollView {
                 VStack(spacing: SplickTheme.Spacing.md) {
                     if isLoading {
-                        ProgressView()
-                            .controlSize(.regular)
+                        SplickSpinner()
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, SplickTheme.Spacing.xxl)
                     } else if let errorMessage {
@@ -99,8 +98,7 @@ struct FriendPaymentProfileSheet: View {
                 } label: {
                     Group {
                         if isSavingImage {
-                            ProgressView()
-                                .controlSize(.small)
+                            SplickSpinner(size: .small)
                         } else {
                             Label(
                                 languageService.text(.profilePaymentSaveImage),

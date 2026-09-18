@@ -146,7 +146,7 @@ struct PaymentEvidenceSheet: View {
     private var emptyDropZone: some View {
         VStack(spacing: SplickTheme.Spacing.sm) {
             if isImportingPhotos {
-                ProgressView()
+                SplickSpinner()
             } else {
                 ZStack {
                     Circle()
@@ -253,7 +253,7 @@ struct PaymentEvidenceSheet: View {
     private var addPhotoTile: some View {
         VStack(spacing: 8) {
             if isImportingPhotos {
-                ProgressView()
+                SplickSpinner()
             } else {
                 Image(systemName: "plus")
                     .font(.system(size: 18, weight: .semibold))
@@ -309,8 +309,7 @@ struct PaymentEvidenceSheet: View {
             } label: {
                 Group {
                     if isSubmitting {
-                        ProgressView()
-                            .tint(.white)
+                        SplickSpinner(usesBrandColors: false)
                     } else {
                         Text(languageService.text(.feedPaymentEvidenceSubmit))
                             .fontWeight(.semibold)

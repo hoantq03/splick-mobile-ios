@@ -145,7 +145,7 @@ struct ExpenseGroupDetailView: View {
         .font(SplickTheme.Typography.headline)
       switch viewModel.state {
       case .idle, .loading:
-        ProgressView()
+        SplickSpinner()
           .frame(maxWidth: .infinity, minHeight: 80)
       case .failed(let message):
         ErrorView(message: message) {

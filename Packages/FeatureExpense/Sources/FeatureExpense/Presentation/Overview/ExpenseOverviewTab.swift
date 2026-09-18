@@ -480,7 +480,7 @@ struct ExpenseSpendingChartsSectionView: View {
           }
         }
       } else if case .loading = state {
-        ProgressView()
+        SplickSpinner()
           .frame(maxWidth: .infinity, minHeight: 80)
       } else {
         Text(languageService.text(.expenseOverviewSpendingEmpty))
@@ -665,7 +665,7 @@ struct ExpenseGroupsSectionView: View {
         .font(SplickTheme.Typography.headline)
       if groups.isEmpty {
         if case .loading = state {
-          ProgressView().frame(maxWidth: .infinity, minHeight: 60)
+          SplickSpinner().frame(maxWidth: .infinity, minHeight: 60)
         } else {
           Text(languageService.text(.expenseOverviewGroupsEmpty))
             .font(SplickTheme.Typography.body)

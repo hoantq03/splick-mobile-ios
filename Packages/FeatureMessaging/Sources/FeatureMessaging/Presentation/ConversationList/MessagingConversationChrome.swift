@@ -129,8 +129,7 @@ struct MessagingConversationChrome: View {
                 .submitLabel(.search)
 
             if showsSearchSpinner {
-                ProgressView()
-                    .controlSize(.small)
+                SplickSpinner(size: .small)
                     .transition(.opacity.combined(with: .scale(scale: 0.85)))
             }
         }

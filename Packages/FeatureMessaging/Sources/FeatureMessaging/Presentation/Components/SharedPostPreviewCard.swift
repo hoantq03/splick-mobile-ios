@@ -78,8 +78,7 @@ struct SharedPostPreviewCard: View {
             ZStack {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(Color.black.opacity(0.12))
-                ProgressView()
-                    .tint(titleColor.opacity(0.7))
+                SplickSpinner(usesBrandColors: false)
             }
             .frame(maxWidth: .infinity)
             .frame(height: Self.mediaHeight)

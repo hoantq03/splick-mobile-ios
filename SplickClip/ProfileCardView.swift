@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import DesignSystem
 
 // MARK: - Root View
 
@@ -1082,10 +1083,7 @@ private struct ActionFriendButton: View {
         Button(action: action) {
             HStack(spacing: 10) {
                 if isLoading {
-                    ProgressView()
-                        .progressViewStyle(.circular)
-                        .tint(.white)
-                        .scaleEffect(0.9)
+                    SplickSpinner(size: .small, usesBrandColors: false)
                 } else {
                     Image(systemName: config.icon)
                         .font(.system(.body, weight: .bold))

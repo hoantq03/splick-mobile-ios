@@ -365,7 +365,7 @@ public struct ConversationListView: View {
     private func searchResultsPlaceholder(message: String, showsSpinner: Bool) -> some View {
         VStack(spacing: SplickTheme.Spacing.sm) {
             if showsSpinner {
-                ProgressView()
+                SplickSpinner()
             }
             Text(message)
                 .font(SplickTheme.Typography.callout)
@@ -641,7 +641,7 @@ public struct ConversationListView: View {
                     if viewModel.isLoadingMore {
                         HStack {
                             Spacer()
-                            ProgressView()
+                            SplickSpinner()
                                 .padding(.vertical, SplickTheme.Spacing.md)
                             Spacer()
                         }
@@ -690,8 +690,7 @@ public struct ConversationListView: View {
                 .focused($isSearchFocused)
 
                 if viewModel.isRefreshingSearch, !suppressRefreshAnimations {
-                    ProgressView()
-                        .controlSize(.small)
+                    SplickSpinner(size: .small)
                 }
             }
             .padding(.horizontal, SplickTheme.Spacing.md)

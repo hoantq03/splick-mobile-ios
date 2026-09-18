@@ -335,15 +335,14 @@ public struct EmojiPickerSheet: View {
         } label: {
             if style == .iconOnly {
                 if isPreparingUpload {
-                    ProgressView()
+                    SplickSpinner()
                 } else {
                     Image(systemName: "plus.circle")
                 }
             } else {
                 Group {
                     if isPreparingUpload {
-                        ProgressView()
-                            .controlSize(.small)
+                        SplickSpinner(size: .small)
                     } else {
                         Text(languageService.text(.feedCustomEmojiAddAction))
                             .font(SplickTheme.Typography.caption.weight(.semibold))

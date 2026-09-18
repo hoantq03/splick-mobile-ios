@@ -225,7 +225,7 @@ public struct NotificationListView: View {
                 }
 
                 if viewModel.isLoadingMore {
-                    ProgressView()
+                    SplickSpinner()
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, SplickTheme.Spacing.md)
                 }
@@ -388,8 +388,7 @@ private extension NotificationRowView {
             )
             .lineLimit(1)
         } else if isProcessingFriendRequest {
-            ProgressView()
-                .controlSize(.regular)
+            SplickSpinner()
                 .frame(width: 22, height: 22)
         } else if onAcceptFriendRequest != nil || onRejectFriendRequest != nil {
             HStack(spacing: SplickTheme.Spacing.xs) {

@@ -24,7 +24,7 @@ struct ReactionDetailSheet: View {
         NavigationStack {
             Group {
                 if isLoading {
-                    ProgressView()
+                    SplickSpinner()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let loadError {
                     Text(loadError)

@@ -61,9 +61,7 @@ struct StreakMonthScrollView<Header: View>: View {
                         }
 
                         if isLoadingOlder || isOlderLoadInFlight {
-                            ProgressView()
-                                .controlSize(.regular)
-                                .tint(SplickTheme.Colors.primaryGradientStart)
+                            SplickSpinner()
                                 .padding(.vertical, SplickTheme.Spacing.sm)
                                 .frame(maxWidth: .infinity)
                                 .accessibilityLabel(languageService.text(.feedStreakLoading))

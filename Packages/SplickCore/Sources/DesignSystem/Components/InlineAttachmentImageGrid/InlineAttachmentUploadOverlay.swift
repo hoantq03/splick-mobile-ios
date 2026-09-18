@@ -9,10 +9,7 @@ struct InlineAttachmentUploadOverlay: View {
         case .uploading:
             ZStack {
                 Color.black.opacity(0.28)
-                ProgressView()
-                    .progressViewStyle(.circular)
-                    .controlSize(.regular)
-                    .tint(.white)
+                SplickSpinner(usesBrandColors: false)
             }
             .accessibilityLabel("Đang tải ảnh lên")
 

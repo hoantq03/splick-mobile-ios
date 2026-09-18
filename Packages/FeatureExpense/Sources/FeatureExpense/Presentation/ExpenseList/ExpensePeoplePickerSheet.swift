@@ -104,7 +104,7 @@ struct ExpensePeoplePickerSheet: View {
     @ViewBuilder
     private var pickerContent: some View {
         if isLoading {
-            ProgressView()
+            SplickSpinner()
         } else if currentUser == nil && friends.isEmpty && groups.isEmpty {
             Text(languageService.text(.feedAlbumPeopleEmpty))
                 .foregroundStyle(SplickTheme.Colors.textSecondary)

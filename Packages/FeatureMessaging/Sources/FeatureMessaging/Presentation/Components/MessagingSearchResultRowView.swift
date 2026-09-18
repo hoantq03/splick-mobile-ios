@@ -33,7 +33,7 @@ struct MessagingSearchResultRowView: View {
             }
 
             if isStarting {
-                ProgressView().controlSize(.small)
+                SplickSpinner().controlSize(.small)
             }
         }
         .padding(.vertical, SplickTheme.Spacing.xs)

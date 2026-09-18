@@ -65,8 +65,7 @@ public struct NewMessageComposeView: View {
                 .focused($isSearchFocused)
 
             if viewModel.isSearching {
-                ProgressView()
-                    .controlSize(.small)
+                SplickSpinner(size: .small)
             }
         }
         .padding(.horizontal, SplickTheme.Spacing.md)

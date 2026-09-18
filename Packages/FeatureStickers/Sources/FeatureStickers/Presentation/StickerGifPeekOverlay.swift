@@ -113,8 +113,7 @@ struct StickerGifPeekOverlay: View {
         Button(action: onToggleFavorite) {
             HStack(spacing: 8) {
                 if isTogglingFavorite {
-                    ProgressView()
-                        .tint(.white)
+                    SplickSpinner(usesBrandColors: false)
                 } else {
                     Image(systemName: isFavorite ? "star.fill" : "star")
                         .font(.system(size: 16, weight: .semibold))

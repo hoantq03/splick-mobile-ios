@@ -80,8 +80,7 @@ public struct SharePostToChatSheet: View {
                 .textInputAutocapitalization(.never)
 
             if viewModel.isSearching {
-                ProgressView()
-                    .controlSize(.small)
+                SplickSpinner(size: .small)
             }
         }
         .padding(.horizontal, SplickTheme.Spacing.md)
@@ -95,7 +94,7 @@ public struct SharePostToChatSheet: View {
     @ViewBuilder
     private var recipientStrip: some View {
         if viewModel.isLoading {
-            ProgressView()
+            SplickSpinner()
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, SplickTheme.Spacing.md)
         } else if viewModel.visibleRecipients.isEmpty && viewModel.visibleRemoteUsers.isEmpty {
@@ -235,8 +234,7 @@ public struct SharePostToChatSheet: View {
                 }
             } label: {
                 if viewModel.isSending {
-                    ProgressView()
-                        .tint(.white)
+                    SplickSpinner(usesBrandColors: false)
                 } else {
                     Text(languageService.text(.feedShareToChatSend))
                         .fontWeight(.semibold)

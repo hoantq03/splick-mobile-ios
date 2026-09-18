@@ -330,7 +330,7 @@ struct PostAudiencePickerSheet: View {
 
             switch viewModel.audienceGroupsState {
             case .loading:
-                ProgressView()
+                SplickSpinner()
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, SplickTheme.Spacing.md)
             case .failed(let message):
@@ -419,7 +419,7 @@ struct PostAudiencePickerSheet: View {
 
             if viewModel.audienceFriendOptions.isEmpty {
                 if viewModel.isLoadingAudienceFriends {
-                    ProgressView()
+                    SplickSpinner()
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, SplickTheme.Spacing.md)
                 } else {
@@ -510,8 +510,7 @@ struct PostAudiencePickerSheet: View {
             }
 
             if viewModel.isLoadingAudienceFriends {
-                ProgressView()
-                    .controlSize(.small)
+                SplickSpinner(size: .small)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, SplickTheme.Spacing.sm)
             }

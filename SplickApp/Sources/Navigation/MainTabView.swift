@@ -95,9 +95,17 @@ struct MainTabView: View {
                             sizeBytes: upload.sizeBytes
                         )
                     },
-                    onDismiss: {
-                        withAnimation(LinkedPostMotion.spring) {
-                            appState.dismissLinkedPostPresentation()
+                    onDismiss: { animated in
+                        if animated {
+                            withAnimation(LinkedPostMotion.spring) {
+                                appState.dismissLinkedPostPresentation()
+                            }
+                        } else {
+                            var transaction = Transaction()
+                            transaction.disablesAnimations = true
+                            withTransaction(transaction) {
+                                appState.dismissLinkedPostPresentation()
+                            }
                         }
                     }
                 )
@@ -108,7 +116,6 @@ struct MainTabView: View {
                 .zIndex(1)
             }
         }
-        .animation(LinkedPostMotion.spring, value: appState.linkedPostPresentation)
             .onAppear {
                 if appState.selectedTab.isPagerTab {
                     settledPagerTab = appState.selectedTab
@@ -472,6 +479,7 @@ private struct MainTabBarChrome: View {
     let badgeCounts: TabBadgeCounts
     let isChromePresented: Bool
     @ObservedObject var scrollState: TabBarScrollState
+    @Environment(\.colorScheme) private var colorScheme
 
     private var animationToken: TabBarChromeAnimationToken {
         TabBarChromeAnimationToken(
@@ -498,7 +506,8 @@ private struct MainTabBarChrome: View {
         SplickTabBar(
             selectedTab: $selectedTab,
             badgeCounts: badgeCounts,
-            tabBarScrollState: scrollState
+            tabBarScrollState: scrollState,
+            colorScheme: colorScheme
         )
         .equatable()
         .opacity(opacity)
@@ -537,6 +546,7 @@ struct ProfileSettingsView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var container: DependencyContainer
     @EnvironmentObject private var languageService: LanguageService
+    @EnvironmentObject private var themeService: ThemeService
     @EnvironmentObject private var pushNotificationCoordinator: PushNotificationCoordinator
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
@@ -557,7 +567,6 @@ struct ProfileSettingsView: View {
     @State private var showChangeUsername = false
     @State private var showNotifications = false
     @State private var showTheme = false
-    @State private var showAppIcon = false
     @State private var showWidget = false
     @State private var showLanguagePicker = false
     @State private var languageDraft = AppLocale.default
@@ -813,10 +822,7 @@ struct ProfileSettingsView: View {
             .navigationDestination(isPresented: $showTheme) {
                 ThemeSettingsView()
                     .environmentObject(languageService)
-            }
-            .navigationDestination(isPresented: $showAppIcon) {
-                AppIconSettingsView()
-                    .environmentObject(languageService)
+                    .environmentObject(themeService)
             }
             .navigationDestination(isPresented: $showWidget) {
                 WidgetSettingsView()
@@ -839,8 +845,7 @@ struct ProfileSettingsView: View {
                             if isUpdatingAvatar {
                                 Circle()
                                     .fill(Color.black.opacity(0.4))
-                                ProgressView()
-                                    .tint(.white)
+                                SplickSpinner(usesBrandColors: false)
                             }
                         }
                         .overlay(alignment: .bottomTrailing) {
@@ -1156,7 +1161,6 @@ struct ProfileSettingsView: View {
                 ProfileSettingsItem(
                     icon: "trash",
                     title: languageService.text(.profileDeleteAccount),
-                    isDestructive: true,
                     action: { accountClosureAction = .delete }
                 )
             ]
@@ -1217,14 +1221,10 @@ struct ProfileSettingsView: View {
                     }
                 ),
                 ProfileSettingsItem(
-                    icon: "paintbrush",
+                    icon: "moon.stars",
                     title: languageService.text(.profileTheme),
+                    subtitle: languageService.text(themeService.theme.displayNameKey),
                     action: { showTheme = true }
-                ),
-                ProfileSettingsItem(
-                    icon: "app",
-                    title: languageService.text(.profileAppIcon),
-                    action: { showAppIcon = true }
                 ),
                 ProfileSettingsItem(
                     icon: "square.grid.2x2",
