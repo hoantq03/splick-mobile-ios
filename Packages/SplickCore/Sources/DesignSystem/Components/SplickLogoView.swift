@@ -27,26 +27,25 @@ public struct SplickLogoView: View {
 
     private var aspectRatio: CGFloat {
         switch layout {
-        case .fullLockup: 412.0 / 390.0
-        case .markOnly: 278.0 / 221.0
+        case .fullLockup: 1289.0 / 1220.0
+        case .markOnly: 1
         }
     }
 
     public var body: some View {
-        Image(assetName, bundle: .module)
-            .resizable()
+        let image = Image(assetName, bundle: .module)
+            .renderingMode(style == .fullColor ? .original : .template)
             .interpolation(.high)
-            .renderingMode(.template)
+            .resizable()
             .aspectRatio(aspectRatio, contentMode: .fit)
-            .foregroundStyle(foreground)
-    }
 
-    private var foreground: Color {
         switch style {
-        case .fullColor, .monochrome:
-            SplickTheme.Colors.textPrimary
+        case .fullColor:
+            image
+        case .monochrome:
+            image.foregroundStyle(SplickTheme.Colors.textPrimary)
         case .onDark:
-            Color.white
+            image.foregroundStyle(Color.white)
         }
     }
 }
@@ -74,12 +73,10 @@ public struct SplickLogoMark: View {
 
     private var frameHeight: CGFloat {
         switch layout {
-        case .fullLockup: size * (390.0 / 412.0)
-        case .markOnly: size * (221.0 / 278.0)
+        case .fullLockup: size * (1220.0 / 1289.0)
+        case .markOnly: size
         }
     }
-
-    private var appIconCornerRadius: CGFloat { size * 0.2237 }
 
     public var body: some View {
         Group {
@@ -94,20 +91,12 @@ public struct SplickLogoMark: View {
     }
 
     private var appIconBody: some View {
-        let markWidth = size * 0.64
-        RoundedRectangle(cornerRadius: appIconCornerRadius, style: .continuous)
-            .fill(Color.white)
-            .overlay {
-                Image("SplickLogoMark", bundle: .module)
-                    .resizable()
-                    .interpolation(.high)
-                    .renderingMode(.template)
-                    .aspectRatio(278.0 / 221.0, contentMode: .fit)
-                    .foregroundStyle(Color.black)
-                    .frame(width: markWidth, height: markWidth * (221.0 / 278.0))
-            }
+        Image("SplickAppIcon", bundle: .module)
+            .renderingMode(.original)
+            .interpolation(.high)
+            .resizable()
+            .scaledToFit()
             .frame(width: size, height: size)
-            .clipShape(RoundedRectangle(cornerRadius: appIconCornerRadius, style: .continuous))
-            .shadow(color: Color.black.opacity(0.12), radius: size * 0.06, y: size * 0.04)
+            .shadow(color: Color.black.opacity(0.10), radius: size * 0.08, y: size * 0.04)
     }
 }
