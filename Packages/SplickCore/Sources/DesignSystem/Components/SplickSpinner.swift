@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Unified loading indicator — same ring style everywhere; only size / rotation mode differs.
+/// Circular loader using the logo wordmark colors (blue → pink → orange).
 public struct SplickSpinner: View {
     public enum Size {
         case small
@@ -9,69 +9,106 @@ public struct SplickSpinner: View {
 
         var dimension: CGFloat {
             switch self {
-            case .small: 18
-            case .medium: 28
-            case .large: 40
+            case .small: return 16
+            case .medium: return 28
+            case .large: return 40
             }
         }
 
         var lineWidth: CGFloat {
             switch self {
-            case .small: 2
-            case .medium: 2.5
-            case .large: 3
+            case .small: return 2
+            case .medium: return 2.75
+            case .large: return 3.25
             }
         }
     }
 
-    private let size: Size
-    private let rotation: Double
-    private let isAnimating: Bool
+    public var size: Size
+    public var usesBrandColors: Bool
+    private let sideOverride: CGFloat?
 
-    /// - Parameters:
-    ///   - size: Visual scale (small / medium / large).
-    ///   - rotation: Manual rotation in degrees (pull-to-refresh drag). Ignored when `isAnimating` is true.
-    ///   - isAnimating: Continuous spin (default). Set false to drive rotation manually.
-    public init(size: Size = .medium, rotation: Double = 0, isAnimating: Bool = true) {
+    public init(size: Size = .medium, usesBrandColors: Bool = true, side: CGFloat? = nil) {
         self.size = size
-        self.rotation = rotation
-        self.isAnimating = isAnimating
+        self.usesBrandColors = usesBrandColors
+        self.sideOverride = side
+    }
+
+    private var dimension: CGFloat {
+        sideOverride ?? size.dimension
+    }
+
+    private var strokeWidth: CGFloat {
+        if let sideOverride {
+            return max(2.4, sideOverride * 0.09)
+        }
+        return size.lineWidth
     }
 
     public var body: some View {
-        Group {
-            if isAnimating {
-                TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { timeline in
-                    ring.rotationEffect(.degrees(continuousAngle(at: timeline.date)))
-                }
-            } else {
-                ring.rotationEffect(.degrees(rotation))
-            }
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
+            let cycle = 0.9
+            let phase = context.date.timeIntervalSinceReferenceDate
+                .truncatingRemainder(dividingBy: cycle) / cycle
+            ring
+                .rotationEffect(.degrees(phase * 360))
         }
-        .frame(width: size.dimension, height: size.dimension)
+        .frame(width: dimension, height: dimension)
         .accessibilityLabel("Loading")
+        .accessibilityAddTraits(.updatesFrequently)
     }
 
+    @ViewBuilder
     private var ring: some View {
-        Circle()
-            .trim(from: 0.12, to: 0.88)
-            .stroke(
-                AngularGradient(
-                    colors: [
-                        SplickTheme.Colors.primaryGradientStart,
-                        SplickTheme.Colors.primaryGradientEnd,
-                        SplickTheme.Colors.primaryGradientStart.opacity(0.3),
-                        SplickTheme.Colors.primaryGradientStart
-                    ],
-                    center: .center
-                ),
-                style: StrokeStyle(lineWidth: size.lineWidth, lineCap: .round)
-            )
+        if usesBrandColors {
+            Circle()
+                .trim(from: 0.04, to: 0.78)
+                .stroke(
+                    AngularGradient(
+                        colors: [
+                            SplickTheme.Colors.brandBlue,
+                            SplickTheme.Colors.brandPink,
+                            SplickTheme.Colors.brandOrange,
+                            SplickTheme.Colors.brandOrange.opacity(0.08),
+                        ],
+                        center: .center
+                    ),
+                    style: StrokeStyle(lineWidth: strokeWidth, lineCap: .round)
+                )
+        } else {
+            Circle()
+                .trim(from: 0.04, to: 0.78)
+                .stroke(
+                    Color.white,
+                    style: StrokeStyle(lineWidth: strokeWidth, lineCap: .round)
+                )
+        }
+    }
+}
+
+public struct SplickProgressViewStyle: ProgressViewStyle {
+    public init() {}
+
+    public func makeBody(configuration: Configuration) -> some View {
+        SplickProgressViewStyleBody()
+    }
+}
+
+private struct SplickProgressViewStyleBody: View {
+    @Environment(\.controlSize) private var controlSize
+
+    var body: some View {
+        SplickSpinner(size: spinnerSize)
     }
 
-    /// One full turn per second.
-    private func continuousAngle(at date: Date) -> Double {
-        let seconds = date.timeIntervalSinceReferenceDate
-        return seconds.truncatingRemainder(dividingBy: 1.0) * 360
+    private var spinnerSize: SplickSpinner.Size {
+        switch controlSize {
+        case .mini, .small:
+            return .small
+        case .large:
+            return .large
+        default:
+            return .medium
+        }
     }
 }
