@@ -33,6 +33,10 @@ public struct PhotoAlbumFilters: Equatable, Sendable {
         !authors.isEmpty || !groups.isEmpty || apiCaptionQuery != nil || feedKind != nil
     }
 
+    public var hasAdvancedFilters: Bool {
+        !authors.isEmpty || !groups.isEmpty || feedKind != nil
+    }
+
     public mutating func clearAll() {
         authors = []
         groups = []

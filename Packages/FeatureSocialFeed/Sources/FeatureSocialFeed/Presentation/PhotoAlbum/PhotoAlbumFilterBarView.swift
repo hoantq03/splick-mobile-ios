@@ -4,6 +4,15 @@ import Localization
 import SplickDomain
 import FeatureFriends
 
+private enum AlbumFilterMetrics {
+    static let innerH: CGFloat = 10
+    static let innerV: CGFloat = 8
+    static let rowV: CGFloat = 6
+    static let sectionSpacing: CGFloat = 8
+    static let cardPadding: CGFloat = SplickTheme.Spacing.sm
+    static let fieldRadius: CGFloat = SplickTheme.CornerRadius.inset
+}
+
 private typealias AlbumGroup = SplickDomain.Group
 
 struct PhotoAlbumFilterBarView: View {
@@ -14,51 +23,24 @@ struct PhotoAlbumFilterBarView: View {
     let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
 
     @State private var captionQuery = ""
-    @State private var isExpanded = false
-    @State private var showPeoplePicker = false
+    @State private var showFilterPopup = false
+    @State private var showPeoplePane = false
+    @State private var filterBarWidth: CGFloat = 0
     @State private var captionSearchTask: Task<Void, Never>?
 
     private var filters: PhotoAlbumFilters { viewModel.filters }
 
-    private var expandAnimation: Animation {
-        .spring(response: 0.42, dampingFraction: 0.86)
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+        HStack(spacing: SplickTheme.Spacing.sm) {
             captionSearchField
-            filterHeader
-
-            if isExpanded {
-                VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-                    kindChips
-                    peopleChip
-                }
-                .animation(expandAnimation, value: selectedPeopleItems.map(\.id))
-                .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-
-            if filters.hasAnyFilter {
-                clearButton
-            }
+            filterButtonWithPopover
         }
-        .splickCard(padding: SplickTheme.Spacing.md)
-        .sheet(isPresented: $showPeoplePicker) {
-            PhotoAlbumPeoplePickerSheet(
-                currentUser: currentUser,
-                fetchMyFriendsUseCase: fetchMyFriendsUseCase,
-                fetchMyGroupsUseCase: fetchMyGroupsUseCase,
-                selectedAuthors: filters.authors,
-                selectedGroups: filters.groups
-            ) { authors, groups in
-                Task {
-                    var updated = filters
-                    updated.authors = authors
-                    updated.groups = groups
-                    await viewModel.applyFilters(updated)
-                }
+        .background(
+            GeometryReader { geo in
+                Color.clear.preference(key: AlbumFilterBarWidthKey.self, value: geo.size.width)
             }
-        }
+        )
+        .onPreferenceChange(AlbumFilterBarWidthKey.self) { filterBarWidth = $0 }
         .onAppear {
             if captionQuery.isEmpty {
                 captionQuery = filters.captionQuery
@@ -77,8 +59,11 @@ struct PhotoAlbumFilterBarView: View {
     private var captionSearchField: some View {
         HStack(spacing: SplickTheme.Spacing.xs) {
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(SplickTheme.Colors.textTertiary)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
             TextField(languageService.text(.feedAlbumSearchCaption), text: $captionQuery)
+                .font(SplickTheme.Typography.callout)
+                .textFieldStyle(.plain)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .onChange(of: captionQuery) { newValue in
@@ -90,43 +75,113 @@ struct PhotoAlbumFilterBarView: View {
                     viewModel.setCaptionQuery("")
                 } label: {
                     Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 14))
                         .foregroundStyle(SplickTheme.Colors.textTertiary)
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(.horizontal, SplickTheme.Spacing.md)
-        .padding(.vertical, 10)
-        .background(
-            SplickTheme.Colors.tertiaryBackground,
-            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-        )
+        .padding(.vertical, SplickTheme.Spacing.sm)
+        .frame(maxWidth: .infinity)
+        .background(SplickTheme.Colors.secondaryBackground)
+        .clipShape(Capsule(style: .continuous))
     }
 
-    private var filterHeader: some View {
+    private var filterButton: some View {
         Button {
-            withAnimation(expandAnimation) {
-                isExpanded.toggle()
-            }
+            showPeoplePane = false
+            showFilterPopup = true
         } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "line.3.horizontal.decrease.circle")
-                    .font(.system(size: 13, weight: .semibold))
-                Text(languageService.text(.feedFilterTitle))
-                    .font(.system(size: 13, weight: .semibold))
-                Spacer()
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 12, weight: .semibold))
-                    .rotationEffect(.degrees(isExpanded ? 180 : 0))
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: "line.3.horizontal.decrease")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(
+                        filters.hasAdvancedFilters
+                            ? SplickTheme.Colors.primaryGradientStart
+                            : SplickTheme.Colors.textSecondary
+                    )
+                    .frame(width: 40, height: 40)
+                    .background(SplickTheme.Colors.secondaryBackground, in: Circle())
+                if filters.hasAdvancedFilters {
+                    Circle()
+                        .fill(SplickTheme.Colors.primaryGradientStart)
+                        .frame(width: 8, height: 8)
+                        .offset(x: -2, y: 2)
+                }
             }
-            .foregroundStyle(SplickTheme.Colors.textSecondary)
-            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(languageService.text(.feedFilterTitle))
+    }
+
+    @ViewBuilder
+    private var filterButtonWithPopover: some View {
+        if #available(iOS 16.4, *) {
+            filterButton
+                .popover(isPresented: $showFilterPopup, arrowEdge: .top) {
+                    filterPopoverContent
+                        .presentationCompactAdaptation(.popover)
+                }
+        } else {
+            filterButton
+                .popover(isPresented: $showFilterPopup, arrowEdge: .top) {
+                    filterPopoverContent
+                }
+        }
+    }
+
+    private var filterPopoverContent: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+                kindChips
+                peopleChip
+                if filters.hasAdvancedFilters {
+                    Button(languageService.text(.feedAlbumClearFilters)) {
+                        captionQuery = ""
+                        Task { await viewModel.clearFilters() }
+                    }
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                }
+            }
+            .padding(SplickTheme.Spacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(isPresented: $showPeoplePane) {
+                PhotoAlbumPeoplePickerPane(
+                    currentUser: currentUser,
+                    fetchMyFriendsUseCase: fetchMyFriendsUseCase,
+                    fetchMyGroupsUseCase: fetchMyGroupsUseCase,
+                    selectedAuthors: filters.authors,
+                    selectedGroups: filters.groups
+                ) { authors, groups in
+                    Task {
+                        var updated = filters
+                        updated.authors = authors
+                        updated.groups = groups
+                        await viewModel.applyFilters(updated)
+                    }
+                }
+            }
+        }
+        .frame(width: popoverWidth, alignment: .leading)
+        .onDisappear {
+            showPeoplePane = false
+        }
+    }
+
+    private var popoverWidth: CGFloat {
+        filterBarWidth > 0 ? filterBarWidth : max(280, UIScreen.main.bounds.width - SplickTheme.Spacing.md * 2)
     }
 
     private var peoplePickerEnabled: Bool {
         currentUser != nil || fetchMyFriendsUseCase != nil || fetchMyGroupsUseCase != nil
+    }
+
+    private func presentPeoplePicker() {
+        showPeoplePane = true
     }
 
     private var selectedPeopleItems: [AlbumSelectedFilter] {
@@ -146,22 +201,26 @@ struct PhotoAlbumFilterBarView: View {
 
     private var emptyPeopleChip: some View {
         Button {
-            showPeoplePicker = true
+            presentPeoplePicker()
         } label: {
-            HStack(spacing: SplickTheme.Spacing.sm) {
+            HStack(spacing: 6) {
                 Image(systemName: "person.2")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    .frame(width: 14)
                 Text(languageService.text(.feedAlbumPickPeople))
+                    .font(.system(size: 12))
+                    .foregroundStyle(SplickTheme.Colors.textTertiary)
                     .lineLimit(1)
                 Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(SplickTheme.Colors.textTertiary)
             }
-            .font(.system(size: 14, weight: .medium))
-            .foregroundStyle(SplickTheme.Colors.textPrimary)
-            .padding(.horizontal, SplickTheme.Spacing.md)
-            .padding(.vertical, 10)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(SplickTheme.Colors.tertiaryBackground)
-            )
+            .padding(.horizontal, AlbumFilterMetrics.innerH)
+            .padding(.vertical, AlbumFilterMetrics.innerV)
+            .background(SplickTheme.Colors.secondaryBackground)
+            .clipShape(RoundedRectangle(cornerRadius: AlbumFilterMetrics.fieldRadius, style: .continuous))
         }
         .buttonStyle(.plain)
         .disabled(!peoplePickerEnabled)
@@ -169,29 +228,24 @@ struct PhotoAlbumFilterBarView: View {
     }
 
     private var selectedPeopleRow: some View {
-        HStack(spacing: SplickTheme.Spacing.sm) {
+        HStack(spacing: 6) {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: SplickTheme.Spacing.md) {
+                HStack(spacing: 6) {
                     ForEach(selectedPeopleItems) { item in
-                        removableFilterAvatar(item)
+                        selectedPeopleChip(item)
                     }
                 }
-                .padding(.top, 8)
-                .padding(.trailing, 6)
-                .animation(expandAnimation, value: selectedPeopleItems.map(\.id))
             }
             Button {
-                showPeoplePicker = true
+                presentPeoplePicker()
             } label: {
                 Image(systemName: "plus")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(SplickTheme.Colors.primary)
-                    .frame(width: 40, height: 40)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                    .frame(width: 28, height: 28)
                     .background(
-                        Circle().strokeBorder(
-                            SplickTheme.Colors.primary.opacity(0.35),
-                            style: StrokeStyle(lineWidth: 1.5, dash: [5, 4])
-                        )
+                        RoundedRectangle(cornerRadius: AlbumFilterMetrics.fieldRadius, style: .continuous)
+                            .fill(SplickTheme.Colors.primaryGradientStart.opacity(0.12))
                     )
             }
             .buttonStyle(.plain)
@@ -200,29 +254,38 @@ struct PhotoAlbumFilterBarView: View {
         }
     }
 
-    private func removableFilterAvatar(_ item: AlbumSelectedFilter) -> some View {
-        ZStack(alignment: .topTrailing) {
+    private func selectedPeopleChip(_ item: AlbumSelectedFilter) -> some View {
+        HStack(spacing: 6) {
             AvatarView(
                 imageURL: item.avatarURL,
                 name: item.displayName,
-                size: .compact,
+                size: .small,
                 userId: item.userId
             )
+            .scaleEffect(0.72)
+            .frame(width: 24, height: 24)
+
+            Text(item.displayName)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
+                .lineLimit(1)
+
             Button {
                 removeSelectedFilter(item)
             } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 18, height: 18)
-                    .background(Circle().fill(Color.black.opacity(0.72)))
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(SplickTheme.Colors.textTertiary)
             }
             .buttonStyle(.plain)
-            .offset(x: 4, y: -4)
             .accessibilityLabel(
                 languageService.format(.feedAlbumRemoveSelectedA11y, item.displayName)
             )
         }
+        .padding(.horizontal, AlbumFilterMetrics.innerH)
+        .padding(.vertical, 6)
+        .background(SplickTheme.Colors.secondaryBackground)
+        .clipShape(RoundedRectangle(cornerRadius: AlbumFilterMetrics.fieldRadius, style: .continuous))
         .transition(.asymmetric(
             insertion: .scale(scale: 0.72).combined(with: .opacity),
             removal: .scale(scale: 0.72).combined(with: .opacity)
@@ -242,7 +305,7 @@ struct PhotoAlbumFilterBarView: View {
 
     private var kindChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: SplickTheme.Spacing.xs) {
+            HStack(spacing: 6) {
                 kindChip(title: languageService.text(.feedAlbumKindAll), kind: nil)
                 kindChip(title: languageService.text(.feedAlbumKindMoment), kind: .checkIn)
                 kindChip(title: languageService.text(.feedAlbumKindBill), kind: .shareBill)
@@ -260,30 +323,25 @@ struct PhotoAlbumFilterBarView: View {
             }
         } label: {
             Text(title)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 11, weight: .semibold))
                 .lineLimit(1)
-                .padding(.horizontal, SplickTheme.Spacing.md)
-                .padding(.vertical, 8)
-                .foregroundStyle(isActive ? SplickTheme.Colors.primary : SplickTheme.Colors.textPrimary)
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .foregroundStyle(
+                    isActive
+                        ? SplickTheme.Colors.primaryGradientStart
+                        : SplickTheme.Colors.textSecondary
+                )
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background {
+                    Capsule(style: .continuous)
                         .fill(
                             isActive
-                                ? SplickTheme.Colors.primary.opacity(0.12)
-                                : SplickTheme.Colors.tertiaryBackground
+                                ? SplickTheme.Colors.primaryGradientStart.opacity(0.14)
+                                : SplickTheme.Colors.secondaryBackground
                         )
-                )
+                }
         }
         .buttonStyle(.plain)
-    }
-
-    private var clearButton: some View {
-        Button(languageService.text(.feedAlbumClearFilters)) {
-            captionQuery = ""
-            Task { await viewModel.clearFilters() }
-        }
-        .font(.system(size: 13, weight: .semibold))
-        .foregroundStyle(SplickTheme.Colors.primary)
     }
 
     private func scheduleCaptionSearch(_ query: String) {
@@ -298,7 +356,14 @@ struct PhotoAlbumFilterBarView: View {
     }
 }
 
-private struct PhotoAlbumPeoplePickerSheet: View {
+private struct AlbumFilterBarWidthKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private struct PhotoAlbumPeoplePickerPane: View {
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
 
@@ -366,15 +431,13 @@ private struct PhotoAlbumPeoplePickerSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            pickerContent
+        pickerContent
+            .frame(minHeight: 320, maxHeight: 480)
             .navigationTitle(languageService.text(.feedAlbumFilterPeople))
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.visible, for: .navigationBar)
             .searchable(text: $searchQuery, prompt: languageService.text(.feedCreateSearchFriendsGroups))
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(languageService.text(.commonClose)) { dismiss() }
-                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(languageService.text(.commonDone)) {
                         onApply(draftAuthors, draftGroups)
@@ -383,8 +446,6 @@ private struct PhotoAlbumPeoplePickerSheet: View {
                     .fontWeight(.semibold)
                 }
             }
-            .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
             .task {
                 isLoading = true
                 defer { isLoading = false }
@@ -393,13 +454,12 @@ private struct PhotoAlbumPeoplePickerSheet: View {
                 friends = await loadedFriends
                 groups = await loadedGroups
             }
-        }
     }
 
     @ViewBuilder
     private var pickerContent: some View {
         if isLoading && currentUser == nil && friends.isEmpty && groups.isEmpty {
-            ProgressView()
+            SplickSpinner(size: .medium)
         } else if currentUser == nil && friends.isEmpty && groups.isEmpty {
             Text(languageService.text(.feedAlbumPeopleEmpty))
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
@@ -474,7 +534,7 @@ private struct PhotoAlbumPeoplePickerSheet: View {
                 ZStack {
                     Circle()
                         .stroke(selected ? Color.clear : SplickTheme.Colors.textTertiary.opacity(0.5), lineWidth: 1.5)
-                        .background(Circle().fill(selected ? SplickTheme.Colors.primary : Color.clear))
+                        .background(Circle().fill(selected ? SplickTheme.Colors.primaryGradientStart : Color.clear))
                         .frame(width: 22, height: 22)
                     if selected {
                         Image(systemName: "checkmark")
@@ -489,7 +549,7 @@ private struct PhotoAlbumPeoplePickerSheet: View {
         .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
         .listRowBackground(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(selected ? SplickTheme.Colors.primary.opacity(0.08) : Color.clear)
+                .fill(selected ? SplickTheme.Colors.primaryGradientStart.opacity(0.08) : Color.clear)
                 .padding(.horizontal, 8)
         )
     }

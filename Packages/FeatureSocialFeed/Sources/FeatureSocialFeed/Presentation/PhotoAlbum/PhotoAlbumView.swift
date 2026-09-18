@@ -82,7 +82,7 @@ public struct PhotoAlbumView: View {
             )
             .padding(.horizontal, SplickTheme.Spacing.md)
             .padding(.top, SplickTheme.Spacing.xs)
-            .padding(.bottom, SplickTheme.Spacing.sm)
+            .padding(.bottom, SplickTheme.Spacing.xs)
 
             albumContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -312,8 +312,7 @@ private struct AlbumPhotoCell: View {
                 .overlay {
                     if isLoadingPreview {
                         Color.black.opacity(0.28)
-                        ProgressView()
-                            .tint(.white)
+                        SplickSpinner(usesBrandColors: false)
                     }
                 }
                 .clipShape(cellShape)
