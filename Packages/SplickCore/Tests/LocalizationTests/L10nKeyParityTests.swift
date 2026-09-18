@@ -40,4 +40,3 @@ final class L10nKeyParityTests: XCTestCase {
         XCTAssertEqual(AppTheme.system.visualTheme(systemIsDark: false), .light)
     }
 }
-}
