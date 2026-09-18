@@ -104,8 +104,7 @@ public enum AppConstants {
     }
 
     public enum Splash {
-        public static let minimumDisplayDuration: Duration = .milliseconds(1500)
-        public static let dismissDuration: Duration = .milliseconds(850)
+        public static let minimumDisplayDuration: Duration = .milliseconds(2500)
     }
 
     public enum PushNotifications {

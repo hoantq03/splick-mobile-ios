@@ -43,17 +43,9 @@ final class AppState: ObservableObject {
     /// `true` only after the user taps through the 4-page onboarding this session.
     @Published private(set) var hasPassedOnboardingThisSession = false
 
-    /// `false` = splash overlay is visible; `true` = splash has slid away.
+    /// Cold-launch loading overlay. Not replayed when returning from background.
     @Published private(set) var isLaunchSplashComplete = false
-    @Published private(set) var splashSessionID = UUID()
-
-    /// Returning users skip the blocking splash and hydrate from cache immediately.
-    private let hadStoredCredentialsAtLaunch: Bool = {
-        guard let token = try? KeychainService().loadString(for: AppConstants.Keychain.accessTokenKey) else {
-            return false
-        }
-        return !token.isEmpty
-    }()
+    @Published private(set) var isLaunchSplashExiting = false
 
     init() {
         if let stored = UserDefaults.standard.string(forKey: AppConstants.UserDefaults.pendingBillInviteToken),
@@ -74,9 +66,8 @@ final class AppState: ObservableObject {
         }
     }
 
-    var needsSplash: Bool {
-        if isAuthenticated || hadStoredCredentialsAtLaunch { return false }
-        return !isLaunchSplashComplete
+    var needsLaunchLoading: Bool {
+        !isLaunchSplashComplete
     }
 
     var isAuthenticated: Bool {
@@ -92,7 +83,6 @@ final class AppState: ObservableObject {
     func setAuthenticated(user: User, needsOAuthProfileSetup: Bool = false) {
         authState = .authenticated(user)
         self.needsOAuthProfileSetup = needsOAuthProfileSetup
-        isLaunchSplashComplete = true
         Log.info("User authenticated: \(user.username)", category: .lifecycle)
         Log.debug("Navigate to main tabs", category: .ui)
     }
@@ -111,7 +101,6 @@ final class AppState: ObservableObject {
         container.widgetSyncBridge.clearAll()
         authState = .unauthenticated
         hasPassedOnboardingThisSession = false
-        isLaunchSplashComplete = true
         needsOAuthProfileSetup = false
         selectedTab = .feed
         showNotifications = false
@@ -126,7 +115,6 @@ final class AppState: ObservableObject {
     }
 
     /// Called when session restore determines there is no active session.
-    /// Does NOT replay the splash — caller controls that.
     func markUnauthenticated(container: DependencyContainer) {
         container.resetTabViewModels()
         container.widgetSyncBridge.clearAll()
@@ -444,15 +432,12 @@ final class AppState: ObservableObject {
         pendingFeedPostNavigation = nil
     }
 
-    func completeLaunchSplash() {
-        withAnimation(SplashMotion.reveal) {
-            isLaunchSplashComplete = true
-        }
+    func startLaunchSplashExit() {
+        isLaunchSplashExiting = true
     }
 
-    func resetGuestSplashSession() {
-        isLaunchSplashComplete = false
-        splashSessionID = UUID()
+    func completeLaunchSplash() {
+        isLaunchSplashComplete = true
     }
 }
 
