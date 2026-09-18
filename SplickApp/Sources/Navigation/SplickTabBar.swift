@@ -54,7 +54,6 @@ private struct ModernSplickTabBar: View {
     private var notchRadius: CGFloat { cameraSize / 2 + cameraGap }
     private let barHeight: CGFloat = 56
     private let cornerRadius: CGFloat = 26
-    private let cameraIconSize: CGFloat = 27
     private let panelOuterPadding: CGFloat = 6
 
     var body: some View {
@@ -108,24 +107,14 @@ private struct ModernSplickTabBar: View {
     }
 
     private var cameraButton: some View {
-        let isSelected = selectedTab == .camera
-        return Button {
+        TabBarCameraButton(
+            size: cameraSize,
+            isSelected: selectedTab == .camera,
+            title: Tab.camera.localizedTitle(using: languageService)
+        ) {
             selectedTab = .camera
             tabBarScrollState.hide(flushToBottom: true)
-        } label: {
-            Circle()
-                .fill(SplickTheme.Colors.tabCameraRing)
-                .frame(width: cameraSize, height: cameraSize)
-                .overlay {
-                    Image(systemName: "camera.fill")
-                        .font(.system(size: cameraIconSize, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
         }
-        .buttonStyle(.plain)
-        .contentShape(Circle())
-        .accessibilityLabel(Tab.camera.localizedTitle(using: languageService))
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private func tabButton(_ tab: Tab, badge: Int = 0) -> some View {
@@ -195,7 +184,6 @@ private struct LegacySplickTabBar: View {
     private var notchRadius: CGFloat { cameraSize / 2 + cameraGap }
     private let barHeight: CGFloat = 56
     private let cornerRadius: CGFloat = 26
-    private let cameraIconSize: CGFloat = 30
     private let panelOuterPadding: CGFloat = 6
 
     var body: some View {
@@ -252,25 +240,14 @@ private struct LegacySplickTabBar: View {
     }
 
     private var cameraButton: some View {
-        let isSelected = selectedTab == .camera
-        return Button {
+        TabBarCameraButton(
+            size: cameraSize,
+            isSelected: selectedTab == .camera,
+            title: Tab.camera.localizedTitle(using: languageService)
+        ) {
             selectedTab = .camera
             tabBarScrollState.hide(flushToBottom: true)
-        } label: {
-            Circle()
-                .fill(SplickTheme.Colors.tabCameraRing)
-                .frame(width: cameraSize, height: cameraSize)
-                .overlay {
-                    Image(systemName: "camera.fill")
-                        .font(.system(size: cameraIconSize, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
-                .shadow(color: SplickTheme.Colors.tabCameraRing.opacity(0.35), radius: 10, y: 3)
         }
-        .buttonStyle(.plain)
-        .contentShape(Circle())
-        .accessibilityLabel(Tab.camera.localizedTitle(using: languageService))
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private func tabButton(_ tab: Tab, badge: Int = 0) -> some View {
@@ -324,16 +301,53 @@ private struct LegacySplickTabBar: View {
     }
 }
 
+private struct TabBarCameraButton: View {
+    let size: CGFloat
+    let isSelected: Bool
+    let title: String
+    let action: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                SplickBrandAtmosphere(fillsSafeArea: false)
+                SplickLogoMark(
+                    size: size * 0.72,
+                    layout: .markOnly,
+                    style: .fullColor
+                )
+            }
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+            .overlay {
+                Circle()
+                    .strokeBorder(
+                        Color.white.opacity(colorScheme == .dark ? 0.22 : 0.55),
+                        lineWidth: 1
+                    )
+            }
+            .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.45 : 0.12), radius: 10, y: 3)
+        }
+        .buttonStyle(.plain)
+        .contentShape(Circle())
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
 // MARK: - Public entry
 
 struct SplickTabBar: View, Equatable {
     @Binding var selectedTab: Tab
     let badgeCounts: TabBadgeCounts
     let tabBarScrollState: TabBarScrollState
+    let colorScheme: ColorScheme
 
     static func == (lhs: SplickTabBar, rhs: SplickTabBar) -> Bool {
         lhs.selectedTab == rhs.selectedTab
             && lhs.badgeCounts == rhs.badgeCounts
+            && lhs.colorScheme == rhs.colorScheme
     }
 
     var body: some View {
