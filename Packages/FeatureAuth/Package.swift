@@ -11,6 +11,7 @@ let package = Package(
     dependencies: [
         .package(path: "../SplickCore"),
         .package(path: "../SplickDomain"),
+        .package(path: "../SplickWidgetKit"),
     ],
     targets: [
         .target(
@@ -22,6 +23,7 @@ let package = Package(
                 .product(name: "Common", package: "SplickCore"),
                 .product(name: "Localization", package: "SplickCore"),
                 .product(name: "SplickDomain", package: "SplickDomain"),
+                .product(name: "SplickWidgetKit", package: "SplickWidgetKit"),
             ],
             path: "Sources/FeatureAuth",
             resources: [
