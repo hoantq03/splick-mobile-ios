@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import UIKit
+import Localization
 
 // MARK: - Environment
 
@@ -60,6 +61,8 @@ private struct SplickNativeRefreshableWithController: ViewModifier {
     @State private var isRefreshing = false
     /// Only used when the underlying scroll view has no `UIRefreshControl` yet.
     @State private var showsFallbackHeader = false
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.splickVisualTheme) private var visualThemeOverride
 
     func body(content: Content) -> some View {
         content
@@ -69,12 +72,18 @@ private struct SplickNativeRefreshableWithController: ViewModifier {
             .refreshable {
                 await runRefresh()
             }
-            .safeAreaInset(edge: .top, spacing: 0) {
+            // Overlay (not safeAreaInset): UIHostingController pages set
+            // `safeAreaRegions = []`, which clips inset-based headers.
+            .overlay(alignment: .top) {
                 if showsFallbackHeader {
                     SplickSpinner(size: .medium)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .padding(
+                            .top,
+                            max(refreshHost.scrollView?.adjustedContentInset.top ?? 12, 12)
+                        )
+                        .padding(.bottom, 8)
+                        .transition(.opacity)
                 }
             }
             .environment(\.pullToRefreshActive, isRefreshing)
@@ -83,7 +92,20 @@ private struct SplickNativeRefreshableWithController: ViewModifier {
                 guard requestID > 0 else { return }
                 Task { await runProgrammaticRefresh() }
             }
+            .onAppear { applyRefreshTint() }
+            .onChange(of: colorScheme) { _ in applyRefreshTint() }
+            .onChange(of: visualThemeOverride) { _ in applyRefreshTint() }
             .animation(.spring(response: 0.28, dampingFraction: 0.62), value: showsFallbackHeader)
+    }
+
+    private var resolvedVisualTheme: SplickVisualTheme {
+        .resolved(override: visualThemeOverride, colorScheme: colorScheme)
+    }
+
+    private func applyRefreshTint() {
+        refreshHost.applyTint(
+            SplickThemeCatalog.spinnerPalette(for: resolvedVisualTheme).refreshTint
+        )
     }
 
     @MainActor
@@ -134,18 +156,24 @@ private enum SplickProgrammaticRefreshMotion {
 @MainActor
 public final class SplickScrollRefreshHost: ObservableObject {
     public weak var scrollView: UIScrollView?
+    private var refreshTint: UIColor?
 
     public init() {}
+
+    public func applyTint(_ tint: UIColor) {
+        refreshTint = tint
+        scrollView?.refreshControl?.tintColor = tint
+    }
 
     /// Shows the same spinner as a manual pull-to-refresh, with a fast overshoot + bounce-back.
     @discardableResult
     public func beginRefreshing() async -> Bool {
-        // Re-resolve in case `.refreshable` attached the control after first layout.
-        if scrollView?.refreshControl == nil, let scrollView {
-            self.scrollView = Self.findRefreshableScrollView(near: scrollView) ?? scrollView
-        }
+        await resolveRefreshableScrollView(retryIfMissingControl: true)
 
         guard let scrollView, let refreshControl = scrollView.refreshControl else { return false }
+        if let refreshTint {
+            refreshControl.tintColor = refreshTint
+        }
         guard !refreshControl.isRefreshing else { return true }
 
         let topInset = scrollView.adjustedContentInset.top
@@ -219,6 +247,9 @@ public final class SplickScrollRefreshHost: ObservableObject {
         let resolved = Self.findRefreshableScrollView(near: view)
         if let resolved {
             scrollView = resolved
+            if let refreshTint {
+                resolved.refreshControl?.tintColor = refreshTint
+            }
             return
         }
         if scrollView?.window == nil {
@@ -226,35 +257,71 @@ public final class SplickScrollRefreshHost: ObservableObject {
         }
     }
 
+    private func resolveRefreshableScrollView(retryIfMissingControl: Bool) async {
+        if let current = scrollView {
+            self.scrollView = Self.findRefreshableScrollView(near: current) ?? current
+        }
+        guard retryIfMissingControl, scrollView?.refreshControl == nil else { return }
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        if let current = scrollView {
+            self.scrollView = Self.findRefreshableScrollView(near: current) ?? current
+        }
+    }
+
     private static func findRefreshableScrollView(near view: UIView) -> UIScrollView? {
+        var nearestWithControl: UIScrollView?
+        var nearestWithoutControl: UIScrollView?
+
+        var ancestor: UIView? = view
+        while let current = ancestor {
+            if let scrollView = current as? UIScrollView,
+               isLikelyVerticalContentScrollView(scrollView) {
+                if scrollView.refreshControl != nil {
+                    nearestWithControl = scrollView
+                    break
+                }
+                if nearestWithoutControl == nil {
+                    nearestWithoutControl = scrollView
+                }
+            }
+            ancestor = current.superview
+        }
+
+        if let nearestWithControl {
+            return nearestWithControl
+        }
+        if let nearestWithoutControl {
+            return nearestWithoutControl
+        }
+
+        // Stay inside this SwiftUI hosting page so sibling pager pages
+        // (streak / feed / album) cannot steal programmatic refresh.
+        let searchRoot = enclosingHostingView(for: view) ?? view
         var preferred: UIScrollView?
         var fallback: UIScrollView?
-
-        func consider(_ scrollView: UIScrollView) {
+        enumerateScrollViews(in: searchRoot) { scrollView in
             guard isLikelyVerticalContentScrollView(scrollView) else { return }
-            if scrollView.refreshControl != nil {
+            if scrollView.refreshControl != nil, preferred == nil {
                 preferred = scrollView
             } else if fallback == nil {
                 fallback = scrollView
             }
         }
-
-        var ancestor: UIView? = view
-        while let current = ancestor {
-            if let scrollView = current as? UIScrollView {
-                consider(scrollView)
-            }
-            ancestor = current.superview
-        }
-
-        var container: UIView? = view.superview
-        while let current = container {
-            enumerateScrollViews(in: current, visit: consider)
-            if preferred != nil { break }
-            container = current.superview
-        }
-
         return preferred ?? fallback
+    }
+
+    private static func enclosingHostingView(for view: UIView) -> UIView? {
+        var responder: UIResponder? = view
+        while let current = responder {
+            if let viewController = current as? UIViewController {
+                let typeName = NSStringFromClass(type(of: viewController))
+                if typeName.contains("HostingController") {
+                    return viewController.view
+                }
+            }
+            responder = current.next
+        }
+        return nil
     }
 
     private static func enumerateScrollViews(in root: UIView, visit: (UIScrollView) -> Void) {

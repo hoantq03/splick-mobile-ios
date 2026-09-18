@@ -6,8 +6,15 @@ public enum SplickTheme {
 
     public enum Colors {
         public static let primary = Color("AccentColor", bundle: .module)
-        /// Brand blue → teal (refined for logo depth / tech feel).
-        public static let primaryGradientStart = Color(hex: 0x5B6CFF)
+        /// Camera mark left stop (Gicnova-aligned).
+        public static let brandOrange = Color(hex: 0xFF872B)
+        public static let brandPink = Color(hex: 0xFF517C)
+        public static let brandBlue = Color(hex: 0x0095FF)
+        public static let brandCanvas = Color(hex: 0xFFFEFD)
+        public static let brandCanvasDark = Color(hex: 0x00020C)
+
+        /// In-app accent matches the blue on the left of the logo.
+        public static let primaryGradientStart = brandBlue
         public static let primaryGradientMid = Color(hex: 0x4ECDC4)
         public static let primaryGradientEnd = Color(hex: 0x2A9D8F)
 
@@ -19,11 +26,11 @@ public enum SplickTheme {
         public static let textSecondary = Color(.secondaryLabel)
         public static let textTertiary = Color(.tertiaryLabel)
 
-        public static let tabCameraRing = Color(hex: 0x6FCF97)
+        public static let tabCameraRing = brandBlue
         public static let success = Color(hex: 0x27AE60)
         public static let warning = Color(hex: 0xF2994A)
         public static let error = Color(hex: 0xEB5757)
-        public static let info = Color(hex: 0x2F80ED)
+        public static let info = brandBlue
 
         public static let cardBackground = Color(.secondarySystemBackground)
         public static let divider = Color(.separator)
@@ -36,13 +43,6 @@ public enum SplickTheme {
             )
         }
 
-        /// Wordmark / camera lockup (Gicnova-aligned).
-        public static let brandOrange = Color(hex: 0xFF872B)
-        public static let brandPink = Color(hex: 0xFF517C)
-        public static let brandBlue = Color(hex: 0x0095FF)
-        public static let brandCanvas = Color(hex: 0xFFFEFD)
-        public static let brandCanvasDark = Color(hex: 0x00020C)
-
         public static var brandWordmarkGradient: LinearGradient {
             LinearGradient(
                 colors: [brandBlue, brandPink, brandOrange],
@@ -54,6 +54,14 @@ public enum SplickTheme {
         public static let authFieldFill = Color.white.opacity(0.88)
         public static let authFieldStroke = brandBlue.opacity(0.28)
         public static let authFieldStrokeFocused = brandPink.opacity(0.72)
+
+        public static func resolvedBrandCanvas(_ colorScheme: ColorScheme) -> Color {
+            colorScheme == .dark ? brandCanvasDark : brandCanvas
+        }
+
+        public static func resolvedAuthFieldFill(_ colorScheme: ColorScheme) -> Color {
+            colorScheme == .dark ? Color.white.opacity(0.12) : authFieldFill
+        }
     }
 
     // MARK: - Typography

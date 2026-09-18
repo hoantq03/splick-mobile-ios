@@ -1,6 +1,7 @@
 import SwiftUI
+import Localization
 
-/// Circular loader using the logo wordmark colors (blue → pink → orange).
+/// Circular loader using the active [SplickVisualTheme] spinner palette.
 public struct SplickSpinner: View {
     public enum Size {
         case small
@@ -28,6 +29,9 @@ public struct SplickSpinner: View {
     public var usesBrandColors: Bool
     private let sideOverride: CGFloat?
 
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.splickVisualTheme) private var visualThemeOverride
+
     public init(size: Size = .medium, usesBrandColors: Bool = true, side: CGFloat? = nil) {
         self.size = size
         self.usesBrandColors = usesBrandColors
@@ -43,6 +47,12 @@ public struct SplickSpinner: View {
             return max(2.4, sideOverride * 0.09)
         }
         return size.lineWidth
+    }
+
+    private var palette: SplickSpinnerPalette {
+        SplickThemeCatalog.spinnerPalette(
+            for: .resolved(override: visualThemeOverride, colorScheme: colorScheme)
+        )
     }
 
     public var body: some View {
@@ -65,12 +75,7 @@ public struct SplickSpinner: View {
                 .trim(from: 0.04, to: 0.78)
                 .stroke(
                     AngularGradient(
-                        colors: [
-                            SplickTheme.Colors.brandBlue,
-                            SplickTheme.Colors.brandPink,
-                            SplickTheme.Colors.brandOrange,
-                            SplickTheme.Colors.brandOrange.opacity(0.08),
-                        ],
+                        colors: palette.gradientColors,
                         center: .center
                     ),
                     style: StrokeStyle(lineWidth: strokeWidth, lineCap: .round)
@@ -79,7 +84,7 @@ public struct SplickSpinner: View {
             Circle()
                 .trim(from: 0.04, to: 0.78)
                 .stroke(
-                    Color.white,
+                    palette.onAccent,
                     style: StrokeStyle(lineWidth: strokeWidth, lineCap: .round)
                 )
         }
