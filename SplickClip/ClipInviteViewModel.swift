@@ -128,6 +128,7 @@ final class ClipInviteViewModel: ObservableObject {
     }
 
     func handleInviteURL(_ url: URL) {
+        guard isSplickInviteURL(url) else { return }
         guard let username = extractUsername(from: url) else {
             withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) {
                 state = .error(
@@ -144,6 +145,13 @@ final class ClipInviteViewModel: ObservableObject {
     func retry() {
         guard let username = lastAttemptedUsername else { return }
         Task { await loadProfile(username: username) }
+    }
+
+    /// Simulator / Xcode run without an NFC invocation URL.
+    func loadProfileIfStillIdle(username: String) async {
+        guard case .idle = state else { return }
+        lastAttemptedUsername = username
+        await loadProfile(username: username)
     }
 
     func sendInvite() {
@@ -164,7 +172,7 @@ final class ClipInviteViewModel: ObservableObject {
         }
     }
 
-    private func loadProfile(username: String) async {
+    func loadProfile(username: String) async {
         state = .loading
         do {
             let profile: ClipPublicProfileDTO = try await apiClient.request(
@@ -205,7 +213,16 @@ final class ClipInviteViewModel: ObservableObject {
         }
     }
 
-    func extractUsername(from url: URL) -> String? {
+    private func isSplickInviteURL(_ url: URL) -> Bool {
+        if let host = url.host?.lowercased(), host.hasSuffix("splick.app") {
+            return true
+        }
+        return URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?
+            .contains(where: { $0.name == "username" && ($0.value?.isEmpty == false) }) == true
+    }
+
+    private func extractUsername(from url: URL) -> String? {
         if let queryName = URLComponents(url: url, resolvingAgainstBaseURL: false)?
             .queryItems?
             .first(where: { $0.name == "username" })?
