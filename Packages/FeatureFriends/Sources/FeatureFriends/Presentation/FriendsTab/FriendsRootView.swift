@@ -62,8 +62,8 @@ public struct FriendsRootView: View {
     @State private var profileRoute: UserProfileRoute?
     @State private var scrollTopSignal = 0
     @State private var searchScrollTopSignal = 0
-    @State private var directoryRefreshController = SplickRefreshController()
-    @State private var searchRefreshController = SplickRefreshController()
+    @StateObject private var directoryRefreshController = SplickRefreshController()
+    @StateObject private var searchRefreshController = SplickRefreshController()
 
     private let fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol
     private let searchUsersUseCase: SearchUsersUseCaseProtocol
@@ -466,7 +466,7 @@ public struct FriendsRootView: View {
         }
         .onReceive(sameTabTapPublisher) { _ in
             guard sameTabTapHandlingEnabled else { return }
-            if tabBarScrollState?.isAtTop == true {
+            if tabBarScrollState?.isAtTop ?? true {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 if viewModel.isSearching {
                     searchRefreshController.refresh()
