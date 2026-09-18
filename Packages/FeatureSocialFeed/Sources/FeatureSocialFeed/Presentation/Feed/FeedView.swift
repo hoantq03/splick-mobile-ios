@@ -536,6 +536,9 @@ private struct FeedPrimaryPage: View {
                     Color.clear
                         .frame(height: 0)
                         .id(FeedScrollAnchor.top)
+                        .background {
+                            SplickRefreshableScrollBootstrap()
+                        }
                     content()
                 }
             }
