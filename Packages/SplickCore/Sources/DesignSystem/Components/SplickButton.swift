@@ -25,7 +25,11 @@ public struct SplickButton: View {
     private let action: () -> Void
 
     @State private var phase: Phase
-    @State private var outcomeTask: Task<Void, Never>?
+    @State private var loadingStartedAt: Date?
+
+    private var outcomeFlags: OutcomeFlags {
+        OutcomeFlags(isLoading: isLoading, isFailed: isFailed)
+    }
 
     public init(
         _ title: String,
@@ -47,7 +51,13 @@ public struct SplickButton: View {
     }
 
     public var body: some View {
-        Button(action: action) {
+        Button {
+            if phase == .idle {
+                loadingStartedAt = Date()
+                withAnimation(Self.morph) { phase = .loading }
+            }
+            action()
+        } label: {
             ZStack {
                 if phase == .idle {
                     Text(title)
@@ -92,19 +102,19 @@ public struct SplickButton: View {
             }
         }
         .buttonStyle(.plain)
-        .frame(maxWidth: phase == .idle ? .infinity : nil)
+        .frame(maxWidth: .infinity, alignment: .center)
         .disabled(isDisabled || phase != .idle)
         .opacity(isDisabled && phase == .idle ? 0.5 : 1.0)
         .animation(Self.morph, value: phase)
-        .onChange(of: isLoading) { loading in
-            handleLoadingChange(loading)
+        .task(id: outcomeFlags) {
+            await runOutcome(outcomeFlags)
         }
-        .onChange(of: isFailed) { failed in
-            guard !isLoading, failed, phase == .loading || phase == .success else { return }
-            playOutcome(failed: true)
+        .onAppear {
+            restoreIdleIfNeeded()
         }
         .onDisappear {
-            outcomeTask?.cancel()
+            loadingStartedAt = nil
+            phase = .idle
         }
     }
 
@@ -175,31 +185,60 @@ public struct SplickButton: View {
         )
     }
 
-    private func handleLoadingChange(_ loading: Bool) {
-        outcomeTask?.cancel()
-        outcomeTask = nil
-        if loading {
+    private func restoreIdleIfNeeded() {
+        guard !isLoading, phase != .loading, phase != .idle else { return }
+        withAnimation(Self.morph) { phase = .idle }
+    }
+
+    @MainActor
+    private func runOutcome(_ flags: OutcomeFlags) async {
+        if flags.isLoading {
+            if loadingStartedAt == nil {
+                loadingStartedAt = Date()
+            }
             withAnimation(Self.morph) { phase = .loading }
             return
         }
-        playOutcome(failed: isFailed)
+        if phase == .loading || phase == .success || phase == .failed {
+            await waitOutMinimumLoading()
+            if Task.isCancelled || isLoading { return }
+            withAnimation(Self.morph) {
+                phase = flags.isFailed ? .failed : .success
+            }
+            try? await Task.sleep(nanoseconds: Self.morphDurationNanoseconds)
+            if Task.isCancelled || isLoading { return }
+        }
+        loadingStartedAt = nil
+        withAnimation(Self.morph) { phase = .idle }
     }
 
-    private func playOutcome(failed: Bool) {
-        outcomeTask?.cancel()
-        withAnimation(Self.morph) {
-            phase = failed ? .failed : .success
-        }
-        outcomeTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 850_000_000)
-            guard !Task.isCancelled, !isLoading else { return }
-            withAnimation(Self.morph) { phase = .idle }
-        }
+    @MainActor
+    private func waitOutMinimumLoading() async {
+        let elapsed = loadingStartedAt.map { Date().timeIntervalSince($0) } ?? 0
+        let remaining = Self.minimumLoadingDuration - elapsed
+        guard remaining > 0 else { return }
+        try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
     }
+
+    /// Shrink-to-spinner plus a visible spin, even when the API returns immediately.
+    public static let minimumLoadingNanoseconds: UInt64 = 1_000_000_000
+    private static var minimumLoadingDuration: TimeInterval {
+        TimeInterval(minimumLoadingNanoseconds) / 1_000_000_000
+    }
+    private static let morphDurationNanoseconds: UInt64 = 480_000_000
+
+    /// Time from API completion until the original button is restored (fastest API).
+    public static let successHoldNanoseconds: UInt64 =
+        minimumLoadingNanoseconds + morphDurationNanoseconds * 2
 
     private static let buttonHeight: CGFloat = 52
     private static let spinnerSide: CGFloat = 32
     private static let morph = Animation.timingCurve(0.22, 1.0, 0.36, 1.0, duration: 0.48)
+}
+
+private struct OutcomeFlags: Equatable {
+    var isLoading: Bool
+    var isFailed: Bool
 }
 
 /// Compact header chip that pairs with the 32pt circular close control.
