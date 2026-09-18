@@ -34,8 +34,8 @@ public struct ConversationListView: View {
     @State private var searchDraft = ""
     @State private var scrollTopSignal = 0
     @State private var searchScrollTopSignal = 0
-    @State private var refreshController = SplickRefreshController()
-    @State private var searchRefreshController = SplickRefreshController()
+    @StateObject private var refreshController = SplickRefreshController()
+    @StateObject private var searchRefreshController = SplickRefreshController()
     @FocusState private var isSearchFocused: Bool
     @State private var showCloseFriendsComingSoon = false
     @State private var conversationRowFrames: [UUID: CGRect] = [:]
@@ -206,7 +206,7 @@ public struct ConversationListView: View {
                 popToInbox()
                 return
             }
-            if tabBarScrollState?.isAtTop == true {
+            if tabBarScrollState?.isAtTop ?? true {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 if isSearching {
                     searchRefreshController.refresh()
@@ -355,6 +355,9 @@ public struct ConversationListView: View {
             ScrollView {
                 content()
                     .frame(width: geo.size.width, height: max(geo.size.height, 1))
+                    .background {
+                        SplickRefreshableScrollBootstrap()
+                    }
             }
             .scrollDismissesKeyboard(.interactively)
             .tabBarHideOnScroll()
@@ -378,7 +381,12 @@ public struct ConversationListView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    Color.clear.frame(height: 0).id("messagingSearchScrollTop")
+                    Color.clear
+                        .frame(height: 0)
+                        .id("messagingSearchScrollTop")
+                        .background {
+                            SplickRefreshableScrollBootstrap()
+                        }
                     ForEach(results) { result in
                         Button {
                             Task { await openSearchResult(result) }
@@ -611,7 +619,12 @@ public struct ConversationListView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    Color.clear.frame(height: 0).id("messagingScrollTop")
+                    Color.clear
+                        .frame(height: 0)
+                        .id("messagingScrollTop")
+                        .background {
+                            SplickRefreshableScrollBootstrap()
+                        }
                     ForEach(items) { conversation in
                         ConversationRowView(
                             conversation: conversation,
