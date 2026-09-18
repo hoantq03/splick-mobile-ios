@@ -30,6 +30,7 @@ struct SplickClipApp: App {
                 .environmentObject(viewModel)
                 .languageService(languageService)
                 .preferredColorScheme(themeService.preferredColorScheme)
+                .modifier(ClipForcedColorSchemeModifier(scheme: themeService.preferredColorScheme))
                 .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
                     guard let url = activity.webpageURL else { return }
                     viewModel.handleInviteURL(url)
@@ -37,6 +38,20 @@ struct SplickClipApp: App {
                 .onOpenURL { url in
                     viewModel.handleInviteURL(url)
                 }
+        }
+    }
+}
+
+/// When the user picked Light or Dark in Splick, push that into SwiftUI immediately.
+/// When the preference is System, leave `colorScheme` unset so it tracks iOS appearance.
+private struct ClipForcedColorSchemeModifier: ViewModifier {
+    let scheme: ColorScheme?
+
+    func body(content: Content) -> some View {
+        if let scheme {
+            content.environment(\.colorScheme, scheme)
+        } else {
+            content
         }
     }
 }
