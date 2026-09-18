@@ -27,6 +27,7 @@ struct RootView: View {
             .environment(\.suppressKeyboardAutoFocus, appState.needsLaunchLoading)
             .dismissKeyboardOnTap()
             .progressViewStyle(SplickProgressViewStyle())
+            .splickHiddenScrollIndicators()
             .splickVisualTheme(
                 themeService.theme.visualTheme(systemIsDark: colorScheme == .dark)
             )

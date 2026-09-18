@@ -3,6 +3,7 @@ import UIKit
 import UserNotifications
 import Common
 import Localization
+import DesignSystem
 
 @MainActor
 final class AppDelegate: NSObject, UIApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate {
@@ -11,6 +12,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, @preconcurrency UNUser
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        SplickHiddenScrollIndicators.apply()
 
         if let userInfo = launchOptions?[.remoteNotification] as? [AnyHashable: Any] {
             PushNotificationCoordinator.shared.handleRemoteNotification(userInfo: userInfo)
