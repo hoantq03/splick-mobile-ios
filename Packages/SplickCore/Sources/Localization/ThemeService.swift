@@ -10,19 +10,31 @@ public final class ThemeService: ObservableObject {
 
     private let userDefaults: UserDefaultsServiceProtocol
     private let storageKey: String
+    private let sharedDefaults: UserDefaults?
 
     public init(
         userDefaults: UserDefaultsServiceProtocol,
-        storageKey: String = AppConstants.UserDefaults.selectedTheme
+        storageKey: String = AppConstants.UserDefaults.selectedTheme,
+        sharedDefaults: UserDefaults? = UserDefaults(suiteName: AppConstants.UserDefaults.appGroup)
     ) {
         self.userDefaults = userDefaults
         self.storageKey = storageKey
-        if let saved: String = userDefaults.get(for: storageKey) {
-            self.theme = AppTheme.from(storedValue: saved)
-        } else {
-            self.theme = .default
+        self.sharedDefaults = sharedDefaults
+        let stored = Self.readStoredTheme(
+            userDefaults: userDefaults,
+            sharedDefaults: sharedDefaults,
+            storageKey: storageKey
+        )
+        let resolved = AppTheme.from(storedValue: stored)
+        self.theme = resolved
+        if let stored {
+            Self.persistPlainString(
+                AppTheme.from(storedValue: stored).rawValue,
+                to: sharedDefaults,
+                key: storageKey
+            )
         }
-        Self.applyUserInterfaceStyle(theme)
+        Self.applyUserInterfaceStyle(resolved)
     }
 
     public var preferredColorScheme: ColorScheme? {
@@ -33,7 +45,23 @@ public final class ThemeService: ObservableObject {
         guard newTheme != theme else { return }
         theme = newTheme
         userDefaults.set(newTheme.rawValue, for: storageKey)
+        Self.persistPlainString(newTheme.rawValue, to: sharedDefaults, key: storageKey)
         Self.applyUserInterfaceStyle(newTheme)
+    }
+
+    /// Reloads the preference from the shared suite (parent app / App Clip).
+    public func refreshFromStorage() {
+        let resolved = AppTheme.from(storedValue: Self.readStoredTheme(
+            userDefaults: userDefaults,
+            sharedDefaults: sharedDefaults,
+            storageKey: storageKey
+        ))
+        guard resolved != theme else {
+            applyUserInterfaceStyle()
+            return
+        }
+        theme = resolved
+        applyUserInterfaceStyle()
     }
 
     /// `preferredColorScheme` does not always update UIKit trait collections (lists, tab chrome,
@@ -57,5 +85,24 @@ public final class ThemeService: ObservableObject {
                 }
             }
         }
+    }
+
+    private static func readStoredTheme(
+        userDefaults: UserDefaultsServiceProtocol,
+        sharedDefaults: UserDefaults?,
+        storageKey: String
+    ) -> String? {
+        if let shared = sharedDefaults?.string(forKey: storageKey), !shared.isEmpty {
+            return shared
+        }
+        if let saved: String = userDefaults.get(for: storageKey), !saved.isEmpty {
+            persistPlainString(AppTheme.from(storedValue: saved).rawValue, to: sharedDefaults, key: storageKey)
+            return saved
+        }
+        return nil
+    }
+
+    private static func persistPlainString(_ value: String, to defaults: UserDefaults?, key: String) {
+        defaults?.set(value, forKey: key)
     }
 }
