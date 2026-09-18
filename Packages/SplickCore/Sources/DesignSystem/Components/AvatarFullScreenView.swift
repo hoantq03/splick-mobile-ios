@@ -59,7 +59,7 @@ private final class AvatarFullScreenViewController: UIViewController, UIScrollVi
     private let imageView = UIImageView()
     private let placeholderContainer = UIView()
     private let placeholderLabel = UILabel()
-    private let spinner = UIActivityIndicatorView(style: .large)
+    private var spinnerHost: UIHostingController<SplickSpinner>?
     private let closeButton = UIButton(type: .system)
 
     private var dismissPan: UIPanGestureRecognizer!
@@ -166,14 +166,25 @@ private final class AvatarFullScreenViewController: UIViewController, UIScrollVi
     }
 
     private func setupSpinner() {
-        spinner.color = .white
-        spinner.hidesWhenStopped = true
-        spinner.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(spinner)
+        let host = UIHostingController(rootView: SplickSpinner(size: .large, usesBrandColors: true))
+        host.view.backgroundColor = .clear
+        host.view.isUserInteractionEnabled = false
+        host.view.isHidden = true
+        host.view.translatesAutoresizingMaskIntoConstraints = false
+        addChild(host)
+        view.addSubview(host.view)
+        host.didMove(toParent: self)
         NSLayoutConstraint.activate([
-            spinner.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            spinner.centerYAnchor.constraint(equalTo: view.centerYAnchor)
+            host.view.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            host.view.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            host.view.widthAnchor.constraint(equalToConstant: 40),
+            host.view.heightAnchor.constraint(equalToConstant: 40),
         ])
+        spinnerHost = host
+    }
+
+    private func setSpinnerHidden(_ hidden: Bool) {
+        spinnerHost?.view.isHidden = hidden
     }
 
     private func setupCloseButton() {
@@ -206,12 +217,12 @@ private final class AvatarFullScreenViewController: UIViewController, UIScrollVi
             return
         }
 
-        spinner.startAnimating()
+        setSpinnerHidden(false)
         let maxPixelSize = max(UIScreen.main.bounds.width, UIScreen.main.bounds.height) * UIScreen.main.scale
         imageLoadHandle?.cancel()
         imageLoadHandle = RemoteUIImageLoader.load(url: imageURL, maxPixelSize: maxPixelSize) { [weak self] image in
             guard let self else { return }
-            self.spinner.stopAnimating()
+            self.setSpinnerHidden(true)
             guard let image else {
                 self.showPlaceholder()
                 return
@@ -224,7 +235,7 @@ private final class AvatarFullScreenViewController: UIViewController, UIScrollVi
     }
 
     private func showPlaceholder() {
-        spinner.stopAnimating()
+        setSpinnerHidden(true)
         imageView.isHidden = true
         placeholderContainer.isHidden = false
     }
