@@ -16,6 +16,7 @@ public struct SplickTextField: View {
 
     @State private var internalPasswordVisible = false
     @FocusState private var isFieldFocused: Bool
+    @Environment(\.usesBrandAuthChrome) private var usesBrandAuthChrome
 
     private static let accessorySide: CGFloat = 20
     private static let visibilityToggleAnimation = Animation.easeInOut(duration: 0.22)
@@ -73,15 +74,13 @@ public struct SplickTextField: View {
                 validationAccessory
             }
             .padding(SplickTheme.Spacing.sm)
-            .background(SplickTheme.Colors.secondaryBackground)
+            .background(fieldFill)
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(
-                        errorMessage != nil ? SplickTheme.Colors.error : Color.clear,
-                        lineWidth: 1
-                    )
+                    .strokeBorder(fieldStroke, lineWidth: usesBrandAuthChrome && isFieldFocused ? 1.5 : 1)
             }
+            .tint(usesBrandAuthChrome ? SplickTheme.Colors.brandBlue : SplickTheme.Colors.primary)
 
             if errorMessage != nil {
                 SplickFieldErrorMessage(errorMessage)
@@ -89,6 +88,23 @@ public struct SplickTextField: View {
             }
         }
         .animation(Self.errorReveal, value: errorMessage)
+    }
+
+    private var fieldFill: Color {
+        if usesBrandAuthChrome {
+            return SplickTheme.Colors.authFieldFill
+        }
+        return SplickTheme.Colors.secondaryBackground
+    }
+
+    private var fieldStroke: Color {
+        if errorMessage != nil {
+            return SplickTheme.Colors.error
+        }
+        guard usesBrandAuthChrome else { return .clear }
+        return isFieldFocused
+            ? SplickTheme.Colors.authFieldStrokeFocused
+            : SplickTheme.Colors.authFieldStroke
     }
 
     private static let errorTransition: AnyTransition = .asymmetric(
@@ -163,8 +179,7 @@ public struct SplickTextField: View {
         case .neutral:
             EmptyView()
         case .loading:
-            ProgressView()
-                .controlSize(.small)
+            SplickSpinner(size: .small)
                 .frame(width: Self.accessorySide, height: Self.accessorySide)
                 .accessibilityLabel("Checking")
         case .valid:

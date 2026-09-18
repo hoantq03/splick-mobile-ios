@@ -16,6 +16,7 @@ struct AuthIdentifierField: View {
     var onSubmit: () -> Void
 
     @FocusState private var isFocused: Bool
+    @Environment(\.usesBrandAuthChrome) private var usesBrandAuthChrome
 
     private var isPhoneIntent: Bool { intent == .phone }
 
@@ -26,6 +27,7 @@ struct AuthIdentifierField: View {
 
                 TextField(placeholder, text: $text)
                     .id("auth.identifier.text")
+                    .font(SplickTheme.Typography.body)
                     .focused($isFocused)
                     .keyboardType(.asciiCapable)
                     .textInputAutocapitalization(.never)
@@ -38,20 +40,32 @@ struct AuthIdentifierField: View {
             }
             .animation(AuthFlowMotion.countryCodeReveal, value: isPhoneIntent)
             .padding(SplickTheme.Spacing.sm)
-            .background(SplickTheme.Colors.secondaryBackground)
+            .background(
+                usesBrandAuthChrome
+                    ? SplickTheme.Colors.authFieldFill
+                    : SplickTheme.Colors.secondaryBackground
+            )
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(
-                        errorMessage != nil ? SplickTheme.Colors.error : Color.clear,
-                        lineWidth: 1
-                    )
+                    .strokeBorder(identifierStroke, lineWidth: usesBrandAuthChrome && isFocused ? 1.5 : 1)
             }
+            .tint(usesBrandAuthChrome ? SplickTheme.Colors.brandBlue : SplickTheme.Colors.primary)
 
             if errorMessage != nil {
                 SplickFieldErrorMessage(errorMessage)
             }
         }
+    }
+
+    private var identifierStroke: Color {
+        if errorMessage != nil {
+            return SplickTheme.Colors.error
+        }
+        guard usesBrandAuthChrome else { return .clear }
+        return isFocused
+            ? SplickTheme.Colors.authFieldStrokeFocused
+            : SplickTheme.Colors.authFieldStroke
     }
 
     @ViewBuilder
@@ -74,8 +88,7 @@ struct AuthIdentifierField: View {
     @ViewBuilder
     private var validationAccessory: some View {
         ZStack {
-            ProgressView()
-                .controlSize(.small)
+            SplickSpinner(size: .small)
                 .opacity(validationStatus == .loading ? 1 : 0)
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 20))
@@ -102,14 +115,15 @@ private struct PhoneCountryCodeMenu: View {
                 }
             }
         } label: {
-            HStack(spacing: SplickTheme.Spacing.xxs) {
+            HStack(alignment: .center, spacing: SplickTheme.Spacing.xxs) {
                 Text(selectedRegion.flagEmoji)
-                    .font(.system(size: 18))
+                    .font(.system(size: 22))
                 Text("+\(selectedRegion.callingCode)")
-                    .font(SplickTheme.Typography.captionBold)
+                    .font(SplickTheme.Typography.body)
+                    .fontWeight(.medium)
                     .foregroundStyle(SplickTheme.Colors.textPrimary)
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
             }
             .contentShape(Rectangle())
