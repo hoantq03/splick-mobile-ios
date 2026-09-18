@@ -423,6 +423,7 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .clear
+        view.clipsToBounds = false
 
         let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
         pan.cancelsTouchesInView = false
@@ -493,6 +494,7 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
 
     private func prepareHost<Content: View>(_ hosting: UIHostingController<Content>) {
         hosting.view.backgroundColor = .clear
+        hosting.view.clipsToBounds = false
         if #available(iOS 16.4, *) {
             hosting.safeAreaRegions = []
         }

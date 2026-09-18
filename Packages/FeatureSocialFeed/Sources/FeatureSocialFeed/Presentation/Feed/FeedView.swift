@@ -301,7 +301,12 @@ public struct FeedView: View {
             return
         }
 
-        // Feed list refresh is handled inside FeedPrimaryPage (UIHostingController-safe).
+        // UIHostingController pages do not reliably receive Combine tab taps.
+        if scrollChrome.feedSegment.isExpanded {
+            NotificationCenter.default.post(name: FeedSameTabNotification.refresh, object: nil)
+        } else {
+            NotificationCenter.default.post(name: FeedSameTabNotification.scrollToTop, object: nil)
+        }
     }
 
     private var sameTabTapPublisher: AnyPublisher<Void, Never> {
@@ -333,11 +338,6 @@ private struct FeedPrimaryPage: View {
     @State private var editingPost: Post?
     @StateObject private var cardActions = PostCardActions()
 
-    private var sameTabTapPublisher: AnyPublisher<Void, Never> {
-        tabBarScrollState?.sameTabTapSubject.eraseToAnyPublisher()
-            ?? Empty().eraseToAnyPublisher()
-    }
-
     var body: some View {
         feedPane
             .onAppear {
@@ -345,13 +345,17 @@ private struct FeedPrimaryPage: View {
                 configureCardActions()
                 Task { await viewModel.loadFeedIfNeeded() }
             }
-            .onReceive(sameTabTapPublisher) { _ in
-                handleFeedSameTabTap()
-            }
             .onReceive(NotificationCenter.default.publisher(for: FeedSameTabNotification.refresh)) { _ in
-                guard sameTabTapHandlingEnabled, feedTabIsActive else { return }
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 Task { @MainActor in
                     refreshController.refresh()
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: FeedSameTabNotification.scrollToTop)) { _ in
+                Task { @MainActor in
+                    sameTabScrollTopSignal += 1
+                    tabBarScrollState?.reset()
+                    feedSegmentScrollState?.reset()
                 }
             }
             .onChange(of: viewModel.revealNewPostsGeneration) { generation in
@@ -402,23 +406,6 @@ private struct FeedPrimaryPage: View {
                 )
                 .environmentObject(languageService)
             }
-    }
-
-    private func handleFeedSameTabTap() {
-        guard sameTabTapHandlingEnabled, feedTabIsActive else { return }
-
-        if tabBarScrollState?.isAtTop ?? true {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            Task { @MainActor in
-                refreshController.refresh()
-            }
-        } else {
-            Task { @MainActor in
-                sameTabScrollTopSignal += 1
-                tabBarScrollState?.reset()
-                feedSegmentScrollState?.reset()
-            }
-        }
     }
 
     private func configureCardActions() {
@@ -547,7 +534,10 @@ private struct FeedPrimaryPage: View {
             .feedScrollSoftTopEdge()
             .scrollChromeTracking()
             .feedScrollBounceAlways()
-            .splickNativeRefreshable(controller: refreshController) {
+            .splickNativeRefreshable(
+                controller: refreshController,
+                chromeTopInset: FeedPagerTopInsetMetrics.refreshChromeTopInset
+            ) {
                 FeedScrollLock.forceUnlock()
                 feedScrollLocked = false
                 let succeeded = await viewModel.loadFeed(isPullToRefresh: true)

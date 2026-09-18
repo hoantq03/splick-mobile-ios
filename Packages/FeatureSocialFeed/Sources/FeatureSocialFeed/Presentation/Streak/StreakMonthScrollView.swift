@@ -97,7 +97,7 @@ struct StreakMonthScrollView<Header: View>: View {
                     scrollTopID: StreakScrollAnchor.top,
                     scrollProxy: proxy,
                     refreshController: refreshController,
-                    isAtTop: { tabBarScrollState?.isAtTop == true }
+                    isAtTop: { tabBarScrollState?.isAtTop ?? true }
                 )
                 .onAppear {
                     trackedSectionCount = sections.count

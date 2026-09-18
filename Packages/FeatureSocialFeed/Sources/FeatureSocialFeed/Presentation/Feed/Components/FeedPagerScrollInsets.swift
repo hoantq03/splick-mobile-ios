@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import DesignSystem
 
 enum FeedPagerTopInsetMetrics {
@@ -8,6 +9,18 @@ enum FeedPagerTopInsetMetrics {
 
     static func resolvedTopMargin(for geometry: GeometryProxy) -> CGFloat {
         SplickSegmentPagerTopInsetMetrics.resolvedTopMargin(for: geometry, style: .underChrome)
+    }
+
+    /// Distance from the pager's top edge to just below the Chuỗi/Tin/Album pills.
+    static var refreshChromeTopInset: CGFloat {
+        let safeTop = (UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first { $0.isKeyWindow }?
+            .safeAreaInsets.top) ?? 59
+        return safeTop
+            + FeedSegmentChromeMetrics.navigationBarHeight
+            + FeedSegmentChromeMetrics.segmentRowHeight
     }
 }
 
