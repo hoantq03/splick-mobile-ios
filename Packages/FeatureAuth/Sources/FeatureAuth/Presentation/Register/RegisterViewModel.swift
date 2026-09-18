@@ -216,9 +216,10 @@ public final class RegisterViewModel: ObservableObject {
                 otpInfoMessage = languageService.text(.authOtpSentPhone)
                 #endif
             }
-            step = .otpVerification
             otpCode = ""
-            state = .idle
+            await revealButtonResultThen {
+                step = .otpVerification
+            }
         } catch {
             applyRequestFailure(error, fallback: languageService.text(.authSendCodeFailedRetry))
         }
@@ -246,7 +247,7 @@ public final class RegisterViewModel: ObservableObject {
                 displayName: trimmedDisplayName.isEmpty ? resolvedUsername : trimmedDisplayName,
                 dateOfBirth: nil
             )
-            state = .loaded(session)
+            await presentAuthenticatedSession(session)
             Log.info("Registration successful for \(session.user.username)", category: .auth)
         } catch let error as AuthError {
             applyAuthError(error, onOtpStep: true)
@@ -271,6 +272,18 @@ public final class RegisterViewModel: ObservableObject {
         if case .failed = state {
             state = .idle
         }
+    }
+
+    private func presentAuthenticatedSession(_ session: AuthSession) async {
+        await revealButtonResultThen {
+            state = .loaded(session)
+        }
+    }
+
+    private func revealButtonResultThen(_ work: () -> Void) async {
+        state = .idle
+        try? await Task.sleep(nanoseconds: SplickButton.successHoldNanoseconds)
+        work()
     }
 
     private func validateOtp() -> Bool {

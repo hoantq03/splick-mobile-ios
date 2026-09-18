@@ -16,11 +16,11 @@ struct DeactivatedAccountView: View {
         VStack(spacing: SplickTheme.Spacing.lg) {
             ZStack {
                 Circle()
-                    .fill(SplickTheme.Colors.warning.opacity(0.14))
+                    .fill(SplickTheme.Colors.brandBlue.opacity(0.14))
                     .frame(width: 64, height: 64)
                 Image(systemName: "pause.circle.fill")
                     .font(.system(size: 30, weight: .semibold))
-                    .foregroundStyle(SplickTheme.Colors.warning)
+                    .foregroundStyle(SplickTheme.Colors.brandBlue)
             }
 
             Text(languageService.text(.deactivatedAccountTitle))
@@ -52,7 +52,7 @@ struct DeactivatedAccountView: View {
                 languageService.text(.deactivatedAccountReactivate),
                 isLoading: isLoading,
                 isFailed: errorMessage != nil && !(errorMessage?.isEmpty ?? true),
-                isDisabled: isLoading || info.reactivationToken.isEmpty
+                isDisabled: info.reactivationToken.isEmpty
             ) {
                 onReactivate()
             }

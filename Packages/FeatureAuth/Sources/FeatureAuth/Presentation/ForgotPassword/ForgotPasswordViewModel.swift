@@ -166,9 +166,10 @@ public final class ForgotPasswordViewModel: ObservableObject {
             otpErrorKey = nil
             isOtpVerified = false
             otpInfoMessageKey = .authOtpEmailHint
-            step = .otp
             startResendCooldown()
-            setState(.idle)
+            await revealButtonResultThen {
+                step = .otp
+            }
         } catch let error as AuthError {
             applyAuthError(error, onOtpStep: false)
         } catch let error as NetworkError {
@@ -190,8 +191,9 @@ public final class ForgotPasswordViewModel: ObservableObject {
         do {
             try await verifyResetPasswordOtpUseCase.execute(email: normalizedEmail, otpCode: code)
             isOtpVerified = true
-            step = .newPassword
-            setState(.idle)
+            await revealButtonResultThen {
+                step = .newPassword
+            }
         } catch let error as AuthError {
             applyAuthError(error, onOtpStep: true)
         } catch let error as NetworkError {
@@ -223,7 +225,7 @@ public final class ForgotPasswordViewModel: ObservableObject {
                 otpCode: code,
                 newPassword: password
             )
-            setState(.loaded(session))
+            await presentAuthenticatedSession(session)
         } catch let error as AuthError {
             applyAuthError(error, onOtpStep: true)
         } catch let error as NetworkError {
@@ -271,6 +273,18 @@ public final class ForgotPasswordViewModel: ObservableObject {
                 resendCooldownRemaining -= 1
             }
         }
+    }
+
+    private func presentAuthenticatedSession(_ session: AuthSession) async {
+        await revealButtonResultThen {
+            setState(.loaded(session))
+        }
+    }
+
+    private func revealButtonResultThen(_ work: () -> Void) async {
+        setState(.idle)
+        try? await Task.sleep(nanoseconds: SplickButton.successHoldNanoseconds)
+        work()
     }
 
     private func setState(_ newState: LoadingState<AuthSession>) {

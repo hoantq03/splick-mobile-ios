@@ -497,9 +497,10 @@ public final class LoginViewModel: ObservableObject {
                 setState(.idle)
                 return
             }
-            step = .registerOtp
             otpCode = ""
-            setState(.idle)
+            await revealButtonResultThen {
+                step = .registerOtp
+            }
         } catch let error as AuthError {
             setState(.failed(error.userMessage))
         } catch let error as NetworkError {
@@ -533,7 +534,7 @@ public final class LoginViewModel: ObservableObject {
                 displayName: trimmedDisplayName.isEmpty ? resolvedUsername : trimmedDisplayName,
                 dateOfBirth: dateOfBirth
             )
-            setState(.loaded(session))
+            await presentAuthenticatedSession(session)
             Log.info("Registration successful for \(session.user.username)", category: .auth)
         } catch let error as AuthError {
             applyRegistrationError(error)
@@ -560,14 +561,15 @@ public final class LoginViewModel: ObservableObject {
         Log.info("Requesting phone OTP", category: .auth)
         do {
             try await requestPhoneOtpUseCase.execute(phoneNumber: phoneNumber)
-            step = .phoneOtp
             otpCode = ""
             #if DEBUG
             otpInfoMessageKey = .authOtpPhoneHintDebug
             #else
             otpInfoMessageKey = .authOtpPhoneHint
             #endif
-            setState(.idle)
+            await revealButtonResultThen {
+                step = .phoneOtp
+            }
         } catch let error as AuthError {
             applyOtpRequestError(error)
         } catch let error as NetworkError {
@@ -594,7 +596,7 @@ public final class LoginViewModel: ObservableObject {
                 phoneNumber: phoneNumber,
                 otpCode: otpCode
             )
-            setState(.loaded(session))
+            await presentAuthenticatedSession(session)
         } catch let error as AuthError {
             if case .accountInactive = error {
                 applySignInFailure(error)
@@ -631,7 +633,7 @@ public final class LoginViewModel: ObservableObject {
             let idToken = try await googleSignInPresenter.fetchIdToken()
             let session = try await googleSignInUseCase.execute(idToken: idToken)
             shouldCompleteOAuthProfile = session.isNewUser
-            setState(.loaded(session))
+            await presentAuthenticatedSession(session)
             Log.info("Google sign-in successful for \(session.user.username)", category: .auth)
         } catch {
             let nsError = error as NSError
@@ -654,7 +656,7 @@ public final class LoginViewModel: ObservableObject {
             let idToken = try await appleSignInPresenter.fetchIdToken()
             let session = try await appleSignInUseCase.execute(idToken: idToken)
             shouldCompleteOAuthProfile = session.isNewUser
-            setState(.loaded(session))
+            await presentAuthenticatedSession(session)
             Log.info("Apple sign-in successful for \(session.user.username)", category: .auth)
         } catch AppleSignInError.cancelled {
             setState(.idle)
@@ -735,7 +737,7 @@ public final class LoginViewModel: ObservableObject {
                 email: identifier.trimmed,
                 password: password
             )
-            setState(.loaded(session))
+            await presentAuthenticatedSession(session)
             Log.info("Login successful for \(session.user.username)", category: .auth)
         } catch {
             applySignInFailure(error)
@@ -749,7 +751,7 @@ public final class LoginViewModel: ObservableObject {
         do {
             let session = try await reactivateAccountUseCase.execute(reactivationToken: token)
             deactivatedAccount = nil
-            setState(.loaded(session))
+            await presentAuthenticatedSession(session)
         } catch {
             loadingAction = nil
             state = .idle
@@ -789,6 +791,18 @@ public final class LoginViewModel: ObservableObject {
             return
         }
         setState(.failed(AuthError.invalidCredentials.userMessage))
+    }
+
+    private func presentAuthenticatedSession(_ session: AuthSession) async {
+        await revealButtonResultThen {
+            setState(.loaded(session))
+        }
+    }
+
+    private func revealButtonResultThen(_ work: () -> Void) async {
+        setState(.idle)
+        try? await Task.sleep(nanoseconds: SplickButton.successHoldNanoseconds)
+        work()
     }
 
     private func setState(_ newState: LoadingState<AuthSession>, loadingAction action: LoadingAction? = nil) {
