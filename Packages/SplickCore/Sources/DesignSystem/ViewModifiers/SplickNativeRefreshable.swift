@@ -32,20 +32,32 @@ public extension View {
     /// Programmatic refresh drives the same `UIRefreshControl` spinner as a manual pull.
     func splickNativeRefreshable(
         controller: SplickRefreshController? = nil,
+        chromeTopInset: CGFloat = 0,
         action: @escaping () async -> Void
     ) -> some View {
-        modifier(SplickNativeRefreshableModifier(controller: controller, action: action))
+        modifier(
+            SplickNativeRefreshableModifier(
+                controller: controller,
+                chromeTopInset: chromeTopInset,
+                action: action
+            )
+        )
     }
 }
 
 private struct SplickNativeRefreshableModifier: ViewModifier {
     let controller: SplickRefreshController?
+    let chromeTopInset: CGFloat
     let action: () async -> Void
 
     func body(content: Content) -> some View {
         if let controller {
             content.modifier(
-                SplickNativeRefreshableWithController(controller: controller, action: action)
+                SplickNativeRefreshableWithController(
+                    controller: controller,
+                    chromeTopInset: chromeTopInset,
+                    action: action
+                )
             )
         } else {
             content.refreshable { await action() }
@@ -55,17 +67,47 @@ private struct SplickNativeRefreshableModifier: ViewModifier {
 
 private struct SplickNativeRefreshableWithController: ViewModifier {
     @ObservedObject var controller: SplickRefreshController
+    let chromeTopInset: CGFloat
     let action: () async -> Void
 
+    @Environment(\.tabBarScrollState) private var tabBarScrollState
     @StateObject private var refreshHost = SplickScrollRefreshHost()
     @State private var isRefreshing = false
     @State private var refreshTask: Task<Void, Never>?
     /// Only used when the underlying scroll view has no `UIRefreshControl` yet.
     @State private var showsFallbackHeader = false
+    @State private var handledRequestID = 0
+    /// SwiftUI bounce for lists that sit under overlapping chrome (feed pager).
+    @State private var chromeContentBounce: CGFloat = 0
+
+    private var shiftsContentUnderChrome: Bool { chromeTopInset > 0 }
+
+    private var heldRefreshPull: CGFloat { 60 }
+
+    private var visiblePull: CGFloat {
+        guard shiftsContentUnderChrome else { return refreshHost.pullDistance }
+        if isRefreshing || showsFallbackHeader {
+            return max(chromeContentBounce, refreshHost.pullDistance, heldRefreshPull)
+        }
+        return max(chromeContentBounce, refreshHost.pullDistance)
+    }
+
+    private var isIndicatorVisible: Bool {
+        isRefreshing || showsFallbackHeader || visiblePull > 4
+    }
+
+    private func spinnerTopPadding(zStackGlobalMinY: CGFloat) -> CGFloat {
+        if shiftsContentUnderChrome {
+            let spinner: CGFloat = 28
+            let chromeOverlap = max(0, chromeTopInset - zStackGlobalMinY)
+            return chromeOverlap + max(8, (visiblePull - spinner) / 2)
+        }
+        return refreshHost.spinnerOverlayTopPadding()
+    }
 
     func body(content: Content) -> some View {
         ZStack(alignment: .top) {
-            content
+            chromeShiftedContent(content)
                 .background {
                     SplickScrollViewRefreshAnchor(host: refreshHost)
                 }
@@ -74,22 +116,36 @@ private struct SplickNativeRefreshableWithController: ViewModifier {
                 }
 
             let isLoading = isRefreshing || showsFallbackHeader
-            let isPulling = refreshHost.pullDistance > 4
-            SplickSpinner(
-                size: .medium,
-                rotationDegrees: isLoading ? nil : refreshHost.pullRotationDegrees
-            )
-            .frame(maxWidth: .infinity)
-            .padding(.top, refreshHost.spinnerOverlayTopPadding())
-            .opacity(isLoading || isPulling ? 1 : 0)
+            GeometryReader { geo in
+                SplickSpinner(
+                    size: .medium,
+                    rotationDegrees: isLoading
+                        ? nil
+                        : (shiftsContentUnderChrome
+                            ? Double(visiblePull / SplickScrollRefreshHost.fullRotationPull) * 360
+                            : refreshHost.pullRotationDegrees)
+                )
+                .frame(maxWidth: .infinity)
+                .padding(
+                    .top,
+                    spinnerTopPadding(zStackGlobalMinY: geo.frame(in: .global).minY)
+                )
+                .opacity(isIndicatorVisible ? 1 : 0)
+                .accessibilityHidden(!isIndicatorVisible)
+            }
             .allowsHitTesting(false)
-            .accessibilityHidden(!(isLoading || isPulling))
         }
             .environment(\.pullToRefreshActive, isRefreshing)
             .preference(key: PullToRefreshActivePreferenceKey.self, value: isRefreshing)
-            .onChange(of: controller.requestID) { requestID in
-                guard requestID > 0 else { return }
+            .onReceive(controller.$requestID) { requestID in
+                guard requestID > handledRequestID else { return }
+                handledRequestID = requestID
                 Task { await runProgrammaticRefresh() }
+            }
+            .onChange(of: isIndicatorVisible) { visible in
+                Task { @MainActor in
+                    tabBarScrollState?.setRefreshIndicatorVisible(visible)
+                }
             }
             .onAppear {
                 refreshHost.applyClearSystemTint()
@@ -99,13 +155,20 @@ private struct SplickNativeRefreshableWithController: ViewModifier {
             }
     }
 
+    @ViewBuilder
+    private func chromeShiftedContent(_ content: Content) -> some View {
+        if shiftsContentUnderChrome {
+            content.offset(y: visiblePull)
+        } else {
+            content
+        }
+    }
+
     @MainActor
     private func handleSystemRefreshable() async {
-        if refreshHost.shouldCommitRefresh() {
-            await runRefresh()
-        } else {
-            refreshHost.endRefreshing()
-        }
+        // System `.refreshable` already crossed UIKit's threshold. Do not drop the
+        // refresh when custom pull-tracking failed to attach (feed UIHostingController).
+        await runRefresh()
         if refreshHost.currentPullDistance() < 8 {
             refreshHost.resetGesturePeak()
         }
@@ -119,7 +182,19 @@ private struct SplickNativeRefreshableWithController: ViewModifier {
         }
         let task = Task { @MainActor in
             isRefreshing = true
-            defer { isRefreshing = false }
+            if shiftsContentUnderChrome, chromeContentBounce < heldRefreshPull {
+                withAnimation(.easeOut(duration: 0.12)) {
+                    chromeContentBounce = heldRefreshPull
+                }
+            }
+            defer {
+                if shiftsContentUnderChrome {
+                    withAnimation(.easeOut(duration: 0.22)) {
+                        chromeContentBounce = 0
+                    }
+                }
+                isRefreshing = false
+            }
             await action()
         }
         refreshTask = task
@@ -132,16 +207,44 @@ private struct SplickNativeRefreshableWithController: ViewModifier {
         guard refreshTask == nil, !isRefreshing else { return }
         isRefreshing = true
         refreshHost.prepareProgrammaticCommit()
-        let usedNative = await refreshHost.beginRefreshing()
-        if !usedNative {
-            await playFallbackPullBounce()
+        if shiftsContentUnderChrome {
+            await playChromeContentBounce()
+        } else {
+            let usedNative = await refreshHost.beginRefreshing()
+            if !usedNative {
+                await playFallbackPullBounce()
+            }
         }
         defer {
-            isRefreshing = false
             showsFallbackHeader = false
+            isRefreshing = false
+            withAnimation(.easeOut(duration: 0.22)) {
+                chromeContentBounce = 0
+            }
             refreshHost.endRefreshing()
         }
         await action()
+    }
+
+    @MainActor
+    private func playChromeContentBounce() async {
+        let hold = heldRefreshPull
+        let overshoot = hold + SplickProgrammaticRefreshMotion.overshoot
+        withAnimation(.easeOut(duration: SplickProgrammaticRefreshMotion.pullDuration)) {
+            chromeContentBounce = overshoot
+        }
+        try? await Task.sleep(
+            nanoseconds: UInt64(SplickProgrammaticRefreshMotion.pullDuration * 1_000_000_000)
+        )
+        withAnimation(
+            .spring(
+                response: SplickProgrammaticRefreshMotion.bounceDuration,
+                dampingFraction: SplickProgrammaticRefreshMotion.bounceDamping
+            )
+        ) {
+            chromeContentBounce = hold
+        }
+        try? await Task.sleep(nanoseconds: 80_000_000)
     }
 
     @MainActor
@@ -538,6 +641,9 @@ public struct SplickScrollViewRefreshAnchor: UIViewRepresentable {
 
     public func updateUIView(_ uiView: UIView, context: Context) {
         DispatchQueue.main.async {
+            host.attach(from: uiView)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             host.attach(from: uiView)
         }
     }
