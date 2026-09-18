@@ -81,10 +81,8 @@ public enum APIErrorLocalization {
             return L10n.string(.errorAuthGoogleAlreadyLinked, locale: locale)
         case .providerAlreadyLinked:
             return L10n.string(.errorAuthProviderAlreadyLinked, locale: locale)
-        case .invalidOtp(let message):
-            return message.isEmpty
-                ? L10n.string(.errorAuthInvalidOtpDefault, locale: locale)
-                : message
+        case .invalidOtp:
+            return L10n.string(.errorAuthInvalidOtpDefault, locale: locale)
         case .otpRateLimited:
             return L10n.string(.errorAuthOtpRateLimited, locale: locale)
         case .registrationFailed(let reason):
