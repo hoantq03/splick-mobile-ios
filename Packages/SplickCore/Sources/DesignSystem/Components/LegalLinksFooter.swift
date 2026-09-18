@@ -35,7 +35,7 @@ public struct LegalLinksFooter: View {
                             .font(.system(size: 20))
                             .foregroundStyle(
                                 hasAcceptedTerms
-                                    ? AnyShapeStyle(SplickTheme.Colors.brandWordmarkGradient)
+                                    ? AnyShapeStyle(SplickTheme.Colors.brandBlue)
                                     : AnyShapeStyle(SplickTheme.Colors.textSecondary)
                             )
                         consentText
@@ -62,7 +62,7 @@ public struct LegalLinksFooter: View {
                 Button(action: onOpenTerms) {
                     Text(languageService.text(.legalTermsTitle))
                         .font(SplickTheme.Typography.caption.weight(.semibold))
-                        .foregroundStyle(SplickTheme.Colors.brandWordmarkGradient)
+                        .foregroundStyle(SplickTheme.Colors.brandBlue)
                 }
                 .buttonStyle(.plain)
 
@@ -73,7 +73,7 @@ public struct LegalLinksFooter: View {
                 Button(action: onOpenPrivacy) {
                     Text(languageService.text(.legalPrivacyTitle))
                         .font(SplickTheme.Typography.caption.weight(.semibold))
-                        .foregroundStyle(SplickTheme.Colors.brandWordmarkGradient)
+                        .foregroundStyle(SplickTheme.Colors.brandBlue)
                 }
                 .buttonStyle(.plain)
             }

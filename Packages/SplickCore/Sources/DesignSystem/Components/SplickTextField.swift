@@ -17,6 +17,7 @@ public struct SplickTextField: View {
     @State private var internalPasswordVisible = false
     @FocusState private var isFieldFocused: Bool
     @Environment(\.usesBrandAuthChrome) private var usesBrandAuthChrome
+    @Environment(\.colorScheme) private var colorScheme
 
     private static let accessorySide: CGFloat = 20
     private static let visibilityToggleAnimation = Animation.easeInOut(duration: 0.22)
@@ -92,7 +93,7 @@ public struct SplickTextField: View {
 
     private var fieldFill: Color {
         if usesBrandAuthChrome {
-            return SplickTheme.Colors.authFieldFill
+            return SplickTheme.Colors.resolvedAuthFieldFill(colorScheme)
         }
         return SplickTheme.Colors.secondaryBackground
     }

@@ -17,6 +17,7 @@ public struct SplickOtpField: View {
     @FocusState private var isFocused: Bool
     @Environment(\.suppressKeyboardAutoFocus) private var suppressKeyboardAutoFocus
     @Environment(\.usesBrandAuthChrome) private var usesBrandAuthChrome
+    @Environment(\.colorScheme) private var colorScheme
     @State private var ignoreKeyboardHideUntil: Date = .distantPast
 
     private let boxHeight: CGFloat = 56
@@ -162,7 +163,7 @@ public struct SplickOtpField: View {
             return SplickTheme.Colors.error.opacity(0.06)
         }
         if usesBrandAuthChrome {
-            return SplickTheme.Colors.authFieldFill
+            return SplickTheme.Colors.resolvedAuthFieldFill(colorScheme)
         }
         if isActive {
             return SplickTheme.Colors.primaryGradientStart.opacity(0.08)

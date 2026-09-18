@@ -29,7 +29,7 @@ struct SplashScreenView: View {
 
                     Text(languageService.text(.onboardingTagline))
                         .font(.system(size: 19, weight: .medium))
-                        .foregroundStyle(Color(hex: 0x656565))
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, SplickTheme.Spacing.xl)
                         .modifier(SplashSlideOut(isExiting: exitSlogan, travel: travel))
@@ -40,7 +40,6 @@ struct SplashScreenView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .preferredColorScheme(.light)
         .task {
             await playIntro()
         }

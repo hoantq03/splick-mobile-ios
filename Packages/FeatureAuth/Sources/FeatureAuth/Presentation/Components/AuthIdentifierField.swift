@@ -17,6 +17,7 @@ struct AuthIdentifierField: View {
 
     @FocusState private var isFocused: Bool
     @Environment(\.usesBrandAuthChrome) private var usesBrandAuthChrome
+    @Environment(\.colorScheme) private var colorScheme
 
     private var isPhoneIntent: Bool { intent == .phone }
 
@@ -42,7 +43,7 @@ struct AuthIdentifierField: View {
             .padding(SplickTheme.Spacing.sm)
             .background(
                 usesBrandAuthChrome
-                    ? SplickTheme.Colors.authFieldFill
+                    ? SplickTheme.Colors.resolvedAuthFieldFill(colorScheme)
                     : SplickTheme.Colors.secondaryBackground
             )
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))

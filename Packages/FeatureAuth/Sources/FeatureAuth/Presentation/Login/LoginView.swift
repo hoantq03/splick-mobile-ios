@@ -13,6 +13,7 @@ public struct LoginView: View {
     @State private var showDateOfBirthPicker = false
     @State private var presentedLegalDocument: LegalDocumentType?
     @Environment(\.launchRevealActive) private var launchRevealActive
+    @Environment(\.colorScheme) private var colorScheme
     @State private var riseHeader = false
     @State private var riseForm = false
     @State private var riseActions = false
@@ -51,6 +52,7 @@ public struct LoginView: View {
                     onBack: { closeForgotPassword() },
                     onAuthenticated: { user in onAuthenticated?(user, false) }
                 )
+                .id(showForgotPassword)
                 .frame(width: geometry.size.width)
                 .clipped()
             }
@@ -407,7 +409,7 @@ public struct LoginView: View {
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
                 }
                 .padding(SplickTheme.Spacing.sm)
-                .background(SplickTheme.Colors.authFieldFill)
+                .background(SplickTheme.Colors.resolvedAuthFieldFill(colorScheme))
                 .clipShape(RoundedRectangle(cornerRadius: Self.fieldCornerRadius, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: Self.fieldCornerRadius, style: .continuous)
