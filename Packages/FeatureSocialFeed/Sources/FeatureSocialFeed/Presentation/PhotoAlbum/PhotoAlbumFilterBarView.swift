@@ -132,44 +132,22 @@ struct PhotoAlbumFilterBarView: View {
     }
 
     private var filterPopoverContent: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-                kindChips
-                peopleChip
-                if filters.hasAdvancedFilters {
-                    Button(languageService.text(.feedAlbumClearFilters)) {
-                        captionQuery = ""
-                        Task { await viewModel.clearFilters() }
-                    }
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+            kindChips
+            peopleChip
+            if filters.hasAdvancedFilters {
+                Button(languageService.text(.feedAlbumClearFilters)) {
+                    captionQuery = ""
+                    Task { await viewModel.clearFilters() }
                 }
-            }
-            .padding(SplickTheme.Spacing.md)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar(.hidden, for: .navigationBar)
-            .navigationDestination(isPresented: $showPeoplePane) {
-                PhotoAlbumPeoplePickerPane(
-                    currentUser: currentUser,
-                    fetchMyFriendsUseCase: fetchMyFriendsUseCase,
-                    fetchMyGroupsUseCase: fetchMyGroupsUseCase,
-                    selectedAuthors: filters.authors,
-                    selectedGroups: filters.groups
-                ) { authors, groups in
-                    Task {
-                        var updated = filters
-                        updated.authors = authors
-                        updated.groups = groups
-                        await viewModel.applyFilters(updated)
-                    }
-                }
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
             }
         }
+        .padding(SplickTheme.Spacing.md)
         .frame(width: popoverWidth, alignment: .leading)
-        .onDisappear {
-            showPeoplePane = false
-        }
+        .fixedSize(horizontal: false, vertical: true)
+        .modifier(AlbumPopoverAdaptation())
     }
 
     private var popoverWidth: CGFloat {
@@ -190,12 +168,33 @@ struct PhotoAlbumFilterBarView: View {
 
     @ViewBuilder
     private var peopleChip: some View {
-        if selectedPeopleItems.isEmpty {
-            emptyPeopleChip
-                .transition(.opacity.combined(with: .scale(scale: 0.98)))
-        } else {
-            selectedPeopleRow
-                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+        Group {
+            if selectedPeopleItems.isEmpty {
+                emptyPeopleChip
+            } else {
+                selectedPeopleRow
+            }
+        }
+        .popover(isPresented: $showPeoplePane, arrowEdge: .top) {
+            PhotoAlbumPeoplePickerPane(
+                currentUser: currentUser,
+                fetchMyFriendsUseCase: fetchMyFriendsUseCase,
+                fetchMyGroupsUseCase: fetchMyGroupsUseCase,
+                selectedAuthors: filters.authors,
+                selectedGroups: filters.groups,
+                onDismiss: { showPeoplePane = false }
+            ) { authors, groups in
+                Task {
+                    var updated = filters
+                    updated.authors = authors
+                    updated.groups = groups
+                    await viewModel.applyFilters(updated)
+                }
+                showPeoplePane = false
+            }
+            .frame(width: popoverWidth)
+            .fixedSize(horizontal: false, vertical: true)
+            .modifier(AlbumPopoverAdaptation())
         }
     }
 
@@ -363,15 +362,25 @@ private struct AlbumFilterBarWidthKey: PreferenceKey {
     }
 }
 
+private struct AlbumPopoverAdaptation: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 16.4, *) {
+            content.presentationCompactAdaptation(.popover)
+        } else {
+            content
+        }
+    }
+}
+
 private struct PhotoAlbumPeoplePickerPane: View {
     @EnvironmentObject private var languageService: LanguageService
-    @Environment(\.dismiss) private var dismiss
 
     let currentUser: UserSummary?
     let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol?
     let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
     let selectedAuthors: [UserSummary]
     let selectedGroups: [AlbumGroup]
+    let onDismiss: () -> Void
     let onApply: ([UserSummary], [AlbumGroup]) -> Void
 
     @State private var friends: [UserSummary] = []
@@ -387,6 +396,7 @@ private struct PhotoAlbumPeoplePickerPane: View {
         fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?,
         selectedAuthors: [UserSummary],
         selectedGroups: [AlbumGroup],
+        onDismiss: @escaping () -> Void,
         onApply: @escaping ([UserSummary], [AlbumGroup]) -> Void
     ) {
         self.currentUser = currentUser
@@ -394,6 +404,7 @@ private struct PhotoAlbumPeoplePickerPane: View {
         self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
         self.selectedAuthors = selectedAuthors
         self.selectedGroups = selectedGroups
+        self.onDismiss = onDismiss
         self.onApply = onApply
         _draftAuthors = State(initialValue: selectedAuthors)
         _draftGroups = State(initialValue: selectedGroups)
@@ -431,78 +442,111 @@ private struct PhotoAlbumPeoplePickerPane: View {
     }
 
     var body: some View {
-        pickerContent
-            .frame(minHeight: 320, maxHeight: 480)
-            .navigationTitle(languageService.text(.feedAlbumFilterPeople))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar(.visible, for: .navigationBar)
-            .searchable(text: $searchQuery, prompt: languageService.text(.feedCreateSearchFriendsGroups))
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(languageService.text(.commonDone)) {
-                        onApply(draftAuthors, draftGroups)
-                        dismiss()
-                    }
-                    .fontWeight(.semibold)
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+            HStack(spacing: SplickTheme.Spacing.sm) {
+                Button(action: onDismiss) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(SplickTheme.Colors.textPrimary)
                 }
+                .buttonStyle(.plain)
+                Text(languageService.text(.feedAlbumFilterPeople))
+                    .font(SplickTheme.Typography.callout.weight(.semibold))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Button(languageService.text(.commonDone)) {
+                    onApply(draftAuthors, draftGroups)
+                }
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                .buttonStyle(.plain)
             }
-            .task {
-                isLoading = true
-                defer { isLoading = false }
-                async let loadedFriends = loadFriends()
-                async let loadedGroups = loadGroups()
-                friends = await loadedFriends
-                groups = await loadedGroups
-            }
+            peopleSearchField
+            pickerContent
+        }
+        .padding(SplickTheme.Spacing.md)
+        .task {
+            isLoading = true
+            defer { isLoading = false }
+            async let loadedFriends = loadFriends()
+            async let loadedGroups = loadGroups()
+            friends = await loadedFriends
+            groups = await loadedGroups
+        }
+    }
+
+    private var peopleSearchField: some View {
+        HStack(spacing: SplickTheme.Spacing.xs) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+            TextField(languageService.text(.feedCreateSearchFriendsGroups), text: $searchQuery)
+                .font(SplickTheme.Typography.caption)
+                .textFieldStyle(.plain)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+        }
+        .padding(.horizontal, AlbumFilterMetrics.innerH)
+        .padding(.vertical, 8)
+        .background(SplickTheme.Colors.secondaryBackground)
+        .clipShape(RoundedRectangle(cornerRadius: AlbumFilterMetrics.fieldRadius, style: .continuous))
     }
 
     @ViewBuilder
     private var pickerContent: some View {
         if isLoading && currentUser == nil && friends.isEmpty && groups.isEmpty {
             SplickSpinner(size: .medium)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, SplickTheme.Spacing.md)
         } else if currentUser == nil && friends.isEmpty && groups.isEmpty {
             Text(languageService.text(.feedAlbumPeopleEmpty))
+                .font(SplickTheme.Typography.caption)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
+                .padding(.vertical, SplickTheme.Spacing.sm)
         } else if filteredCurrentUser == nil && filteredFriends.isEmpty && filteredGroups.isEmpty {
             Text(languageService.text(.feedFilterFriendsNotFound))
+                .font(SplickTheme.Typography.caption)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
+                .padding(.vertical, SplickTheme.Spacing.sm)
         } else {
-            List {
-                if let me = filteredCurrentUser {
-                    peopleRow(
-                        title: languageService.text(.commonMe),
-                        subtitle: "@\(me.username)",
-                        avatarURL: me.avatarURL,
-                        isGroup: false,
-                        selected: draftAuthors.contains(where: { $0.id == me.id })
-                    ) {
-                        toggleAuthor(me)
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 4) {
+                    if let me = filteredCurrentUser {
+                        peopleRow(
+                            title: languageService.text(.commonMe),
+                            subtitle: "@\(me.username)",
+                            avatarURL: me.avatarURL,
+                            isGroup: false,
+                            selected: draftAuthors.contains(where: { $0.id == me.id })
+                        ) {
+                            toggleAuthor(me)
+                        }
                     }
-                }
-                ForEach(filteredFriends) { friend in
-                    peopleRow(
-                        title: friend.displayName,
-                        subtitle: "@\(friend.username)",
-                        avatarURL: friend.avatarURL,
-                        isGroup: false,
-                        selected: draftAuthors.contains(where: { $0.id == friend.id })
-                    ) {
-                        toggleAuthor(friend)
+                    ForEach(filteredFriends) { friend in
+                        peopleRow(
+                            title: friend.displayName,
+                            subtitle: "@\(friend.username)",
+                            avatarURL: friend.avatarURL,
+                            isGroup: false,
+                            selected: draftAuthors.contains(where: { $0.id == friend.id })
+                        ) {
+                            toggleAuthor(friend)
+                        }
                     }
-                }
-                ForEach(filteredGroups) { group in
-                    peopleRow(
-                        title: group.name,
-                        subtitle: languageService.text(.feedFilterByGroups),
-                        avatarURL: group.avatarURL,
-                        isGroup: true,
-                        selected: draftGroups.contains(where: { $0.id == group.id })
-                    ) {
-                        toggleGroup(group)
+                    ForEach(filteredGroups) { group in
+                        peopleRow(
+                            title: group.name,
+                            subtitle: languageService.text(.feedFilterByGroups),
+                            avatarURL: group.avatarURL,
+                            isGroup: true,
+                            selected: draftGroups.contains(where: { $0.id == group.id })
+                        ) {
+                            toggleGroup(group)
+                        }
                     }
                 }
             }
-            .listStyle(.plain)
+            .frame(maxHeight: 280)
         }
     }
 
@@ -546,11 +590,11 @@ private struct PhotoAlbumPeoplePickerPane: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-        .listRowBackground(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+        .padding(.vertical, 6)
+        .padding(.horizontal, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(selected ? SplickTheme.Colors.primaryGradientStart.opacity(0.08) : Color.clear)
-                .padding(.horizontal, 8)
         )
     }
 
