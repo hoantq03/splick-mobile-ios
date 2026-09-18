@@ -3,59 +3,75 @@
 //  SplickClip
 //
 
-import SwiftUI
 import Combine
-import Networking // Provides APIClient, APIEndpoint, HTTPMethod, InMemoryTokenProvider
-import Storage   // Provides KeychainService
+import Common
+import Foundation
+import Localization
+import Networking
+import Storage
+import SwiftUI
 
 // MARK: - Lightweight local DTOs
 // App Clips must stay small — we intentionally avoid importing FeatureFriends/SplickDomain.
-// These structs mirror only the API fields the clip actually needs.
-
-struct ClipUserDTO: Decodable, Sendable {
-    let id: String
-    let username: String
-    let displayName: String
-    let avatarURL: URL?
-
-    enum CodingKeys: String, CodingKey {
-        case id, username, displayName = "display_name", avatarURL = "avatar_url"
-    }
-}
 
 struct ClipPublicProfileDTO: Decodable, Sendable {
-    let userId: String
+    let userId: UUID
     let username: String
     let displayName: String
-    let avatarUrl: URL?
+    let avatarUrl: String?
     let friendCount: Int
     let postCount: Int
     /// nil = anonymous / not authenticated. Values: "NONE" | "PENDING" | "FRIENDS"
     let friendStatus: String?
 
-    enum CodingKeys: String, CodingKey {
-        case userId = "userId"
-        case username, displayName, avatarUrl
-        case friendCount, postCount
-        case friendStatus
+    var avatarURL: URL? {
+        guard let avatarUrl, !avatarUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        return URL(string: avatarUrl)
+    }
+
+    var resolvedFriendStatus: ClipFriendStatus {
+        ClipFriendStatus(rawValue: friendStatus ?? "") ?? .none
+    }
+
+    var visibleStats: [ClipProfileStat] {
+        var stats: [ClipProfileStat] = []
+        if friendCount > 0 {
+            stats.append(ClipProfileStat(value: friendCount, labelKey: .clipStatsFriends))
+        }
+        if postCount > 0 {
+            stats.append(ClipProfileStat(value: postCount, labelKey: .clipStatsPosts))
+        }
+        return stats
     }
 }
 
-// MARK: - ViewModel State
+struct ClipProfileStat: Hashable, Sendable {
+    let value: Int
+    let labelKey: L10nKey
+}
+
+enum ClipFriendStatus: String, Sendable {
+    case none = "NONE"
+    case pending = "PENDING"
+    case friends = "FRIENDS"
+}
 
 enum ClipInviteState {
     case idle
     case loading
     case loaded(ClipPublicProfileDTO)
     case inviteSent
-    case error(String)
+    case error(title: String, message: String)
 }
-
-// MARK: - Endpoints
 
 private struct PublicUserProfileEndpoint: APIEndpoint {
     let username: String
-    var path: String { "/v1/public/users/\(username)" }
+    var path: String {
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        return "/v1/public/users/\(encoded)"
+    }
     var method: HTTPMethod { .get }
     var requiresAuth: Bool { false }
     var sendsRefreshTokenHeader: Bool { false }
@@ -67,147 +83,154 @@ private struct SendFriendRequestEndpoint: APIEndpoint {
     var method: HTTPMethod { .post }
     var requiresAuth: Bool { true }
     var sendsRefreshTokenHeader: Bool { true }
-    var body: Encodable? { Body(username: targetUsername) }
-    struct Body: Encodable { let username: String }
+    var body: Encodable? { Body(username: targetUsername, message: nil) }
+    struct Body: Encodable {
+        let username: String
+        let message: String?
+    }
 }
-
-// MARK: - ViewModel
 
 @MainActor
 final class ClipInviteViewModel: ObservableObject {
     @Published var state: ClipInviteState = .idle
-    @Published var isInviting: Bool = false
-    /// Extra fancy fields when profile comes from mock / enriched cache.
-    @Published var richProfile: ClipRichProfile?
+    @Published var isInviting = false
 
-    @Published var lastAttemptedUsername: String? = ClipMockProfiles.demoUsername
-    private let apiClient = APIClient(tokenProvider: InMemoryTokenProvider())
+    private let apiClient: APIClient
+    private let tokenProvider: InMemoryTokenProvider
+    private let languageService: LanguageService
+    private let keychain: KeychainServiceProtocol
+    private var lastAttemptedUsername: String?
 
-    init() {
-        let mock = ClipMockProfiles.tqHoan03
-        richProfile = mock
-        state = .loaded(mock.dto)
+    private static let reservedPathSegments: Set<String> = [
+        "invite", "privacy", "terms", "support", "admin", "app", "download",
+        "legal", "bills", "bill", "api", "www", "help", "blog",
+    ]
+
+    init(
+        languageService: LanguageService,
+        keychain: KeychainServiceProtocol = KeychainService()
+    ) {
+        self.languageService = languageService
+        self.keychain = keychain
+        let tokenProvider = InMemoryTokenProvider()
+        self.tokenProvider = tokenProvider
+        self.apiClient = APIClient(
+            tokenProvider: tokenProvider,
+            localeProvider: languageService
+        )
     }
 
-    /// Demo entry: `https://splick.app/tq.hoan03`
-    func loadDemoProfile() {
-        applyHardcodedProfile()
+    func prepareSession() async {
+        guard let access = try? keychain.loadString(for: AppConstants.Keychain.accessTokenKey),
+              !access.isEmpty else { return }
+        let refresh = (try? keychain.loadString(for: AppConstants.Keychain.refreshTokenKey)) ?? ""
+        await tokenProvider.updateTokens(access: access, refresh: refresh)
     }
 
-    // Called from the scene via onContinueUserActivity / onOpenURL
     func handleInviteURL(_ url: URL) {
-        // Cmd+R / Xcode injects non-App-Clip URLs — ignore them so hardcoded profile stays.
-        guard let username = extractUsername(from: url) else { return }
+        guard let username = extractUsername(from: url) else {
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) {
+                state = .error(
+                    title: languageService.text(.clipNotFoundTitle),
+                    message: languageService.text(.clipNotFoundMessage)
+                )
+            }
+            return
+        }
         lastAttemptedUsername = username
         Task { await loadProfile(username: username) }
     }
 
-    /// Retries loading the last attempted username
     func retry() {
         guard let username = lastAttemptedUsername else { return }
         Task { await loadProfile(username: username) }
     }
 
-    /// Sends a friend request to the currently loaded profile.
-    /// If the user is not signed in, opens the full Splick app instead.
     func sendInvite() {
         guard case .loaded(let profile) = state else { return }
-
-        guard let token = retrieveAuthToken() else {
-            openFullApp(username: profile.username)
-            return
+        Task {
+            await prepareSession()
+            guard await tokenProvider.accessToken() != nil else {
+                openFullApp(username: profile.username)
+                return
+            }
+            await performSendInvite(username: profile.username)
         }
-        Task { await performSendInvite(username: profile.username, token: token) }
     }
 
-    /// Opens the full Splick app deeplink so the user can sign in and then add a friend.
     func openFullApp(username: String) {
-        // Align with main-app friend deep link: splick://friend/{username}
         if let url = URL(string: "splick://friend/\(username)") {
             UIApplication.shared.open(url)
         }
     }
 
-    // MARK: - Private
-
-    private func applyHardcodedProfile() {
-        let mock = ClipMockProfiles.tqHoan03
-        lastAttemptedUsername = mock.dto.username
-        withAnimation(.spring(response: 0.5, dampingFraction: 0.78)) {
-            richProfile = mock
-            state = .loaded(mock.dto)
+    private func loadProfile(username: String) async {
+        state = .loading
+        do {
+            let profile: ClipPublicProfileDTO = try await apiClient.request(
+                PublicUserProfileEndpoint(username: username)
+            )
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.82)) {
+                state = .loaded(profile)
+            }
+        } catch {
+            let isNotFound = (error as? NetworkError) == .notFound
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) {
+                state = .error(
+                    title: languageService.text(isNotFound ? .clipNotFoundTitle : .clipLoadErrorTitle),
+                    message: isNotFound
+                        ? languageService.text(.clipNotFoundMessage)
+                        : languageService.localizedMessage(for: error)
+                )
+            }
         }
     }
 
-    private func loadProfile(username _: String) async {
-        // Always show the local mock — public profile API is not live yet.
-        applyHardcodedProfile()
-    }
-
-    private func ensureMinimumLoading(from startTime: Date, minimum: TimeInterval) async {
-        let elapsed = Date().timeIntervalSince(startTime)
-        if elapsed < minimum {
-            try? await Task.sleep(nanoseconds: UInt64((minimum - elapsed) * 1_000_000_000))
-        }
-    }
-
-    private func performSendInvite(username: String, token: String) async {
+    private func performSendInvite(username: String) async {
         isInviting = true
         defer { isInviting = false }
 
-        // Demo mock path: pretend invite succeeded without hitting API.
-        if ClipMockProfiles.richProfile(for: username) != nil {
-            try? await Task.sleep(nanoseconds: 450_000_000)
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-                state = .inviteSent
-            }
-            return
-        }
-
-        struct Empty: Decodable {}
         do {
-            let _: Empty = try await apiClient.request(
-                SendFriendRequestEndpoint(targetUsername: username)
-            )
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+            try await apiClient.request(SendFriendRequestEndpoint(targetUsername: username))
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.72)) {
                 state = .inviteSent
             }
         } catch {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-                state = .error(friendlyErrorMessage(for: error))
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) {
+                state = .error(
+                    title: languageService.text(.clipLoadErrorTitle),
+                    message: languageService.localizedMessage(for: error)
+                )
             }
         }
     }
 
-    private func friendlyErrorMessage(for error: Error) -> String {
-        let text = error.localizedDescription.lowercased()
-        if text.contains("network") || text.contains("offline") || text.contains("internet") || text.contains("timed out") || text.contains("connection") {
-            return "Không thể kết nối đến máy chủ. Vui lòng kiểm tra lại kết nối mạng."
-        }
-        if text.contains("not found") || text.contains("404") {
-            return "Không tìm thấy hồ sơ người dùng trên Splick."
-        }
-        return "Không thể tải thông tin hồ sơ. Vui lòng thử lại sau."
-    }
-
-    // MARK: - Helpers
-
-    private func extractUsername(from url: URL) -> String? {
-        // Supports:
-        //   https://splick.app/{username}
-        //   https://splick.app/invite?username={username}
-        if let host = url.host, host.hasSuffix("splick.app") {
-            let parts = url.pathComponents.filter { $0 != "/" }
-            if let first = parts.first, !first.isEmpty { return first }
-        }
-        return URLComponents(url: url, resolvingAgainstBaseURL: false)?
+    func extractUsername(from url: URL) -> String? {
+        if let queryName = URLComponents(url: url, resolvingAgainstBaseURL: false)?
             .queryItems?
             .first(where: { $0.name == "username" })?
-            .value
+            .value {
+            return sanitizedUsername(queryName)
+        }
+
+        guard let host = url.host?.lowercased(), host.hasSuffix("splick.app") else {
+            return nil
+        }
+
+        let parts = url.pathComponents.filter { $0 != "/" }
+        guard let first = parts.first else { return nil }
+        if first.lowercased() == "invite", parts.count >= 2 {
+            return sanitizedUsername(parts[1])
+        }
+        if Self.reservedPathSegments.contains(first.lowercased()) {
+            return nil
+        }
+        return sanitizedUsername(first)
     }
 
-    /// Reads access token from Keychain (never UserDefaults — security rule).
-    private func retrieveAuthToken() -> String? {
-        try? KeychainService().loadString(for: "splick.accessToken")
+    private func sanitizedUsername(_ raw: String) -> String? {
+        let username = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isValid = username.range(of: "^[a-zA-Z0-9_.]{3,50}$", options: .regularExpression) != nil
+        return isValid ? username : nil
     }
 }
