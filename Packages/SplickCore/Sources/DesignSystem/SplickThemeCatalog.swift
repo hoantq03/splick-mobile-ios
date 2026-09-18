@@ -40,7 +40,7 @@ public enum SplickThemeCatalog {
             SplickTheme.Colors.brandBlue,
             SplickTheme.Colors.brandPink,
             SplickTheme.Colors.brandOrange,
-            SplickTheme.Colors.brandOrange.opacity(0.08),
+            SplickTheme.Colors.brandBlue,
         ],
         onAccent: .white,
         refreshTint: UIColor(red: 0, green: 149 / 255, blue: 1, alpha: 1)
@@ -52,7 +52,7 @@ public enum SplickThemeCatalog {
             Color(hex: 0x47B5FF),
             SplickTheme.Colors.brandPink,
             SplickTheme.Colors.brandOrange,
-            SplickTheme.Colors.brandOrange.opacity(0.18),
+            Color(hex: 0x47B5FF),
         ],
         onAccent: .white,
         refreshTint: UIColor(red: 71 / 255, green: 181 / 255, blue: 1, alpha: 1)
