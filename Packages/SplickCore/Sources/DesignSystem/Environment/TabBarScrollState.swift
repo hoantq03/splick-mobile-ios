@@ -39,10 +39,24 @@ public final class TabBarScrollState: ObservableObject {
     private let showAtTopThreshold: CGFloat = SplickTabBarMetrics.showNearTopThreshold
     private let visibilityChangeCooldown: TimeInterval = 0.35
 
+    /// Raw `contentOffset.y + contentInsets.top` from the active list.
+    private var lastRawOffset: CGFloat = 0
+
+    /// Custom PTR spinner is showing (pull or loading). Used to hide top fade overlays.
+    @Published public private(set) var refreshIndicatorVisible = false
+
     /// True when the list is at (or very near) the top — used for same-tab tap refresh vs scroll-to-top.
-    public var isAtTop: Bool { lastDistanceFromTop <= SplickTabBarMetrics.sameTabAtTopThreshold }
+    public var isAtTop: Bool {
+        lastDistanceFromTop <= SplickTabBarMetrics.sameTabAtTopThreshold
+            || lastRawOffset <= SplickTabBarMetrics.sameTabAtTopThreshold
+    }
 
     public init() {}
+
+    public func setRefreshIndicatorVisible(_ visible: Bool) {
+        guard refreshIndicatorVisible != visible else { return }
+        refreshIndicatorVisible = visible
+    }
 
     /// Call when the user taps the active tab again — subscribers scroll to top or trigger refresh.
     public func handleSameTabTap() {
@@ -50,6 +64,7 @@ public final class TabBarScrollState: ObservableObject {
     }
 
     public func updateScrollOffset(_ rawOffset: CGFloat) {
+        lastRawOffset = rawOffset
         // Normalize against resting baseline so contentMargins / inset don't look like "scrolled".
         lastDistanceFromTop = distanceNormalizer.normalize(rawOffset)
 
@@ -82,6 +97,8 @@ public final class TabBarScrollState: ObservableObject {
     public func reset() {
         lastOffset = 0
         lastDistanceFromTop = 0
+        lastRawOffset = 0
+        refreshIndicatorVisible = false
         offsetNormalizer.reset()
         distanceNormalizer.reset()
         suppressesBottomInset = false

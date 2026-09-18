@@ -92,6 +92,38 @@ public struct SplickScrollTopFadeOverlay: View {
     }
 
     public var body: some View {
+        SplickScrollTopFadeOverlayBody(mode: mode)
+    }
+}
+
+private struct SplickScrollTopFadeOverlayBody: View {
+    let mode: SplickScrollTopFadeOverlay.Mode
+    @Environment(\.tabBarScrollState) private var tabBarScrollState
+
+    var body: some View {
+        if let tabBarScrollState {
+            SplickScrollTopFadeOverlayObserved(mode: mode, tabBarScrollState: tabBarScrollState)
+        } else {
+            SplickScrollTopFadeOverlayContent(mode: mode)
+        }
+    }
+}
+
+private struct SplickScrollTopFadeOverlayObserved: View {
+    let mode: SplickScrollTopFadeOverlay.Mode
+    @ObservedObject var tabBarScrollState: TabBarScrollState
+
+    var body: some View {
+        SplickScrollTopFadeOverlayContent(mode: mode)
+            .opacity(tabBarScrollState.refreshIndicatorVisible ? 0 : 1)
+            .animation(.easeOut(duration: 0.12), value: tabBarScrollState.refreshIndicatorVisible)
+    }
+}
+
+private struct SplickScrollTopFadeOverlayContent: View {
+    let mode: SplickScrollTopFadeOverlay.Mode
+
+    var body: some View {
         GeometryReader { proxy in
             let height = SplickScrollChromeFadeMetrics.height(
                 for: mode,
