@@ -11,6 +11,7 @@ public struct OtpVerificationView: View {
     private let otpError: String?
     private let otpInfoMessage: String?
     private let isLoading: Bool
+    private let isFailed: Bool
     private let cornerRadius: CGFloat
     private let showsBackButton: Bool
     private let backTitle: String
@@ -31,6 +32,7 @@ public struct OtpVerificationView: View {
         otpError: String?,
         otpInfoMessage: String?,
         isLoading: Bool,
+        isFailed: Bool = false,
         cornerRadius: CGFloat = SplickTheme.CornerRadius.medium,
         showsBackButton: Bool = true,
         backTitle: String,
@@ -50,6 +52,7 @@ public struct OtpVerificationView: View {
         self.otpError = otpError
         self.otpInfoMessage = otpInfoMessage
         self.isLoading = isLoading
+        self.isFailed = isFailed
         self.cornerRadius = cornerRadius
         self.showsBackButton = showsBackButton
         self.backTitle = backTitle
@@ -94,6 +97,7 @@ public struct OtpVerificationView: View {
             SplickButton(
                 submitTitle,
                 isLoading: isLoading,
+                isFailed: isFailed || !(otpError?.isEmpty ?? true),
                 isDisabled: otpCode.count != SplickOtpField.defaultLength,
                 cornerRadius: cornerRadius
             ) {

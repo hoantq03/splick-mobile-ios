@@ -98,7 +98,11 @@ public struct ForgotPasswordView: View {
                 .simultaneousGesture(stepSwipeGesture(width: geometry.size.width))
             }
         }
-        .background(SplickTheme.Colors.background)
+        .background {
+            if presentation == .sheet {
+                SplickBrandAtmosphere()
+            }
+        }
     }
 
     private func stepScroll<Content: View>(_ content: Content, width: CGFloat) -> some View {
@@ -171,6 +175,7 @@ public struct ForgotPasswordView: View {
             SplickButton(
                 languageService.text(.authSendCode),
                 isLoading: viewModel.state.isLoading && viewModel.step == .identifier,
+                isFailed: viewModel.showErrorAlert,
                 isDisabled: viewModel.identifier.trimmed.isEmpty
                     || viewModel.detectedKind == .unknown
                     || viewModel.identifierErrorKey != nil,
@@ -196,6 +201,7 @@ public struct ForgotPasswordView: View {
             otpError: localized(viewModel.otpErrorKey),
             otpInfoMessage: localized(viewModel.otpInfoMessageKey),
             isLoading: viewModel.state.isLoading && viewModel.step == .otp,
+            isFailed: viewModel.showErrorAlert,
             cornerRadius: fieldCornerRadius,
             showsBackButton: presentation == .sheet,
             backTitle: languageService.text(.commonBack),
@@ -263,6 +269,7 @@ public struct ForgotPasswordView: View {
             SplickButton(
                 languageService.text(.authResetPasswordTitle),
                 isLoading: viewModel.state.isLoading && viewModel.step == .newPassword,
+                isFailed: viewModel.showErrorAlert,
                 isDisabled: resetSubmitDisabled,
                 cornerRadius: fieldCornerRadius
             ) {

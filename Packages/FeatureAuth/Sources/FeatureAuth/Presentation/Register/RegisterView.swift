@@ -35,6 +35,7 @@ public struct RegisterView: View {
                         otpError: viewModel.otpError,
                         otpInfoMessage: viewModel.otpInfoMessage,
                         isLoading: viewModel.state.isLoading,
+                        isFailed: viewModel.state.error != nil,
                         backTitle: languageService.text(.commonBack),
                         resendTitle: languageService.text(.changePasswordResendCode),
                         onResend: { Task { await viewModel.resendOtp() } },
@@ -195,6 +196,7 @@ public struct RegisterView: View {
         SplickButton(
             languageService.text(.authContinue),
             isLoading: viewModel.state.isLoading,
+            isFailed: viewModel.state.error != nil,
             isDisabled: !viewModel.canContinueAccountDetails
         ) {
             Task { await viewModel.requestOtpAndContinue() }

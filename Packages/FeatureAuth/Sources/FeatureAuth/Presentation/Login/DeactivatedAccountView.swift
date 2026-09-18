@@ -51,6 +51,7 @@ struct DeactivatedAccountView: View {
             SplickButton(
                 languageService.text(.deactivatedAccountReactivate),
                 isLoading: isLoading,
+                isFailed: errorMessage != nil && !(errorMessage?.isEmpty ?? true),
                 isDisabled: isLoading || info.reactivationToken.isEmpty
             ) {
                 onReactivate()

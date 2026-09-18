@@ -12,6 +12,12 @@ public struct LoginView: View {
     @State private var showForgotPassword = false
     @State private var showDateOfBirthPicker = false
     @State private var presentedLegalDocument: LegalDocumentType?
+    @Environment(\.launchRevealActive) private var launchRevealActive
+    @State private var riseHeader = false
+    @State private var riseForm = false
+    @State private var riseActions = false
+    @State private var riseLegal = false
+    @State private var riseSocial = false
 
     private static let fieldCornerRadius = SplickTheme.CornerRadius.pill
 
@@ -35,7 +41,7 @@ public struct LoginView: View {
     public var body: some View {
         GeometryReader { geometry in
             HStack(spacing: 0) {
-                signInPanel
+                signInPanel(travel: geometry.size.height)
                     .frame(width: geometry.size.width)
 
                 ForgotPasswordView(
@@ -53,7 +59,11 @@ public struct LoginView: View {
             .frame(width: geometry.size.width, alignment: .leading)
             .clipped()
         }
-        .background(SplickTheme.Colors.background)
+        .background {
+            SplickBrandAtmosphere()
+        }
+        .environment(\.usesBrandAuthChrome, true)
+        .toolbarBackground(.hidden, for: .navigationBar)
         .sheet(isPresented: $viewModel.showPasswordRequirements) {
             PasswordRequirementsSheet(result: viewModel.passwordStrength)
         }
@@ -77,12 +87,40 @@ public struct LoginView: View {
         } message: {
             Text(languageService.text(.authSignInFailedGeneric))
         }
+        .task(id: launchRevealActive) {
+            guard launchRevealActive else { return }
+            await playLoginEntrance()
+        }
     }
 
-    private var signInPanel: some View {
+    private func playLoginEntrance() async {
+        guard !riseHeader else { return }
+        withAnimation(LoginEntranceMotion.rise) {
+            riseHeader = true
+        }
+        try? await Task.sleep(for: LoginEntranceMotion.stagger)
+        withAnimation(LoginEntranceMotion.rise) {
+            riseForm = true
+        }
+        try? await Task.sleep(for: LoginEntranceMotion.stagger)
+        withAnimation(LoginEntranceMotion.rise) {
+            riseActions = true
+        }
+        try? await Task.sleep(for: LoginEntranceMotion.stagger)
+        withAnimation(LoginEntranceMotion.rise) {
+            riseLegal = true
+        }
+        try? await Task.sleep(for: LoginEntranceMotion.stagger)
+        withAnimation(LoginEntranceMotion.rise) {
+            riseSocial = true
+        }
+    }
+
+    private func signInPanel(travel: CGFloat) -> some View {
         ScrollView {
             VStack(spacing: SplickTheme.Spacing.lg) {
                 headerSection
+                    .modifier(LoginRiseIn(visible: riseHeader, distance: travel))
 
                 if let deactivated = viewModel.deactivatedAccount {
                     DeactivatedAccountView(
@@ -92,11 +130,14 @@ public struct LoginView: View {
                         onReactivate: { Task { await viewModel.reactivateDeactivatedAccount() } },
                         onUseAnotherAccount: { viewModel.useAnotherAccount() }
                     )
+                    .modifier(LoginRiseIn(visible: riseForm, distance: travel))
                 } else {
                     switch viewModel.step {
                 case .credentials:
                     credentialsSection
+                        .modifier(LoginRiseIn(visible: riseForm, distance: travel))
                     credentialsActions
+                        .modifier(LoginRiseIn(visible: riseActions, distance: travel))
                 case .phoneOtp:
                     OtpVerificationView(
                         otpCode: $viewModel.otpCode,
@@ -109,6 +150,7 @@ public struct LoginView: View {
                         otpError: localizedOtpKey(viewModel.otpErrorKey),
                         otpInfoMessage: localizedOtpKey(viewModel.otpInfoMessageKey),
                         isLoading: viewModel.state.isLoading,
+                        isFailed: viewModel.showErrorAlert,
                         cornerRadius: Self.fieldCornerRadius,
                         backTitle: languageService.text(.commonBack),
                         resendTitle: languageService.text(.changePasswordResendCode),
@@ -116,6 +158,7 @@ public struct LoginView: View {
                         onSubmit: { Task { await viewModel.verifyPhoneOtp() } },
                         onBack: { viewModel.goBackToCredentials() }
                     )
+                    .modifier(LoginRiseIn(visible: riseForm, distance: travel))
                 case .registerOtp:
                     OtpVerificationView(
                         otpCode: $viewModel.otpCode,
@@ -125,6 +168,7 @@ public struct LoginView: View {
                         otpError: localizedOtpKey(viewModel.otpErrorKey),
                         otpInfoMessage: localizedOtpKey(viewModel.otpInfoMessageKey),
                         isLoading: viewModel.state.isLoading,
+                        isFailed: viewModel.showErrorAlert,
                         cornerRadius: Self.fieldCornerRadius,
                         backTitle: languageService.text(.commonBack),
                         resendTitle: languageService.text(.changePasswordResendCode),
@@ -132,20 +176,24 @@ public struct LoginView: View {
                         onSubmit: { Task { await viewModel.completeRegistration() } },
                         onBack: { viewModel.goBackFromRegisterOtp() }
                     )
+                    .modifier(LoginRiseIn(visible: riseForm, distance: travel))
                 }
                 }
 
                 if viewModel.deactivatedAccount == nil, viewModel.step == .credentials {
                     credentialsLegalFooter
+                        .modifier(LoginRiseIn(visible: riseLegal, distance: travel))
                 }
 
                 if viewModel.deactivatedAccount == nil, viewModel.step == .credentials, showsSocialSignIn {
                     socialSignInSection
+                        .modifier(LoginRiseIn(visible: riseSocial, distance: travel))
                 }
             }
             .padding(.horizontal, SplickTheme.Spacing.lg)
             .padding(.top, SplickTheme.Spacing.xxl)
         }
+        .scrollContentBackground(.hidden)
         .scrollDismissesKeyboard(.interactively)
     }
 
@@ -205,10 +253,7 @@ public struct LoginView: View {
 
     private var headerSection: some View {
         VStack(spacing: SplickTheme.Spacing.sm) {
-            SplickLogoMark(size: 96, layout: .markOnly, style: .fullColor, asAppIcon: true)
-            Text("Splick")
-                .font(SplickTheme.Typography.largeTitle)
-                .foregroundStyle(SplickTheme.Colors.primaryGradient)
+            SplickLogoMark(size: 168, layout: .fullLockup, style: .fullColor)
             Text(languageService.text(.authLoginTagline))
                 .font(SplickTheme.Typography.callout)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
@@ -272,7 +317,7 @@ public struct LoginView: View {
                         openForgotPassword()
                     }
                     .font(SplickTheme.Typography.caption)
-                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                    .foregroundStyle(SplickTheme.Colors.brandBlue)
                 }
             }
         }
@@ -362,12 +407,14 @@ public struct LoginView: View {
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
                 }
                 .padding(SplickTheme.Spacing.sm)
-                .background(SplickTheme.Colors.secondaryBackground)
+                .background(SplickTheme.Colors.authFieldFill)
                 .clipShape(RoundedRectangle(cornerRadius: Self.fieldCornerRadius, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: Self.fieldCornerRadius, style: .continuous)
                         .strokeBorder(
-                            viewModel.dateOfBirthError != nil ? SplickTheme.Colors.error : Color.clear,
+                            viewModel.dateOfBirthError != nil
+                                ? SplickTheme.Colors.error
+                                : SplickTheme.Colors.authFieldStroke,
                             lineWidth: 1
                         )
                 }
@@ -419,6 +466,7 @@ public struct LoginView: View {
         SplickButton(
             languageService.text(viewModel.submitTitleKey),
             isLoading: viewModel.loadingAction == .credentials,
+            isFailed: viewModel.showErrorAlert,
             isDisabled: viewModel.credentialsSubmitDisabled,
             cornerRadius: Self.fieldCornerRadius
         ) {
