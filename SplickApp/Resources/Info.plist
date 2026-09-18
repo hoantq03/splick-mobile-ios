@@ -65,6 +65,32 @@
 		<key>UIColorName</key>
 		<string>LaunchScreenBackground</string>
 	</dict>
+	<key>CFBundleIcons</key>
+	<dict>
+		<key>CFBundlePrimaryIcon</key>
+		<dict>
+			<key>CFBundleIconName</key>
+			<string>AppIcon</string>
+			<key>CFBundleIconFiles</key>
+			<array>
+				<string>AppIcon</string>
+			</array>
+		</dict>
+		<key>CFBundleAlternateIcons</key>
+		<dict>
+			<key>AppIconDark</key>
+			<dict>
+				<key>CFBundleIconName</key>
+				<string>AppIconDark</string>
+				<key>CFBundleIconFiles</key>
+				<array>
+					<string>AppIconDark</string>
+				</array>
+				<key>UIPrerenderedIcon</key>
+				<false/>
+			</dict>
+		</dict>
+	</dict>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

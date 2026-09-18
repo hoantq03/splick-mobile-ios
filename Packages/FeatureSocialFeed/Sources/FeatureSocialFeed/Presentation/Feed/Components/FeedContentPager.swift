@@ -49,16 +49,20 @@ struct FeedContentPager<Feed: View, Album: View, Streak: View>: View {
 
     /// UIHostingController pages don't inherit the outer SwiftUI environment — forward keys explicitly.
     @EnvironmentObject private var languageService: LanguageService
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.splickVisualTheme) private var splickVisualTheme
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.feedSegmentScrollState) private var feedSegmentScrollState
     @Environment(\.pullToRefreshActive) private var pullToRefreshActive
     @Environment(\.feedTabIsActive) private var feedTabIsActive
 
-    /// Locale-only: high-frequency flags (tab active, pull-to-refresh, selection) must not
-    /// replace UIHostingController roots — that hitch is what made main-tab switches lag on iOS 17.
+    /// Locale + appearance only. High-frequency flags (tab active, pull-to-refresh, selection)
+    /// must not replace UIHostingController roots — that hitch lagged main-tab switches on iOS 17.
     private var contentRevision: Int {
         var hasher = Hasher()
         hasher.combine(languageService.locale)
+        hasher.combine(colorScheme == .dark)
+        hasher.combine(splickVisualTheme)
         return hasher.finalize()
     }
 
@@ -95,6 +99,8 @@ struct FeedContentPager<Feed: View, Album: View, Streak: View>: View {
     private var pagerEnvironment: _PagerEnvironmentForwarding {
         _PagerEnvironmentForwarding(
             languageService: languageService,
+            colorScheme: colorScheme,
+            splickVisualTheme: splickVisualTheme,
             tabBarScrollState: tabBarScrollState,
             feedSegmentScrollState: feedSegmentScrollState
         )
@@ -105,12 +111,16 @@ struct FeedContentPager<Feed: View, Album: View, Streak: View>: View {
 /// Tab/refresh flags live on `_PagerActivityState` so they update without remounting pages.
 private struct _PagerEnvironmentForwarding: ViewModifier {
     let languageService: LanguageService
+    let colorScheme: ColorScheme
+    let splickVisualTheme: SplickVisualTheme?
     let tabBarScrollState: TabBarScrollState?
     let feedSegmentScrollState: FeedSegmentScrollState?
 
     func body(content: Content) -> some View {
         content
             .environmentObject(languageService)
+            .environment(\.colorScheme, colorScheme)
+            .environment(\.splickVisualTheme, splickVisualTheme)
             .environment(\.tabBarScrollState, tabBarScrollState)
             .environment(\.feedSegmentScrollState, feedSegmentScrollState)
     }

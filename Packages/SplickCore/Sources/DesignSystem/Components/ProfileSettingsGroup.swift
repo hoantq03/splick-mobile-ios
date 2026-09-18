@@ -87,7 +87,7 @@ public struct ProfileSettingsRow: View {
             HStack(spacing: SplickTheme.Spacing.sm) {
                 Image(systemName: icon)
                     .font(.body)
-                    .foregroundStyle(isDestructive ? SplickTheme.Colors.error : SplickTheme.Colors.primary)
+                    .foregroundStyle(isDestructive ? SplickTheme.Colors.error : SplickTheme.Colors.primaryGradientStart)
                     .frame(width: 24)
 
                 Text(title)

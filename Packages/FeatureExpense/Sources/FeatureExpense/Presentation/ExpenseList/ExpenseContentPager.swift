@@ -20,14 +20,18 @@ struct ExpenseContentPager<History: View, Overview: View, Friends: View>: View {
     @ViewBuilder var friends: () -> Friends
 
     @EnvironmentObject private var languageService: LanguageService
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.splickVisualTheme) private var splickVisualTheme
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.feedSegmentScrollState) private var feedSegmentScrollState
     @Environment(\.pullToRefreshActive) private var pullToRefreshActive
 
-    /// Locale + identity epoch only. Pull-to-refresh / selection must not remount hosted pages.
+    /// Locale + appearance + identity epoch. Pull-to-refresh / selection must not remount hosted pages.
     private var contentRevision: Int {
         var hasher = Hasher()
         hasher.combine(languageService.locale)
+        hasher.combine(colorScheme == .dark)
+        hasher.combine(splickVisualTheme)
         hasher.combine(contentEpoch)
         return hasher.finalize()
     }
@@ -47,6 +51,8 @@ struct ExpenseContentPager<History: View, Overview: View, Friends: View>: View {
                     history().modifier(
                         ExpensePagerEnvironmentForwarding(
                             languageService: languageService,
+                            colorScheme: colorScheme,
+                            splickVisualTheme: splickVisualTheme,
                             tabBarScrollState: tabBarScrollState,
                             feedSegmentScrollState: feedSegmentScrollState
                         )
@@ -56,6 +62,8 @@ struct ExpenseContentPager<History: View, Overview: View, Friends: View>: View {
                     overview().modifier(
                         ExpensePagerEnvironmentForwarding(
                             languageService: languageService,
+                            colorScheme: colorScheme,
+                            splickVisualTheme: splickVisualTheme,
                             tabBarScrollState: tabBarScrollState,
                             feedSegmentScrollState: feedSegmentScrollState
                         )
@@ -65,6 +73,8 @@ struct ExpenseContentPager<History: View, Overview: View, Friends: View>: View {
                     friends().modifier(
                         ExpensePagerEnvironmentForwarding(
                             languageService: languageService,
+                            colorScheme: colorScheme,
+                            splickVisualTheme: splickVisualTheme,
                             tabBarScrollState: tabBarScrollState,
                             feedSegmentScrollState: feedSegmentScrollState
                         )
@@ -82,12 +92,16 @@ struct ExpenseContentPager<History: View, Overview: View, Friends: View>: View {
 
 private struct ExpensePagerEnvironmentForwarding: ViewModifier {
     let languageService: LanguageService
+    let colorScheme: ColorScheme
+    let splickVisualTheme: SplickVisualTheme?
     let tabBarScrollState: TabBarScrollState?
     let feedSegmentScrollState: FeedSegmentScrollState?
 
     func body(content: Content) -> some View {
         content
             .environmentObject(languageService)
+            .environment(\.colorScheme, colorScheme)
+            .environment(\.splickVisualTheme, splickVisualTheme)
             .environment(\.tabBarScrollState, tabBarScrollState)
             .environment(\.feedSegmentScrollState, feedSegmentScrollState)
     }

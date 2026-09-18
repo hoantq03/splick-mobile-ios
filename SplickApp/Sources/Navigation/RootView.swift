@@ -1,6 +1,7 @@
 import SwiftUI
 import DesignSystem
 import Common
+import Localization
 import FeatureAuth
 import FeatureMedia
 
@@ -9,6 +10,8 @@ struct RootView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var container: DependencyContainer
     @EnvironmentObject private var pushNotificationCoordinator: PushNotificationCoordinator
+    @EnvironmentObject private var themeService: ThemeService
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ZStack {
@@ -24,6 +27,16 @@ struct RootView: View {
             .environment(\.suppressKeyboardAutoFocus, appState.needsLaunchLoading)
             .dismissKeyboardOnTap()
             .progressViewStyle(SplickProgressViewStyle())
+            .splickVisualTheme(
+                themeService.theme.visualTheme(systemIsDark: colorScheme == .dark)
+            )
+            .preferredColorScheme(themeService.preferredColorScheme)
+            .modifier(ForcedColorSchemeModifier(scheme: themeService.preferredColorScheme))
+            .onChange(of: themeService.theme) { _ in
+                themeService.applyUserInterfaceStyle()
+                applyAppIcon()
+            }
+            .onChange(of: colorScheme) { _ in applyAppIcon() }
             .animation(.easeOut(duration: 0.22), value: appState.needsLaunchLoading)
             .environment(\.launchRevealActive, !appState.needsLaunchLoading)
             .task {
@@ -32,6 +45,7 @@ struct RootView: View {
             }
             .onChange(of: scenePhase) { phase in
                 if phase == .active {
+                    themeService.applyUserInterfaceStyle()
                     pushNotificationCoordinator.refreshAuthorizationStatus()
                 }
                 guard appState.isAuthenticated else { return }
@@ -63,6 +77,8 @@ struct RootView: View {
                 }
             }
             .onAppear {
+                themeService.applyUserInterfaceStyle()
+                applyAppIcon()
                 consumePendingNotificationDestination()
                 if appState.isAuthenticated {
                     container.messagingWebSocketClient.connect()
@@ -211,6 +227,13 @@ struct RootView: View {
         appState.markUnauthenticated(container: container)
     }
 
+    private func applyAppIcon() {
+        AppIconSwitcher.apply(
+            theme: themeService.theme,
+            systemIsDark: colorScheme == .dark
+        )
+    }
+
     private func confirmRemoteSession() async {
         switch await container.restoreSessionUseCase.confirmRemote() {
         case .updated(let session):
@@ -220,6 +243,20 @@ struct RootView: View {
             break
         case .signedOut:
             appState.setUnauthenticated(container: container)
+        }
+    }
+}
+
+/// Forces SwiftUI `Environment(\.colorScheme)` immediately. `preferredColorScheme` alone can
+/// leave descendants on the previous scheme until a view is recreated.
+private struct ForcedColorSchemeModifier: ViewModifier {
+    let scheme: ColorScheme?
+
+    func body(content: Content) -> some View {
+        if let scheme {
+            content.environment(\.colorScheme, scheme)
+        } else {
+            content
         }
     }
 }

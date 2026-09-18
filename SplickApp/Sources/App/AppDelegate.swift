@@ -2,6 +2,7 @@ import Foundation
 import UIKit
 import UserNotifications
 import Common
+import Localization
 
 @MainActor
 final class AppDelegate: NSObject, UIApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate {
@@ -106,5 +107,18 @@ final class AppDelegate: NSObject, UIApplicationDelegate, @preconcurrency UNUser
             await PushNotificationCoordinator.shared.handleNotificationResponse(response)
             completionHandler()
         }
+    }
+}
+
+enum AppIconSwitcher {
+    static func apply(theme: AppTheme, systemIsDark: Bool) {
+        let application = UIApplication.shared
+        guard application.supportsAlternateIcons else { return }
+        let desired = theme.usesDarkAppIcon(systemIsDark: systemIsDark)
+            ? AppTheme.darkAlternateIconName
+            : nil
+        let current = application.alternateIconName
+        guard current != desired else { return }
+        application.setAlternateIconName(desired)
     }
 }

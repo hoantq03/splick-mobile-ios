@@ -25,6 +25,7 @@ final class DependencyContainer: ObservableObject {
     let keychainService: KeychainServiceProtocol
     let userDefaultsService: UserDefaultsServiceProtocol
     let languageService: LanguageService
+    let themeService: ThemeService
     let presenceStore: PresenceStore
     let friendDisplayNameStore: FriendDisplayNameStore
 
@@ -1191,6 +1192,7 @@ final class DependencyContainer: ObservableObject {
         self.keychainService = KeychainService()
         self.userDefaultsService = UserDefaultsService()
         self.languageService = LanguageService(userDefaults: userDefaultsService)
+        self.themeService = ThemeService(userDefaults: userDefaultsService)
         self.presenceStore = PresenceStore()
         self.friendDisplayNameStore = FriendDisplayNameStore()
         self.sessionManager = SessionManager()
