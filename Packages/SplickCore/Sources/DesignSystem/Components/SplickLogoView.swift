@@ -57,15 +57,19 @@ public struct SplickLogoMark: View {
     public var style: SplickLogoStyle
     /// Square side for `markOnly`; max width for `fullLockup`.
     public var size: CGFloat
+    /// Home-screen application icon chrome (continuous rounded square).
+    public var asAppIcon: Bool
 
     public init(
         size: CGFloat = 120,
         layout: SplickLogoLayout = .markOnly,
-        style: SplickLogoStyle = .fullColor
+        style: SplickLogoStyle = .fullColor,
+        asAppIcon: Bool = false
     ) {
         self.size = size
         self.layout = layout
         self.style = style
+        self.asAppIcon = asAppIcon
     }
 
     private var frameHeight: CGFloat {
@@ -75,9 +79,35 @@ public struct SplickLogoMark: View {
         }
     }
 
+    private var appIconCornerRadius: CGFloat { size * 0.2237 }
+
     public var body: some View {
-        SplickLogoView(layout: layout, style: style)
-            .frame(width: size, height: frameHeight)
-            .accessibilityLabel("Splick")
+        Group {
+            if asAppIcon {
+                appIconBody
+            } else {
+                SplickLogoView(layout: layout, style: style)
+                    .frame(width: size, height: frameHeight)
+            }
+        }
+        .accessibilityLabel("Splick")
+    }
+
+    private var appIconBody: some View {
+        let markWidth = size * 0.64
+        RoundedRectangle(cornerRadius: appIconCornerRadius, style: .continuous)
+            .fill(Color.white)
+            .overlay {
+                Image("SplickLogoMark", bundle: .module)
+                    .resizable()
+                    .interpolation(.high)
+                    .renderingMode(.template)
+                    .aspectRatio(278.0 / 221.0, contentMode: .fit)
+                    .foregroundStyle(Color.black)
+                    .frame(width: markWidth, height: markWidth * (221.0 / 278.0))
+            }
+            .frame(width: size, height: size)
+            .clipShape(RoundedRectangle(cornerRadius: appIconCornerRadius, style: .continuous))
+            .shadow(color: Color.black.opacity(0.12), radius: size * 0.06, y: size * 0.04)
     }
 }

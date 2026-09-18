@@ -16,7 +16,7 @@ struct SplashScreenView: View {
             .ignoresSafeArea()
 
             VStack(spacing: SplickTheme.Spacing.md) {
-                SplickLogoMark(size: 128, layout: .markOnly, style: .fullColor)
+                SplickLogoMark(size: 128, layout: .markOnly, style: .fullColor, asAppIcon: true)
                 Text("Splick")
                     .font(.system(size: 32, weight: .bold, design: .rounded))
                     .foregroundStyle(SplickTheme.Colors.primaryGradient)

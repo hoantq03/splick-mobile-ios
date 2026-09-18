@@ -205,7 +205,7 @@ public struct LoginView: View {
 
     private var headerSection: some View {
         VStack(spacing: SplickTheme.Spacing.sm) {
-            SplickLogoMark(size: 96, layout: .markOnly, style: .fullColor)
+            SplickLogoMark(size: 96, layout: .markOnly, style: .fullColor, asAppIcon: true)
             Text("Splick")
                 .font(SplickTheme.Typography.largeTitle)
                 .foregroundStyle(SplickTheme.Colors.primaryGradient)

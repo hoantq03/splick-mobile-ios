@@ -95,7 +95,7 @@ struct OnboardingView: View {
 
     private var brandPage: some View {
         VStack(spacing: SplickTheme.Spacing.md) {
-            SplickLogoMark(size: 140, layout: .markOnly, style: .fullColor)
+            SplickLogoMark(size: 140, layout: .markOnly, style: .fullColor, asAppIcon: true)
 
             Text("Splick")
                 .font(.system(size: 44, weight: .bold, design: .rounded))
