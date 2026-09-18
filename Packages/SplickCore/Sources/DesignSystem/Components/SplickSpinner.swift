@@ -27,19 +27,32 @@ public struct SplickSpinner: View {
 
     public var size: Size
     public var usesBrandColors: Bool
+    /// When set, the ring follows this angle instead of spinning on its own (pull-to-refresh tracking).
+    public var rotationDegrees: Double?
     private let sideOverride: CGFloat?
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.splickVisualTheme) private var visualThemeOverride
 
-    public init(size: Size = .medium, usesBrandColors: Bool = true, side: CGFloat? = nil) {
+    public init(
+        size: Size = .medium,
+        usesBrandColors: Bool = true,
+        side: CGFloat? = nil,
+        rotationDegrees: Double? = nil
+    ) {
         self.size = size
         self.usesBrandColors = usesBrandColors
         self.sideOverride = side
+        self.rotationDegrees = rotationDegrees
     }
 
     private var dimension: CGFloat {
         sideOverride ?? size.dimension
+    }
+
+    /// Pull distance that rolls the ring through one full turn (arc length = circumference).
+    public static func fullRotationPullDistance(for size: Size = .medium) -> CGFloat {
+        .pi * size.dimension
     }
 
     private var strokeWidth: CGFloat {
@@ -56,12 +69,18 @@ public struct SplickSpinner: View {
     }
 
     public var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
-            let cycle = 0.9
-            let phase = context.date.timeIntervalSinceReferenceDate
-                .truncatingRemainder(dividingBy: cycle) / cycle
-            ring
-                .rotationEffect(.degrees(phase * 360))
+        Group {
+            if let rotationDegrees {
+                ring.rotationEffect(.degrees(rotationDegrees))
+            } else {
+                TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
+                    let cycle = 0.9
+                    let phase = context.date.timeIntervalSinceReferenceDate
+                        .truncatingRemainder(dividingBy: cycle) / cycle
+                    ring
+                        .rotationEffect(.degrees(phase * 360))
+                }
+            }
         }
         .frame(width: dimension, height: dimension)
         .accessibilityLabel("Loading")
@@ -70,24 +89,19 @@ public struct SplickSpinner: View {
 
     @ViewBuilder
     private var ring: some View {
-        if usesBrandColors {
-            Circle()
-                .trim(from: 0.04, to: 0.78)
-                .stroke(
-                    AngularGradient(
-                        colors: palette.gradientColors,
-                        center: .center
-                    ),
-                    style: StrokeStyle(lineWidth: strokeWidth, lineCap: .round)
-                )
-        } else {
-            Circle()
-                .trim(from: 0.04, to: 0.78)
-                .stroke(
-                    palette.onAccent,
-                    style: StrokeStyle(lineWidth: strokeWidth, lineCap: .round)
-                )
-        }
+        Circle()
+            .trim(from: 0.08, to: 0.92)
+            .stroke(
+                AngularGradient(
+                    colors: usesBrandColors ? palette.gradientColors : [
+                        palette.onAccent,
+                        palette.onAccent.opacity(0.35),
+                        palette.onAccent,
+                    ],
+                    center: .center
+                ),
+                style: StrokeStyle(lineWidth: strokeWidth, lineCap: .round)
+            )
     }
 }
 
