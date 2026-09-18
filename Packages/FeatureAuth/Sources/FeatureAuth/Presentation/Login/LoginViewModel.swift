@@ -27,6 +27,7 @@ public final class LoginViewModel: ObservableObject {
 
     @Published var step: Step = .credentials
     @Published var identifier = ""
+    @Published var selectedPhoneRegion: PhoneCallingRegion = .vietnam
     @Published var password = ""
     @Published var confirmPassword = ""
     @Published var username = ""
@@ -82,9 +83,28 @@ public final class LoginViewModel: ObservableObject {
 
     private var usernameManuallyEdited = false
     private var lastAutoFilledUsername = ""
+    private var identifierLookupTask: Task<Void, Never>?
+
+    private static let identifierLookupDebounce: Duration = .milliseconds(450)
 
     var detectedKind: LoginIdentifierKind {
-        identifier.detectedLoginIdentifierKind
+        let value = identifier.trimmed
+        if value.isEmpty { return .unknown }
+        if value.contains("@") || value.contains(where: \.isLetter) {
+            return value.isValidEmail ? .email : .unknown
+        }
+        guard PhoneNumberParser.looksLikePhone(value) else { return .unknown }
+        return PhoneNumberParser.parse(normalizedPhone, defaultRegion: selectedPhoneRegion)?
+            .completeness == .complete ? .phone : .unknown
+    }
+
+    var identifierIntent: LoginIdentifierKind {
+        let value = identifier.trimmed
+        if value.isEmpty { return .unknown }
+        if value.contains("@") || value.contains(where: \.isLetter) {
+            return .email
+        }
+        return PhoneNumberParser.looksLikePhone(value) ? .phone : .unknown
     }
 
     var showsPasswordField: Bool {
@@ -99,6 +119,34 @@ public final class LoginViewModel: ObservableObject {
         showsPasswordField
     }
 
+    func onIdentifierChanged() {
+        applyPhoneInputNormalization()
+        validateIdentifierField()
+        if lookupState != .pending {
+            resetLookupState()
+        }
+        suggestUsernameFromEmailIfNeeded()
+        scheduleIdentifierLookup()
+    }
+
+    func selectPhoneRegion(_ region: PhoneCallingRegion) {
+        selectedPhoneRegion = region
+        onIdentifierChanged()
+    }
+
+    private func applyPhoneInputNormalization() {
+        guard let normalized = PhoneNumberParser.normalizeTypedIdentifier(
+            identifier,
+            selectedRegion: selectedPhoneRegion
+        ) else { return }
+        if selectedPhoneRegion != normalized.region {
+            selectedPhoneRegion = normalized.region
+        }
+        if identifier != normalized.displayText {
+            identifier = normalized.displayText
+        }
+    }
+
     var submitTitleKey: L10nKey {
         switch lookupState {
         case .pending:
@@ -110,7 +158,9 @@ public final class LoginViewModel: ObservableObject {
         }
     }
 
-    private var normalizedPhone: String { identifier.normalizedE164Phone }
+    private var normalizedPhone: String {
+        "+" + selectedPhoneRegion.callingCode + identifier.filter(\.isNumber)
+    }
 
     public var isAppleSignInAvailable: Bool {
         appleSignInPresenter?.isAvailable == true
@@ -148,14 +198,6 @@ public final class LoginViewModel: ObservableObject {
         self.appleSignInPresenter = appleSignInPresenter
     }
 
-    func onIdentifierChanged() {
-        validateIdentifierField()
-        if lookupState != .pending {
-            resetLookupState()
-        }
-        suggestUsernameFromEmailIfNeeded()
-    }
-
     func onUsernameChanged() {
         if username != lastAutoFilledUsername {
             usernameManuallyEdited = true
@@ -171,16 +213,34 @@ public final class LoginViewModel: ObservableObject {
             return
         }
 
-        switch detectedKind {
-        case .email, .phone:
+        if value.contains("@") || value.contains(where: \.isLetter) {
+            if value.isValidEmail {
+                identifierError = nil
+                identifierStatus = .valid
+            } else if value.contains("@") {
+                identifierError = languageService.text(.authValidationInvalidEmail)
+                identifierStatus = .neutral
+            } else {
+                identifierError = nil
+                identifierStatus = .neutral
+            }
+            return
+        }
+
+        guard let parsed = PhoneNumberParser.parse(normalizedPhone, defaultRegion: selectedPhoneRegion) else {
+            identifierError = nil
+            identifierStatus = .neutral
+            return
+        }
+        switch parsed.completeness {
+        case .complete:
             identifierError = nil
             identifierStatus = .valid
-        case .unknown:
-            if value.contains("@") {
-                identifierError = languageService.text(.authValidationInvalidEmail)
-            } else {
-                identifierError = languageService.text(.authValidationInvalidPhone)
-            }
+        case .incomplete:
+            identifierError = nil
+            identifierStatus = .neutral
+        case .invalid:
+            identifierError = languageService.text(.authValidationInvalidPhone)
             identifierStatus = .neutral
         }
     }
@@ -287,10 +347,17 @@ public final class LoginViewModel: ObservableObject {
         }
     }
 
+    func submitIdentifierFromKeyboard() async {
+        identifierLookupTask?.cancel()
+        guard lookupState == .pending else { return }
+        await checkIdentifier(showsButtonLoading: true)
+    }
+
     func submit() async {
+        identifierLookupTask?.cancel()
         switch lookupState {
         case .pending:
-            await checkIdentifier()
+            await checkIdentifier(showsButtonLoading: true)
         case .existingUser:
             switch detectedKind {
             case .email:
@@ -307,10 +374,50 @@ public final class LoginViewModel: ObservableObject {
     }
 
     func checkIdentifier() async {
-        validateIdentifierField()
+        await checkIdentifier(showsButtonLoading: true)
+    }
+
+    private func scheduleIdentifierLookup() {
+        identifierLookupTask?.cancel()
+        guard !state.isLoading else { return }
         guard identifierError == nil, detectedKind != .unknown else { return }
 
-        setState(.loading, loadingAction: .credentials)
+        let snapshot = identifierLookupSnapshot
+        identifierLookupTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.identifierLookupDebounce)
+            guard !Task.isCancelled else { return }
+            await self?.checkIdentifier(showsButtonLoading: false, expectedSnapshot: snapshot)
+        }
+    }
+
+    private var identifierLookupSnapshot: String {
+        switch detectedKind {
+        case .email:
+            return "email:\(identifier.trimmed.lowercased())"
+        case .phone:
+            return "phone:\(normalizedPhone)"
+        case .unknown:
+            return ""
+        }
+    }
+
+    private func checkIdentifier(
+        showsButtonLoading: Bool,
+        expectedSnapshot: String? = nil
+    ) async {
+        validateIdentifierField()
+        guard identifierError == nil, detectedKind != .unknown else { return }
+        guard lookupState == .pending else { return }
+
+        let snapshot = expectedSnapshot ?? identifierLookupSnapshot
+        guard snapshot == identifierLookupSnapshot else { return }
+
+        if showsButtonLoading {
+            setState(.loading, loadingAction: .credentials)
+        } else {
+            identifierStatus = .loading
+        }
+
         do {
             let exists: Bool
             switch detectedKind {
@@ -328,7 +435,14 @@ public final class LoginViewModel: ObservableObject {
                 setState(.idle)
                 return
             }
+
+            guard snapshot == identifierLookupSnapshot else {
+                if showsButtonLoading { setState(.idle) }
+                return
+            }
+
             lookupState = exists ? .existingUser : .newUser
+            identifierStatus = .valid
             if exists {
                 hasAcceptedLegalTerms = true
                 legalConsentError = nil
@@ -339,8 +453,12 @@ public final class LoginViewModel: ObservableObject {
             }
             setState(.idle)
         } catch let error as NetworkError {
+            guard snapshot == identifierLookupSnapshot else { return }
+            identifierStatus = .neutral
             setState(.failed(error.userMessage))
         } catch {
+            guard snapshot == identifierLookupSnapshot else { return }
+            identifierStatus = .neutral
             setState(.failed(languageService.text(.authVerifyIdentifierFailed)))
         }
     }
@@ -584,6 +702,7 @@ public final class LoginViewModel: ObservableObject {
     }
 
     private func resetLookupState() {
+        identifierLookupTask?.cancel()
         lookupState = .pending
         password = ""
         confirmPassword = ""
@@ -646,6 +765,7 @@ public final class LoginViewModel: ObservableObject {
         deactivatedAccountError = nil
         resetLookupState()
         identifier = ""
+        selectedPhoneRegion = .vietnam
         password = ""
         step = .credentials
         state = .idle

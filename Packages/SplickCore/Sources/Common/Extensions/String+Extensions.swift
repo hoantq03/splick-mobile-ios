@@ -46,11 +46,10 @@ extension String {
     }
 
     /// Normalizes local input to E.164 when possible (e.g. 0901234567 → +84901234567).
+    /// Digits without `+` default to Vietnam (`+84`). `+` / `00` use the typed calling code.
     public var normalizedE164Phone: String {
-        let trimmed = trimmed
-        if trimmed.hasPrefix("+") { return trimmed }
-        if trimmed.hasPrefix("0"), trimmed.count >= 10 {
-            return "+84" + String(trimmed.dropFirst())
+        if let parsed = PhoneNumberParser.parse(self) {
+            return parsed.e164 ?? parsed.e164Candidate
         }
         return trimmed
     }

@@ -77,18 +77,27 @@ private struct SendFriendRequestEndpoint: APIEndpoint {
 final class ClipInviteViewModel: ObservableObject {
     @Published var state: ClipInviteState = .idle
     @Published var isInviting: Bool = false
+    /// Extra fancy fields when profile comes from mock / enriched cache.
+    @Published var richProfile: ClipRichProfile?
 
-    @Published var lastAttemptedUsername: String?
+    @Published var lastAttemptedUsername: String? = ClipMockProfiles.demoUsername
     private let apiClient = APIClient(tokenProvider: InMemoryTokenProvider())
+
+    init() {
+        let mock = ClipMockProfiles.tqHoan03
+        richProfile = mock
+        state = .loaded(mock.dto)
+    }
+
+    /// Demo entry: `https://splick.app/tq.hoan03`
+    func loadDemoProfile() {
+        applyHardcodedProfile()
+    }
 
     // Called from the scene via onContinueUserActivity / onOpenURL
     func handleInviteURL(_ url: URL) {
-        guard let username = extractUsername(from: url) else {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-                state = .error("Liên kết mời không hợp lệ.")
-            }
-            return
-        }
+        // Cmd+R / Xcode injects non-App-Clip URLs — ignore them so hardcoded profile stays.
+        guard let username = extractUsername(from: url) else { return }
         lastAttemptedUsername = username
         Task { await loadProfile(username: username) }
     }
@@ -113,50 +122,51 @@ final class ClipInviteViewModel: ObservableObject {
 
     /// Opens the full Splick app deeplink so the user can sign in and then add a friend.
     func openFullApp(username: String) {
-        // splick://profile/{username} — handled by SplickApp's universal link / deeplink router
-        if let url = URL(string: "splick://profile/\(username)") {
+        // Align with main-app friend deep link: splick://friend/{username}
+        if let url = URL(string: "splick://friend/\(username)") {
             UIApplication.shared.open(url)
         }
     }
 
     // MARK: - Private
 
-    private func loadProfile(username: String) async {
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-            state = .loading
+    private func applyHardcodedProfile() {
+        let mock = ClipMockProfiles.tqHoan03
+        lastAttemptedUsername = mock.dto.username
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.78)) {
+            richProfile = mock
+            state = .loaded(mock.dto)
         }
-        let startTime = Date()
+    }
 
-        do {
-            let profile: ClipPublicProfileDTO = try await apiClient.request(
-                PublicUserProfileEndpoint(username: username)
-            )
-            // Ensure shimmer skeleton renders smoothly for at least 0.5s
-            let elapsed = Date().timeIntervalSince(startTime)
-            if elapsed < 0.5 {
-                try? await Task.sleep(nanoseconds: UInt64((0.5 - elapsed) * 1_000_000_000))
-            }
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.78)) {
-                state = .loaded(profile)
-            }
-        } catch {
-            // Guarantee loading skeleton is displayed for at least 0.9s before transitioning to error
-            let elapsed = Date().timeIntervalSince(startTime)
-            if elapsed < 0.9 {
-                try? await Task.sleep(nanoseconds: UInt64((0.9 - elapsed) * 1_000_000_000))
-            }
-            withAnimation(.spring(response: 0.55, dampingFraction: 0.78)) {
-                state = .error(friendlyErrorMessage(for: error))
-            }
+    private func loadProfile(username _: String) async {
+        // Always show the local mock — public profile API is not live yet.
+        applyHardcodedProfile()
+    }
+
+    private func ensureMinimumLoading(from startTime: Date, minimum: TimeInterval) async {
+        let elapsed = Date().timeIntervalSince(startTime)
+        if elapsed < minimum {
+            try? await Task.sleep(nanoseconds: UInt64((minimum - elapsed) * 1_000_000_000))
         }
     }
 
     private func performSendInvite(username: String, token: String) async {
         isInviting = true
         defer { isInviting = false }
+
+        // Demo mock path: pretend invite succeeded without hitting API.
+        if ClipMockProfiles.richProfile(for: username) != nil {
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                state = .inviteSent
+            }
+            return
+        }
+
+        struct Empty: Decodable {}
         do {
-            struct Empty: Decodable {}
-            let _: Empty? = try? await apiClient.request(
+            let _: Empty = try await apiClient.request(
                 SendFriendRequestEndpoint(targetUsername: username)
             )
             withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {

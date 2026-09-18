@@ -163,8 +163,7 @@ public struct ForgotPasswordView: View {
                 validationStatus: viewModel.identifierStatus,
                 cornerRadius: fieldCornerRadius
             )
-            .textContentType(identifierTextContentType)
-            .keyboardType(identifierKeyboardType)
+            .keyboardType(.asciiCapable)
             .autocorrectionDisabled()
             .textInputAutocapitalization(.never)
             .onChange(of: viewModel.identifier) { _ in viewModel.validateIdentifierField() }
@@ -172,12 +171,15 @@ public struct ForgotPasswordView: View {
             SplickButton(
                 languageService.text(.authSendCode),
                 isLoading: viewModel.state.isLoading && viewModel.step == .identifier,
-                isDisabled: viewModel.identifier.trimmed.isEmpty,
+                isDisabled: viewModel.identifier.trimmed.isEmpty
+                    || viewModel.detectedKind == .unknown
+                    || viewModel.identifierErrorKey != nil,
                 cornerRadius: fieldCornerRadius
             ) {
                 Task { await viewModel.requestResetCode() }
             }
         }
+        .animation(AuthFlowMotion.fieldReveal, value: viewModel.identifierErrorKey)
         .padding(.horizontal, horizontalPadding)
         .padding(.top, presentation == .inline ? SplickTheme.Spacing.md : SplickTheme.Spacing.lg)
     }
@@ -325,24 +327,10 @@ public struct ForgotPasswordView: View {
     }
 
     private var identifierIcon: String {
-        switch viewModel.detectedKind {
+        switch viewModel.identifierIntent {
         case .email: return "envelope"
         case .phone: return "phone"
         case .unknown: return "person"
-        }
-    }
-
-    private var identifierKeyboardType: UIKeyboardType {
-        switch viewModel.detectedKind {
-        case .phone: return .phonePad
-        case .email, .unknown: return .emailAddress
-        }
-    }
-
-    private var identifierTextContentType: UITextContentType {
-        switch viewModel.detectedKind {
-        case .phone: return .telephoneNumber
-        case .email, .unknown: return .username
         }
     }
 

@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 import DesignSystem
 import Common
 import Localization
@@ -168,12 +167,13 @@ public struct LoginView: View {
             }
 
             if viewModel.legalConsentError != nil {
-                Text(languageService.text(.legalConsentRequiredError))
-                    .font(SplickTheme.Typography.caption)
-                    .foregroundStyle(SplickTheme.Colors.error)
-                    .multilineTextAlignment(.center)
+                SplickFieldErrorMessage(
+                    languageService.text(.legalConsentRequiredError),
+                    alignment: .center
+                )
             }
         }
+        .animation(AuthFlowMotion.fieldReveal, value: viewModel.legalConsentError)
     }
 
     private var showsSocialSignIn: Bool {
@@ -218,33 +218,37 @@ public struct LoginView: View {
 
     private var credentialsSection: some View {
         VStack(spacing: SplickTheme.Spacing.md) {
-            SplickTextField(
-                languageService.text(.authIdentifier),
+            AuthIdentifierField(
                 text: $viewModel.identifier,
+                intent: viewModel.identifierIntent,
+                selectedRegion: viewModel.selectedPhoneRegion,
                 errorMessage: viewModel.identifierError,
-                icon: identifierIcon,
                 validationStatus: viewModel.identifierStatus,
-                cornerRadius: Self.fieldCornerRadius
+                placeholder: languageService.text(.authIdentifier),
+                cornerRadius: Self.fieldCornerRadius,
+                locale: Locale(identifier: languageService.locale.rawValue),
+                onSelectRegion: { viewModel.selectPhoneRegion($0) },
+                onSubmit: {
+                    Task { await viewModel.submitIdentifierFromKeyboard() }
+                }
             )
-            .textContentType(identifierTextContentType)
-            .keyboardType(identifierKeyboardType)
-            .autocorrectionDisabled()
-            .textInputAutocapitalization(.never)
             .onChange(of: viewModel.identifier) { _ in
                 viewModel.onIdentifierChanged()
             }
 
-            if viewModel.showsPasswordField {
-                emailPasswordFields
-                    .transition(AuthFlowMotion.credentialsFieldTransition)
-            }
+            Group {
+                if viewModel.showsPasswordField {
+                    emailPasswordFields
+                        .transition(AuthFlowMotion.credentialsFieldTransition)
+                }
 
-            if viewModel.showsRegistrationFields {
-                registrationFields
-                    .transition(AuthFlowMotion.credentialsFieldTransition)
+                if viewModel.showsRegistrationFields {
+                    registrationFields
+                        .transition(AuthFlowMotion.credentialsFieldTransition)
+                }
             }
+            .animation(AuthFlowMotion.fieldReveal, value: viewModel.lookupState)
         }
-        .animation(AuthFlowMotion.fieldReveal, value: viewModel.lookupState)
     }
 
     private var emailPasswordFields: some View {
@@ -370,12 +374,11 @@ public struct LoginView: View {
             }
             .buttonStyle(.plain)
 
-            if let error = viewModel.dateOfBirthError {
-                Text(error)
-                    .font(SplickTheme.Typography.caption)
-                    .foregroundStyle(SplickTheme.Colors.error)
+            if viewModel.dateOfBirthError != nil {
+                SplickFieldErrorMessage(viewModel.dateOfBirthError)
             }
         }
+        .animation(AuthFlowMotion.fieldReveal, value: viewModel.dateOfBirthError)
     }
 
     private var dateOfBirthPickerSheet: some View {
@@ -410,28 +413,6 @@ public struct LoginView: View {
             }
         }
         .presentationDetents([.medium, .large])
-    }
-
-    private var identifierIcon: String {
-        switch viewModel.detectedKind {
-        case .email: return "envelope"
-        case .phone: return "phone"
-        case .unknown: return "person"
-        }
-    }
-
-    private var identifierKeyboardType: UIKeyboardType {
-        switch viewModel.detectedKind {
-        case .phone: return .phonePad
-        case .email, .unknown: return .emailAddress
-        }
-    }
-
-    private var identifierTextContentType: UITextContentType {
-        switch viewModel.detectedKind {
-        case .phone: return .telephoneNumber
-        case .email, .unknown: return .username
-        }
     }
 
     private var credentialsActions: some View {

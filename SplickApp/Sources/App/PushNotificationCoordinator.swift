@@ -517,8 +517,7 @@ final class PushNotificationCoordinator: ObservableObject {
 
         guard await hasAccessToken?() ?? false else {
             isRegisteredOnServer = false
-            pushDebug("SKIP POST /v1/devices — not authenticated yet suffix=\(tokenSuffix)")
-            Log.warning(
+            Log.debug(
                 "Skipping POST /v1/devices because user is not authenticated yet",
                 category: .notification,
                 metadata: ["tokenSuffix": tokenSuffix]

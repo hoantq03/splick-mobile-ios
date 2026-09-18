@@ -36,7 +36,9 @@ struct ProfileCardView: View {
                 Group {
                     switch viewModel.state {
                     case .idle:
-                        IdleScanCardView()
+                        IdleScanCardView {
+                            viewModel.loadDemoProfile()
+                        }
                             .transition(.asymmetric(
                                 insertion: .scale(scale: 0.9).combined(with: .opacity),
                                 removal: .scale(scale: 0.9).combined(with: .opacity)
@@ -50,7 +52,11 @@ struct ProfileCardView: View {
                             ))
 
                     case .loaded(let profile):
-                        LoadedProfileCardContent(profile: profile, viewModel: viewModel)
+                        LoadedProfileCardContent(
+                            profile: profile,
+                            rich: viewModel.richProfile,
+                            viewModel: viewModel
+                        )
                             .transition(.asymmetric(
                                 insertion: .scale(scale: 0.92).combined(with: .opacity),
                                 removal: .scale(scale: 0.92).combined(with: .opacity)
@@ -149,24 +155,26 @@ private struct BackgroundAuraView: View {
     var body: some View {
         ZStack {
             if colorScheme == .dark {
-                // Deep cosmic base
-                Color(hex: 0x0A0A14).ignoresSafeArea()
+                Color(hex: 0x05050C).ignoresSafeArea()
 
-                // Ambient violet orb
                 Circle()
-                    .fill(Color(hex: 0x5B6CFF).opacity(pulse ? 0.35 : 0.22))
-                    .frame(width: 320, height: 320)
-                    .blur(radius: 80)
-                    .offset(x: pulse ? -80 : -50, y: pulse ? -140 : -100)
+                    .fill(Color(hex: 0x5B6CFF).opacity(pulse ? 0.42 : 0.26))
+                    .frame(width: 340, height: 340)
+                    .blur(radius: 90)
+                    .offset(x: pulse ? -90 : -40, y: pulse ? -160 : -110)
 
-                // Ambient teal/cyan orb
                 Circle()
-                    .fill(Color(hex: 0x00F5D4).opacity(pulse ? 0.28 : 0.18))
-                    .frame(width: 280, height: 280)
-                    .blur(radius: 75)
-                    .offset(x: pulse ? 90 : 60, y: pulse ? 120 : 80)
+                    .fill(Color(hex: 0x00F5D4).opacity(pulse ? 0.32 : 0.18))
+                    .frame(width: 300, height: 300)
+                    .blur(radius: 82)
+                    .offset(x: pulse ? 100 : 50, y: pulse ? 140 : 90)
+
+                Circle()
+                    .fill(Color(hex: 0xE056FD).opacity(pulse ? 0.22 : 0.12))
+                    .frame(width: 220, height: 220)
+                    .blur(radius: 70)
+                    .offset(x: pulse ? 20 : -30, y: pulse ? 40 : 80)
             } else {
-                // Soft iridescent light background
                 LinearGradient(
                     colors: [
                         Color(hex: 0xF8FAFC),
@@ -178,26 +186,60 @@ private struct BackgroundAuraView: View {
                 )
                 .ignoresSafeArea()
 
-                // Soft pastel violet orb
                 Circle()
-                    .fill(Color(hex: 0x5B6CFF).opacity(pulse ? 0.18 : 0.10))
+                    .fill(Color(hex: 0x5B6CFF).opacity(pulse ? 0.20 : 0.10))
                     .frame(width: 320, height: 320)
                     .blur(radius: 70)
                     .offset(x: pulse ? -70 : -40, y: pulse ? -120 : -90)
 
-                // Soft pastel teal orb
                 Circle()
-                    .fill(Color(hex: 0x4ECDC4).opacity(pulse ? 0.20 : 0.12))
+                    .fill(Color(hex: 0x4ECDC4).opacity(pulse ? 0.22 : 0.12))
                     .frame(width: 300, height: 300)
                     .blur(radius: 70)
                     .offset(x: pulse ? 80 : 50, y: pulse ? 110 : 70)
+
+                Circle()
+                    .fill(Color(hex: 0xE056FD).opacity(pulse ? 0.12 : 0.06))
+                    .frame(width: 200, height: 200)
+                    .blur(radius: 60)
+                    .offset(x: pulse ? -10 : 30, y: pulse ? 20 : -20)
             }
+
+            StarfieldView(isDark: colorScheme == .dark)
         }
         .onAppear {
             withAnimation(.easeInOut(duration: 5.0).repeatForever(autoreverses: true)) {
                 pulse.toggle()
             }
         }
+    }
+}
+
+private struct StarfieldView: View {
+    let isDark: Bool
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 30, paused: false)) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            Canvas { context, size in
+                for i in 0..<28 {
+                    let seed = Double(i * 47)
+                    let x = (sin(seed) * 0.5 + 0.5) * size.width
+                    let y = (cos(seed * 1.3) * 0.5 + 0.5) * size.height
+                    let twinkle = (sin(t * (1.4 + Double(i % 5) * 0.35) + seed) * 0.5 + 0.5)
+                    let radius = isDark ? (0.7 + twinkle * 1.6) : (0.5 + twinkle * 1.1)
+                    let rect = CGRect(x: x, y: y, width: radius, height: radius)
+                    context.fill(
+                        Path(ellipseIn: rect),
+                        with: .color(
+                            Color.white.opacity(isDark ? 0.18 + twinkle * 0.55 : 0.08 + twinkle * 0.22)
+                        )
+                    )
+                }
+            }
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
     }
 }
 
@@ -211,9 +253,10 @@ private struct SplickBrandHeader: View {
             Image("SplickLogoMark")
                 .resizable()
                 .interpolation(.high)
+                .renderingMode(.template)
                 .scaledToFit()
-                .frame(width: 18, height: 24)
-                .shadow(color: Color(hex: 0x5B6CFF).opacity(0.8), radius: 6)
+                .frame(width: 18, height: 14)
+                .foregroundStyle(colorScheme == .dark ? Color.white : Color(hex: 0x0F172A))
 
             Text("SPLICK")
                 .font(.system(.subheadline, design: .rounded, weight: .black))
@@ -263,6 +306,7 @@ private struct SplickBrandHeader: View {
 // MARK: - Idle Scanning State (Adaptive)
 
 private struct IdleScanCardView: View {
+    var onPreviewDemo: () -> Void
     @Environment(\.colorScheme) private var colorScheme
     @State private var wavePulse: Bool = false
 
@@ -305,9 +349,10 @@ private struct IdleScanCardView: View {
                 Image("SplickLogoMark")
                     .resizable()
                     .interpolation(.high)
+                    .renderingMode(.template)
                     .scaledToFit()
-                    .frame(width: 44, height: 56)
-                    .shadow(color: Color(hex: 0x00F5D4).opacity(0.9), radius: 10)
+                    .frame(width: 44, height: 35)
+                    .foregroundStyle(.white)
             }
             .frame(height: 180)
             .padding(.top, 16)
@@ -323,6 +368,32 @@ private struct IdleScanCardView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 16)
             }
+
+            // Mock invite URL pill — tap to preview demo profile
+            Button(action: onPreviewDemo) {
+                HStack(spacing: 8) {
+                    Image(systemName: "link")
+                        .font(.system(size: 11, weight: .bold))
+                    Text(ClipMockProfiles.demoInviteURL.absoluteString.replacingOccurrences(of: "https://", with: ""))
+                        .font(.system(.caption, design: .rounded, weight: .bold))
+                    Image(systemName: "arrow.right.circle.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                .foregroundStyle(colorScheme == .dark ? Color(hex: 0x00F5D4) : Color(hex: 0x0D9488))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    (colorScheme == .dark ? Color(hex: 0x00F5D4).opacity(0.12) : Color(hex: 0x0D9488).opacity(0.1)),
+                    in: Capsule()
+                )
+                .overlay(
+                    Capsule().strokeBorder(
+                        (colorScheme == .dark ? Color(hex: 0x00F5D4) : Color(hex: 0x0D9488)).opacity(0.35),
+                        lineWidth: 1
+                    )
+                )
+            }
+            .buttonStyle(.plain)
         }
         .padding(32)
         .frame(maxWidth: 360)
@@ -434,152 +505,559 @@ private struct LoadingCardSkeletonView: View {
 
 private struct LoadedProfileCardContent: View {
     let profile: ClipPublicProfileDTO
+    let rich: ClipRichProfile?
     let viewModel: ClipInviteViewModel
     @Environment(\.colorScheme) private var colorScheme
 
     @State private var avatarGlow: Bool = false
+    @State private var contentReveal: Bool = false
+    @State private var displayedFriends: Int = 0
+    @State private var displayedPosts: Int = 0
 
     var body: some View {
-        VStack(spacing: 24) {
-            // 3D Glowing Avatar
-            ZStack {
-                // Background radial aura
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                Color(hex: 0x5B6CFF).opacity(colorScheme == .dark ? 0.55 : 0.25),
-                                .clear
-                            ],
-                            center: .center,
-                            startRadius: 20,
-                            endRadius: 75
-                        )
-                    )
-                    .frame(width: 150, height: 150)
-                    .scaleEffect(avatarGlow ? 1.08 : 0.95)
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 14) {
+                if let rank = rich?.rankTitle {
+                    RankRibbon(title: rank)
+                        .padding(.top, 2)
+                }
 
-                // Avatar Image
-                AsyncImage(url: profile.avatarUrl) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                    case .failure, .empty:
-                        AvatarInitialsView(name: profile.displayName)
-                    @unknown default:
-                        AvatarInitialsView(name: profile.displayName)
+                ZStack {
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [
+                                    Color(hex: 0x5B6CFF).opacity(colorScheme == .dark ? 0.62 : 0.28),
+                                    Color(hex: 0xE056FD).opacity(colorScheme == .dark ? 0.18 : 0.08),
+                                    .clear
+                                ],
+                                center: .center,
+                                startRadius: 12,
+                                endRadius: 82
+                            )
+                        )
+                        .frame(width: 164, height: 164)
+                        .scaleEffect(avatarGlow ? 1.1 : 0.94)
+
+                    AvatarSparklesView()
+
+                    AsyncImage(url: profile.avatarUrl) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image.resizable().scaledToFill()
+                        case .failure, .empty:
+                            AvatarInitialsView(name: profile.displayName)
+                        @unknown default:
+                            AvatarInitialsView(name: profile.displayName)
+                        }
+                    }
+                    .frame(width: 104, height: 104)
+                    .clipShape(Circle())
+                    .overlay(
+                        TimelineView(.animation(minimumInterval: 1 / 30, paused: false)) { timeline in
+                            let degrees = timeline.date.timeIntervalSinceReferenceDate * 40
+                            Circle()
+                                .strokeBorder(
+                                    AngularGradient(
+                                        colors: [
+                                            Color(hex: 0x4ECDC4),
+                                            Color(hex: 0x5B6CFF),
+                                            Color(hex: 0xE056FD),
+                                            Color(hex: 0xF59E0B),
+                                            Color(hex: 0x4ECDC4)
+                                        ],
+                                        center: .center
+                                    ),
+                                    lineWidth: 3.2
+                                )
+                                .rotationEffect(.degrees(degrees))
+                        }
+                    )
+                    .shadow(
+                        color: colorScheme == .dark
+                            ? Color(hex: 0x4ECDC4).opacity(0.5)
+                            : Color(hex: 0x5B6CFF).opacity(0.28),
+                        radius: 18,
+                        y: 6
+                    )
+
+                    if rich?.isOnline == true {
+                        OnlinePulseDot()
+                            .offset(x: 38, y: 38)
                     }
                 }
-                .frame(width: 104, height: 104)
-                .clipShape(Circle())
-                .overlay(
-                    Circle()
-                        .strokeBorder(
-                            LinearGradient(
-                                colors: [Color(hex: 0x4ECDC4), Color(hex: 0x5B6CFF), Color(hex: 0xE056FD)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 3
-                        )
-                )
-                .shadow(
-                    color: colorScheme == .dark
-                        ? Color(hex: 0x4ECDC4).opacity(0.4)
-                        : Color(hex: 0x5B6CFF).opacity(0.25),
-                    radius: 18,
-                    y: 6
-                )
-            }
-            .padding(.top, 4)
+                .padding(.top, 2)
 
-            // Name & Username
-            VStack(spacing: 6) {
-                Text(profile.displayName)
-                    .font(.system(.title2, design: .rounded, weight: .bold))
-                    .foregroundStyle(colorScheme == .dark ? .white : Color(hex: 0x0F172A))
-                    .multilineTextAlignment(.center)
+                VStack(spacing: 6) {
+                    HStack(spacing: 6) {
+                        Text(profile.displayName)
+                            .font(.system(.title2, design: .rounded, weight: .bold))
+                            .foregroundStyle(holographicName)
 
-                HStack(spacing: 4) {
+                        if rich?.isVerified == true {
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        colors: [Color(hex: 0x5B6CFF), Color(hex: 0x4ECDC4)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .shadow(color: Color(hex: 0x5B6CFF).opacity(0.45), radius: 4)
+                        }
+                    }
+
                     Text("@\(profile.username)")
                         .font(.system(.subheadline, design: .rounded, weight: .bold))
                         .foregroundStyle(colorScheme == .dark ? Color(hex: 0x00F5D4) : Color(hex: 0x0D9488))
 
-                    Image(systemName: "checkmark.seal.fill")
-                        .font(.caption)
-                        .foregroundStyle(colorScheme == .dark ? Color(hex: 0x00F5D4) : Color(hex: 0x0D9488))
+                    if let rich {
+                        HStack(spacing: 6) {
+                            Image(systemName: "mappin.and.ellipse")
+                                .font(.system(size: 10, weight: .semibold))
+                            Text(rich.location)
+                            Text("·")
+                            Text(rich.vibe)
+                        }
+                        .font(.system(.caption2, design: .rounded, weight: .medium))
+                        .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.48) : Color(hex: 0x64748B))
+                    }
                 }
-            }
+                .opacity(contentReveal ? 1 : 0)
+                .offset(y: contentReveal ? 0 : 8)
 
-            // Stats Pill Row
-            HStack(spacing: 36) {
-                StatPillItem(value: profile.friendCount, label: "bạn bè")
-
-                Rectangle()
-                    .fill(colorScheme == .dark ? Color.white.opacity(0.14) : Color(hex: 0xCBD5E1))
-                    .frame(width: 1, height: 32)
-
-                StatPillItem(value: profile.postCount, label: "bài viết")
-            }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 10)
-            .background(
-                colorScheme == .dark
-                    ? Color.white.opacity(0.04)
-                    : Color(hex: 0xF1F5F9),
-                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-            )
-
-            // Action CTA Button
-            ActionFriendButton(
-                friendStatus: profile.friendStatus,
-                isLoading: viewModel.isInviting
-            ) {
-                triggerHaptic()
-                viewModel.sendInvite()
-            }
-            .padding(.horizontal, 6)
-
-            // Open Full App Link
-            Button {
-                triggerHaptic()
-                viewModel.openFullApp(username: profile.username)
-            } label: {
-                HStack(spacing: 4) {
-                    Text("Mở hồ sơ trên Splick")
-                        .font(.system(.footnote, design: .rounded, weight: .semibold))
-                    Image(systemName: "arrow.up.right")
-                        .font(.system(size: 10, weight: .bold))
+                if let quote = rich?.quote {
+                    Text("“\(quote)”")
+                        .font(.system(.caption, design: .serif).italic())
+                        .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.78) : Color(hex: 0x334155))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 10)
+                        .opacity(contentReveal ? 1 : 0)
                 }
-                .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.55) : Color(hex: 0x4B5563))
-            }
-            .padding(.bottom, 2)
 
-            // Brand Footer Tagline
-            HStack(spacing: 5) {
-                Image("SplickLogoMark")
-                    .resizable()
-                    .interpolation(.high)
-                    .scaledToFit()
-                    .frame(width: 12, height: 16)
-                    .opacity(0.65)
-                Text("Splick • Click and Split")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.42) : Color(hex: 0x64748B))
+                if let bio = rich?.bio {
+                    Text(bio)
+                        .font(.system(.caption, design: .rounded))
+                        .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.68) : Color(hex: 0x475569))
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(2)
+                        .padding(.horizontal, 8)
+                        .opacity(contentReveal ? 1 : 0)
+                }
+
+                if let url = rich?.profileURL {
+                    ProfileURLPill(urlText: url)
+                        .opacity(contentReveal ? 1 : 0)
+                }
+
+                if let badges = rich?.badges, !badges.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(badges, id: \.id) { badge in
+                                BadgeChipView(badge: badge)
+                            }
+                        }
+                        .padding(.horizontal, 2)
+                    }
+                    .opacity(contentReveal ? 1 : 0)
+                }
+
+                HStack(spacing: 0) {
+                    StatPillItem(value: displayedFriends, label: "bạn bè")
+                        .frame(maxWidth: .infinity)
+                    Rectangle()
+                        .fill(colorScheme == .dark ? Color.white.opacity(0.14) : Color(hex: 0xCBD5E1))
+                        .frame(width: 1, height: 32)
+                    StatPillItem(value: displayedPosts, label: "bài viết")
+                        .frame(maxWidth: .infinity)
+                    if let mutualCount = rich?.mutualCount {
+                        Rectangle()
+                            .fill(colorScheme == .dark ? Color.white.opacity(0.14) : Color(hex: 0xCBD5E1))
+                            .frame(width: 1, height: 32)
+                        StatPillItem(value: mutualCount, label: "chung")
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .padding(.vertical, 10)
+                .background(
+                    colorScheme == .dark
+                        ? Color.white.opacity(0.045)
+                        : Color(hex: 0xF1F5F9),
+                    in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                )
+                .opacity(contentReveal ? 1 : 0)
+
+                if let rich {
+                    MutualRow(friends: rich.mutuals, extraCount: max(0, rich.mutualCount - rich.mutuals.count))
+                        .opacity(contentReveal ? 1 : 0)
+
+                    RecentSplitRow(split: rich.recentSplit)
+                        .opacity(contentReveal ? 1 : 0)
+                }
+
+                if let highlights = rich?.highlights, !highlights.isEmpty {
+                    HStack(spacing: 8) {
+                        ForEach(highlights, id: \.id) { item in
+                            HighlightMiniCard(item: item)
+                        }
+                    }
+                    .opacity(contentReveal ? 1 : 0)
+                }
+
+                ActionFriendButton(
+                    friendStatus: profile.friendStatus,
+                    isLoading: viewModel.isInviting
+                ) {
+                    triggerHaptic()
+                    viewModel.sendInvite()
+                }
+                .padding(.horizontal, 2)
+
+                Button {
+                    triggerHaptic()
+                    viewModel.openFullApp(username: profile.username)
+                } label: {
+                    HStack(spacing: 4) {
+                        Text("Mở hồ sơ trên Splick")
+                            .font(.system(.footnote, design: .rounded, weight: .semibold))
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.55) : Color(hex: 0x4B5563))
+                }
+
+                HStack(spacing: 5) {
+                    Image("SplickLogoMark")
+                        .resizable()
+                        .interpolation(.high)
+                        .renderingMode(.template)
+                        .scaledToFit()
+                        .frame(width: 12, height: 10)
+                        .foregroundStyle(colorScheme == .dark ? Color.white : Color(hex: 0x0F172A))
+                        .opacity(0.65)
+                    Text("Splick • Click and Split")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.42) : Color(hex: 0x64748B))
+                }
+                .padding(.bottom, 4)
             }
+            .padding(22)
         }
-        .padding(28)
         .frame(maxWidth: 360)
+        .frame(maxHeight: 640)
         .glassCardStyle()
         .onAppear {
             withAnimation(.easeInOut(duration: 2.2).repeatForever(autoreverses: true)) {
                 avatarGlow = true
             }
+            withAnimation(.spring(response: 0.55, dampingFraction: 0.82).delay(0.08)) {
+                contentReveal = true
+            }
+            animateCounts()
+        }
+    }
+
+    private var holographicName: LinearGradient {
+        if colorScheme == .dark {
+            return LinearGradient(
+                colors: [Color.white, Color(hex: 0xA5B4FC), Color(hex: 0x4ECDC4)],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        }
+        return LinearGradient(
+            colors: [Color(hex: 0x0F172A), Color(hex: 0x4338CA), Color(hex: 0x0D9488)],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+
+    private func animateCounts() {
+        displayedFriends = 0
+        displayedPosts = 0
+        let friends = profile.friendCount
+        let posts = profile.postCount
+        Task { @MainActor in
+            for step in 1...18 {
+                try? await Task.sleep(nanoseconds: 28_000_000)
+                let progress = Double(step) / 18.0
+                displayedFriends = Int(Double(friends) * progress)
+                displayedPosts = Int(Double(posts) * progress)
+            }
+            displayedFriends = friends
+            displayedPosts = posts
         }
     }
 
     private func triggerHaptic() {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    }
+}
+
+// MARK: - Fancy Profile Subviews
+
+private struct AvatarSparklesView: View {
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 30, paused: false)) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            ZStack {
+                ForEach(0..<8, id: \.self) { i in
+                    let angle = (Double(i) / 8.0) * .pi * 2 + t * 0.9
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color(hex: 0x00F5D4), Color(hex: 0xE056FD)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .frame(width: i.isMultiple(of: 2) ? 6 : 3.5, height: i.isMultiple(of: 2) ? 6 : 3.5)
+                        .blur(radius: 0.3)
+                        .shadow(color: Color(hex: 0x4ECDC4).opacity(0.85), radius: 4)
+                        .offset(x: cos(angle) * 70, y: sin(angle) * 70)
+                        .opacity(0.55 + 0.4 * sin(t * 2 + Double(i)))
+                }
+            }
+            .frame(width: 160, height: 160)
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+private struct ProfileURLPill: View {
+    let urlText: String
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "link")
+                .font(.system(size: 10, weight: .bold))
+            Text(urlText)
+                .font(.system(.caption2, design: .monospaced, weight: .semibold))
+        }
+        .foregroundStyle(colorScheme == .dark ? Color(hex: 0xA5B4FC) : Color(hex: 0x4F46E5))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(
+            (colorScheme == .dark ? Color(hex: 0x5B6CFF).opacity(0.16) : Color(hex: 0xEEF2FF)),
+            in: Capsule()
+        )
+        .overlay(
+            Capsule().strokeBorder(
+                Color(hex: 0x5B6CFF).opacity(colorScheme == .dark ? 0.35 : 0.22),
+                lineWidth: 1
+            )
+        )
+    }
+}
+
+private struct BadgeChipView: View {
+    let badge: ClipProfileBadge
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: badge.systemImage)
+                .font(.system(size: 10, weight: .bold))
+            Text(badge.title)
+                .font(.system(.caption2, design: .rounded, weight: .bold))
+        }
+        .foregroundStyle(Color(hex: badge.accentHex))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(
+            Color(hex: badge.accentHex).opacity(colorScheme == .dark ? 0.18 : 0.12),
+            in: Capsule()
+        )
+        .overlay(
+            Capsule().strokeBorder(Color(hex: badge.accentHex).opacity(0.35), lineWidth: 1)
+        )
+    }
+}
+
+private struct HighlightMiniCard: View {
+    let item: ClipProfileHighlight
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 4) {
+                Image(systemName: item.systemImage)
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(Color(hex: 0x4ECDC4))
+                Text(item.title)
+                    .font(.system(.caption, design: .rounded, weight: .bold))
+                    .foregroundStyle(colorScheme == .dark ? .white : Color(hex: 0x0F172A))
+                    .lineLimit(1)
+            }
+            Text(item.subtitle)
+                .font(.system(size: 9, weight: .medium, design: .rounded))
+                .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.45) : Color(hex: 0x64748B))
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 10)
+        .background(
+            colorScheme == .dark ? Color.white.opacity(0.05) : Color(hex: 0xF8FAFC),
+            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            Color(hex: 0x4ECDC4).opacity(0.45),
+                            Color(hex: 0x5B6CFF).opacity(0.2)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        )
+    }
+}
+
+private struct RankRibbon: View {
+    let title: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 9, weight: .bold))
+            Text(title)
+                .font(.system(size: 10, weight: .black, design: .rounded))
+                .tracking(1.4)
+            Image(systemName: "sparkles")
+                .font(.system(size: 9, weight: .bold))
+        }
+        .foregroundStyle(
+            LinearGradient(
+                colors: [Color(hex: 0xFDE68A), Color(hex: 0xF59E0B), Color(hex: 0xFDE68A)],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        )
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(
+            Capsule().fill(Color(hex: 0xF59E0B).opacity(0.16))
+        )
+        .overlay(
+            Capsule().strokeBorder(Color(hex: 0xF59E0B).opacity(0.45), lineWidth: 1)
+        )
+        .shadow(color: Color(hex: 0xF59E0B).opacity(0.28), radius: 8, y: 2)
+    }
+}
+
+private struct OnlinePulseDot: View {
+    @State private var pulse = false
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color(hex: 0x22C55E).opacity(0.28))
+                .frame(width: pulse ? 22 : 16, height: pulse ? 22 : 16)
+            Circle()
+                .fill(Color(hex: 0x22C55E))
+                .frame(width: 12, height: 12)
+                .overlay(Circle().stroke(Color.white, lineWidth: 2))
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
+                pulse = true
+            }
+        }
+    }
+}
+
+private struct MutualRow: View {
+    let friends: [ClipMutualFriend]
+    let extraCount: Int
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        HStack(spacing: 10) {
+            HStack(spacing: -8) {
+                ForEach(friends, id: \.initials) { friend in
+                    Text(friend.initials)
+                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .frame(width: 24, height: 24)
+                        .background(Circle().fill(Color(hex: friend.accentHex)))
+                        .overlay(Circle().stroke(colorScheme == .dark ? Color(hex: 0x0A0A14) : .white, lineWidth: 1.5))
+                }
+            }
+
+            Text(extraCount > 0 ? "+\(extraCount) bạn chung" : "Bạn chung")
+                .font(.system(.caption2, design: .rounded, weight: .semibold))
+                .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.62) : Color(hex: 0x475569))
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            colorScheme == .dark ? Color.white.opacity(0.04) : Color(hex: 0xF8FAFC),
+            in: Capsule()
+        )
+    }
+}
+
+private struct RecentSplitRow: View {
+    let split: ClipRecentSplit
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color(hex: 0x5B6CFF), Color(hex: 0x4ECDC4)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 36, height: 36)
+                Image(systemName: "fork.knife")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(split.title)
+                    .font(.system(.caption, design: .rounded, weight: .bold))
+                    .foregroundStyle(colorScheme == .dark ? .white : Color(hex: 0x0F172A))
+                Text("\(split.people) người · \(split.timeAgo)")
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.45) : Color(hex: 0x64748B))
+            }
+
+            Spacer(minLength: 0)
+
+            Text(split.amount)
+                .font(.system(.caption, design: .rounded, weight: .black))
+                .foregroundStyle(colorScheme == .dark ? Color(hex: 0x00F5D4) : Color(hex: 0x0D9488))
+        }
+        .padding(10)
+        .background(
+            colorScheme == .dark ? Color.white.opacity(0.05) : Color(hex: 0xF8FAFC),
+            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [Color(hex: 0x5B6CFF).opacity(0.4), Color(hex: 0x4ECDC4).opacity(0.35)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ),
+                    lineWidth: 1
+                )
+        )
     }
 }
 
@@ -626,11 +1104,26 @@ private struct ActionFriendButton: View {
             .frame(height: 54)
             .background {
                 if config.isPrimary {
-                    LinearGradient(
-                        colors: [Color(hex: 0x5B6CFF), Color(hex: 0x4ECDC4)],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
+                    ZStack {
+                        LinearGradient(
+                            colors: [Color(hex: 0x5B6CFF), Color(hex: 0x4ECDC4), Color(hex: 0xE056FD)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        TimelineView(.animation(minimumInterval: 1 / 24, paused: false)) { timeline in
+                            let t = timeline.date.timeIntervalSinceReferenceDate
+                            let x = CGFloat((sin(t * 1.4) * 0.5) + 0.5)
+                            LinearGradient(
+                                stops: [
+                                    .init(color: .clear, location: max(0, x - 0.22)),
+                                    .init(color: .white.opacity(0.38), location: x),
+                                    .init(color: .clear, location: min(1, x + 0.22))
+                                ],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        }
+                    }
                 } else {
                     colorScheme == .dark
                         ? Color.white.opacity(0.1)
@@ -847,8 +1340,10 @@ private struct AvatarInitialsView: View {
             Image("SplickLogoMark")
                 .resizable()
                 .interpolation(.high)
+                .renderingMode(.template)
                 .scaledToFit()
-                .frame(width: 64, height: 84)
+                .frame(width: 64, height: 51)
+                .foregroundStyle(.white)
                 .opacity(0.18)
 
             Text(initials)
@@ -874,40 +1369,62 @@ private struct GlassCardModifier: ViewModifier {
                     Image("SplickLogoMark")
                         .resizable()
                         .interpolation(.high)
+                        .renderingMode(.template)
                         .scaledToFit()
-                        .frame(width: 150, height: 200)
+                        .frame(width: 150, height: 119)
+                        .foregroundStyle(colorScheme == .dark ? Color.white : Color(hex: 0x0F172A))
                         .opacity(colorScheme == .dark ? 0.06 : 0.05)
                         .rotationEffect(.degrees(12))
                         .offset(x: 35, y: -25)
                         .blendMode(colorScheme == .dark ? .overlay : .multiply)
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+                .overlay {
+                    TimelineView(.animation(minimumInterval: 1 / 24, paused: false)) { timeline in
+                        let t = timeline.date.timeIntervalSinceReferenceDate
+                        let x = (sin(t * 0.7) * 0.55) + 0.15
+                        RoundedRectangle(cornerRadius: 32, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    stops: [
+                                        .init(color: .clear, location: 0),
+                                        .init(color: .white.opacity(colorScheme == .dark ? 0.14 : 0.22), location: x),
+                                        .init(color: .clear, location: 1)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .blendMode(.overlay)
+                    }
+                    .allowsHitTesting(false)
+                }
                 .overlay(
                     RoundedRectangle(cornerRadius: 32, style: .continuous)
                         .strokeBorder(
                             LinearGradient(
                                 stops: [
                                     .init(
-                                        color: colorScheme == .dark ? .white.opacity(0.4) : .white.opacity(0.9),
+                                        color: colorScheme == .dark ? .white.opacity(0.5) : .white.opacity(0.95),
                                         location: 0
                                     ),
                                     .init(
                                         color: colorScheme == .dark ? .white.opacity(0.08) : Color(hex: 0xCBD5E1).opacity(0.4),
-                                        location: 0.4
+                                        location: 0.35
                                     ),
                                     .init(
-                                        color: Color(hex: 0x4ECDC4).opacity(colorScheme == .dark ? 0.3 : 0.35),
-                                        location: 0.8
+                                        color: Color(hex: 0x4ECDC4).opacity(colorScheme == .dark ? 0.45 : 0.4),
+                                        location: 0.7
                                     ),
                                     .init(
-                                        color: Color(hex: 0x5B6CFF).opacity(colorScheme == .dark ? 0.25 : 0.3),
+                                        color: Color(hex: 0xE056FD).opacity(colorScheme == .dark ? 0.35 : 0.28),
                                         location: 1
                                     )
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ),
-                            lineWidth: 1.2
+                            lineWidth: 1.4
                         )
                 )
             }
@@ -957,15 +1474,9 @@ private extension Color {
 
 #Preview("Dark Mode — Loaded") {
     let vm = ClipInviteViewModel()
-    vm.state = .loaded(ClipPublicProfileDTO(
-        userId: "abc",
-        username: "hoan03",
-        displayName: "Hoàn Trần",
-        avatarUrl: nil,
-        friendCount: 348,
-        postCount: 42,
-        friendStatus: "NONE"
-    ))
+    let mock = ClipMockProfiles.tqHoan03
+    vm.richProfile = mock
+    vm.state = .loaded(mock.dto)
     return ProfileCardView()
         .environmentObject(vm)
         .preferredColorScheme(.dark)
@@ -973,15 +1484,9 @@ private extension Color {
 
 #Preview("Light Mode — Loaded") {
     let vm = ClipInviteViewModel()
-    vm.state = .loaded(ClipPublicProfileDTO(
-        userId: "abc",
-        username: "hoan03",
-        displayName: "Hoàn Trần",
-        avatarUrl: nil,
-        friendCount: 348,
-        postCount: 42,
-        friendStatus: "NONE"
-    ))
+    let mock = ClipMockProfiles.tqHoan03
+    vm.richProfile = mock
+    vm.state = .loaded(mock.dto)
     return ProfileCardView()
         .environmentObject(vm)
         .preferredColorScheme(.light)

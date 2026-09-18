@@ -19,6 +19,11 @@ public struct SplickTextField: View {
 
     private static let accessorySide: CGFloat = 20
     private static let visibilityToggleAnimation = Animation.easeInOut(duration: 0.22)
+    private static let errorReveal = Animation.spring(
+        response: 0.34,
+        dampingFraction: 0.92,
+        blendDuration: 0.08
+    )
 
     public init(
         _ placeholder: String,
@@ -78,13 +83,18 @@ public struct SplickTextField: View {
                     )
             }
 
-            if let errorMessage {
-                Text(errorMessage)
-                    .font(SplickTheme.Typography.caption)
-                    .foregroundStyle(SplickTheme.Colors.error)
+            if errorMessage != nil {
+                SplickFieldErrorMessage(errorMessage)
+                    .transition(Self.errorTransition)
             }
         }
+        .animation(Self.errorReveal, value: errorMessage)
     }
+
+    private static let errorTransition: AnyTransition = .asymmetric(
+        insertion: .opacity.combined(with: .offset(y: -8)),
+        removal: .opacity.combined(with: .offset(y: -6))
+    )
 
     private var isPasswordVisible: Bool {
         passwordVisibleBinding.wrappedValue

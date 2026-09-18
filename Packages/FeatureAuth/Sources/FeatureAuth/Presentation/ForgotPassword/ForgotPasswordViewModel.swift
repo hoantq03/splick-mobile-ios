@@ -43,6 +43,10 @@ public final class ForgotPasswordViewModel: ObservableObject {
         identifier.detectedLoginIdentifierKind
     }
 
+    var identifierIntent: LoginIdentifierKind {
+        identifier.loginIdentifierIntent
+    }
+
     var passwordFieldError: String? {
         guard let passwordErrorKey else { return nil }
         if passwordErrorKey == .changePasswordWeakPassword {
@@ -95,23 +99,32 @@ public final class ForgotPasswordViewModel: ObservableObject {
         state = .idle
     }
 
-    func validateIdentifierField() {
-        let value = identifier.trimmed
-        if value.isEmpty {
+    func validateIdentifierField(requireComplete: Bool = false) {
+        switch identifier.classifiedLoginIdentifier {
+        case .empty:
             identifierErrorKey = nil
             identifierStatus = .neutral
-            return
-        }
-
-        switch detectedKind {
-        case .email, .phone:
+        case .email(.valid):
             identifierErrorKey = nil
             identifierStatus = .valid
-        case .unknown:
-            identifierErrorKey = value.contains("@")
-                ? .authValidationInvalidEmail
-                : .authValidationInvalidPhone
+        case .email(.incomplete):
+            identifierErrorKey = requireComplete ? .authValidationInvalidEmail : nil
             identifierStatus = .neutral
+        case .email(.invalid):
+            identifierErrorKey = .authValidationInvalidEmail
+            identifierStatus = .neutral
+        case .phone(let parsed):
+            switch parsed.completeness {
+            case .complete:
+                identifierErrorKey = nil
+                identifierStatus = .valid
+            case .incomplete:
+                identifierErrorKey = requireComplete ? .authValidationInvalidPhone : nil
+                identifierStatus = .neutral
+            case .invalid:
+                identifierErrorKey = .authValidationInvalidPhone
+                identifierStatus = .neutral
+            }
         }
     }
 
@@ -135,7 +148,7 @@ public final class ForgotPasswordViewModel: ObservableObject {
     }
 
     func requestResetCode() async {
-        validateIdentifierField()
+        validateIdentifierField(requireComplete: true)
         guard identifierErrorKey == nil, detectedKind != .unknown else { return }
 
         guard detectedKind == .email else {

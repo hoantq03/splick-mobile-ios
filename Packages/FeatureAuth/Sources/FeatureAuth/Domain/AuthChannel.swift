@@ -22,21 +22,28 @@ public enum AuthSignInMethod: String, CaseIterable, Identifiable, Sendable {
 }
 
 public extension String {
-    /// Infers whether the user entered an email address or a phone number.
+    /// Complete email or E.164 phone — used to enable continue / lookup.
     var detectedLoginIdentifierKind: LoginIdentifierKind {
-        let value = trimmed
-        guard !value.isEmpty else { return .unknown }
-
-        if value.contains("@") {
-            return value.isValidEmail ? .email : .unknown
-        }
-
-        let normalizedPhone = value.normalizedE164Phone
-        if normalizedPhone.isValidE164Phone {
+        switch classifiedLoginIdentifier {
+        case .email(.valid):
+            return .email
+        case .phone(let parsed) where parsed.completeness == .complete:
             return .phone
+        default:
+            return .unknown
         }
+    }
 
-        return .unknown
+    /// Channel the user is typing toward, even before the value is valid.
+    var loginIdentifierIntent: LoginIdentifierKind {
+        switch classifiedLoginIdentifier {
+        case .email:
+            return .email
+        case .phone:
+            return .phone
+        case .empty:
+            return .unknown
+        }
     }
 }
 

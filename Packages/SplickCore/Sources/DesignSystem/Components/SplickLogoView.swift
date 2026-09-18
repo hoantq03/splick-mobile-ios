@@ -6,7 +6,7 @@ public enum SplickLogoStyle {
     case onDark
 }
 
-/// `markOnly` — biểu tượng S; `fullLockup` — icon + Splick + Click and Split.
+/// `markOnly` — camera mark; `fullLockup` — camera + Splick wordmark.
 public enum SplickLogoLayout {
     case markOnly
     case fullLockup
@@ -27,27 +27,27 @@ public struct SplickLogoView: View {
 
     private var aspectRatio: CGFloat {
         switch layout {
-        case .fullLockup: 1024.0 / 682.0
-        case .markOnly: 900.0 / 1219.0 // transparent mark asset (trimmed)
+        case .fullLockup: 412.0 / 390.0
+        case .markOnly: 278.0 / 221.0
         }
     }
 
     public var body: some View {
-        Group {
-            switch style {
-            case .fullColor, .onDark:
-                baseImage
-            case .monochrome:
-                baseImage.saturation(0).contrast(1.05)
-            }
-        }
-    }
-
-    private var baseImage: some View {
         Image(assetName, bundle: .module)
             .resizable()
             .interpolation(.high)
+            .renderingMode(.template)
             .aspectRatio(aspectRatio, contentMode: .fit)
+            .foregroundStyle(foreground)
+    }
+
+    private var foreground: Color {
+        switch style {
+        case .fullColor, .monochrome:
+            SplickTheme.Colors.textPrimary
+        case .onDark:
+            Color.white
+        }
     }
 }
 
@@ -70,8 +70,8 @@ public struct SplickLogoMark: View {
 
     private var frameHeight: CGFloat {
         switch layout {
-        case .fullLockup: size / (1024.0 / 682.0)
-        case .markOnly: size * (1219.0 / 900.0)
+        case .fullLockup: size * (390.0 / 412.0)
+        case .markOnly: size * (221.0 / 278.0)
         }
     }
 
@@ -79,12 +79,5 @@ public struct SplickLogoMark: View {
         SplickLogoView(layout: layout, style: style)
             .frame(width: size, height: frameHeight)
             .accessibilityLabel("Splick")
-            .shadow(
-                color: SplickTheme.Colors.primaryGradientStart.opacity(
-                    style == .fullColor && layout == .markOnly ? 0.18 : 0
-                ),
-                radius: size * 0.06,
-                y: size * 0.03
-            )
     }
 }

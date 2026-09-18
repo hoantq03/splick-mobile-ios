@@ -201,7 +201,7 @@ enum StringsEn {
         .authForgotPasswordPhoneUnsupported: "Password reset via phone is not available yet. Use your email address.",
         .authResetCodeRequested: "If an account exists for this email, a code was sent. Check your inbox.",
         .authValidationInvalidEmail: "Please enter a valid email",
-        .authValidationInvalidPhone: "Use international format, e.g. +84901234567",
+        .authValidationInvalidPhone: "Enter a valid phone number, e.g. 0901234567",
         .authUseDifferentIdentifier: "Use a different email or phone",
         .authVerifyPhoneTitle: "Enter verification code",
         .authVerifyPhoneSubtitle: "We sent a 6-digit code via SMS to %@.",

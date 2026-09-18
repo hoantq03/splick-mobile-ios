@@ -201,7 +201,7 @@ enum StringsVi {
         .authForgotPasswordPhoneUnsupported: "Đặt lại mật khẩu qua SĐT chưa hỗ trợ. Hãy dùng email.",
         .authResetCodeRequested: "Nếu email có tài khoản, mã đã được gửi. Kiểm tra hộp thư của bạn.",
         .authValidationInvalidEmail: "Vui lòng nhập email hợp lệ",
-        .authValidationInvalidPhone: "Dùng định dạng quốc tế, ví dụ +84901234567",
+        .authValidationInvalidPhone: "Nhập số điện thoại hợp lệ, ví dụ 0901234567",
         .authUseDifferentIdentifier: "Dùng email hoặc SĐT khác",
         .authVerifyPhoneTitle: "Nhập mã xác minh",
         .authVerifyPhoneSubtitle: "Mã 6 chữ số đã được gửi qua SMS tới %@.",
