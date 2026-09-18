@@ -29,6 +29,7 @@ public final class AccountClosureSheetViewModel: ObservableObject {
     @Published public private(set) var isExecuting = false
     @Published public private(set) var hasSentEmailCode = false
     @Published public private(set) var isRequestingEmailCode = false
+    @Published public private(set) var sendCodeFailed = false
     @Published public private(set) var otpResendSecondsRemaining = 0
 
     public let action: AccountClosureAction
@@ -83,6 +84,7 @@ public final class AccountClosureSheetViewModel: ObservableObject {
         isExecuting = false
         hasSentEmailCode = false
         isRequestingEmailCode = false
+        sendCodeFailed = false
         otpResendSecondsRemaining = 0
         resendCountdownTask?.cancel()
         resendCountdownTask = nil
@@ -96,6 +98,7 @@ public final class AccountClosureSheetViewModel: ObservableObject {
         otpInfoMessage = nil
         isVerified = false
         hasSentEmailCode = false
+        sendCodeFailed = false
         stopOtpResendCountdown()
     }
 
@@ -128,20 +131,22 @@ public final class AccountClosureSheetViewModel: ObservableObject {
         guard otpResendSecondsRemaining == 0 else { return }
 
         isRequestingEmailCode = true
+        sendCodeFailed = false
         otpError = nil
-        defer { isRequestingEmailCode = false }
+        let started = ContinuousClock.now
 
         do {
             try await requestEmailOtpUseCase.execute(email: accountEmail)
+            await holdMinimumLoading(from: started)
+            isRequestingEmailCode = false
             hasSentEmailCode = true
             otpInfoMessage = languageService.format(.changePasswordCodeSent, accountEmail)
             startOtpResendCountdown()
-        } catch let error as AuthError {
-            otpError = error.userMessage
-        } catch let error as NetworkError {
-            otpError = error.userMessage
         } catch {
-            otpError = languageService.text(.connectedAccountsSendCodeFailed)
+            otpError = otpFailureMessage(error)
+            await holdMinimumLoading(from: started)
+            isRequestingEmailCode = false
+            sendCodeFailed = true
         }
     }
 
@@ -159,27 +164,18 @@ public final class AccountClosureSheetViewModel: ObservableObject {
         isVerifying = true
         passwordError = nil
         sheetError = nil
-        defer { isVerifying = false }
+        let started = ContinuousClock.now
 
         do {
             try await verifyPasswordChangeUseCase.execute(currentPassword: trimmed, otpCode: nil)
+            await holdMinimumLoading(from: started)
+            isVerifying = false
             isVerified = true
-        } catch let error as AuthError where error == .invalidCredentials {
-            passwordError = languageService.text(.changePasswordInvalidCurrent)
-            isVerified = false
-        } catch let error as AuthError {
-            passwordError = error.userMessage
-            isVerified = false
-        } catch let error as NetworkError {
-            if case .unauthorized = error {
-                passwordError = languageService.text(.changePasswordInvalidCurrent)
-            } else {
-                passwordError = error.userMessage
-            }
-            isVerified = false
         } catch {
-            passwordError = languageService.text(.changePasswordInvalidCurrent)
+            passwordError = currentPasswordFailureMessage(error)
             isVerified = false
+            await holdMinimumLoading(from: started)
+            isVerifying = false
         }
     }
 
@@ -192,22 +188,18 @@ public final class AccountClosureSheetViewModel: ObservableObject {
         isVerifying = true
         otpError = nil
         sheetError = nil
-        defer { isVerifying = false }
+        let started = ContinuousClock.now
 
         do {
             try await verifyPasswordChangeUseCase.execute(currentPassword: nil, otpCode: otpCode)
+            await holdMinimumLoading(from: started)
+            isVerifying = false
             isVerified = true
-        } catch let error as AuthError {
-            otpError = error.shouldShowOnOtpStep
-                ? error.userMessage
-                : languageService.text(.errorAuthInvalidOtpDefault)
-            isVerified = false
-        } catch let error as NetworkError {
-            otpError = languageService.text(.errorAuthInvalidOtpDefault)
-            isVerified = false
         } catch {
-            otpError = languageService.text(.errorAuthInvalidOtpDefault)
+            otpError = otpFailureMessage(error)
             isVerified = false
+            await holdMinimumLoading(from: started)
+            isVerifying = false
         }
     }
 
@@ -219,8 +211,7 @@ public final class AccountClosureSheetViewModel: ObservableObject {
 
         isExecuting = true
         sheetError = nil
-        defer { isExecuting = false }
-
+        let started = ContinuousClock.now
         let trimmedPassword = password.trimmingCharacters(in: .whitespacesAndNewlines)
         let passwordCredential = method == .password ? trimmedPassword : nil
         let otpCredential = method == .emailCode ? otpCode : nil
@@ -238,19 +229,61 @@ public final class AccountClosureSheetViewModel: ObservableObject {
                     otpCode: otpCredential
                 )
             }
+            await holdMinimumLoading(from: started)
+            isExecuting = false
+            try? await Task.sleep(nanoseconds: SplickButton.successHoldNanoseconds)
             onCompleted()
             return true
-        } catch let error as AuthError {
-            sheetError = error.userMessage
-            return false
-        } catch let error as NetworkError {
-            sheetError = error.userMessage
-            return false
         } catch {
-            sheetError = action == .deactivate
-                ? languageService.text(.accountClosureDeactivateFailed)
-                : languageService.text(.accountClosureDeleteFailed)
+            sheetError = executeFailureMessage(error)
+            await holdMinimumLoading(from: started)
+            isExecuting = false
             return false
+        }
+    }
+
+    private func currentPasswordFailureMessage(_ error: Error) -> String {
+        if let error = error as? AuthError, error == .invalidCredentials {
+            return languageService.text(.changePasswordInvalidCurrent)
+        }
+        if let error = error as? NetworkError, case .unauthorized = error {
+            return languageService.text(.changePasswordInvalidCurrent)
+        }
+        return languageService.localizedMessage(for: error)
+    }
+
+    private func otpFailureMessage(_ error: Error) -> String {
+        if let error = error as? AuthError {
+            switch error {
+            case .otpRateLimited:
+                return languageService.text(.errorAuthOtpRateLimited)
+            default:
+                return languageService.text(.errorAuthInvalidOtpDefault)
+            }
+        }
+        if let error = error as? NetworkError, case .unauthorized = error {
+            return languageService.text(.errorAuthInvalidOtpDefault)
+        }
+        return languageService.localizedMessage(for: error)
+    }
+
+    private func executeFailureMessage(_ error: Error) -> String {
+        if let error = error as? AuthError, error.shouldShowOnOtpStep {
+            return otpFailureMessage(error)
+        }
+        if error is AuthError || error is NetworkError {
+            return languageService.localizedMessage(for: error)
+        }
+        return action == .deactivate
+            ? languageService.text(.accountClosureDeactivateFailed)
+            : languageService.text(.accountClosureDeleteFailed)
+    }
+
+    private func holdMinimumLoading(from started: ContinuousClock.Instant) async {
+        let minimum = Duration.nanoseconds(Int64(SplickButton.minimumLoadingNanoseconds))
+        let elapsed = started.duration(to: .now)
+        if elapsed < minimum {
+            try? await Task.sleep(for: minimum - elapsed)
         }
     }
 

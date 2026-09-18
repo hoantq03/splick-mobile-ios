@@ -1,5 +1,6 @@
 import SwiftUI
 import DesignSystem
+import Common
 import Localization
 
 public struct AccountClosureSheet: View {
@@ -8,7 +9,7 @@ public struct AccountClosureSheet: View {
 
     @State private var isPasswordVisible = false
     @State private var confirmedRevealStep = 0
-    @State private var showDeactivateConfirm = false
+    @State private var showActionConfirm = false
 
     @Binding private var isPresented: Bool
 
@@ -49,20 +50,12 @@ public struct AccountClosureSheet: View {
                         if confirmedRevealStep >= 2 {
                             SplickButton(
                                 confirmButtonTitle,
-                                style: viewModel.action == .delete ? .destructive : .secondary,
+                                style: viewModel.action == .delete ? .destructive : .primary,
                                 isLoading: viewModel.isExecuting,
-                                isDisabled: viewModel.isExecuting
+                                isFailed: viewModel.sheetError != nil
                             ) {
-                                if viewModel.action == .deactivate {
-                                    showDeactivateConfirm = true
-                                } else {
-                                    Task {
-                                        let success = await viewModel.executeAction()
-                                        if success {
-                                            isPresented = false
-                                        }
-                                    }
-                                }
+                                hideKeyboard()
+                                showActionConfirm = true
                             }
                             .transition(confirmedTransition)
                         }
@@ -73,6 +66,7 @@ public struct AccountClosureSheet: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .background(SplickTheme.Colors.background)
+            .dismissKeyboardOnTap()
             .navigationTitle(sheetTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -98,11 +92,11 @@ public struct AccountClosureSheet: View {
                 }
             }
             .alert(
-                languageService.text(.accountClosureDeactivateConfirmTitle),
-                isPresented: $showDeactivateConfirm
+                actionConfirmTitle,
+                isPresented: $showActionConfirm
             ) {
                 Button(languageService.text(.commonCancel), role: .cancel) {}
-                Button(languageService.text(.accountClosureConfirmDeactivate), role: .destructive) {
+                Button(confirmButtonTitle, role: .destructive) {
                     Task {
                         let success = await viewModel.executeAction()
                         if success {
@@ -111,7 +105,7 @@ public struct AccountClosureSheet: View {
                     }
                 }
             } message: {
-                Text(languageService.text(.accountClosureDeactivateConfirmMessage))
+                Text(actionConfirmMessage)
             }
         }
         .presentationDetents([.medium, .large])
@@ -167,9 +161,10 @@ public struct AccountClosureSheet: View {
                 SplickButton(
                     languageService.text(.changePasswordVerifyContinue),
                     isLoading: viewModel.isVerifying,
-                    isDisabled: viewModel.isVerifying
-                        || viewModel.password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    isFailed: viewModel.passwordError != nil,
+                    isDisabled: viewModel.password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ) {
+                    hideKeyboard()
                     Task { await viewModel.verifyIdentity() }
                 }
             }
@@ -178,58 +173,77 @@ public struct AccountClosureSheet: View {
 
     private var emailCodeVerificationSection: some View {
         VStack(spacing: SplickTheme.Spacing.lg) {
-            Text(languageService.format(.changePasswordEmailHint, viewModel.accountEmail))
-                .font(SplickTheme.Typography.callout)
-                .foregroundStyle(SplickTheme.Colors.textSecondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
-
-            if let info = viewModel.otpInfoMessage {
-                Text(info)
-                    .font(SplickTheme.Typography.caption)
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
-                    .multilineTextAlignment(.center)
-            }
-
-            SplickOtpField(code: $viewModel.otpCode, errorMessage: viewModel.otpError)
-                .onChange(of: viewModel.otpCode) { _ in
-                    viewModel.onOtpCodeChanged()
-                }
+            ConnectAccountReadOnlyField(
+                label: languageService.text(.changePasswordEmailHint),
+                value: viewModel.accountEmail,
+                icon: "envelope.fill"
+            )
 
             if !viewModel.isVerified {
                 if !viewModel.hasSentEmailCode {
                     SplickButton(
                         languageService.text(.changePasswordSendCode),
                         isLoading: viewModel.isRequestingEmailCode,
-                        isDisabled: viewModel.isRequestingEmailCode
+                        isFailed: viewModel.sendCodeFailed
                     ) {
+                        hideKeyboard()
                         Task { await viewModel.requestEmailCode() }
                     }
                 } else {
-                    SplickButton(
-                        viewModel.otpResendSecondsRemaining > 0
-                            ? languageService.format(
-                                .changePasswordResendIn,
-                                viewModel.otpResendSecondsRemaining
-                            )
-                            : languageService.text(.changePasswordResendCode),
-                        style: .secondary,
-                        isDisabled: viewModel.isRequestingEmailCode
-                            || viewModel.otpResendSecondsRemaining > 0
-                    ) {
-                        Task { await viewModel.resendEmailCode() }
+                    if let info = viewModel.otpInfoMessage {
+                        Text(info)
+                            .font(SplickTheme.Typography.caption)
+                            .foregroundStyle(SplickTheme.Colors.textSecondary)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
                     }
+
+                    SplickOtpField(code: $viewModel.otpCode, errorMessage: viewModel.otpError)
+                        .onChange(of: viewModel.otpCode) { _ in
+                            viewModel.onOtpCodeChanged()
+                        }
+
+                    resendCodeControl
 
                     SplickButton(
                         languageService.text(.changePasswordVerifyContinue),
                         isLoading: viewModel.isVerifying,
-                        isDisabled: viewModel.isVerifying
-                            || viewModel.otpCode.count != SplickOtpField.defaultLength
+                        isFailed: viewModel.otpError != nil,
+                        isDisabled: viewModel.otpCode.count != SplickOtpField.defaultLength
                     ) {
+                        hideKeyboard()
                         Task { await viewModel.verifyIdentity() }
                     }
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var resendCodeControl: some View {
+        if viewModel.otpResendSecondsRemaining > 0 {
+            Text(
+                languageService.format(
+                    .changePasswordResendIn,
+                    viewModel.otpResendSecondsRemaining
+                )
+            )
+            .font(SplickTheme.Typography.caption)
+            .foregroundStyle(SplickTheme.Colors.textSecondary)
+            .frame(maxWidth: .infinity)
+        } else {
+            Button {
+                Task { await viewModel.resendEmailCode() }
+            } label: {
+                Text(languageService.text(.changePasswordResendCode))
+                    .font(SplickTheme.Typography.callout)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+            }
+            .buttonStyle(.plain)
+            .disabled(viewModel.isRequestingEmailCode)
+            .opacity(viewModel.isRequestingEmailCode ? 0.5 : 1)
+            .frame(maxWidth: .infinity)
         }
     }
 
@@ -293,11 +307,24 @@ public struct AccountClosureSheet: View {
     }
 
     private var warningTint: Color {
+        SplickTheme.Colors.brandBlue
+    }
+
+    private var actionConfirmTitle: String {
         switch viewModel.action {
         case .deactivate:
-            return SplickTheme.Colors.warning
+            return languageService.text(.accountClosureDeactivateConfirmTitle)
         case .delete:
-            return SplickTheme.Colors.error
+            return languageService.text(.accountClosureDeleteConfirmTitle)
+        }
+    }
+
+    private var actionConfirmMessage: String {
+        switch viewModel.action {
+        case .deactivate:
+            return languageService.text(.accountClosureDeactivateConfirmMessage)
+        case .delete:
+            return languageService.text(.accountClosureDeleteConfirmMessage)
         }
     }
 
