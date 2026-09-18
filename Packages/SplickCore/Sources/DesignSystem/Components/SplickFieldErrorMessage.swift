@@ -5,11 +5,7 @@ public struct SplickFieldErrorMessage: View {
     private let message: String?
     private let alignment: TextAlignment
 
-    private static let reveal = Animation.spring(
-        response: 0.34,
-        dampingFraction: 0.92,
-        blendDuration: 0.08
-    )
+    private static let reveal = Animation.timingCurve(0.22, 1.0, 0.36, 1.0, duration: 0.42)
 
     public init(_ message: String?, alignment: TextAlignment = .leading) {
         self.message = message
@@ -39,7 +35,7 @@ public struct SplickFieldErrorMessage: View {
     }
 
     private static let transition: AnyTransition = .asymmetric(
-        insertion: .opacity.combined(with: .offset(y: -8)),
-        removal: .opacity.combined(with: .offset(y: -6))
+        insertion: .move(edge: .top).combined(with: .opacity),
+        removal: .move(edge: .top).combined(with: .opacity)
     )
 }

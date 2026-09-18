@@ -16,6 +16,7 @@ public struct SplickOtpField: View {
 
     @FocusState private var isFocused: Bool
     @Environment(\.suppressKeyboardAutoFocus) private var suppressKeyboardAutoFocus
+    @Environment(\.usesBrandAuthChrome) private var usesBrandAuthChrome
     @State private var ignoreKeyboardHideUntil: Date = .distantPast
 
     private let boxHeight: CGFloat = 56
@@ -77,13 +78,10 @@ public struct SplickOtpField: View {
             .frame(height: boxHeight)
 
             if let errorMessage, !errorMessage.isEmpty {
-                Text(errorMessage)
-                    .font(SplickTheme.Typography.caption)
-                    .foregroundStyle(SplickTheme.Colors.error)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
+                SplickFieldErrorMessage(errorMessage, alignment: .center)
             }
         }
+        .animation(Self.errorReveal, value: errorMessage)
         .onAppear {
             requestFocusIfNeeded()
         }
@@ -117,6 +115,8 @@ public struct SplickOtpField: View {
         }
     }
 
+    private static let errorReveal = Animation.timingCurve(0.22, 1.0, 0.36, 1.0, duration: 0.42)
+
     private func boxWidth(for totalWidth: CGFloat) -> CGFloat {
         let spacing = boxSpacing * CGFloat(length - 1)
         let computed = (totalWidth - spacing) / CGFloat(length)
@@ -142,7 +142,7 @@ public struct SplickOtpField: View {
 
             if digit.isEmpty && isActive {
                 RoundedRectangle(cornerRadius: 1.5)
-                    .fill(SplickTheme.Colors.primaryGradientStart)
+                    .fill(usesBrandAuthChrome ? SplickTheme.Colors.brandPink : SplickTheme.Colors.primaryGradientStart)
                     .frame(width: 2, height: 22)
                     .opacity(0.9)
             } else {
@@ -161,11 +161,11 @@ public struct SplickOtpField: View {
         if errorMessage != nil {
             return SplickTheme.Colors.error.opacity(0.06)
         }
+        if usesBrandAuthChrome {
+            return SplickTheme.Colors.authFieldFill
+        }
         if isActive {
             return SplickTheme.Colors.primaryGradientStart.opacity(0.08)
-        }
-        if isFilled {
-            return SplickTheme.Colors.secondaryBackground
         }
         return SplickTheme.Colors.secondaryBackground
     }
@@ -173,6 +173,13 @@ public struct SplickOtpField: View {
     private func boxStroke(isActive: Bool) -> some ShapeStyle {
         if errorMessage != nil {
             return AnyShapeStyle(SplickTheme.Colors.error.opacity(0.85))
+        }
+        if usesBrandAuthChrome {
+            return AnyShapeStyle(
+                isActive
+                    ? SplickTheme.Colors.authFieldStrokeFocused
+                    : SplickTheme.Colors.authFieldStroke
+            )
         }
         if isActive {
             return AnyShapeStyle(SplickTheme.Colors.primaryGradient)
