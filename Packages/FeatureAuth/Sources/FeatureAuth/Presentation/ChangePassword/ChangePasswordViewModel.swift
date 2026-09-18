@@ -30,6 +30,7 @@ public final class ChangePasswordViewModel: ObservableObject {
     @Published var isVerifyingEmailCode = false
     @Published private(set) var hasSentEmailCode = false
     @Published private(set) var isRequestingEmailCode = false
+    @Published private(set) var sendCodeFailed = false
     @Published private(set) var otpResendSecondsRemaining = 0
     @Published private(set) var hasPasswordLogin = true
     @Published private(set) var isResolvingPasswordLogin = true
@@ -85,17 +86,15 @@ public final class ChangePasswordViewModel: ObservableObject {
     }
 
     func onCurrentPasswordChanged() {
-        if isCurrentPasswordVerified {
-            isCurrentPasswordVerified = false
-        }
         currentPasswordError = nil
+        guard isCurrentPasswordVerified, !isVerifyingCurrentPassword else { return }
+        isCurrentPasswordVerified = false
     }
 
     func onOtpCodeChanged() {
-        if isEmailCodeVerified {
-            isEmailCodeVerified = false
-        }
         otpError = nil
+        guard isEmailCodeVerified, !isVerifyingEmailCode else { return }
+        isEmailCodeVerified = false
     }
 
     func validatePasswordField() {
@@ -127,30 +126,21 @@ public final class ChangePasswordViewModel: ObservableObject {
 
         isVerifyingCurrentPassword = true
         currentPasswordError = nil
-        defer { isVerifyingCurrentPassword = false }
+        let started = ContinuousClock.now
 
         do {
             try await verifyPasswordChangeUseCase.execute(
                 currentPassword: trimmed,
                 otpCode: nil
             )
+            await holdMinimumLoading(from: started)
+            isVerifyingCurrentPassword = false
             isCurrentPasswordVerified = true
-        } catch let error as AuthError where error == .invalidCredentials {
-            currentPasswordError = languageService.text(.changePasswordInvalidCurrent)
-            isCurrentPasswordVerified = false
-        } catch let error as AuthError {
-            currentPasswordError = error.userMessage
-            isCurrentPasswordVerified = false
-        } catch let error as NetworkError {
-            if case .unauthorized = error {
-                currentPasswordError = languageService.text(.changePasswordInvalidCurrent)
-            } else {
-                currentPasswordError = error.userMessage
-            }
-            isCurrentPasswordVerified = false
         } catch {
-            currentPasswordError = languageService.text(.changePasswordInvalidCurrent)
+            currentPasswordError = currentPasswordFailureMessage(error)
             isCurrentPasswordVerified = false
+            await holdMinimumLoading(from: started)
+            isVerifyingCurrentPassword = false
         }
     }
 
@@ -162,31 +152,21 @@ public final class ChangePasswordViewModel: ObservableObject {
 
         isVerifyingEmailCode = true
         otpError = nil
-        defer { isVerifyingEmailCode = false }
+        let started = ContinuousClock.now
 
         do {
             try await verifyPasswordChangeUseCase.execute(
                 currentPassword: nil,
                 otpCode: otpCode
             )
+            await holdMinimumLoading(from: started)
+            isVerifyingEmailCode = false
             isEmailCodeVerified = true
-        } catch let error as AuthError {
-            if error.shouldShowOnOtpStep {
-                otpError = error.userMessage
-            } else {
-                otpError = languageService.text(.errorAuthInvalidOtpDefault)
-            }
-            isEmailCodeVerified = false
-        } catch let error as NetworkError {
-            if case .unauthorized = error {
-                otpError = languageService.text(.errorAuthInvalidOtpDefault)
-            } else {
-                otpError = error.userMessage
-            }
-            isEmailCodeVerified = false
         } catch {
-            otpError = languageService.text(.errorAuthInvalidOtpDefault)
+            otpError = otpFailureMessage(error)
             isEmailCodeVerified = false
+            await holdMinimumLoading(from: started)
+            isVerifyingEmailCode = false
         }
     }
 
@@ -194,24 +174,22 @@ public final class ChangePasswordViewModel: ObservableObject {
         guard otpResendSecondsRemaining == 0 else { return }
 
         isRequestingEmailCode = true
+        sendCodeFailed = false
         otpError = nil
-        defer { isRequestingEmailCode = false }
+        let started = ContinuousClock.now
 
         do {
             try await requestEmailOtpUseCase.execute(email: accountEmail)
+            await holdMinimumLoading(from: started)
+            isRequestingEmailCode = false
             hasSentEmailCode = true
             otpInfoMessage = languageService.format(.changePasswordCodeSent, accountEmail)
             startOtpResendCountdown()
-        } catch let error as AuthError {
-            if error.shouldShowOnOtpStep {
-                otpError = error.userMessage
-            } else {
-                state = .failed(error.userMessage)
-            }
-        } catch let error as NetworkError {
-            state = .failed(error.userMessage)
         } catch {
-            state = .failed(languageService.text(.changePasswordFailed))
+            applyEmailCodeRequestFailure(error)
+            await holdMinimumLoading(from: started)
+            isRequestingEmailCode = false
+            sendCodeFailed = true
         }
     }
 
@@ -240,28 +218,40 @@ public final class ChangePasswordViewModel: ObservableObject {
         }
 
         state = .loading
+        let started = ContinuousClock.now
         do {
             let session = try await changePasswordUseCase.execute(
                 currentPassword: method == .currentPassword ? currentPassword : nil,
                 otpCode: method == .emailCode ? otpCode : nil,
                 newPassword: newPassword
             )
-            state = .loaded(session)
+            await holdMinimumLoading(from: started)
+            await revealButtonResultThen {
+                state = .loaded(session)
+            }
         } catch let error as AuthError {
+            await holdMinimumLoading(from: started)
             if error.shouldShowOnOtpStep {
-                otpError = error.userMessage
+                let message = otpFailureMessage(error)
+                otpError = message
+                state = .failed(message)
+                try? await Task.sleep(nanoseconds: SplickButton.successHoldNanoseconds)
                 isEmailCodeVerified = false
                 state = .idle
             } else if method == .currentPassword, error == .invalidCredentials {
                 currentPasswordError = languageService.text(.changePasswordInvalidCurrent)
+                state = .failed(currentPasswordError ?? languageService.localizedMessage(for: error))
+                try? await Task.sleep(nanoseconds: SplickButton.successHoldNanoseconds)
                 isCurrentPasswordVerified = false
                 state = .idle
             } else {
-                state = .failed(error.userMessage)
+                state = .failed(languageService.localizedMessage(for: error))
             }
         } catch let error as NetworkError {
-            state = .failed(error.userMessage)
+            await holdMinimumLoading(from: started)
+            state = .failed(languageService.localizedMessage(for: error))
         } catch {
+            await holdMinimumLoading(from: started)
             state = .failed(languageService.text(.changePasswordFailed))
         }
     }
@@ -275,10 +265,58 @@ public final class ChangePasswordViewModel: ObservableObject {
         passwordError = nil
         confirmPasswordError = nil
         otpInfoMessage = nil
+        sendCodeFailed = false
         otpCode = ""
         newPassword = ""
         confirmPassword = ""
         passwordStrength = .empty
+    }
+
+    private func currentPasswordFailureMessage(_ error: Error) -> String {
+        if let error = error as? AuthError, error == .invalidCredentials {
+            return languageService.text(.changePasswordInvalidCurrent)
+        }
+        if let error = error as? NetworkError, case .unauthorized = error {
+            return languageService.text(.changePasswordInvalidCurrent)
+        }
+        return languageService.localizedMessage(for: error)
+    }
+
+    private func otpFailureMessage(_ error: Error) -> String {
+        if let error = error as? AuthError {
+            switch error {
+            case .otpRateLimited:
+                return languageService.text(.errorAuthOtpRateLimited)
+            default:
+                return languageService.text(.errorAuthInvalidOtpDefault)
+            }
+        }
+        if let error = error as? NetworkError, case .unauthorized = error {
+            return languageService.text(.errorAuthInvalidOtpDefault)
+        }
+        return languageService.localizedMessage(for: error)
+    }
+
+    private func applyEmailCodeRequestFailure(_ error: Error) {
+        if let error = error as? AuthError, error.shouldShowOnOtpStep {
+            otpError = otpFailureMessage(error)
+            return
+        }
+        state = .failed(languageService.localizedMessage(for: error))
+    }
+
+    private func holdMinimumLoading(from started: ContinuousClock.Instant) async {
+        let minimum = Duration.nanoseconds(Int64(SplickButton.minimumLoadingNanoseconds))
+        let elapsed = started.duration(to: .now)
+        if elapsed < minimum {
+            try? await Task.sleep(for: minimum - elapsed)
+        }
+    }
+
+    private func revealButtonResultThen(_ work: () -> Void) async {
+        state = .idle
+        try? await Task.sleep(nanoseconds: SplickButton.successHoldNanoseconds)
+        work()
     }
 
     private func startOtpResendCountdown() {

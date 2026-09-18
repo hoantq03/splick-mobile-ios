@@ -27,7 +27,7 @@ public struct ChangePasswordView: View {
     public var body: some View {
         Group {
             if viewModel.isResolvingPasswordLogin {
-                ProgressView()
+                SplickSpinner()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 VStack(spacing: SplickTheme.Spacing.lg) {
@@ -136,15 +136,17 @@ public struct ChangePasswordView: View {
                 )
                 .textContentType(.password)
                 .onChange(of: viewModel.currentPassword) { _ in
+                    guard !viewModel.isCurrentPasswordVerified else { return }
                     viewModel.onCurrentPasswordChanged()
                 }
 
                 SplickButton(
                     languageService.text(.changePasswordVerifyContinue),
                     isLoading: viewModel.isVerifyingCurrentPassword,
-                    isDisabled: viewModel.isVerifyingCurrentPassword
-                        || viewModel.currentPassword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    isFailed: viewModel.currentPasswordError != nil,
+                    isDisabled: viewModel.currentPassword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ) {
+                    hideKeyboard()
                     Task { await viewModel.verifyCurrentPassword() }
                 }
             }
@@ -216,9 +218,8 @@ public struct ChangePasswordView: View {
             if !viewModel.hasSentEmailCode {
                 SplickButton(
                     languageService.text(.changePasswordSendCode),
-                    style: .secondary,
                     isLoading: viewModel.isRequestingEmailCode,
-                    isDisabled: viewModel.isRequestingEmailCode
+                    isFailed: viewModel.sendCodeFailed
                 ) {
                     Task { await viewModel.requestEmailCode() }
                 }
@@ -234,6 +235,7 @@ public struct ChangePasswordView: View {
 
                 SplickOtpField(code: $viewModel.otpCode, errorMessage: viewModel.otpError)
                     .onChange(of: viewModel.otpCode) { _ in
+                        guard !viewModel.isEmailCodeVerified else { return }
                         viewModel.onOtpCodeChanged()
                     }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -243,9 +245,10 @@ public struct ChangePasswordView: View {
                 SplickButton(
                     languageService.text(.changePasswordVerifyContinue),
                     isLoading: viewModel.isVerifyingEmailCode,
-                    isDisabled: viewModel.isVerifyingEmailCode
-                        || viewModel.otpCode.count != SplickOtpField.defaultLength
+                    isFailed: viewModel.otpError != nil,
+                    isDisabled: viewModel.otpCode.count != SplickOtpField.defaultLength
                 ) {
+                    hideKeyboard()
                     Task { await viewModel.verifyEmailCodeStep() }
                 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -360,6 +363,7 @@ public struct ChangePasswordView: View {
                         viewModel.hasPasswordLogin ? .changePasswordUpdate : .createPasswordSubmit
                     ),
                     isLoading: viewModel.state.isLoading,
+                    isFailed: viewModel.state.error != nil,
                     isDisabled: submitDisabled
                 ) {
                     Task { await viewModel.changePassword() }
@@ -395,8 +399,7 @@ public struct ChangePasswordView: View {
     }
 
     private var submitDisabled: Bool {
-        viewModel.state.isLoading
-            || !viewModel.passwordStrength.isStrong
+        !viewModel.passwordStrength.isStrong
             || viewModel.newPassword != viewModel.confirmPassword
     }
 }
