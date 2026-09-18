@@ -35,6 +35,25 @@ public enum SplickTheme {
                 endPoint: .bottomTrailing
             )
         }
+
+        /// Wordmark / camera lockup (Gicnova-aligned).
+        public static let brandOrange = Color(hex: 0xFF872B)
+        public static let brandPink = Color(hex: 0xFF517C)
+        public static let brandBlue = Color(hex: 0x0095FF)
+        public static let brandCanvas = Color(hex: 0xFFFEFD)
+        public static let brandCanvasDark = Color(hex: 0x00020C)
+
+        public static var brandWordmarkGradient: LinearGradient {
+            LinearGradient(
+                colors: [brandBlue, brandPink, brandOrange],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        }
+
+        public static let authFieldFill = Color.white.opacity(0.88)
+        public static let authFieldStroke = brandBlue.opacity(0.28)
+        public static let authFieldStrokeFocused = brandPink.opacity(0.72)
     }
 
     // MARK: - Typography
