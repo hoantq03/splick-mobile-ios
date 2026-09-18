@@ -392,7 +392,7 @@ private final class ExpensePagerContainerVC<History: View, Overview: View, Frien
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .clear
-        view.clipsToBounds = true
+        view.clipsToBounds = false
 
         let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
         pan.cancelsTouchesInView = false

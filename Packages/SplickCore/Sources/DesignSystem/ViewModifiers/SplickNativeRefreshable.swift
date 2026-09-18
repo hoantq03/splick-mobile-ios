@@ -59,67 +59,79 @@ private struct SplickNativeRefreshableWithController: ViewModifier {
 
     @StateObject private var refreshHost = SplickScrollRefreshHost()
     @State private var isRefreshing = false
+    @State private var refreshTask: Task<Void, Never>?
     /// Only used when the underlying scroll view has no `UIRefreshControl` yet.
     @State private var showsFallbackHeader = false
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.splickVisualTheme) private var visualThemeOverride
 
     func body(content: Content) -> some View {
-        content
-            .background {
-                SplickScrollViewRefreshAnchor(host: refreshHost)
-            }
-            .refreshable {
-                await runRefresh()
-            }
-            // Overlay (not safeAreaInset): UIHostingController pages set
-            // `safeAreaRegions = []`, which clips inset-based headers.
-            .overlay(alignment: .top) {
-                if showsFallbackHeader {
-                    SplickSpinner(size: .medium)
-                        .frame(maxWidth: .infinity)
-                        .padding(
-                            .top,
-                            max(refreshHost.scrollView?.adjustedContentInset.top ?? 12, 12)
-                        )
-                        .padding(.bottom, 8)
-                        .transition(.opacity)
+        ZStack(alignment: .top) {
+            content
+                .background {
+                    SplickScrollViewRefreshAnchor(host: refreshHost)
                 }
-            }
+                .refreshable {
+                    await handleSystemRefreshable()
+                }
+
+            let isLoading = isRefreshing || showsFallbackHeader
+            let isPulling = refreshHost.pullDistance > 4
+            SplickSpinner(
+                size: .medium,
+                rotationDegrees: isLoading ? nil : refreshHost.pullRotationDegrees
+            )
+            .frame(maxWidth: .infinity)
+            .padding(.top, refreshHost.spinnerOverlayTopPadding())
+            .opacity(isLoading || isPulling ? 1 : 0)
+            .allowsHitTesting(false)
+            .accessibilityHidden(!(isLoading || isPulling))
+        }
             .environment(\.pullToRefreshActive, isRefreshing)
             .preference(key: PullToRefreshActivePreferenceKey.self, value: isRefreshing)
             .onChange(of: controller.requestID) { requestID in
                 guard requestID > 0 else { return }
                 Task { await runProgrammaticRefresh() }
             }
-            .onAppear { applyRefreshTint() }
-            .onChange(of: colorScheme) { _ in applyRefreshTint() }
-            .onChange(of: visualThemeOverride) { _ in applyRefreshTint() }
-            .animation(.spring(response: 0.28, dampingFraction: 0.62), value: showsFallbackHeader)
+            .onAppear {
+                refreshHost.applyClearSystemTint()
+                refreshHost.onPullCommit = {
+                    Task { await runRefresh() }
+                }
+            }
     }
 
-    private var resolvedVisualTheme: SplickVisualTheme {
-        .resolved(override: visualThemeOverride, colorScheme: colorScheme)
-    }
-
-    private func applyRefreshTint() {
-        refreshHost.applyTint(
-            SplickThemeCatalog.spinnerPalette(for: resolvedVisualTheme).refreshTint
-        )
+    @MainActor
+    private func handleSystemRefreshable() async {
+        if refreshHost.shouldCommitRefresh() {
+            await runRefresh()
+        } else {
+            refreshHost.endRefreshing()
+        }
+        if refreshHost.currentPullDistance() < 8 {
+            refreshHost.resetGesturePeak()
+        }
     }
 
     @MainActor
     private func runRefresh() async {
-        guard !isRefreshing else { return }
-        isRefreshing = true
-        defer { isRefreshing = false }
-        await action()
+        if let refreshTask {
+            await refreshTask.value
+            return
+        }
+        let task = Task { @MainActor in
+            isRefreshing = true
+            defer { isRefreshing = false }
+            await action()
+        }
+        refreshTask = task
+        await task.value
+        refreshTask = nil
     }
 
     @MainActor
     private func runProgrammaticRefresh() async {
-        guard !isRefreshing else { return }
+        guard refreshTask == nil, !isRefreshing else { return }
         isRefreshing = true
+        refreshHost.prepareProgrammaticCommit()
         let usedNative = await refreshHost.beginRefreshing()
         if !usedNative {
             await playFallbackPullBounce()
@@ -154,15 +166,64 @@ private enum SplickProgrammaticRefreshMotion {
 
 /// Finds the underlying `UIScrollView` and drives its native refresh control.
 @MainActor
-public final class SplickScrollRefreshHost: ObservableObject {
+public final class SplickScrollRefreshHost: NSObject, ObservableObject, UIGestureRecognizerDelegate {
     public weak var scrollView: UIScrollView?
-    private var refreshTint: UIColor?
+    @Published public private(set) var pullDistance: CGFloat = 0
+    public var pullRotationDegrees: Double {
+        Double(pullDistance / Self.fullRotationPull) * 360
+    }
+    public private(set) var completedFullRotation = false
+    var onPullCommit: (() -> Void)?
 
-    public init() {}
+    private var offsetObservation: NSKeyValueObservation?
+    private var panRecognizer: UIPanGestureRecognizer?
+    private var maxPullInGesture: CGFloat = 0
+    private var wasDragging = false
+    private var didThresholdHaptic = false
+    private let thresholdHaptic = UIImpactFeedbackGenerator(style: .medium)
 
-    public func applyTint(_ tint: UIColor) {
-        refreshTint = tint
-        scrollView?.refreshControl?.tintColor = tint
+    static let fullRotationPull = SplickSpinner.fullRotationPullDistance(for: .medium)
+
+    public override init() {}
+
+    public func applyClearSystemTint() {
+        scrollView?.refreshControl?.tintColor = .clear
+    }
+
+    public func prepareProgrammaticCommit() {
+        completedFullRotation = true
+    }
+
+    public func shouldCommitRefresh() -> Bool {
+        completedFullRotation || maxPullInGesture >= Self.fullRotationPull * 0.98
+    }
+
+    public func resetGesturePeak() {
+        maxPullInGesture = 0
+        completedFullRotation = false
+        didThresholdHaptic = false
+    }
+
+    /// Sit in the revealed PTR gap: below chrome that overlaps this scroll view, then centered in the pull.
+    public func spinnerOverlayTopPadding() -> CGFloat {
+        let pull = pullDistance
+        let spinner: CGFloat = 28
+        guard let scrollView else { return max(8, (pull - spinner) / 2) }
+        let inset = scrollView.adjustedContentInset.top
+        let refreshBand = scrollView.refreshControl?.isRefreshing == true
+            ? max(scrollView.refreshControl?.bounds.height ?? 0, 0)
+            : 0
+        let fromInset = max(0, inset - refreshBand)
+        let originY = scrollView.convert(CGPoint.zero, to: nil).y
+        let safeTop = scrollView.window?.safeAreaInsets.top ?? 59
+        let overlappingNav = max(0, (safeTop + 44) - originY)
+        let chrome = max(fromInset, overlappingNav)
+        return chrome + max(8, (pull - spinner) / 2)
+    }
+
+    public func currentPullDistance() -> CGFloat {
+        guard let scrollView else { return 0 }
+        return max(0, -(scrollView.contentOffset.y + scrollView.adjustedContentInset.top))
     }
 
     /// Shows the same spinner as a manual pull-to-refresh, with a fast overshoot + bounce-back.
@@ -170,11 +231,18 @@ public final class SplickScrollRefreshHost: ObservableObject {
     public func beginRefreshing() async -> Bool {
         await resolveRefreshableScrollView(retryIfMissingControl: true)
 
-        guard let scrollView, let refreshControl = scrollView.refreshControl else { return false }
-        if let refreshTint {
-            refreshControl.tintColor = refreshTint
+        guard let scrollView else { return false }
+        if scrollView.refreshControl == nil {
+            let control = UIRefreshControl()
+            control.tintColor = .clear
+            scrollView.refreshControl = control
         }
+        guard let refreshControl = scrollView.refreshControl else { return false }
+        refreshControl.tintColor = .clear
         guard !refreshControl.isRefreshing else { return true }
+
+        scrollView.alwaysBounceVertical = true
+        scrollView.bounces = true
 
         let topInset = scrollView.adjustedContentInset.top
         let controlHeight = max(refreshControl.bounds.height, 60)
@@ -199,6 +267,7 @@ public final class SplickScrollRefreshHost: ObservableObject {
 
         // 2) Engage native spinner while still overshot, then spring back.
         refreshControl.beginRefreshing()
+        refreshControl.tintColor = .clear
         // `beginRefreshing` grows top inset — recompute resting offset from the new inset.
         let settledAfterRefresh = CGPoint(x: 0, y: -scrollView.adjustedContentInset.top)
         if scrollView.contentOffset.y > overshootOffset.y {
@@ -244,38 +313,135 @@ public final class SplickScrollRefreshHost: ObservableObject {
     }
 
     public func attach(from view: UIView) {
-        let resolved = Self.findRefreshableScrollView(near: view)
+        let resolved = findRefreshableScrollView(near: view)
         if let resolved {
-            scrollView = resolved
-            if let refreshTint {
-                resolved.refreshControl?.tintColor = refreshTint
+            if scrollView !== resolved {
+                objectWillChange.send()
             }
+            bind(to: resolved)
+            applyClearSystemTint()
             return
         }
         if scrollView?.window == nil {
-            scrollView = nil
+            unbindScrollView()
         }
+    }
+
+    private func bind(to resolved: UIScrollView) {
+        guard scrollView !== resolved else {
+            installPullTrackingIfNeeded()
+            return
+        }
+        unbindScrollView()
+        scrollView = resolved
+        installPullTrackingIfNeeded()
+    }
+
+    private func unbindScrollView() {
+        offsetObservation?.invalidate()
+        offsetObservation = nil
+        if let panRecognizer, let scrollView {
+            scrollView.removeGestureRecognizer(panRecognizer)
+        }
+        panRecognizer = nil
+        scrollView = nil
+    }
+
+    private func installPullTrackingIfNeeded() {
+        guard let scrollView else { return }
+        if offsetObservation == nil {
+            offsetObservation = scrollView.observe(\.contentOffset, options: [.new]) { [weak self] _, _ in
+                if Thread.isMainThread {
+                    self?.handleContentOffsetChange()
+                } else {
+                    DispatchQueue.main.async {
+                        self?.handleContentOffsetChange()
+                    }
+                }
+            }
+        }
+        if panRecognizer == nil {
+            let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePullPan(_:)))
+            pan.delegate = self
+            pan.cancelsTouchesInView = false
+            pan.maximumNumberOfTouches = 1
+            scrollView.addGestureRecognizer(pan)
+            panRecognizer = pan
+        }
+    }
+
+    @objc private func handlePullPan(_ recognizer: UIPanGestureRecognizer) {
+        switch recognizer.state {
+        case .began:
+            maxPullInGesture = 0
+            completedFullRotation = false
+            didThresholdHaptic = false
+            wasDragging = true
+            thresholdHaptic.prepare()
+            handleContentOffsetChange()
+        case .changed:
+            handleContentOffsetChange()
+        case .ended, .cancelled, .failed:
+            handleContentOffsetChange()
+            handleFingerRelease()
+        default:
+            break
+        }
+    }
+
+    private func handleContentOffsetChange() {
+        let pull = currentPullDistance()
+        if pull > 2 {
+            maxPullInGesture = max(maxPullInGesture, pull)
+        }
+        if !didThresholdHaptic, maxPullInGesture >= Self.fullRotationPull {
+            didThresholdHaptic = true
+            thresholdHaptic.impactOccurred(intensity: 1)
+        }
+        if abs(pullDistance - pull) > 0.4 {
+            pullDistance = pull
+        }
+    }
+
+    private func handleFingerRelease() {
+        wasDragging = false
+        completedFullRotation = maxPullInGesture >= Self.fullRotationPull
+        if completedFullRotation {
+            onPullCommit?()
+        } else if pullDistance < 4 {
+            pullDistance = 0
+        }
+    }
+
+    public func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        true
     }
 
     private func resolveRefreshableScrollView(retryIfMissingControl: Bool) async {
         if let current = scrollView {
-            self.scrollView = Self.findRefreshableScrollView(near: current) ?? current
+            self.scrollView = findRefreshableScrollView(near: current) ?? current
         }
-        guard retryIfMissingControl, scrollView?.refreshControl == nil else { return }
-        try? await Task.sleep(nanoseconds: 50_000_000)
-        if let current = scrollView {
-            self.scrollView = Self.findRefreshableScrollView(near: current) ?? current
+        guard retryIfMissingControl else { return }
+        for _ in 0..<6 {
+            if scrollView?.refreshControl != nil { return }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            if let current = scrollView {
+                self.scrollView = findRefreshableScrollView(near: current) ?? current
+            }
         }
     }
 
-    private static func findRefreshableScrollView(near view: UIView) -> UIScrollView? {
+    private func findRefreshableScrollView(near view: UIView) -> UIScrollView? {
         var nearestWithControl: UIScrollView?
         var nearestWithoutControl: UIScrollView?
 
         var ancestor: UIView? = view
         while let current = ancestor {
             if let scrollView = current as? UIScrollView,
-               isLikelyVerticalContentScrollView(scrollView) {
+               Self.isLikelyVerticalContentScrollView(scrollView) {
                 if scrollView.refreshControl != nil {
                     nearestWithControl = scrollView
                     break
@@ -290,27 +456,38 @@ public final class SplickScrollRefreshHost: ObservableObject {
         if let nearestWithControl {
             return nearestWithControl
         }
+
         if let nearestWithoutControl {
-            return nearestWithoutControl
+            var innerWithControl: UIScrollView?
+            Self.enumerateScrollViews(in: nearestWithoutControl) { scrollView in
+                guard scrollView !== nearestWithoutControl else { return }
+                guard Self.isLikelyVerticalContentScrollView(scrollView) else { return }
+                if scrollView.refreshControl != nil, innerWithControl == nil {
+                    innerWithControl = scrollView
+                }
+            }
+            if let innerWithControl {
+                return innerWithControl
+            }
         }
 
-        // Stay inside this SwiftUI hosting page so sibling pager pages
-        // (streak / feed / album) cannot steal programmatic refresh.
-        let searchRoot = enclosingHostingView(for: view) ?? view
+        let searchRoot = enclosingPageHostingView(near: view) ?? view
         var preferred: UIScrollView?
         var fallback: UIScrollView?
-        enumerateScrollViews(in: searchRoot) { scrollView in
-            guard isLikelyVerticalContentScrollView(scrollView) else { return }
-            if scrollView.refreshControl != nil, preferred == nil {
-                preferred = scrollView
-            } else if fallback == nil {
+        Self.enumerateScrollViews(in: searchRoot) { scrollView in
+            guard Self.isLikelyVerticalContentScrollView(scrollView) else { return }
+            if scrollView.refreshControl != nil {
+                if preferred == nil || scrollView.bounds.height > preferred!.bounds.height {
+                    preferred = scrollView
+                }
+            } else if fallback == nil || scrollView.bounds.height > fallback!.bounds.height {
                 fallback = scrollView
             }
         }
-        return preferred ?? fallback
+        return preferred ?? nearestWithoutControl ?? fallback
     }
 
-    private static func enclosingHostingView(for view: UIView) -> UIView? {
+    private func enclosingPageHostingView(near view: UIView) -> UIView? {
         var responder: UIResponder? = view
         while let current = responder {
             if let viewController = current as? UIViewController {
@@ -334,9 +511,10 @@ public final class SplickScrollRefreshHost: ObservableObject {
     }
 
     private static func isLikelyVerticalContentScrollView(_ scrollView: UIScrollView) -> Bool {
-        if scrollView.isPagingEnabled {
-            let wide = scrollView.contentSize.width > scrollView.bounds.width * 1.2
-            if wide { return false }
+        let wide = scrollView.contentSize.width > scrollView.bounds.width * 1.2
+        if scrollView.isPagingEnabled, wide { return false }
+        if wide, scrollView.bounds.height > 0, scrollView.bounds.height < 120 {
+            return false
         }
         return true
     }
@@ -404,6 +582,7 @@ public struct SplickRefreshableScrollBootstrap: UIViewRepresentable {
             scrollView.alwaysBounceVertical = true
             scrollView.bounces = true
             scrollView.delaysContentTouches = false
+            scrollView.refreshControl?.tintColor = .clear
             Self.lockNestedHorizontalPagers(in: scrollView)
 
             let top = scrollView.adjustedContentInset.top
