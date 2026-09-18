@@ -612,6 +612,7 @@ enum StringsFeatureEn {
         .commonCancel: "Cancel",
         .commonSave: "Save",
         .commonError: "Error",
+        .commonFailed: "Failed",
         .commonSuccess: "Success",
         .commonOr: "or",
         .commonMe: "Me",

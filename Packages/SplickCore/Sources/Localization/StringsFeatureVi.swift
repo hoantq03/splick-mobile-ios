@@ -612,6 +612,7 @@ enum StringsFeatureVi {
         .commonCancel: "Hủy",
         .commonSave: "Lưu",
         .commonError: "Lỗi",
+        .commonFailed: "Thất bại",
         .commonSuccess: "Thành công",
         .commonOr: "hoặc",
         .commonMe: "Tôi",

@@ -246,6 +246,7 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case commonOK = "common.ok"
     case commonSave = "common.save"
     case commonError = "common.error"
+    case commonFailed = "common.failed"
     case commonSuccess = "common.success"
     case commonOr = "common.or"
     case commonMe = "common.me"
