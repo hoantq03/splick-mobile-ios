@@ -18,8 +18,8 @@ public final class CreateExpenseUseCase: CreateExpenseUseCaseProtocol, Sendable 
             throw AppError.validation("Description is required")
         }
 
-        guard request.totalAmount > 0 else {
-            throw AppError.validation("Amount must be greater than zero")
+        guard VndAmountRules.isAtLeastMinimum(request.totalAmount) else {
+            throw AppError.validation("Amount must be at least 1000")
         }
 
         guard !request.participants.isEmpty else {

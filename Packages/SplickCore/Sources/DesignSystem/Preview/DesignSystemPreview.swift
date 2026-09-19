@@ -42,11 +42,25 @@ import SwiftUI
 }
 
 #Preview("Error State") {
-    ErrorView(message: "Something went wrong. Please try again.") {}
+    ErrorView(message: "Something's a little off. Give it another try!") {}
 }
 
 #Preview("Loading") {
     LoadingView(message: "Loading your feed...")
+}
+
+#Preview("Feed Skeleton") {
+    FeedSkeletonLoadingView()
+        .background(SplickTheme.Colors.background)
+}
+
+#Preview("Spinner sizes") {
+    HStack(spacing: 24) {
+        SplickSpinner(size: .small)
+        SplickSpinner(size: .medium)
+        SplickSpinner(size: .large)
+    }
+    .padding()
 }
 
 #Preview("Card Modifier") {

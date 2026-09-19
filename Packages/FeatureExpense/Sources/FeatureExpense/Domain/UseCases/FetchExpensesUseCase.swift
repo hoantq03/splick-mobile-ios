@@ -2,7 +2,7 @@ import Foundation
 import SplickDomain
 
 public protocol FetchExpensesUseCaseProtocol: Sendable {
-    func execute(groupId: UUID?, page: Int) async throws -> [Expense]
+    func execute(groupId: UUID?, page: Int, cursor: String?) async throws -> [Expense]
 }
 
 public final class FetchExpensesUseCase: FetchExpensesUseCaseProtocol, Sendable {
@@ -14,7 +14,8 @@ public final class FetchExpensesUseCase: FetchExpensesUseCaseProtocol, Sendable 
         self.pageSize = pageSize
     }
 
-    public func execute(groupId: UUID?, page: Int) async throws -> [Expense] {
-        try await repository.fetchExpenses(groupId: groupId, page: page, limit: pageSize)
+    public func execute(groupId: UUID?, page: Int, cursor: String? = nil) async throws -> [Expense] {
+        try await repository.fetchExpenses(
+            groupId: groupId, page: page, limit: pageSize, cursor: cursor)
     }
 }

@@ -1,64 +1,274 @@
 import SwiftUI
 import DesignSystem
+import Common
+import Localization
 import FeatureAuth
+import FeatureMedia
 
 struct RootView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var container: DependencyContainer
+    @EnvironmentObject private var pushNotificationCoordinator: PushNotificationCoordinator
+    @EnvironmentObject private var themeService: ThemeService
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        Group {
-            switch appState.authState {
-            case .unknown:
-                splashView
+        ZStack {
+            rootContent
 
-            case .unauthenticated:
-                authFlow
-
-            case .authenticated:
-                MainTabView()
+            if appState.needsLaunchLoading {
+                SplashScreenView()
+                    .zIndex(999)
             }
         }
-        .animation(.easeInOut(duration: 0.3), value: appState.authState)
+            .ignoresSafeArea()
+            .environment(\.suppressKeyboardAutoFocus, appState.needsLaunchLoading)
+            .dismissKeyboardOnTap()
+            .progressViewStyle(SplickProgressViewStyle())
+            .splickHiddenScrollIndicators()
+            .splickVisualTheme(
+                themeService.theme.visualTheme(systemIsDark: colorScheme == .dark)
+            )
+            .splickColorTheme(themeService.colorTheme)
+            .tint(SplickThemeCatalog.brandPalette(for: themeService.colorTheme).accent)
+            .preferredColorScheme(themeService.preferredColorScheme)
+            .modifier(ForcedColorSchemeModifier(scheme: themeService.preferredColorScheme))
+            .onChange(of: themeService.theme) { _ in
+                themeService.applyUserInterfaceStyle()
+                applyAppIcon()
+            }
+            .onChange(of: themeService.colorTheme) { _ in
+                applyAppIcon()
+            }
+            .onChange(of: colorScheme) { _ in applyAppIcon() }
+            .animation(nil, value: appState.needsLaunchLoading)
+            .environment(\.launchRevealActive, appState.isLaunchSplashComplete)
+            .task {
+                pushNotificationCoordinator.refreshAuthorizationStatus()
+                await bootstrapSession()
+            }
+            .onChange(of: scenePhase) { phase in
+                if phase == .active {
+                    themeService.applyUserInterfaceStyle()
+                    pushNotificationCoordinator.refreshAuthorizationStatus()
+                }
+                guard appState.isAuthenticated else { return }
+                switch phase {
+                case .active:
+                    container.messagingWebSocketClient.reconnect()
+                case .inactive:
+                    break
+                case .background:
+                    container.messagingWebSocketClient.disconnect()
+                @unknown default:
+                    break
+                }
+            }
+            .onReceive(pushNotificationCoordinator.$pendingDestination.compactMap { $0 }) { _ in
+                consumePendingNotificationDestination()
+            }
+            .onChange(of: appState.isAuthenticated) { isAuthenticated in
+                if isAuthenticated {
+                    container.messagingWebSocketClient.connect()
+                    consumePendingNotificationDestination()
+                    if appState.pendingUserProfileNavigation != nil
+                        || !(appState.pendingUserProfileUsername ?? "").isEmpty {
+                        appState.selectedTab = .friends
+                    }
+                    Task { await claimPendingBillInviteIfNeeded() }
+                } else {
+                    container.messagingWebSocketClient.disconnect()
+                }
+            }
+            .onAppear {
+                themeService.applyUserInterfaceStyle()
+                applyAppIcon()
+                consumePendingNotificationDestination()
+                if appState.isAuthenticated {
+                    container.messagingWebSocketClient.connect()
+                    Task { await claimPendingBillInviteIfNeeded() }
+                }
+            }
     }
 
-    private var splashView: some View {
-        VStack(spacing: SplickTheme.Spacing.md) {
-            Text("Splick")
-                .font(SplickTheme.Typography.largeTitle)
-                .foregroundStyle(SplickTheme.Colors.primaryGradient)
+    // MARK: - Root content
 
-            ProgressView()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(SplickTheme.Colors.background)
-        .task {
-            await checkExistingSession()
+    /// After launch loading, unauthenticated users go straight to login.
+    @ViewBuilder
+    private var rootContent: some View {
+        switch appState.authState {
+        case .unknown:
+            SplickBrandAtmosphere()
+
+        case .unauthenticated, .authenticated:
+            ZStack {
+                if appState.isAuthenticated {
+                    if appState.needsOAuthProfileSetup, let user = appState.currentUser {
+                        CompleteOAuthProfileView(
+                            viewModel: CompleteOAuthProfileViewModel(
+                                user: user,
+                                updateProfileUseCase: container.updateProfileUseCase,
+                                languageService: container.languageService,
+                                uploadAvatar: { image in
+                                    try await container.uploadUserAvatarUseCase.execute(image: image).url
+                                }
+                            ),
+                            onFinished: { updated in
+                                appState.updateAuthenticatedUser(updated)
+                                appState.completeOAuthProfileSetup()
+                            }
+                        )
+                        .transition(SplashMotion.authenticatedTransition)
+                        .zIndex(1)
+                    } else {
+                        MainTabView()
+                            .transition(SplashMotion.authenticatedTransition)
+                            .zIndex(1)
+                    }
+                } else {
+                    authFlow
+                        .transition(SplashMotion.unauthenticatedTransition)
+                        .zIndex(0)
+                }
+            }
+            .animation(SplashMotion.authStateSlide, value: appState.isAuthenticated)
+            .animation(SplashMotion.authStateSlide, value: appState.needsOAuthProfileSetup)
         }
     }
+
+    // MARK: - Flows
 
     private var authFlow: some View {
         NavigationStack {
             LoginView(
-                viewModel: LoginViewModel(loginUseCase: container.loginUseCase)
+                viewModel: LoginViewModel(
+                    checkIdentifierUseCase: container.checkIdentifierUseCase,
+                    loginUseCase: container.loginUseCase,
+                    registerUseCase: container.registerUseCase,
+                    requestEmailOtpUseCase: container.requestEmailOtpUseCase,
+                    requestPhoneOtpUseCase: container.requestPhoneOtpUseCase,
+                    verifyPhoneOtpUseCase: container.verifyPhoneOtpUseCase,
+                    googleSignInUseCase: container.googleSignInUseCase,
+                    appleSignInUseCase: container.appleSignInUseCase,
+                    reactivateAccountUseCase: container.reactivateAccountUseCase,
+                    languageService: container.languageService,
+                    googleSignInPresenter: GoogleSignInClient.shared,
+                    appleSignInPresenter: AppleSignInClient.shared
+                ),
+                forgotPasswordViewModelFactory: {
+                    ForgotPasswordViewModel(
+                        forgotPasswordUseCase: container.forgotPasswordUseCase,
+                        verifyResetPasswordOtpUseCase: container.verifyResetPasswordOtpUseCase,
+                        resetPasswordUseCase: container.resetPasswordUseCase,
+                        languageService: container.languageService
+                    )
+                },
+                onAuthenticated: { user, needsOAuthProfileSetup in
+                    container.languageService.applyFromServer(user.preferredLocale)
+                    appState.setAuthenticated(user: user, needsOAuthProfileSetup: needsOAuthProfileSetup)
+                    Task {
+                        await pushNotificationCoordinator.ensureDeviceTokenRegistered()
+                    }
+                }
             )
-            .navigationDestination(isPresented: .constant(false)) {
-                RegisterView(
-                    viewModel: RegisterViewModel(registerUseCase: container.registerUseCase)
-                )
-            }
+            .toolbarBackground(.hidden, for: .navigationBar)
         }
-        .onChange(of: appState.authState) { _ in }
+        .background {
+            SplickBrandAtmosphere()
+        }
     }
 
-    private func checkExistingSession() async {
-        try? await Task.sleep(for: .seconds(1))
+    // MARK: - Session restore
 
-        if await container.sessionManager.isAuthenticated(),
-           let session = await container.sessionManager.currentSession() {
+    private func consumePendingNotificationDestination() {
+        guard appState.isAuthenticated else { return }
+        guard let destination = pushNotificationCoordinator.pendingDestination else { return }
+        appState.routeRemoteNotification(destination)
+        pushNotificationCoordinator.clearPendingDestination()
+    }
+
+    private func claimPendingBillInviteIfNeeded() async {
+        guard appState.isAuthenticated else { return }
+        guard let pending = appState.consumePendingBillInvite() else { return }
+        do {
+            let result = try await container.claimBillInvite(
+                token: pending.token,
+                splitId: pending.splitId
+            )
+            if let postId = result.postId {
+                appState.openPostFromNotification(postId)
+            } else {
+                appState.selectedTab = .expenses
+            }
+        } catch {
+            appState.storePendingBillInvite(pending.token, splitId: pending.splitId)
+        }
+    }
+
+    private func bootstrapSession() async {
+        if case .unknown = appState.authState {
+            await restoreSessionLocalFirst()
+        }
+
+        guard appState.needsLaunchLoading else { return }
+
+        if appState.isAuthenticated {
+            appState.completeLaunchSplash()
+            return
+        }
+
+        try? await Task.sleep(for: AppConstants.Splash.minimumDisplayDuration)
+        guard !Task.isCancelled else { return }
+        appState.startLaunchSplashExit()
+    }
+
+    private func restoreSessionLocalFirst() async {
+        if let session = await container.restoreSessionUseCase.restoreLocal() {
+            container.languageService.applyFromServer(session.user.preferredLocale)
             appState.setAuthenticated(user: session.user)
+            consumePendingNotificationDestination()
+            Task {
+                await confirmRemoteSession()
+                await pushNotificationCoordinator.ensureDeviceTokenRegistered()
+            }
+            return
+        }
+
+        appState.markUnauthenticated(container: container)
+    }
+
+    private func applyAppIcon() {
+        AppIconSwitcher.apply(
+            theme: themeService.theme,
+            colorTheme: themeService.colorTheme,
+            systemIsDark: colorScheme == .dark
+        )
+    }
+
+    private func confirmRemoteSession() async {
+        switch await container.restoreSessionUseCase.confirmRemote() {
+        case .updated(let session):
+            container.languageService.applyFromServer(session.user.preferredLocale)
+            appState.updateAuthenticatedUser(session.user)
+        case .unchanged:
+            break
+        case .signedOut:
+            appState.setUnauthenticated(container: container)
+        }
+    }
+}
+
+/// Forces SwiftUI `Environment(\.colorScheme)` immediately. `preferredColorScheme` alone can
+/// leave descendants on the previous scheme until a view is recreated.
+private struct ForcedColorSchemeModifier: ViewModifier {
+    let scheme: ColorScheme?
+
+    func body(content: Content) -> some View {
+        if let scheme {
+            content.environment(\.colorScheme, scheme)
         } else {
-            appState.setUnauthenticated()
+            content
         }
     }
 }

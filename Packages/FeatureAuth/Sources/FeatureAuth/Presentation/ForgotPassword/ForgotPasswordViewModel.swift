@@ -1,0 +1,313 @@
+import Foundation
+import SwiftUI
+import Common
+import DesignSystem
+import Localization
+import SplickDomain
+
+@MainActor
+public final class ForgotPasswordViewModel: ObservableObject {
+    enum Step: Int, CaseIterable {
+        case identifier = 0
+        case otp = 1
+        case newPassword = 2
+    }
+
+    static let resendCooldownSeconds = 60
+
+    @Published var step: Step = .identifier
+    @Published var identifier = ""
+    @Published var otpCode = ""
+    @Published var password = ""
+    @Published var confirmPassword = ""
+    @Published var identifierErrorKey: L10nKey?
+    @Published var passwordErrorKey: L10nKey?
+    @Published var confirmPasswordErrorKey: L10nKey?
+    @Published var otpErrorKey: L10nKey?
+    @Published var otpInfoMessageKey: L10nKey?
+    @Published var state: LoadingState<AuthSession> = .idle
+    @Published var passwordStrength: PasswordStrengthResult = .empty
+    @Published var showErrorAlert = false
+    @Published private(set) var resendCooldownRemaining = 0
+
+    @Published private(set) var identifierStatus: FieldValidationStatus = .neutral
+    @Published private(set) var isOtpVerified = false
+
+    private let forgotPasswordUseCase: ForgotPasswordUseCaseProtocol
+    private let verifyResetPasswordOtpUseCase: VerifyResetPasswordOtpUseCaseProtocol
+    private let resetPasswordUseCase: ResetPasswordUseCaseProtocol
+    private let languageService: LanguageService
+    private var resendCooldownTask: Task<Void, Never>?
+
+    var detectedKind: LoginIdentifierKind {
+        identifier.detectedLoginIdentifierKind
+    }
+
+    var identifierIntent: LoginIdentifierKind {
+        identifier.loginIdentifierIntent
+    }
+
+    var passwordFieldError: String? {
+        guard let passwordErrorKey else { return nil }
+        if passwordErrorKey == .changePasswordWeakPassword {
+            return languageService.weakPasswordMessage(for: passwordStrength)
+        }
+        return languageService.text(passwordErrorKey)
+    }
+
+    var normalizedEmail: String {
+        identifier.trimmed.lowercased()
+    }
+
+    var canResendCode: Bool {
+        resendCooldownRemaining == 0 && !state.isLoading
+    }
+
+    public init(
+        forgotPasswordUseCase: ForgotPasswordUseCaseProtocol,
+        verifyResetPasswordOtpUseCase: VerifyResetPasswordOtpUseCaseProtocol,
+        resetPasswordUseCase: ResetPasswordUseCaseProtocol,
+        languageService: LanguageService
+    ) {
+        self.forgotPasswordUseCase = forgotPasswordUseCase
+        self.verifyResetPasswordOtpUseCase = verifyResetPasswordOtpUseCase
+        self.resetPasswordUseCase = resetPasswordUseCase
+        self.languageService = languageService
+    }
+
+    deinit {
+        resendCooldownTask?.cancel()
+    }
+
+    func reset() {
+        resendCooldownTask?.cancel()
+        resendCooldownRemaining = 0
+        step = .identifier
+        identifier = ""
+        otpCode = ""
+        password = ""
+        confirmPassword = ""
+        identifierErrorKey = nil
+        passwordErrorKey = nil
+        confirmPasswordErrorKey = nil
+        otpErrorKey = nil
+        otpInfoMessageKey = nil
+        identifierStatus = .neutral
+        isOtpVerified = false
+        passwordStrength = .empty
+        showErrorAlert = false
+        state = .idle
+    }
+
+    func validateIdentifierField(requireComplete: Bool = false) {
+        switch identifier.classifiedLoginIdentifier {
+        case .empty:
+            identifierErrorKey = nil
+            identifierStatus = .neutral
+        case .email(.valid):
+            identifierErrorKey = nil
+            identifierStatus = .valid
+        case .email(.incomplete):
+            identifierErrorKey = requireComplete ? .authValidationInvalidEmail : nil
+            identifierStatus = .neutral
+        case .email(.invalid):
+            identifierErrorKey = .authValidationInvalidEmail
+            identifierStatus = .neutral
+        case .phone(let parsed):
+            switch parsed.completeness {
+            case .complete:
+                identifierErrorKey = nil
+                identifierStatus = .valid
+            case .incomplete:
+                identifierErrorKey = requireComplete ? .authValidationInvalidPhone : nil
+                identifierStatus = .neutral
+            case .invalid:
+                identifierErrorKey = .authValidationInvalidPhone
+                identifierStatus = .neutral
+            }
+        }
+    }
+
+    func validatePasswordField() {
+        passwordStrength = PasswordStrengthValidator.evaluate(password)
+        if password.isEmpty {
+            passwordErrorKey = nil
+            validateConfirmPasswordField()
+            return
+        }
+        passwordErrorKey = passwordStrength.isStrong ? nil : .changePasswordWeakPassword
+        validateConfirmPasswordField()
+    }
+
+    func validateConfirmPasswordField() {
+        if confirmPassword.isEmpty {
+            confirmPasswordErrorKey = nil
+            return
+        }
+        confirmPasswordErrorKey = password == confirmPassword ? nil : .changePasswordPasswordsMismatch
+    }
+
+    func requestResetCode() async {
+        validateIdentifierField(requireComplete: true)
+        guard identifierErrorKey == nil, detectedKind != .unknown else { return }
+
+        guard detectedKind == .email else {
+            identifierErrorKey = .authForgotPasswordPhoneUnsupported
+            return
+        }
+
+        let normalized = normalizedEmail
+        guard !normalized.isEmpty else { return }
+
+        setState(.loading)
+        do {
+            try await forgotPasswordUseCase.execute(email: normalized)
+            otpCode = ""
+            otpErrorKey = nil
+            isOtpVerified = false
+            otpInfoMessageKey = .authOtpEmailHint
+            startResendCooldown()
+            await revealButtonResultThen {
+                step = .otp
+            }
+        } catch let error as AuthError {
+            applyAuthError(error, onOtpStep: false)
+        } catch let error as NetworkError {
+            presentGenericError(error.userMessage)
+        } catch {
+            presentGenericError(languageService.text(.authResetSendFailed))
+        }
+    }
+
+    func verifyResetCode() async {
+        let code = otpCode.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard code.count == 6 else {
+            otpErrorKey = .changePasswordOtpRequired
+            return
+        }
+        otpErrorKey = nil
+
+        setState(.loading)
+        do {
+            try await verifyResetPasswordOtpUseCase.execute(email: normalizedEmail, otpCode: code)
+            isOtpVerified = true
+            await revealButtonResultThen {
+                step = .newPassword
+            }
+        } catch let error as AuthError {
+            applyAuthError(error, onOtpStep: true)
+        } catch let error as NetworkError {
+            presentGenericError(error.userMessage)
+        } catch {
+            presentGenericError(languageService.text(.authResetVerifyFailed))
+        }
+    }
+
+    func resetPassword() async {
+        guard isOtpVerified else { return }
+
+        validatePasswordField()
+        validateConfirmPasswordField()
+        guard passwordStrength.isStrong, password == confirmPassword else { return }
+
+        let code = otpCode.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard code.count == 6 else {
+            otpErrorKey = .changePasswordOtpRequired
+            step = .otp
+            isOtpVerified = false
+            return
+        }
+
+        setState(.loading)
+        do {
+            let session = try await resetPasswordUseCase.execute(
+                email: normalizedEmail,
+                otpCode: code,
+                newPassword: password
+            )
+            await presentAuthenticatedSession(session)
+        } catch let error as AuthError {
+            applyAuthError(error, onOtpStep: true)
+        } catch let error as NetworkError {
+            presentGenericError(error.userMessage)
+        } catch {
+            presentGenericError(languageService.text(.authResetFailed))
+        }
+    }
+
+    func resendCode() async {
+        guard canResendCode else { return }
+        await requestResetCode()
+    }
+
+    func goBackToIdentifier() {
+        resendCooldownTask?.cancel()
+        resendCooldownRemaining = 0
+        step = .identifier
+        otpCode = ""
+        password = ""
+        confirmPassword = ""
+        otpErrorKey = nil
+        otpInfoMessageKey = nil
+        isOtpVerified = false
+        state = .idle
+    }
+
+    func goBackToOtp() {
+        step = .otp
+        password = ""
+        confirmPassword = ""
+        passwordErrorKey = nil
+        confirmPasswordErrorKey = nil
+        passwordStrength = .empty
+        isOtpVerified = false
+    }
+
+    private func startResendCooldown() {
+        resendCooldownTask?.cancel()
+        resendCooldownRemaining = Self.resendCooldownSeconds
+        resendCooldownTask = Task {
+            while resendCooldownRemaining > 0 {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { return }
+                resendCooldownRemaining -= 1
+            }
+        }
+    }
+
+    private func presentAuthenticatedSession(_ session: AuthSession) async {
+        await revealButtonResultThen {
+            setState(.loaded(session))
+        }
+    }
+
+    private func revealButtonResultThen(_ work: () -> Void) async {
+        setState(.idle)
+        try? await Task.sleep(nanoseconds: SplickButton.successHoldNanoseconds)
+        work()
+    }
+
+    private func setState(_ newState: LoadingState<AuthSession>) {
+        switch newState {
+        case .failed(let detail):
+            presentGenericError(detail)
+        default:
+            state = newState
+        }
+    }
+
+    private func presentGenericError(_ detail: String) {
+        Log.warning("Forgot password failed: \(detail)", category: .auth)
+        showErrorAlert = true
+        state = .idle
+    }
+
+    private func applyAuthError(_ error: AuthError, onOtpStep: Bool) {
+        if onOtpStep && error.shouldShowOnOtpStep {
+            otpErrorKey = .errorAuthInvalidOtpDefault
+            state = .idle
+        } else {
+            presentGenericError(error.userMessage)
+        }
+    }
+}

@@ -1,0 +1,296 @@
+import Foundation
+import Networking
+import SplickDomain
+import Common
+
+public final class MessagingRepository: MessagingRepositoryProtocol, Sendable {
+    private let apiClient: APIClientProtocol
+    private let friendDisplayNameStore: FriendDisplayNameStore?
+
+    public init(
+        apiClient: APIClientProtocol,
+        friendDisplayNameStore: FriendDisplayNameStore? = nil
+    ) {
+        self.apiClient = apiClient
+        self.friendDisplayNameStore = friendDisplayNameStore
+    }
+
+    public func fetchConversations(query: ConversationInboxQuery) async throws -> MessagingPage<Conversation> {
+        let page: PageResponseDTO<ConversationResponseDTO> = try await apiClient.request(
+            MessagingEndpoint.listConversations(query)
+        )
+        let conversations = page.items.map(MessagingMapper.toConversation)
+        return MessagingPage(
+            items: await resolveConversations(conversations),
+            nextCursor: page.nextCursor,
+            hasMore: page.hasMore
+        )
+    }
+
+    public func fetchConversationInboxSummary() async throws -> Int {
+        let dto: ConversationInboxSummaryResponseDTO = try await apiClient.request(
+            MessagingEndpoint.conversationInboxSummary
+        )
+        return dto.unreadConversationCount
+    }
+
+    public func getOrCreateConversation(friendUserId: UUID) async throws -> Conversation {
+        let dto: ConversationResponseDTO = try await apiClient.request(
+            MessagingEndpoint.getOrCreateConversation(friendUserId: friendUserId)
+        )
+        return await resolveConversation(MessagingMapper.toConversation(dto))
+    }
+
+    public func createGroup(
+        name: String,
+        avatarUrl: String?,
+        memberUserIds: [UUID],
+        groupId: UUID?
+    ) async throws -> Conversation {
+        let dto: ConversationResponseDTO = try await apiClient.request(
+            MessagingEndpoint.createGroup(
+                CreateGroupConversationRequestDTO(
+                    groupId: groupId,
+                    name: name,
+                    avatarUrl: avatarUrl,
+                    memberUserIds: memberUserIds
+                )
+            )
+        )
+        return await resolveConversation(MessagingMapper.toConversation(dto))
+    }
+
+    public func addGroupMember(groupId: UUID, memberUserId: UUID, shareChatHistory: Bool) async throws {
+        try await apiClient.request(
+            MessagingEndpoint.addGroupMember(
+                groupId: groupId,
+                AddGroupMemberRequestDTO(memberUserId: memberUserId, shareChatHistory: shareChatHistory)
+            )
+        )
+    }
+
+    public func listGroupMembers(groupId: UUID) async throws -> [GroupChatMember] {
+        let dtos: [GroupConversationMemberResponseDTO] = try await apiClient.request(
+            MessagingEndpoint.listGroupMembers(groupId: groupId)
+        )
+        return dtos.map(MessagingMapper.toGroupChatMember)
+    }
+
+    public func removeGroupMember(groupId: UUID, memberUserId: UUID) async throws {
+        try await apiClient.request(
+            MessagingEndpoint.removeGroupMember(groupId: groupId, memberUserId: memberUserId)
+        )
+    }
+
+    public func leaveGroup(groupId: UUID) async throws {
+        try await apiClient.request(MessagingEndpoint.leaveGroup(groupId: groupId))
+    }
+
+    public func deleteConversation(conversationId: UUID) async throws {
+        do {
+            try await apiClient.request(MessagingEndpoint.deleteConversation(conversationId: conversationId))
+        } catch {
+            guard error.isConversationDeleteNotFound else { throw error }
+        }
+    }
+
+    public func updateNotificationSettings(
+        conversationId: UUID,
+        notificationsEnabled: Bool,
+        notificationSound: String
+    ) async throws -> Conversation {
+        let dto: ConversationResponseDTO = try await apiClient.request(
+            MessagingEndpoint.updateNotificationSettings(
+                conversationId: conversationId,
+                UpdateConversationNotificationSettingsRequestDTO(
+                    notificationsEnabled: notificationsEnabled,
+                    notificationSound: notificationSound
+                )
+            )
+        )
+        return await resolveConversation(MessagingMapper.toConversation(dto))
+    }
+
+    public func renameGroup(groupId: UUID, name: String) async throws -> Conversation {
+        let dto: ConversationResponseDTO = try await apiClient.request(
+            MessagingEndpoint.renameGroup(groupId: groupId, RenameGroupRequestDTO(name: name))
+        )
+        return await resolveConversation(MessagingMapper.toConversation(dto).updating(groupName: name))
+    }
+
+    public func updateGroupAvatar(groupId: UUID, avatarUrl: String) async throws -> Conversation {
+        let dto: ConversationResponseDTO = try await apiClient.request(
+            MessagingEndpoint.updateGroupAvatar(
+                groupId: groupId,
+                UpdateGroupAvatarRequestDTO(avatarUrl: avatarUrl)
+            )
+        )
+        return await resolveConversation(
+            MessagingMapper.toConversation(dto).updating(groupAvatarUrl: avatarUrl)
+        )
+    }
+
+    public func transferGroupAdmin(groupId: UUID, newAdminUserId: UUID) async throws {
+        try await apiClient.request(
+            MessagingEndpoint.transferGroupAdmin(
+                groupId: groupId,
+                TransferGroupAdminRequestDTO(newAdminUserId: newAdminUserId)
+            )
+        )
+    }
+
+    public func fetchMessages(
+        conversationId: UUID,
+        page: Int,
+        limit: Int,
+        after: Int64?,
+        before: Int64?
+    ) async throws -> MessagingPage<ChatMessage> {
+        let pageDTO: PageResponseDTO<MessageResponseDTO> = try await apiClient.request(
+            MessagingEndpoint.listMessages(
+                conversationId: conversationId,
+                page: page,
+                limit: limit,
+                after: after,
+                before: before
+            )
+        )
+        return MessagingPage(
+            items: pageDTO.items.map(MessagingMapper.toMessage),
+            nextCursor: pageDTO.nextCursor,
+            hasMore: pageDTO.hasMore
+        )
+    }
+
+    public func sendMessage(
+        conversationId: UUID,
+        body: String,
+        clientMessageId: UUID,
+        imageAttachments: [MessageImageAttachment] = [],
+        replyToMessageId: UUID? = nil
+    ) async throws -> ChatMessage {
+        let attachmentDTOs = imageAttachments.map {
+            SendMessageRequestDTO.MessageAttachmentRequestDTO(
+                mediaId: $0.mediaId,
+                url: $0.url.absoluteString,
+                thumbnailUrl: $0.thumbnailURL?.absoluteString
+            )
+        }
+        let dto: MessageResponseDTO = try await apiClient.request(
+            MessagingEndpoint.sendMessage(
+                conversationId: conversationId,
+                body: body,
+                clientMessageId: clientMessageId,
+                attachments: attachmentDTOs,
+                replyToMessageId: replyToMessageId
+            )
+        )
+        return MessagingMapper.toMessage(dto)
+    }
+
+    public func editMessage(conversationId: UUID, messageId: UUID, body: String) async throws -> ChatMessage {
+        let dto: MessageResponseDTO = try await apiClient.request(
+            MessagingEndpoint.editMessage(
+                conversationId: conversationId,
+                messageId: messageId,
+                EditMessageRequestDTO(body: body)
+            )
+        )
+        return MessagingMapper.toMessage(dto)
+    }
+
+    public func recallMessage(conversationId: UUID, messageId: UUID) async throws {
+        try await apiClient.request(
+            MessagingEndpoint.recallMessage(conversationId: conversationId, messageId: messageId)
+        )
+    }
+
+    public func markRead(conversationId: UUID, upToMessageId: UUID) async throws {
+        try await apiClient.request(
+            MessagingEndpoint.markRead(conversationId: conversationId, upToMessageId: upToMessageId)
+        )
+    }
+
+    public func unreadCount() async throws -> Int {
+        let dto: UnreadMessageCountDTO = try await apiClient.request(MessagingEndpoint.unreadCount)
+        return dto.unreadCount
+    }
+
+    public func addReaction(conversationId: UUID, messageId: UUID, emoji: String) async throws -> Reaction {
+        let dto: ReactionResponseDTO = try await apiClient.request(
+            MessagingEndpoint.addReaction(
+                conversationId: conversationId,
+                messageId: messageId,
+                CreateReactionRequestDTO(emoji: emoji)
+            )
+        )
+        return MessagingMapper.toReaction(dto)
+    }
+
+    public func removeReaction(conversationId: UUID, messageId: UUID, reactionId: UUID) async throws {
+        try await apiClient.request(
+            MessagingEndpoint.removeReaction(
+                conversationId: conversationId,
+                messageId: messageId,
+                reactionId: reactionId
+            )
+        )
+    }
+
+    public func searchMessages(
+        query: String,
+        page: Int,
+        limit: Int,
+        conversationId: UUID?
+    ) async throws -> [MessageSearchHit] {
+        let dtos: [MessageSearchHitResponseDTO] = try await apiClient.request(
+            MessagingEndpoint.searchMessages(
+                q: query,
+                page: page,
+                limit: limit,
+                conversationId: conversationId
+            )
+        )
+        return dtos.map(MessagingMapper.toMessageSearchHit)
+    }
+
+    public func requestWsTicket() async throws -> String {
+        let dto: WsTicketResponseDTO = try await apiClient.request(MessagingEndpoint.wsTicket)
+        return dto.ticket
+    }
+
+    private func resolveConversations(_ conversations: [Conversation]) async -> [Conversation] {
+        guard let friendDisplayNameStore else { return conversations }
+        return await friendDisplayNameStore.resolve(conversations)
+    }
+
+    private func resolveConversation(_ conversation: Conversation) async -> Conversation {
+        guard let friendDisplayNameStore else { return conversation }
+        return await friendDisplayNameStore.resolve(conversation)
+    }
+}
+
+private extension Error {
+    var isConversationDeleteNotFound: Bool {
+        if let appError = self as? AppError, case .network(let networkError) = appError {
+            return networkError.isConversationDeleteNotFound
+        }
+        if let networkError = self as? NetworkError {
+            return networkError.isConversationDeleteNotFound
+        }
+        return false
+    }
+}
+
+private extension NetworkError {
+    var isConversationDeleteNotFound: Bool {
+        switch self {
+        case .notFound:
+            return true
+        case .apiError(let code, _, _):
+            return code.uppercased() == "CONVERSATION_NOT_FOUND"
+        default:
+            return false
+        }
+    }
+}

@@ -17,19 +17,32 @@ public final class KeychainService: KeychainServiceProtocol, Sendable {
     }
 
     public func save(_ data: Data, for key: String) throws {
-        try delete(for: key)
-
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: key,
+        ]
+
+        let attributes: [String: Any] = [
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         ]
 
-        let status = SecItemAdd(query as CFDictionary, nil)
-        guard status == errSecSuccess else {
-            throw StorageError.keychainError("Save failed with status: \(status)")
+        // Prefer update-in-place to avoid delete/add races under concurrent refresh.
+        let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        switch updateStatus {
+        case errSecSuccess:
+            return
+        case errSecItemNotFound:
+            var addQuery = query
+            addQuery[kSecValueData as String] = data
+            addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+            guard addStatus == errSecSuccess else {
+                throw StorageError.keychainError("Save failed with status: \(addStatus)")
+            }
+        default:
+            throw StorageError.keychainError("Save failed with status: \(updateStatus)")
         }
     }
 
