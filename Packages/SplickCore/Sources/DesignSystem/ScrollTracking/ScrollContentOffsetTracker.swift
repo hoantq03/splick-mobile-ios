@@ -3,16 +3,32 @@ import SwiftUI
 /// Converts raw `onScrollGeometryChange` offsets into distance scrolled from the initial rest position.
 struct ScrollChromeOffsetNormalizer {
     private var baseline: CGFloat?
+    private var previousRawOffset: CGFloat?
 
     mutating func reset() {
         baseline = nil
+        previousRawOffset = nil
     }
 
     mutating func normalize(_ rawOffset: CGFloat) -> CGFloat {
-        if baseline == nil {
-            baseline = rawOffset
+        defer { previousRawOffset = rawOffset }
+
+        if let existing = baseline {
+            if let previousRawOffset {
+                let chromeRest = FeedSegmentChromeMetrics.overlappingNavigationInset
+                let sampleDelta = rawOffset - previousRawOffset
+                // Cold pager layout: rest jumps in one sample to the overlapping-nav
+                // inset. A real user scroll arrives in small frame deltas.
+                if sampleDelta >= 40,
+                   abs(rawOffset - chromeRest) <= SplickTabBarMetrics.showNearTopThreshold {
+                    baseline = rawOffset
+                    return 0
+                }
+            }
+            return max(0, rawOffset - existing)
         }
-        return max(0, rawOffset - (baseline ?? rawOffset))
+        baseline = rawOffset
+        return 0
     }
 }
 

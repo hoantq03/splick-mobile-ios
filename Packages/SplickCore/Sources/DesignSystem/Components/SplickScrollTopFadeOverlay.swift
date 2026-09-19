@@ -98,12 +98,18 @@ public struct SplickScrollTopFadeOverlay: View {
 private struct SplickScrollTopFadeOverlayBody: View {
     let mode: SplickScrollTopFadeOverlay.Mode
     @Environment(\.tabBarScrollState) private var tabBarScrollState
+    @Environment(\.pullToRefreshActive) private var pullToRefreshActive
 
     var body: some View {
         if let tabBarScrollState {
-            SplickScrollTopFadeOverlayObserved(mode: mode, tabBarScrollState: tabBarScrollState)
+            SplickScrollTopFadeOverlayObserved(
+                mode: mode,
+                tabBarScrollState: tabBarScrollState,
+                pullToRefreshActive: pullToRefreshActive
+            )
         } else {
             SplickScrollTopFadeOverlayContent(mode: mode)
+                .opacity(pullToRefreshActive ? 0 : 1)
         }
     }
 }
@@ -111,11 +117,16 @@ private struct SplickScrollTopFadeOverlayBody: View {
 private struct SplickScrollTopFadeOverlayObserved: View {
     let mode: SplickScrollTopFadeOverlay.Mode
     @ObservedObject var tabBarScrollState: TabBarScrollState
+    let pullToRefreshActive: Bool
+
+    private var hidesForRefresh: Bool {
+        tabBarScrollState.refreshIndicatorVisible || pullToRefreshActive
+    }
 
     var body: some View {
         SplickScrollTopFadeOverlayContent(mode: mode)
-            .opacity(tabBarScrollState.refreshIndicatorVisible ? 0 : 1)
-            .animation(.easeOut(duration: 0.12), value: tabBarScrollState.refreshIndicatorVisible)
+            .opacity(hidesForRefresh ? 0 : 1)
+            .animation(.easeOut(duration: 0.12), value: hidesForRefresh)
     }
 }
 

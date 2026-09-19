@@ -319,8 +319,11 @@ public struct FeedView: View {
             return
         }
 
-        // UIHostingController pages do not reliably receive Combine tab taps.
-        if scrollChrome.feedSegment.isExpanded {
+        // Match expenses/inbox: unknown scroll state is "at top". Feed's pill
+        // collapse can look scrolled on first layout (inset + LazyVStack) and
+        // would skip the spinner until the user has pulled once.
+        let atTop = (tabBarScrollState?.isAtTop ?? true) || scrollChrome.feedSegment.isExpanded
+        if atTop {
             NotificationCenter.default.post(name: FeedSameTabNotification.refresh, object: nil)
         } else {
             NotificationCenter.default.post(name: FeedSameTabNotification.scrollToTop, object: nil)
@@ -562,7 +565,8 @@ private struct FeedPrimaryPage: View {
                 let succeeded = await viewModel.loadFeed(isPullToRefresh: true)
                 await SplickViewUpdate.hop()
                 if succeeded {
-                    tabBarScrollState?.reset()
+                    // Do not reset TabBarScrollState here — that hides the fade overlay's
+                    // "spinner visible" flag while the PTR spinner is still on screen.
                     feedSegmentScrollState?.reset()
                     withAnimation(.easeOut(duration: 0.18)) {
                         scrollProxy.scrollTo(FeedScrollAnchor.top, anchor: .top)

@@ -67,10 +67,7 @@ public final class TabBarScrollState: ObservableObject {
 
     public func setRefreshIndicatorVisible(_ visible: Bool) {
         guard refreshIndicatorVisible != visible else { return }
-        DispatchQueue.main.async { [weak self] in
-            guard let self, self.refreshIndicatorVisible != visible else { return }
-            self.refreshIndicatorVisible = visible
-        }
+        refreshIndicatorVisible = visible
     }
 
     /// Call when the user taps the active tab again — subscribers scroll to top or trigger refresh.

@@ -139,9 +139,7 @@ private struct SplickNativeRefreshableWithController: ViewModifier {
                 Task { await runProgrammaticRefresh() }
             }
             .onChange(of: isIndicatorVisible) { visible in
-                DispatchQueue.main.async {
-                    tabBarScrollState?.setRefreshIndicatorVisible(visible)
-                }
+                tabBarScrollState?.setRefreshIndicatorVisible(visible)
             }
             .onAppear {
                 refreshHost.usesChromePullVisual = true
@@ -196,6 +194,8 @@ private struct SplickNativeRefreshableWithController: ViewModifier {
         guard refreshTask == nil, !isRefreshing else { return }
         await SplickViewUpdate.hop()
         isRefreshing = true
+        tabBarScrollState?.setRefreshIndicatorVisible(true)
+        await refreshHost.ensureAttached()
         refreshHost.prepareProgrammaticCommit()
         frozenPullRotation = 0
         await playChromeContentBounce()
@@ -249,6 +249,7 @@ private enum SplickProgrammaticRefreshMotion {
 @MainActor
 public final class SplickScrollRefreshHost: NSObject, ObservableObject, UIGestureRecognizerDelegate {
     public weak var scrollView: UIScrollView?
+    private weak var attachProbe: UIView?
     @Published public private(set) var pullDistance: CGFloat = 0
     public var pullRotationDegrees: Double {
         Double(pullDistance / Self.fullRotationPull) * 360
@@ -458,6 +459,7 @@ public final class SplickScrollRefreshHost: NSObject, ObservableObject, UIGestur
     }
 
     public func attach(from view: UIView) {
+        attachProbe = view
         let resolved = findRefreshableScrollView(near: view)
         if let resolved {
             bind(to: resolved)
@@ -466,6 +468,18 @@ public final class SplickScrollRefreshHost: NSObject, ObservableObject, UIGestur
         }
         if scrollView?.window == nil {
             unbindScrollView()
+        }
+    }
+
+    /// Cold launch: the feed pager may not have resolved a UIScrollView until
+    /// the first user pan. Retry from the last probe so tab-tap bounce can run.
+    func ensureAttached() async {
+        for _ in 0..<8 {
+            if let attachProbe {
+                attach(from: attachProbe)
+            }
+            if scrollView != nil { return }
+            try? await Task.sleep(nanoseconds: 40_000_000)
         }
     }
 
@@ -772,6 +786,9 @@ public struct SplickScrollViewRefreshAnchor: UIViewRepresentable {
             host.attach(from: uiView)
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            host.attach(from: uiView)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             host.attach(from: uiView)
         }
     }
