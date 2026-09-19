@@ -1,12 +1,14 @@
 import UniformTypeIdentifiers
 import UserNotifications
 
-/// Downloads `actorAvatarUrl` from the APNs payload and attaches it so the lock-screen /
-/// banner shows the actor photo instead of only the app icon. Also applies the user's
-/// globally selected notification sound from the app group.
+/// Applies the selected notification sound. For non-message alerts, downloads
+/// `actorAvatarUrl` and attaches it as a compact actor photo.
 ///
-/// After delivering, keeps the extension alive briefly and removes the delivered
-/// notification so the heads-up auto-hides outside the app (same ~2.5s as in-app).
+/// Message pushes skip the attachment so expanding the banner shows the reply field
+/// and heart action instead of a full-bleed avatar. Those stay in Notification Center
+/// so swipe-down quick reply remains available.
+///
+/// Other alerts auto-dismiss after ~2.5s to match the in-app heads-up.
 final class NotificationService: UNNotificationServiceExtension {
     /// Must stay in sync with `AppConstants.PushNotifications.bannerAutoDismissDelay`.
     private static let bannerAutoDismissSeconds: TimeInterval = 2.5
@@ -16,6 +18,7 @@ final class NotificationService: UNNotificationServiceExtension {
     private var downloadTask: URLSessionDataTask?
     private var requestIdentifier: String = ""
     private var didFinish = false
+    private var keepDelivered = false
 
     override func didReceive(
         _ request: UNNotificationRequest,
@@ -32,7 +35,13 @@ final class NotificationService: UNNotificationServiceExtension {
 
         applySelectedSound(to: bestAttemptContent)
 
-        guard let avatarURL = Self.actorAvatarURL(from: request.content.userInfo) else {
+        keepDelivered = Self.isMessageNotification(request.content.userInfo)
+        if keepDelivered, bestAttemptContent.categoryIdentifier.isEmpty {
+            bestAttemptContent.categoryIdentifier = "MESSAGE"
+        }
+        guard !keepDelivered,
+              let avatarURL = Self.actorAvatarURL(from: request.content.userInfo)
+        else {
             finish(with: bestAttemptContent)
             return
         }
@@ -99,7 +108,7 @@ final class NotificationService: UNNotificationServiceExtension {
 
         handler?(content)
 
-        guard !identifier.isEmpty else { return }
+        guard !keepDelivered, !identifier.isEmpty else { return }
 
         let delay = Self.bannerAutoDismissSeconds
         let group = DispatchGroup()
@@ -115,6 +124,34 @@ final class NotificationService: UNNotificationServiceExtension {
 
     private func applySelectedSound(to content: UNMutableNotificationContent) {
         content.sound = UNNotificationSound(named: UNNotificationSoundName("splick_notif_default.wav"))
+    }
+
+    private static func isMessageNotification(_ userInfo: [AnyHashable: Any]) -> Bool {
+        if let aps = userInfo["aps"] as? [String: Any],
+           let category = aps["category"] as? String,
+           category.caseInsensitiveCompare("MESSAGE") == .orderedSame
+        {
+            return true
+        }
+        if let actionCategory = userInfo["actionCategory"] as? String,
+           actionCategory.caseInsensitiveCompare("MESSAGE") == .orderedSame
+        {
+            return true
+        }
+        if let type = userInfo["type"] as? String {
+            switch type.uppercased() {
+            case "DIRECT_MESSAGE", "GROUP_MESSAGE", "MESSAGE_NEW":
+                return true
+            default:
+                break
+            }
+        }
+        if let screen = userInfo["screen"] as? String,
+           screen.caseInsensitiveCompare("MESSAGES") == .orderedSame
+        {
+            return true
+        }
+        return false
     }
 
     private static func actorAvatarURL(from userInfo: [AnyHashable: Any]) -> URL? {

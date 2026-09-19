@@ -108,7 +108,10 @@ private struct SplickNativeRefreshableWithController: ViewModifier {
         if chromeTopInset > 0 {
             return chromeTopInset + 6
         }
-        return refreshHost.spinnerOverlayTopPadding()
+        // Hosted feed/expense lists pass an overlapping-nav inset. Overlay
+        // sheets (notifications) sit below their own header — pin the spinner
+        // to the scroll top so it is visible in the pull gap.
+        return 8
     }
 
     func body(content: Content) -> some View {
@@ -351,7 +354,21 @@ public final class SplickScrollRefreshHost: NSObject, ObservableObject, UIGestur
     private func isScrollViewAtTop() -> Bool {
         guard let scrollView else { return true }
         let restY = -scrollView.adjustedContentInset.top
-        return scrollView.contentOffset.y <= restY + 8
+        // Overlay/safe-area lists often sit a few points below rest until the
+        // first scroll. Match the bootstrap snap window so chrome pull can start.
+        return scrollView.contentOffset.y <= restY + 64
+    }
+
+    private func prepareScrollViewForPull(_ scrollView: UIScrollView) {
+        scrollView.alwaysBounceVertical = true
+        scrollView.bounces = true
+        let restY = -scrollView.adjustedContentInset.top
+        if scrollView.contentOffset.y > restY, scrollView.contentOffset.y < restY + 64 {
+            scrollView.setContentOffset(
+                CGPoint(x: scrollView.contentOffset.x, y: restY),
+                animated: false
+            )
+        }
     }
 
     /// Shows the same spinner as a manual pull-to-refresh, with a fast overshoot + bounce-back.
@@ -476,6 +493,7 @@ public final class SplickScrollRefreshHost: NSObject, ObservableObject, UIGestur
 
     private func installPullTrackingIfNeeded() {
         guard let scrollView else { return }
+        prepareScrollViewForPull(scrollView)
         if offsetObservation == nil {
             offsetObservation = scrollView.observe(\.contentOffset, options: [.new]) { [weak self] sv, _ in
                 guard let self else { return }
@@ -577,9 +595,17 @@ public final class SplickScrollRefreshHost: NSObject, ObservableObject, UIGestur
             applyChromeTransform(distance)
         }
         if abs(pullDistance - distance) > 0.12 {
-            SplickViewUpdate.after { [weak self] in
+            let apply: () -> Void = { [weak self] in
                 guard let self, abs(self.pullDistance - distance) > 0.12 else { return }
                 self.pullDistance = distance
+            }
+            // Chrome pan runs on UIKit's gesture callback — publish immediately
+            // so the overlay spinner tracks the finger. KVO can fire during a
+            // SwiftUI render, so hop that path.
+            if applyChromeResistance {
+                apply()
+            } else {
+                SplickViewUpdate.after(apply)
             }
         }
     }

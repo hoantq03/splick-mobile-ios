@@ -15,6 +15,7 @@ public final class NotificationListViewModel: ObservableObject {
     @Published private(set) var isRefreshing = false
     @Published private(set) var isLoadingMore = false
     @Published private(set) var hasMorePages = true
+    @Published private(set) var isSwitchingFilter = false
 
     private let fetchNotificationsUseCase: FetchNotificationsUseCaseProtocol
     private let markReadUseCase: MarkNotificationReadUseCaseProtocol
@@ -27,6 +28,7 @@ public final class NotificationListViewModel: ObservableObject {
     private let onMarkAllReadCompleted: (() async -> Void)?
     private var currentPage = 0
     private var pullToRefreshTask: Task<Void, Never>?
+    private var filterGeneration = 0
 
     @Published private(set) var friendRequestOutcomes: [UUID: FriendRequestInboxOutcome] = [:]
     @Published private(set) var processingFriendRequestIds: Set<UUID> = []
@@ -58,7 +60,7 @@ public final class NotificationListViewModel: ObservableObject {
     }
 
     var showsInitialLoading: Bool {
-        notifications.isEmpty && state.isLoading
+        notifications.isEmpty && state.isLoading && !isSwitchingFilter
     }
 
     var notificationSections: [NotificationListSection] {
@@ -72,8 +74,12 @@ public final class NotificationListViewModel: ObservableObject {
         let nextCategory: NotificationListCategory = selectedCategory == category ? .all : category
         guard nextCategory != selectedCategory else { return }
         selectedCategory = nextCategory
-        notifications = []
+        filterGeneration += 1
+        let generation = filterGeneration
+        isSwitchingFilter = true
         await load()
+        guard generation == filterGeneration else { return }
+        isSwitchingFilter = false
     }
 
     /// Fetches page 0 from the API when the inbox opens or the filter changes.
@@ -103,7 +109,7 @@ public final class NotificationListViewModel: ObservableObject {
             return
         }
 
-        if notifications.isEmpty {
+        if notifications.isEmpty, !isSwitchingFilter {
             state = .loading
         }
         await performLoad(isPullToRefresh: false)
@@ -170,8 +176,14 @@ public final class NotificationListViewModel: ObservableObject {
                 category: .notification,
                 metadata: ["count": String(batch.count), "hasMore": String(hasMorePages)]
             )
+        } catch is CancellationError {
+            return
         } catch {
+            guard selectedCategory == category else { return }
             if isPullToRefresh, !notifications.isEmpty {
+                Log.error(error, category: .notification)
+                state = .loaded(notifications)
+            } else if isSwitchingFilter, !notifications.isEmpty {
                 Log.error(error, category: .notification)
                 state = .loaded(notifications)
             } else {

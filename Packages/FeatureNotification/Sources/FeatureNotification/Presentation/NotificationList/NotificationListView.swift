@@ -103,30 +103,12 @@ public struct NotificationListView: View {
     private var listContent: some View {
         VStack(spacing: 0) {
             categoryFilterBar
-            Group {
-                if case .failed(let message) = viewModel.state, viewModel.notifications.isEmpty {
-                    ErrorView(message: message) {
-                        Task { await viewModel.load() }
-                    }
-                } else if viewModel.showsInitialLoading {
-                    LoadingView(message: languageService.text(.notificationLoading))
-                } else if viewModel.notifications.isEmpty {
-                    EmptyStateView(
-                        icon: "bell.slash",
-                        title: languageService.text(
-                            viewModel.selectedCategory.isFiltered
-                                ? .notificationFilterEmptyTitle
-                                : .notificationEmptyTitle
-                        ),
-                        message: languageService.text(
-                            viewModel.selectedCategory.isFiltered
-                                ? .notificationFilterEmptyMessage
-                                : .notificationEmptyMessage
-                        )
-                    )
-                } else {
-                    notificationList
-                }
+            if viewModel.showsInitialLoading {
+                LoadingView(message: languageService.text(.notificationLoading))
+            } else {
+                notificationList
+                    .opacity(viewModel.isSwitchingFilter ? 0.72 : 1)
+                    .animation(.easeInOut(duration: 0.16), value: viewModel.isSwitchingFilter)
             }
         }
     }
@@ -141,6 +123,7 @@ public struct NotificationListView: View {
             .padding(.horizontal, SplickTheme.Spacing.md)
             .padding(.vertical, SplickTheme.Spacing.sm)
         }
+        .animation(.easeInOut(duration: 0.18), value: viewModel.selectedCategory)
     }
 
     private func categoryChip(_ category: NotificationListCategory) -> some View {
@@ -183,56 +166,85 @@ public struct NotificationListView: View {
     private var notificationList: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-                ForEach(viewModel.notificationSections) { section in
-                    VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxs) {
-                        Text(languageService.text(section.section.l10nKey))
-                            .font(SplickTheme.Typography.captionBold)
-                            .foregroundColor(SplickTheme.Colors.textSecondary)
-                            .textCase(nil)
-                            .padding(.top, SplickTheme.Spacing.xxs)
+                if case .failed(let message) = viewModel.state, viewModel.notifications.isEmpty {
+                    ErrorView(message: message) {
+                        Task { await viewModel.load() }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, SplickTheme.Spacing.xxl)
+                } else if viewModel.notifications.isEmpty {
+                    EmptyStateView(
+                        icon: "bell.slash",
+                        title: languageService.text(
+                            viewModel.selectedCategory.isFiltered
+                                ? .notificationFilterEmptyTitle
+                                : .notificationEmptyTitle
+                        ),
+                        message: languageService.text(
+                            viewModel.selectedCategory.isFiltered
+                                ? .notificationFilterEmptyMessage
+                                : .notificationEmptyMessage
+                        )
+                    )
+                    .padding(.top, SplickTheme.Spacing.xxl)
+                } else {
+                    ForEach(viewModel.notificationSections) { section in
+                        VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxs) {
+                            Text(languageService.text(section.section.l10nKey))
+                                .font(SplickTheme.Typography.captionBold)
+                                .foregroundColor(SplickTheme.Colors.textSecondary)
+                                .textCase(nil)
+                                .padding(.top, SplickTheme.Spacing.xxs)
 
-                        ForEach(section.notifications) { notification in
-                            NotificationRowView(
-                                notification: notification,
-                                friendRequestOutcome: viewModel.friendRequestOutcome(for: notification),
-                                isProcessingFriendRequest: viewModel.isProcessingFriendRequest(notification),
-                                onAcceptFriendRequest: viewModel.showsFriendRequestActions(for: notification)
-                                    ? {
-                                        Task<Void, Never> {
-                                            await viewModel.acceptFriendRequest(notification)
+                            ForEach(section.notifications) { notification in
+                                NotificationRowView(
+                                    notification: notification,
+                                    friendRequestOutcome: viewModel.friendRequestOutcome(for: notification),
+                                    isProcessingFriendRequest: viewModel.isProcessingFriendRequest(notification),
+                                    onAcceptFriendRequest: viewModel.showsFriendRequestActions(for: notification)
+                                        ? {
+                                            Task<Void, Never> {
+                                                await viewModel.acceptFriendRequest(notification)
+                                            }
+                                        }
+                                        : nil,
+                                    onRejectFriendRequest: viewModel.showsFriendRequestActions(for: notification)
+                                        ? {
+                                            Task<Void, Never> {
+                                                await viewModel.rejectFriendRequest(notification)
+                                            }
+                                        }
+                                        : nil,
+                                    onRowTap: {
+                                        Task {
+                                            let target = await viewModel.handleTap(notification)
+                                            onNavigate?(target)
                                         }
                                     }
-                                    : nil,
-                                onRejectFriendRequest: viewModel.showsFriendRequestActions(for: notification)
-                                    ? {
-                                        Task<Void, Never> {
-                                            await viewModel.rejectFriendRequest(notification)
-                                        }
-                                    }
-                                    : nil,
-                                onRowTap: {
-                                    Task {
-                                        let target = await viewModel.handleTap(notification)
-                                        onNavigate?(target)
-                                    }
-                                }
-                            )
+                                )
                                 .onAppear {
                                     Task { await viewModel.loadMoreIfNeeded(current: notification) }
                                 }
+                            }
                         }
                     }
-                }
 
-                if viewModel.isLoadingMore {
-                    SplickSpinner()
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, SplickTheme.Spacing.md)
+                    if viewModel.isLoadingMore {
+                        SplickSpinner()
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, SplickTheme.Spacing.md)
+                    }
                 }
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
             .padding(.vertical, SplickTheme.Spacing.xs)
+            .transaction { transaction in
+                if viewModel.isSwitchingFilter {
+                    transaction.animation = nil
+                }
+            }
         }
+        .splickScrollSoftTopEdge()
         .tabBarHideOnScroll()
         .splickNativeRefreshable(controller: refreshController) {
             await viewModel.load(isPullToRefresh: true)

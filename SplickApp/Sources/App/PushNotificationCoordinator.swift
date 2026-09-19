@@ -629,29 +629,38 @@ final class PushNotificationCoordinator: ObservableObject {
         let replyTitle = languageService?.text(.messagingReplyAction) ?? "Reply"
         let sendTitle = languageService?.text(.messagingSend) ?? "Send"
         let placeholder = languageService?.text(.messagingNotificationReplyPlaceholder) ?? "Message"
-        let reply = UNTextInputNotificationAction(
-            identifier: PushNotificationAction.messageReply,
-            title: replyTitle,
-            options: [],
-            textInputButtonTitle: sendTitle,
-            textInputPlaceholder: placeholder
-        )
-        let heart = UNNotificationAction(
-            identifier: PushNotificationAction.messageReactHeart,
-            title: "❤️",
-            options: []
-        )
-        let thumb = UNNotificationAction(
-            identifier: PushNotificationAction.messageReactThumb,
-            title: "👍",
-            options: []
-        )
-        let laugh = UNNotificationAction(
-            identifier: PushNotificationAction.messageReactLaugh,
-            title: "😂",
-            options: []
-        )
-        return [reply, heart, thumb, laugh]
+        let reply: UNTextInputNotificationAction
+        let heart: UNNotificationAction
+        if #available(iOS 15.0, *) {
+            reply = UNTextInputNotificationAction(
+                identifier: PushNotificationAction.messageReply,
+                title: replyTitle,
+                options: [],
+                icon: UNNotificationActionIcon(systemImageName: "arrowshape.turn.up.left.fill"),
+                textInputButtonTitle: sendTitle,
+                textInputPlaceholder: placeholder
+            )
+            heart = UNNotificationAction(
+                identifier: PushNotificationAction.messageReactHeart,
+                title: "❤️",
+                options: [],
+                icon: UNNotificationActionIcon(systemImageName: "heart.fill")
+            )
+        } else {
+            reply = UNTextInputNotificationAction(
+                identifier: PushNotificationAction.messageReply,
+                title: replyTitle,
+                options: [],
+                textInputButtonTitle: sendTitle,
+                textInputPlaceholder: placeholder
+            )
+            heart = UNNotificationAction(
+                identifier: PushNotificationAction.messageReactHeart,
+                title: "❤️",
+                options: []
+            )
+        }
+        return [reply, heart]
     }
 
     private func replyToMessageFromNotification(_ response: UNNotificationResponse) async {
