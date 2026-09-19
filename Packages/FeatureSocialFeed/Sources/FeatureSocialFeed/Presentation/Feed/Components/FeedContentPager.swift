@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 import DesignSystem
 import Localization
+import Common
 
 // Segment order: Streak | Feed | Album  (left → right)
 private let feedSegmentOrder: [FeedContentSegment] = [.streak, .feed, .album]
@@ -595,7 +596,15 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
         currentWidth = width
         currentHeight = height
         if activityState.chrome != chrome {
-            activityState.chrome = chrome
+            // Never publish from `updateUIViewController` — that is a SwiftUI
+            // view-update turn and hitch-logs "Publishing changes from within view updates".
+            SplickViewUpdate.after { [activityState] in
+                MainActor.assumeIsolated {
+                    if activityState.chrome != chrome {
+                        activityState.chrome = chrome
+                    }
+                }
+            }
         }
 
         if let index = feedSegmentOrder.firstIndex(of: chrome.activeSelection) {

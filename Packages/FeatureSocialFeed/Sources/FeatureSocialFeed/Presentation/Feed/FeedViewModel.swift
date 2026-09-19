@@ -291,6 +291,7 @@ public final class FeedViewModel: ObservableObject {
         // Use the pinned frontier rather than posts.first to avoid stale reads caused by
         // ensurePostLoaded (album / streak deep-link) inserting old posts at index 0.
         guard !isRefreshing, let feedRepository else { return }
+        guard !SplickZoomPopSourceStore.shared.isInteractivePopInProgress else { return }
         if feedFrontierPostId == nil {
             pinFeedFrontier(from: posts)
         }
@@ -302,7 +303,16 @@ public final class FeedViewModel: ObservableObject {
                 afterCreatedAt: createdAt,
                 afterId: id
             )
-            newPostsCount = max(0, count)
+            let next = max(0, count)
+            guard newPostsCount != next else { return }
+            // Hop off this turn so a 200 during pop does not publish mid-update.
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                guard !SplickZoomPopSourceStore.shared.isInteractivePopInProgress else { return }
+                if self.newPostsCount != next {
+                    self.newPostsCount = next
+                }
+            }
         } catch {
             // Keep the last pill; polling is best-effort.
             Log.debug(
@@ -328,6 +338,7 @@ public final class FeedViewModel: ObservableObject {
 
     @discardableResult
     private func performLoadFeed(isPullToRefresh: Bool, generation: Int) async -> Bool {
+        await SplickViewUpdate.hop()
         let signpost = FeedSignposts.beginFeedLoad(pullToRefresh: isPullToRefresh)
         if isPullToRefresh {
             isRefreshing = true
@@ -349,7 +360,12 @@ public final class FeedViewModel: ObservableObject {
         defer {
             // Only clear when this request is still the latest refresh (avoids race when a prior pull was cancelled).
             if isPullToRefresh, generation == loadFeedGeneration {
-                isRefreshing = false
+                SplickViewUpdate.after { [weak self] in
+                    MainActor.assumeIsolated {
+                        guard let self, generation == self.loadFeedGeneration, self.isRefreshing else { return }
+                        self.isRefreshing = false
+                    }
+                }
             }
         }
 
@@ -357,6 +373,7 @@ public final class FeedViewModel: ObservableObject {
 
         do {
             let posts = try await fetchFeedUseCase.execute(page: 0)
+            await SplickViewUpdate.hop()
             let mergeSignpost = FeedSignposts.beginFeedMerge()
             let companionNames = companionGroupNameIndex()
             let previousById = Dictionary(uniqueKeysWithValues: self.posts.map { ($0.id, $0) })
@@ -545,8 +562,10 @@ public final class FeedViewModel: ObservableObject {
         guard !trackedViewPostIds.contains(post.id) else { return }
 
         trackedViewPostIds.insert(post.id)
-        locallyViewedPostIds.insert(post.id)
         pendingViewPostIds.insert(post.id)
+        SplickViewUpdate.after { [weak self] in
+            self?.locallyViewedPostIds.insert(post.id)
+        }
         scheduleViewTrackFlush()
     }
 

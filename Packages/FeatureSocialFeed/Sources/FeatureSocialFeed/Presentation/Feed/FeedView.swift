@@ -13,6 +13,12 @@ private struct ProfileRoute: Identifiable {
     var id: UUID { user.id }
 }
 
+/// Owns the autoplay coordinator without subscribing to its publishes.
+@MainActor
+private final class FeedVideoCoordinatorHolder: ObservableObject {
+    let coordinator = FeedVideoPlaybackCoordinator()
+}
+
 public struct FeedView: View {
     @EnvironmentObject private var languageService: LanguageService
     @ObservedObject private var viewModel: FeedViewModel
@@ -38,7 +44,9 @@ public struct FeedView: View {
     @State private var companionsRoute: CompanionsSheetRoute?
     @State private var selectedSegment: FeedContentSegment = .feed
     @StateObject private var scrollChrome = ScrollChromeStateHolder()
-    @StateObject private var videoCoordinator = FeedVideoPlaybackCoordinator()
+    /// Holder is observed but never publishes, so autoplay does not rebuild the feed.
+    @StateObject private var videoCoordinatorHolder = FeedVideoCoordinatorHolder()
+    private var videoCoordinator: FeedVideoPlaybackCoordinator { videoCoordinatorHolder.coordinator }
     @Namespace private var postZoomNamespace
 
     public init(
@@ -180,7 +188,10 @@ public struct FeedView: View {
         .environment(\.feedSegmentScrollState, scrollChrome.feedSegment)
         .environment(\.feedPostZoomNamespace, postZoomNamespace)
         .onChange(of: navigationPath.isEmpty) { isEmpty in
-            if isEmpty {
+            guard isEmpty else { return }
+            // Off the view-update turn — publishing TabBarScrollState here
+            // hits "Publishing changes from within view updates".
+            DispatchQueue.main.async {
                 tabBarScrollState?.show(animated: false)
             }
         }
@@ -234,7 +245,14 @@ public struct FeedView: View {
         .environment(\.feedTabIsActive, isTabActive && selectedSegment == .feed)
         .task(id: "\(isTabActive)-\(selectedSegment)-\(scenePhase)") {
             guard isTabActive, selectedSegment == .feed, scenePhase == .active else { return }
-            // Immediate ahead-count check when becoming active, then keep polling.
+            // Wait out zoom-pop land (and a short appear settle) so ahead-count
+            // does not publish into the morph frame.
+            try? await Task.sleep(for: .milliseconds(450))
+            guard !Task.isCancelled, isTabActive, selectedSegment == .feed, scenePhase == .active else { return }
+            while SplickZoomPopSourceStore.shared.isInteractivePopInProgress {
+                try? await Task.sleep(for: .milliseconds(50))
+                guard !Task.isCancelled, isTabActive, selectedSegment == .feed, scenePhase == .active else { return }
+            }
             await viewModel.refreshNewPostsCountIfNeeded()
             await viewModel.pollNewPostsWhileActive()
         }
@@ -327,7 +345,7 @@ private struct FeedPrimaryPage: View {
     @ObservedObject var viewModel: FeedViewModel
     @Binding var navigationPath: NavigationPath
     @Binding var companionsRoute: CompanionsSheetRoute?
-    @ObservedObject var videoCoordinator: FeedVideoPlaybackCoordinator
+    var videoCoordinator: FeedVideoPlaybackCoordinator
     let makeGifPickerViewModel: GifPickerViewModelFactory?
     let onOpenProfile: (UserSummary) -> Void
 
@@ -538,9 +556,11 @@ private struct FeedPrimaryPage: View {
                 controller: refreshController,
                 chromeTopInset: FeedPagerTopInsetMetrics.refreshChromeTopInset
             ) {
+                await SplickViewUpdate.hop()
                 FeedScrollLock.forceUnlock()
                 feedScrollLocked = false
                 let succeeded = await viewModel.loadFeed(isPullToRefresh: true)
+                await SplickViewUpdate.hop()
                 if succeeded {
                     tabBarScrollState?.reset()
                     feedSegmentScrollState?.reset()
@@ -566,8 +586,7 @@ private struct FeedPrimaryPage: View {
                         currentUser: viewModel.currentUser ?? currentUserSummary,
                         actions: cardActions,
                         showsNewBadge: viewModel.showsNewBadge(for: post),
-                        uploadState: viewModel.postUploadState(for: post.id),
-                        autoplayVideoPostIds: videoCoordinator.activePostIds
+                        uploadState: viewModel.postUploadState(for: post.id)
                     )
                     .equatable()
                     .feedPostZoomSource(postId: post.id)

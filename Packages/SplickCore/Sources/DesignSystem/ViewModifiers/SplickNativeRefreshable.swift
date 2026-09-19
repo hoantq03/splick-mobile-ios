@@ -2,6 +2,7 @@ import SwiftUI
 import Combine
 import UIKit
 import Localization
+import Common
 
 // MARK: - Environment
 
@@ -175,6 +176,7 @@ private struct SplickNativeRefreshableWithController: ViewModifier {
             await refreshTask.value
             return
         }
+        await SplickViewUpdate.hop()
         isRefreshing = true
         let task = Task { @MainActor in
             await action()
@@ -182,12 +184,14 @@ private struct SplickNativeRefreshableWithController: ViewModifier {
         refreshTask = task
         await task.value
         refreshTask = nil
+        await SplickViewUpdate.hop()
         settle()
     }
 
     @MainActor
     private func runProgrammaticRefresh() async {
         guard refreshTask == nil, !isRefreshing else { return }
+        await SplickViewUpdate.hop()
         isRefreshing = true
         refreshHost.prepareProgrammaticCommit()
         frozenPullRotation = 0
@@ -199,6 +203,7 @@ private struct SplickNativeRefreshableWithController: ViewModifier {
         await task.value
         refreshTask = nil
         refreshHost.endRefreshing()
+        await SplickViewUpdate.hop()
         settle()
     }
 
@@ -322,7 +327,9 @@ public final class SplickScrollRefreshHost: NSObject, ObservableObject, UIGestur
         didThresholdHaptic = false
         lastOverscrollHapticFinger = 0
         if usesChromePullVisual {
-            pullDistance = 0
+            SplickViewUpdate.after { [weak self] in
+                self?.pullDistance = 0
+            }
         }
     }
 
@@ -513,7 +520,9 @@ public final class SplickScrollRefreshHost: NSObject, ObservableObject, UIGestur
                 let translationY = recognizer.translation(in: recognizer.view).y
                 if translationY < 0 {
                     chromePulling = false
-                    pullDistance = 0
+                    SplickViewUpdate.after { [weak self] in
+                        self?.pullDistance = 0
+                    }
                     applyChromeTransform(0)
                     handleContentOffsetChange()
                 } else {
@@ -568,7 +577,10 @@ public final class SplickScrollRefreshHost: NSObject, ObservableObject, UIGestur
             applyChromeTransform(distance)
         }
         if abs(pullDistance - distance) > 0.12 {
-            pullDistance = distance
+            SplickViewUpdate.after { [weak self] in
+                guard let self, abs(self.pullDistance - distance) > 0.12 else { return }
+                self.pullDistance = distance
+            }
         }
     }
 
@@ -597,7 +609,9 @@ public final class SplickScrollRefreshHost: NSObject, ObservableObject, UIGestur
         if completedFullRotation {
             onPullCommit?()
         } else {
-            pullDistance = 0
+            SplickViewUpdate.after { [weak self] in
+                self?.pullDistance = 0
+            }
             if usesChromePullVisual {
                 animateChromeTransformToRest(duration: 0.18)
             }

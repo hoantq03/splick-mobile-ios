@@ -1,6 +1,18 @@
 import SwiftUI
 import Combine
 
+public enum SplickZoomPopChrome {
+    /// Posted when interactive zoom-pop starts settling so tab/nav chrome can
+    /// render under the flying card instead of hitching after it lands.
+    public static let revealNotification = Notification.Name("splick.zoomPop.revealChrome")
+
+    public static func reveal() {
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: revealNotification, object: nil)
+        }
+    }
+}
+
 public enum SplickTabBarMetrics {
     /// Space reserved above the floating tab bar so bottom controls stay tappable.
     public static let floatingClearance: CGFloat = 88
@@ -104,28 +116,52 @@ public final class TabBarScrollState: ObservableObject {
     }
 
     public func reset() {
+        DispatchQueue.main.async { [weak self] in
+            self?.resetNow()
+        }
+    }
+
+    private func resetNow() {
         lastOffset = 0
         lastDistanceFromTop = 0
         lastRawOffset = 0
-        refreshIndicatorVisible = false
         offsetNormalizer.reset()
         distanceNormalizer.reset()
-        suppressesBottomInset = false
-        animatesVisibility = true
+        if refreshIndicatorVisible {
+            refreshIndicatorVisible = false
+        }
+        if suppressesBottomInset {
+            suppressesBottomInset = false
+        }
+        if !animatesVisibility {
+            animatesVisibility = true
+        }
         setVisibleImmediate(true, applyCooldown: false)
     }
 
     public func show(animated: Bool = true) {
-        suppressesBottomInset = false
-        animatesVisibility = animated
-        setVisibleImmediate(true, applyCooldown: false)
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            if self.suppressesBottomInset {
+                self.suppressesBottomInset = false
+            }
+            if self.animatesVisibility != animated {
+                self.animatesVisibility = animated
+            }
+            self.setVisibleImmediate(true, applyCooldown: false)
+        }
     }
 
     /// Hides the tab bar. Set `flushToBottom` on detail screens so bottom inset becomes zero.
     /// Navigation hides (`flushToBottom: true`) skip the slide so the bar is gone before the composer docks.
     public func hide(flushToBottom: Bool = false) {
-        animatesVisibility = !flushToBottom
-        suppressesBottomInset = flushToBottom
+        let animates = !flushToBottom
+        if animatesVisibility != animates {
+            animatesVisibility = animates
+        }
+        if suppressesBottomInset != flushToBottom {
+            suppressesBottomInset = flushToBottom
+        }
         setVisibleImmediate(false, applyCooldown: true)
     }
 

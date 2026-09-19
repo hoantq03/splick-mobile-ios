@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import AVFoundation
+import Common
 
 /// Autoplay every on-screen feed video post (post-card visibility), with a small AVPlayer pool.
 @MainActor
@@ -63,7 +64,6 @@ final class FeedVideoPlaybackCoordinator: ObservableObject {
 
     func clearPost(_ postId: UUID) {
         visibilityByPost.removeValue(forKey: postId)
-        activePostIds.remove(postId)
         releaseController(for: postId)
         refreshActivePosts()
     }
@@ -78,11 +78,14 @@ final class FeedVideoPlaybackCoordinator: ObservableObject {
         visibilityFlushTask = nil
         pendingVisibilityReports = nil
         visibilityByPost.removeAll()
-        activePostIds = []
-        for controller in pooledControllers.values {
-            controller.setAutoplayActive(false)
+        SplickViewUpdate.after { [weak self] in
+            guard let self else { return }
+            self.activePostIds = []
+            for controller in self.pooledControllers.values {
+                controller.setAutoplayActive(false)
+            }
+            self.releaseAllControllers()
         }
-        releaseAllControllers()
     }
 
     /// Returns a pooled controller only when this post is an autoplay target (or already pooled).
@@ -145,14 +148,17 @@ final class FeedVideoPlaybackCoordinator: ObservableObject {
                 .map(\.key)
         )
         guard next != activePostIds else { return }
-        let removed = activePostIds.subtracting(next)
-        let added = next.subtracting(activePostIds)
-        activePostIds = next
-        for id in removed {
-            pooledControllers[id]?.setAutoplayActive(false)
-        }
-        for id in added {
-            pooledControllers[id]?.setAutoplayActive(true)
+        SplickViewUpdate.after { [weak self] in
+            guard let self, next != self.activePostIds else { return }
+            let removed = self.activePostIds.subtracting(next)
+            let added = next.subtracting(self.activePostIds)
+            self.activePostIds = next
+            for id in removed {
+                self.pooledControllers[id]?.setAutoplayActive(false)
+            }
+            for id in added {
+                self.pooledControllers[id]?.setAutoplayActive(true)
+            }
         }
     }
 }
@@ -218,16 +224,18 @@ struct FeedVideoVisibilityReporter: View {
             .allowsHitTesting(false)
             .onAppear {
                 guard feedTabIsActive else { return }
-                coordinator?.updateVisibility(postId: postId, ratio: 1)
+                SplickViewUpdate.after {
+                    coordinator?.updateVisibility(postId: postId, ratio: 1)
+                }
             }
             .onDisappear {
-                coordinator?.updateVisibility(postId: postId, ratio: 0)
+                SplickViewUpdate.after {
+                    coordinator?.updateVisibility(postId: postId, ratio: 0)
+                }
             }
             .onChange(of: feedTabIsActive) { isActive in
-                if isActive {
-                    coordinator?.updateVisibility(postId: postId, ratio: 1)
-                } else {
-                    coordinator?.updateVisibility(postId: postId, ratio: 0)
+                SplickViewUpdate.after {
+                    coordinator?.updateVisibility(postId: postId, ratio: isActive ? 1 : 0)
                 }
             }
     }

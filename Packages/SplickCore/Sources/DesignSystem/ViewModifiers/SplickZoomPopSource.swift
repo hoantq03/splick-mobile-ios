@@ -7,9 +7,9 @@ import Combine
 public final class SplickZoomPopSourceStore: ObservableObject {
     public static let shared = SplickZoomPopSourceStore()
 
-    /// When set, the matching feed card renders at opacity 0 so only the
-    /// finger-held snapshot is visible (iOS 26 zoom hole).
-    @Published public private(set) var hiddenPostId: UUID?
+    /// True while a custom zoom-pop snapshot covers the feed. Polls and other
+    /// SwiftUI publishes must wait so they do not hitch the landing frame.
+    public private(set) var isInteractivePopInProgress = false
     public private(set) var activeDestinationPostId: UUID?
 
     private var anchors: [UUID: WeakViewBox] = [:]
@@ -23,13 +23,19 @@ public final class SplickZoomPopSourceStore: ObservableObject {
         activeDestinationPostId = postId
     }
 
-    public func hideActiveSource() {
-        hiddenPostId = activeDestinationPostId
+    public func beginInteractivePop() {
+        isInteractivePopInProgress = true
     }
 
-    public func revealSource() {
-        hiddenPostId = nil
+    public func endInteractivePop() {
+        isInteractivePopInProgress = false
     }
+
+    /// UIKit hides the source card (`alpha` + hole). Do not publish here —
+    /// `@Published` would invalidate every feed cell during the gesture.
+    public func hideActiveSource() {}
+
+    public func revealSource() {}
 
     public func registerAnchor(_ view: UIView, postId: UUID) {
         for (id, box) in anchors where id != postId && box.value === view {

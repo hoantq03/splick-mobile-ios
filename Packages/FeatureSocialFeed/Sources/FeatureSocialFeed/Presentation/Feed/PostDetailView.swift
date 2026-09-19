@@ -222,6 +222,7 @@ struct PostDetailView: View {
             }()
             try? await Task.sleep(for: .milliseconds(380))
             guard !Task.isCancelled else { return }
+            await SplickViewUpdate.hop()
             tabBarScrollState?.hide(flushToBottom: true)
             withAnimation(.easeOut(duration: 0.16)) {
                 commentsRevealed = true
@@ -234,7 +235,14 @@ struct PostDetailView: View {
             }
         }
         .onDisappear {
-            tabBarScrollState?.show(animated: false)
+            DispatchQueue.main.async {
+                tabBarScrollState?.show(animated: false)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: SplickZoomPopChrome.revealNotification)) { _ in
+            DispatchQueue.main.async {
+                tabBarScrollState?.show(animated: false)
+            }
         }
         .postCardPresentationHost(
             presentation: $cardPresentation,
@@ -607,7 +615,9 @@ struct PostDetailView: View {
         }
         .onPreferenceChange(CommentListHeightKey.self) { height in
             guard commentPager.commentsLoaded, height > 0 else { return }
-            commentsListMinHeight = height
+            SplickViewUpdate.after {
+                commentsListMinHeight = height
+            }
         }
         .animation(.easeOut(duration: 0.32), value: commentPager.commentsLoaded)
         .animation(.easeOut(duration: 0.28), value: commentPager.commentFilter)

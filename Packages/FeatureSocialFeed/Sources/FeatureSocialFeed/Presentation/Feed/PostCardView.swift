@@ -22,8 +22,7 @@ struct PostCardView: View, Equatable {
     var initialMediaIndex: Int = 0
     var uploadState: PostUploadState? = nil
     var showsVideoScrubber: Bool = false
-    /// Feed autoplay targets — included in Equatable so `.equatable()` does not swallow play/pause updates.
-    var autoplayVideoPostIds: Set<UUID> = []
+    @Environment(\.feedVideoCoordinator) private var videoCoordinator
 
     @State private var mediaPageIndex = 0
     @State private var appliedInitialMediaIndex = false
@@ -46,7 +45,6 @@ struct PostCardView: View, Equatable {
             && lhs.initialMediaIndex == rhs.initialMediaIndex
             && lhs.uploadState == rhs.uploadState
             && lhs.showsVideoScrubber == rhs.showsVideoScrubber
-            && lhs.autoplayVideoPostIds == rhs.autoplayVideoPostIds
             && lhs.actions === rhs.actions
     }
 
@@ -101,13 +99,13 @@ struct PostCardView: View, Equatable {
             }
 
             companionsSection
-            PostMediaView(
+            ObservingFeedPostMedia(
                 post: post,
                 selectedIndex: $mediaPageIndex,
                 onTap: resolvedMediaTap,
                 isPinchZooming: $isMediaPinchZooming,
                 showsVideoScrubber: showsVideoScrubber,
-                isAutoplayTarget: autoplayVideoPostIds.contains(post.id)
+                coordinator: videoCoordinator
             )
             contextSection
 
@@ -639,5 +637,58 @@ struct PostCardView: View, Equatable {
                 reminderSentMessage = languageService.localizedMessage(for: error)
             }
         }
+    }
+}
+
+/// Observes autoplay at the media leaf so the feed list / `FeedView` do not
+/// invalidate when `activePostIds` changes.
+private struct ObservingFeedPostMedia: View {
+    let post: Post
+    @Binding var selectedIndex: Int
+    var onTap: ((Int) -> Void)?
+    @Binding var isPinchZooming: Bool
+    var showsVideoScrubber: Bool
+    var coordinator: FeedVideoPlaybackCoordinator?
+
+    var body: some View {
+        if let coordinator {
+            BoundFeedPostMedia(
+                post: post,
+                selectedIndex: $selectedIndex,
+                onTap: onTap,
+                isPinchZooming: $isPinchZooming,
+                showsVideoScrubber: showsVideoScrubber,
+                coordinator: coordinator
+            )
+        } else {
+            PostMediaView(
+                post: post,
+                selectedIndex: $selectedIndex,
+                onTap: onTap,
+                isPinchZooming: $isPinchZooming,
+                showsVideoScrubber: showsVideoScrubber,
+                isAutoplayTarget: false
+            )
+        }
+    }
+}
+
+private struct BoundFeedPostMedia: View {
+    let post: Post
+    @Binding var selectedIndex: Int
+    var onTap: ((Int) -> Void)?
+    @Binding var isPinchZooming: Bool
+    var showsVideoScrubber: Bool
+    @ObservedObject var coordinator: FeedVideoPlaybackCoordinator
+
+    var body: some View {
+        PostMediaView(
+            post: post,
+            selectedIndex: $selectedIndex,
+            onTap: onTap,
+            isPinchZooming: $isPinchZooming,
+            showsVideoScrubber: showsVideoScrubber,
+            isAutoplayTarget: coordinator.isAutoplayTarget(post.id)
+        )
     }
 }

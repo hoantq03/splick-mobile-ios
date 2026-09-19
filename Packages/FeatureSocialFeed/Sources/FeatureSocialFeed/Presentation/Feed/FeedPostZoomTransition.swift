@@ -27,16 +27,16 @@ extension EnvironmentValues {
 }
 
 /// Morphs the feed card into post detail on iOS 18+; older OS keeps a source
-/// anchor so the custom interactive pop can hide the list card and land in it.
+/// anchor so the custom interactive pop can land in the list hole.
+/// Hiding the in-list card is UIKit-only (`source.alpha` + hole overlay). A
+/// SwiftUI `@ObservedObject` opacity here would invalidate every feed cell
+/// mid-gesture and hitch on land.
 struct FeedPostZoomSourceModifier: ViewModifier {
     let postId: UUID
     @Environment(\.feedPostZoomNamespace) private var namespace
-    @ObservedObject private var zoomPopStore = SplickZoomPopSourceStore.shared
 
     func body(content: Content) -> some View {
-        let hidden = zoomPopStore.hiddenPostId == postId
         let card = content
-            .opacity(hidden ? 0 : 1)
             .overlay {
                 SplickZoomPopSourceAnchor(postId: postId)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

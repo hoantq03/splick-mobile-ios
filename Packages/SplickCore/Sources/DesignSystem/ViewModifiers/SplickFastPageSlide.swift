@@ -1194,6 +1194,7 @@ private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate 
               let card = container.snapshotView(afterScreenUpdates: false) else { return }
 
         let store = SplickZoomPopSourceStore.shared
+        store.beginInteractivePop()
         let postId = store.activeDestinationPostId
         var sourceFrame = postId.flatMap { store.sourceFrame(for: $0, in: container) }
         store.hideActiveSource()
@@ -1409,7 +1410,21 @@ private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate 
         let sourceView = fallbackHiddenSourceView
 
         if complete {
+            sourceView?.alpha = 1
+            SplickZoomPopChrome.reveal()
             settleFallbackCard(complete: true) {
+                DispatchQueue.main.async {
+                    let covering = self.fallbackCard
+                    let hole = self.fallbackHoleView
+                    self.fallbackHoleView = nil
+                    covering?.removeFromSuperview()
+                    hole?.removeFromSuperview()
+                    self.clearFallbackState()
+                }
+            }
+            // Pop on the next turn so the settle transform is already in-flight.
+            // Chrome (nav pills, tab bar) lays out under the covering card.
+            DispatchQueue.main.async {
                 self.restoreInsertedToView(
                     toView: toView,
                     originalSuper: originalSuper,
@@ -1417,17 +1432,20 @@ private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate 
                     inserted: inserted
                 )
                 self.didInsertFallbackToView = false
-                sourceView?.alpha = 1
-                SplickZoomPopSourceStore.shared.revealSource()
                 navBar?.alpha = 1
-                if nav.viewControllers.count > 1 {
-                    nav.popViewController(animated: false)
+                UIView.performWithoutAnimation {
+                    if nav.viewControllers.count > 1 {
+                        nav.popViewController(animated: false)
+                    }
                 }
                 fromView?.isHidden = false
-                card?.removeFromSuperview()
-                self.fallbackHoleView?.removeFromSuperview()
-                self.fallbackHoleView = nil
-                self.clearFallbackState()
+                if let card = self.fallbackCard, card.superview == nil, let container = nav.view {
+                    container.addSubview(card)
+                }
+                if let hole = self.fallbackHoleView, hole.superview == nil,
+                   let container = nav.view, let card = self.fallbackCard {
+                    container.insertSubview(hole, belowSubview: card)
+                }
             }
         } else {
             settleFallbackCard(complete: false) {
@@ -1466,6 +1484,7 @@ private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate 
         navBar?.alpha = 1
         sourceView?.alpha = 1
         SplickZoomPopSourceStore.shared.revealSource()
+        SplickZoomPopSourceStore.shared.endInteractivePop()
         if restoreToView, inserted, let toView {
             if let originalSuper {
                 let index = min(originalIndex, originalSuper.subviews.count)
@@ -1494,6 +1513,7 @@ private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate 
         didInsertFallbackToView = false
         fallbackTranslation = .zero
         fallbackVelocity = .zero
+        SplickZoomPopSourceStore.shared.endInteractivePop()
     }
 
     private func cancelFallbackTracking(removingInsertedView: Bool) {

@@ -1,5 +1,6 @@
 import Foundation
 import SplickDomain
+import Common
 
 @MainActor
 final class PostDetailViewModel: ObservableObject {
@@ -96,6 +97,7 @@ final class PostDetailViewModel: ObservableObject {
     }
 
     private func fetchPages(reset: Bool, ensureVisibleId: UUID?, loadThroughEnd: Bool = false) async {
+        await SplickViewUpdate.hop()
         requestID += 1
         let currentRequest = requestID
         if reset { nextPage = 0 }
@@ -133,6 +135,8 @@ final class PostDetailViewModel: ObservableObject {
                 }
             } while page < 50
 
+            await SplickViewUpdate.hop()
+            guard currentRequest == requestID else { return }
             allComments = merged
             displayedTopLevel = displayed
             hasMore = more

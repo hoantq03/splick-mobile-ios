@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 import DesignSystem
 import Localization
+import Common
 
 enum ExpensePagerMotion {
     static let settleDuration: TimeInterval = SplickPageSlideMotion.duration
@@ -536,8 +537,13 @@ private final class ExpensePagerContainerVC<History: View, Overview: View, Frien
         currentHeight = height
 
         if activityState.chrome != chrome {
-            Task { @MainActor in
-                activityState.chrome = chrome
+            // Never publish from `updateUIViewController` — that is a SwiftUI view-update turn.
+            SplickViewUpdate.after { [activityState] in
+                MainActor.assumeIsolated {
+                    if activityState.chrome != chrome {
+                        activityState.chrome = chrome
+                    }
+                }
             }
         }
 

@@ -90,10 +90,13 @@ public final class FeedSegmentScrollState: ObservableObject {
     }
 
     public func reset() {
-        lastOffset = 0
-        lastRawOffset = 0
-        offsetNormalizer.reset()
-        setCollapseProgress(0, animated: false)
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.lastOffset = 0
+            self.lastRawOffset = 0
+            self.offsetNormalizer.reset()
+            self.setCollapseProgress(0, animated: false)
+        }
     }
 
     private func setCollapseProgress(_ value: CGFloat, animated: Bool = false) {
