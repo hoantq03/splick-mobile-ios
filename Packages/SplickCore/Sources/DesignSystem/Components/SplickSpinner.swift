@@ -76,7 +76,9 @@ public struct SplickSpinner: View {
     }
 
     public var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
+        // Pause when idle — `.animation` otherwise keeps a 60 fps display link
+        // even for off-screen / opacity-0 pull-to-refresh spinners.
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !isSpinning)) { context in
             ring
                 .rotationEffect(.degrees(currentAngle(at: context.date)), anchor: .center)
                 .transaction { $0.animation = nil }

@@ -92,6 +92,7 @@ struct MessageComposerInputBar: View {
                         .lineLimit(1...5)
                         .font(SplickTheme.Typography.body)
                         .focused($isFocused)
+                        .splickDisableWritingTools()
                         .padding(.horizontal, SplickTheme.Spacing.sm)
                         .padding(.vertical, SplickTheme.Spacing.xs)
                         .background(SplickTheme.Colors.secondaryBackground)

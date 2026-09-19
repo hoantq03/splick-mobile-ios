@@ -11,7 +11,6 @@ public struct ChatThreadView: View {
     @ObservedObject private var viewModel: ChatThreadViewModel
     @ObservedObject private var relationshipViewModel: ChatPeerRelationshipViewModel
     @EnvironmentObject private var languageService: LanguageService
-    @EnvironmentObject private var presenceStore: PresenceStore
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.openUserProfile) private var openUserProfile
     @Environment(\.currentUserSummary) private var currentUserSummary
@@ -76,6 +75,13 @@ public struct ChatThreadView: View {
     public var body: some View {
         ZStack {
             threadContent
+            if let peer, displayConversation?.isGroup != true {
+                ChatThreadPresenceSideEffects(
+                    peerUserId: peer.userId,
+                    isBlocked: relationshipViewModel.isBlocked,
+                    canRemoveFriend: relationshipViewModel.canRemoveFriend
+                )
+            }
             reactionFocusCover
             if isSearchingThread {
                 ChatThreadSearchOverlay(
@@ -104,41 +110,14 @@ public struct ChatThreadView: View {
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Button(action: openChatHeader) {
-                    HStack(spacing: SplickTheme.Spacing.xs) {
-                        if displayConversation?.isGroup != true, let peer {
-                            AvatarWithPresenceView(
-                                imageURL: peer.avatarUrl.flatMap(URL.init(string:)),
-                                name: navigationTitle,
-                                size: .compact,
-                                userId: peer.userId,
-                                showOnlineIndicator: showsPeerPresence && PresenceDisplayPolicy.shouldShowOnlineIndicator(
-                                    isOnline: resolvedPresence(for: peer).isOnline
-                                ),
-                                lastSeenLabel: showsPeerPresence
-                                    ? PresenceDisplayPolicy.compactLastSeenLabel(
-                                        isOnline: resolvedPresence(for: peer).isOnline,
-                                        lastSeenAt: resolvedPresence(for: peer).lastSeenAt,
-                                        appLocale: languageService.locale
-                                    )
-                                    : nil
-                            )
-                        } else {
-                            AvatarView(
-                                imageURL: (displayConversation?.isGroup == true
-                                    ? displayConversation?.groupAvatarUrl
-                                    : peer?.avatarUrl)?.flatMap(URL.init(string:)),
-                                name: navigationTitle,
-                                size: .compact
-                            )
-                        }
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(displayConversation?.displayTitle ?? navigationTitle)
-                                .font(.system(size: 18, weight: .semibold, design: .rounded))
-                                .foregroundStyle(SplickTheme.Colors.textPrimary)
-                                .lineLimit(1)
-                                .id(displayConversation?.groupName ?? navigationTitle)
-                        }
-                    }
+                    ChatThreadNavigationTitle(
+                        isGroup: displayConversation?.isGroup == true,
+                        peer: peer,
+                        title: displayConversation?.displayTitle ?? navigationTitle,
+                        navigationTitle: navigationTitle,
+                        groupAvatarURL: displayConversation?.groupAvatarUrl,
+                        showsPeerPresence: showsPeerPresence
+                    )
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(navigationTitle)
@@ -171,7 +150,7 @@ public struct ChatThreadView: View {
                 case .avatar:
                     GroupAvatarSheet(
                         groupName: displayConversation.displayTitle,
-                        currentAvatarURL: displayConversation.groupAvatarUrl.flatMap(URL.init(string:))
+                        currentAvatarURL: messagingAvatarURL(displayConversation.groupAvatarUrl)
                     ) { imageData in
                         let avatarURL = try await groupManagementActions.updateGroupAvatar(
                             displayConversation.id,
@@ -714,14 +693,8 @@ public struct ChatThreadView: View {
             switch confirm {
             case .removeFriend:
                 await relationshipViewModel.removeFriend()
-                if !relationshipViewModel.canRemoveFriend, let peer {
-                    presenceStore.clear(userId: peer.userId)
-                }
             case .blockUser:
                 await relationshipViewModel.blockUser()
-                if relationshipViewModel.isBlocked, let peer {
-                    presenceStore.clear(userId: peer.userId)
-                }
             case nil:
                 break
             }
@@ -956,7 +929,7 @@ public struct ChatThreadView: View {
             id: peer.userId,
             username: peer.username,
             displayName: peer.displayTitle,
-            avatarURL: peer.avatarUrl.flatMap(URL.init(string:))
+            avatarURL: messagingAvatarURL(peer.avatarUrl)
         )
         guard user.id != currentUserSummary?.id else { return }
         openUserProfile(user)
@@ -988,7 +961,7 @@ public struct ChatThreadView: View {
                 userDisplayName: userDisplayName(for:),
                 onRequestComposerFocus: { isInputFocused = true },
                 onDismissKeyboard: { isInputFocused = false },
-                peerAvatarURL: peer?.avatarUrl.flatMap(URL.init(string:)),
+                peerAvatarURL: messagingAvatarURL(peer?.avatarUrl),
                 peerDisplayName: peer?.displayTitle ?? "",
                 showsPeerReadAvatar: displayConversation?.isGroup != true,
                 conversationId: viewModel.conversationId,
@@ -1117,6 +1090,60 @@ public struct ChatThreadView: View {
             return false
         }
     }
+}
+
+/// Isolated so presence heartbeats do not invalidate the message list.
+private struct ChatThreadNavigationTitle: View {
+    @EnvironmentObject private var languageService: LanguageService
+    @EnvironmentObject private var presenceStore: PresenceStore
+
+    let isGroup: Bool
+    let peer: ConversationPeer?
+    let title: String
+    let navigationTitle: String
+    let groupAvatarURL: String?
+    let showsPeerPresence: Bool
+
+    var body: some View {
+        HStack(spacing: SplickTheme.Spacing.xs) {
+            if !isGroup, let peer {
+                let presence = resolvedPresence(for: peer)
+                AvatarWithPresenceView(
+                    imageURL: messagingAvatarURL(peer.avatarUrl),
+                    name: navigationTitle,
+                    size: .compact,
+                    userId: peer.userId,
+                    showOnlineIndicator: showsPeerPresence && PresenceDisplayPolicy.shouldShowOnlineIndicator(
+                        isOnline: presence.isOnline
+                    ),
+                    lastSeenLabel: showsPeerPresence
+                        ? PresenceDisplayPolicy.compactLastSeenLabel(
+                            isOnline: presence.isOnline,
+                            lastSeenAt: presence.lastSeenAt,
+                            appLocale: languageService.locale
+                        )
+                        : nil
+                )
+            } else {
+                AvatarView(
+                    imageURL: headerAvatarURL,
+                    name: navigationTitle,
+                    size: .compact
+                )
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .foregroundStyle(SplickTheme.Colors.textPrimary)
+                    .lineLimit(1)
+                    .id(title)
+            }
+        }
+    }
+
+    private var headerAvatarURL: URL? {
+        messagingAvatarURL(isGroup ? groupAvatarURL : peer?.avatarUrl)
+    }
 
     private func resolvedPresence(for peer: ConversationPeer) -> (isOnline: Bool, lastSeenAt: Date?) {
         let stored = presenceStore.state(for: peer.userId)
@@ -1124,6 +1151,36 @@ public struct ChatThreadView: View {
         let lastSeenAt = stored?.lastSeenAt ?? peer.lastSeenAt
         return (isOnline, lastSeenAt)
     }
+}
+
+/// Clears stale presence after block/unfriend without observing the store on the thread view.
+private struct ChatThreadPresenceSideEffects: View {
+    @EnvironmentObject private var presenceStore: PresenceStore
+    let peerUserId: UUID
+    let isBlocked: Bool
+    let canRemoveFriend: Bool
+
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .onChange(of: isBlocked) { blocked in
+                if blocked {
+                    presenceStore.clear(userId: peerUserId)
+                }
+            }
+            .onChange(of: canRemoveFriend) { canRemove in
+                if !canRemove {
+                    presenceStore.clear(userId: peerUserId)
+                }
+            }
+    }
+}
+
+private func messagingAvatarURL(_ raw: String?) -> URL? {
+    guard let raw, !raw.isEmpty else { return nil }
+    return URL(string: raw)
 }
 
 private extension Error {

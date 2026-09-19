@@ -177,6 +177,9 @@ struct ChatMessageListView: View {
                             openReactionFocus(at: point)
                         },
                         onNearBottomChanged: { near in
+                            if viewModel.isLoadingOlder || viewModel.prependAnchorMessageId != nil {
+                                return
+                            }
                             if near {
                                 userReleasedInitialPin = false
                                 viewModel.onViewportReturnedToBottom()
@@ -186,18 +189,35 @@ struct ChatMessageListView: View {
                             guard !initialOpenBottomScrollPending else { return }
                             userReleasedInitialPin = true
                             viewModel.onViewportLeftBottom()
-                        }
+                        },
+                        onNearTopChanged: { near in
+                            guard near, hasCompletedInitialBottomScroll else { return }
+                            guard !viewModel.isLoadingOlder, viewModel.prependAnchorMessageId == nil else { return }
+                            guard let first = viewModel.messages.first else { return }
+                            Task { await viewModel.loadOlderMessagesIfNeeded(current: first) }
+                        },
+                        isPrepending: viewModel.isLoadingOlder || viewModel.prependAnchorMessageId != nil,
+                        preservePrependOffset: userReleasedInitialPin,
+                        jumpToBottomToken: viewModel.scrollToBottomToken,
+                        allowsAnimatedJump: hasCompletedInitialBottomScroll
                     )
                     .allowsHitTesting(false)
                 }
-                .modifier(ChatThreadScrollPositionModifier())
                 .onChange(of: viewModel.prependAnchorMessageId) { anchorId in
                     guard let anchorId else { return }
-                    // Keep visual position after older messages are prepended.
-                    DispatchQueue.main.async {
-                        proxy.scrollTo(anchorId, anchor: .top)
-                        viewModel.clearPrependAnchor()
+                    if userReleasedInitialPin {
+                        // Same as peek: UIKit already added the height delta to contentOffset.
+                        DispatchQueue.main.async {
+                            viewModel.clearPrependAnchor()
+                        }
+                    } else {
+                        scrollToBottom(proxy: proxy, animated: false)
+                        DispatchQueue.main.async {
+                            scrollToBottom(proxy: proxy, animated: false)
+                            viewModel.clearPrependAnchor()
+                        }
                     }
+                    _ = anchorId
                 }
                 .simultaneousGesture(
                     TapGesture().onEnded {
@@ -223,33 +243,18 @@ struct ChatMessageListView: View {
                 guard viewModel.prependAnchorMessageId == nil else { return }
                 guard !viewModel.messages.isEmpty else { return }
 
-                let tokenIncreased = viewModel.scrollToBottomToken > lastHandledScrollToBottomToken
                 let isInitial = !hasCompletedInitialBottomScroll || initialOpenBottomScrollPending
-                if !isInitial, !tokenIncreased, !viewModel.isNearBottom { return }
+                guard isInitial else { return }
 
-                if tokenIncreased {
-                    lastHandledScrollToBottomToken = viewModel.scrollToBottomToken
-                    userReleasedInitialPin = false
-                }
-
-                if isInitial {
-                    await scrollToBottomUntilVisible(
-                        proxy: proxy,
-                        animated: false
-                    )
-                } else {
-                    scrollToBottom(proxy: proxy, animated: tokenIncreased)
-                    try? await Task.sleep(for: .milliseconds(50))
-                    scrollToBottom(proxy: proxy, animated: false)
-                }
+                await scrollToBottomUntilVisible(
+                    proxy: proxy,
+                    animated: false
+                )
             }
             .onChange(of: viewModel.scrollToBottomToken) { token in
-                // Send / jump-to-latest / pinToLatest — intentional, not the open storm.
+                // Send / jump-to-latest — UIKit installer animates after the initial pin.
                 guard token > lastHandledScrollToBottomToken else { return }
-                guard viewModel.scrollToMessageToken == 0 else { return }
-                guard viewModel.highlightedMessageId == nil else { return }
                 lastHandledScrollToBottomToken = token
-                scrollToBottom(proxy: proxy, animated: hasCompletedInitialBottomScroll)
             }
             .onReceive(
                 NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)
@@ -261,7 +266,8 @@ struct ChatMessageListView: View {
                 // Only keep the latest in view if the user is already at the bottom.
                 // Focusing the composer for reply must not jump away from the replied message.
                 guard viewModel.isNearBottom else { return }
-                scrollToBottom(proxy: proxy, animated: false)
+                // One scroll after the inset lands — an extra immediate scrollTo
+                // layout-storms the thread and trips InputUI's 250ms accumulator.
                 let duration = (notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? NSNumber)?
                     .doubleValue ?? 0.25
                 DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
@@ -275,13 +281,6 @@ struct ChatMessageListView: View {
                 lastHandledScrollToBottomToken = 0
                 lastAnchoredMessageClientId = nil
                 viewModel.userReturnedToLatest()
-            }
-            .onChange(of: viewModel.messages.count) { count in
-                guard count > 0 else { return }
-                // During open, `.task(id: bottomScrollTaskKey)` already keys off count+last.
-                guard !initialOpenBottomScrollPending else { return }
-                guard viewModel.autoFollowLatest else { return }
-                scrollToBottom(proxy: proxy, animated: hasCompletedInitialBottomScroll)
             }
             .onChange(of: viewModel.scrollToMessageToken) { token in
                 guard token > 0, let targetId = viewModel.highlightedMessageId else { return }
@@ -297,11 +296,17 @@ struct ChatMessageListView: View {
     ) -> some View {
         let lastMessage = messages.last
 
-        LazyVStack(spacing: 0) {
-            if viewModel.isLoadingOlder {
-                SplickSpinner()
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, SplickTheme.Spacing.sm)
+        // VStack (not Lazy): same as conversation peek — eager heights make
+        // prepend `contentOffset += delta` exact, so the viewport does not jump.
+        VStack(spacing: 0) {
+            if viewModel.hasMoreMessages || viewModel.isLoadingOlder {
+                ZStack {
+                    SplickSpinner(size: .small)
+                        .opacity(viewModel.isLoadingOlder ? 1 : 0)
+                }
+                .frame(height: 28)
+                .frame(maxWidth: .infinity)
+                .accessibilityHidden(!viewModel.isLoadingOlder)
             }
 
             ForEach(displayMessages) { item in
@@ -349,7 +354,7 @@ struct ChatMessageListView: View {
                 }
             }
         }
-        .modifier(ChatThreadScrollTargetLayoutModifier())
+        .transaction { $0.animation = nil }
         .onAppear { prefetchRecentThreadMedia() }
         .onChange(of: messages.suffix(12).map(\.id)) { _ in
             prefetchRecentThreadMedia()
@@ -423,10 +428,6 @@ struct ChatMessageListView: View {
             isQuotedMessageRecalled: isQuotedMessageRecalled
         )
         .id(item.message.clientMessageId)
-        .onAppear {
-            guard item.message.id == messages.first?.id else { return }
-            Task { await viewModel.loadOlderMessagesIfNeeded(current: item.message) }
-        }
     }
 
     @ViewBuilder
@@ -453,8 +454,7 @@ struct ChatMessageListView: View {
     private var bottomScrollTaskKey: String {
         let conversation = conversationId?.uuidString ?? "none"
         let last = viewModel.messages.last?.clientMessageId.uuidString ?? "none"
-        let count = viewModel.messages.count
-        return "\(conversation)-\(last)-\(count)-\(viewModel.scrollToBottomToken)"
+        return "\(conversation)-\(last)"
     }
 
     private func resolvedBottomScrollTarget() -> AnyHashable? {
@@ -968,6 +968,11 @@ private struct ChatListHorizontalPanInstaller: UIViewRepresentable {
     var onLongPress: ((CGPoint) -> Void)?
     var onNearBottomChanged: ((Bool) -> Void)? = nil
     var onUserScrolledAwayFromBottom: (() -> Void)? = nil
+    var onNearTopChanged: ((Bool) -> Void)? = nil
+    var isPrepending: Bool = false
+    var preservePrependOffset: Bool = false
+    var jumpToBottomToken: Int = 0
+    var allowsAnimatedJump: Bool = false
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -991,6 +996,13 @@ private struct ChatListHorizontalPanInstaller: UIViewRepresentable {
         context.coordinator.onLongPress = onLongPress
         context.coordinator.onNearBottomChanged = onNearBottomChanged
         context.coordinator.onUserScrolledAwayFromBottom = onUserScrolledAwayFromBottom
+        context.coordinator.onNearTopChanged = onNearTopChanged
+        context.coordinator.isPrepending = isPrepending
+        context.coordinator.preservePrependOffset = preservePrependOffset
+        if isPrepending, preservePrependOffset {
+            context.coordinator.armPrependWindow()
+        }
+        context.coordinator.consumeJumpToBottomToken(jumpToBottomToken, animate: allowsAnimatedJump)
         context.coordinator.setEnabled(isEnabled)
         uiView.attachHandler = { [weak coordinator = context.coordinator] marker in
             coordinator?.attach(from: marker)
@@ -1020,6 +1032,10 @@ private struct ChatListHorizontalPanInstaller: UIViewRepresentable {
         var onLongPress: ((CGPoint) -> Void)?
         var onNearBottomChanged: ((Bool) -> Void)?
         var onUserScrolledAwayFromBottom: (() -> Void)?
+        var onNearTopChanged: ((Bool) -> Void)?
+        var isPrepending = false
+        var preservePrependOffset = false
+        var lastJumpToken = 0
 
         private weak var hostScrollView: UIScrollView?
         private weak var navigationController: UINavigationController?
@@ -1029,7 +1045,11 @@ private struct ChatListHorizontalPanInstaller: UIViewRepresentable {
         private var contentSizeObservation: NSKeyValueObservation?
         private var contentSizeReportWorkItem: DispatchWorkItem?
         private var lastReportedNearBottom: Bool?
+        private var lastReportedNearTop: Bool?
         private var lastContentOffsetY: CGFloat = .nan
+        private var lastContentHeight: CGFloat = 0
+        private var prependUntil: CFTimeInterval = 0
+        private var jumpUntil: CFTimeInterval = 0
         private var didDisableScrollForHorizontalPan = false
         private var didInstallEdgePrefer = false
         private lazy var pan: ChatDelayedHorizontalPanGestureRecognizer = {
@@ -1058,6 +1078,14 @@ private struct ChatListHorizontalPanInstaller: UIViewRepresentable {
         }()
 
         func attach(from markerView: UIView) {
+            // Skip the window-wide scroll-view walk on every SwiftUI pass — that
+            // walks feed/expenses/friends/inbox while a thread is open and pegs CPU.
+            if let existing = hostScrollView,
+               pan.view === existing,
+               existing.window != nil,
+               markerView.window != nil {
+                return
+            }
             guard markerView.window != nil, let scrollView = chatListScrollView(from: markerView) else { return }
             let nav = navigationController(from: scrollView)
             pan.competingScrollPan = scrollView.panGestureRecognizer
@@ -1126,7 +1154,11 @@ private struct ChatListHorizontalPanInstaller: UIViewRepresentable {
             contentSizeObservation = nil
             contentSizeReportWorkItem = nil
             lastReportedNearBottom = nil
+            lastReportedNearTop = nil
             lastContentOffsetY = .nan
+            lastContentHeight = 0
+            prependUntil = 0
+            jumpUntil = 0
             hostScrollView = nil
             navigationController = nil
             didInstallEdgePrefer = false
@@ -1138,6 +1170,48 @@ private struct ChatListHorizontalPanInstaller: UIViewRepresentable {
             didDisableScrollForHorizontalPan = true
         }
 
+        func armPrependWindow() {
+            prependUntil = CACurrentMediaTime() + 0.4
+        }
+
+        func consumeJumpToBottomToken(_ token: Int, animate: Bool) {
+            guard token > lastJumpToken else { return }
+            lastJumpToken = token
+            prependUntil = 0
+            guard animate else { return }
+            animateToBottom()
+        }
+
+        func animateToBottom() {
+            guard let scrollView = hostScrollView else { return }
+            let targetY = Self.bottomOffset(for: scrollView)
+            let distance = abs(targetY - scrollView.contentOffset.y)
+            guard distance > 1 else { return }
+            let duration = min(
+                ChatScrollAnimation.jumpToLatestTravelDuration,
+                max(0.2, Double(distance / 2800))
+            )
+            jumpUntil = CACurrentMediaTime() + duration + 0.08
+            UIView.animate(
+                withDuration: duration,
+                delay: 0,
+                options: [.curveEaseInOut, .allowUserInteraction, .beginFromCurrentState]
+            ) {
+                scrollView.setContentOffset(
+                    CGPoint(x: scrollView.contentOffset.x, y: targetY),
+                    animated: false
+                )
+            }
+        }
+
+        private static func bottomOffset(for scrollView: UIScrollView) -> CGFloat {
+            let inset = scrollView.adjustedContentInset
+            return max(
+                -inset.top,
+                scrollView.contentSize.height - scrollView.bounds.height + inset.bottom
+            )
+        }
+
         private func restoreScrollIfNeeded() {
             guard didDisableScrollForHorizontalPan else { return }
             hostScrollView?.isScrollEnabled = true
@@ -1145,33 +1219,94 @@ private struct ChatListHorizontalPanInstaller: UIViewRepresentable {
         }
 
         private func observeScrollProximity(_ scrollView: UIScrollView) {
-            let report = { [weak self, weak scrollView] in
-                guard let self, let scrollView else { return }
-                self.reportNearBottom(from: scrollView)
+            lastContentHeight = scrollView.contentSize.height
+            offsetObservation = scrollView.observe(\.contentOffset, options: [.new]) { [weak self] scroll, _ in
+                self?.reportProximity(from: scroll)
             }
-            offsetObservation = scrollView.observe(\.contentOffset, options: [.new]) { _, _ in
-                report()
-            }
-            contentSizeObservation = scrollView.observe(\.contentSize, options: [.new]) { [weak self] _, _ in
+            contentSizeObservation = scrollView.observe(\.contentSize, options: [.old, .new]) { [weak self] scroll, change in
+                self?.handleContentSizeChange(scroll: scroll, change: change)
                 self?.scheduleContentSizeNearBottomReport()
             }
             DispatchQueue.main.async { [weak self, weak scrollView] in
                 guard let self, let scrollView else { return }
-                self.reportNearBottom(from: scrollView)
+                self.reportProximity(from: scrollView)
             }
+        }
+
+        private func handleContentSizeChange(
+            scroll: UIScrollView,
+            change: NSKeyValueObservedChange<CGSize>
+        ) {
+            let oldHeight = change.oldValue?.height ?? lastContentHeight
+            let newHeight = change.newValue?.height ?? scroll.contentSize.height
+            let delta = newHeight - oldHeight
+            lastContentHeight = newHeight
+            guard delta > 0.5 else { return }
+
+            let now = CACurrentMediaTime()
+            if now < jumpUntil {
+                let remaining = max(0.05, jumpUntil - now)
+                let targetY = Self.bottomOffset(for: scroll)
+                UIView.animate(
+                    withDuration: remaining,
+                    delay: 0,
+                    options: [.curveEaseInOut, .beginFromCurrentState, .allowUserInteraction]
+                ) {
+                    scroll.setContentOffset(
+                        CGPoint(x: scroll.contentOffset.x, y: targetY),
+                        animated: false
+                    )
+                }
+                return
+            }
+
+            // Same compensation as peek: content grew at the top, keep the viewport
+            // by adding the height delta. VStack gives a real delta.
+            let shouldPreserve = preservePrependOffset
+                && (isPrepending || now < prependUntil)
+            guard shouldPreserve else { return }
+            var offset = scroll.contentOffset
+            offset.y += delta
+            let maxOffset = Self.bottomOffset(for: scroll)
+            offset.y = min(max(offset.y, -scroll.adjustedContentInset.top), maxOffset)
+            scroll.setContentOffset(offset, animated: false)
         }
 
         private func scheduleContentSizeNearBottomReport() {
             contentSizeReportWorkItem?.cancel()
             let work = DispatchWorkItem { [weak self] in
                 guard let self, let scrollView = self.hostScrollView else { return }
-                self.reportNearBottom(from: scrollView)
+                self.reportProximity(from: scrollView)
             }
             contentSizeReportWorkItem = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
         }
 
+        private func reportProximity(from scrollView: UIScrollView) {
+            reportNearBottom(from: scrollView)
+            reportNearTop(from: scrollView)
+        }
+
+        private func reportNearTop(from scrollView: UIScrollView) {
+            if isPrepending {
+                lastReportedNearTop = false
+                return
+            }
+            let offsetFromTop = scrollView.contentOffset.y + scrollView.adjustedContentInset.top
+            let near = offsetFromTop <= 56
+            guard lastReportedNearTop != near else { return }
+            lastReportedNearTop = near
+            let callback = onNearTopChanged
+            DispatchQueue.main.async {
+                callback?(near)
+            }
+        }
+
         private func reportNearBottom(from scrollView: UIScrollView) {
+            if isPrepending {
+                lastReportedNearBottom = false
+                return
+            }
             let insetBottom = scrollView.adjustedContentInset.bottom
             let visibleBottom = scrollView.contentOffset.y + scrollView.bounds.height - insetBottom
             let distance = scrollView.contentSize.height - visibleBottom
@@ -1388,28 +1523,6 @@ private struct ChatListHorizontalPanInstaller: UIViewRepresentable {
             for child in root.subviews {
                 collectScrollViews(from: child, into: &found)
             }
-        }
-    }
-}
-
-private struct ChatThreadScrollTargetLayoutModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(iOS 17.0, *) {
-            content.scrollTargetLayout()
-        } else {
-            content
-        }
-    }
-}
-
-private struct ChatThreadScrollPositionModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(iOS 17.0, *) {
-            // defaultScrollAnchor only — scrollPosition(id:) on an unmeasured tall cell
-            // leaves the viewport blank until the user pans.
-            content.defaultScrollAnchor(.bottom)
-        } else {
-            content
         }
     }
 }

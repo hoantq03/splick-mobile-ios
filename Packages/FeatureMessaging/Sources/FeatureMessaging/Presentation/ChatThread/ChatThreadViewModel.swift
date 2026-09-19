@@ -53,6 +53,7 @@ public final class ChatThreadViewModel: ObservableObject {
     private var initialBottomScrollRequested = false
     private static let highlightDuration: Duration = .seconds(2)
     private static let markReadDebounce: Duration = .milliseconds(500)
+    private var loadOlderCooldownUntil = Date.distantPast
 
     private var isLoading: Bool {
         if case .loading = state { return true }
@@ -351,6 +352,7 @@ public final class ChatThreadViewModel: ObservableObject {
     public func loadOlderMessagesIfNeeded(current message: ChatMessage) async {
         guard hasMoreMessages, !isLoadingOlder, !isLoading else { return }
         guard messages.first?.id == message.id else { return }
+        guard Date() >= loadOlderCooldownUntil else { return }
 
         isLoadingOlder = true
         defer { isLoadingOlder = false }
@@ -387,6 +389,10 @@ public final class ChatThreadViewModel: ObservableObject {
                 return
             }
 
+            // Cooldown so the new oldest row cannot chain-load while offset is still settling.
+            loadOlderCooldownUntil = Date().addingTimeInterval(0.8)
+            userScrolledAwayFromLatest()
+            noteNearBottom(false)
             var transaction = Transaction()
             transaction.disablesAnimations = true
             withTransaction(transaction) {

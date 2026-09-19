@@ -947,10 +947,10 @@ public final class ConversationListViewModel: ObservableObject {
         var changed = false
         items = items.map { conversation in
             guard let peer = conversation.peer, peer.userId == userId else { return conversation }
+            let updatedPeer = peer.updatingPresence(isOnline: isOnline, lastSeenAt: lastSeenAt)
+            guard updatedPeer != peer else { return conversation }
             changed = true
-            return conversation.updating(
-                peer: peer.updatingPresence(isOnline: isOnline, lastSeenAt: lastSeenAt)
-            )
+            return conversation.updating(peer: updatedPeer)
         }
         if changed {
             state = .loaded(items)
