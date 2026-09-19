@@ -18,6 +18,8 @@ struct ContentView: View {
         ProfileCardView()
             .environment(\.usesBrandAuthChrome, true)
             .splickVisualTheme(themeService.theme.visualTheme(systemIsDark: colorScheme == .dark))
+            .splickColorTheme(themeService.colorTheme)
+            .tint(SplickThemeCatalog.brandPalette(for: themeService.colorTheme).accent)
             .task {
                 await viewModel.prepareSession()
                 themeService.refreshFromStorage()

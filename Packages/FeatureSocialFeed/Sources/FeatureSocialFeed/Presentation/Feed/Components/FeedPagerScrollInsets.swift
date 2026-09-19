@@ -11,16 +11,9 @@ enum FeedPagerTopInsetMetrics {
         SplickSegmentPagerTopInsetMetrics.resolvedTopMargin(for: geometry, style: .underChrome)
     }
 
-    /// Distance from the pager's top edge to just below the Chuỗi/Tin/Album pills.
+    /// Bottom of the feed nav (pills live in the inline toolbar, not a second row).
     static var refreshChromeTopInset: CGFloat {
-        let safeTop = (UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap(\.windows)
-            .first { $0.isKeyWindow }?
-            .safeAreaInsets.top) ?? 59
-        return safeTop
-            + FeedSegmentChromeMetrics.navigationBarHeight
-            + FeedSegmentChromeMetrics.segmentRowHeight
+        FeedSegmentChromeMetrics.overlappingNavigationInset
     }
 }
 

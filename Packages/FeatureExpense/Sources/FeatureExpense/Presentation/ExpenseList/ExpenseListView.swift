@@ -417,7 +417,10 @@ private struct ExpenseHistoryPage: View {
             .scrollChromeTracking()
             .splickSegmentPagerScrollInsets()
             .splickScrollSoftTopEdge()
-            .splickNativeRefreshable(controller: refreshController) {
+            .splickNativeRefreshable(
+                controller: refreshController,
+                chromeTopInset: FeedSegmentChromeMetrics.overlappingNavigationInset
+            ) {
                 await viewModel.load(isPullToRefresh: true)
             }
             .onChange(of: historyScrollTopSignal) { _ in

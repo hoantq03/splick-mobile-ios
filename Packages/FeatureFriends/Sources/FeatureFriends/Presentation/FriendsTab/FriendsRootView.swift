@@ -283,7 +283,11 @@ public struct FriendsRootView: View {
             }
             .dismissKeyboardOnTap()
             .splickFastPageSlide()
-            .onPreferenceChange(PullToRefreshActivePreferenceKey.self) { isPullRefreshing = $0 }
+            .onPreferenceChange(PullToRefreshActivePreferenceKey.self) { isActive in
+                DispatchQueue.main.async {
+                    isPullRefreshing = isActive
+                }
+            }
             .splickTabScreenHeader(languageService.text(.friendsTitle), showsBell: false)
             .onChange(of: viewModel.searchQuery) { newValue in
                 viewModel.onSearchQueryChanged(newValue)
@@ -580,6 +584,16 @@ public struct FriendsRootView: View {
                 }
 
                 friendRequestShortcut(
+                    icon: "dot.radiowaves.left.and.right",
+                    title: languageService.text(.friendsNearbyTitle),
+                    count: 0,
+                    isHighlighted: false
+                ) {
+                    showNearbyRadar = true
+                    viewModel.startRadarSession()
+                }
+
+                friendRequestShortcut(
                     icon: "person.2.circle",
                     title: languageService.text(.friendsPeopleYouMayKnowTitle),
                     count: peopleYouMayKnowViewModel.suggestionCount,
@@ -610,27 +624,6 @@ public struct FriendsRootView: View {
         }
         .padding(.top, SplickTheme.Spacing.sm)
         .padding(.bottom, SplickTheme.Spacing.xxxs)
-    }
-
-    private var nearbySection: some View {
-        VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
-            Text(languageService.text(.friendsNearbyTitle))
-                .font(SplickTheme.Typography.headline)
-                .foregroundStyle(SplickTheme.Colors.textPrimary)
-                .padding(.top, SplickTheme.Spacing.sm)
-
-            VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-                Text(languageService.text(.friendsNearbySessionHint))
-                    .font(SplickTheme.Typography.body)
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
-                SplickButton(languageService.text(.friendsNearbyOpen), style: .primary) {
-                    showNearbyRadar = true
-                    viewModel.startRadarSession()
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .splickCard()
-        }
     }
 
     private func friendRequestShortcut(
@@ -1026,7 +1019,6 @@ public struct FriendsRootView: View {
                                 SplickRefreshableScrollBootstrap()
                             }
                         friendRequestsRow
-                        nearbySection
                         friendsDirectoryListHeader
                         if items.isEmpty {
                             directoryEmptyStateCard

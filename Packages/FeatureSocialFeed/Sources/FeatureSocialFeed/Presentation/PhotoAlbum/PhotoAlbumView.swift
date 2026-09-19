@@ -210,7 +210,10 @@ public struct PhotoAlbumView: View {
             .scrollContentBackground(.hidden)
             .background(SplickTheme.Colors.background)
             .scrollChromeTracking()
-            .splickNativeRefreshable(controller: refreshController) {
+            .splickNativeRefreshable(
+                controller: refreshController,
+                chromeTopInset: FeedPagerTopInsetMetrics.refreshChromeTopInset
+            ) {
                 await viewModel.refresh()
             }
             .onChange(of: scrollTopSignal) { _ in

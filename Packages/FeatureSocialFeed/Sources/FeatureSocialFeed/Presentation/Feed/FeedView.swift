@@ -181,7 +181,7 @@ public struct FeedView: View {
         .environment(\.feedPostZoomNamespace, postZoomNamespace)
         .onChange(of: navigationPath.isEmpty) { isEmpty in
             if isEmpty {
-                tabBarScrollState?.show()
+                tabBarScrollState?.show(animated: false)
             }
         }
         .onFirstAppear {

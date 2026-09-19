@@ -6,6 +6,7 @@ import SplickDomain
 
 public struct FriendUserProfileView: View {
     @StateObject private var viewModel: FriendUserProfileViewModel
+    @StateObject private var refreshController = SplickRefreshController()
     @State private var previewPost: Post?
     @State private var showAvatarViewer = false
     @EnvironmentObject private var languageService: LanguageService
@@ -134,7 +135,7 @@ public struct FriendUserProfileView: View {
                 async let posts: Void = viewModel.loadPostsIfNeeded()
                 _ = await (profile, posts)
             }
-            .refreshable {
+            .splickNativeRefreshable(controller: refreshController) {
                 async let profile: Void = viewModel.loadProfile()
                 async let posts: Void = viewModel.refreshPosts()
                 _ = await (profile, posts)

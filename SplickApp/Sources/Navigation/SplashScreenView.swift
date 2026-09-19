@@ -62,22 +62,27 @@ struct SplashScreenView: View {
         withAnimation(SplashIntro.exit) {
             exitLogo = true
         }
-        try? await Task.sleep(for: .milliseconds(200))
+        try? await Task.sleep(for: .milliseconds(SplashIntro.staggerMilliseconds))
         withAnimation(SplashIntro.exit) {
             exitTitle = true
         }
-        try? await Task.sleep(for: .milliseconds(200))
+        try? await Task.sleep(for: .milliseconds(SplashIntro.staggerMilliseconds))
         withAnimation(SplashIntro.exit) {
             exitSlogan = true
         }
-        try? await Task.sleep(for: .milliseconds(1050))
+        try? await Task.sleep(for: .milliseconds(SplashIntro.exitMilliseconds))
         appState.completeLaunchSplash()
     }
 }
 
 private enum SplashIntro {
     static let slide = Animation.spring(response: 0.92, dampingFraction: 0.88, blendDuration: 0.16)
-    static let exit = Animation.timingCurve(0.22, 0.74, 0.28, 1, duration: 1.05)
+    /// Permanent off-screen exit: accelerate (Material standard-accelerate).
+    /// Milder than emphasized-accelerate so it starts promptly after the hold, without crawling at the edge.
+    static let exitMilliseconds: Int64 = 512
+    /// 3 large rows: 50–80ms stagger so they overlap as one cascade, not three waits.
+    static let staggerMilliseconds: Int64 = 48
+    static let exit = Animation.timingCurve(0.30, 0.00, 1.00, 1.00, duration: 0.51)
 }
 
 private struct SplashSlideIn: ViewModifier {
@@ -95,8 +100,21 @@ private struct SplashSlideOut: ViewModifier {
     var travel: CGFloat
 
     func body(content: Content) -> some View {
-        content
-            .offset(x: isExiting ? travel : 0)
+        content.modifier(SplashSlideTranslation(x: isExiting ? travel : 0))
+    }
+}
+
+/// GPU translation interpolated every frame — avoids layout-offset hitching on large brand views.
+private struct SplashSlideTranslation: ViewModifier, Animatable {
+    var x: CGFloat
+
+    var animatableData: CGFloat {
+        get { x }
+        set { x = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        content.transformEffect(CGAffineTransform(translationX: x, y: 0))
     }
 }
 

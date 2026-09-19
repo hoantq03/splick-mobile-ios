@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// When `false`, login content stays off-screen so it can rise after launch loading.
+/// When `false`, login content stays off-screen until splash marks have finished sliding away.
 private struct LaunchRevealActiveKey: EnvironmentKey {
     static let defaultValue = true
 }
@@ -22,8 +22,15 @@ extension EnvironmentValues {
 }
 
 public enum LoginEntranceMotion {
-    public static let rise = Animation.timingCurve(0.16, 0.92, 0.18, 1, duration: 1.42)
-    public static let stagger: Duration = .milliseconds(240)
+    /// Critically damped rise: starts from rest, eases into place. ~610ms visual settle.
+    public static let riseMilliseconds: Int64 = 608
+    /// 4–5 large sections: 56ms stagger, ~224ms cascade (under the 300ms cap).
+    public static let stagger: Duration = .milliseconds(56)
+    public static let rise = Animation.spring(
+        response: 0.61,
+        dampingFraction: 1.0,
+        blendDuration: 0.14
+    )
 }
 
 public struct LoginRiseIn: ViewModifier {
@@ -36,8 +43,23 @@ public struct LoginRiseIn: ViewModifier {
     }
 
     public func body(content: Content) -> some View {
+        content.modifier(LoginRiseTranslation(progress: visible ? 1 : 0, distance: distance))
+    }
+}
+
+/// Interpolated every frame so the spring can ease into rest.
+private struct LoginRiseTranslation: ViewModifier, Animatable {
+    var progress: CGFloat
+    var distance: CGFloat
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func body(content: Content) -> some View {
         content
-            .opacity(visible ? 1 : 0)
-            .offset(y: visible ? 0 : distance)
+            .opacity(progress)
+            .offset(y: (1 - progress) * distance)
     }
 }

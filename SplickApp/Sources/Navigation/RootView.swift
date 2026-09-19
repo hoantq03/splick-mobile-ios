@@ -19,7 +19,6 @@ struct RootView: View {
 
             if appState.needsLaunchLoading {
                 SplashScreenView()
-                    .transition(.opacity)
                     .zIndex(999)
             }
         }
@@ -31,15 +30,20 @@ struct RootView: View {
             .splickVisualTheme(
                 themeService.theme.visualTheme(systemIsDark: colorScheme == .dark)
             )
+            .splickColorTheme(themeService.colorTheme)
+            .tint(SplickThemeCatalog.brandPalette(for: themeService.colorTheme).accent)
             .preferredColorScheme(themeService.preferredColorScheme)
             .modifier(ForcedColorSchemeModifier(scheme: themeService.preferredColorScheme))
             .onChange(of: themeService.theme) { _ in
                 themeService.applyUserInterfaceStyle()
                 applyAppIcon()
             }
+            .onChange(of: themeService.colorTheme) { _ in
+                applyAppIcon()
+            }
             .onChange(of: colorScheme) { _ in applyAppIcon() }
-            .animation(.easeOut(duration: 0.22), value: appState.needsLaunchLoading)
-            .environment(\.launchRevealActive, !appState.needsLaunchLoading)
+            .animation(nil, value: appState.needsLaunchLoading)
+            .environment(\.launchRevealActive, appState.isLaunchSplashComplete)
             .task {
                 pushNotificationCoordinator.refreshAuthorizationStatus()
                 await bootstrapSession()
@@ -208,6 +212,12 @@ struct RootView: View {
         }
 
         guard appState.needsLaunchLoading else { return }
+
+        if appState.isAuthenticated {
+            appState.completeLaunchSplash()
+            return
+        }
+
         try? await Task.sleep(for: AppConstants.Splash.minimumDisplayDuration)
         guard !Task.isCancelled else { return }
         appState.startLaunchSplashExit()
@@ -231,6 +241,7 @@ struct RootView: View {
     private func applyAppIcon() {
         AppIconSwitcher.apply(
             theme: themeService.theme,
+            colorTheme: themeService.colorTheme,
             systemIsDark: colorScheme == .dark
         )
     }

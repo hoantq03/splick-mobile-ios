@@ -43,7 +43,8 @@ final class AppState: ObservableObject {
     /// `true` only after the user taps through the 4-page onboarding this session.
     @Published private(set) var hasPassedOnboardingThisSession = false
 
-    /// Cold-launch loading overlay. Not replayed when returning from background.
+    /// Cold-launch overlay. Covers auth restore; brand choreography only runs when logged out.
+    /// Not replayed when returning from background.
     @Published private(set) var isLaunchSplashComplete = false
     @Published private(set) var isLaunchSplashExiting = false
 

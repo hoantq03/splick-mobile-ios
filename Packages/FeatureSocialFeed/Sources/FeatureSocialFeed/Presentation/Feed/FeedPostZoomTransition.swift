@@ -26,16 +26,27 @@ extension EnvironmentValues {
     }
 }
 
-/// Morphs the feed card into post detail on iOS 18+; older OS keeps the standard push.
+/// Morphs the feed card into post detail on iOS 18+; older OS keeps a source
+/// anchor so the custom interactive pop can hide the list card and land in it.
 struct FeedPostZoomSourceModifier: ViewModifier {
     let postId: UUID
     @Environment(\.feedPostZoomNamespace) private var namespace
+    @ObservedObject private var zoomPopStore = SplickZoomPopSourceStore.shared
 
     func body(content: Content) -> some View {
+        let hidden = zoomPopStore.hiddenPostId == postId
+        let card = content
+            .opacity(hidden ? 0 : 1)
+            .overlay {
+                SplickZoomPopSourceAnchor(postId: postId)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
         if #available(iOS 18.0, *), let namespace {
-            content.matchedTransitionSource(id: postId, in: namespace)
+            card.matchedTransitionSource(id: postId, in: namespace)
         } else {
-            content
+            card
         }
     }
 }
@@ -48,11 +59,14 @@ struct FeedPostZoomDestinationModifier: ViewModifier {
     private var namespace: Namespace.ID? { namespaceOverride ?? environmentNamespace }
 
     func body(content: Content) -> some View {
-        if #available(iOS 18.0, *), let namespace {
-            content.navigationTransition(.zoom(sourceID: postId, in: namespace))
-        } else {
-            content
+        Group {
+            if #available(iOS 18.0, *), let namespace {
+                content.navigationTransition(.zoom(sourceID: postId, in: namespace))
+            } else {
+                content
+            }
         }
+        .background { SplickZoomPopDestinationAnchor(postId: postId) }
     }
 }
 

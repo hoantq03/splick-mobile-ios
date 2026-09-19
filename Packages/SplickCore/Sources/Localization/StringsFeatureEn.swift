@@ -261,7 +261,7 @@ enum StringsFeatureEn {
         .friendsPeopleYouMayKnowEmptyTitle: "No suggestions right now",
         .friendsPeopleYouMayKnowEmptyMessage: "Join a group or invite friends — we'll suggest people from shared groups.",
         .friendsPeopleYouMayKnowSharedGroup: "Same group · %@",
-        .friendsNearbyTitle: "Nearby",
+        .friendsNearbyTitle: "Nearby friends",
         .friendsNearbyEmpty: "No one nearby right now.",
         .friendsNearbyEnable: "Appear when others scan nearby",
         .friendsNearbyPermission: "Allow location to find people nearby",

@@ -2,9 +2,9 @@ import SwiftUI
 
 public enum SplickScrollChromeFadeMetrics {
     /// Extra fade tail below the segment pills so content dissolves gradually.
-    public static let fadeTail: CGFloat = 56
+    public static let fadeTail: CGFloat = 28
     /// Short dissolve when the overlay sits *below* the nav bar.
-    public static let compactFadeTail: CGFloat = 36
+    public static let compactFadeTail: CGFloat = 20
 
     public static func totalHeight(safeTop: CGFloat) -> CGFloat {
         safeTop
@@ -40,11 +40,10 @@ public enum SplickScrollChromeFadeMetrics {
         let bg = backgroundColor
         return [
             .init(color: bg, location: 0),
-            .init(color: bg.opacity(0.98), location: 0.18),
-            .init(color: bg.opacity(0.88), location: 0.38),
-            .init(color: bg.opacity(0.62), location: 0.58),
-            .init(color: bg.opacity(0.32), location: 0.78),
-            .init(color: bg.opacity(0.08), location: 0.92),
+            .init(color: bg.opacity(0.98), location: 0.22),
+            .init(color: bg.opacity(0.88), location: 0.42),
+            .init(color: bg.opacity(0.58), location: 0.62),
+            .init(color: bg.opacity(0.18), location: 0.82),
             .init(color: bg.opacity(0), location: 1)
         ]
     }

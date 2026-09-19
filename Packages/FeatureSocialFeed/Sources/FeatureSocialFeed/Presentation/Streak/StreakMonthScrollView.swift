@@ -90,7 +90,10 @@ struct StreakMonthScrollView<Header: View>: View {
                 .feedScrollSoftTopEdge()
                 .feedScrollBounceAlways()
                 .scrollChromeTracking()
-                .splickNativeRefreshable(controller: refreshController) {
+                .splickNativeRefreshable(
+                    controller: refreshController,
+                    chromeTopInset: FeedPagerTopInsetMetrics.refreshChromeTopInset
+                ) {
                     await onRefresh()
                 }
                 .splickSameTabTapBehavior(

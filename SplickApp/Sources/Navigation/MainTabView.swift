@@ -26,6 +26,7 @@ struct MainTabView: View {
     @EnvironmentObject private var container: DependencyContainer
     @EnvironmentObject private var pushNotificationCoordinator: PushNotificationCoordinator
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.splickBrandPalette) private var brandPalette
     @StateObject private var tabBarChrome = TabBarScrollStateHolder()
     @State private var badgeCounts: TabBadgeCounts = .zero
     /// Drives heavy tab work (loads, chrome) — updated after the pager slide settles
@@ -305,7 +306,7 @@ struct MainTabView: View {
                 .zIndex(100)
             }
         }
-        .tint(SplickTheme.Colors.primaryGradientStart)
+        .tint(brandPalette.accent)
     }
 
     @ViewBuilder
@@ -567,6 +568,7 @@ struct ProfileSettingsView: View {
     @State private var showChangeUsername = false
     @State private var showNotifications = false
     @State private var showTheme = false
+    @State private var showColorTheme = false
     @State private var showWidget = false
     @State private var showLanguagePicker = false
     @State private var languageDraft = AppLocale.default
@@ -821,6 +823,11 @@ struct ProfileSettingsView: View {
             }
             .navigationDestination(isPresented: $showTheme) {
                 ThemeSettingsView()
+                    .environmentObject(languageService)
+                    .environmentObject(themeService)
+            }
+            .navigationDestination(isPresented: $showColorTheme) {
+                ColorThemeSettingsView()
                     .environmentObject(languageService)
                     .environmentObject(themeService)
             }
@@ -1219,6 +1226,12 @@ struct ProfileSettingsView: View {
                         languageDraft = languageService.locale
                         showLanguagePicker = true
                     }
+                ),
+                ProfileSettingsItem(
+                    icon: "paintpalette",
+                    title: languageService.text(.profileColorTheme),
+                    subtitle: languageService.text(themeService.colorTheme.displayNameKey),
+                    action: { showColorTheme = true }
                 ),
                 ProfileSettingsItem(
                     icon: "moon.stars",

@@ -18,32 +18,38 @@ public struct SplickSpinner: View {
 
         var lineWidth: CGFloat {
             switch self {
-            case .small: return 2
-            case .medium: return 2.75
-            case .large: return 3.25
+            case .small: return 4.65
+            case .medium: return 6.15
+            case .large: return 7.1
             }
         }
     }
 
     public var size: Size
     public var usesBrandColors: Bool
-    /// When set, the ring follows this angle instead of spinning on its own (pull-to-refresh tracking).
+    /// Pull-to-refresh tracking angle. When spinning, rotation continues from this angle.
     public var rotationDegrees: Double?
+    /// When true, the ring spins. Defaults to spinning only when `rotationDegrees` is nil.
+    public var isSpinning: Bool
     private let sideOverride: CGFloat?
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.splickVisualTheme) private var visualThemeOverride
+    @Environment(\.splickColorTheme) private var colorTheme
+    @State private var spinStartedAt: Date?
 
     public init(
         size: Size = .medium,
         usesBrandColors: Bool = true,
         side: CGFloat? = nil,
-        rotationDegrees: Double? = nil
+        rotationDegrees: Double? = nil,
+        isSpinning: Bool? = nil
     ) {
         self.size = size
         self.usesBrandColors = usesBrandColors
         self.sideOverride = side
         self.rotationDegrees = rotationDegrees
+        self.isSpinning = isSpinning ?? (rotationDegrees == nil)
     }
 
     private var dimension: CGFloat {
@@ -57,34 +63,51 @@ public struct SplickSpinner: View {
 
     private var strokeWidth: CGFloat {
         if let sideOverride {
-            return max(2.4, sideOverride * 0.09)
+            return max(4.65, sideOverride * 0.2)
         }
         return size.lineWidth
     }
 
     private var palette: SplickSpinnerPalette {
         SplickThemeCatalog.spinnerPalette(
-            for: .resolved(override: visualThemeOverride, colorScheme: colorScheme)
+            for: .resolved(override: visualThemeOverride, colorScheme: colorScheme),
+            colorTheme: colorTheme
         )
     }
 
     public var body: some View {
-        Group {
-            if let rotationDegrees {
-                ring.rotationEffect(.degrees(rotationDegrees))
-            } else {
-                TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
-                    let cycle = 0.9
-                    let phase = context.date.timeIntervalSinceReferenceDate
-                        .truncatingRemainder(dividingBy: cycle) / cycle
-                    ring
-                        .rotationEffect(.degrees(phase * 360))
-                }
-            }
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
+            ring
+                .rotationEffect(.degrees(currentAngle(at: context.date)), anchor: .center)
+                .transaction { $0.animation = nil }
         }
         .frame(width: dimension, height: dimension)
+        .transaction { $0.animation = nil }
+        .onAppear {
+            if isSpinning, spinStartedAt == nil {
+                spinStartedAt = Date()
+            }
+        }
+        .onChange(of: isSpinning) { spinning in
+            spinStartedAt = spinning ? Date() : nil
+        }
         .accessibilityLabel("Loading")
         .accessibilityAddTraits(.updatesFrequently)
+    }
+
+    private var baseAngle: Double {
+        rotationDegrees ?? 0
+    }
+
+    /// Continues from the pull angle. Never fall back to wall-clock phase — that jumps
+    /// the arc the moment loading starts, before `spinStartedAt` is set.
+    private func currentAngle(at date: Date) -> Double {
+        guard isSpinning else { return baseAngle }
+        guard let start = spinStartedAt else { return baseAngle }
+        let cycle = 0.9
+        let elapsed = date.timeIntervalSince(start)
+        let extra = elapsed.truncatingRemainder(dividingBy: cycle) / cycle * 360
+        return baseAngle + extra
     }
 
     @ViewBuilder

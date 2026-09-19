@@ -81,7 +81,9 @@ private struct SplickNativeRefreshableWithController: ViewModifier {
     @State private var chromeContentBounce: CGFloat = 0
     @State private var frozenPullRotation: Double = 0
 
-    private var heldRefreshPull: CGFloat { 80 }
+    /// Content shift while spinner spins. Chrome tabs need less because the spinner
+    /// already sits below the nav bar; non-chrome tabs need more visible pull space.
+    private var heldRefreshPull: CGFloat { chromeTopInset > 0 ? 15 : 40 }
 
     private var trackingRotation: Double {
         Double(visiblePull / SplickScrollRefreshHost.fullRotationPull) * 360
@@ -143,11 +145,14 @@ private struct SplickNativeRefreshableWithController: ViewModifier {
                 refreshHost.onPullCommit = { [self] in
                     // Called from UIKit gesture handler — safe to start task.
                     frozenPullRotation = trackingRotation
-                    let held = max(refreshHost.pullDistance, heldRefreshPull)
-                    if chromeContentBounce <= 0 {
-                        chromeContentBounce = held
-                    }
-                    refreshHost.applyChromeTransform(held)
+                    chromeContentBounce = heldRefreshPull
+                    // Spring from the current (possibly overscrolled) position
+                    // down to exactly the spinner resting height.
+                    refreshHost.animateChromeTransform(
+                        to: heldRefreshPull,
+                        duration: 0.32,
+                        damping: 0.78
+                    )
                     Task { await runRefresh() }
                 }
             }

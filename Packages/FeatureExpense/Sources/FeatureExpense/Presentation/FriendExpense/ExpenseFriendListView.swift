@@ -180,7 +180,10 @@ public struct ExpenseFriendListView: View {
       .tabBarHideOnScroll()
       .splickSegmentPagerScrollInsets()
       .splickScrollSoftTopEdge()
-      .splickNativeRefreshable(controller: refreshController) {
+      .splickNativeRefreshable(
+        controller: refreshController,
+        chromeTopInset: FeedSegmentChromeMetrics.overlappingNavigationInset
+      ) {
         await viewModel.load(isPullToRefresh: true)
       }
       .onChange(of: scrollTopSignal) { _ in

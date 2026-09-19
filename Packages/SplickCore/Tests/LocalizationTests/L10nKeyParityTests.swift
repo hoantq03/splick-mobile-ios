@@ -39,4 +39,13 @@ final class L10nKeyParityTests: XCTestCase {
         XCTAssertEqual(AppTheme.system.visualTheme(systemIsDark: true), .dark)
         XCTAssertEqual(AppTheme.system.visualTheme(systemIsDark: false), .light)
     }
+
+    func testSplickColorThemeParsesStoredValues() {
+        XCTAssertEqual(SplickColorTheme.from(storedValue: "default"), .default)
+        XCTAssertEqual(SplickColorTheme.from(storedValue: "DEFAULT"), .default)
+        XCTAssertEqual(SplickColorTheme.from(storedValue: "unknown"), .default)
+        XCTAssertEqual(SplickColorTheme.from(storedValue: nil), .default)
+        XCTAssertNil(SplickColorTheme.default.alternateIconName(isDark: false))
+        XCTAssertEqual(SplickColorTheme.default.alternateIconName(isDark: true), AppTheme.darkAlternateIconName)
+    }
 }

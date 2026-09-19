@@ -49,10 +49,11 @@ extension View {
         background(SplickWideInteractivePopInstaller(fraction: fraction, minimumWidth: minimumWidth))
     }
 
-    /// Post detail: widened swipe-back only when the drag is clearly horizontal so pull-to-refresh
-    /// does not accidentally pop. On iOS 18 zoom, filters the system edge pop the same way.
+    /// Post detail: swipe-back from anywhere, but only when the drag is clearly horizontal so
+    /// pull-to-refresh does not accidentally pop. iOS 18+ zoom already tracks off-edge; older
+    /// iOS drives the same `handleNavigationTransition:` from a full-screen pan.
     public func splickHorizontalDominantInteractivePop(
-        fraction: CGFloat = 0.25,
+        fraction: CGFloat = 1,
         minimumWidth: CGFloat = 0
     ) -> some View {
         background(
@@ -227,7 +228,7 @@ private struct SplickHorizontalDominantInteractivePopInstaller: UIViewController
 }
 
 private final class SplickHorizontalDominantInteractivePopHostController: UIViewController {
-    var fraction: CGFloat = 0.25
+    var fraction: CGFloat = 1
     var minimumWidth: CGFloat = 0
 
     override func viewDidLoad() {
@@ -251,26 +252,33 @@ private final class SplickHorizontalDominantInteractivePopHostController: UIView
     }
 
     func installIfNeeded() {
-        guard let nav = navigationController ?? ancestorNavigationController() else { return }
+        guard let nav = resolvedNavigationController() else {
+            // Nav might not be in the responder chain yet. Retry.
+            for delay in [0.0, 0.05, 0.2] as [TimeInterval] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                    guard let self, let nav = self.resolvedNavigationController() else { return }
+                    self.doInstall(on: nav)
+                }
+            }
+            return
+        }
+        doInstall(on: nav)
+    }
+
+    private func doInstall(on nav: UINavigationController) {
         SplickHorizontalDominantPopMode.activate(on: nav, fraction: fraction, minimumWidth: minimumWidth)
         SplickWidePopGesture.install(on: nav, fraction: fraction, minimumWidth: minimumWidth)
-        SplickZoomPopHorizontalGuard.refresh(on: nav)
+        // Zoom guard is installed inside `attach` only when the destination actually zooms.
+        // Re-installing it here replaced `pop.delegate` on iOS 17 and broke target binding.
     }
 
     func deactivateIfNeeded() {
-        guard let nav = navigationController ?? ancestorNavigationController() else { return }
+        guard let nav = resolvedNavigationController() else { return }
         SplickHorizontalDominantPopMode.deactivate(on: nav)
     }
 
-    private func ancestorNavigationController() -> UINavigationController? {
-        var responder: UIResponder? = view
-        while let current = responder {
-            if let nav = current as? UINavigationController {
-                return nav
-            }
-            responder = current.next
-        }
-        return nil
+    private func resolvedNavigationController() -> UINavigationController? {
+        navigationController ?? SplickNavigationLookup.navigationController(from: view)
     }
 }
 
@@ -306,7 +314,7 @@ private final class SplickZoomPopHorizontalGuard: NSObject, UIGestureRecognizerD
     private weak var navigationController: UINavigationController?
 
     static func refresh(on nav: UINavigationController) {
-        guard SplickHorizontalDominantPopMode.isActive(on: nav), splickNavigationUsesZoom(nav) else {
+        guard SplickHorizontalDominantPopMode.isActive(on: nav) else {
             uninstall(on: nav)
             return
         }
@@ -392,8 +400,12 @@ private final class SplickWideInteractivePopHostController: UIViewController {
 
 /// Shared axis checks for interactive pop gestures (wide band, zoom edge pop, post detail).
 public enum SplickInteractivePopAxis {
-    public static let horizontalDominanceRatio: CGFloat = 1.75
-    public static let minimumHorizontalTranslation: CGFloat = 12
+    /// dx must exceed dy × ratio for the swipe to count as "horizontal".
+    /// 3.0 ≈ ±18° from the X-axis — tight enough that pull-to-refresh (≈90°)
+    /// and diagonal drags (≈45°) never accidentally pop.
+    public static let horizontalDominanceRatio: CGFloat = 3.0
+    /// Minimum horizontal travel (pt) before the pop can begin.
+    public static let minimumHorizontalTranslation: CGFloat = 16
 
     public static func isHorizontalDominant(
         translation: CGPoint,
@@ -407,16 +419,20 @@ public enum SplickInteractivePopAxis {
 
     public static func isOutwardHorizontalPop(
         translation: CGPoint,
+        velocity: CGPoint = .zero,
         isRightToLeft: Bool,
         ratio: CGFloat = horizontalDominanceRatio,
         minimumHorizontal: CGFloat = minimumHorizontalTranslation
     ) -> Bool {
-        let outward = isRightToLeft ? translation.x < 0 : translation.x > 0
-        return outward && isHorizontalDominant(
-            translation: translation,
-            ratio: ratio,
-            minimumHorizontal: minimumHorizontal
-        )
+        let outwardTranslation = isRightToLeft ? -translation.x : translation.x
+        let outwardVelocity = isRightToLeft ? -velocity.x : velocity.x
+        if outwardTranslation >= minimumHorizontal,
+           isHorizontalDominant(translation: translation, ratio: ratio, minimumHorizontal: minimumHorizontal) {
+            return true
+        }
+        // Decide early from velocity so content scroll can fail-or-begin quickly.
+        return outwardVelocity > 180
+            && abs(velocity.x) > abs(velocity.y) * ratio
     }
 }
 
@@ -843,6 +859,56 @@ private enum SplickNavigationLookup {
     }
 }
 
+/// Weak reference box for storing `UIGestureRecognizerDelegate` on associated objects
+/// without retaining the internal UIKit transition object.
+private final class WeakBox: NSObject {
+    private(set) weak var value: UIGestureRecognizerDelegate?
+    init(_ value: UIGestureRecognizerDelegate) { self.value = value }
+}
+
+/// Full-screen back-swipe. `UIScrollView` automatically yields only to a
+/// `UIScreenEdgePanGestureRecognizer`, so a normal pan loses in the middle of
+/// the screen. This recognizer cannot be prevented by scroll/refresh pans and
+/// fails itself once the drag is clearly vertical.
+private final class SplickFullScreenPopPanGestureRecognizer: UIPanGestureRecognizer {
+    override func canBePrevented(by preventingGestureRecognizer: UIGestureRecognizer) -> Bool {
+        if Self.isScrollLike(preventingGestureRecognizer) { return false }
+        return super.canBePrevented(by: preventingGestureRecognizer)
+    }
+
+    override func canPrevent(_ preventedGestureRecognizer: UIGestureRecognizer) -> Bool {
+        if Self.isScrollLike(preventedGestureRecognizer) { return true }
+        return super.canPrevent(preventedGestureRecognizer)
+    }
+
+    override func shouldBeRequiredToFail(by otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        false
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesMoved(touches, with: event)
+        let translation = translation(in: view)
+        let dx = abs(translation.x)
+        let dy = abs(translation.y)
+        if dy > 10, dy > dx, state == .possible {
+            state = .failed
+        }
+    }
+
+    static func isScrollLike(_ gesture: UIGestureRecognizer) -> Bool {
+        if gesture.view is UIScrollView { return true }
+        var current = gesture.view
+        while let view = current {
+            if view is UIScrollView { return true }
+            current = view.superview
+        }
+        let name = String(describing: type(of: gesture))
+        return name.contains("Scroll")
+            || name.contains("Refresh")
+            || name.contains("UIScrollView")
+    }
+}
+
 /// One pan per navigation controller. Waits for the system edge pop to fail, then drives
 /// the same `handleNavigationTransition:` so zoom stays percent-driven under the finger.
 private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate {
@@ -854,6 +920,37 @@ private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate 
     var minimumWidth: CGFloat = 0
     /// When true, keep the widened band off (chat needs content area for reply pans).
     private var isForcedDisabled = false
+    /// Original `interactivePopGestureRecognizer.delegate` (`_UINavigationInteractiveTransition`).
+    /// Captured before any custom delegate replaces it. Used by `bindTargets` fallback.
+    private weak var originalPopDelegate: UIGestureRecognizerDelegate?
+    /// Fallback only: `UIPercentDrivenInteractiveTransition` + `popViewController`.
+    /// SwiftUI `NavigationStack` often ignores that path, so prefer `handleNavigationTransition:`.
+    private var manualDriving = false
+    /// Active interactive transition, set during a manual-driven pop gesture.
+    private(set) var interactiveTransition: UIPercentDrivenInteractiveTransition?
+    /// Fallback 1:1 zoom-style tracking (iOS 26-like card dismiss).
+    private weak var fallbackFromView: UIView?
+    private weak var fallbackToView: UIView?
+    private var fallbackCard: UIView?
+    private weak var fallbackNavBar: UIView?
+    private var didInsertFallbackToView = false
+    private var fallbackToViewOriginalSuperview: UIView?
+    private var fallbackToViewOriginalIndex = 0
+    private var fallbackTranslation: CGPoint = .zero
+    private weak var fallbackHiddenSourceView: UIView?
+    private var fallbackSourceFrame: CGRect?
+    private var fallbackStartFrame: CGRect = .zero
+    /// Inner clip view — rounded continuous card; host (`fallbackCard`) carries the shadow.
+    private var fallbackClipView: UIView?
+    /// Covers the list card so only the finger-held snapshot is visible.
+    private var fallbackHoleView: UIView?
+    private var fallbackVelocity: CGPoint = .zero
+    private var fallbackSettleAnimator: UIViewPropertyAnimator?
+    /// Invalidates in-flight `preferOverScrollPans` retries when `attach` runs again.
+    private var preferOverScrollGeneration: UInt = 0
+    private var pausedScrollViews: [UIScrollView] = []
+    /// iOS 18 zoom: leave the leading bezel to the system pop so the morph stays native.
+    private var yieldsLeadingEdgeToSystem = false
 
     static func install(on nav: UINavigationController, fraction: CGFloat, minimumWidth: CGFloat = 0) {
         let owner: SplickWidePopGesture
@@ -861,7 +958,21 @@ private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate 
             owner = existing
         } else {
             owner = SplickWidePopGesture()
+            // Capture the original pop delegate. Check both the current pop delegate
+            // and the previously saved one (saved before SplickNavigationDelegateProxy replaced it).
+            if let popDelegate = nav.interactivePopGestureRecognizer?.delegate,
+               !(popDelegate is SplickNavigationDelegateProxy),
+               !(popDelegate is SplickWidePopGesture),
+               !(popDelegate is SplickZoomPopHorizontalGuard) {
+                owner.originalPopDelegate = popDelegate
+            } else if let saved = recoverOriginalPopDelegate(from: nav) {
+                owner.originalPopDelegate = saved
+            }
             objc_setAssociatedObject(nav, &associatedKey, owner, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
+        // If the original delegate is still nil, try recovering from saved.
+        if owner.originalPopDelegate == nil, let saved = recoverOriginalPopDelegate(from: nav) {
+            owner.originalPopDelegate = saved
         }
         owner.isForcedDisabled = false
         owner.fraction = fraction
@@ -905,34 +1016,578 @@ private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate 
         let usesZoom = splickNavigationUsesZoom(nav)
         let horizontalDominant = SplickHorizontalDominantPopMode.isActive(on: nav)
 
-        if pan == nil {
-            let gesture = UIPanGestureRecognizer()
+        let inFlight: Bool = {
+            guard let pan else { return false }
+            switch pan.state {
+            case .began, .changed:
+                return true
+            default:
+                return false
+            }
+        }()
+        if inFlight {
+            pan?.isEnabled = canPop
+            return
+        }
+
+        if pan == nil || !(pan is SplickFullScreenPopPanGestureRecognizer) {
+            if let pan {
+                pan.view?.removeGestureRecognizer(pan)
+            }
+            let gesture = SplickFullScreenPopPanGestureRecognizer(
+                target: self,
+                action: #selector(handleWidePan(_:))
+            )
+            gesture.name = "splick.detail.widePop"
             gesture.maximumNumberOfTouches = 1
+            gesture.cancelsTouchesInView = true
+            gesture.delaysTouchesBegan = false
             gesture.delegate = self
             nav.view.addGestureRecognizer(gesture)
             pan = gesture
         }
 
-        bindTargets(from: systemPop, onto: pan)
+        let tracksOffEdge = systemPopTracksOffEdge(nav)
 
-        if horizontalDominant && usesZoom {
-            // Zoom dismiss stays on the system edge recognizer; filter vertical pulls there.
-            systemPop.isEnabled = canPop
-            pan?.isEnabled = false
-            SplickZoomPopHorizontalGuard.refresh(on: nav)
-        } else if horizontalDominant {
-            // Wide band only — stock pop tries first and steals pull-to-refresh near the edge.
-            systemPop.isEnabled = false
-            pan?.isEnabled = canPop
-            SplickZoomPopHorizontalGuard.uninstall(on: nav)
+        if horizontalDominant {
+            if tracksOffEdge {
+                // iOS 26 zoom already tracks off-edge; a second pan pops on lift.
+                manualDriving = false
+                yieldsLeadingEdgeToSystem = false
+                bindTargets(from: systemPop, onto: pan)
+                systemPop.isEnabled = canPop
+                pan?.isEnabled = false
+                SplickZoomPopHorizontalGuard.refresh(on: nav)
+            } else {
+                // System pop is edge-only. Drive the same transition from a
+                // full-screen pan so swipe-back works from the middle.
+                fraction = 1
+                SplickZoomPopHorizontalGuard.uninstall(on: nav)
+                let keepSystemPop = usesZoom
+                yieldsLeadingEdgeToSystem = keepSystemPop
+                applyFullScreenPop(on: nav, systemPop: systemPop, canPop: canPop, keepSystemPop: keepSystemPop)
+                DispatchQueue.main.async { [weak self, weak nav, weak systemPop] in
+                    guard let self, let nav, let systemPop else { return }
+                    guard SplickHorizontalDominantPopMode.isActive(on: nav),
+                          !systemPopTracksOffEdge(nav) else { return }
+                    self.applyFullScreenPop(
+                        on: nav,
+                        systemPop: systemPop,
+                        canPop: nav.viewControllers.count > 1,
+                        keepSystemPop: splickNavigationUsesZoom(nav)
+                    )
+                }
+            }
         } else {
+            manualDriving = false
+            yieldsLeadingEdgeToSystem = false
+            bindTargets(from: systemPop, onto: pan)
             systemPop.isEnabled = canPop
-            // Zoom interactive dismiss is bound to the system edge recognizer.
-            // A second pan with copied targets pops on lift instead of tracking the finger.
             pan?.isEnabled = canPop && !usesZoom
             SplickZoomPopHorizontalGuard.uninstall(on: nav)
         }
     }
+
+    private func applyFullScreenPop(
+        on nav: UINavigationController,
+        systemPop: UIGestureRecognizer,
+        canPop: Bool,
+        keepSystemPop: Bool
+    ) {
+        let flying: Bool = {
+            guard let pan else { return false }
+            switch pan.state {
+            case .began, .changed: return true
+            default: return false
+            }
+        }()
+        guard !flying else { return }
+        // A non-edge pan bound to `handleNavigationTransition:` often only
+        // finishes on lift. Drive the page 1:1 ourselves instead.
+        pan?.removeTarget(nil, action: nil)
+        pan?.addTarget(self, action: #selector(handleWidePan(_:)))
+        manualDriving = false
+        yieldsLeadingEdgeToSystem = keepSystemPop
+        systemPop.isEnabled = keepSystemPop && canPop
+        pan?.isEnabled = canPop
+        preferOverScrollPans(on: nav)
+    }
+
+    /// Content pans (scroll / PTR) must wait so a horizontal swipe in the middle
+    /// of the screen can begin — same as iOS 26 zoom interactive pop.
+    /// Walks the whole nav view (detail may not be `visible` yet during push) and
+    /// retries after layout so SwiftUI scroll views mounted later also wait.
+    private func preferOverScrollPans(on nav: UINavigationController, retryCount: Int = 0) {
+        guard let popPan = pan, popPan.isEnabled else { return }
+        if retryCount == 0 {
+            preferOverScrollGeneration &+= 1
+        }
+        let generation = preferOverScrollGeneration
+
+        func walk(_ view: UIView) {
+            if let scroll = view as? UIScrollView, scroll.panGestureRecognizer !== popPan {
+                scroll.panGestureRecognizer.require(toFail: popPan)
+            }
+            view.subviews.forEach(walk)
+        }
+        walk(nav.view)
+
+        guard retryCount < 4 else { return }
+        let delays: [TimeInterval] = [0.05, 0.15, 0.35, 0.6]
+        let delay = delays[min(retryCount, delays.count - 1)]
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak nav] in
+            guard let self, let nav, self.preferOverScrollGeneration == generation else { return }
+            self.preferOverScrollPans(on: nav, retryCount: retryCount + 1)
+        }
+    }
+
+    // MARK: - Full-screen pan observer + manual fallback
+
+    @objc private func handleWidePan(_ gesture: UIPanGestureRecognizer) {
+        if manualDriving {
+            handleManualPop(gesture)
+            return
+        }
+        guard let nav = navigationController, let view = nav.view else { return }
+        let translation = gesture.translation(in: view)
+
+        switch gesture.state {
+        case .began:
+            UIView.performWithoutAnimation {
+                nav.view.window?.endEditing(true)
+            }
+            beginFallbackTracking(on: nav)
+            updateFallbackTracking(translation: translation, in: view.bounds.size)
+
+        case .changed:
+            updateFallbackTracking(translation: translation, in: view.bounds.size)
+
+        case .ended:
+            finishFallbackTracking(
+                complete: shouldCompleteZoomPop(
+                    translation: translation,
+                    velocity: gesture.velocity(in: view)
+                ),
+                velocity: gesture.velocity(in: view),
+                on: nav
+            )
+
+        case .cancelled, .failed:
+            finishFallbackTracking(complete: false, velocity: .zero, on: nav)
+
+        default:
+            break
+        }
+    }
+
+    private func shouldCompleteZoomPop(translation: CGPoint, velocity: CGPoint) -> Bool {
+        let distance = hypot(translation.x, translation.y)
+        let speed = hypot(velocity.x, velocity.y)
+        return distance > 110 || (distance > 36 && speed > 700)
+    }
+
+    private func beginFallbackTracking(on nav: UINavigationController) {
+        cancelFallbackTracking(removingInsertedView: true)
+        guard nav.viewControllers.count > 1,
+              let fromView = nav.topViewController?.view,
+              let container = nav.view,
+              let card = container.snapshotView(afterScreenUpdates: false) else { return }
+
+        let store = SplickZoomPopSourceStore.shared
+        let postId = store.activeDestinationPostId
+        var sourceFrame = postId.flatMap { store.sourceFrame(for: $0, in: container) }
+        store.hideActiveSource()
+
+        let toVC = nav.viewControllers[nav.viewControllers.count - 2]
+        fallbackToViewOriginalSuperview = toVC.view.superview
+        if let original = toVC.view.superview {
+            fallbackToViewOriginalIndex = original.subviews.firstIndex(of: toVC.view) ?? 0
+        }
+        toVC.view.frame = container.bounds
+        toVC.view.transform = .identity
+        container.insertSubview(toVC.view, at: 0)
+        didInsertFallbackToView = true
+        toVC.view.layoutIfNeeded()
+
+        if let postId {
+            if let live = store.sourceFrame(for: postId, in: container) {
+                sourceFrame = live
+            }
+            if let source = store.sourceCardView(for: postId) {
+                fallbackHiddenSourceView = source
+                source.alpha = 0
+            }
+        }
+        fallbackStartFrame = container.bounds
+        fallbackSourceFrame = sourceFrame ?? defaultZoomPopTargetFrame(in: container)
+
+        let host = UIView(frame: container.bounds)
+        host.backgroundColor = .clear
+        host.layer.masksToBounds = false
+        host.layer.shadowColor = UIColor.black.cgColor
+        host.layer.shadowRadius = SplickTheme.Shadow.card.radius
+        host.layer.shadowOffset = CGSize(width: SplickTheme.Shadow.card.x, height: SplickTheme.Shadow.card.y)
+        let clip = UIView(frame: host.bounds)
+        clip.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        clip.backgroundColor = .systemBackground
+        clip.layer.cornerCurve = .continuous
+        clip.clipsToBounds = true
+        card.frame = clip.bounds
+        card.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        clip.addSubview(card)
+        host.addSubview(clip)
+        container.addSubview(host)
+        installSourceHole(in: container, below: host)
+
+        fromView.isHidden = true
+        fallbackNavBar = nav.navigationBar
+        fallbackNavBar?.alpha = 0
+
+        fallbackFromView = fromView
+        fallbackToView = toVC.view
+        fallbackCard = host
+        fallbackClipView = clip
+        fallbackTranslation = .zero
+        fallbackVelocity = .zero
+    }
+
+    private func defaultZoomPopTargetFrame(in container: UIView) -> CGRect {
+        let horizontalPad = SplickTheme.Spacing.md
+        let width = max(container.bounds.width - horizontalPad * 2, 1)
+        let height = min(max(container.bounds.height * 0.38, 220), 420)
+        let y = container.safeAreaInsets.top + SplickTheme.Spacing.lg
+        return CGRect(x: horizontalPad, y: y, width: width, height: height)
+    }
+
+    private func paddedHoleFrame(_ frame: CGRect) -> CGRect {
+        let pad = SplickTheme.Shadow.card.radius + 4
+        return frame.insetBy(dx: -pad, dy: -pad)
+    }
+
+    private func installSourceHole(in container: UIView, below card: UIView) {
+        fallbackHoleView?.removeFromSuperview()
+        guard let sourceFrame = fallbackSourceFrame else { return }
+        let hole = UIView(frame: paddedHoleFrame(sourceFrame))
+        hole.isUserInteractionEnabled = false
+        hole.backgroundColor = .systemBackground
+        container.insertSubview(hole, belowSubview: card)
+        fallbackHoleView = hole
+    }
+
+    private func syncSourceHole(in container: UIView) {
+        let store = SplickZoomPopSourceStore.shared
+        guard let postId = store.activeDestinationPostId,
+              let live = store.sourceFrame(for: postId, in: container),
+              live.width > 8,
+              live.height > 8 else { return }
+        fallbackSourceFrame = live
+        fallbackHoleView?.frame = paddedHoleFrame(live)
+        if fallbackHiddenSourceView == nil, let source = store.sourceCardView(for: postId) {
+            fallbackHiddenSourceView = source
+            source.alpha = 0
+        }
+    }
+
+    private func zoomPopProgress(translation: CGPoint, in size: CGSize) -> CGFloat {
+        let distance = hypot(translation.x, translation.y)
+        return min(1, distance / max(size.width * 0.38, 1))
+    }
+
+    /// Visual (on-screen) corner radius matching `splickCard`.
+    private func zoomPopCornerRadius(progress: CGFloat) -> CGFloat {
+        let radius = SplickTheme.CornerRadius.card
+        let t = min(1, max(0, progress / 0.12))
+        return radius * (t * t * (3 - 2 * t))
+    }
+
+    /// Scale around the view center, then move with the finger. GPU-only.
+    private func zoomPopDragTransform(
+        translation: CGPoint,
+        progress: CGFloat,
+        start: CGRect,
+        target: CGRect
+    ) -> CGAffineTransform {
+        let sx = 1 + (target.width / max(start.width, 1) - 1) * progress
+        let sy = 1 + (target.height / max(start.height, 1) - 1) * progress
+        return CGAffineTransform(translationX: translation.x, y: translation.y)
+            .scaledBy(x: max(sx, 0.12), y: max(sy, 0.12))
+    }
+
+    private func zoomPopCompletedTransform(start: CGRect, target: CGRect) -> CGAffineTransform {
+        let sx = target.width / max(start.width, 1)
+        let sy = target.height / max(start.height, 1)
+        return CGAffineTransform(
+            translationX: target.midX - start.midX,
+            y: target.midY - start.midY
+        ).scaledBy(x: sx, y: sy)
+    }
+
+    private func applyFallbackCardTransform(translation: CGPoint, progress: CGFloat) {
+        guard let host = fallbackCard, let clip = fallbackClipView else { return }
+        let start = fallbackStartFrame
+        let target = fallbackSourceFrame ?? start
+        let transform = zoomPopDragTransform(
+            translation: translation,
+            progress: progress,
+            start: start,
+            target: target
+        )
+        let scaleX = max(abs(transform.a), 0.12)
+        let visualRadius = zoomPopCornerRadius(progress: progress)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        host.transform = transform
+        clip.layer.cornerRadius = visualRadius / scaleX
+        clip.layer.borderWidth = progress > 0.02 ? 0.5 / scaleX : 0
+        clip.layer.borderColor = UIColor.label.withAlphaComponent(0.05).cgColor
+        host.layer.shadowOpacity = Float(0.05 * min(1, progress / 0.16))
+        CATransaction.commit()
+    }
+
+    private func settleFallbackCard(complete: Bool, completion: @escaping () -> Void) {
+        guard let host = fallbackCard, let clip = fallbackClipView else {
+            completion()
+            return
+        }
+        let start = fallbackStartFrame
+        let target = fallbackSourceFrame ?? start
+        let endTransform = complete
+            ? zoomPopCompletedTransform(start: start, target: target)
+            : .identity
+        let endProgress: CGFloat = complete ? 1 : 0
+        let scaleX = complete ? max(target.width / max(start.width, 1), 0.12) : 1
+        fallbackSettleAnimator?.stopAnimation(true)
+        let animator = UIViewPropertyAnimator(
+            duration: 0.48,
+            controlPoint1: CGPoint(x: 0.05, y: 0.85),
+            controlPoint2: CGPoint(x: 0.18, y: 1.0)
+        )
+        animator.addAnimations {
+            host.transform = endTransform
+            clip.layer.cornerRadius = self.zoomPopCornerRadius(progress: endProgress) / scaleX
+            clip.layer.borderWidth = complete ? 0.5 / scaleX : 0
+            host.layer.shadowOpacity = complete ? 0.05 : 0
+        }
+        animator.addCompletion { _ in
+            self.fallbackSettleAnimator = nil
+            completion()
+        }
+        fallbackSettleAnimator = animator
+        animator.startAnimation()
+    }
+
+    private func updateFallbackTracking(translation: CGPoint, in size: CGSize) {
+        fallbackTranslation = translation
+        applyFallbackCardTransform(
+            translation: translation,
+            progress: zoomPopProgress(translation: translation, in: size)
+        )
+        fallbackToView?.transform = .identity
+    }
+
+    private func restoreInsertedToView(
+        toView: UIView?,
+        originalSuper: UIView?,
+        originalIndex: Int,
+        inserted: Bool
+    ) {
+        toView?.transform = .identity
+        guard inserted, let toView, let originalSuper else { return }
+        let index = min(originalIndex, originalSuper.subviews.count)
+        originalSuper.insertSubview(toView, at: index)
+    }
+
+    private func finishFallbackTracking(complete: Bool, velocity: CGPoint, on nav: UINavigationController) {
+        fallbackVelocity = velocity
+        let card = fallbackCard
+        let toView = fallbackToView
+        let fromView = fallbackFromView
+        let navBar = fallbackNavBar
+        let inserted = didInsertFallbackToView
+        let originalSuper = fallbackToViewOriginalSuperview
+        let originalIndex = fallbackToViewOriginalIndex
+        let sourceView = fallbackHiddenSourceView
+
+        if complete {
+            settleFallbackCard(complete: true) {
+                self.restoreInsertedToView(
+                    toView: toView,
+                    originalSuper: originalSuper,
+                    originalIndex: originalIndex,
+                    inserted: inserted
+                )
+                self.didInsertFallbackToView = false
+                sourceView?.alpha = 1
+                SplickZoomPopSourceStore.shared.revealSource()
+                navBar?.alpha = 1
+                if nav.viewControllers.count > 1 {
+                    nav.popViewController(animated: false)
+                }
+                fromView?.isHidden = false
+                card?.removeFromSuperview()
+                self.fallbackHoleView?.removeFromSuperview()
+                self.fallbackHoleView = nil
+                self.clearFallbackState()
+            }
+        } else {
+            settleFallbackCard(complete: false) {
+                fromView?.isHidden = false
+                fromView?.layoutIfNeeded()
+                self.teardownFallbackTracking(
+                    fromView: fromView,
+                    toView: toView,
+                    card: card,
+                    navBar: navBar,
+                    sourceView: sourceView,
+                    restoreToView: true,
+                    originalSuper: originalSuper,
+                    originalIndex: originalIndex,
+                    inserted: inserted
+                )
+            }
+        }
+    }
+
+    private func teardownFallbackTracking(
+        fromView: UIView?,
+        toView: UIView?,
+        card: UIView?,
+        navBar: UIView?,
+        sourceView: UIView?,
+        restoreToView: Bool,
+        originalSuper: UIView?,
+        originalIndex: Int,
+        inserted: Bool
+    ) {
+        card?.removeFromSuperview()
+        fallbackHoleView?.removeFromSuperview()
+        fallbackHoleView = nil
+        fromView?.isHidden = false
+        navBar?.alpha = 1
+        sourceView?.alpha = 1
+        SplickZoomPopSourceStore.shared.revealSource()
+        if restoreToView, inserted, let toView {
+            if let originalSuper {
+                let index = min(originalIndex, originalSuper.subviews.count)
+                originalSuper.insertSubview(toView, at: index)
+            } else {
+                toView.removeFromSuperview()
+            }
+        }
+        clearFallbackState()
+    }
+
+    private func clearFallbackState() {
+        fallbackSettleAnimator?.stopAnimation(true)
+        fallbackSettleAnimator = nil
+        fallbackFromView = nil
+        fallbackToView = nil
+        fallbackCard = nil
+        fallbackClipView = nil
+        fallbackNavBar = nil
+        fallbackToViewOriginalSuperview = nil
+        fallbackHiddenSourceView = nil
+        fallbackSourceFrame = nil
+        fallbackStartFrame = .zero
+        fallbackHoleView?.removeFromSuperview()
+        fallbackHoleView = nil
+        didInsertFallbackToView = false
+        fallbackTranslation = .zero
+        fallbackVelocity = .zero
+    }
+
+    private func cancelFallbackTracking(removingInsertedView: Bool) {
+        teardownFallbackTracking(
+            fromView: fallbackFromView,
+            toView: fallbackToView,
+            card: fallbackCard,
+            navBar: fallbackNavBar,
+            sourceView: fallbackHiddenSourceView,
+            restoreToView: removingInsertedView,
+            originalSuper: fallbackToViewOriginalSuperview,
+            originalIndex: fallbackToViewOriginalIndex,
+            inserted: didInsertFallbackToView
+        )
+    }
+
+    /// Last-resort interactive pop when `handleNavigationTransition:` cannot be bound.
+    private func handleManualPop(_ pan: UIPanGestureRecognizer) {
+        guard let nav = navigationController,
+              let view = nav.view else { return }
+
+        let rtl = view.effectiveUserInterfaceLayoutDirection == .rightToLeft
+        let tx = pan.translation(in: view).x
+        let progress = max(0, min(1, (rtl ? -tx : tx) / view.bounds.width))
+
+        switch pan.state {
+        case .began:
+            UIView.performWithoutAnimation {
+                nav.view.window?.endEditing(true)
+            }
+            pauseScrollViews(under: nav)
+            interactiveTransition = UIPercentDrivenInteractiveTransition()
+            interactiveTransition?.completionCurve = .easeOut
+            nav.popViewController(animated: true)
+
+        case .changed:
+            interactiveTransition?.update(progress)
+
+        case .ended, .cancelled:
+            restorePausedScrollViews()
+            let vx = pan.velocity(in: view).x
+            let outwardVelocity = rtl ? -vx : vx
+            if pan.state == .cancelled || (progress < 0.33 && outwardVelocity < 100) {
+                interactiveTransition?.cancel()
+            } else {
+                interactiveTransition?.finish()
+            }
+            interactiveTransition = nil
+
+        case .failed:
+            restorePausedScrollViews()
+            interactiveTransition?.cancel()
+            interactiveTransition = nil
+
+        default:
+            break
+        }
+    }
+
+    private func pauseScrollViews(under nav: UINavigationController) {
+        restorePausedScrollViews()
+        var found: [UIScrollView] = []
+        func walk(_ view: UIView) {
+            if let scroll = view as? UIScrollView, scroll.isScrollEnabled {
+                found.append(scroll)
+            }
+            view.subviews.forEach(walk)
+        }
+        walk(nav.view)
+        for scroll in found {
+            scroll.isScrollEnabled = false
+        }
+        pausedScrollViews = found
+    }
+
+    private func restorePausedScrollViews() {
+        for scroll in pausedScrollViews {
+            scroll.isScrollEnabled = true
+        }
+        pausedScrollViews = []
+    }
+
+    /// Returns the active interactive transition if the wide pop is manually driving a pop.
+    static func activeInteractiveTransition(on nav: UINavigationController) -> UIPercentDrivenInteractiveTransition? {
+        (objc_getAssociatedObject(nav, &associatedKey) as? SplickWidePopGesture)?.interactiveTransition
+    }
+
+    /// Whether a manual pop is currently in progress (used to decide whether to return a pop animator).
+    static func isManuallyDrivingPop(on nav: UINavigationController) -> Bool {
+        guard let g = objc_getAssociatedObject(nav, &associatedKey) as? SplickWidePopGesture else { return false }
+        return g.interactiveTransition != nil
+    }
+
+    // MARK: - Refresh & delegate preservation
 
     static func refresh(on nav: UINavigationController) {
         guard let existing = objc_getAssociatedObject(nav, &associatedKey) as? SplickWidePopGesture else {
@@ -941,16 +1596,73 @@ private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate 
         existing.attach(to: nav)
     }
 
-    private func bindTargets(from systemPop: UIGestureRecognizer, onto pan: UIPanGestureRecognizer?) {
-        guard let pan else { return }
+    /// Saves the original pop delegate if not already captured.
+    /// Called from `SplickInteractivePopConfigurator` before replacing `pop.delegate`.
+    /// Stores on a separate key so it survives even if the `SplickWidePopGesture` instance
+    /// hasn't been created yet.
+    static func preserveOriginalPopDelegate(_ delegate: UIGestureRecognizerDelegate, on nav: UINavigationController) {
+        // Also update existing instance if present.
+        if let existing = objc_getAssociatedObject(nav, &associatedKey) as? SplickWidePopGesture,
+           existing.originalPopDelegate == nil {
+            existing.originalPopDelegate = delegate
+        }
+        // Always store on nav so a later `install` can pick it up.
+        if objc_getAssociatedObject(nav, &savedPopDelegateKey) == nil {
+            // Box with NSValue (weak) to avoid retaining the internal UIKit object forever.
+            let box = WeakBox(delegate)
+            objc_setAssociatedObject(nav, &savedPopDelegateKey, box, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
+    }
+
+    /// Recovers the saved original delegate from the nav (if `SplickWidePopGesture` was created after save).
+    private static func recoverOriginalPopDelegate(from nav: UINavigationController) -> UIGestureRecognizerDelegate? {
+        (objc_getAssociatedObject(nav, &savedPopDelegateKey) as? WeakBox)?.value
+    }
+
+    private static var savedPopDelegateKey: UInt8 = 0
+
+    /// Bind the system interactive-pop handler onto our pan without sharing the
+    /// `targets` array (sharing would also attach `handleWidePan` to the stock gesture).
+    @discardableResult
+    private func bindTargets(from systemPop: UIGestureRecognizer, onto pan: UIPanGestureRecognizer?) -> Bool {
+        guard let pan else { return false }
+
+        var bound = false
+        // Copy the stock interactive-pop targets so `handleNavigationTransition:`
+        // scrubs 1:1 under the finger (same as chat edge pop).
         if let targets = systemPop.value(forKey: "targets") {
             pan.setValue(targets, forKey: "targets")
-            return
+            bound = true
         }
+
         let selector = NSSelectorFromString("handleNavigationTransition:")
-        if let transition = systemPop.delegate, transition.responds(to: selector) {
-            pan.addTarget(transition, action: selector)
+        if !bound {
+            let candidates: [AnyObject?] = [
+                systemPop.delegate,
+                originalPopDelegate,
+                navigationController?.value(forKey: "_interactiveTransition") as AnyObject?
+            ]
+            for candidate in candidates {
+                if let target = candidate,
+                   isSystemTransitionTarget(target),
+                   (target as? NSObject)?.responds(to: selector) == true {
+                    pan.addTarget(target, action: selector)
+                    bound = true
+                    break
+                }
+            }
         }
+
+        pan.removeTarget(self, action: #selector(handleWidePan(_:)))
+        pan.addTarget(self, action: #selector(handleWidePan(_:)))
+        return bound
+    }
+
+    private func isSystemTransitionTarget(_ target: AnyObject) -> Bool {
+        !(target is SplickNavigationDelegateProxy)
+            && !(target is SplickWidePopGesture)
+            && !(target is SplickZoomPopHorizontalGuard)
+            && !(target is SplickStrictEdgePopGesture)
     }
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
@@ -962,11 +1674,44 @@ private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate 
         if point.y < view.safeAreaInsets.top + 44 {
             return false
         }
+        if SplickHorizontalDominantPopMode.isActive(on: nav) {
+            if isInsideHorizontalPagerPastStart(touch) {
+                return false
+            }
+            if yieldsLeadingEdgeToSystem,
+               SplickEdgeInteractivePop.isInLeadingEdgeBand(
+                x: point.x,
+                viewWidth: view.bounds.width,
+                isRightToLeft: view.effectiveUserInterfaceLayoutDirection == .rightToLeft,
+                edgeWidth: SplickEdgeInteractivePop.resolvedEdgeWidth(for: view)
+               ) {
+                return false
+            }
+            return true
+        }
         let band = leadingPopBand(in: view)
-        if view.effectiveUserInterfaceLayoutDirection == .rightToLeft {
+        let rtl = view.effectiveUserInterfaceLayoutDirection == .rightToLeft
+        if rtl {
             return point.x >= view.bounds.width - band
         }
         return point.x <= band
+    }
+
+    /// Let a media pager keep swiping between photos when it is not on the first item.
+    private func isInsideHorizontalPagerPastStart(_ touch: UITouch) -> Bool {
+        var current: UIView? = touch.view
+        while let view = current {
+            if let scroll = view as? UIScrollView {
+                let extraWidth = scroll.contentSize.width - scroll.bounds.width
+                let isHorizontal = extraWidth > 8
+                    && (scroll.isPagingEnabled || scroll.contentSize.height <= scroll.bounds.height + 40)
+                if isHorizontal, scroll.contentOffset.x > 8 {
+                    return true
+                }
+            }
+            current = view.superview
+        }
+        return false
     }
 
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
@@ -982,7 +1727,10 @@ private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate 
         if SplickHorizontalDominantPopMode.isActive(on: nav) {
             return SplickInteractivePopAxis.isOutwardHorizontalPop(
                 translation: translation,
-                isRightToLeft: rtl
+                velocity: pan.velocity(in: view),
+                isRightToLeft: rtl,
+                ratio: 1.15,
+                minimumHorizontal: 6
             )
         }
         let outward = rtl ? translation.x < 0 : translation.x > 0
@@ -993,11 +1741,19 @@ private final class SplickWidePopGesture: NSObject, UIGestureRecognizerDelegate 
         _ gestureRecognizer: UIGestureRecognizer,
         shouldRequireFailureOf otherGestureRecognizer: UIGestureRecognizer
     ) -> Bool {
-        guard let nav = navigationController else { return false }
-        if SplickHorizontalDominantPopMode.isActive(on: nav) {
+        false
+    }
+
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        guard gestureRecognizer === pan else { return false }
+        if otherGestureRecognizer === navigationController?.interactivePopGestureRecognizer {
             return false
         }
-        return otherGestureRecognizer === nav.interactivePopGestureRecognizer
+        return SplickFullScreenPopPanGestureRecognizer.isScrollLike(otherGestureRecognizer)
+            || otherGestureRecognizer is UIPanGestureRecognizer
     }
 
     func gestureRecognizer(
@@ -1110,9 +1866,13 @@ private final class SplickNavigationDelegateProxy: NSObject, UINavigationControl
             )
         }
 
-        // Custom pop animators suppress UIKit's percent-driven edge swipe. Keep
-        // the system interactive pop; only accelerate programmatic pushes.
+        // When the wide pop gesture is manually driving a pop with
+        // UIPercentDrivenInteractiveTransition, we must return a pop animator
+        // so that `interactionControllerFor` is called.
         if operation == .pop {
+            if SplickWidePopGesture.isManuallyDrivingPop(on: navigationController) {
+                return SplickSlideAnimator(operation: .pop)
+            }
             return nil
         }
 
@@ -1153,6 +1913,13 @@ private final class SplickNavigationDelegateProxy: NSObject, UINavigationControl
         isForwardingDidShow = true
         defer { isForwardingDidShow = false }
         original?.navigationController?(navigationController, didShow: viewController, animated: animated)
+    }
+
+    func navigationController(
+        _ navigationController: UINavigationController,
+        interactionControllerFor animationController: UIViewControllerAnimatedTransitioning
+    ) -> UIViewControllerInteractiveTransitioning? {
+        SplickWidePopGesture.activeInteractiveTransition(on: navigationController)
     }
 
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
@@ -1224,14 +1991,27 @@ private enum SplickInteractivePopConfigurator {
             return
         }
 
-        pop.isEnabled = nav.viewControllers.count > 1
-
         let usesZoom = splickNavigationUsesZoom(nav)
+        let horizontalDominant = SplickHorizontalDominantPopMode.isActive(on: nav)
+        // Full-screen pan owns pop on older iOS. Re-enabling the stock edge
+        // recognizer here made middle-of-screen swipes lose to UIScrollView.
+        if !(horizontalDominant && !systemPopTracksOffEdge(nav)) {
+            pop.isEnabled = nav.viewControllers.count > 1
+        }
+
+        if let currentPopDelegate = pop.delegate,
+           !(currentPopDelegate is SplickNavigationDelegateProxy),
+           !(currentPopDelegate is SplickWidePopGesture),
+           !(currentPopDelegate is SplickZoomPopHorizontalGuard),
+           !(currentPopDelegate is SplickStrictEdgePopGesture) {
+            SplickWidePopGesture.preserveOriginalPopDelegate(currentPopDelegate, on: nav)
+        }
+
         if usesZoom {
             if pop.delegate is SplickNavigationDelegateProxy {
                 pop.delegate = nil
             }
-            if SplickHorizontalDominantPopMode.isActive(on: nav) {
+            if horizontalDominant, systemPopTracksOffEdge(nav) {
                 SplickZoomPopHorizontalGuard.refresh(on: nav)
             }
         } else if let gestureDelegate {
@@ -1272,6 +2052,13 @@ private func splickNavigationUsesZoom(_ nav: UINavigationController) -> Bool {
         }
     }
     return false
+}
+
+/// iOS 26 zoom interactive pop already tracks from off-edge. Older zoom (iOS 18–25)
+/// and non-zoom (iOS 17) stay leading-edge only.
+private func systemPopTracksOffEdge(_ nav: UINavigationController) -> Bool {
+    guard splickNavigationUsesZoom(nav) else { return false }
+    return ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 26
 }
 
 @available(iOS 18.0, *)

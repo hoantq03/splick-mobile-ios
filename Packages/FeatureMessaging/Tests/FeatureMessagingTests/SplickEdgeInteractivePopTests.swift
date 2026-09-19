@@ -136,6 +136,25 @@ final class SplickEdgeInteractivePopTests: XCTestCase {
             )
         )
     }
+
+    func testFullScreenPopBeginAcceptsSmallOutwardSwipe() {
+        XCTAssertTrue(
+            SplickInteractivePopAxis.isOutwardHorizontalPop(
+                translation: CGPoint(x: 8, y: 2),
+                isRightToLeft: false,
+                ratio: 1.15,
+                minimumHorizontal: 6
+            )
+        )
+        XCTAssertFalse(
+            SplickInteractivePopAxis.isOutwardHorizontalPop(
+                translation: CGPoint(x: 4, y: 12),
+                isRightToLeft: false,
+                ratio: 1.15,
+                minimumHorizontal: 6
+            )
+        )
+    }
 }
 
 final class ChatSwipeHitTestingTests: XCTestCase {

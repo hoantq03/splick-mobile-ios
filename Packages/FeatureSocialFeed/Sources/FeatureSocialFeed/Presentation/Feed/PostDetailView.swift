@@ -234,7 +234,7 @@ struct PostDetailView: View {
             }
         }
         .onDisappear {
-            tabBarScrollState?.show()
+            tabBarScrollState?.show(animated: false)
         }
         .postCardPresentationHost(
             presentation: $cardPresentation,

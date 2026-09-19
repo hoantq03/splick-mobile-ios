@@ -89,9 +89,13 @@ public struct LoginView: View {
         } message: {
             Text(languageService.text(.authSignInFailedGeneric))
         }
-        .task(id: launchRevealActive) {
+        .onChange(of: launchRevealActive) { active in
+            guard active else { return }
+            Task { await playLoginEntrance() }
+        }
+        .onAppear {
             guard launchRevealActive else { return }
-            await playLoginEntrance()
+            Task { await playLoginEntrance() }
         }
     }
 

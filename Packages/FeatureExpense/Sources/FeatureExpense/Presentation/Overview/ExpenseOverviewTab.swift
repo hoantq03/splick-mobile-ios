@@ -59,7 +59,7 @@ struct ExpenseOverviewTab: View {
           )
         }
         .padding(.horizontal, SplickTheme.Spacing.md)
-        .padding(.top, SplickTheme.Spacing.md)
+        .padding(.top, SplickTheme.Spacing.xs)
         .padding(.bottom, SplickTabBarMetrics.floatingClearance + SplickTheme.Spacing.md)
         .transaction { transaction in
           if pullToRefreshActive {
@@ -70,7 +70,10 @@ struct ExpenseOverviewTab: View {
       .scrollChromeTracking()
       .splickSegmentPagerScrollInsets()
       .splickScrollSoftTopEdge()
-      .splickNativeRefreshable(controller: refreshController) {
+      .splickNativeRefreshable(
+        controller: refreshController,
+        chromeTopInset: FeedSegmentChromeMetrics.overlappingNavigationInset
+      ) {
         await viewModel.load(isPullToRefresh: true)
       }
       .onChange(of: overviewScrollTopSignal) { _ in

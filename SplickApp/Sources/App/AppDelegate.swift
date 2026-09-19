@@ -113,12 +113,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, @preconcurrency UNUser
 }
 
 enum AppIconSwitcher {
-    static func apply(theme: AppTheme, systemIsDark: Bool) {
+    static func apply(theme: AppTheme, colorTheme: SplickColorTheme, systemIsDark: Bool) {
         let application = UIApplication.shared
         guard application.supportsAlternateIcons else { return }
-        let desired = theme.usesDarkAppIcon(systemIsDark: systemIsDark)
-            ? AppTheme.darkAlternateIconName
-            : nil
+        let desired = colorTheme.alternateIconName(
+            isDark: theme.usesDarkAppIcon(systemIsDark: systemIsDark)
+        )
         let current = application.alternateIconName
         guard current != desired else { return }
         application.setAlternateIconName(desired)

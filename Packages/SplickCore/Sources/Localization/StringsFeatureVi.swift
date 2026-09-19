@@ -261,7 +261,7 @@ enum StringsFeatureVi {
         .friendsPeopleYouMayKnowEmptyTitle: "Chưa có gợi ý",
         .friendsPeopleYouMayKnowEmptyMessage: "Tham gia nhóm hoặc mời bạn bè — chúng tôi sẽ gợi ý người từ các nhóm chung.",
         .friendsPeopleYouMayKnowSharedGroup: "Cùng nhóm · %@",
-        .friendsNearbyTitle: "Gần đây",
+        .friendsNearbyTitle: "Bạn gần đây",
         .friendsNearbyEmpty: "Không có ai quanh đây.",
         .friendsNearbyEnable: "Hiện khi tìm người gần đây",
         .friendsNearbyPermission: "Cho phép vị trí để tìm người gần bạn",

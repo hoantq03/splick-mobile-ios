@@ -10,7 +10,7 @@ public enum SplickSegmentPagerTopInsetStyle: Equatable, Sendable {
 
 /// Top content margin so segment-pager tabs (feed / expense) sit correctly under chrome.
 public enum SplickSegmentPagerTopInsetMetrics {
-    private static let belowSegmentSpacing: CGFloat = SplickTheme.Spacing.lg
+    private static let belowSegmentSpacing: CGFloat = SplickTheme.Spacing.sm
     private static let toolbarBuffer: CGFloat = SplickTheme.Spacing.sm
     /// Pages whose pager is already laid out below the nav bar.
     public static let tightTopGap: CGFloat = SplickTheme.Spacing.sm
@@ -112,7 +112,10 @@ private struct SplickSegmentPagerScrollInsetsModifier: ViewModifier {
         guard !pullToRefreshActive else { return }
         let next = SplickSegmentPagerTopInsetMetrics.resolvedTopMargin(for: geometry, style: style)
         guard abs(next - topMargin) > 0.5 else { return }
-        topMargin = next
+        DispatchQueue.main.async {
+            guard abs(next - topMargin) > 0.5 else { return }
+            topMargin = next
+        }
     }
 }
 
@@ -152,6 +155,9 @@ private struct SplickSegmentPagerPageTopInsetModifier: ViewModifier {
     private func applyTopPadding(from geometry: GeometryProxy) {
         let next = SplickSegmentPagerTopInsetMetrics.resolvedTopMargin(for: geometry, style: style)
         guard abs(next - topPadding) > 0.5 else { return }
-        topPadding = next
+        DispatchQueue.main.async {
+            guard abs(next - topPadding) > 0.5 else { return }
+            topPadding = next
+        }
     }
 }

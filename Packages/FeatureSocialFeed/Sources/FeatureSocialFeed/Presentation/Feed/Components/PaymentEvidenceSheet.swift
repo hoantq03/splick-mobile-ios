@@ -18,6 +18,7 @@ struct PaymentEvidenceSheet: View {
     @State private var pickerItems: [PhotosPickerItem] = []
     @State private var validationMessage: String?
     @State private var isSubmitting = false
+    @State private var submitFailed = false
     @State private var isImportingPhotos = false
     @State private var fullScreenPreviewRoute: AttachmentPreviewRoute?
 
@@ -304,32 +305,15 @@ struct PaymentEvidenceSheet: View {
     private var submitBar: some View {
         VStack(spacing: 0) {
             Divider().opacity(0.35)
-            Button {
+            SplickButton(
+                languageService.text(.feedPaymentEvidenceSubmit),
+                style: .primary,
+                isLoading: isSubmitting,
+                isFailed: submitFailed,
+                isDisabled: pendingAttachments.isEmpty || isImportingPhotos
+            ) {
                 Task { await submit() }
-            } label: {
-                Group {
-                    if isSubmitting {
-                        SplickSpinner(usesBrandColors: false)
-                    } else {
-                        Text(languageService.text(.feedPaymentEvidenceSubmit))
-                            .fontWeight(.semibold)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .foregroundStyle(.white)
-                .background {
-                    Capsule(style: .continuous)
-                        .fill(
-                            pendingAttachments.isEmpty || isImportingPhotos || isSubmitting
-                                ? SplickTheme.Colors.primaryGradientStart.opacity(0.38)
-                                : SplickTheme.Colors.primaryGradientStart
-                        )
-                }
-                .contentShape(Capsule())
             }
-            .buttonStyle(.plain)
-            .disabled(pendingAttachments.isEmpty || isImportingPhotos || isSubmitting)
             .padding(.horizontal, SplickTheme.Spacing.md)
             .padding(.top, SplickTheme.Spacing.sm)
             .padding(.bottom, SplickTheme.Spacing.sm)
@@ -385,14 +369,19 @@ struct PaymentEvidenceSheet: View {
             validationMessage = languageService.text(.feedPaymentEvidenceAttachmentRequired)
             return
         }
+        submitFailed = false
         isSubmitting = true
         validationMessage = nil
-        defer { isSubmitting = false }
         do {
             let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
             try await onSubmit(trimmedMessage.isEmpty ? nil : trimmedMessage, pendingAttachments)
+            isSubmitting = false
+            // SplickButton shows checkmark, then dismiss after animation completes.
+            try? await Task.sleep(nanoseconds: SplickButton.successHoldNanoseconds)
             dismiss()
         } catch {
+            isSubmitting = false
+            submitFailed = true
             validationMessage = languageService.localizedMessage(for: error)
         }
     }

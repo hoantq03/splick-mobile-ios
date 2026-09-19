@@ -62,6 +62,7 @@ public struct ProfileSettingsGroup: View {
 }
 
 public struct ProfileSettingsRow: View {
+    @Environment(\.splickBrandPalette) private var brandPalette
     private let icon: String
     private let title: String
     private let subtitle: String?
@@ -87,7 +88,7 @@ public struct ProfileSettingsRow: View {
             HStack(spacing: SplickTheme.Spacing.sm) {
                 Image(systemName: icon)
                     .font(.body)
-                    .foregroundStyle(isDestructive ? SplickTheme.Colors.error : SplickTheme.Colors.primaryGradientStart)
+                    .foregroundStyle(isDestructive ? SplickTheme.Colors.error : brandPalette.accent)
                     .frame(width: 24)
 
                 Text(title)

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Chrome metrics
 
@@ -6,6 +7,16 @@ public enum FeedSegmentChromeMetrics {
     public static let navigationBarHeight: CGFloat = 48
     /// Capsule row: 34pt buttons + vertical chrome padding.
     public static let segmentRowHeight: CGFloat = 40
+
+    /// Bottom of the inline nav (pills live in the toolbar). Used to pin PTR spinner.
+    public static var overlappingNavigationInset: CGFloat {
+        let safeTop = (UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first { $0.isKeyWindow }?
+            .safeAreaInsets.top) ?? 59
+        return safeTop + navigationBarHeight
+    }
 }
 
 // MARK: - Scroll-driven collapse
@@ -28,6 +39,18 @@ public final class FeedSegmentScrollState: ObservableObject {
     public init() {}
 
     public func updateScrollOffset(_ rawOffset: CGFloat) {
+        DispatchQueue.main.async { [weak self] in
+            self?.applyScrollOffset(rawOffset)
+        }
+    }
+
+    public func snapCollapseProgress() {
+        DispatchQueue.main.async { [weak self] in
+            self?.applySnapCollapseProgress()
+        }
+    }
+
+    private func applyScrollOffset(_ rawOffset: CGFloat) {
         lastRawOffset = rawOffset
         // Use raw geometry for "at top" so a drifted baseline cannot leave the
         // title collapsed after the list has already settled at offset 0.
@@ -52,7 +75,7 @@ public final class FeedSegmentScrollState: ObservableObject {
         lastOffset = offset
     }
 
-    public func snapCollapseProgress() {
+    private func applySnapCollapseProgress() {
         if lastRawOffset <= atTopSnapSlack {
             setCollapseProgress(0, animated: true)
             return

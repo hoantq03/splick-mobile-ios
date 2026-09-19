@@ -55,7 +55,10 @@ public final class TabBarScrollState: ObservableObject {
 
     public func setRefreshIndicatorVisible(_ visible: Bool) {
         guard refreshIndicatorVisible != visible else { return }
-        refreshIndicatorVisible = visible
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.refreshIndicatorVisible != visible else { return }
+            self.refreshIndicatorVisible = visible
+        }
     }
 
     /// Call when the user taps the active tab again — subscribers scroll to top or trigger refresh.
@@ -64,6 +67,12 @@ public final class TabBarScrollState: ObservableObject {
     }
 
     public func updateScrollOffset(_ rawOffset: CGFloat) {
+        DispatchQueue.main.async { [weak self] in
+            self?.applyScrollOffset(rawOffset)
+        }
+    }
+
+    private func applyScrollOffset(_ rawOffset: CGFloat) {
         lastRawOffset = rawOffset
         // Normalize against resting baseline so contentMargins / inset don't look like "scrolled".
         lastDistanceFromTop = distanceNormalizer.normalize(rawOffset)
@@ -106,9 +115,9 @@ public final class TabBarScrollState: ObservableObject {
         setVisibleImmediate(true, applyCooldown: false)
     }
 
-    public func show() {
+    public func show(animated: Bool = true) {
         suppressesBottomInset = false
-        animatesVisibility = true
+        animatesVisibility = animated
         setVisibleImmediate(true, applyCooldown: false)
     }
 

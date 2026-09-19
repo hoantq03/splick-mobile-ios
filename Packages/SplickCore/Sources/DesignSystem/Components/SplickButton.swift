@@ -16,6 +16,7 @@ public struct SplickButton: View {
     }
 
     @Environment(\.usesBrandAuthChrome) private var usesBrandAuthChrome
+    @Environment(\.splickBrandPalette) private var brandPalette
     private let title: String
     private let style: Style
     private let isLoading: Bool
@@ -121,7 +122,7 @@ public struct SplickButton: View {
     private var primaryFill: AnyShapeStyle {
         switch style {
         case .primary:
-            return AnyShapeStyle(SplickTheme.Colors.brandBlue)
+            return AnyShapeStyle(brandPalette.brandBlue)
         case .secondary, .ghost:
             return AnyShapeStyle(Color.clear)
         case .destructive:
@@ -133,7 +134,7 @@ public struct SplickButton: View {
         switch style {
         case .primary, .destructive: return .white
         case .secondary:
-            return usesBrandAuthChrome ? SplickTheme.Colors.brandBlue : SplickTheme.Colors.primaryGradientStart
+            return usesBrandAuthChrome ? brandPalette.brandBlue : brandPalette.accent
         case .ghost: return SplickTheme.Colors.textPrimary
         }
     }
@@ -141,7 +142,7 @@ public struct SplickButton: View {
     private var borderColor: Color {
         switch style {
         case .secondary:
-            return usesBrandAuthChrome ? SplickTheme.Colors.brandBlue : SplickTheme.Colors.primaryGradientStart
+            return usesBrandAuthChrome ? brandPalette.brandBlue : brandPalette.accent
         default: return .clear
         }
     }
@@ -243,6 +244,7 @@ private struct OutcomeFlags: Equatable {
 
 /// Compact header chip that pairs with the 32pt circular close control.
 public struct SplickHeaderActionChip: View {
+    @Environment(\.splickBrandPalette) private var brandPalette
     let title: String
     let action: () -> Void
 
@@ -255,7 +257,7 @@ public struct SplickHeaderActionChip: View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                .foregroundStyle(brandPalette.accent)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
                 .padding(.horizontal, 12)
