@@ -621,15 +621,25 @@ private struct FeedPrimaryPage: View {
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
             .padding(.top, SplickTheme.Spacing.md)
-            .onFeedPostVisibilityChange(threshold: 0.01) { visibleIds in
+            .onFeedPostVisibilityChange(threshold: 0.01) { visibleIds, reports in
                 let ids = feedTabIsActive ? visibleIds : []
                 viewModel.onVisiblePostsChanged(ids)
-                // Autoplay every on-screen post card — do not wait for the video subframe.
-                videoCoordinator.setVisiblePostIds(ids)
+                videoCoordinator.scheduleVisibilityUpdate(videoAutoplayReports(from: reports))
             }
         }
         .scrollDisabled(feedScrollLocked)
         .environment(\.feedVideoCoordinator, videoCoordinator)
+    }
+
+    private func videoAutoplayReports(
+        from reports: [FeedPostVisibilityReport]
+    ) -> [FeedVideoVisibilityReport] {
+        guard feedTabIsActive else { return [] }
+        let videoIds = Set(viewModel.posts.filter(\.containsPlayableVideo).map(\.id))
+        return reports.compactMap { report in
+            guard videoIds.contains(report.postId), report.viewportRatio > 0 else { return nil }
+            return FeedVideoVisibilityReport(postId: report.postId, ratio: report.viewportRatio)
+        }
     }
 
     private var feedEndReachedFooter: some View {
@@ -664,4 +674,12 @@ private struct GuestBillInviteShareSheet: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+private extension Post {
+    var containsPlayableVideo: Bool {
+        if mediaType == .video { return true }
+        if videoURL != nil { return true }
+        return displayMediaItems.contains { $0.mediaType == .video }
+    }
 }

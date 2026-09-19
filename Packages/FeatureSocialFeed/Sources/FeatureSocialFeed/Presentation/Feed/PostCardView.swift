@@ -641,7 +641,7 @@ struct PostCardView: View, Equatable {
 }
 
 /// Observes autoplay at the media leaf so the feed list / `FeedView` do not
-/// invalidate when `activePostIds` changes.
+/// invalidate when the single autoplay target changes.
 private struct ObservingFeedPostMedia: View {
     let post: Post
     @Binding var selectedIndex: Int

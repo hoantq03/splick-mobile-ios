@@ -3,7 +3,10 @@ import UIKit
 
 struct FeedPostVisibilityReport: Equatable {
     let postId: UUID
+    /// max(card coverage, viewport coverage) — used for "is this card on screen".
     let ratio: CGFloat
+    /// Fraction of the screen height this card occupies. Used for video autoplay.
+    let viewportRatio: CGFloat
 }
 
 private struct FeedPostVisibilityPreferenceKey: PreferenceKey {
@@ -33,7 +36,13 @@ struct FeedPostVisibilityReporter: View {
             Color.clear
                 .preference(
                     key: FeedPostVisibilityPreferenceKey.self,
-                    value: [FeedPostVisibilityReport(postId: postId, ratio: ratio)]
+                    value: [
+                        FeedPostVisibilityReport(
+                            postId: postId,
+                            ratio: ratio,
+                            viewportRatio: viewportRatio
+                        )
+                    ]
                 )
         }
         .allowsHitTesting(false)
@@ -43,12 +52,12 @@ struct FeedPostVisibilityReporter: View {
 extension View {
     func onFeedPostVisibilityChange(
         threshold: CGFloat = 0.35,
-        _ action: @escaping (Set<UUID>) -> Void
+        _ action: @escaping (_ visibleIds: Set<UUID>, _ reports: [FeedPostVisibilityReport]) -> Void
     ) -> some View {
         onPreferenceChange(FeedPostVisibilityPreferenceKey.self) { reports in
             DispatchQueue.main.async {
                 let visibleIds = Set(reports.filter { $0.ratio >= threshold }.map(\.postId))
-                action(visibleIds)
+                action(visibleIds, reports)
             }
         }
     }

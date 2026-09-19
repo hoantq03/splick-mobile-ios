@@ -3,21 +3,23 @@ import UIKit
 import AVFoundation
 import Common
 
-/// Autoplay every on-screen feed video post (post-card visibility), with a small AVPlayer pool.
+/// Autoplay the single on-screen feed video that covers the most viewport.
 @MainActor
 final class FeedVideoPlaybackCoordinator: ObservableObject {
-    /// All post IDs currently allowed to autoplay (any portion of the card on screen).
+    /// At most one post id — the current autoplay target.
     @Published private(set) var activePostIds: Set<UUID> = []
 
     /// Back-compat for call sites that still read a single id (first active).
     var activePostId: UUID? { activePostIds.first }
 
     private var visibilityByPost: [UUID: CGFloat] = [:]
-    /// Any on-screen presence of the post card is enough — do not wait for the video subframe.
-    private let activationThreshold: CGFloat = 0.01
+    /// Minimum viewport coverage before a video may start. Peeking headers stay posters.
+    private let activationThreshold: CGFloat = 0.08
+    /// Keep the current video unless another covers this much more of the screen.
+    private let switchHysteresis: CGFloat = 0.08
 
-    /// Concurrent AVPlayers for visible video cells (+ small warm buffer).
-    private let poolCapacity = 6
+    /// One decoder only — extra pooled players were the feed-tab CPU spike.
+    private let poolCapacity = 1
     private var pooledControllers: [UUID: FeedVideoPlaybackController] = [:]
     private var pooledURLs: [UUID: URL] = [:]
     private var lruOrder: [UUID] = []
@@ -43,8 +45,9 @@ final class FeedVideoPlaybackCoordinator: ObservableObject {
 
     func applyVisibilityReports(_ reports: [FeedVideoVisibilityReport]) {
         visibilityByPost.removeAll(keepingCapacity: true)
-        for report in reports where report.ratio > activationThreshold {
-            visibilityByPost[report.postId] = report.ratio
+        for report in reports where report.ratio > 0.01 {
+            let existing = visibilityByPost[report.postId] ?? 0
+            visibilityByPost[report.postId] = max(existing, report.ratio)
         }
         refreshActivePosts()
     }
@@ -142,11 +145,7 @@ final class FeedVideoPlaybackCoordinator: ObservableObject {
     }
 
     private func refreshActivePosts() {
-        let next = Set(
-            visibilityByPost
-                .filter { $0.value >= activationThreshold }
-                .map(\.key)
-        )
+        let next = Set(selectedAutoplayPostId().map { [$0] } ?? [])
         guard next != activePostIds else { return }
         SplickViewUpdate.after { [weak self] in
             guard let self, next != self.activePostIds else { return }
@@ -155,11 +154,32 @@ final class FeedVideoPlaybackCoordinator: ObservableObject {
             self.activePostIds = next
             for id in removed {
                 self.pooledControllers[id]?.setAutoplayActive(false)
+                self.releaseController(for: id)
             }
             for id in added {
                 self.pooledControllers[id]?.setAutoplayActive(true)
             }
         }
+    }
+
+    /// The video covering the most of the screen. Hysteresis avoids flicker when two cards are close.
+    private func selectedAutoplayPostId() -> UUID? {
+        let ranked = visibilityByPost
+            .filter { $0.value >= activationThreshold }
+            .sorted { lhs, rhs in
+                if lhs.value != rhs.value { return lhs.value > rhs.value }
+                return lhs.key.uuidString < rhs.key.uuidString
+            }
+        guard let best = ranked.first else { return nil }
+
+        if let current = activePostIds.first,
+           current != best.key,
+           let currentRatio = visibilityByPost[current],
+           currentRatio >= activationThreshold,
+           best.value < currentRatio + switchHysteresis {
+            return current
+        }
+        return best.key
     }
 }
 
