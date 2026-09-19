@@ -18,8 +18,6 @@ public final class ExpenseOverviewViewModel: ObservableObject {
   private let fetchGroupsUseCase: FetchGroupExpenseSummaryUseCaseProtocol
   private let languageService: LanguageService
   private var inFlightLoadTask: Task<Void, Never>?
-  private var lastSuccessfulLoadAt: Date?
-  private static let freshLoadInterval: TimeInterval = 30
 
   public init(
     fetchOverviewUseCase: FetchExpenseOverviewUseCaseProtocol,
@@ -33,17 +31,19 @@ public final class ExpenseOverviewViewModel: ObservableObject {
     self.languageService = languageService
   }
 
+  /// Fetches only when this screen has no snapshot yet. Tab re-entry keeps stale data.
   func loadIfNeeded() async {
-    if case .loaded = state,
-       let lastSuccessfulLoadAt,
-       Date().timeIntervalSince(lastSuccessfulLoadAt) < Self.freshLoadInterval {
-      return
+    if hasCachedSnapshot { return }
+    if let inFlightLoadTask {
+      await inFlightLoadTask.value
+      if hasCachedSnapshot { return }
     }
     await load()
   }
 
-  /// Quiet refresh that bypasses the once-loaded short-circuit.
+  /// Quiet refresh after a local mutation. Skips if overview was never opened.
   func softSync() async {
+    guard hasCachedSnapshot || inFlightLoadTask != nil else { return }
     await load(isPullToRefresh: false, force: true)
   }
 
@@ -51,7 +51,6 @@ public final class ExpenseOverviewViewModel: ObservableObject {
     if let inFlightLoadTask {
       await inFlightLoadTask.value
       if !force && !isPullToRefresh { return }
-      if case .loaded = state, !force { return }
     }
     let task = Task { await performLoad(isPullToRefresh: isPullToRefresh, force: force) }
     inFlightLoadTask = task
@@ -67,7 +66,6 @@ public final class ExpenseOverviewViewModel: ObservableObject {
       let result = try await fetchOverviewUseCase.execute()
       overview = result
       state = .loaded(result)
-      lastSuccessfulLoadAt = Date()
       await loadSecondary()
     } catch is CancellationError {
       // Leave prior loaded/idle state; never stick on .loading after cancel.
@@ -111,5 +109,10 @@ public final class ExpenseOverviewViewModel: ObservableObject {
         groupsState = .failed(languageService.localizedMessage(for: error))
       }
     }
+  }
+
+  private var hasCachedSnapshot: Bool {
+    if case .loaded = state { return true }
+    return overview != nil
   }
 }

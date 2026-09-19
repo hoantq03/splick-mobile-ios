@@ -19,8 +19,6 @@ public final class ExpenseListViewModel: ObservableObject {
     @Published private(set) var displayedExpenses: [Expense] = []
 
     private static let listFilterAnimation = Animation.spring(response: 0.42, dampingFraction: 0.86)
-    /// Skip silent reloads that happen within this window (tab remount / duplicate triggers).
-    private static let freshLoadInterval: TimeInterval = 30
 
     private let fetchExpensesUseCase: FetchExpensesUseCaseProtocol
     private let fetchDebtSummaryUseCase: FetchDebtSummaryUseCaseProtocol
@@ -35,9 +33,6 @@ public final class ExpenseListViewModel: ObservableObject {
     /// Single in-flight load for both cold load and pull-to-refresh.
     private var inFlightLoadTask: Task<Void, Never>?
     private var softSyncTask: Task<Void, Never>?
-    private var visiblePollingTask: Task<Void, Never>?
-    private var lastSuccessfulLoadAt: Date?
-    private let visiblePollInterval: Duration = .seconds(30)
 
     private struct ExpenseListCachePayload: Codable {
         let expenses: [Expense]
@@ -162,47 +157,26 @@ public final class ExpenseListViewModel: ObservableObject {
         }
     }
 
-    /// Loads expenses when idle/failed, or when data is older than the freshness window.
+    /// Disk only — never hits the network. Safe to call when another segment is visible.
+    public func hydrateLocalSnapshotIfNeeded() async {
+        await loadDiskCacheIfNeeded()
+    }
+
+    /// Hydrates disk cache, then fetches only when this screen has no snapshot yet.
+    /// Tab re-entry keeps stale rows; the user pulls to refresh.
     public func loadIfNeeded() async {
         await loadDiskCacheIfNeeded()
-        if case .loaded = state,
-           let lastSuccessfulLoadAt,
-           Date().timeIntervalSince(lastSuccessfulLoadAt) < Self.freshLoadInterval {
-            return
+        if hasCachedSnapshot { return }
+        if let existing = inFlightLoadTask {
+            await existing.value
+            if hasCachedSnapshot { return }
         }
         await load(isPullToRefresh: false)
     }
 
-    /// Soft-refresh when the Expenses tab becomes visible.
-    public func onExpensesVisible() {
-        Task { @MainActor in
-            await loadIfNeeded()
-        }
-        startVisiblePolling()
-    }
-
-    public func onExpensesHidden() {
-        stopVisiblePolling()
-    }
-
-    public func startVisiblePolling() {
-        guard visiblePollingTask == nil else { return }
-        visiblePollingTask = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: self?.visiblePollInterval ?? .seconds(30))
-                guard !Task.isCancelled else { return }
-                await self?.softSyncDirectory()
-            }
-        }
-    }
-
-    public func stopVisiblePolling() {
-        visiblePollingTask?.cancel()
-        visiblePollingTask = nil
-    }
-
-    /// Quiet refresh that bypasses the freshness throttle (keeps existing rows on screen).
+    /// Quiet refresh after a local mutation. Skips screens that were never opened.
     public func softSyncDirectory() async {
+        guard hasCachedSnapshot || inFlightLoadTask != nil else { return }
         if let existing = softSyncTask {
             await existing.value
             return
@@ -224,14 +198,6 @@ public final class ExpenseListViewModel: ObservableObject {
             await existing.value
             // Non-force callers can reuse the completed load; force/PTR still re-fetch.
             if !force && !isPullToRefresh { return }
-        }
-
-        if !isPullToRefresh,
-           !force,
-           case .loaded = state,
-           let lastSuccessfulLoadAt,
-           Date().timeIntervalSince(lastSuccessfulLoadAt) < Self.freshLoadInterval {
-            return
         }
 
         let task = Task { @MainActor in
@@ -280,7 +246,6 @@ public final class ExpenseListViewModel: ObservableObject {
             // Overview UI keys off `state == .loading`. Do not wait for monthly-summary —
             // that endpoint can be slow, and Android already renders overview without it.
             state = .loaded(fetchedExpenses)
-            lastSuccessfulLoadAt = Date()
             persistDiskCache()
 
             if let summary = await monthlyTask {
@@ -328,6 +293,11 @@ public final class ExpenseListViewModel: ObservableObject {
             )
             return monthlySummary
         }
+    }
+
+    private var hasCachedSnapshot: Bool {
+        if case .loaded = state { return true }
+        return !expenses.isEmpty || !debts.isEmpty
     }
 
     private func loadDiskCacheIfNeeded() async {

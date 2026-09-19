@@ -56,6 +56,12 @@ public final class ExpenseFriendListViewModel: ObservableObject {
     self.languageService = languageService
   }
 
+  /// Fetches only when this screen has no snapshot yet. Tab re-entry keeps stale rows.
+  public func loadIfNeeded() async {
+    if hasCachedSnapshot { return }
+    await load()
+  }
+
   public func load(isPullToRefresh: Bool = false) async {
     // Keep the list mounted during pull-to-refresh so UIRefreshControl is not torn down mid-gesture.
     if !isPullToRefresh {
@@ -72,6 +78,11 @@ public final class ExpenseFriendListViewModel: ObservableObject {
         state = .failed(languageService.localizedMessage(for: error))
       }
     }
+  }
+
+  private var hasCachedSnapshot: Bool {
+    if case .loaded = state { return true }
+    return !debts.isEmpty
   }
 }
 
@@ -138,11 +149,6 @@ public struct ExpenseFriendListView: View {
     .onChange(of: refreshController.requestID) { requestID in
       guard requestID > 0, !hasScrollableFriends else { return }
       Task { await viewModel.load(isPullToRefresh: true) }
-    }
-    .task {
-      if case .idle = viewModel.state {
-        await viewModel.load()
-      }
     }
   }
 

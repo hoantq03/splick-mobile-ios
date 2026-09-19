@@ -32,7 +32,6 @@ public struct ExpenseListView: View {
 
     @Environment(\.notificationsPresented) private var notificationsPresented
     @Environment(\.scenePhase) private var scenePhase
-    @State private var hasCompletedInitialLoad = false
     private let currentUser: UserSummary?
     private let currentUserId: UUID?
     private let isTabActive: Bool
@@ -134,31 +133,12 @@ public struct ExpenseListView: View {
             }
         }
         .environment(\.feedSegmentScrollState, scrollChrome.feedSegment)
-        .onChange(of: selectedSegment) { _ in
-            if !navigationPath.isEmpty {
-                navigationPath = NavigationPath()
-            }
-            // Wait for segment spring to settle before chrome resets contend on main thread.
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(ExpensePagerMotion.settleMilliseconds))
-                scrollChrome.feedSegment.reset()
-                tabBarScrollState?.reset()
-            }
-        }
         .onFirstAppear {
             Task { @MainActor in
                 viewModel.updateCurrentUserId(currentUserId)
-                // Always mark complete so later tab activation can load. The pager mounts
-                // Expenses while Feed is selected, so `isTabActive` is often false here.
-                hasCompletedInitialLoad = true
                 guard isTabActive else { return }
-                await viewModel.loadIfNeeded()
-                if let overviewViewModel {
-                    await overviewViewModel.loadIfNeeded()
-                }
-                if scenePhase == .active {
-                    viewModel.startVisiblePolling()
-                }
+                await viewModel.hydrateLocalSnapshotIfNeeded()
+                await loadSelectedSegmentIfNeeded()
             }
         }
         .onChange(of: isTabActive) { active in
@@ -177,6 +157,21 @@ public struct ExpenseListView: View {
                 updateExpensesVisibility(isActive: isTabActive, phase: phase)
             }
         }
+        .onChange(of: selectedSegment) { _ in
+            if !navigationPath.isEmpty {
+                navigationPath = NavigationPath()
+            }
+            Task { @MainActor in
+                guard isTabActive else { return }
+                await loadSelectedSegmentIfNeeded()
+            }
+            // Wait for segment spring to settle before chrome resets contend on main thread.
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(ExpensePagerMotion.settleMilliseconds))
+                scrollChrome.feedSegment.reset()
+                tabBarScrollState?.reset()
+            }
+        }
         .onReceive(sameTabTapPublisher) { _ in
             handleSameTabTap()
         }
@@ -187,11 +182,17 @@ public struct ExpenseListView: View {
                 if let overviewViewModel {
                     await overviewViewModel.softSync()
                 }
+                if let friendListViewModel, case .loaded = friendListViewModel.state {
+                    await friendListViewModel.load(isPullToRefresh: true)
+                }
             }
         }
         .onChange(of: currentUserId) { userId in
             Task { @MainActor in
                 viewModel.updateCurrentUserId(userId)
+                guard isTabActive else { return }
+                await viewModel.hydrateLocalSnapshotIfNeeded()
+                await loadSelectedSegmentIfNeeded()
             }
         }
         .sheet(item: $profileRoute) { route in
@@ -208,16 +209,22 @@ public struct ExpenseListView: View {
 
     private func updateExpensesVisibility(isActive: Bool, phase: ScenePhase) {
         if isActive, phase == .active {
-            // Do not gate on hasCompletedInitialLoad — activation must always be able to fetch
-            // (Expenses often first appears while another pager tab is selected).
-            viewModel.onExpensesVisible()
-            if let overviewViewModel {
-                Task { @MainActor in
-                    await overviewViewModel.loadIfNeeded()
-                }
+            Task { @MainActor in
+                viewModel.updateCurrentUserId(currentUserId)
+                await viewModel.hydrateLocalSnapshotIfNeeded()
+                await loadSelectedSegmentIfNeeded()
             }
-        } else if hasCompletedInitialLoad {
-            viewModel.onExpensesHidden()
+        }
+    }
+
+    private func loadSelectedSegmentIfNeeded() async {
+        switch selectedSegment {
+        case .history:
+            await viewModel.loadIfNeeded()
+        case .overview:
+            await overviewViewModel?.loadIfNeeded()
+        case .friends:
+            await friendListViewModel?.loadIfNeeded()
         }
     }
 

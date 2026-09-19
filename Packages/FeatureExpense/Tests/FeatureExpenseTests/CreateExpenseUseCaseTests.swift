@@ -77,6 +77,20 @@ private actor StubExpenseRepository: ExpenseRepositoryProtocol {
         return MonthlyExpenseSummary(currency: "VND", currentMonth: month, months: [month])
     }
 
+    func fetchOverview() async throws -> ExpenseOverview {
+        throw AppError.unknown("unused")
+    }
+
+    func fetchSpendingAnalytics(period: SpendingAnalyticsPeriod, months: Int) async throws
+        -> SpendingAnalytics
+    {
+        throw AppError.unknown("unused")
+    }
+
+    func fetchGroupExpenseSummary() async throws -> GroupExpenseSummary {
+        throw AppError.unknown("unused")
+    }
+
     func fetchExpenses(
         counterpartyId: UUID,
         page: Int,
