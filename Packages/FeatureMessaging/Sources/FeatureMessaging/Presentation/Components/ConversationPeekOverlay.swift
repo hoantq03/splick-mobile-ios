@@ -38,7 +38,7 @@ struct ConversationPeekOverlay: View {
     @State private var userReleasedBottomPin = false
     @State private var isNearTop = false
     /// Measured options chrome; initial guess matches two 2-column chip rows.
-    @State private var optionsSize = CGSize(width: 320, height: 96)
+    @State private var optionsSize = CGSize(width: 320, height: 104)
     @State private var didFreezeOptionsSize = false
     private static let olderLoaderSlotHeight: CGFloat = 28
     private static let peekBottomAnchor = "peek-timeline-bottom"
@@ -51,10 +51,7 @@ struct ConversationPeekOverlay: View {
     private let contentGap = SplickTheme.Spacing.sm
     /// Extra drop below the Dynamic Island / status bar so chips are fully visible.
     private let extraBelowIsland = SplickTheme.Spacing.sm
-    /// Options band soft-cap as a fraction of the usable vertical space (keeps preview roomy on SE).
-    private let optionsMaxHeightFraction: CGFloat = 0.22
-    /// Preview always keeps at least this fraction of usable height.
-    private let previewMinHeightFraction: CGFloat = 0.55
+    private let optionsBandHeight: CGFloat = 104
 
     var body: some View {
         GeometryReader { geometry in
@@ -67,24 +64,18 @@ struct ConversationPeekOverlay: View {
                 optionsSize: optionsSize
             )
             let destFrame = layout.previewFrame
-            // Morph from the list row into the stacked peek card — this is the bounce users expect.
+            // Morph from the list row into a floating peek card — inbox stays visible around it.
             let currentFrame = isRevealed ? destFrame : context.anchorFrame
-            let matchingRadius = max(
-                Self.displayCornerRadius - edgeMargin,
-                SplickTheme.CornerRadius.card
-            )
-            let previewShape = UnevenRoundedRectangle(
-                topLeadingRadius: SplickTheme.CornerRadius.card,
-                bottomLeadingRadius: matchingRadius,
-                bottomTrailingRadius: matchingRadius,
-                topTrailingRadius: SplickTheme.CornerRadius.card,
+            let previewShape = RoundedRectangle(
+                cornerRadius: SplickTheme.CornerRadius.card,
                 style: .continuous
             )
 
             ZStack(alignment: .topLeading) {
                 Color.black
-                    .opacity(isRevealed ? 0.52 : 0)
+                    .opacity(isRevealed ? 0.45 : 0)
                     .ignoresSafeArea()
+                    .allowsHitTesting(true)
                     .contentShape(Rectangle())
                     .onTapGesture {
                         guard dismissIsArmed else { return }
@@ -100,7 +91,10 @@ struct ConversationPeekOverlay: View {
                         var transaction = Transaction()
                         transaction.disablesAnimations = true
                         withTransaction(transaction) {
-                            optionsSize = size
+                            optionsSize = CGSize(
+                                width: size.width,
+                                height: max(size.height, optionsBandHeight)
+                            )
                         }
                     }
                     .scaleEffect(
@@ -133,6 +127,7 @@ struct ConversationPeekOverlay: View {
             }
         }
         .ignoresSafeArea()
+        .background(Color.clear)
         .onAppear {
             // Paint the first frame at the list-row anchor, then spring-morph open.
             // Without the async hop, SwiftUI often skips the anchor frame and the bounce vanishes.
@@ -233,7 +228,7 @@ struct ConversationPeekOverlay: View {
         }
     }
 
-    private func previewCard(shape: UnevenRoundedRectangle) -> some View {
+    private func previewCard(shape: RoundedRectangle) -> some View {
         VStack(spacing: 0) {
             ConversationRowView(
                 conversation: context.conversation,
@@ -485,7 +480,7 @@ struct ConversationPeekOverlay: View {
         let previewFrame: CGRect
     }
 
-    /// Percentage-based stack: options on top (no overlap), preview fills the rest.
+    /// Options on top; preview is a floating card so leftover inbox stays visible.
     private func peekLayout(
         containerSize: CGSize,
         insets: EdgeInsets,
@@ -497,27 +492,24 @@ struct ConversationPeekOverlay: View {
         let bottom = containerSize.height - max(insets.bottom, Self.windowSafeAreaBottom)
             - SplickTabBarMetrics.floatingClearance - edgeMargin
         let width = max(right - left, 160)
-        let usableHeight = max(bottom - chromeTop, 200)
-
-        // Prefer measured chip height; soft-cap only so SE still leaves a usable preview.
-        let optionsHeightCap = usableHeight * optionsMaxHeightFraction
-        let optionsHeight = min(max(optionsSize.height, 44), max(optionsHeightCap, 44))
+        let optionsHeight = max(optionsSize.height, optionsBandHeight)
         let optionsFrame = CGRect(
             x: left,
             y: chromeTop,
             width: width,
             height: optionsHeight
         )
-
-        // Hard gap under options — never overlap (previous 55% pull-up covered the chips).
-        let previewTop = optionsFrame.maxY + contentGap
-        let previewMinHeight = usableHeight * previewMinHeightFraction
-        let previewHeight = max(bottom - previewTop, min(previewMinHeight, usableHeight * 0.5))
+        let previewRect = ConversationPeekLayout.previewDestination(
+            top: chromeTop,
+            bottom: bottom,
+            optionsHeight: optionsHeight,
+            gap: contentGap
+        )
         let previewFrame = CGRect(
             x: left,
-            y: previewTop,
+            y: previewRect.minY,
             width: width,
-            height: previewHeight
+            height: previewRect.height
         )
 
         return PeekLayout(optionsFrame: optionsFrame, previewFrame: previewFrame)
