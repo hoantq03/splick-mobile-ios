@@ -272,8 +272,16 @@ private final class _PagerGestureCoordinator: NSObject, UIGestureRecognizerDeleg
 
         let velocity = pan.velocity(in: hostView)
         let total = abs(velocity.x) + abs(velocity.y)
-        guard total > 20 else { return true }
-        return abs(velocity.x) * 2 >= abs(velocity.y)
+        if total > 20 {
+            return abs(velocity.x) * 2 >= abs(velocity.y)
+        }
+        // Near-zero velocity: do not steal taps. Allow slow horizontal swipes
+        // only once translation already shows a clear sideways intent.
+        let translation = pan.translation(in: hostView)
+        let tx = abs(translation.x)
+        let ty = abs(translation.y)
+        guard tx + ty > 8 else { return false }
+        return tx * 2 >= ty
     }
 
     func gestureRecognizer(
