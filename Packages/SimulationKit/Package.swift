@@ -41,5 +41,10 @@ let package = Package(
             dependencies: ["SimulationKit"],
             path: "Sources/Sandbox"
         ),
+        .testTarget(
+            name: "SimulationKitTests",
+            dependencies: ["SimulationKit"],
+            path: "Tests/SimulationKitTests"
+        ),
     ]
 )
