@@ -189,7 +189,7 @@ final class MockAuthRepository: AuthRepositoryProtocol, @unchecked Sendable {
         try requestLinkEmailOtpResult.get()
     }
 
-    func linkEmailAccount(email: String?, otpCode: String, password: String) async throws {
+    func linkEmailAccount(email: String?, otpCode: String, password: String?) async throws {
         try linkEmailResult.get()
     }
 

@@ -343,7 +343,7 @@ public final class AuthRepository: AuthRepositoryProtocol, Sendable {
         try await apiClient.request(AuthEndpoint.requestLinkEmailOtp(dto))
     }
 
-    public func linkEmailAccount(email: String?, otpCode: String, password: String) async throws {
+    public func linkEmailAccount(email: String?, otpCode: String, password: String?) async throws {
         let dto = LinkEmailAccountRequestDTO(email: email, otpCode: otpCode, password: password)
         try await apiClient.request(AuthEndpoint.linkEmail(dto))
     }

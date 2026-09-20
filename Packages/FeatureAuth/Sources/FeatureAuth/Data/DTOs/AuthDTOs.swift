@@ -100,6 +100,7 @@ struct UserDTO: Decodable {
     let timezone: String?
     let dateOfBirth: String?
     let createdAt: Date
+    let hasPassword: Bool?
 }
 
 struct UpdateUserProfileRequestDTO: Encodable {
@@ -212,7 +213,18 @@ struct LinkPhoneAccountRequestDTO: Encodable {
 struct LinkEmailAccountRequestDTO: Encodable {
     let email: String?
     let otpCode: String
-    let password: String
+    let password: String?
+
+    enum CodingKeys: String, CodingKey {
+        case email, otpCode, password
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(email, forKey: .email)
+        try container.encode(otpCode, forKey: .otpCode)
+        try container.encodeIfPresent(password, forKey: .password)
+    }
 }
 
 struct ConnectedAccountsDTO: Decodable {

@@ -19,6 +19,7 @@ enum AuthMapper {
             preferredLocale: dto.preferredLocale ?? "vi",
             timezone: dto.timezone ?? "Asia/Ho_Chi_Minh",
             dateOfBirth: dto.dateOfBirth.flatMap(Date.from(apiCalendarDate:)),
+            hasPassword: dto.hasPassword ?? true,
             createdAt: dto.createdAt
         )
     }

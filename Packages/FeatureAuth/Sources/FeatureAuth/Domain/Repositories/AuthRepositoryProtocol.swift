@@ -59,7 +59,7 @@ public protocol AuthRepositoryProtocol: Sendable {
     func requestLinkPhoneOtp(phoneNumber: String) async throws
     func linkPhoneAccount(phoneNumber: String, otpCode: String) async throws
     func requestLinkEmailOtp(email: String?) async throws
-    func linkEmailAccount(email: String?, otpCode: String, password: String) async throws
+    func linkEmailAccount(email: String?, otpCode: String, password: String?) async throws
     func fetchMyPaymentProfile() async throws -> PaymentProfile
     func upsertMyPaymentProfile(
         qrImageUrl: String?,
