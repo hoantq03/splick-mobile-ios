@@ -583,7 +583,7 @@ public final class ExpenseListViewModel: ObservableObject {
     }
 }
 
-private struct ExpenseOverviewSnapshot {
+struct ExpenseOverviewSnapshot {
     static let empty = ExpenseOverviewSnapshot()
 
     var oweUnpaidTotal: Decimal = 0

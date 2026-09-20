@@ -460,7 +460,7 @@ final class ExpenseEndpointsAndUseCasesTests: XCTestCase {
 
 // MARK: - Mock Repository
 
-private actor MockAllExpensesRepository: ExpenseRepositoryProtocol {
+actor MockAllExpensesRepository: ExpenseRepositoryProtocol {
     func fetchExpenses(groupId: UUID?, page: Int, limit: Int, cursor: String?) async throws -> [Expense] {
         [
             Expense(
@@ -610,7 +610,7 @@ private actor MockAllExpensesRepository: ExpenseRepositoryProtocol {
 
 // MARK: - Mock User Defaults
 
-private final class MockUserDefaultsService: UserDefaultsServiceProtocol, @unchecked Sendable {
+final class MockUserDefaultsService: UserDefaultsServiceProtocol, @unchecked Sendable {
     private var store: [String: Any] = [:]
 
     func set<T: Codable>(_ value: T, for key: String) {

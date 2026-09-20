@@ -358,4 +358,43 @@ final class ExpenseRepositoryTests: XCTestCase {
         XCTAssertEqual(result.splitId, splitId)
         XCTAssertEqual(result.postId, postId)
     }
+
+    func testRepositoryResolutionsWithFriendDisplayNameStore() async throws {
+        let store = FriendDisplayNameStore()
+        let repoWithStore = ExpenseRepository(apiClient: apiClient, friendDisplayNameStore: store)
+        let expenseId = UUID()
+        let userDTO = ExpenseUserDTO(id: UUID(), username: "payer", displayName: "Payer", avatarUrl: nil)
+        let dto = ExpenseResponseDTO(
+            id: expenseId,
+            description: "Dinner",
+            totalAmount: "100000",
+            currency: "VND",
+            paidBy: userDTO,
+            splits: [],
+            groupId: nil,
+            postId: nil,
+            category: "FOOD",
+            status: "PENDING",
+            createdAt: Date(),
+            settledAt: nil
+        )
+        apiClient.mockResponse = [dto]
+
+        let expenses = try await repoWithStore.fetchExpenses(groupId: nil, page: 0, limit: 20, cursor: nil)
+        XCTAssertEqual(expenses.count, 1)
+
+        apiClient.mockResponse = dto
+        let expense = try await repoWithStore.fetchExpense(id: expenseId)
+        XCTAssertEqual(expense.id, expenseId)
+
+        let debtDTO = DebtSummaryDTO(
+            user: userDTO,
+            amount: "50000",
+            currency: "VND"
+        )
+        apiClient.mockResponse = DebtSummaryPageDTO(content: [debtDTO])
+        let debts = try await repoWithStore.fetchDebtSummary(groupId: nil)
+        XCTAssertEqual(debts.count, 1)
+    }
 }
+
