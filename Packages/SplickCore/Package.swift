@@ -61,5 +61,15 @@ let package = Package(
             dependencies: ["Common"],
             path: "Tests/CommonTests"
         ),
+        .testTarget(
+            name: "StorageTests",
+            dependencies: ["Storage", "Common"],
+            path: "Tests/StorageTests"
+        ),
+        .testTarget(
+            name: "NetworkingTests",
+            dependencies: ["Networking", "Common"],
+            path: "Tests/NetworkingTests"
+        ),
     ]
 )
