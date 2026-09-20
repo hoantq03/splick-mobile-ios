@@ -9,11 +9,24 @@ enum EditorLayout {
     static let bottomBarHeight: CGFloat = 92
     static let drawOptionsHeight: CGFloat = 56
     static let stickerOptionsHeight: CGFloat = 280
+    /// Extra gap below the notch / Dynamic Island before the top chrome row.
+    static let topBarBelowSafeArea: CGFloat = SplickTheme.Spacing.sm
 
     /// Fixed insets keep the image frame stable while chrome fades in/out.
-    static func canvasTopInset() -> CGFloat { topBarHeight }
+    static func canvasTopInset(safeTop: CGFloat = windowSafeAreaTop) -> CGFloat {
+        safeTop + topBarBelowSafeArea + topBarHeight
+    }
 
     static func canvasBottomInset() -> CGFloat { bottomBarHeight }
+
+    static var windowSafeAreaTop: CGFloat {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let inset = scenes
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)?
+            .safeAreaInsets.top
+        return inset ?? 59
+    }
 }
 
 struct PhotoEditorView: View {

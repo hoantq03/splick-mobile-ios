@@ -76,7 +76,8 @@ struct EditorToolbar: View {
             .disabled(viewModel.isExporting)
         }
         .padding(.horizontal, SplickTheme.Spacing.md)
-        .padding(.top, SplickTheme.Spacing.sm)
+        // Sit clearly under the notch / Dynamic Island (status bar is hidden in editor).
+        .padding(.top, EditorLayout.windowSafeAreaTop + EditorLayout.topBarBelowSafeArea)
         .padding(.bottom, SplickTheme.Spacing.xs)
         .opacity(viewModel.isChromeVisible ? 1 : 0)
     }
