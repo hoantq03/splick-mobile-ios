@@ -32,7 +32,12 @@ public struct FlowLayout: Layout {
         var frames: [CGRect] = []
 
         for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
+            // Prefer intrinsic width (hug content) like Android FlowRow; only clamp
+            // when a chip is wider than the container.
+            var size = subview.sizeThatFits(.unspecified)
+            if maxWidth.isFinite, size.width > maxWidth {
+                size = subview.sizeThatFits(ProposedViewSize(width: maxWidth, height: nil))
+            }
             if x + size.width > maxWidth, x > 0 {
                 x = 0
                 y += rowHeight + lineSpacing

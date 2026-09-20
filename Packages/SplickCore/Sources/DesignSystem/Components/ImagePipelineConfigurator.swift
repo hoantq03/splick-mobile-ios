@@ -25,10 +25,11 @@ public enum ImagePipelineConfigurator {
         // Persist both original bytes and processed (resized) variants so scroll-back
         // and cold start never re-fetch the same feed/album URL from the network.
         configuration.dataCachePolicy = .storeAll
-        configuration.imageCache = ImageCache(
+        let memoryCache = ImageCache(
             costLimit: memoryCacheCostLimit,
             countLimit: 80
         )
+        configuration.imageCache = memoryCache
         // Skip eager RGBA decompression that used to spike CVPixelBuffer usage with ImageIO thumbnails.
         // Feed images now downscale via ImageProcessors.Resize instead.
         configuration.isDecompressionEnabled = false
@@ -40,7 +41,7 @@ public enum ImagePipelineConfigurator {
             object: nil,
             queue: .main
         ) { _ in
-            ImageCache.shared.removeAll()
+            memoryCache.removeAll()
         }
     }
 }
