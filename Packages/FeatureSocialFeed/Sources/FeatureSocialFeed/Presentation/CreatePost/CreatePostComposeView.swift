@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import CoreLocation
+import Common
 import DesignSystem
 import Localization
 import SplickDomain
@@ -139,16 +140,22 @@ public struct CreatePostComposeView: View {
             }
             .padding(.bottom, SplickTheme.Spacing.xl)
         }
+        .scrollDismissesKeyboard(.immediately)
+        .dismissKeyboardOnTap()
         }
         .navigationTitle(languageService.text(.feedCreateTitle))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button(languageService.text(.commonCancel), action: onCancel)
+                Button(languageService.text(.commonCancel), action: {
+                    PhotoEditorSessionStore.shared.removeAll()
+                    onCancel()
+                })
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button(languageService.text(.feedCreatePostAction)) {
                     if let prepared = viewModel.prepareSubmit() {
+                        PhotoEditorSessionStore.shared.removeAll()
                         onPostSubmit(prepared)
                     }
                 }
@@ -225,6 +232,7 @@ public struct CreatePostComposeView: View {
                 } else if let image = item.previewImage, item.mediaType == .image {
                     SelectedPhotoReviewView(
                         image: image,
+                        sessionId: id,
                         stickerPickerBuilder: stickerPickerBuilder,
                         onImageUpdated: { viewModel.updateMediaImage(id: id, image: $0) },
                         onDismiss: { reviewingMediaID = nil }
@@ -536,6 +544,7 @@ public struct CreatePostComposeView: View {
     }
 
     private func toggleComposeOption(_ option: ExpandedComposeOption) {
+        hideKeyboard()
         withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
             expandedComposeOption = expandedComposeOption == option ? nil : option
         }
@@ -840,7 +849,7 @@ public struct CreatePostComposeView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 4) {
-                TextField("0", text: percentBinding(for: guestId))
+                TextField("-", text: percentBinding(for: guestId))
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.center)
                     .frame(width: 48)
@@ -880,7 +889,8 @@ public struct CreatePostComposeView: View {
                 LiveVNDMoneyTextField(
                     text: exactAmountBinding(for: guestId),
                     font: .systemFont(ofSize: 16, weight: .medium),
-                    textColor: UIColor(SplickTheme.Colors.textPrimary)
+                    textColor: UIColor(SplickTheme.Colors.textPrimary),
+                    placeholder: "-"
                 )
                 .frame(minWidth: 100)
 
@@ -910,14 +920,14 @@ public struct CreatePostComposeView: View {
     private func percentBinding(for userId: UUID) -> Binding<String> {
         Binding(
             get: { viewModel.percentageTexts[userId] ?? "" },
-            set: { viewModel.percentageTexts[userId] = $0.filter { $0.isNumber || $0 == "," || $0 == "." } }
+            set: { viewModel.setPercentage(userId: userId, raw: $0) }
         )
     }
 
     private func exactAmountBinding(for userId: UUID) -> Binding<String> {
         Binding(
             get: { viewModel.exactAmountTexts[userId] ?? "" },
-            set: { viewModel.exactAmountTexts[userId] = $0 }
+            set: { viewModel.setExactAmount(userId: userId, raw: $0) }
         )
     }
 }
@@ -966,7 +976,8 @@ private struct ComposeCompanionsEditorView: View {
                         .padding(SplickTheme.Spacing.md)
                         .padding(.bottom, SplickTheme.Spacing.xl)
                     }
-                    .scrollDismissesKeyboard(.never)
+                    .scrollDismissesKeyboard(.immediately)
+                    .dismissKeyboardOnTap()
                     .navigationTitle(companionsTitle)
                     .navigationBarTitleDisplayMode(.inline)
                     .onChange(of: isFriendSearchFocused) { focused in
@@ -1019,7 +1030,7 @@ private struct ComposeCompanionsEditorView: View {
                         }
                         .padding(SplickTheme.Spacing.sm)
 
-                        if isFriendSearchFocused {
+                        if viewModel.shouldShowFriendSuggestions {
                             Divider()
                             friendSearchResultsList
                         }
@@ -1042,9 +1053,10 @@ private struct ComposeCompanionsEditorView: View {
         }
     }
 
-    private func addCompanionKeepingSearchFocus(_ friend: UserSummary) {
+    private func addCompanionAndDismissSearch(_ friend: UserSummary) {
         viewModel.addCompanion(friend)
-        isFriendSearchFocused = true
+        isFriendSearchFocused = false
+        hideKeyboard()
     }
 
     private var billShareAddActions: some View {
@@ -1211,7 +1223,7 @@ private struct ComposeCompanionsEditorView: View {
                     SplickSpinner(size: .small)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, SplickTheme.Spacing.md)
-                } else {
+                } else if !viewModel.friendSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text(languageService.text(.feedCreateFriendsNotFound))
                         .font(SplickTheme.Typography.caption)
                         .foregroundStyle(SplickTheme.Colors.textTertiary)
@@ -1230,7 +1242,7 @@ private struct ComposeCompanionsEditorView: View {
                 ForEach(viewModel.friendSearchResults) { friend in
                     HStack(spacing: SplickTheme.Spacing.sm) {
                         Button {
-                            addCompanionKeepingSearchFocus(friend)
+                            addCompanionAndDismissSearch(friend)
                         } label: {
                             HStack(spacing: SplickTheme.Spacing.sm) {
                                 AvatarView(
@@ -1257,7 +1269,7 @@ private struct ComposeCompanionsEditorView: View {
                         .buttonStyle(.plain)
 
                         Button {
-                            addCompanionKeepingSearchFocus(friend)
+                            addCompanionAndDismissSearch(friend)
                         } label: {
                             Image(systemName: "plus.circle.fill")
                                 .font(.system(size: 18))
@@ -1303,7 +1315,8 @@ private struct ComposeCompanionsEditorView: View {
             ForEach(viewModel.filteredCompanionGroups) { group in
                 Button {
                     viewModel.selectCompanionGroup(group)
-                    isFriendSearchFocused = true
+                    isFriendSearchFocused = false
+                    hideKeyboard()
                 } label: {
                     companionGroupRow(group)
                 }

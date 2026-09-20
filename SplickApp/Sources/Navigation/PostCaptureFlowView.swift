@@ -67,7 +67,10 @@ struct PostCaptureFlowView: View {
                 appState.selectedTab = .feed
                 onDismiss()
             },
-            onCancel: { capturedMedia = nil }
+            onCancel: {
+                // Cancel compose returns to the capture finder for any media type.
+                capturedMedia = nil
+            }
         )
     }
 
