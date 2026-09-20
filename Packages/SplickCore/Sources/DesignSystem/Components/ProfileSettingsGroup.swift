@@ -6,6 +6,7 @@ public struct ProfileSettingsItem: Identifiable {
     public let title: String
     public let subtitle: String?
     public let isDestructive: Bool
+    public let isEnabled: Bool
     public let action: () -> Void
 
     public init(
@@ -13,12 +14,14 @@ public struct ProfileSettingsItem: Identifiable {
         title: String,
         subtitle: String? = nil,
         isDestructive: Bool = false,
+        isEnabled: Bool = true,
         action: @escaping () -> Void
     ) {
         self.icon = icon
         self.title = title
         self.subtitle = subtitle
         self.isDestructive = isDestructive
+        self.isEnabled = isEnabled
         self.action = action
     }
 }
@@ -46,6 +49,7 @@ public struct ProfileSettingsGroup: View {
                         title: item.title,
                         subtitle: item.subtitle,
                         isDestructive: item.isDestructive,
+                        isEnabled: item.isEnabled,
                         action: item.action
                     )
 
@@ -67,6 +71,7 @@ public struct ProfileSettingsRow: View {
     private let title: String
     private let subtitle: String?
     private let isDestructive: Bool
+    private let isEnabled: Bool
     private let action: () -> Void
 
     public init(
@@ -74,12 +79,14 @@ public struct ProfileSettingsRow: View {
         title: String,
         subtitle: String? = nil,
         isDestructive: Bool = false,
+        isEnabled: Bool = true,
         action: @escaping () -> Void
     ) {
         self.icon = icon
         self.title = title
         self.subtitle = subtitle
         self.isDestructive = isDestructive
+        self.isEnabled = isEnabled
         self.action = action
     }
 
@@ -104,14 +111,18 @@ public struct ProfileSettingsRow: View {
                         .lineLimit(1)
                 }
 
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(SplickTheme.Colors.textTertiary)
+                if isEnabled {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(SplickTheme.Colors.textTertiary)
+                }
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
             .padding(.vertical, SplickTheme.Spacing.sm + 2)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.45)
     }
 }

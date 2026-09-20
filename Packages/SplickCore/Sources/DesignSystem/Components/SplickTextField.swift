@@ -127,6 +127,7 @@ public struct SplickTextField: View {
                     }
                 }
                     .padding(.top, fieldHeight + 8)
+                    .allowsHitTesting(false)
                     .transition(
                         .asymmetric(
                             insertion: .opacity.combined(with: .scale(scale: 0.96, anchor: .top)),
@@ -147,6 +148,13 @@ public struct SplickTextField: View {
         }
         .onChange(of: overlayNote) { note in
             if let note, !note.isEmpty { noteDismissed = false }
+        }
+        .onChange(of: isFieldFocused) { focused in
+            if focused {
+                noteDismissed = false
+            } else {
+                lingerComplete = false
+            }
         }
         .onChange(of: allRequirementsMet) { met in
             handleRequirementsCompletion(met)
@@ -172,21 +180,21 @@ public struct SplickTextField: View {
     }
 
     private var popupVisible: Bool {
-        guideVisible || overlayVisible
+        isFieldFocused && (guideVisible || overlayVisible)
     }
 
     private var showsWarningAccessory: Bool {
         if !requirementItems.isEmpty {
-            return guideVisible
+            return guideVisible || (hasOverlayIssue && !noteDismissed)
         }
         if hasOverlayIssue {
-            return true
+            return !noteDismissed
         }
         return validationStatus == .warning
     }
 
     private var showsValidCheck: Bool {
-        guard !popupVisible else { return false }
+        guard !guideVisible, !overlayVisible else { return false }
         if !requirementItems.isEmpty {
             return allRequirementsMet && !text.isEmpty
         }
@@ -284,7 +292,12 @@ public struct SplickTextField: View {
         Button {
             if !requirementItems.isEmpty || hasOverlayIssue {
                 withAnimation(Self.guideAnimation) {
-                    noteDismissed.toggle()
+                    if isFieldFocused {
+                        noteDismissed.toggle()
+                    } else {
+                        noteDismissed = false
+                        isFieldFocused = true
+                    }
                 }
             } else {
                 onValidationAccessoryTap?()
@@ -375,13 +388,7 @@ private struct PasswordRequirementsOverlayCard: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(SplickTheme.Colors.cardBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(SplickTheme.Colors.divider.opacity(0.55), lineWidth: 1)
-        }
-        .shadow(color: Color.black.opacity(0.12), radius: 12, y: 6)
+        .passwordOverlayCard()
     }
 }
 
@@ -394,12 +401,32 @@ private struct PasswordMessageOverlayCard: View {
             .foregroundStyle(SplickTheme.Colors.textPrimary)
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(SplickTheme.Colors.cardBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .passwordOverlayCard()
+    }
+}
+
+private extension View {
+    func passwordOverlayCard() -> some View {
+        frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                SplickTheme.Colors.cardBackground,
+                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+            )
             .overlay {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(SplickTheme.Colors.divider.opacity(0.55), lineWidth: 1)
+                    .strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5)
             }
-            .shadow(color: Color.black.opacity(0.12), radius: 12, y: 6)
+            .shadow(
+                color: SplickTheme.Shadow.small.color,
+                radius: SplickTheme.Shadow.small.radius,
+                x: SplickTheme.Shadow.small.x,
+                y: SplickTheme.Shadow.small.y
+            )
+            .shadow(
+                color: SplickTheme.Shadow.card.color,
+                radius: SplickTheme.Shadow.card.radius,
+                x: SplickTheme.Shadow.card.x,
+                y: SplickTheme.Shadow.card.y
+            )
     }
 }

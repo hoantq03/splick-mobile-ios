@@ -2,6 +2,7 @@ import Common
 import DesignSystem
 import Localization
 
+@MainActor
 func passwordRequirementGuideItems(
     for password: String,
     languageService: LanguageService

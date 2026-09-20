@@ -17,6 +17,8 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case profileTitle = "profile.title"
     case profileEdit = "profile.edit"
     case profileChangePassword = "profile.change_password"
+    case profileChangePasswordUnavailable = "profile.change_password.unavailable"
+    case profileChangePasswordUnavailableShort = "profile.change_password.unavailable_short"
     case profileDevicesSessions = "profile.devices_sessions"
     case sessionsTitle = "sessions.title"
     case sessionsSubtitle = "sessions.subtitle"

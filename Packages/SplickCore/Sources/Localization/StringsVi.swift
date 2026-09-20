@@ -20,6 +20,8 @@ enum StringsVi {
         .profileTitle: "Hồ sơ",
         .profileEdit: "Sửa hồ sơ",
         .profileChangePassword: "Đổi mật khẩu",
+        .profileChangePasswordUnavailable: "Tài khoản này đăng nhập bằng bên thứ 3 và chưa có mật khẩu. Hãy tạo mật khẩu trong Tài khoản liên kết.",
+        .profileChangePasswordUnavailableShort: "Chưa có mật khẩu",
         .profileDevicesSessions: "Thiết bị & phiên đăng nhập",
         .sessionsTitle: "Thiết bị & phiên đăng nhập",
         .sessionsSubtitle: "Các thiết bị đang đăng nhập vào tài khoản của bạn. Gỡ thiết bị nào bạn không nhận ra.",

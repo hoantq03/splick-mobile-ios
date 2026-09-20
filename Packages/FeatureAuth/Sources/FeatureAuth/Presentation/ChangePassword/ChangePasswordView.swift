@@ -29,42 +29,32 @@ public struct ChangePasswordView: View {
             if viewModel.isResolvingPasswordLogin {
                 SplickSpinner()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                VStack(spacing: SplickTheme.Spacing.lg) {
-                    if viewModel.hasPasswordLogin {
-                        verificationPicker
-                            .padding(.horizontal, SplickTheme.Spacing.lg)
-                            .padding(.top, SplickTheme.Spacing.lg)
-                    } else {
-                        Text(languageService.text(.createPasswordHint))
-                            .font(SplickTheme.Typography.callout)
-                            .foregroundStyle(SplickTheme.Colors.textSecondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, SplickTheme.Spacing.lg)
-                            .padding(.top, SplickTheme.Spacing.lg)
-                    }
+            } else if viewModel.hasPasswordLogin {
+                VStack(spacing: SplickTheme.Spacing.md) {
+                    verificationPicker
+                        .padding(.horizontal, SplickTheme.Spacing.lg)
+                        .padding(.top, SplickTheme.Spacing.lg)
 
-                    if viewModel.hasPasswordLogin {
-                        TabView(selection: $viewModel.method) {
-                            pageScroll(currentPasswordPage)
-                                .tag(ChangePasswordViewModel.VerificationMethod.currentPassword)
+                    TabView(selection: $viewModel.method) {
+                        pageScroll(currentPasswordPage)
+                            .tag(ChangePasswordViewModel.VerificationMethod.currentPassword)
 
-                            pageScroll(emailCodePage)
-                                .tag(ChangePasswordViewModel.VerificationMethod.emailCode)
-                        }
-                        .tabViewStyle(.page(indexDisplayMode: .never))
-                        .animation(.easeInOut(duration: 0.25), value: viewModel.method)
-                    } else {
                         pageScroll(emailCodePage)
+                            .tag(ChangePasswordViewModel.VerificationMethod.emailCode)
                     }
+                    .tabViewStyle(.page(indexDisplayMode: .never))
+                    .animation(.easeInOut(duration: 0.25), value: viewModel.method)
+                }
+            } else {
+                ScrollView {
+                    unavailableSection
+                        .padding(SplickTheme.Spacing.lg)
                 }
             }
         }
         .background(SplickTheme.Colors.background)
         .dismissKeyboardOnTap()
-        .navigationTitle(
-            languageService.text(viewModel.hasPasswordLogin ? .changePasswordTitle : .createPasswordTitle)
-        )
+        .navigationTitle(languageService.text(.changePasswordTitle))
         .navigationBarTitleDisplayMode(.inline)
         .task { await viewModel.loadPasswordLoginState() }
         .onChange(of: viewModel.method) { _ in
@@ -98,8 +88,8 @@ public struct ChangePasswordView: View {
     private var verificationPicker: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
             Text(languageService.text(.changePasswordVerifyWith))
-                .font(SplickTheme.Typography.caption)
-                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                .font(SplickTheme.Typography.headline)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
                 .padding(.leading, SplickTheme.Spacing.sm)
 
             Picker("", selection: $viewModel.method) {
@@ -112,33 +102,79 @@ public struct ChangePasswordView: View {
         }
     }
 
-    private var currentPasswordPage: some View {
-        VStack(spacing: SplickTheme.Spacing.lg) {
-            if viewModel.isCurrentPasswordVerified {
-                verifiedNewPasswordSection()
-            } else {
-                PasswordMascotView(
-                    passwordLength: viewModel.currentPassword.count,
-                    isPasswordVisible: isCurrentPasswordVisible
-                )
-                .padding(.top, SplickTheme.Spacing.sm)
-                .padding(.bottom, SplickTheme.Spacing.xs)
+    private var unavailableSection: some View {
+        settingsGroup(title: languageService.text(.changePasswordTitle)) {
+            Text(languageService.text(.profileChangePasswordUnavailable))
+                .font(SplickTheme.Typography.callout)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(SplickTheme.Spacing.md)
+        }
+    }
 
-                SplickTextField(
-                    languageService.text(.changePasswordCurrentPassword),
-                    text: $viewModel.currentPassword,
-                    isSecure: true,
-                    errorMessage: viewModel.currentPasswordError,
-                    icon: "lock",
-                    showsPasswordVisibilityToggle: true,
-                    isPasswordVisible: $isCurrentPasswordVisible,
-                    passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
-                    passwordHiddenAccessibilityLabel: languageService.text(.authHidePassword)
-                )
-                .textContentType(.password)
-                .onChange(of: viewModel.currentPassword) { _ in
-                    guard !viewModel.isCurrentPasswordVerified else { return }
-                    viewModel.onCurrentPasswordChanged()
+    private func settingsGroup<Content: View>(
+        title: String,
+        clipsContent: Bool = true,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        let shape = RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.control, style: .continuous)
+        return VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+            Text(title)
+                .font(SplickTheme.Typography.headline)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
+                .padding(.leading, SplickTheme.Spacing.sm)
+
+            Group {
+                if clipsContent {
+                    VStack(spacing: 0) { content() }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(SplickTheme.Colors.cardBackground)
+                        .clipShape(shape)
+                } else {
+                    VStack(spacing: 0) { content() }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(shape.fill(SplickTheme.Colors.cardBackground))
+                }
+            }
+        }
+    }
+
+    private var currentPasswordPage: some View {
+        VStack(spacing: SplickTheme.Spacing.md) {
+            if viewModel.isCurrentPasswordVerified {
+                settingsGroup(title: languageService.text(.changePasswordNewPassword), clipsContent: false) {
+                    verifiedNewPasswordFields()
+                        .padding(SplickTheme.Spacing.md)
+                }
+                verifiedSubmitButton
+            } else {
+                settingsGroup(title: languageService.text(.changePasswordMethodCurrent), clipsContent: false) {
+                    VStack(spacing: SplickTheme.Spacing.lg) {
+                        PasswordMascotView(
+                            passwordLength: viewModel.currentPassword.count,
+                            isPasswordVisible: isCurrentPasswordVisible
+                        )
+                        .padding(.top, SplickTheme.Spacing.sm)
+                        .padding(.bottom, SplickTheme.Spacing.xs)
+
+                        SplickTextField(
+                            languageService.text(.changePasswordCurrentPassword),
+                            text: $viewModel.currentPassword,
+                            isSecure: true,
+                            errorMessage: viewModel.currentPasswordError,
+                            icon: "lock",
+                            showsPasswordVisibilityToggle: true,
+                            isPasswordVisible: $isCurrentPasswordVisible,
+                            passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
+                            passwordHiddenAccessibilityLabel: languageService.text(.authHidePassword)
+                        )
+                        .textContentType(.password)
+                        .onChange(of: viewModel.currentPassword) { _ in
+                            guard !viewModel.isCurrentPasswordVerified else { return }
+                            viewModel.onCurrentPasswordChanged()
+                        }
+                    }
+                    .padding(SplickTheme.Spacing.md)
                 }
 
                 SplickButton(
@@ -156,28 +192,47 @@ public struct ChangePasswordView: View {
     }
 
     private var emailCodePage: some View {
-        VStack(spacing: SplickTheme.Spacing.lg) {
-            readOnlyAccountEmailField
-
+        VStack(spacing: SplickTheme.Spacing.md) {
             if viewModel.isEmailCodeVerified {
-                verifiedNewPasswordSection(showMascot: false)
-                    .transition(
-                        .asymmetric(
-                            insertion: .move(edge: .bottom).combined(with: .opacity),
-                            removal: .opacity
-                        )
-                    )
+                settingsGroup(title: languageService.text(.changePasswordNewPassword), clipsContent: false) {
+                    verifiedNewPasswordFields(showMascot: false)
+                        .padding(SplickTheme.Spacing.md)
+                }
+                verifiedSubmitButton
             } else {
-                emailOtpSection
-                    .transition(
-                        .asymmetric(
-                            insertion: .opacity,
-                            removal: .move(edge: .top).combined(with: .opacity)
-                        )
-                    )
+                settingsGroup(title: languageService.text(.changePasswordMethodEmail), clipsContent: false) {
+                    VStack(spacing: SplickTheme.Spacing.lg) {
+                        readOnlyAccountEmailField
+                        emailOtpFields
+                    }
+                    .padding(SplickTheme.Spacing.md)
+                }
+
+                SplickButton(
+                    languageService.text(
+                        viewModel.hasSentEmailCode
+                            ? .changePasswordVerifyContinue
+                            : .changePasswordSendCode
+                    ),
+                    isLoading: viewModel.hasSentEmailCode
+                        ? viewModel.isVerifyingEmailCode
+                        : viewModel.isRequestingEmailCode,
+                    isFailed: viewModel.hasSentEmailCode
+                        ? viewModel.otpError != nil
+                        : viewModel.sendCodeFailed,
+                    isDisabled: viewModel.hasSentEmailCode
+                        ? viewModel.otpCode.count != SplickOtpField.defaultLength
+                        : viewModel.accountEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ) {
+                    if viewModel.hasSentEmailCode {
+                        hideKeyboard()
+                        Task { await viewModel.verifyEmailCodeStep() }
+                    } else {
+                        Task { await viewModel.requestEmailCode() }
+                    }
+                }
             }
         }
-        .padding(.top, SplickTheme.Spacing.sm)
         .animation(.spring(response: 0.48, dampingFraction: 0.86), value: viewModel.isEmailCodeVerified)
     }
 
@@ -214,48 +269,26 @@ public struct ChangePasswordView: View {
         }
     }
 
-    private var emailOtpSection: some View {
-        VStack(spacing: SplickTheme.Spacing.lg) {
-            if !viewModel.hasSentEmailCode {
-                SplickButton(
-                    languageService.text(.changePasswordSendCode),
-                    isLoading: viewModel.isRequestingEmailCode,
-                    isFailed: viewModel.sendCodeFailed
-                ) {
-                    Task { await viewModel.requestEmailCode() }
-                }
-            } else {
-                if let message = viewModel.otpInfoMessage {
-                    Text(message)
-                        .font(SplickTheme.Typography.caption)
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: .infinity)
-                        .transition(.opacity)
+    private var emailOtpFields: some View {
+        VStack(spacing: SplickTheme.Spacing.md) {
+            if let message = viewModel.otpInfoMessage {
+                Text(message)
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+            }
+
+            SplickOtpField(code: $viewModel.otpCode, errorMessage: viewModel.otpError)
+                .onChange(of: viewModel.otpCode) { _ in
+                    guard !viewModel.isEmailCodeVerified else { return }
+                    viewModel.onOtpCodeChanged()
                 }
 
-                SplickOtpField(code: $viewModel.otpCode, errorMessage: viewModel.otpError)
-                    .onChange(of: viewModel.otpCode) { _ in
-                        guard !viewModel.isEmailCodeVerified else { return }
-                        viewModel.onOtpCodeChanged()
-                    }
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-
+            if viewModel.hasSentEmailCode {
                 resendCodeControl
-
-                SplickButton(
-                    languageService.text(.changePasswordVerifyContinue),
-                    isLoading: viewModel.isVerifyingEmailCode,
-                    isFailed: viewModel.otpError != nil,
-                    isDisabled: viewModel.otpCode.count != SplickOtpField.defaultLength
-                ) {
-                    hideKeyboard()
-                    Task { await viewModel.verifyEmailCodeStep() }
-                }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .animation(.spring(response: 0.42, dampingFraction: 0.86), value: viewModel.hasSentEmailCode)
     }
 
     @ViewBuilder
@@ -288,7 +321,7 @@ public struct ChangePasswordView: View {
         }
     }
 
-    private func verifiedNewPasswordSection(showMascot: Bool = true) -> some View {
+    private func verifiedNewPasswordFields(showMascot: Bool = true) -> some View {
         VStack(spacing: SplickTheme.Spacing.lg) {
             if verifiedRevealStep >= 1 {
                 Text(
@@ -363,20 +396,23 @@ public struct ChangePasswordView: View {
                     .multilineTextAlignment(.center)
                     .transition(verifiedFieldTransition)
             }
+        }
+    }
 
-            if verifiedRevealStep >= (showMascot ? 5 : 4) {
-                SplickButton(
-                    languageService.text(
-                        viewModel.hasPasswordLogin ? .changePasswordUpdate : .createPasswordSubmit
-                    ),
-                    isLoading: viewModel.state.isLoading,
-                    isFailed: viewModel.state.error != nil,
-                    isDisabled: submitDisabled
-                ) {
-                    Task { await viewModel.changePassword() }
-                }
-                .transition(verifiedFieldTransition)
+    @ViewBuilder
+    private var verifiedSubmitButton: some View {
+        if verifiedRevealStep >= (viewModel.method == .currentPassword ? 5 : 4) {
+            SplickButton(
+                languageService.text(
+                    viewModel.hasPasswordLogin ? .changePasswordUpdate : .createPasswordSubmit
+                ),
+                isLoading: viewModel.state.isLoading,
+                isFailed: viewModel.state.error != nil,
+                isDisabled: submitDisabled
+            ) {
+                Task { await viewModel.changePassword() }
             }
+            .transition(verifiedFieldTransition)
         }
     }
 
