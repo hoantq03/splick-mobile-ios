@@ -571,6 +571,7 @@ enum StringsFeatureVi {
         .messagingChatSearchHint: "Nhập ít nhất 2 ký tự để tìm.",
         .messagingChatMuteNotifications: "Tắt thông báo",
         .messagingChatUnmuteNotifications: "Bật thông báo",
+        .messagingChatMarkAsRead: "Đánh dấu đã đọc",
         .messagingChatNotificationSounds: "Thông báo và âm thanh",
         .messagingChatNotificationsToggle: "Thông báo",
         .messagingChatNotificationBell: "Chuông thông báo",

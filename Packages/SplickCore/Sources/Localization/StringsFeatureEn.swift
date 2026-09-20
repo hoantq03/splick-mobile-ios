@@ -571,6 +571,7 @@ enum StringsFeatureEn {
         .messagingChatSearchHint: "Enter at least 2 characters to search.",
         .messagingChatMuteNotifications: "Mute notifications",
         .messagingChatUnmuteNotifications: "Unmute notifications",
+        .messagingChatMarkAsRead: "Mark as read",
         .messagingChatNotificationSounds: "Notifications and sounds",
         .messagingChatNotificationsToggle: "Notifications",
         .messagingChatNotificationBell: "Notification sound",

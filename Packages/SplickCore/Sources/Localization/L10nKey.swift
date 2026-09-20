@@ -873,6 +873,7 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case messagingChatSearchMessages = "messaging.chat.search_messages"
     case messagingChatMuteNotifications = "messaging.chat.mute_notifications"
     case messagingChatUnmuteNotifications = "messaging.chat.unmute_notifications"
+    case messagingChatMarkAsRead = "messaging.chat.mark_as_read"
     case messagingChatNotificationSounds = "messaging.chat.notification_sounds"
     case messagingChatNotificationsToggle = "messaging.chat.notifications_toggle"
     case messagingChatNotificationBell = "messaging.chat.notification_bell"

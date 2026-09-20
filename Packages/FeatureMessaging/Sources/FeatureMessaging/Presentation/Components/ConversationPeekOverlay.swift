@@ -24,6 +24,7 @@ struct ConversationPeekOverlay: View {
     let onOpen: () -> Void
     let onDelete: () -> Void
     let onMute: () -> Void
+    let onMarkRead: () -> Void
     var onLoadOlder: ((ChatMessage) -> Void)? = nil
     var onClearPrependAnchor: (() -> Void)? = nil
 
@@ -36,8 +37,8 @@ struct ConversationPeekOverlay: View {
     /// User scrolled away from the newest edge — prepend must preserve mid-thread position.
     @State private var userReleasedBottomPin = false
     @State private var isNearTop = false
-    /// Measured options chrome; initial guess matches a 2-column chip row.
-    @State private var optionsSize = CGSize(width: 320, height: 48)
+    /// Measured options chrome; initial guess matches two 2-column chip rows.
+    @State private var optionsSize = CGSize(width: 320, height: 96)
     @State private var didFreezeOptionsSize = false
     private static let olderLoaderSlotHeight: CGFloat = 28
     private static let peekBottomAnchor = "peek-timeline-bottom"
@@ -166,7 +167,7 @@ struct ConversationPeekOverlay: View {
         }
     }
 
-    /// Two-column chip grid — short vertically, wraps to a second row if more actions appear.
+    /// Two-column chip grid — two rows of two actions.
     private func optionsStack(maxWidth: CGFloat) -> some View {
         let columns = [
             GridItem(.flexible(minimum: 96), spacing: SplickTheme.Spacing.xs),
@@ -182,6 +183,12 @@ struct ConversationPeekOverlay: View {
                 action: onMute
             )
             .animation(ConversationPeekMotion.muteToggle, value: context.conversation.notificationsEnabled)
+            optionChip(
+                titleKey: .messagingChatMarkAsRead,
+                systemImage: "checkmark.message",
+                destructive: false,
+                action: onMarkRead
+            )
             optionChip(
                 titleKey: .messagingChatDeleteConversation,
                 systemImage: "trash",
@@ -205,7 +212,7 @@ struct ConversationPeekOverlay: View {
                 .transition(.scale(scale: 0.72).combined(with: .opacity))
             Text(languageService.text(titleKey))
                 .font(SplickTheme.Typography.callout.weight(.semibold))
-                .lineLimit(1)
+                .lineLimit(2)
                 .minimumScaleFactor(0.85)
                 .id(titleKey)
                 .transition(.opacity)
@@ -696,7 +703,7 @@ private struct PeekTimelineScrollBridge: UIViewRepresentable {
 }
 
 private struct PeekOptionsSizeKey: PreferenceKey {
-    static var defaultValue: CGSize = CGSize(width: 320, height: 48)
+    static var defaultValue: CGSize = CGSize(width: 320, height: 96)
 
     static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
         let next = nextValue()

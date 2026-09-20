@@ -324,6 +324,33 @@ public final class ConversationListViewModel: ObservableObject {
         }
     }
 
+    /// Marks the peeked thread read up to the newest loaded message. Peek stays open; unread badge clears live.
+    public func markReadFromPeek() async {
+        guard let peek = peekConversation, peek.unreadCount > 0 else { return }
+        let upToMessageId = peekMessages.last?.id ?? peek.lastMessage?.id
+        let optimistic = peek.updating(unreadCount: 0)
+        peekConversation = optimistic
+        upsertConversation(optimistic)
+
+        guard let upToMessageId else { return }
+        do {
+            try await repository.markRead(conversationId: peek.id, upToMessageId: upToMessageId)
+        } catch {
+            if peekConversation?.id == peek.id {
+                peekConversation = peek
+            }
+            upsertConversation(peek)
+            Log.error(
+                error,
+                category: .network,
+                metadata: [
+                    "action": "markReadFromPeek",
+                    "conversationId": peek.id.uuidString,
+                ]
+            )
+        }
+    }
+
     public func hideConversationLocally(conversationId: UUID) {
         messageCache?.remove(conversationId: conversationId)
         removeConversationFromInbox(conversationId)

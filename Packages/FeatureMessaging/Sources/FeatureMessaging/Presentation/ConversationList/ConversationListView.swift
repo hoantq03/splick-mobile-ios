@@ -492,6 +492,9 @@ public struct ConversationListView: View {
                         onMute: {
                             Task { await viewModel.toggleMuteFromPeek() }
                         },
+                        onMarkRead: {
+                            Task { await viewModel.markReadFromPeek() }
+                        },
                         onLoadOlder: { message in
                             Task { await viewModel.loadOlderPeekMessagesIfNeeded(current: message) }
                         },

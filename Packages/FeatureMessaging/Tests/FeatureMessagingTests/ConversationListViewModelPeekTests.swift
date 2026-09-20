@@ -17,6 +17,7 @@ private actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
     private let shouldFailFetchingConversations: Bool
     private(set) var deletedConversationIds: [UUID] = []
     private(set) var mutedConversationIds: [(UUID, Bool, String)] = []
+    private(set) var markedRead: [(UUID, UUID)] = []
 
     init(
         messagesByConversation: [UUID: [ChatMessage]] = [:],
@@ -113,7 +114,9 @@ private actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
             imageAttachments: imageAttachments
         )
     }
-    func markRead(conversationId: UUID, upToMessageId: UUID) async throws {}
+    func markRead(conversationId: UUID, upToMessageId: UUID) async throws {
+        markedRead.append((conversationId, upToMessageId))
+    }
     func unreadCount() async throws -> Int { 0 }
     func addReaction(conversationId: UUID, messageId: UUID, emoji: String) async throws -> Reaction {
         Reaction(id: UUID(), emoji: emoji, userId: UUID(), createdAt: .now)
@@ -338,6 +341,41 @@ final class ConversationListViewModelPeekTests: XCTestCase {
         XCTAssertEqual(muted.count, 1)
         XCTAssertEqual(muted.first?.0, conversation.id)
         XCTAssertEqual(muted.first?.1, false)
+    }
+
+    func test_markReadFromPeek_clearsUnreadWithoutClosingPeek() async throws {
+        let conversationId = UUID()
+        let latest = makeMessage(
+            conversationId: conversationId,
+            body: "Latest",
+            createdAt: Date(timeIntervalSince1970: 2)
+        )
+        let conversation = Conversation(
+            id: conversationId,
+            unreadCount: 3,
+            peer: nil,
+            lastMessage: latest,
+            createdAt: .now,
+            updatedAt: .now
+        )
+        let repository = PeekMessagingRepositoryStub(
+            messagesByConversation: [conversationId: [latest]]
+        )
+        let viewModel = makeViewModel(repository: repository)
+        viewModel.applyStartupConversations([conversation])
+        await viewModel.beginPeek(conversation: conversation)
+
+        await viewModel.markReadFromPeek()
+
+        let peek = try XCTUnwrap(viewModel.peekConversation)
+        XCTAssertEqual(peek.id, conversation.id)
+        XCTAssertEqual(peek.unreadCount, 0)
+        let updated = try XCTUnwrap(viewModel.conversations.first)
+        XCTAssertEqual(updated.unreadCount, 0)
+        let marked = await repository.markedRead
+        XCTAssertEqual(marked.count, 1)
+        XCTAssertEqual(marked.first?.0, conversation.id)
+        XCTAssertEqual(marked.first?.1, latest.id)
     }
 
     func test_loadOlderPeekMessages_prependsNextPageAndKeepsPeekOpen() async throws {
