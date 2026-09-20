@@ -5,13 +5,13 @@ import Localization
 import SplickDomain
 import Storage
 
-private struct PeekSearchProviderStub: MessagingSearchProviding {
+struct PeekSearchProviderStub: MessagingSearchProviding {
     func search(query: String) async throws -> [MessagingSearchResult] {
         []
     }
 }
 
-private actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
+actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
     private let messagesByConversation: [UUID: [ChatMessage]]
     private let delayMillisecondsByConversation: [UUID: Int]
     private let shouldFailFetchingConversations: Bool

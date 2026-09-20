@@ -15,7 +15,7 @@ private final class MockUserDefaultsService: UserDefaultsServiceProtocol {
     func remove(for key: String) { dict.removeValue(forKey: key) }
 }
 
-private struct MockSharePostMessagingRepository: MessagingRepositoryProtocol, @unchecked Sendable {
+struct MockSharePostMessagingRepository: MessagingRepositoryProtocol, @unchecked Sendable {
     var sendMessageResult: Result<ChatMessage, Error> = .success(
         ChatMessage(
             id: UUID(),
@@ -46,7 +46,17 @@ private struct MockSharePostMessagingRepository: MessagingRepositoryProtocol, @u
     }
 
     func createGroup(name: String, avatarUrl: String?, memberUserIds: [UUID], groupId: UUID?) async throws -> Conversation {
-        fatalError()
+        Conversation(
+            id: groupId ?? UUID(),
+            type: .group,
+            unreadCount: 0,
+            peer: nil,
+            groupName: name,
+            groupAvatarUrl: avatarUrl,
+            lastMessage: nil,
+            createdAt: Date(),
+            updatedAt: Date()
+        )
     }
 
     func addGroupMember(groupId: UUID, memberUserId: UUID, shareChatHistory: Bool) async throws {}
