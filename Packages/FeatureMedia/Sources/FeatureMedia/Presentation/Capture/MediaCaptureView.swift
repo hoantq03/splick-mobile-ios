@@ -16,6 +16,7 @@ public struct MediaCaptureView: View {
     @State private var workingImage: UIImage?
     @State private var workingFilter: FilterPreset = .none
     @State private var cameraSessionID = UUID()
+    @State private var editorSessionId = UUID()
 
     private let maxLibrarySelection: Int
 
@@ -68,6 +69,7 @@ public struct MediaCaptureView: View {
                     onCreated: { image in
                         workingImage = image
                         workingFilter = .none
+                        editorSessionId = UUID()
                         route = .editor
                     }
                 )
@@ -78,11 +80,16 @@ public struct MediaCaptureView: View {
                     PhotoEditorView(
                         sourceImage: workingImage,
                         initialFilter: workingFilter,
+                        sessionId: editorSessionId,
                         stickerPickerBuilder: stickerPickerBuilder,
-                        onDone: { edited in onMediaCaptured(.image(edited)) },
+                        onDone: { edited in
+                            PhotoEditorSessionStore.shared.markPending(editorSessionId)
+                            onMediaCaptured(.image(edited))
+                        },
                         onCancel: {
                             self.workingImage = nil
                             self.workingFilter = .none
+                            editorSessionId = UUID()
                             reopenCamera()
                         }
                     )
@@ -183,6 +190,7 @@ public struct MediaCaptureView: View {
         case .image(let image, let filter):
             workingImage = image
             workingFilter = filter
+            editorSessionId = UUID()
             route = .editor
         case .video(let url):
             onMediaCaptured(.video(url))

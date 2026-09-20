@@ -27,15 +27,24 @@ struct PhotoEditorView: View {
     let stickerPickerBuilder: MediaStickerPickerBuilder?
     let onDone: (UIImage) -> Void
     let onCancel: () -> Void
+    private let sessionId: UUID
 
     init(
         sourceImage: UIImage,
         initialFilter: FilterPreset = .none,
+        sessionId: UUID = UUID(),
         stickerPickerBuilder: MediaStickerPickerBuilder? = nil,
         onDone: @escaping (UIImage) -> Void,
         onCancel: @escaping () -> Void
     ) {
-        _viewModel = StateObject(wrappedValue: PhotoEditorViewModel(sourceImage: sourceImage, initialFilter: initialFilter))
+        self.sessionId = sessionId
+        _viewModel = StateObject(
+            wrappedValue: PhotoEditorViewModel(
+                sourceImage: sourceImage,
+                initialFilter: initialFilter,
+                sessionId: sessionId
+            )
+        )
         self.stickerPickerBuilder = stickerPickerBuilder
         self.onDone = onDone
         self.onCancel = onCancel
@@ -57,6 +66,7 @@ struct PhotoEditorView: View {
                 onComposerTool: handleComposerTool,
                 onDone: {
                     viewModel.prepareForFinalize()
+                    viewModel.persistSession(id: sessionId)
                     Task {
                         let image = await viewModel.finalizeAsync()
                         onDone(image)
@@ -237,7 +247,10 @@ private struct EditorCanvasView: View {
             )
 
             ZStack {
-                EditorImageView(image: viewModel.baseImage, adjustments: viewModel.adjustments)
+                EditorImageView(image: viewModel.baseImage)
+                    .brightness(Double(viewModel.adjustments.brightness + viewModel.adjustments.exposure * 0.18))
+                    .contrast(Double(viewModel.adjustments.contrast))
+                    .saturation(Double(viewModel.adjustments.saturation))
                     .frame(width: metrics.displayFrame.width, height: metrics.displayFrame.height)
                     .position(x: metrics.displayFrame.midX, y: metrics.displayFrame.midY)
                     .scaleEffect(viewModel.rotatePulse ? 1.02 : 1)

@@ -129,8 +129,9 @@ final class PhotoEditorViewModel: ObservableObject {
         UIColor(red: 0.42, green: 0.85, blue: 0.55, alpha: 1),
     ]
 
-    init(sourceImage: UIImage, initialFilter: FilterPreset = .none) {
-        let prepared = PhotoEditorImageProcessor.prepareForEditing(sourceImage)
+    init(sourceImage: UIImage, initialFilter: FilterPreset = .none, sessionId: UUID? = nil) {
+        let restored = sessionId.flatMap { PhotoEditorSessionStore.shared.session(for: $0) }
+        let prepared = PhotoEditorImageProcessor.prepareForEditing(restored?.originalImage ?? sourceImage)
         preparedImage = prepared
         baseImage = prepared.editingImage
         if let ciImage = CIImage(image: prepared.editingImage) {
@@ -142,8 +143,41 @@ final class PhotoEditorViewModel: ObservableObject {
         }
         activeFilter = initialFilter
         activeTool = nil
+        if let restored {
+            undoStack = restored.undoStack
+            redoStack = restored.redoStack
+            drawingCanvasSize = restored.drawingCanvasSize
+            selectedCropAspect = restored.selectedCropAspect
+            if let last = restored.undoStack.last {
+                normalizedCropRect = last.cropRect
+                rotationQuarters = last.rotationQuarters
+                isFlippedHorizontally = last.isFlippedHorizontally
+                drawing = last.drawing
+                textItems = last.textItems
+                stickerItems = last.stickerItems
+                gifStickerData = last.gifStickerData
+                activeFilter = last.activeFilter
+                adjustments = last.adjustments
+            }
+            schedulePreviewRefresh()
+        } else {
+            pushSnapshotIfNeeded()
+            schedulePreviewRefresh()
+        }
+    }
+
+    func persistSession(id: UUID) {
         pushSnapshotIfNeeded()
-        schedulePreviewRefresh()
+        PhotoEditorSessionStore.shared.save(
+            PhotoEditorSession(
+                originalImage: preparedImage.editingImage,
+                undoStack: undoStack,
+                redoStack: redoStack,
+                drawingCanvasSize: drawingCanvasSize,
+                selectedCropAspect: selectedCropAspect
+            ),
+            for: id
+        )
     }
 
     var canUndo: Bool { undoStack.count > 1 }
@@ -354,7 +388,7 @@ final class PhotoEditorViewModel: ObservableObject {
         guard activeFilter != preset else { return }
         activeFilter = preset
         pushSnapshotIfNeeded()
-        schedulePreviewRefresh()
+        schedulePreviewRefresh(live: true)
     }
 
     func setAdjustments(_ value: ImageAdjustments) {
@@ -638,6 +672,8 @@ final class PhotoEditorViewModel: ObservableObject {
                 if self.pendingLivePreview {
                     self.pendingLivePreview = false
                     self.schedulePreviewRefresh(live: self.isAdjustingLive)
+                } else if live && !self.isAdjustingLive {
+                    self.schedulePreviewRefresh(live: false)
                 }
             }
         }
