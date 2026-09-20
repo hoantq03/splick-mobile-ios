@@ -9,7 +9,9 @@ import Foundation
 import Localization
 import Networking
 import Storage
+import StoreKit
 import SwiftUI
+import UIKit
 
 // MARK: - Lightweight local DTOs
 // App Clips must stay small — we intentionally avoid importing FeatureFriends/SplickDomain.
@@ -99,12 +101,16 @@ final class ClipInviteViewModel: ObservableObject {
     private let tokenProvider: InMemoryTokenProvider
     private let languageService: LanguageService
     private let keychain: KeychainServiceProtocol
+    private let storeOverlayPresenter = ClipStoreOverlayPresenter()
     private var lastAttemptedUsername: String?
 
     private static let reservedPathSegments: Set<String> = [
         "invite", "privacy", "terms", "support", "admin", "app", "download",
         "legal", "bills", "bill", "api", "www", "help", "blog",
     ]
+    private static let appleAppID = "6786314571"
+    private static let appStoreURL = URL(string: "https://apps.apple.com/app/id\(appleAppID)")!
+    private static let appStoreAppURL = URL(string: "itms-apps://apps.apple.com/app/id\(appleAppID)")!
 
     init(
         languageService: LanguageService,
@@ -167,8 +173,33 @@ final class ClipInviteViewModel: ObservableObject {
     }
 
     func openFullApp(username: String) {
-        if let url = URL(string: "splick://friend/\(username)") {
-            UIApplication.shared.open(url)
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        if let deepLink = URL(string: "splick://friend/\(encoded)"),
+           UIApplication.shared.canOpenURL(deepLink) {
+            UIApplication.shared.open(deepLink)
+            return
+        }
+        presentAppStoreInstall()
+    }
+
+    /// StoreKit overlay when eligible (App Store–distributed Clip); otherwise open the product page.
+    /// Xcode-run Clips log "not eligible to use ASC" / SKError 0 — must fall through to URL.
+    func presentAppStoreInstall() {
+        #if DEBUG
+        // Local/Xcode App Clips cannot use SKOverlay ("not eligible to use ASC").
+        Self.openAppStoreProductPage()
+        #else
+        storeOverlayPresenter.present(appIdentifier: Self.appleAppID) {
+            Self.openAppStoreProductPage()
+        }
+        #endif
+    }
+
+    private static func openAppStoreProductPage() {
+        // Prefer the App Store app scheme; fall back to https if needed.
+        UIApplication.shared.open(appStoreAppURL, options: [:]) { success in
+            guard !success else { return }
+            UIApplication.shared.open(appStoreURL)
         }
     }
 
@@ -249,5 +280,60 @@ final class ClipInviteViewModel: ObservableObject {
         let username = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let isValid = username.range(of: "^[a-zA-Z0-9_.]{3,50}$", options: .regularExpression) != nil
         return isValid ? username : nil
+    }
+}
+
+// MARK: - SKOverlay (production App Clips)
+
+/// Holds a strong reference so the overlay + failure callback stay alive.
+private final class ClipStoreOverlayPresenter: NSObject, SKOverlayDelegate {
+    private var overlay: SKOverlay?
+    private var onFailure: (() -> Void)?
+    private var settled = false
+
+    func present(appIdentifier: String, onFailure: @escaping () -> Void) {
+        self.onFailure = onFailure
+        settled = false
+
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        guard let scene = scenes.first(where: { $0.activationState == .foregroundActive }) ?? scenes.first else {
+            failOnce()
+            return
+        }
+
+        let configuration = SKOverlay.AppConfiguration(
+            appIdentifier: appIdentifier,
+            position: .bottom
+        )
+        configuration.userDismissible = true
+
+        let overlay = SKOverlay(configuration: configuration)
+        overlay.delegate = self
+        self.overlay = overlay
+        overlay.present(in: scene)
+
+        // Xcode / ineligible clips sometimes fail without a timely delegate callback.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+            self?.failOnce()
+        }
+    }
+
+    func storeOverlayWillStartPresentation(_ overlay: SKOverlay, transitionContext: SKOverlay.TransitionContext) {
+        // Overlay is showing — do not fall through to the App Store URL.
+        settled = true
+        onFailure = nil
+    }
+
+    func storeOverlayDidFailToLoad(_ overlay: SKOverlay, error: Error) {
+        failOnce()
+    }
+
+    private func failOnce() {
+        guard !settled else { return }
+        settled = true
+        let failure = onFailure
+        onFailure = nil
+        overlay = nil
+        failure?()
     }
 }

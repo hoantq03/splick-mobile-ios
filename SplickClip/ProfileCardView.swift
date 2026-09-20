@@ -7,11 +7,13 @@ import DesignSystem
 import Localization
 import Storage
 import SwiftUI
+import CoreMotion
 
 struct ProfileCardView: View {
     @EnvironmentObject private var viewModel: ClipInviteViewModel
     @EnvironmentObject private var languageService: LanguageService
 
+    @StateObject private var deviceTilt = ClipDeviceTilt()
     @State private var dragOffset: CGSize = .zero
     @State private var breathingAngle: Double = 0
 
@@ -57,9 +59,13 @@ struct ProfileCardView: View {
                 .padding(.top, 6)
         }
         .onAppear {
+            deviceTilt.start()
             withAnimation(.easeInOut(duration: 5.2).repeatForever(autoreverses: true)) {
                 breathingAngle = 1
             }
+        }
+        .onDisappear {
+            deviceTilt.stop()
         }
     }
 
@@ -126,11 +132,19 @@ struct ProfileCardView: View {
     }
 
     private var effectiveAngleX: Double {
-        Double(dragOffset.height / 16).clamped(to: -14...14) + ((breathingAngle * 1.4) - 0.7)
+        (
+            Double(dragOffset.height / 16)
+            + deviceTilt.angleX
+            + ((breathingAngle * 1.4) - 0.7)
+        ).clamped(to: -18...18)
     }
 
     private var effectiveAngleY: Double {
-        Double(dragOffset.width / 16).clamped(to: -14...14) + ((sin(breathingAngle * .pi) * 1.6) - 0.8)
+        (
+            Double(dragOffset.width / 16)
+            + deviceTilt.angleY
+            + ((sin(breathingAngle * .pi) * 1.6) - 0.8)
+        ).clamped(to: -18...18)
     }
 
     private var stateIdentity: String {
@@ -560,11 +574,11 @@ private struct ClipConnectButton: View {
                         RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.extraLarge, style: .continuous)
                             .fill(
                                 LinearGradient(
-                                    stops: [
-                                        .init(color: .clear, location: max(0, x - 0.2)),
-                                        .init(color: .white.opacity(0.38), location: x),
-                                        .init(color: .clear, location: min(1, x + 0.2)),
-                                    ],
+                                    stops: ClipGradientStops.shimmerBand(
+                                        center: x,
+                                        halfWidth: 0.2,
+                                        peak: .white.opacity(0.38)
+                                    ),
                                     startPoint: .leading,
                                     endPoint: .trailing
                                 )
@@ -714,15 +728,15 @@ private struct ClipGlassCardModifier: ViewModifier {
 
                     TimelineView(.animation(minimumInterval: 1 / 18, paused: false)) { timeline in
                         let t = timeline.date.timeIntervalSinceReferenceDate
-                        let x = (sin(t * 0.55) * 0.5) + 0.2
+                        // Keep center in (0, 1) — negative locations trigger "Gradient stop locations must be ordered".
+                        let x = CGFloat((sin(t * 0.55) * 0.5) + 0.5)
                         RoundedRectangle(cornerRadius: 32, style: .continuous)
                             .fill(
                                 LinearGradient(
-                                    stops: [
-                                        .init(color: .clear, location: 0),
-                                        .init(color: .white.opacity(colorScheme == .dark ? 0.16 : 0.28), location: x),
-                                        .init(color: .clear, location: 1),
-                                    ],
+                                    stops: ClipGradientStops.shimmerSweep(
+                                        center: x,
+                                        peak: .white.opacity(colorScheme == .dark ? 0.16 : 0.28)
+                                    ),
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 )
@@ -769,6 +783,29 @@ private extension View {
     }
 }
 
+/// Builds shimmer gradient stops that stay non-decreasing in [0, 1].
+private enum ClipGradientStops {
+    static func shimmerSweep(center: CGFloat, peak: Color) -> [Gradient.Stop] {
+        let mid = min(max(center, 0.02), 0.98)
+        return [
+            .init(color: .clear, location: 0),
+            .init(color: peak, location: mid),
+            .init(color: .clear, location: 1),
+        ]
+    }
+
+    static func shimmerBand(center: CGFloat, halfWidth: CGFloat, peak: Color) -> [Gradient.Stop] {
+        let mid = min(max(center, 0), 1)
+        let left = min(max(mid - halfWidth, 0), mid)
+        let right = max(min(mid + halfWidth, 1), mid)
+        return [
+            .init(color: .clear, location: left),
+            .init(color: peak, location: mid),
+            .init(color: .clear, location: right),
+        ]
+    }
+}
+
 private extension Comparable {
     func clamped(to limits: ClosedRange<Self>) -> Self {
         min(max(self, limits.lowerBound), limits.upperBound)
@@ -801,4 +838,67 @@ private extension Comparable {
         .environmentObject(viewModel)
         .environmentObject(language)
         .environmentObject(ThemeService(userDefaults: UserDefaultsService()))
+}
+
+// MARK: - Device tilt
+
+/// Maps device gravity into a gentle 3D card tilt (relative to the hold pose at start).
+final class ClipDeviceTilt: ObservableObject {
+    @Published private(set) var angleX: Double = 0
+    @Published private(set) var angleY: Double = 0
+
+    private let manager = CMMotionManager()
+    private var originX: Double?
+    private var originY: Double?
+    private var isRunning = false
+
+    private let maxDegrees = 14.0
+    private let sensitivity = 28.0
+    private let smoothing = 0.28
+
+    func start() {
+        guard !isRunning, manager.isDeviceMotionAvailable else { return }
+        isRunning = true
+        originX = nil
+        originY = nil
+        manager.deviceMotionUpdateInterval = 1.0 / 50.0
+        let queue = OperationQueue()
+        queue.name = "com.splick.clip.device-tilt"
+        queue.qualityOfService = .userInteractive
+        manager.startDeviceMotionUpdates(using: .xArbitraryZVertical, to: queue) { [weak self] motion, error in
+            guard let self, let motion, error == nil else { return }
+            let gravity = motion.gravity
+            DispatchQueue.main.async {
+                self.apply(gravity: gravity)
+            }
+        }
+    }
+
+    func stop() {
+        guard isRunning else { return }
+        manager.stopDeviceMotionUpdates()
+        isRunning = false
+        originX = nil
+        originY = nil
+        angleX = 0
+        angleY = 0
+    }
+
+    private func apply(gravity: CMAcceleration) {
+        if originX == nil || originY == nil {
+            originX = gravity.x
+            originY = gravity.y
+            return
+        }
+        let dx = gravity.x - (originX ?? 0)
+        let dy = gravity.y - (originY ?? 0)
+        let targetY = clamp(dx * sensitivity, to: -maxDegrees...maxDegrees)
+        let targetX = clamp(-dy * sensitivity, to: -maxDegrees...maxDegrees)
+        angleY += (targetY - angleY) * smoothing
+        angleX += (targetX - angleX) * smoothing
+    }
+
+    private func clamp(_ value: Double, to range: ClosedRange<Double>) -> Double {
+        min(max(value, range.lowerBound), range.upperBound)
+    }
 }

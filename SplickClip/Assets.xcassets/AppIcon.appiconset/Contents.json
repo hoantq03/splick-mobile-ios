@@ -1,6 +1,18 @@
 {
   "images" : [
     {
+      "filename" : "fiona.g@example.net",
+      "idiom" : "iphone",
+      "scale" : "2x",
+      "size" : "60x60"
+    },
+    {
+      "filename" : "laura.c@example.net",
+      "idiom" : "iphone",
+      "scale" : "3x",
+      "size" : "60x60"
+    },
+    {
       "filename" : "AppIcon-1024.png",
       "idiom" : "universal",
       "platform" : "ios",
