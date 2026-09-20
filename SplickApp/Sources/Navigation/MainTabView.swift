@@ -43,7 +43,12 @@ struct MainTabView: View {
     /// Reset to `false` once `showNotifications` fully clears.
     @State private var notificationIsDismissing = false
     @State private var inviteFriendsToGroupRequest: InviteFriendsToGroupRequest?
-    @State private var cameraReveal: CGFloat = 0
+    /// Camera layer stays mounted until the UIKit water collapse finishes.
+    @State private var cameraMounted = false
+    /// Drives the UIKit radial mask (not a per-frame SwiftUI animatable).
+    @State private var cameraExpanded = false
+    /// Shutter lift/scale follow this; updated by the water mask display-link.
+    @StateObject private var cameraRevealProgress = CameraOpenRevealProgressSource()
 
     private var currentUserSummary: UserSummary? {
         appState.currentUser.map {
@@ -63,7 +68,7 @@ struct MainTabView: View {
     }
 
     private var showsCameraLayer: Bool {
-        appState.selectedTab == .camera || cameraReveal > 0.001
+        cameraMounted
     }
 
     var body: some View {
@@ -125,7 +130,8 @@ struct MainTabView: View {
                 }
                 feedPlaybackActive = appState.selectedTab == .feed
                 if appState.selectedTab == .camera {
-                    cameraReveal = 1
+                    cameraMounted = true
+                    cameraExpanded = true
                 }
                 Task { @MainActor in
                     badgeCounts = container.badgeCountService.counts
@@ -261,33 +267,38 @@ struct MainTabView: View {
             }
             .environment(\.currentUserSummary, currentUserSummary)
             .environment(\.tabBarScrollState, tabBarChrome.tabBar)
-            .environment(\.cameraOpenRevealProgress, cameraReveal)
+            .environmentObject(cameraRevealProgress)
             .overlay(alignment: .bottom) {
                 MainTabBarChrome(
                     selectedTab: $appState.selectedTab,
                     badgeCounts: badgeCounts,
                     isChromePresented: isTabBarChromePresented,
-                    cameraRevealProgress: cameraReveal,
+                    cameraRevealProgress: cameraRevealProgress,
                     scrollState: tabBarChrome.tabBar
                 )
             }
             .overlay {
                 if showsCameraLayer {
-                    ZStack {
-                        // Opaque base so the soft water rim never ghosts the tab underneath.
-                        Color.black
+                    CameraOpenRevealContainer(
+                        isExpanded: cameraExpanded,
+                        cameraSize: SplickTabBarMetrics.cameraSize,
+                        bottomInset: SplickTabBarMetrics.cameraButtonBottomInset,
+                        progressSource: cameraRevealProgress,
+                        onCollapseFinished: {
+                            // Ignore late callbacks if the user reopened mid-collapse.
+                            guard !cameraExpanded else { return }
+                            cameraMounted = false
+                            cameraRevealProgress.setValue(0)
+                        }
+                    ) {
                         cameraTabContent
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .environmentObject(cameraRevealProgress)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .cameraOpenReveal(
-                        progress: cameraReveal,
-                        cameraSize: SplickTabBarMetrics.cameraSize,
-                        bottomInset: SplickTabBarMetrics.cameraButtonBottomInset
-                    )
-                    // Collapse only: fade after the water has shrunk into the button.
-                    .opacity(appState.selectedTab == .camera ? 1 : min(max(cameraReveal / 0.08, 0), 1))
                     .ignoresSafeArea()
                     .zIndex(80)
+                    .allowsHitTesting(cameraExpanded)
                 }
             }
             .onChange(of: appState.selectedTab, perform: handleSelectedTabChange)
@@ -479,21 +490,12 @@ struct MainTabView: View {
             feedPlaybackActive = false
         }
         if tab == .camera {
-            // Snap to the button-sized drop first so expand never starts mid-haze.
-            var reset = Transaction()
-            reset.disablesAnimations = true
-            withTransaction(reset) {
-                cameraReveal = 0
-            }
-            withAnimation(CameraOpenRevealMotion.expand) {
-                cameraReveal = 1
-            }
+            cameraMounted = true
+            cameraExpanded = true
             return
         }
-        if cameraReveal > 0 {
-            withAnimation(CameraOpenRevealMotion.collapse) {
-                cameraReveal = 0
-            }
+        if cameraExpanded || cameraMounted {
+            cameraExpanded = false
         }
         // Defer heavy tab activation + chrome reset until the pager slide has finished.
         Task { @MainActor in
@@ -518,7 +520,7 @@ private struct MainTabBarChrome: View {
     @Binding var selectedTab: Tab
     let badgeCounts: TabBadgeCounts
     let isChromePresented: Bool
-    let cameraRevealProgress: CGFloat
+    @ObservedObject var cameraRevealProgress: CameraOpenRevealProgressSource
     @ObservedObject var scrollState: TabBarScrollState
     @Environment(\.colorScheme) private var colorScheme
 
@@ -549,7 +551,7 @@ private struct MainTabBarChrome: View {
             badgeCounts: badgeCounts,
             tabBarScrollState: scrollState,
             colorScheme: colorScheme,
-            cameraRevealProgress: cameraRevealProgress
+            cameraRevealProgress: cameraRevealProgress.value
         )
         .equatable()
         .opacity(opacity)

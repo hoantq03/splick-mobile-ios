@@ -32,19 +32,25 @@ final class CameraOpenRevealGeometryTests: XCTestCase {
         XCTAssertEqual(CameraOpenRevealGeometry.feather(progress: 0.5, maxFeather: 48), 48, accuracy: 0.01)
         XCTAssertEqual(CameraOpenRevealGeometry.feather(progress: 1, maxFeather: 48), 0, accuracy: 0.01)
         XCTAssertEqual(CameraOpenRevealGeometry.feather(progress: 0.25, maxFeather: 48), 36, accuracy: 0.01)
-        XCTAssertEqual(CameraOpenRevealGeometry.maxFeatherFraction, 0.22, accuracy: 0.001)
+        XCTAssertEqual(CameraOpenRevealGeometry.maxFeatherFraction, 0.18, accuracy: 0.001)
+        XCTAssertEqual(CameraOpenRevealGeometry.expandEase(0), 0, accuracy: 0.02)
+        XCTAssertEqual(CameraOpenRevealGeometry.expandEase(1), 1, accuracy: 0.02)
+        XCTAssertGreaterThan(CameraOpenRevealGeometry.expandEase(0.5), 0.45)
+        XCTAssertLessThan(CameraOpenRevealGeometry.expandEase(0.5), 0.92)
     }
 
     func testShutterRowLiftsWithRevealProgress() {
         XCTAssertEqual(CameraOpenRevealGeometry.shutterRowLift(progress: 0), 0, accuracy: 0.01)
         XCTAssertEqual(CameraOpenRevealGeometry.shutterRowLift(progress: 1), CameraOpenRevealGeometry.shutterRestLift, accuracy: 0.01)
-        XCTAssertEqual(CameraOpenRevealGeometry.shutterRowLift(progress: 0.5), 28, accuracy: 0.01)
+        XCTAssertEqual(CameraOpenRevealGeometry.shutterRowLift(progress: 0.52), CameraOpenRevealGeometry.shutterRestLift, accuracy: 0.01)
+        XCTAssertEqual(CameraOpenRevealGeometry.shutterRowLift(progress: 0.26), CameraOpenRevealGeometry.shutterRestLift * 0.5, accuracy: 0.5)
     }
 
     func testShutterGrowsWithRevealProgress() {
         XCTAssertEqual(CameraOpenRevealGeometry.shutterOpenScale(progress: 0), 1, accuracy: 0.001)
+        XCTAssertEqual(CameraOpenRevealGeometry.shutterOpenScale(progress: 0.42), 1, accuracy: 0.001)
         XCTAssertEqual(CameraOpenRevealGeometry.shutterOpenScale(progress: 1), CameraOpenRevealGeometry.shutterOpenedScale, accuracy: 0.001)
-        XCTAssertEqual(CameraOpenRevealGeometry.shutterOpenScale(progress: 0.5), 1.125, accuracy: 0.001)
+        XCTAssertGreaterThan(CameraOpenRevealGeometry.shutterOpenScale(progress: 0.7), 1)
     }
 
     func testFinderSpreadStartsOnCameraButton() {
