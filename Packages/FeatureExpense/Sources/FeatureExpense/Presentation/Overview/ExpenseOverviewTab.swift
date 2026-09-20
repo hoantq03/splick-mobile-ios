@@ -355,7 +355,7 @@ struct ExpenseNeedsAttentionRowView: View {
       return
     }
     if let postId = item.postId {
-      openLinkedPost?(postId, true)
+      openLinkedPost?(postId, true, item.type == .expenseConfirmation)
     }
   }
 

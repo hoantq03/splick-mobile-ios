@@ -321,12 +321,14 @@ public struct ExpenseListView: View {
 
     private func openLinkedPost(for expense: Expense) {
         guard let postId = expense.postId else { return }
-        openLinkedPost?(postId, true)
+        let scrollToPending = expense.userPaymentDisplayStatus(userId: currentUserId) == .pendingApproval
+        openLinkedPost?(postId, true, scrollToPending)
     }
 
     private func openNeedsAttentionItem(_ item: ExpenseNeedsAttentionItem) {
         if let postId = item.postId {
-            openLinkedPost?(postId, true)
+            let scrollToPending = item.type == .expenseConfirmation
+            openLinkedPost?(postId, true, scrollToPending)
             return
         }
         guard let user = item.counterparty else { return }

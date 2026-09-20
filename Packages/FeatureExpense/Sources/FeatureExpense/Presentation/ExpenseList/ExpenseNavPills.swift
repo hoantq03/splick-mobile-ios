@@ -49,6 +49,7 @@ struct ExpenseNavPills: View {
         }
         // Match pager spring so pill indicator and page offset share one motion feel.
         .animation(ExpensePagerMotion.slide, value: selection)
+        .animation(nil, value: collapseProgress)
     }
 
     @ViewBuilder

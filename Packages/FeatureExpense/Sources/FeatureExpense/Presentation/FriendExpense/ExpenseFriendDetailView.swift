@@ -486,6 +486,8 @@ public struct ExpenseFriendDetailView: View {
 
   private func openLinkedPost(for expense: Expense) {
     guard let postId = expense.postId else { return }
-    openLinkedPost?(postId, true)
+    let scrollToPending =
+      expense.userPaymentDisplayStatus(userId: viewModel.currentUserId) == .pendingApproval
+    openLinkedPost?(postId, true, scrollToPending)
   }
 }
