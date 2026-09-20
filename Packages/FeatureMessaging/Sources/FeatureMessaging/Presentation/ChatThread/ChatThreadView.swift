@@ -986,7 +986,11 @@ public struct ChatThreadView: View {
     private var messageArea: some View {
         switch viewModel.state {
         case .failed(let error):
-            ErrorView(message: error) {
+            ErrorView(
+                message: error,
+                isLoading: viewModel.isInitialLoading,
+                isFailed: true
+            ) {
                 Task { await viewModel.load() }
             }
         case .loaded(let messages) where messages.isEmpty && viewModel.typingUserIds.isEmpty:
