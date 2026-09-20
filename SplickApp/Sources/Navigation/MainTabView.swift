@@ -43,6 +43,7 @@ struct MainTabView: View {
     /// Reset to `false` once `showNotifications` fully clears.
     @State private var notificationIsDismissing = false
     @State private var inviteFriendsToGroupRequest: InviteFriendsToGroupRequest?
+    @State private var cameraReveal: CGFloat = 0
 
     private var currentUserSummary: UserSummary? {
         appState.currentUser.map {
@@ -56,10 +57,13 @@ struct MainTabView: View {
     }
 
     private var isTabBarChromePresented: Bool {
-        appState.selectedTab != .camera
-            && appState.linkedPostPresentation == nil
+        appState.linkedPostPresentation == nil
             && (!appState.showNotifications || notificationIsDismissing)
             && !(appState.selectedTab == .messages && appState.isMessagingThreadPresented)
+    }
+
+    private var showsCameraLayer: Bool {
+        appState.selectedTab == .camera || cameraReveal > 0.001
     }
 
     var body: some View {
@@ -74,8 +78,7 @@ struct MainTabView: View {
                 feed: { feedTabContent },
                 expenses: { expensesTabContent },
                 friends: { friendsTabContent },
-                messages: { messagesTabContent },
-                camera: { cameraTabContent }
+                messages: { messagesTabContent }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .allowsHitTesting(!appState.showNotifications)
@@ -122,6 +125,9 @@ struct MainTabView: View {
                     settledPagerTab = appState.selectedTab
                 }
                 feedPlaybackActive = appState.selectedTab == .feed
+                if appState.selectedTab == .camera {
+                    cameraReveal = 1
+                }
                 Task { @MainActor in
                     badgeCounts = container.badgeCountService.counts
                     pushNotificationCoordinator.syncAppIconBadge(count: badgeCounts.total)
@@ -256,13 +262,28 @@ struct MainTabView: View {
             }
             .environment(\.currentUserSummary, currentUserSummary)
             .environment(\.tabBarScrollState, tabBarChrome.tabBar)
+            .environment(\.cameraOpenRevealProgress, cameraReveal)
             .overlay(alignment: .bottom) {
                 MainTabBarChrome(
                     selectedTab: $appState.selectedTab,
                     badgeCounts: badgeCounts,
                     isChromePresented: isTabBarChromePresented,
+                    cameraRevealProgress: cameraReveal,
                     scrollState: tabBarChrome.tabBar
                 )
+            }
+            .overlay {
+                if showsCameraLayer {
+                    cameraTabContent
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .cameraOpenReveal(
+                            progress: cameraReveal,
+                            cameraSize: SplickTabBarMetrics.cameraSize,
+                            bottomInset: SplickTabBarMetrics.cameraButtonBottomInset
+                        )
+                        .ignoresSafeArea()
+                        .zIndex(80)
+                }
             }
             .onChange(of: appState.selectedTab, perform: handleSelectedTabChange)
             .onChange(of: appState.showNotifications) { isShown in
@@ -453,8 +474,15 @@ struct MainTabView: View {
             feedPlaybackActive = false
         }
         if tab == .camera {
-            tabBarChrome.tabBar.hide(flushToBottom: true)
+            withAnimation(CameraOpenRevealMotion.expand) {
+                cameraReveal = 1
+            }
             return
+        }
+        if cameraReveal > 0 {
+            withAnimation(CameraOpenRevealMotion.collapse) {
+                cameraReveal = 0
+            }
         }
         // Defer heavy tab activation + chrome reset until the pager slide has finished.
         Task { @MainActor in
@@ -479,6 +507,7 @@ private struct MainTabBarChrome: View {
     @Binding var selectedTab: Tab
     let badgeCounts: TabBadgeCounts
     let isChromePresented: Bool
+    let cameraRevealProgress: CGFloat
     @ObservedObject var scrollState: TabBarScrollState
     @Environment(\.colorScheme) private var colorScheme
 
@@ -508,7 +537,8 @@ private struct MainTabBarChrome: View {
             selectedTab: $selectedTab,
             badgeCounts: badgeCounts,
             tabBarScrollState: scrollState,
-            colorScheme: colorScheme
+            colorScheme: colorScheme,
+            cameraRevealProgress: cameraRevealProgress
         )
         .equatable()
         .opacity(opacity)
@@ -557,6 +587,7 @@ struct ProfileSettingsView: View {
     @State private var isUpdatingLanguage = false
     @State private var profileError: String?
     @State private var showChangePassword = false
+    @State private var hasPasswordLogin: Bool?
     @State private var showSessions = false
     @State private var showConnectedAccounts = false
     @State private var accountClosureAction: AccountClosureAction?
@@ -643,6 +674,11 @@ struct ProfileSettingsView: View {
             }
             .task {
                 await refreshProfile()
+            }
+            .onChange(of: showConnectedAccounts) { isPresented in
+                if !isPresented {
+                    Task { await refreshPasswordLoginState() }
+                }
             }
             .sheet(isPresented: $showAvatarOptions, onDismiss: {
                 switch pendingAvatarSheetAction {
@@ -1148,6 +1184,10 @@ struct ProfileSettingsView: View {
                 ProfileSettingsItem(
                     icon: "lock",
                     title: languageService.text(.profileChangePassword),
+                    subtitle: hasPasswordLogin == false
+                        ? languageService.text(.profileChangePasswordUnavailableShort)
+                        : nil,
+                    isEnabled: hasPasswordLogin == true,
                     action: { showChangePassword = true }
                 ),
                 ProfileSettingsItem(
@@ -1435,8 +1475,18 @@ struct ProfileSettingsView: View {
             appState.updateAuthenticatedUser(user)
             languageService.applyFromServer(user.preferredLocale)
             await syncDeviceTimezoneIfNeeded(user)
+            await refreshPasswordLoginState()
         } catch {
             profileError = languageService.text(.profileRefreshFailed)
+        }
+    }
+
+    private func refreshPasswordLoginState() async {
+        do {
+            let accounts = try await container.getConnectedAccountsUseCase.execute()
+            hasPasswordLogin = accounts.emailPassword.isLinked
+        } catch {
+            hasPasswordLogin = hasPasswordLogin ?? true
         }
     }
 
@@ -1489,13 +1539,12 @@ private extension Tab {
     }
 }
 
-private struct MainTabContentPager<Feed: View, Expenses: View, Friends: View, Messages: View, Camera: View>: View {
+private struct MainTabContentPager<Feed: View, Expenses: View, Friends: View, Messages: View>: View {
     @Binding var selectedTab: Tab
     @ViewBuilder var feed: () -> Feed
     @ViewBuilder var expenses: () -> Expenses
     @ViewBuilder var friends: () -> Friends
     @ViewBuilder var messages: () -> Messages
-    @ViewBuilder var camera: () -> Camera
 
     var body: some View {
         MainTabOffsetPager(
@@ -1503,19 +1552,17 @@ private struct MainTabContentPager<Feed: View, Expenses: View, Friends: View, Me
             feed: feed,
             expenses: expenses,
             friends: friends,
-            messages: messages,
-            camera: camera
+            messages: messages
         )
     }
 }
 
-private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Messages: View, Camera: View>: View {
+private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Messages: View>: View {
     @Binding var selectedTab: Tab
     @ViewBuilder var feed: () -> Feed
     @ViewBuilder var expenses: () -> Expenses
     @ViewBuilder var friends: () -> Friends
     @ViewBuilder var messages: () -> Messages
-    @ViewBuilder var camera: () -> Camera
 
     @State private var pagerIndex: Int = 0
     @State private var activatedTabs: Set<Tab> = [.feed]
@@ -1536,18 +1583,10 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
                 }
                 .frame(width: width * pageCount, alignment: .leading)
                 .modifier(MainTabPagerSlideOffset(offsetX: -CGFloat(pagerIndex) * width))
-
-                if selectedTab == .camera {
-                    camera()
-                        .frame(width: width)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                        .zIndex(1)
-                }
             }
         }
         .ignoresSafeArea(edges: [.top, .bottom])
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .animation(MainTabPagerMotion.slide, value: selectedTab == .camera)
         .onAppear {
             let initial = selectedTab.isPagerTab ? selectedTab : .feed
             var transaction = Transaction()

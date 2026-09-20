@@ -45,6 +45,7 @@ private struct ModernSplickTabBar: View {
     @Binding var selectedTab: Tab
     let badgeCounts: TabBadgeCounts
     let tabBarScrollState: TabBarScrollState
+    var cameraRevealProgress: CGFloat = 0
 
     @EnvironmentObject private var languageService: LanguageService
     @State private var tappedTab: Tab?
@@ -66,6 +67,7 @@ private struct ModernSplickTabBar: View {
                     tabButton(.expenses, badge: badgeCounts.expenses)
                 }
                 .frame(maxWidth: .infinity)
+                .allowsHitTesting(selectedTab != .camera && cameraRevealProgress < 0.02)
 
                 Color.clear
                     .frame(width: centerLaneWidth)
@@ -76,6 +78,7 @@ private struct ModernSplickTabBar: View {
                     tabButton(.messages, badge: badgeCounts.messages)
                 }
                 .frame(maxWidth: .infinity)
+                .allowsHitTesting(selectedTab != .camera && cameraRevealProgress < 0.02)
             }
 
             cameraButton
@@ -110,10 +113,10 @@ private struct ModernSplickTabBar: View {
         TabBarCameraButton(
             size: cameraSize,
             isSelected: selectedTab == .camera,
-            title: Tab.camera.localizedTitle(using: languageService)
+            title: Tab.camera.localizedTitle(using: languageService),
+            revealProgress: cameraRevealProgress
         ) {
             selectedTab = .camera
-            tabBarScrollState.hide(flushToBottom: true)
         }
     }
 
@@ -174,6 +177,7 @@ private struct LegacySplickTabBar: View {
     @Binding var selectedTab: Tab
     let badgeCounts: TabBadgeCounts
     let tabBarScrollState: TabBarScrollState
+    var cameraRevealProgress: CGFloat = 0
 
     @EnvironmentObject private var languageService: LanguageService
     @State private var tappedTab: Tab?
@@ -196,6 +200,7 @@ private struct LegacySplickTabBar: View {
                     tabButton(.expenses, badge: badgeCounts.expenses)
                 }
                 .frame(maxWidth: .infinity)
+                .allowsHitTesting(selectedTab != .camera && cameraRevealProgress < 0.02)
 
                 Color.clear
                     .frame(width: centerLaneWidth)
@@ -206,6 +211,7 @@ private struct LegacySplickTabBar: View {
                     tabButton(.messages, badge: badgeCounts.messages)
                 }
                 .frame(maxWidth: .infinity)
+                .allowsHitTesting(selectedTab != .camera && cameraRevealProgress < 0.02)
             }
 
             cameraButton
@@ -243,10 +249,10 @@ private struct LegacySplickTabBar: View {
         TabBarCameraButton(
             size: cameraSize,
             isSelected: selectedTab == .camera,
-            title: Tab.camera.localizedTitle(using: languageService)
+            title: Tab.camera.localizedTitle(using: languageService),
+            revealProgress: cameraRevealProgress
         ) {
             selectedTab = .camera
-            tabBarScrollState.hide(flushToBottom: true)
         }
     }
 
@@ -305,34 +311,19 @@ private struct TabBarCameraButton: View {
     let size: CGFloat
     let isSelected: Bool
     let title: String
+    var revealProgress: CGFloat = 0
     let action: () -> Void
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Button(action: action) {
-            ZStack {
-                SplickBrandAtmosphere(fillsSafeArea: false)
-                SplickLogoMark(
-                    size: size * 0.72,
-                    layout: .markOnly,
-                    style: .fullColor
-                )
-            }
-            .frame(width: size, height: size)
-            .clipShape(Circle())
-            .overlay {
-                Circle()
-                    .strokeBorder(
-                        Color.white.opacity(colorScheme == .dark ? 0.22 : 0.55),
-                        lineWidth: 1
-                    )
-            }
-            .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.45 : 0.12), radius: 10, y: 3)
+            SplickCameraCaptureButton(size: size)
         }
         .buttonStyle(.plain)
         .contentShape(Circle())
         .accessibilityLabel(title)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .opacity(isSelected || revealProgress > 0.02 ? 0 : 1)
+        .allowsHitTesting(!isSelected && revealProgress <= 0.02)
     }
 }
 
@@ -343,11 +334,13 @@ struct SplickTabBar: View, Equatable {
     let badgeCounts: TabBadgeCounts
     let tabBarScrollState: TabBarScrollState
     let colorScheme: ColorScheme
+    var cameraRevealProgress: CGFloat = 0
 
     static func == (lhs: SplickTabBar, rhs: SplickTabBar) -> Bool {
         lhs.selectedTab == rhs.selectedTab
             && lhs.badgeCounts == rhs.badgeCounts
             && lhs.colorScheme == rhs.colorScheme
+            && lhs.cameraRevealProgress == rhs.cameraRevealProgress
     }
 
     var body: some View {
@@ -356,13 +349,15 @@ struct SplickTabBar: View, Equatable {
                 ModernSplickTabBar(
                     selectedTab: $selectedTab,
                     badgeCounts: badgeCounts,
-                    tabBarScrollState: tabBarScrollState
+                    tabBarScrollState: tabBarScrollState,
+                    cameraRevealProgress: cameraRevealProgress
                 )
             } else {
                 LegacySplickTabBar(
                     selectedTab: $selectedTab,
                     badgeCounts: badgeCounts,
-                    tabBarScrollState: tabBarScrollState
+                    tabBarScrollState: tabBarScrollState,
+                    cameraRevealProgress: cameraRevealProgress
                 )
             }
         }

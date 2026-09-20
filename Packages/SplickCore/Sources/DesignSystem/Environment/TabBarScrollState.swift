@@ -22,6 +22,20 @@ public enum SplickTabBarMetrics {
     public static let showNearTopThreshold: CGFloat = 64
     /// Tighter threshold for same-tab tap: scroll-to-top vs pull-to-refresh.
     public static let sameTabAtTopThreshold: CGFloat = 16
+
+    public static let barHeight: CGFloat = 56
+    public static let barBottomPadding: CGFloat = 4
+    public static let cameraSizeIOS26: CGFloat = 63
+    public static let cameraSizeLegacy: CGFloat = 72
+
+    public static var cameraSize: CGFloat {
+        if #available(iOS 26.0, *) { cameraSizeIOS26 } else { cameraSizeLegacy }
+    }
+
+    /// Distance from the screen bottom to the camera circle’s bottom edge.
+    public static var cameraButtonBottomInset: CGFloat {
+        barBottomPadding - max(cameraSize - barHeight, 0) / 2
+    }
 }
 
 public enum TabBarChromeMotion {
