@@ -360,26 +360,26 @@ final class MultiPhotoLibraryPickerViewModel: ObservableObject {
     }
 
     private func fetchMediaAssets() -> [PHAsset] {
+        let images = PHAsset.fetchAssets(with: .image, options: Self.recencyFetchOptions())
+        let videos = PHAsset.fetchAssets(with: .video, options: Self.recencyFetchOptions())
+        var combined: [PHAsset] = []
+        combined.reserveCapacity(min(images.count + videos.count, Self.maxLoadedAssets))
+        images.enumerateObjects { asset, _, _ in combined.append(asset) }
+        videos.enumerateObjects { asset, _, _ in combined.append(asset) }
+        combined.sort { lhs, rhs in
+            (lhs.creationDate ?? .distantPast) > (rhs.creationDate ?? .distantPast)
+        }
+        if combined.count > Self.maxLoadedAssets {
+            combined = Array(combined.prefix(Self.maxLoadedAssets))
+        }
+        return combined
+    }
+
+    private static func recencyFetchOptions() -> PHFetchOptions {
         let options = PHFetchOptions()
         options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
-        options.predicate = NSPredicate(
-            format: "mediaType == %d OR mediaType == %d",
-            PHAssetMediaType.image.rawValue,
-            PHAssetMediaType.video.rawValue
-        )
-
-        let result = PHAsset.fetchAssets(with: options)
-        var fetched: [PHAsset] = []
-        let count = min(result.count, Self.maxLoadedAssets)
-        fetched.reserveCapacity(count)
-        result.enumerateObjects { asset, index, stop in
-            if index >= Self.maxLoadedAssets {
-                stop.pointee = true
-                return
-            }
-            fetched.append(asset)
-        }
-        return fetched
+        options.fetchLimit = maxLoadedAssets
+        return options
     }
 
     private func loadFullSizeImage(for asset: PHAsset) async -> UIImage? {
