@@ -32,8 +32,8 @@ final class PushNotificationCoordinator: ObservableObject {
     private var languageService: LanguageService?
     private var serverSyncInFlight = false
     private var lastSyncedToken: String?
-    private var bannerAutoDismissTasks: [String: Task<Void, Never>] = [:]
-    /// Request identifiers currently scheduled for short-lived banner display.
+    private var bannerRetractTasks: [String: Task<Void, Never>] = [:]
+    /// Request identifiers currently showing a short-lived heads-up banner.
     private var activeBannerRequestIdentifiers: Set<String> = []
 
     private init() {}
@@ -315,95 +315,214 @@ final class PushNotificationCoordinator: ObservableObject {
     func foregroundPresentationOptions(
         userInfo: [AnyHashable: Any] = [:]
     ) -> UNNotificationPresentationOptions {
+        // Quiet re-post after heads-up retract — list only, never show another banner.
+        if Self.isHeadsUpRetractedRetain(userInfo) {
+            return [.list, .badge]
+        }
         if shouldSuppressForegroundChatBanner(userInfo: userInfo) {
             return []
         }
         if notificationSound.isSilent {
-            return [.banner, .badge]
+            return [.banner, .list, .badge]
         }
         playSelectedSound()
         // Omit `.sound` so APNs "default" does not override the bundled tone.
-        return [.banner, .badge]
+        // `.list` keeps the alert in Notification Center after the banner retracts.
+        return [.banner, .list, .badge]
     }
 
-    /// iOS keeps actionable / attachment banners until the user swipes them away, which also
-    /// blocks subsequent banners. Remove the delivered notification after a short delay.
+    /// Retracts the sticky/temporary heads-up after a short delay without clearing
+    /// Notification Center: remove the delivered alert, then re-post it quietly.
+    ///
+    /// Call `retractStaleHeadsUpsImmediately` first when a newer push arrives so the
+    /// previous banner hides right away instead of waiting out its remaining delay.
     func scheduleBannerAutoDismiss(
         requestIdentifier: String? = nil,
         userInfo: [AnyHashable: Any] = [:]
     ) {
+        guard !Self.isHeadsUpRetractedRetain(userInfo) else { return }
+
         if let requestIdentifier {
             activeBannerRequestIdentifiers.insert(requestIdentifier)
         }
         let taskKey = requestIdentifier
             ?? notificationIdString(from: userInfo)
             ?? UUID().uuidString
-        bannerAutoDismissTasks[taskKey]?.cancel()
-        bannerAutoDismissTasks[taskKey] = Task { @MainActor [weak self] in
+        bannerRetractTasks[taskKey]?.cancel()
+        bannerRetractTasks[taskKey] = Task { @MainActor [weak self] in
             try? await Task.sleep(for: AppConstants.PushNotifications.bannerAutoDismissDelay)
             guard !Task.isCancelled else { return }
-            await self?.dismissDeliveredBanner(
+            await self?.retractHeadsUpPreservingNotificationCenter(
                 requestIdentifier: requestIdentifier,
                 userInfo: userInfo
             )
-            // Background deliver can lag slightly behind the wake callback — retry once.
+            // Delivery can lag slightly behind the wake callback — retry once.
             try? await Task.sleep(for: .milliseconds(400))
             guard !Task.isCancelled else { return }
-            await self?.dismissDeliveredBanner(
+            await self?.retractHeadsUpPreservingNotificationCenter(
                 requestIdentifier: requestIdentifier,
                 userInfo: userInfo
             )
             if let requestIdentifier {
                 self?.activeBannerRequestIdentifiers.remove(requestIdentifier)
             }
-            self?.bannerAutoDismissTasks[taskKey] = nil
+            self?.bannerRetractTasks[taskKey] = nil
         }
     }
 
-    /// Clears still-visible short-lived banners so a newly arrived push is not queued behind them.
-    func dismissPendingBanners(except requestIdentifier: String? = nil) {
-        let staleRequestIds = activeBannerRequestIdentifiers.filter { $0 != requestIdentifier }
-        let staleTaskKeys = bannerAutoDismissTasks.keys.filter { $0 != requestIdentifier }
+    /// Immediately retracts every visible heads-up except the newest one.
+    /// Cancels their pending 2.5s timers so a rapid next push replaces the banner now.
+    func retractStaleHeadsUpsImmediately(
+        exceptRequestIdentifier: String? = nil,
+        exceptUserInfo: [AnyHashable: Any] = [:]
+    ) async {
+        let exceptNotificationId = notificationIdString(from: exceptUserInfo)
+        let keepTaskKey = exceptRequestIdentifier ?? exceptNotificationId
+
+        let staleTaskKeys = bannerRetractTasks.keys.filter { $0 != keepTaskKey }
         for key in staleTaskKeys {
-            bannerAutoDismissTasks[key]?.cancel()
-            bannerAutoDismissTasks[key] = nil
+            bannerRetractTasks[key]?.cancel()
+            bannerRetractTasks[key] = nil
         }
-        activeBannerRequestIdentifiers.subtract(staleRequestIds)
-        guard !staleRequestIds.isEmpty else { return }
-        UNUserNotificationCenter.current()
-            .removeDeliveredNotifications(withIdentifiers: Array(staleRequestIds))
+        if let exceptRequestIdentifier {
+            activeBannerRequestIdentifiers = activeBannerRequestIdentifiers.filter {
+                $0 == exceptRequestIdentifier
+            }
+        } else {
+            activeBannerRequestIdentifiers.removeAll()
+        }
+
+        await retractAllVisibleHeadsUps(
+            exceptRequestIdentifier: exceptRequestIdentifier,
+            exceptNotificationId: exceptNotificationId
+        )
     }
 
-    private func dismissDeliveredBanner(
+    private func retractAllVisibleHeadsUps(
+        exceptRequestIdentifier: String?,
+        exceptNotificationId: String?
+    ) async {
+        let center = UNUserNotificationCenter.current()
+        let delivered = await center.deliveredNotifications()
+        for notification in delivered {
+            let identifier = notification.request.identifier
+            if let exceptRequestIdentifier, identifier == exceptRequestIdentifier {
+                continue
+            }
+            let info = notification.request.content.userInfo
+            if Self.isHeadsUpRetractedRetain(info) {
+                continue
+            }
+            if let exceptNotificationId,
+               notificationIdString(from: info) == exceptNotificationId
+            {
+                continue
+            }
+            await retractHeadsUpPreservingNotificationCenter(
+                requestIdentifier: identifier,
+                userInfo: info
+            )
+        }
+    }
+
+    private func retractHeadsUpPreservingNotificationCenter(
         requestIdentifier: String?,
         userInfo: [AnyHashable: Any]
     ) async {
         let center = UNUserNotificationCenter.current()
-        if let requestIdentifier {
-            center.removeDeliveredNotifications(withIdentifiers: [requestIdentifier])
-            return
-        }
-
-        let targetId = notificationIdString(from: userInfo)
         let delivered = await center.deliveredNotifications()
-        let identifiers: [String]
-        if let targetId {
-            identifiers = delivered.compactMap { notification in
-                let info = notification.request.content.userInfo
-                guard notificationIdString(from: info) == targetId else { return nil }
-                return notification.request.identifier
+
+        let matches: [UNNotification]
+        if let requestIdentifier {
+            matches = delivered.filter { $0.request.identifier == requestIdentifier }
+        } else if let targetId = notificationIdString(from: userInfo) {
+            matches = delivered.filter {
+                notificationIdString(from: $0.request.content.userInfo) == targetId
             }
         } else if !userInfo.isEmpty {
-            // Fallback: remove the newest delivered notification from this app.
-            identifiers = delivered
-                .sorted { $0.date > $1.date }
-                .prefix(1)
-                .map(\.request.identifier)
+            matches = delivered.sorted { $0.date > $1.date }.prefix(1).map { $0 }
         } else {
-            identifiers = []
+            matches = []
         }
-        guard !identifiers.isEmpty else { return }
-        center.removeDeliveredNotifications(withIdentifiers: identifiers)
+
+        for notification in matches {
+            let identifier = notification.request.identifier
+            let original = notification.request.content
+            if Self.isHeadsUpRetractedRetain(original.userInfo) {
+                continue
+            }
+
+            let retained = Self.makeQuietNotificationCenterContent(from: original)
+            center.removeDeliveredNotifications(withIdentifiers: [identifier])
+
+            let request = UNNotificationRequest(
+                identifier: identifier,
+                content: retained,
+                trigger: nil
+            )
+            do {
+                try await center.add(request)
+            } catch {
+                Log.error(
+                    error,
+                    category: .notification,
+                    metadata: ["action": "retractHeadsUpPreservingNotificationCenter"]
+                )
+            }
+        }
+    }
+
+    private static func makeQuietNotificationCenterContent(
+        from original: UNNotificationContent
+    ) -> UNMutableNotificationContent {
+        let retained = UNMutableNotificationContent()
+        retained.title = original.title
+        retained.subtitle = original.subtitle
+        retained.body = original.body
+        retained.badge = original.badge
+        retained.categoryIdentifier = original.categoryIdentifier
+        retained.threadIdentifier = original.threadIdentifier
+        retained.targetContentIdentifier = original.targetContentIdentifier
+        retained.attachments = copyAttachments(original.attachments)
+        // No sound — avoid a second chime when re-posting into Notification Center.
+        retained.sound = nil
+        retained.interruptionLevel = .passive
+
+        var info = original.userInfo
+        info[AppConstants.PushNotifications.headsUpRetractedUserInfoKey] = true
+        retained.userInfo = info
+        return retained
+    }
+
+    private static func copyAttachments(
+        _ attachments: [UNNotificationAttachment]
+    ) -> [UNNotificationAttachment] {
+        attachments.compactMap { attachment in
+            let destination = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString)
+                .appendingPathExtension(attachment.url.pathExtension)
+            do {
+                try FileManager.default.copyItem(at: attachment.url, to: destination)
+                return try UNNotificationAttachment(
+                    identifier: attachment.identifier,
+                    url: destination,
+                    options: nil
+                )
+            } catch {
+                return nil
+            }
+        }
+    }
+
+    static func isHeadsUpRetractedRetain(_ userInfo: [AnyHashable: Any]) -> Bool {
+        let key = AppConstants.PushNotifications.headsUpRetractedUserInfoKey
+        if let value = userInfo[key] as? Bool {
+            return value
+        }
+        if let value = userInfo[key] as? NSNumber {
+            return value.boolValue
+        }
+        return false
     }
 
     private func notificationIdString(from userInfo: [AnyHashable: Any]) -> String? {
