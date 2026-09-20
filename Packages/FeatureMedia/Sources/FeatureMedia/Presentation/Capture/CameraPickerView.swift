@@ -354,9 +354,8 @@ struct CameraPickerView: View {
                 .frame(width: metrics.galleryDiameter, height: metrics.galleryDiameter)
             Spacer(minLength: 0)
             shutterCluster(metrics: metrics)
-                // Hand off from the tab-bar button (which owns lift/scale above the
-                // water) only at the end — keeps one continuous sliding shutter.
-                .opacity(Double(min(max((revealProgress - 0.85) / 0.12, 0), 1)))
+                // Tab-bar shutter owns the visible lift/scale; take over only at the end.
+                .opacity(Double(min(max((revealProgress - 0.9) / 0.08, 0), 1)))
             Spacer(minLength: 0)
             Color.clear
                 .frame(width: metrics.sideControlDiameter, height: metrics.sideControlDiameter)
@@ -364,7 +363,7 @@ struct CameraPickerView: View {
         .padding(.horizontal, metrics.shutterRowHorizontalPadding)
         .padding(.bottom, metrics.bottomPadding)
         .offset(y: -CameraOpenRevealGeometry.shutterRowLift(progress: revealProgress))
-        .allowsHitTesting(revealProgress > 0.9)
+        .allowsHitTesting(revealProgress > 0.92)
     }
 
     private func shutterCluster(metrics: CameraChromeMetrics) -> some View {

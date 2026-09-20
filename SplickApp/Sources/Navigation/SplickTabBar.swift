@@ -334,12 +334,9 @@ private struct TabBarCameraButton: View {
         .contentShape(Circle())
         .accessibilityLabel(title)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-        // Lift + scale live on this higher layer (above the water). The in-camera
-        // shutter only crossfades in at the end — otherwise the button vanishes
-        // mid-lift when it leaves the circular mask.
-        .offset(y: -CameraOpenRevealGeometry.shutterRowLift(progress: revealProgress))
-        .scaleEffect(CameraOpenRevealGeometry.shutterOpenScale(progress: revealProgress))
-        .opacity(revealProgress > 0.88 ? 0 : 1)
+        // While the camera layer is open, `CameraRevealFloatingShutter` owns the
+        // visible lift/scale above the water — hide this copy to avoid a double mark.
+        .opacity(isSelected || revealProgress > 0.001 ? 0 : 1)
         .allowsHitTesting(!isSelected && revealProgress <= 0.001)
     }
 }

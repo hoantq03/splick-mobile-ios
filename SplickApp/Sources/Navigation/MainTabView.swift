@@ -270,16 +270,8 @@ struct MainTabView: View {
             .environment(\.currentUserSummary, currentUserSummary)
             .environment(\.tabBarScrollState, tabBarChrome.tabBar)
             .environmentObject(cameraRevealProgress)
-            .overlay(alignment: .bottom) {
-                MainTabBarChrome(
-                    selectedTab: $appState.selectedTab,
-                    badgeCounts: badgeCounts,
-                    isChromePresented: isTabBarChromePresented,
-                    cameraRevealProgress: cameraRevealProgress,
-                    scrollState: tabBarChrome.tabBar,
-                    cameraLayerVisible: showsCameraLayer
-                )
-            }
+            // Camera water → tab chrome → floating shutter on top (never clipped by tab frame).
+            // Sibling overlays ignore child zIndex; later overlays paint on top.
             .overlay {
                 if showsCameraLayer {
                     CameraOpenRevealContainer(
@@ -300,8 +292,26 @@ struct MainTabView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .ignoresSafeArea()
-                    .zIndex(80)
                     .allowsHitTesting(cameraExpanded)
+                }
+            }
+            .overlay(alignment: .bottom) {
+                MainTabBarChrome(
+                    selectedTab: $appState.selectedTab,
+                    badgeCounts: badgeCounts,
+                    isChromePresented: isTabBarChromePresented,
+                    cameraRevealProgress: cameraRevealProgress,
+                    scrollState: tabBarChrome.tabBar,
+                    cameraLayerVisible: showsCameraLayer
+                )
+            }
+            .overlay {
+                if showsCameraLayer {
+                    CameraRevealFloatingShutter(
+                        progressSource: cameraRevealProgress,
+                        cameraSize: SplickTabBarMetrics.cameraSize,
+                        bottomInset: SplickTabBarMetrics.cameraRevealBottomInset
+                    )
                 }
             }
             .onChange(of: appState.selectedTab, perform: handleSelectedTabChange)
@@ -518,6 +528,33 @@ struct MainTabView: View {
     }
 }
 
+/// Shutter proxy above the water mask — full-screen so lift/scale is never clipped by the tab frame.
+private struct CameraRevealFloatingShutter: View {
+    @ObservedObject var progressSource: CameraOpenRevealProgressSource
+    let cameraSize: CGFloat
+    let bottomInset: CGFloat
+
+    var body: some View {
+        let progress = progressSource.value
+        GeometryReader { geo in
+            let origin = CameraOpenRevealGeometry.origin(
+                in: geo.size,
+                cameraSize: cameraSize,
+                bottomInset: bottomInset
+            )
+            let lift = CameraOpenRevealGeometry.shutterRowLift(progress: progress)
+            let scale = CameraOpenRevealGeometry.shutterOpenScale(progress: progress)
+            SplickCameraCaptureButton(size: cameraSize)
+                .scaleEffect(scale)
+                .position(x: origin.x, y: origin.y - lift)
+                // Crossfade to the in-camera shutter at the end of the lift.
+                .opacity(progress > 0.92 ? 0 : 1)
+                .allowsHitTesting(false)
+        }
+        .ignoresSafeArea()
+    }
+}
+
 /// Isolated so scroll-driven hide/show does not invalidate `MainTabView` (all four tabs).
 private struct MainTabBarChrome: View {
     @Binding var selectedTab: Tab
@@ -553,10 +590,8 @@ private struct MainTabBarChrome: View {
     }
 
     /// Crisp tab shutter sits above the soft water while it blooms / collapses.
-    /// Stay above until nearly settled open — otherwise on close the tab button is
-    /// trapped under the water and pops in with a flash when the camera unmounts.
     private var floatsAboveCameraWater: Bool {
-        cameraLayerVisible && cameraRevealProgress.value < 0.97
+        cameraLayerVisible && cameraRevealProgress.value < 0.99
     }
 
     var body: some View {
@@ -567,7 +602,7 @@ private struct MainTabBarChrome: View {
             colorScheme: colorScheme,
             cameraRevealProgress: cameraRevealProgress.value
         )
-        .equatable()
+        // Avoid .equatable() here — it can skip per-frame lift/scale updates.
         .opacity(opacity)
         .offset(y: slideOffset)
         .allowsHitTesting(
@@ -579,7 +614,6 @@ private struct MainTabBarChrome: View {
         // Skip clipping while revealing so the tab camera can lift above the bar.
         .frame(height: insetHeight)
         .modifier(CameraRevealClipModifier(clip: !floatsAboveCameraWater))
-        .zIndex(floatsAboveCameraWater ? 90 : 20)
         .animation(
             animationToken.animated ? TabBarMotion.slide : nil,
             value: animationToken

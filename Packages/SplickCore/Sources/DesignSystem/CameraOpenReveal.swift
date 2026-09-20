@@ -64,17 +64,17 @@ public enum CameraOpenRevealGeometry {
     /// Tab-aligned at progress 0; settles `56 + 18` pt higher once open (matches prior rest).
     public static let shutterRestLift: CGFloat = 74
 
-    /// Lift completes in the first half of the reveal — slide up before the shutter grows.
+    /// Lift completes in the first ~70% so the shutter is mostly up before handoff.
     public static func shutterRowLift(progress: CGFloat) -> CGFloat {
-        let t = min(max(progress / 0.52, 0), 1)
+        let t = min(max(progress / 0.7, 0), 1)
         return t * shutterRestLift
     }
 
     public static let shutterOpenedScale: CGFloat = 1.25
 
-    /// Scale starts after lift is mostly done so open reads as: slide up → then expand.
+    /// Scale grows with the lift (not after) — slide up and enlarge together.
     public static func shutterOpenScale(progress: CGFloat) -> CGFloat {
-        let t = min(max((progress - 0.42) / 0.58, 0), 1)
+        let t = min(max(progress / 0.7, 0), 1)
         return lerp(1, shutterOpenedScale, t)
     }
 
