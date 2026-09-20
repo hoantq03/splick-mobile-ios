@@ -2,7 +2,7 @@ import XCTest
 @testable import FeatureMessaging
 
 final class ConversationPeekLayoutTests: XCTestCase {
-    func testPreviewCardDoesNotFillRemainingScreen() {
+    func testPreviewCardFillsDownToMenuClearance() {
         let dest = ConversationPeekLayout.previewDestination(
             top: 80,
             bottom: 800,
@@ -10,13 +10,10 @@ final class ConversationPeekLayoutTests: XCTestCase {
             gap: 8
         )
         XCTAssertEqual(dest.minY, 192, accuracy: 0.5)
-        XCTAssertLessThan(dest.maxY, 800)
+        XCTAssertEqual(dest.maxY, 800, accuracy: 0.5)
+        XCTAssertEqual(dest.height, 608, accuracy: 0.5)
+        XCTAssertGreaterThan(dest.height, ConversationPeekLayout.minPreviewHeight)
         XCTAssertGreaterThan(dest.minY, 80, "Band above the card must stay empty so dimmer taps can dismiss")
-        XCTAssertEqual(
-            dest.height,
-            (800 - 80) * ConversationPeekLayout.previewMaxUsableFraction,
-            accuracy: 0.5
-        )
     }
 
     func testTinyRemainingSpaceUsesAllOfIt() {

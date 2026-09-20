@@ -37,8 +37,8 @@ struct ConversationPeekOverlay: View {
     /// User scrolled away from the newest edge — prepend must preserve mid-thread position.
     @State private var userReleasedBottomPin = false
     @State private var isNearTop = false
-    /// Measured options chrome; initial guess matches two 2-column chip rows.
-    @State private var optionsSize = CGSize(width: 320, height: 104)
+    /// Measured options chrome; initial guess for first frame before flow layout measures.
+    @State private var optionsSize = CGSize(width: 320, height: 52)
     @State private var didFreezeOptionsSize = false
     private static let olderLoaderSlotHeight: CGFloat = 28
     private static let peekBottomAnchor = "peek-timeline-bottom"
@@ -51,7 +51,8 @@ struct ConversationPeekOverlay: View {
     private let contentGap = SplickTheme.Spacing.sm
     /// Extra drop below the Dynamic Island / status bar so chips are fully visible.
     private let extraBelowIsland = SplickTheme.Spacing.sm
-    private let optionsBandHeight: CGFloat = 104
+    /// Fallback band before the first real measure (≈ one chip row).
+    private let optionsBandHeightFallback: CGFloat = 52
 
     var body: some View {
         GeometryReader { geometry in
@@ -99,28 +100,23 @@ struct ConversationPeekOverlay: View {
                     .frame(width: layout.optionsFrame.width, alignment: .leading)
                     .background(optionsSizeReader)
                     .onPreferenceChange(PeekOptionsSizeKey.self) { size in
-                        guard size.width > 1, size.height > 1, !didFreezeOptionsSize else { return }
+                        guard size.width > 1, size.height > 1 else { return }
+                        // Keep updating when height grows (wrap / longer locale) so the
+                        // preview always sits below the chips — never overlaps them.
+                        if didFreezeOptionsSize,
+                           size.height <= optionsSize.height + 0.5,
+                           abs(size.width - optionsSize.width) <= 0.5 {
+                            return
+                        }
                         didFreezeOptionsSize = true
                         var transaction = Transaction()
                         transaction.disablesAnimations = true
                         withTransaction(transaction) {
-                            optionsSize = CGSize(
-                                width: size.width,
-                                height: max(size.height, optionsBandHeight)
-                            )
+                            optionsSize = size
                         }
                     }
-                    .scaleEffect(
-                        isOptionsRevealed ? 1 : 0.72,
-                        anchor: .top
-                    )
-                    .opacity(isOptionsRevealed ? 1 : 0)
-                    .offset(
-                        x: layout.optionsFrame.minX,
-                        y: layout.optionsFrame.minY + (isOptionsRevealed ? 0 : -16)
-                    )
+                    .offset(x: layout.optionsFrame.minX, y: layout.optionsFrame.minY)
                     .allowsHitTesting(isOptionsRevealed)
-                    .compositingGroup()
                     .zIndex(2)
             }
         }
@@ -141,8 +137,9 @@ struct ConversationPeekOverlay: View {
                 withAnimation(ConversationPeekMotion.appear) {
                     isRevealed = true
                 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + MessageReactionTrayMotion.optionsChromeDelay) {
-                    withAnimation(ConversationPeekMotion.appear) {
+                // Preview bounce first; then chips cascade L→R, top→bottom.
+                DispatchQueue.main.asyncAfter(deadline: .now() + ConversationPeekMotion.optionsStartDelay) {
+                    withAnimation(ConversationPeekMotion.chipAppear) {
                         isOptionsRevealed = true
                     }
                 }
@@ -161,14 +158,11 @@ struct ConversationPeekOverlay: View {
         }
     }
 
-    /// Two-column chip grid — two rows of two actions.
+    /// Intrinsic-width chips that wrap onto new rows via `FlowLayout` (matches Android FlowRow).
     private func optionsStack(maxWidth: CGFloat) -> some View {
-        let columns = [
-            GridItem(.flexible(minimum: 96), spacing: SplickTheme.Spacing.xs),
-            GridItem(.flexible(minimum: 96), spacing: SplickTheme.Spacing.xs),
-        ]
-        return LazyVGrid(columns: columns, alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+        FlowLayout(spacing: SplickTheme.Spacing.xs, lineSpacing: SplickTheme.Spacing.xs) {
             optionChip(
+                index: 0,
                 titleKey: context.conversation.isMuted()
                     ? .messagingChatUnmuteNotifications
                     : .messagingChatMuteNotifications,
@@ -178,12 +172,14 @@ struct ConversationPeekOverlay: View {
             )
             .animation(ConversationPeekMotion.muteToggle, value: context.conversation.isMuted())
             optionChip(
+                index: 1,
                 titleKey: .messagingChatMarkAsRead,
                 systemImage: "checkmark.message",
                 destructive: false,
                 action: onMarkRead
             )
             optionChip(
+                index: 2,
                 titleKey: .messagingChatDeleteConversation,
                 systemImage: "trash",
                 destructive: true,
@@ -194,33 +190,48 @@ struct ConversationPeekOverlay: View {
     }
 
     private func optionChip(
+        index: Int,
         titleKey: L10nKey,
         systemImage: String,
         destructive: Bool,
         action: @escaping () -> Void
     ) -> some View {
-        HStack(spacing: SplickTheme.Spacing.xs) {
+        let appearDelay = Double(index) * ConversationPeekMotion.chipStagger
+        let dismissDelay = Double(ConversationPeekMotion.optionChipCount - 1 - index)
+            * ConversationPeekMotion.chipStagger
+        return HStack(spacing: SplickTheme.Spacing.xs) {
             Image(systemName: systemImage)
                 .font(.system(size: 14, weight: .semibold))
                 .id(systemImage)
                 .transition(.scale(scale: 0.72).combined(with: .opacity))
             Text(languageService.text(titleKey))
                 .font(SplickTheme.Typography.callout.weight(.semibold))
-                .lineLimit(2)
-                .minimumScaleFactor(0.85)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
                 .id(titleKey)
                 .transition(.opacity)
         }
         .animation(ConversationPeekMotion.muteToggle, value: systemImage)
-        .frame(maxWidth: .infinity)
         .foregroundStyle(destructive ? SplickTheme.Colors.error : SplickTheme.Colors.textPrimary)
-        .padding(.horizontal, SplickTheme.Spacing.md)
-        .padding(.vertical, SplickTheme.Spacing.sm)
+        // Match Android PeekOptionChip padding (12 / 11).
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
         .background {
             Capsule(style: .continuous)
                 .fill(SplickTheme.Colors.cardBackground)
         }
+        .fixedSize(horizontal: true, vertical: true)
         .contentShape(Capsule())
+        .scaleEffect(
+            isOptionsRevealed ? 1 : ConversationPeekMotion.chipHiddenScale,
+            anchor: .bottom
+        )
+        .opacity(isOptionsRevealed ? 1 : 0)
+        .offset(y: isOptionsRevealed ? 0 : ConversationPeekMotion.chipHiddenOffsetY)
+        .animation(
+            ConversationPeekMotion.chipAppear.delay(isOptionsRevealed ? appearDelay : dismissDelay),
+            value: isOptionsRevealed
+        )
         .onTapGesture {
             Self.actionImpact.impactOccurred()
             action()
@@ -244,7 +255,8 @@ struct ConversationPeekOverlay: View {
         }
         .background {
             shape
-                .fill(SplickTheme.Colors.secondaryBackground)
+                // Match ChatThread surface so incoming bubbles (secondaryBackground) stay visible.
+                .fill(SplickTheme.Colors.background)
                 .shadow(color: .black.opacity(0.2), radius: 20, y: 10)
         }
         .contentShape(shape)
@@ -479,7 +491,7 @@ struct ConversationPeekOverlay: View {
         let previewFrame: CGRect
     }
 
-    /// Options on top; preview is a floating card so leftover inbox stays visible.
+    /// Options on top; preview fills from below the chips down to tab-bar clearance.
     private func peekLayout(
         containerSize: CGSize,
         insets: EdgeInsets,
@@ -491,7 +503,7 @@ struct ConversationPeekOverlay: View {
         let bottom = containerSize.height - max(insets.bottom, Self.windowSafeAreaBottom)
             - SplickTabBarMetrics.floatingClearance - edgeMargin
         let width = max(right - left, 160)
-        let optionsHeight = max(optionsSize.height, optionsBandHeight)
+        let optionsHeight = max(optionsSize.height, optionsBandHeightFallback)
         let optionsFrame = CGRect(
             x: left,
             y: chromeTop,
@@ -532,43 +544,63 @@ struct ConversationPeekOverlay: View {
     private func dismissAnimated(completion: @escaping () -> Void) {
         guard !isDismissing else { return }
         isDismissing = true
-        withAnimation(ConversationPeekMotion.dismiss) {
-            isRevealed = false
+        // Options reverse-cascade first (R→L / bottom→top), then preview settles.
+        withAnimation(ConversationPeekMotion.chipAppear) {
             isOptionsRevealed = false
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + ConversationPeekMotion.dismissSettlingDelay) {
+        let previewDelay = ConversationPeekMotion.optionsDismissLeadIn
+        DispatchQueue.main.asyncAfter(deadline: .now() + previewDelay) {
+            withAnimation(ConversationPeekMotion.dismiss) {
+                isRevealed = false
+            }
+        }
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + previewDelay + ConversationPeekMotion.dismissSettlingDelay
+        ) {
             completion()
         }
     }
 }
 
 enum ConversationPeekLayout {
-    static let previewMaxUsableFraction: CGFloat = 0.62
     static let minPreviewHeight: CGFloat = 120
 
+    /// Preview card starts below the action chips and fills down to [bottom]
+    /// (already clears the floating tab bar) — matches Android peek layout.
     static func previewDestination(
         top: CGFloat,
         bottom: CGFloat,
         optionsHeight: CGFloat,
         gap: CGFloat
     ) -> CGRect {
-        let usable = max(bottom - top, minPreviewHeight)
         let previewTop = min(top + optionsHeight + gap, bottom - minPreviewHeight)
-        let available = max(bottom - previewTop, 0)
-        let preferred = usable * previewMaxUsableFraction
-        let height = min(max(preferred, min(minPreviewHeight, available)), available)
-        return CGRect(x: 0, y: previewTop, width: 0, height: height)
+        let previewBottom = max(bottom, previewTop)
+        return CGRect(x: 0, y: previewTop, width: 0, height: previewBottom - previewTop)
     }
 }
 
 private enum ConversationPeekMotion {
-    /// Morph from the list row with a soft overshoot (bounce).
-    static let appear = Animation.spring(response: 0.42, dampingFraction: 0.58)
+    /// Morph from the list row — snappy bounce.
+    static let appear = Animation.spring(response: 0.30, dampingFraction: 0.56)
+    /// Per-chip: scale up from small + overshoot bounce (appear and reverse dismiss).
+    static let chipAppear = Animation.spring(response: 0.28, dampingFraction: 0.48)
+    /// Wait for the preview spring to crest before cascading chips.
+    static let optionsStartDelay: TimeInterval = 0.20
+    /// Left→right / top→bottom cascade between chips (reverse on dismiss).
+    static let chipStagger: TimeInterval = 0.040
+    static let optionChipCount = 3
+    /// Let the reverse chip cascade lead before the preview morphs away.
+    static var optionsDismissLeadIn: TimeInterval {
+        Double(optionChipCount - 1) * chipStagger + 0.08
+    }
+    /// Hidden chip starts smaller so the pop reads clearly.
+    static let chipHiddenScale: CGFloat = 0.48
+    static let chipHiddenOffsetY: CGFloat = 18
     /// Return to the list row without oscillating past it.
-    static let dismiss = Animation.spring(response: 0.30, dampingFraction: 0.86)
+    static let dismiss = Animation.spring(response: 0.28, dampingFraction: 0.86)
     /// Mute bell / chip label while peek stays open.
     static let muteToggle = Animation.spring(response: 0.34, dampingFraction: 0.72)
-    static let dismissSettlingDelay: TimeInterval = 0.28
+    static let dismissSettlingDelay: TimeInterval = 0.26
 }
 
 /// Hosted inside the peek timeline so we can find the parent UIScrollView and:
