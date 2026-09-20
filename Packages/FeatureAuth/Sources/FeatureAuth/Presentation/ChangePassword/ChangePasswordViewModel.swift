@@ -103,7 +103,7 @@ public final class ChangePasswordViewModel: ObservableObject {
             passwordError = nil
             return
         }
-        passwordError = languageService.weakPasswordMessage(for: passwordStrength)
+        passwordError = nil
         validateConfirmPasswordField()
     }
 

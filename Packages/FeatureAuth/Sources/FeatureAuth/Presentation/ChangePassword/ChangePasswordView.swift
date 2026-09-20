@@ -92,6 +92,7 @@ public struct ChangePasswordView: View {
                 .padding(.bottom, SplickTheme.Spacing.xl)
         }
         .scrollDismissesKeyboard(.interactively)
+        .splickAllowsOverflowingOverlays()
     }
 
     private var verificationPicker: some View {
@@ -320,7 +321,12 @@ public struct ChangePasswordView: View {
                     isSecure: true,
                     errorMessage: viewModel.passwordError,
                     icon: "lock",
-                    validationStatus: viewModel.passwordStrength.isStrong && !viewModel.newPassword.isEmpty ? .valid : .neutral,
+                    validationStatus: viewModel.passwordStrength.isStrong && !viewModel.newPassword.isEmpty ? .valid : (viewModel.newPassword.isEmpty ? .neutral : .warning),
+                    requirementItems: passwordRequirementGuideItems(
+                        for: viewModel.newPassword,
+                        languageService: languageService
+                    ),
+                    requirementIntro: languageService.text(.authPasswordRequirementsIntro),
                     showsPasswordVisibilityToggle: true,
                     isPasswordVisible: $isNewPasswordVisible,
                     passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
@@ -336,9 +342,10 @@ public struct ChangePasswordView: View {
                     languageService.text(.changePasswordConfirmPassword),
                     text: $viewModel.confirmPassword,
                     isSecure: true,
-                    errorMessage: viewModel.confirmPasswordError,
+                    errorMessage: nil,
                     icon: "lock.fill",
                     validationStatus: passwordsMatchStatus,
+                    overlayNote: viewModel.confirmPasswordError,
                     showsPasswordVisibilityToggle: true,
                     isPasswordVisible: $isConfirmPasswordVisible,
                     passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
@@ -395,7 +402,7 @@ public struct ChangePasswordView: View {
 
     private var passwordsMatchStatus: FieldValidationStatus {
         guard !viewModel.confirmPassword.isEmpty else { return .neutral }
-        return viewModel.newPassword == viewModel.confirmPassword ? .valid : .neutral
+        return viewModel.newPassword == viewModel.confirmPassword ? .valid : .warning
     }
 
     private var submitDisabled: Bool {

@@ -111,6 +111,7 @@ public struct ForgotPasswordView: View {
                 .frame(maxWidth: .infinity)
         }
         .scrollDismissesKeyboard(.interactively)
+        .splickAllowsOverflowingOverlays()
         .frame(width: width)
     }
 
@@ -246,6 +247,14 @@ public struct ForgotPasswordView: View {
                 isSecure: true,
                 errorMessage: viewModel.passwordFieldError,
                 icon: "lock",
+                validationStatus: viewModel.password.isEmpty
+                    ? .neutral
+                    : (viewModel.passwordStrength.isStrong ? .valid : .warning),
+                requirementItems: passwordRequirementGuideItems(
+                    for: viewModel.password,
+                    languageService: languageService
+                ),
+                requirementIntro: languageService.text(.authPasswordRequirementsIntro),
                 cornerRadius: fieldCornerRadius,
                 passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
                 passwordHiddenAccessibilityLabel: languageService.text(.authHidePassword)
@@ -257,8 +266,12 @@ public struct ForgotPasswordView: View {
                 languageService.text(.changePasswordConfirmPassword),
                 text: $viewModel.confirmPassword,
                 isSecure: true,
-                errorMessage: localized(viewModel.confirmPasswordErrorKey),
+                errorMessage: nil,
                 icon: "lock.fill",
+                validationStatus: viewModel.confirmPassword.isEmpty
+                    ? .neutral
+                    : (viewModel.password == viewModel.confirmPassword ? .valid : .warning),
+                overlayNote: localized(viewModel.confirmPasswordErrorKey),
                 cornerRadius: fieldCornerRadius,
                 passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
                 passwordHiddenAccessibilityLabel: languageService.text(.authHidePassword)

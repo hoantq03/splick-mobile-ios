@@ -135,7 +135,7 @@ public final class ForgotPasswordViewModel: ObservableObject {
             validateConfirmPasswordField()
             return
         }
-        passwordErrorKey = passwordStrength.isStrong ? nil : .changePasswordWeakPassword
+        passwordErrorKey = nil
         validateConfirmPasswordField()
     }
 

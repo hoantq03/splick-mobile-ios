@@ -30,7 +30,6 @@ public final class RegisterViewModel: ObservableObject {
     @Published var otpInfoMessage: String?
     @Published var state: LoadingState<AuthSession> = .idle
     @Published var passwordStrength: PasswordStrengthResult = .empty
-    @Published var showPasswordRequirements = false
 
     @Published private(set) var emailStatus: FieldValidationStatus = .neutral
     @Published private(set) var phoneStatus: FieldValidationStatus = .neutral
@@ -164,7 +163,7 @@ public final class RegisterViewModel: ObservableObject {
             passwordError = nil
             passwordStatus = .valid
         } else {
-            passwordError = languageService.weakPasswordMessage(for: passwordStrength)
+            passwordError = nil
             passwordStatus = .warning
         }
         validateConfirmPasswordField()
@@ -184,7 +183,7 @@ public final class RegisterViewModel: ObservableObject {
             confirmPasswordStatus = .neutral
         } else {
             confirmPasswordError = languageService.text(.authPasswordsMismatch)
-            confirmPasswordStatus = .neutral
+            confirmPasswordStatus = .warning
         }
     }
 

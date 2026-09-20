@@ -55,11 +55,9 @@ public struct RegisterView: View {
             .padding(.top, SplickTheme.Spacing.xl)
         }
         .scrollDismissesKeyboard(.interactively)
+        .splickAllowsOverflowingOverlays()
         .background(SplickTheme.Colors.background)
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $viewModel.showPasswordRequirements) {
-            PasswordRequirementsSheet(result: viewModel.passwordStrength)
-        }
         .onChange(of: viewModel.state) { state in
             if case .loaded(let session) = state {
                 onAuthenticated?(session.user)
@@ -170,7 +168,11 @@ public struct RegisterView: View {
                 errorMessage: viewModel.passwordError,
                 icon: "lock",
                 validationStatus: viewModel.passwordStatus,
-                onValidationAccessoryTap: { viewModel.showPasswordRequirements = true },
+                requirementItems: passwordRequirementGuideItems(
+                    for: viewModel.password,
+                    languageService: languageService
+                ),
+                requirementIntro: languageService.text(.authPasswordRequirementsIntro),
                 passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
                 passwordHiddenAccessibilityLabel: languageService.text(.authHidePassword)
             )
@@ -181,9 +183,10 @@ public struct RegisterView: View {
                 languageService.text(.authConfirmPassword),
                 text: $viewModel.confirmPassword,
                 isSecure: true,
-                errorMessage: viewModel.confirmPasswordError,
+                errorMessage: nil,
                 icon: "lock.fill",
                 validationStatus: viewModel.confirmPasswordStatus,
+                overlayNote: viewModel.confirmPasswordError,
                 passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
                 passwordHiddenAccessibilityLabel: languageService.text(.authHidePassword)
             )

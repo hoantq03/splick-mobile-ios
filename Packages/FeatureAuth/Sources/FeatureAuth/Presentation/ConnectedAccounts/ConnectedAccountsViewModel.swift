@@ -260,8 +260,7 @@ public final class ConnectedAccountsViewModel: ObservableObject {
         if connectEmailPassword.isEmpty {
             emailSheetPasswordError = nil
         } else {
-            let strength = PasswordStrengthValidator.evaluate(connectEmailPassword)
-            emailSheetPasswordError = languageService.weakPasswordMessage(for: strength)
+            emailSheetPasswordError = nil
         }
 
         if connectEmailConfirm.isEmpty {
@@ -281,7 +280,7 @@ public final class ConnectedAccountsViewModel: ObservableObject {
         }
         let passwordStrength = PasswordStrengthValidator.evaluate(connectEmailPassword)
         guard passwordStrength.isStrong else {
-            emailSheetPasswordError = languageService.weakPasswordMessage(for: passwordStrength)
+            emailSheetPasswordError = nil
             return false
         }
         guard connectEmailOtp.count == SplickOtpField.defaultLength else {

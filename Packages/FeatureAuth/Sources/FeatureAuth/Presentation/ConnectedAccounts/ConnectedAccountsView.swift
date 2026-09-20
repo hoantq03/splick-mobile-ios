@@ -1,5 +1,6 @@
 import SwiftUI
 import DesignSystem
+import Common
 import Localization
 import SplickDomain
 
@@ -348,6 +349,14 @@ public struct ConnectedAccountsView: View {
                             isSecure: true,
                             errorMessage: viewModel.emailSheetPasswordError,
                             icon: "lock",
+                            validationStatus: viewModel.connectEmailPassword.isEmpty
+                                ? .neutral
+                                : (PasswordStrengthValidator.evaluate(viewModel.connectEmailPassword).isStrong ? .valid : .warning),
+                            requirementItems: passwordRequirementGuideItems(
+                                for: viewModel.connectEmailPassword,
+                                languageService: languageService
+                            ),
+                            requirementIntro: languageService.text(.authPasswordRequirementsIntro),
                             showsPasswordVisibilityToggle: true,
                             isPasswordVisible: $isEmailPasswordVisible,
                             passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
@@ -363,8 +372,12 @@ public struct ConnectedAccountsView: View {
                             languageService.text(.connectedAccountsConfirmPasswordField),
                             text: $viewModel.connectEmailConfirm,
                             isSecure: true,
-                            errorMessage: viewModel.emailSheetConfirmPasswordError,
+                            errorMessage: nil,
                             icon: "lock.fill",
+                            validationStatus: viewModel.connectEmailConfirm.isEmpty
+                                ? .neutral
+                                : (viewModel.connectEmailPassword == viewModel.connectEmailConfirm ? .valid : .warning),
+                            overlayNote: viewModel.emailSheetConfirmPasswordError,
                             showsPasswordVisibilityToggle: true,
                             isPasswordVisible: $isEmailConfirmPasswordVisible,
                             passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
@@ -391,6 +404,7 @@ public struct ConnectedAccountsView: View {
                 .animation(.spring(response: 0.42, dampingFraction: 0.86), value: viewModel.hasSentEmailCode)
             }
             .scrollDismissesKeyboard(.interactively)
+            .splickAllowsOverflowingOverlays()
             .background(SplickTheme.Colors.background)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

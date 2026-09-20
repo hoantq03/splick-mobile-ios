@@ -66,9 +66,6 @@ public struct LoginView: View {
         }
         .environment(\.usesBrandAuthChrome, true)
         .toolbarBackground(.hidden, for: .navigationBar)
-        .sheet(isPresented: $viewModel.showPasswordRequirements) {
-            PasswordRequirementsSheet(result: viewModel.passwordStrength)
-        }
         .sheet(isPresented: $showDateOfBirthPicker) {
             dateOfBirthPickerSheet
         }
@@ -201,6 +198,7 @@ public struct LoginView: View {
         }
         .scrollContentBackground(.hidden)
         .scrollDismissesKeyboard(.interactively)
+        .splickAllowsOverflowingOverlays()
     }
 
     private var credentialsLegalFooter: some View {
@@ -363,7 +361,11 @@ public struct LoginView: View {
                 errorMessage: viewModel.passwordError,
                 icon: "lock",
                 validationStatus: viewModel.passwordStatus,
-                onValidationAccessoryTap: { viewModel.showPasswordRequirements = true },
+                requirementItems: passwordRequirementGuideItems(
+                    for: viewModel.password,
+                    languageService: languageService
+                ),
+                requirementIntro: languageService.text(.authPasswordRequirementsIntro),
                 cornerRadius: Self.fieldCornerRadius,
                 passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
                 passwordHiddenAccessibilityLabel: languageService.text(.authHidePassword)
@@ -375,9 +377,10 @@ public struct LoginView: View {
                 languageService.text(.authConfirmPassword),
                 text: $viewModel.confirmPassword,
                 isSecure: true,
-                errorMessage: viewModel.confirmPasswordError,
+                errorMessage: nil,
                 icon: "lock.fill",
                 validationStatus: viewModel.confirmPasswordStatus,
+                overlayNote: viewModel.confirmPasswordError,
                 cornerRadius: Self.fieldCornerRadius,
                 passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
                 passwordHiddenAccessibilityLabel: languageService.text(.authHidePassword)

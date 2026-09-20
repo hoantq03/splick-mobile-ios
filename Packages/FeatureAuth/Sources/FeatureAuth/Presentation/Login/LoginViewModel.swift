@@ -47,7 +47,6 @@ public final class LoginViewModel: ObservableObject {
     @Published var state: LoadingState<AuthSession> = .idle
     @Published private(set) var loadingAction: LoadingAction?
     @Published var passwordStrength: PasswordStrengthResult = .empty
-    @Published var showPasswordRequirements = false
     @Published var showErrorAlert = false
     @Published var hasAcceptedLegalTerms = true
     @Published var legalConsentError: String?
@@ -323,7 +322,7 @@ public final class LoginViewModel: ObservableObject {
             passwordError = nil
             passwordStatus = .valid
         } else {
-            passwordError = languageService.weakPasswordMessage(for: passwordStrength)
+            passwordError = nil
             passwordStatus = .warning
         }
         validateConfirmPasswordField()
@@ -343,7 +342,7 @@ public final class LoginViewModel: ObservableObject {
             confirmPasswordStatus = .neutral
         } else {
             confirmPasswordError = languageService.text(.authPasswordsMismatch)
-            confirmPasswordStatus = .neutral
+            confirmPasswordStatus = .warning
         }
     }
 

@@ -128,7 +128,7 @@ final class AuthViewModelsTests: XCTestCase {
         // Password validation
         vm.password = "Weak"
         vm.validatePasswordField()
-        XCTAssertNotNil(vm.passwordError)
+        XCTAssertNil(vm.passwordError)
         XCTAssertEqual(vm.passwordStatus, .warning)
 
         vm.password = "StrongPassword123!"
@@ -534,7 +534,8 @@ final class AuthViewModelsTests: XCTestCase {
 
         vm.newPassword = "Weak"
         vm.validatePasswordField()
-        XCTAssertNotNil(vm.passwordError)
+        XCTAssertNil(vm.passwordError)
+        XCTAssertFalse(vm.passwordStrength.isStrong)
 
         vm.newPassword = "StrongPassword123!"
         vm.confirmPassword = "StrongPassword123!"
