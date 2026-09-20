@@ -10,6 +10,7 @@ public struct User: Identifiable, Codable, Equatable, Sendable {
     public let preferredLocale: String
     public let timezone: String
     public let dateOfBirth: Date?
+    public let hasPassword: Bool
     public let createdAt: Date
 
     public init(
@@ -22,6 +23,7 @@ public struct User: Identifiable, Codable, Equatable, Sendable {
         preferredLocale: String = "vi",
         timezone: String = "Asia/Ho_Chi_Minh",
         dateOfBirth: Date? = nil,
+        hasPassword: Bool = true,
         createdAt: Date = .now
     ) {
         self.id = id
@@ -33,6 +35,7 @@ public struct User: Identifiable, Codable, Equatable, Sendable {
         self.preferredLocale = preferredLocale
         self.timezone = timezone
         self.dateOfBirth = dateOfBirth
+        self.hasPassword = hasPassword
         self.createdAt = createdAt
     }
 }
