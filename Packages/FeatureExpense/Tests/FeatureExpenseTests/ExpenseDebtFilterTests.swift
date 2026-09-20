@@ -83,6 +83,64 @@ final class ExpenseDebtFilterTests: XCTestCase {
         XCTAssertFalse(ExpenseDebtFilter.awaitingMyReview.matches(expense: expense, userId: friend.id))
     }
 
+    func testExpenseDebtFilterMatchingState() {
+        XCTAssertEqual(ExpenseDebtFilter.oweUnpaid.matchingDebtState, .oweUnpaid)
+        XCTAssertEqual(ExpenseDebtFilter.owePaid.matchingDebtState, .owePaid)
+        XCTAssertEqual(ExpenseDebtFilter.owedUnpaid.matchingDebtState, .owedUnpaid)
+        XCTAssertEqual(ExpenseDebtFilter.owedPaid.matchingDebtState, .owedPaid)
+        XCTAssertNil(ExpenseDebtFilter.all.matchingDebtState)
+        XCTAssertNil(ExpenseDebtFilter.pendingApproval.matchingDebtState)
+        XCTAssertNil(ExpenseDebtFilter.awaitingMyReview.matchingDebtState)
+        XCTAssertNil(ExpenseDebtFilter.repaid.matchingDebtState)
+        XCTAssertEqual(ExpenseDebtFilter.all.id, "all")
+    }
+
+    func testExpenseListFiltersProperties() {
+        var filters = ExpenseListFilters()
+        XCTAssertFalse(filters.hasCaptionSearch)
+        XCTAssertFalse(filters.hasPeopleFilter)
+        XCTAssertFalse(filters.hasAdvancedFilters)
+        XCTAssertFalse(filters.hasAnyFilter)
+        XCTAssertTrue(filters.isDefaultDateFilter)
+        XCTAssertEqual(filters.activeDatePreset, .month)
+
+        // Caption query
+        filters.captionQuery = "dinner"
+        XCTAssertTrue(filters.hasCaptionSearch)
+        XCTAssertTrue(filters.hasAnyFilter)
+        XCTAssertTrue(filters.hasNonDefaultListFilters)
+
+        // People filter
+        let user = UserSummary(id: UUID(), username: "u", displayName: "User", avatarURL: nil)
+        filters.selectedUsers = [user]
+        XCTAssertTrue(filters.hasPeopleFilter)
+        XCTAssertTrue(filters.hasAdvancedFilters)
+
+        // Date preset week
+        filters.dateFrom = ExpenseListFilters.defaultWeekStart
+        filters.dateTo = nil
+        XCTAssertEqual(filters.activeDatePreset, .week)
+
+        // Date preset all
+        filters.dateFrom = nil
+        filters.dateTo = nil
+        XCTAssertEqual(filters.activeDatePreset, .all)
+
+        // Date range with dateTo
+        filters.dateTo = Date()
+        XCTAssertEqual(filters.activeDatePreset, .week)
+
+        // Reset
+        filters = ExpenseListFilters()
+        XCTAssertFalse(filters.hasNonDefaultListFilters)
+    }
+
+    func testExpenseDatePresetIds() {
+        XCTAssertEqual(ExpenseDatePreset.week.id, "week")
+        XCTAssertEqual(ExpenseDatePreset.month.id, "month")
+        XCTAssertEqual(ExpenseDatePreset.all.id, "all")
+    }
+
     private func expense(
         mePays: Bool,
         paid: Bool,

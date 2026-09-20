@@ -40,6 +40,79 @@ final class CreateExpenseUseCaseTests: XCTestCase {
         let callCount = await repository.createCallCount
         XCTAssertEqual(callCount, 1)
     }
+
+    func test_execute_rejectsBlankDescription() async {
+        let useCase = CreateExpenseUseCase(repository: StubExpenseRepository())
+        let request = CreateExpenseRequest(
+            description: "   ",
+            totalAmount: 50_000,
+            participants: [UUID()]
+        )
+
+        do {
+            _ = try await useCase.execute(request)
+            XCTFail("Expected blank description error")
+        } catch let error as AppError {
+            guard case .validation(let msg) = error else { return XCTFail("Wrong error") }
+            XCTAssertTrue(msg.contains("Description is required"))
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func test_execute_rejectsEmptyParticipants() async {
+        let useCase = CreateExpenseUseCase(repository: StubExpenseRepository())
+        let request = CreateExpenseRequest(
+            description: "Dinner",
+            totalAmount: 50_000,
+            participants: []
+        )
+
+        do {
+            _ = try await useCase.execute(request)
+            XCTFail("Expected empty participants error")
+        } catch let error as AppError {
+            guard case .validation(let msg) = error else { return XCTFail("Wrong error") }
+            XCTAssertTrue(msg.contains("participant is required"))
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func test_execute_customAmountsValidation() async throws {
+        let repository = StubExpenseRepository()
+        let useCase = CreateExpenseUseCase(repository: repository)
+        let p1 = UUID()
+        let p2 = UUID()
+
+        // Mismatch sum
+        let invalidRequest = CreateExpenseRequest(
+            description: "Trip",
+            totalAmount: 100_000,
+            splitType: .exact,
+            participants: [p1, p2],
+            customAmounts: [p1: 60_000, p2: 30_000] // sum = 90_000 != 100_000
+        )
+
+        do {
+            _ = try await useCase.execute(invalidRequest)
+            XCTFail("Expected custom amounts mismatch error")
+        } catch let error as AppError {
+            guard case .validation(let msg) = error else { return XCTFail("Wrong error") }
+            XCTAssertTrue(msg.contains("Custom amounts must add up to the total"))
+        }
+
+        // Matching sum
+        let validRequest = CreateExpenseRequest(
+            description: "Trip",
+            totalAmount: 100_000,
+            splitType: .exact,
+            participants: [p1, p2],
+            customAmounts: [p1: 60_000, p2: 40_000] // sum = 100_000 == 100_000
+        )
+        let created = try await useCase.execute(validRequest)
+        XCTAssertEqual(created.totalAmount, 100_000)
+    }
 }
 
 private actor StubExpenseRepository: ExpenseRepositoryProtocol {

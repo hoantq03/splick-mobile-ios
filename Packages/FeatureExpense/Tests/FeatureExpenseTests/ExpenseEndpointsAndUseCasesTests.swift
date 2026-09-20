@@ -293,6 +293,47 @@ final class ExpenseEndpointsAndUseCasesTests: XCTestCase {
         XCTAssertEqual(dto2.customAmounts?[p1.uuidString], "60000")
     }
 
+    func testExpenseMapper_errorsAndFallbacks() {
+        // Invalid evidence URL
+        let invalidUrlDto = BulkSettlementDTO(
+            id: UUID(),
+            debtorUserId: UUID(),
+            creditorUserId: UUID(),
+            amount: "100",
+            currency: "VND",
+            evidenceUrl: "::not a valid url::",
+            note: nil,
+            status: "PENDING_APPROVAL",
+            splitCount: 1,
+            createdAt: Date(),
+            reviewedAt: nil,
+            rejectReason: nil
+        )
+        XCTAssertThrowsError(try ExpenseMapper.toBulkSettlement(invalidUrlDto))
+
+        // Invalid status
+        let invalidStatusDto = BulkSettlementDTO(
+            id: UUID(),
+            debtorUserId: UUID(),
+            creditorUserId: UUID(),
+            amount: "100",
+            currency: "VND",
+            evidenceUrl: "https://example.com/receipt.jpg",
+            note: nil,
+            status: "INVALID_STATUS_XYZ",
+            splitCount: 1,
+            createdAt: Date(),
+            reviewedAt: nil,
+            rejectReason: nil
+        )
+        XCTAssertThrowsError(try ExpenseMapper.toBulkSettlement(invalidStatusDto))
+
+        // SplitType display names
+        XCTAssertEqual(SplitType.equal.displayName, "Split Equally")
+        XCTAssertEqual(SplitType.exact.displayName, "Exact Amounts")
+        XCTAssertEqual(SplitType.percentage.displayName, "By Percentage")
+    }
+
     // MARK: - UseCases Tests
 
     func testExpenseUseCases_executions() async throws {
@@ -642,5 +683,73 @@ final class ExpenseListViewModelTests: XCTestCase {
         // Refresh badge counts
         await vm.refreshBadgeCounts()
         await vm.softSyncDirectory()
+
+        // Filter and preset methods
+        vm.setCaptionQuery("Dinner")
+        XCTAssertEqual(vm.filters.captionQuery, "Dinner")
+
+        vm.setDebtStatus(.oweUnpaid)
+        XCTAssertEqual(vm.filters.debtStatus, .oweUnpaid)
+        vm.setDebtStatus(.oweUnpaid) // toggle back
+        XCTAssertEqual(vm.filters.debtStatus, .all)
+
+        vm.applyOverviewDebtFilter(.owedUnpaid)
+        XCTAssertEqual(vm.filters.debtStatus, .owedUnpaid)
+
+        let testUser = UserSummary(id: UUID(), username: "u", displayName: "User", avatarURL: nil)
+        vm.setSelectedUser(testUser)
+        XCTAssertEqual(vm.filters.selectedUsers.count, 1)
+
+        vm.setPeopleFilter(users: [testUser], groups: [])
+        XCTAssertEqual(vm.filters.selectedUsers.count, 1)
+
+        vm.setDateFrom(Date())
+        vm.setDateTo(Date())
+        XCTAssertNotNil(vm.filters.dateFrom)
+        XCTAssertNotNil(vm.filters.dateTo)
+
+        vm.setAdvancedExpanded(true)
+        XCTAssertTrue(vm.filters.isAdvancedExpanded)
+
+        vm.clearAdvancedFilters()
+        XCTAssertEqual(vm.filters.debtStatus, .all)
+        XCTAssertTrue(vm.filters.selectedUsers.isEmpty)
+
+        vm.applyDatePreset(.week)
+        XCTAssertEqual(vm.filters.activeDatePreset, .week)
+        vm.applyDatePreset(.all)
+        XCTAssertEqual(vm.filters.activeDatePreset, .all)
+        vm.applyDatePreset(.month)
+        XCTAssertEqual(vm.filters.activeDatePreset, .month)
+
+        vm.clearListFilters()
+        XCTAssertEqual(vm.filters.captionQuery, "")
+
+        // Computed properties
+        _ = vm.filteredExpenses
+        _ = vm.filteredDebts
+        _ = vm.overviewOwedPeopleCount
+        _ = vm.overviewOwingPeopleCount
+        _ = vm.overviewTotalOwed
+        _ = vm.overviewTotalOwing
+        _ = vm.overviewOweUnpaidTotal
+        _ = vm.overviewOweUnpaidCount
+        _ = vm.overviewOwePaidTotal
+        _ = vm.overviewOwePaidCount
+        _ = vm.overviewOwedUnpaidTotal
+        _ = vm.overviewOwedUnpaidCount
+        _ = vm.overviewOwedPaidTotal
+        _ = vm.overviewOwedPaidCount
+        _ = vm.todayOweUnpaidTotal
+        _ = vm.todayOwedUnpaidTotal
+        _ = vm.todayNetUnpaid
+        _ = vm.currentMonthReceived
+        _ = vm.currentMonthPaid
+        _ = vm.chartData
+        _ = vm.monthlySummaryCurrency
+        _ = vm.filterParticipantUsers
+
+        // Load more
+        await vm.loadMore()
     }
 }
