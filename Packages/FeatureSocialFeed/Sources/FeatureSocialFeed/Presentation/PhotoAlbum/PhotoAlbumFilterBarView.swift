@@ -13,6 +13,13 @@ private enum AlbumFilterMetrics {
     static let fieldRadius: CGFloat = SplickTheme.CornerRadius.inset
 }
 
+enum AlbumFilterMotion {
+    static let bounce = Animation.spring(response: 0.42, dampingFraction: 0.58)
+    static let collapsedScale: CGFloat = 0.22
+    static let filterOffset: CGFloat = 48
+    static let peopleOffsetFallback: CGFloat = 102
+}
+
 private typealias AlbumGroup = SplickDomain.Group
 
 struct PhotoAlbumFilterBarView: View {
@@ -22,18 +29,31 @@ struct PhotoAlbumFilterBarView: View {
     let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol?
     let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
 
+    @Binding var showFilterPopup: Bool
+    @Binding var showPeoplePane: Bool
+
     @State private var captionQuery = ""
-    @State private var showFilterPopup = false
-    @State private var showPeoplePane = false
     @State private var filterBarWidth: CGFloat = 0
     @State private var captionSearchTask: Task<Void, Never>?
+    @State private var filterHosted = false
+    @State private var peopleHosted = false
+    @State private var peopleAnchorY: CGFloat = AlbumFilterMotion.peopleOffsetFallback
 
     private var filters: PhotoAlbumFilters { viewModel.filters }
 
     var body: some View {
         HStack(spacing: SplickTheme.Spacing.sm) {
             captionSearchField
-            filterButtonWithPopover
+            filterButton
+        }
+        .coordinateSpace(name: "albumFilterBar")
+        .overlay(alignment: .topTrailing) {
+            filterMenuOverlays
+        }
+        .onPreferenceChange(AlbumPeopleAnchorYKey.self) { value in
+            if value > AlbumFilterMotion.filterOffset {
+                peopleAnchorY = value
+            }
         }
         .background(
             GeometryReader { geo in
@@ -53,6 +73,12 @@ struct PhotoAlbumFilterBarView: View {
         }
         .onDisappear {
             captionSearchTask?.cancel()
+        }
+        .onChange(of: showFilterPopup) { shown in
+            hostPane(shown: shown, hosted: $filterHosted, stillExpanded: { showFilterPopup })
+        }
+        .onChange(of: showPeoplePane) { shown in
+            hostPane(shown: shown, hosted: $peopleHosted, stillExpanded: { showPeoplePane })
         }
     }
 
@@ -90,8 +116,13 @@ struct PhotoAlbumFilterBarView: View {
 
     private var filterButton: some View {
         Button {
-            showPeoplePane = false
-            showFilterPopup = true
+            withAnimation(AlbumFilterMotion.bounce) {
+                if showPeoplePane {
+                    showPeoplePane = false
+                } else {
+                    showFilterPopup.toggle()
+                }
+            }
         } label: {
             ZStack(alignment: .topTrailing) {
                 Image(systemName: "line.3.horizontal.decrease")
@@ -116,18 +147,22 @@ struct PhotoAlbumFilterBarView: View {
     }
 
     @ViewBuilder
-    private var filterButtonWithPopover: some View {
-        if #available(iOS 16.4, *) {
-            filterButton
-                .popover(isPresented: $showFilterPopup, arrowEdge: .top) {
-                    filterPopoverContent
-                        .presentationCompactAdaptation(.popover)
-                }
-        } else {
-            filterButton
-                .popover(isPresented: $showFilterPopup, arrowEdge: .top) {
-                    filterPopoverContent
-                }
+    private var filterMenuOverlays: some View {
+        if filterHosted {
+            filterPopoverContent
+                .albumFilterCardStyle(elevated: false)
+                .albumFilterBounce(expanded: showFilterPopup)
+                .offset(y: AlbumFilterMotion.filterOffset)
+                .allowsHitTesting(showFilterPopup)
+                .zIndex(1)
+        }
+        if peopleHosted {
+            peoplePopoverContent
+                .albumFilterCardStyle(elevated: true)
+                .albumFilterBounce(expanded: showPeoplePane)
+                .offset(y: peopleAnchorY)
+                .allowsHitTesting(showPeoplePane)
+                .zIndex(2)
         }
     }
 
@@ -147,7 +182,6 @@ struct PhotoAlbumFilterBarView: View {
         .padding(SplickTheme.Spacing.md)
         .frame(width: popoverWidth, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
-        .modifier(AlbumPopoverAdaptation())
     }
 
     private var popoverWidth: CGFloat {
@@ -159,7 +193,48 @@ struct PhotoAlbumFilterBarView: View {
     }
 
     private func presentPeoplePicker() {
-        showPeoplePane = true
+        withAnimation(AlbumFilterMotion.bounce) {
+            showPeoplePane = true
+        }
+    }
+
+    private func dismissPeoplePane() {
+        withAnimation(AlbumFilterMotion.bounce) {
+            showPeoplePane = false
+        }
+    }
+
+    private func hostPane(shown: Bool, hosted: Binding<Bool>, stillExpanded: @escaping () -> Bool) {
+        if shown {
+            hosted.wrappedValue = true
+            return
+        }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 420_000_000)
+            if !stillExpanded() {
+                hosted.wrappedValue = false
+            }
+        }
+    }
+
+    private var peoplePopoverContent: some View {
+        PhotoAlbumPeoplePickerPane(
+            currentUser: currentUser,
+            fetchMyFriendsUseCase: fetchMyFriendsUseCase,
+            fetchMyGroupsUseCase: fetchMyGroupsUseCase,
+            selectedAuthors: filters.authors,
+            selectedGroups: filters.groups
+        ) { authors, groups in
+            Task {
+                var updated = filters
+                updated.authors = authors
+                updated.groups = groups
+                await viewModel.applyFilters(updated)
+            }
+            dismissPeoplePane()
+        }
+        .frame(width: popoverWidth)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private var selectedPeopleItems: [AlbumSelectedFilter] {
@@ -168,34 +243,20 @@ struct PhotoAlbumFilterBarView: View {
 
     @ViewBuilder
     private var peopleChip: some View {
-        Group {
-            if selectedPeopleItems.isEmpty {
-                emptyPeopleChip
-            } else {
+        VStack(alignment: .leading, spacing: 8) {
+            emptyPeopleChip
+            if !selectedPeopleItems.isEmpty {
                 selectedPeopleRow
             }
         }
-        .popover(isPresented: $showPeoplePane, arrowEdge: .top) {
-            PhotoAlbumPeoplePickerPane(
-                currentUser: currentUser,
-                fetchMyFriendsUseCase: fetchMyFriendsUseCase,
-                fetchMyGroupsUseCase: fetchMyGroupsUseCase,
-                selectedAuthors: filters.authors,
-                selectedGroups: filters.groups,
-                onDismiss: { showPeoplePane = false }
-            ) { authors, groups in
-                Task {
-                    var updated = filters
-                    updated.authors = authors
-                    updated.groups = groups
-                    await viewModel.applyFilters(updated)
-                }
-                showPeoplePane = false
+        .background(
+            GeometryReader { geo in
+                Color.clear.preference(
+                    key: AlbumPeopleAnchorYKey.self,
+                    value: geo.frame(in: .named("albumFilterBar")).minY
+                )
             }
-            .frame(width: popoverWidth)
-            .fixedSize(horizontal: false, vertical: true)
-            .modifier(AlbumPopoverAdaptation())
-        }
+        )
     }
 
     private var emptyPeopleChip: some View {
@@ -227,30 +288,12 @@ struct PhotoAlbumFilterBarView: View {
     }
 
     private var selectedPeopleRow: some View {
-        HStack(spacing: 6) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(selectedPeopleItems) { item in
-                        selectedPeopleChip(item)
-                    }
-                }
+        AlbumChipFlowLayout(spacing: 6) {
+            ForEach(selectedPeopleItems) { item in
+                selectedPeopleChip(item)
             }
-            Button {
-                presentPeoplePicker()
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                    .frame(width: 28, height: 28)
-                    .background(
-                        RoundedRectangle(cornerRadius: AlbumFilterMetrics.fieldRadius, style: .continuous)
-                            .fill(SplickTheme.Colors.primaryGradientStart.opacity(0.12))
-                    )
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(languageService.text(.feedAlbumPickPeople))
-            .disabled(!peoplePickerEnabled)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func selectedPeopleChip(_ item: AlbumSelectedFilter) -> some View {
@@ -263,6 +306,10 @@ struct PhotoAlbumFilterBarView: View {
             )
             .scaleEffect(0.72)
             .frame(width: 24, height: 24)
+
+            Image(systemName: item.isGroup ? "person.3" : "person.2")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
 
             Text(item.displayName)
                 .font(.system(size: 12, weight: .medium))
@@ -339,6 +386,7 @@ struct PhotoAlbumFilterBarView: View {
                                 : SplickTheme.Colors.secondaryBackground
                         )
                 }
+                .animation(.easeInOut(duration: 0.18), value: isActive)
         }
         .buttonStyle(.plain)
     }
@@ -362,13 +410,108 @@ private struct AlbumFilterBarWidthKey: PreferenceKey {
     }
 }
 
-private struct AlbumPopoverAdaptation: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(iOS 16.4, *) {
-            content.presentationCompactAdaptation(.popover)
-        } else {
-            content
+private struct AlbumPeopleAnchorYKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private struct AlbumChipFlowLayout: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        layout(proposal: proposal, subviews: subviews).size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let frames = layout(proposal: ProposedViewSize(bounds.size), subviews: subviews).frames
+        for (index, subview) in subviews.enumerated() {
+            let frame = frames[index]
+            subview.place(
+                at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                proposal: ProposedViewSize(frame.size)
+            )
         }
+    }
+
+    private func layout(proposal: ProposedViewSize, subviews: Subviews) -> (size: CGSize, frames: [CGRect]) {
+        let maxWidth = proposal.width ?? .infinity
+        var frames: [CGRect] = []
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var usedWidth: CGFloat = 0
+
+        for subview in subviews {
+            let unconstrained = subview.sizeThatFits(.unspecified)
+            let itemWidth = min(unconstrained.width, maxWidth)
+            let itemHeight = subview.sizeThatFits(ProposedViewSize(width: itemWidth, height: unconstrained.height)).height
+            if x > 0, x + itemWidth > maxWidth {
+                y += rowHeight + spacing
+                x = 0
+                rowHeight = 0
+            }
+            frames.append(CGRect(x: x, y: y, width: itemWidth, height: itemHeight))
+            rowHeight = max(rowHeight, itemHeight)
+            x += itemWidth + spacing
+            usedWidth = max(usedWidth, x - spacing)
+        }
+
+        let width = maxWidth.isFinite ? maxWidth : usedWidth
+        return (CGSize(width: width, height: y + rowHeight), frames)
+    }
+}
+
+private struct AlbumFilterBounceModifier: ViewModifier {
+    let expanded: Bool
+    @State private var shown = false
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(shown ? 1 : AlbumFilterMotion.collapsedScale, anchor: .topTrailing)
+            .opacity(shown ? 1 : 0)
+            .onAppear {
+                shown = false
+                if expanded {
+                    withAnimation(AlbumFilterMotion.bounce) {
+                        shown = true
+                    }
+                }
+            }
+            .onChange(of: expanded) { isExpanded in
+                withAnimation(AlbumFilterMotion.bounce) {
+                    shown = isExpanded
+                }
+            }
+    }
+}
+
+private struct AlbumFilterCardStyle: ViewModifier {
+    let elevated: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(SplickTheme.Colors.secondaryBackground)
+                    .shadow(
+                        color: .black.opacity(elevated ? 0.22 : 0.12),
+                        radius: elevated ? 22 : 14,
+                        y: elevated ? 10 : 6
+                    )
+            )
+            .frame(width: nil, alignment: .trailing)
+    }
+}
+
+private extension View {
+    func albumFilterBounce(expanded: Bool) -> some View {
+        modifier(AlbumFilterBounceModifier(expanded: expanded))
+    }
+
+    func albumFilterCardStyle(elevated: Bool) -> some View {
+        modifier(AlbumFilterCardStyle(elevated: elevated))
     }
 }
 
@@ -380,7 +523,6 @@ private struct PhotoAlbumPeoplePickerPane: View {
     let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
     let selectedAuthors: [UserSummary]
     let selectedGroups: [AlbumGroup]
-    let onDismiss: () -> Void
     let onApply: ([UserSummary], [AlbumGroup]) -> Void
 
     @State private var friends: [UserSummary] = []
@@ -396,7 +538,6 @@ private struct PhotoAlbumPeoplePickerPane: View {
         fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?,
         selectedAuthors: [UserSummary],
         selectedGroups: [AlbumGroup],
-        onDismiss: @escaping () -> Void,
         onApply: @escaping ([UserSummary], [AlbumGroup]) -> Void
     ) {
         self.currentUser = currentUser
@@ -404,7 +545,6 @@ private struct PhotoAlbumPeoplePickerPane: View {
         self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
         self.selectedAuthors = selectedAuthors
         self.selectedGroups = selectedGroups
-        self.onDismiss = onDismiss
         self.onApply = onApply
         _draftAuthors = State(initialValue: selectedAuthors)
         _draftGroups = State(initialValue: selectedGroups)
@@ -444,12 +584,6 @@ private struct PhotoAlbumPeoplePickerPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
             HStack(spacing: SplickTheme.Spacing.sm) {
-                Button(action: onDismiss) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(SplickTheme.Colors.textPrimary)
-                }
-                .buttonStyle(.plain)
                 Text(languageService.text(.feedAlbumFilterPeople))
                     .font(SplickTheme.Typography.callout.weight(.semibold))
                     .lineLimit(1)
@@ -648,6 +782,11 @@ private enum AlbumSelectedFilter: Identifiable, Equatable {
         case .author(let user): return user.avatarURL
         case .group(let group): return group.avatarURL
         }
+    }
+
+    var isGroup: Bool {
+        if case .group = self { return true }
+        return false
     }
 
     var userId: UUID? {

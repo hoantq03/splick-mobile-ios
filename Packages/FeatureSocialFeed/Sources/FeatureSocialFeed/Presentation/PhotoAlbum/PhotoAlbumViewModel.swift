@@ -117,7 +117,7 @@ public final class PhotoAlbumViewModel: ObservableObject {
     private func performLoad(isPullToRefresh: Bool) async {
         if isPullToRefresh {
             isRefreshing = true
-        } else if photos.isEmpty {
+        } else {
             state = .loading
         }
 

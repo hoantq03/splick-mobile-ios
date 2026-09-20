@@ -25,7 +25,7 @@ public struct PhotoAlbumFilters: Equatable, Sendable {
 
     public var apiCaptionQuery: String? {
         let trimmed = trimmedCaptionQuery
-        guard trimmed.count >= 2 else { return nil }
+        guard !trimmed.isEmpty else { return nil }
         return trimmed
     }
 

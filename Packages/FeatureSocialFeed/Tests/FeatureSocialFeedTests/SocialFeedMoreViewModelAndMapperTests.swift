@@ -43,6 +43,11 @@ final class SocialFeedMoreViewModelAndMapperTests: XCTestCase {
     func testPhotoAlbumFilters() {
         var filters = PhotoAlbumFilters()
         XCTAssertFalse(filters.hasAnyFilter)
+        XCTAssertNil(filters.apiCaptionQuery)
+
+        filters.captionQuery = "a"
+        XCTAssertEqual(filters.apiCaptionQuery, "a")
+        XCTAssertTrue(filters.hasAnyFilter)
 
         filters.captionQuery = "query"
         XCTAssertTrue(filters.hasAnyFilter)

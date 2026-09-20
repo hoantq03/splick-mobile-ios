@@ -31,6 +31,8 @@ public struct PhotoAlbumView: View {
     @State private var previewLoadingPostId: UUID?
     @State private var refreshController = SplickRefreshController()
     @State private var scrollTopSignal = 0
+    @State private var showAlbumFilterPopup = false
+    @State private var showAlbumPeoplePane = false
     private let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol?
     private let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
     private let isEmbedded: Bool
@@ -78,14 +80,33 @@ public struct PhotoAlbumView: View {
                 viewModel: viewModel,
                 currentUser: feedViewModel.currentUser ?? currentUserSummary,
                 fetchMyFriendsUseCase: fetchMyFriendsUseCase,
-                fetchMyGroupsUseCase: fetchMyGroupsUseCase
+                fetchMyGroupsUseCase: fetchMyGroupsUseCase,
+                showFilterPopup: $showAlbumFilterPopup,
+                showPeoplePane: $showAlbumPeoplePane
             )
             .padding(.horizontal, SplickTheme.Spacing.md)
             .padding(.top, SplickTheme.Spacing.xs)
             .padding(.bottom, SplickTheme.Spacing.xs)
+            .zIndex(2)
 
             albumContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .overlay {
+                    if showAlbumFilterPopup || showAlbumPeoplePane {
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                withAnimation(AlbumFilterMotion.bounce) {
+                                    if showAlbumPeoplePane {
+                                        showAlbumPeoplePane = false
+                                    } else {
+                                        showAlbumFilterPopup = false
+                                    }
+                                }
+                            }
+                    }
+                }
+                .zIndex(0)
         }
         .feedPagerPageTopInset(isEnabled: isEmbedded)
         .background(SplickTheme.Colors.background)
@@ -119,36 +140,61 @@ public struct PhotoAlbumView: View {
 
     @ViewBuilder
     private var albumContent: some View {
-        switch viewModel.state {
-        case .idle, .loading where viewModel.photos.isEmpty:
-            FeedAlbumSkeletonLoadingView()
-
-        case .loaded where viewModel.photos.isEmpty:
-            ScrollView {
-                EmptyStateView(
-                    icon: "photo.on.rectangle.angled",
-                    title: languageService.text(.feedAlbumEmptyTitle),
-                    message: languageService.text(.feedAlbumEmptyMessage)
-                )
-                .frame(maxWidth: .infinity)
-                .padding(.top, SplickTheme.Spacing.xxl)
-            }
-            .feedPagerScrollInsets()
-            .refreshable { await viewModel.refresh() }
-
-        case .loaded, .loading:
-            photoScrollView
-
-        case .failed(let message):
-            ScrollView {
-                ErrorView(message: message) {
-                    Task { await viewModel.refresh() }
+        Group {
+            switch viewModel.state {
+            case .idle, .loading:
+                if viewModel.isRefreshing, !viewModel.photos.isEmpty {
+                    photoScrollView
+                } else {
+                    FeedAlbumSkeletonLoadingView()
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.top, SplickTheme.Spacing.xxl)
+
+            case .loaded where viewModel.photos.isEmpty:
+                ScrollView {
+                    EmptyStateView(
+                        icon: "photo.on.rectangle.angled",
+                        title: languageService.text(.feedAlbumEmptyTitle),
+                        message: languageService.text(.feedAlbumEmptyMessage)
+                    )
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, SplickTheme.Spacing.xxl)
+                }
+                .feedPagerScrollInsets()
+                .refreshable { await viewModel.refresh() }
+
+            case .loaded:
+                photoScrollView
+
+            case .failed(let message):
+                ScrollView {
+                    ErrorView(message: message) {
+                        Task { await viewModel.refresh() }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, SplickTheme.Spacing.xxl)
+                }
+                .feedPagerScrollInsets()
+                .refreshable { await viewModel.refresh() }
             }
-            .feedPagerScrollInsets()
-            .refreshable { await viewModel.refresh() }
+        }
+        .id(albumContentKey)
+        .animation(.easeInOut(duration: 0.2), value: albumContentKey)
+        .transition(.opacity)
+    }
+
+    private var albumContentKey: String {
+        if viewModel.isRefreshing, !viewModel.photos.isEmpty {
+            return "grid"
+        }
+        switch viewModel.state {
+        case .idle, .loading:
+            return "skeleton"
+        case .loaded where viewModel.photos.isEmpty:
+            return "empty"
+        case .loaded:
+            return "grid"
+        case .failed:
+            return "error"
         }
     }
 
