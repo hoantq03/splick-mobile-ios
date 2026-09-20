@@ -90,7 +90,11 @@ public enum BoomerangClipComposer {
                 AVVideoWidthKey: width,
                 AVVideoHeightKey: height,
                 AVVideoCompressionPropertiesKey: [
-                    AVVideoAverageBitRateKey: 1_200_000,
+                    AVVideoAverageBitRateKey: BoomerangTimeline.averageBitRate(
+                        width: width,
+                        height: height,
+                        fps: fps
+                    ),
                     AVVideoProfileLevelKey: AVVideoProfileLevelH264BaselineAutoLevel,
                     AVVideoExpectedSourceFrameRateKey: fps,
                 ],

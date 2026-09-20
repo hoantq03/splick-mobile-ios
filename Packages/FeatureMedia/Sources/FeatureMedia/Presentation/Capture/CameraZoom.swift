@@ -127,7 +127,7 @@ enum CameraZoom {
     }
 
     /// Default finger travel (pt) that maps the full min…max display zoom while recording.
-    static let holdDragTravelPx: CGFloat = 320
+    static let holdDragTravelPx: CGFloat = 240
 
     private static func applyLogDrag(
         base: CGFloat,

@@ -143,24 +143,42 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
     func setDisplayZoom(_ display: CGFloat, animated: Bool) {
         let clampedDisplay = CameraZoom.clampDisplay(display, hardware: zoomHardware)
         let video = zoomHardware.video(fromDisplay: clampedDisplay)
-        sessionQueue.async { [weak self] in
-            guard let self, let device = self.currentInput?.device else { return }
-            do {
-                try device.lockForConfiguration()
-                let capped = min(
-                    max(video, device.minAvailableVideoZoomFactor),
-                    min(device.maxAvailableVideoZoomFactor, zoomHardware.maxVideo)
-                )
-                if animated {
-                    device.ramp(toVideoZoomFactor: capped, withRate: 8)
-                } else {
-                    device.videoZoomFactor = capped
-                }
-                device.unlockForConfiguration()
-                DispatchQueue.main.async { self.zoomFactor = clampedDisplay }
-            } catch {
-                // Keep the last successful zoom.
+        // Chrome must track the finger immediately — never wait on the capture queue.
+        if Thread.isMainThread {
+            zoomFactor = clampedDisplay
+        } else {
+            DispatchQueue.main.async { self.zoomFactor = clampedDisplay }
+        }
+        if animated {
+            sessionQueue.async { [weak self] in
+                self?.writeVideoZoomFactor(video, animated: true)
             }
+            return
+        }
+        // Realtime path: apply on the caller thread so boomerang frame prep on
+        // `sessionQueue` cannot starve lens updates mid-drag.
+        writeVideoZoomFactor(video, animated: false)
+    }
+
+    private func writeVideoZoomFactor(_ video: CGFloat, animated: Bool) {
+        guard let device = currentInput?.device else { return }
+        do {
+            try device.lockForConfiguration()
+            let capped = min(
+                max(video, device.minAvailableVideoZoomFactor),
+                min(device.maxAvailableVideoZoomFactor, zoomHardware.maxVideo)
+            )
+            if animated {
+                device.ramp(toVideoZoomFactor: capped, withRate: 8)
+            } else {
+                if device.isRampingVideoZoom {
+                    device.cancelVideoZoomRamp()
+                }
+                device.videoZoomFactor = capped
+            }
+            device.unlockForConfiguration()
+        } catch {
+            // Keep the last successful zoom.
         }
     }
 

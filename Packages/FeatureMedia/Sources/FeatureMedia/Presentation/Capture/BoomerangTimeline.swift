@@ -9,8 +9,15 @@ public enum BoomerangTimeline {
     public static let minFrames = 6
     public static let captureDuration: TimeInterval = 30
     static let minFrameInterval: TimeInterval = 1 / Double(targetFPS)
-    /// 540 keeps feed quality acceptable and roughly halves encode cost vs 720.
-    static let maxLongSide: CGFloat = 540
+    /// ~720p long side for hold-to-record / boomerang (HD feed quality).
+    static let maxLongSide: CGFloat = 720
+
+    /// Target average bitrate for H.264 encode (~0.4 bits/pixel/frame, clamped for 720p).
+    static func averageBitRate(width: Int, height: Int, fps: Int = targetFPS) -> Int {
+        let pixels = max(width, 1) * max(height, 1)
+        let raw = pixels * max(fps, 1) * 4 / 10
+        return min(max(raw, 1_200_000), 5_000_000)
+    }
 
     /// Forward then reverse, omitting the duplicated endpoints so looping stays smooth.
     public static func pingPongIndices(frameCount: Int) -> [Int] {
