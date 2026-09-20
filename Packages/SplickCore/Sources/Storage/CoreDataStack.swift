@@ -7,24 +7,42 @@ public final class CoreDataStack {
 
     public let container: NSPersistentContainer
 
-    private init() {
-        container = NSPersistentContainer(name: "SplickModel")
+    public init(container: NSPersistentContainer) {
+        self.container = container
+        container.viewContext.automaticallyMergesChangesFromParent = true
+        container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+    }
 
-        let description = container.persistentStoreDescriptions.first
-        description?.shouldMigrateStoreAutomatically = true
-        description?.shouldInferMappingModelAutomatically = true
+    public convenience init(name: String = "SplickModel", bundle: Bundle? = nil, inMemory: Bool = false) {
+        let container: NSPersistentContainer
+        let searchBundle = bundle ?? Bundle.main
+        if let modelURL = searchBundle.url(forResource: name, withExtension: "momd") ?? searchBundle.url(forResource: name, withExtension: "mom"),
+           let model = NSManagedObjectModel(contentsOf: modelURL) {
+            container = NSPersistentContainer(name: name, managedObjectModel: model)
+        } else {
+            let emptyModel = NSManagedObjectModel()
+            container = NSPersistentContainer(name: name, managedObjectModel: emptyModel)
+        }
+
+        let description = container.persistentStoreDescriptions.first ?? NSPersistentStoreDescription()
+        description.shouldMigrateStoreAutomatically = true
+        description.shouldInferMappingModelAutomatically = true
+        if inMemory {
+            description.type = NSInMemoryStoreType
+        }
+        container.persistentStoreDescriptions = [description]
 
         container.loadPersistentStores { description, error in
             if let error {
                 Log.error("CoreData load failed: \(error)", category: .storage)
-                fatalError("CoreData failed to load: \(error)")
+            } else {
+                Log.info("CoreData loaded: \(description.url?.absoluteString ?? "unknown")", category: .storage)
             }
-            Log.info("CoreData loaded: \(description.url?.absoluteString ?? "unknown")", category: .storage)
         }
 
-        container.viewContext.automaticallyMergesChangesFromParent = true
-        container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+        self.init(container: container)
     }
+
 
     public var viewContext: NSManagedObjectContext {
         container.viewContext

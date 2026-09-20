@@ -19,20 +19,21 @@ public actor DiskCache {
     private let directoryURL: URL
     private let legacyDirectoryURL: URL
 
-    public init(subdirectory: String = "DiskCache") {
+    public init(subdirectory: String = "DiskCache", supportDirectory: URL? = nil, cachesDirectory: URL? = nil) {
         encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        let support = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? fileManager.temporaryDirectory
-        let caches = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
-            ?? fileManager.temporaryDirectory
+        let support = supportDirectory
+            ?? fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let caches = cachesDirectory
+            ?? fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first!
         directoryURL = support.appendingPathComponent(subdirectory, isDirectory: true)
         legacyDirectoryURL = caches.appendingPathComponent(subdirectory, isDirectory: true)
         try? fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
     }
+
 
     public func read<T: Codable>(_ type: T.Type, key: String) -> T? {
         readEntry(type, key: key)?.value
@@ -64,7 +65,7 @@ public actor DiskCache {
     }
 
     private func fileURL(for key: String) -> URL {
-        let safeName = key.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? key
+        let safeName = key.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
         return directoryURL.appendingPathComponent("\(safeName).json")
     }
 }

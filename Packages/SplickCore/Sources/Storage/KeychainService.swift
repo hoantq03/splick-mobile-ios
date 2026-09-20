@@ -11,9 +11,33 @@ public protocol KeychainServiceProtocol: Sendable {
 
 public final class KeychainService: KeychainServiceProtocol, Sendable {
     private let service: String
+    private let secItemUpdate: @Sendable (CFDictionary, CFDictionary) -> OSStatus
+    private let secItemAdd: @Sendable (CFDictionary, UnsafeMutablePointer<AnyObject?>?) -> OSStatus
+    private let secItemCopyMatching: @Sendable (CFDictionary, UnsafeMutablePointer<AnyObject?>?) -> OSStatus
+    private let secItemDelete: @Sendable (CFDictionary) -> OSStatus
 
-    public init(service: String = AppConstants.Keychain.serviceName) {
+    public convenience init(service: String = AppConstants.Keychain.serviceName) {
+        self.init(
+            service: service,
+            secItemUpdate: { SecItemUpdate($0, $1) },
+            secItemAdd: { SecItemAdd($0, $1) },
+            secItemCopyMatching: { SecItemCopyMatching($0, $1) },
+            secItemDelete: { SecItemDelete($0) }
+        )
+    }
+
+    init(
+        service: String,
+        secItemUpdate: @escaping @Sendable (CFDictionary, CFDictionary) -> OSStatus,
+        secItemAdd: @escaping @Sendable (CFDictionary, UnsafeMutablePointer<AnyObject?>?) -> OSStatus,
+        secItemCopyMatching: @escaping @Sendable (CFDictionary, UnsafeMutablePointer<AnyObject?>?) -> OSStatus,
+        secItemDelete: @escaping @Sendable (CFDictionary) -> OSStatus
+    ) {
         self.service = service
+        self.secItemUpdate = secItemUpdate
+        self.secItemAdd = secItemAdd
+        self.secItemCopyMatching = secItemCopyMatching
+        self.secItemDelete = secItemDelete
     }
 
     public func save(_ data: Data, for key: String) throws {
@@ -29,7 +53,7 @@ public final class KeychainService: KeychainServiceProtocol, Sendable {
         ]
 
         // Prefer update-in-place to avoid delete/add races under concurrent refresh.
-        let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        let updateStatus = secItemUpdate(query as CFDictionary, attributes as CFDictionary)
         switch updateStatus {
         case errSecSuccess:
             return
@@ -37,7 +61,7 @@ public final class KeychainService: KeychainServiceProtocol, Sendable {
             var addQuery = query
             addQuery[kSecValueData as String] = data
             addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-            let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+            let addStatus = secItemAdd(addQuery as CFDictionary, nil)
             guard addStatus == errSecSuccess else {
                 throw StorageError.keychainError("Save failed with status: \(addStatus)")
             }
@@ -56,7 +80,7 @@ public final class KeychainService: KeychainServiceProtocol, Sendable {
         ]
 
         var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        let status = secItemCopyMatching(query as CFDictionary, &result)
 
         switch status {
         case errSecSuccess:
@@ -75,17 +99,14 @@ public final class KeychainService: KeychainServiceProtocol, Sendable {
             kSecAttrAccount as String: key,
         ]
 
-        let status = SecItemDelete(query as CFDictionary)
+        let status = secItemDelete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw StorageError.keychainError("Delete failed with status: \(status)")
         }
     }
 
     public func saveString(_ value: String, for key: String) throws {
-        guard let data = value.data(using: .utf8) else {
-            throw StorageError.saveFailed("Failed to encode string")
-        }
-        try save(data, for: key)
+        try save(Data(value.utf8), for: key)
     }
 
     public func loadString(for key: String) throws -> String? {
