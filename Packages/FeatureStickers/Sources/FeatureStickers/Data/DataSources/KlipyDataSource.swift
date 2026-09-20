@@ -15,10 +15,12 @@ protocol KlipyDataSourceProtocol: Sendable {
 final class KlipyDataSource: KlipyDataSourceProtocol, @unchecked Sendable {
     private let session: URLSession
     private let decoder: JSONDecoder
+    private let apiKey: String
 
-    init(session: URLSession = KlipyDataSource.makeUnauthenticatedSession()) {
+    init(session: URLSession = KlipyDataSource.makeUnauthenticatedSession(), apiKey: String? = nil) {
         self.session = session
         self.decoder = JSONDecoder()
+        self.apiKey = apiKey ?? AppConstants.Klipy.apiKey
     }
 
     private static func makeUnauthenticatedSession() -> URLSession {
@@ -108,7 +110,7 @@ final class KlipyDataSource: KlipyDataSourceProtocol, @unchecked Sendable {
 
     private var baseQueryItems: [URLQueryItem] {
         [
-            URLQueryItem(name: "key", value: AppConstants.Klipy.apiKey),
+            URLQueryItem(name: "key", value: apiKey),
             URLQueryItem(name: "limit", value: "\(AppConstants.Klipy.defaultPageLimit)"),
             URLQueryItem(name: "locale", value: AppConstants.Klipy.locale),
             URLQueryItem(name: "country", value: AppConstants.Klipy.country),
@@ -119,7 +121,7 @@ final class KlipyDataSource: KlipyDataSourceProtocol, @unchecked Sendable {
 
     private var metaQueryItems: [URLQueryItem] {
         [
-            URLQueryItem(name: "key", value: AppConstants.Klipy.apiKey),
+            URLQueryItem(name: "key", value: apiKey),
             URLQueryItem(name: "locale", value: AppConstants.Klipy.locale),
             URLQueryItem(name: "country", value: AppConstants.Klipy.country),
         ]
@@ -140,7 +142,7 @@ final class KlipyDataSource: KlipyDataSourceProtocol, @unchecked Sendable {
     }
 
     private func fetchJSON<T: Decodable>(from components: URLComponents?) async throws -> T {
-        guard !AppConstants.Klipy.apiKey.isEmpty else {
+        guard !apiKey.isEmpty else {
             throw StickerError.apiKeyMissing
         }
         guard let url = components?.url else {

@@ -123,12 +123,22 @@ final class KlipyDataSourceTests: XCTestCase {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [MockURLProtocol.self]
         session = URLSession(configuration: config)
-        dataSource = KlipyDataSource(session: session)
+        dataSource = KlipyDataSource(session: session, apiKey: "test-api-key")
     }
 
     override func tearDown() {
         MockURLProtocol.requestHandler = nil
         super.tearDown()
+    }
+
+    func testFetchJSONThrowsApiKeyMissingWhenKeyIsEmpty() async throws {
+        let emptyKeyDataSource = KlipyDataSource(session: session, apiKey: "")
+        do {
+            _ = try await emptyKeyDataSource.trending(position: nil)
+            XCTFail("Expected StickerError.apiKeyMissing")
+        } catch StickerError.apiKeyMissing {
+            // Expected
+        }
     }
 
     private func makeResponse(statusCode: Int, url: URL) -> HTTPURLResponse {
