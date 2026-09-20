@@ -2,27 +2,37 @@ import AVFoundation
 import CoreVideo
 import UIKit
 
-enum BoomerangClipComposer {
-    enum ComposerError: Error {
+public enum BoomerangClipComposer {
+    public enum ComposerError: Error {
         case empty
         case writerFailed
     }
 
-    static func writeLoopingClip(
+    public static func writeLoopingClip(
         images: [UIImage],
-        fps: Int = BoomerangTimeline.targetFPS,
-        aspectRatio: CGFloat = CameraChromeLayout.previewAspect
+        onProgress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> URL {
-        try await writeClip(images: images, fps: fps, aspectRatio: aspectRatio, pingPong: true)
+        try await writeClip(
+            images: images,
+            fps: BoomerangTimeline.targetFPS,
+            aspectRatio: CameraChromeLayout.previewAspect,
+            pingPong: true,
+            onProgress: onProgress
+        )
     }
 
     /// Forward-only clip for hold-to-record video in photo mode (max ~30s).
-    static func writeForwardClip(
+    public static func writeForwardClip(
         images: [UIImage],
-        fps: Int = BoomerangTimeline.targetFPS,
-        aspectRatio: CGFloat = CameraChromeLayout.previewAspect
+        onProgress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> URL {
-        try await writeClip(images: images, fps: fps, aspectRatio: aspectRatio, pingPong: false)
+        try await writeClip(
+            images: images,
+            fps: BoomerangTimeline.targetFPS,
+            aspectRatio: CameraChromeLayout.previewAspect,
+            pingPong: false,
+            onProgress: onProgress
+        )
     }
 
     /// Normalize + crop + downscale once (call during capture so encode stays light).
@@ -43,89 +53,109 @@ enum BoomerangClipComposer {
         images: [UIImage],
         fps: Int,
         aspectRatio: CGFloat,
-        pingPong: Bool
+        pingPong: Bool,
+        onProgress: (@Sendable (Double) -> Void)?
     ) async throws -> URL {
-        // Frames are usually already prepared during capture; only reprocess if oversized.
-        let prepared: [UIImage] = try await Task.detached(priority: .userInitiated) {
-            images.map { image in
+        // Entire encode stays off the main actor so compose stays interactive.
+        try await Task.detached(priority: .userInitiated) {
+            onProgress?(0)
+            let prepared = images.map { image -> UIImage in
                 let longest = max(image.size.width * image.scale, image.size.height * image.scale)
                 if longest <= BoomerangTimeline.maxLongSide + 1 {
                     return image
                 }
                 return prepareFrame(image, aspectRatio: aspectRatio)
             }
-        }.value
-        guard prepared.count >= BoomerangTimeline.minFrames else {
-            throw ComposerError.empty
-        }
+            guard prepared.count >= BoomerangTimeline.minFrames else {
+                throw ComposerError.empty
+            }
+            onProgress?(0.05)
 
-        let first = prepared[0]
-        let width = evenPixel(first.size.width * first.scale)
-        let height = evenPixel(first.size.height * first.scale)
-        guard width >= 16, height >= 16 else { throw ComposerError.empty }
+            let first = prepared[0]
+            let width = evenPixel(first.size.width * first.scale)
+            let height = evenPixel(first.size.height * first.scale)
+            guard width >= 16, height >= 16 else { throw ComposerError.empty }
 
-        let filePrefix = pingPong ? "splick-boomerang" : "splick-clip"
-        let destination = FileManager.default.temporaryDirectory
-            .appendingPathComponent("\(filePrefix)-\(UUID().uuidString)")
-            .appendingPathExtension("mp4")
-        if FileManager.default.fileExists(atPath: destination.path) {
-            try? FileManager.default.removeItem(at: destination)
-        }
+            let filePrefix = pingPong ? "splick-boomerang" : "splick-clip"
+            let destination = FileManager.default.temporaryDirectory
+                .appendingPathComponent("\(filePrefix)-\(UUID().uuidString)")
+                .appendingPathExtension("mp4")
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try? FileManager.default.removeItem(at: destination)
+            }
 
-        let writer = try AVAssetWriter(outputURL: destination, fileType: .mp4)
-        let settings: [String: Any] = [
-            AVVideoCodecKey: AVVideoCodecType.h264,
-            AVVideoWidthKey: width,
-            AVVideoHeightKey: height,
-            AVVideoCompressionPropertiesKey: [
-                AVVideoAverageBitRateKey: 1_200_000,
-                AVVideoProfileLevelKey: AVVideoProfileLevelH264BaselineAutoLevel,
-                AVVideoExpectedSourceFrameRateKey: fps,
-            ],
-        ]
-        let input = AVAssetWriterInput(mediaType: .video, outputSettings: settings)
-        input.expectsMediaDataInRealTime = false
-        let adaptor = AVAssetWriterInputPixelBufferAdaptor(
-            assetWriterInput: input,
-            sourcePixelBufferAttributes: [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-                kCVPixelBufferWidthKey as String: width,
-                kCVPixelBufferHeightKey as String: height,
-                kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any],
+            let writer = try AVAssetWriter(outputURL: destination, fileType: .mp4)
+            let settings: [String: Any] = [
+                AVVideoCodecKey: AVVideoCodecType.h264,
+                AVVideoWidthKey: width,
+                AVVideoHeightKey: height,
+                AVVideoCompressionPropertiesKey: [
+                    AVVideoAverageBitRateKey: 1_200_000,
+                    AVVideoProfileLevelKey: AVVideoProfileLevelH264BaselineAutoLevel,
+                    AVVideoExpectedSourceFrameRateKey: fps,
+                ],
             ]
-        )
-        guard writer.canAdd(input) else { throw ComposerError.writerFailed }
-        writer.add(input)
-        guard writer.startWriting() else { throw ComposerError.writerFailed }
-        writer.startSession(atSourceTime: .zero)
+            let input = AVAssetWriterInput(mediaType: .video, outputSettings: settings)
+            input.expectsMediaDataInRealTime = false
+            let adaptor = AVAssetWriterInputPixelBufferAdaptor(
+                assetWriterInput: input,
+                sourcePixelBufferAttributes: [
+                    kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+                    kCVPixelBufferWidthKey as String: width,
+                    kCVPixelBufferHeightKey as String: height,
+                    kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any],
+                ]
+            )
+            guard writer.canAdd(input) else { throw ComposerError.writerFailed }
+            writer.add(input)
+            guard writer.startWriting() else { throw ComposerError.writerFailed }
+            writer.startSession(atSourceTime: .zero)
 
-        let indices = pingPong
-            ? BoomerangTimeline.pingPongIndices(frameCount: prepared.count)
-            : Array(0..<prepared.count)
-        let timescale = CMTimeScale(fps)
+            let indices = pingPong
+                ? BoomerangTimeline.pingPongIndices(frameCount: prepared.count)
+                : Array(0..<prepared.count)
+            let timescale = CMTimeScale(fps)
 
-        // Build unique pixel buffers once; ping-pong reuses them.
-        var bufferCache = [Int: CVPixelBuffer](minimumCapacity: prepared.count)
-        for frameIndex in Set(indices) {
-            if let buffer = pixelBuffer(from: prepared[frameIndex], width: width, height: height) {
-                bufferCache[frameIndex] = buffer
+            var bufferCache = [Int: CVPixelBuffer](minimumCapacity: prepared.count)
+            for frameIndex in Set(indices) {
+                if let buffer = pixelBuffer(from: prepared[frameIndex], width: width, height: height) {
+                    bufferCache[frameIndex] = buffer
+                }
             }
-        }
+            onProgress?(0.12)
 
-        for (index, frameIndex) in indices.enumerated() {
-            while !input.isReadyForMoreMediaData {
-                try await Task.sleep(for: .milliseconds(1))
+            let total = max(indices.count, 1)
+            var lastReportedBucket = -1
+            for (index, frameIndex) in indices.enumerated() {
+                try Task.checkCancellation()
+                while !input.isReadyForMoreMediaData {
+                    Thread.sleep(forTimeInterval: 0.001)
+                }
+                guard let buffer = bufferCache[frameIndex] else { continue }
+                let time = CMTime(value: CMTimeValue(index), timescale: timescale)
+                if !adaptor.append(buffer, withPresentationTime: time) {
+                    throw ComposerError.writerFailed
+                }
+                // ~20 UI updates max — enough for a % label without flooding MainActor.
+                let bucket = (index + 1) * 20 / total
+                if bucket != lastReportedBucket {
+                    lastReportedBucket = bucket
+                    let frameProgress = Double(index + 1) / Double(total)
+                    onProgress?(0.12 + frameProgress * 0.83)
+                }
             }
-            guard let buffer = bufferCache[frameIndex] else { continue }
-            let time = CMTime(value: CMTimeValue(index), timescale: timescale)
-            if !adaptor.append(buffer, withPresentationTime: time) {
-                throw ComposerError.writerFailed
+            input.markAsFinished()
+            onProgress?(0.96)
+
+            let finished = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                writer.finishWriting {
+                    continuation.resume(returning: writer.status == .completed)
+                }
             }
-        }
-        input.markAsFinished()
-        await writer.finishWriting()
-        guard writer.status == .completed else { throw ComposerError.writerFailed }
-        return destination
+            guard finished else { throw ComposerError.writerFailed }
+            onProgress?(1)
+            return destination
+        }.value
     }
 
     static func downscale(_ image: UIImage, maxLongSide: CGFloat) -> UIImage {
