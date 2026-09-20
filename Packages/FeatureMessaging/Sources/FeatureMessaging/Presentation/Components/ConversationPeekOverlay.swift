@@ -170,14 +170,14 @@ struct ConversationPeekOverlay: View {
         ]
         return LazyVGrid(columns: columns, alignment: .leading, spacing: SplickTheme.Spacing.xs) {
             optionChip(
-                titleKey: context.conversation.notificationsEnabled
-                    ? .messagingChatMuteNotifications
-                    : .messagingChatUnmuteNotifications,
-                systemImage: context.conversation.notificationsEnabled ? "bell.slash" : "bell",
+                titleKey: context.conversation.isMuted()
+                    ? .messagingChatUnmuteNotifications
+                    : .messagingChatMuteNotifications,
+                systemImage: context.conversation.isMuted() ? "bell" : "bell.slash",
                 destructive: false,
                 action: onMute
             )
-            .animation(ConversationPeekMotion.muteToggle, value: context.conversation.notificationsEnabled)
+            .animation(ConversationPeekMotion.muteToggle, value: context.conversation.isMuted())
             optionChip(
                 titleKey: .messagingChatMarkAsRead,
                 systemImage: "checkmark.message",
@@ -236,7 +236,7 @@ struct ConversationPeekOverlay: View {
                 inboxTyping: inboxTyping
             )
             .padding(.horizontal, SplickTheme.Spacing.sm)
-            .animation(ConversationPeekMotion.muteToggle, value: context.conversation.notificationsEnabled)
+            .animation(ConversationPeekMotion.muteToggle, value: context.conversation.isMuted())
 
             Divider()
 
@@ -277,7 +277,7 @@ struct ConversationPeekOverlay: View {
 
         case .loaded:
             GeometryReader { geo in
-                let rowWidth = max(geo.size.width - SplickTheme.Spacing.md * 2, 1)
+                let rowWidth = max(geo.size.width - MessageThreadRowLayout.listHorizontalPadding * 2, 1)
                 let bubbleMax = MessageThreadRowLayout.contentMaxWidth(forRowWidth: rowWidth)
                 let displayMessages = MessageTimelineGrouping.buildDisplayMessages(from: messages)
                 let bottomPinKey = messages.last?.clientMessageId
@@ -285,7 +285,7 @@ struct ConversationPeekOverlay: View {
                     ScrollView(showsIndicators: false) {
                         // VStack (not Lazy): peek pages are small; eager layout makes
                         // bottom-pin + prepend offset preservation reliable.
-                        VStack(spacing: SplickTheme.Spacing.xxs) {
+                        VStack(spacing: 0) {
                             PeekTimelineScrollBridge(
                                 isPrepending: isLoadingOlder || prependAnchorMessageId != nil,
                                 shouldPreserveOffset: userReleasedBottomPin,
@@ -330,7 +330,8 @@ struct ConversationPeekOverlay: View {
                                 .frame(height: 1)
                                 .id(Self.peekBottomAnchor)
                         }
-                        .padding(SplickTheme.Spacing.md)
+                        .padding(.horizontal, MessageThreadRowLayout.listHorizontalPadding)
+                        .padding(.vertical, SplickTheme.Spacing.sm)
                         .transaction { $0.animation = nil }
                     }
                     .overlay(alignment: .bottom) {
@@ -437,28 +438,27 @@ struct ConversationPeekOverlay: View {
 
     private func previewUserBubble(_ item: DisplayMessage, contentMaxWidth: CGFloat) -> some View {
         let isOutgoing = item.message.senderId == context.currentUserId
-        return HStack {
-            if isOutgoing {
-                Spacer(minLength: 44)
-            }
-
-            MessageBubble(
-                displayMessage: item,
-                isOutgoing: isOutgoing,
-                currentUserId: context.currentUserId,
-                presentation: .reactionFocusLift,
-                focusMaxContentWidth: contentMaxWidth,
-                contentMaxWidth: contentMaxWidth,
-                onReact: { _ in },
-                onRetry: nil,
-                onLongPress: nil,
-                onReply: nil
-            )
-
-            if !isOutgoing {
-                Spacer(minLength: 44)
-            }
-        }
+        let peer = context.conversation.peer
+        return MessageBubble(
+            displayMessage: item,
+            isOutgoing: isOutgoing,
+            currentUserId: context.currentUserId,
+            presentation: .threadRow,
+            contentMaxWidth: contentMaxWidth,
+            onReact: { _ in },
+            onRetry: nil,
+            onLongPress: nil,
+            onReply: nil,
+            senderAvatarURL: {
+                guard !isOutgoing, let raw = peer?.avatarUrl, let url = URL(string: raw) else {
+                    return nil
+                }
+                return url
+            }(),
+            senderAvatarName: item.message.senderDisplayName
+                ?? peer?.displayTitle
+                ?? ""
+        )
     }
 
     private func previewStatus(systemImage: String, message: String) -> some View {
