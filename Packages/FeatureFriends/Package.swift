@@ -32,6 +32,8 @@ let package = Package(
             dependencies: [
                 "FeatureFriends",
                 .product(name: "Common", package: "SplickCore"),
+                .product(name: "Localization", package: "SplickCore"),
+                .product(name: "Storage", package: "SplickCore"),
                 .product(name: "SplickDomain", package: "SplickDomain"),
             ],
             path: "Tests/FeatureFriendsTests"
