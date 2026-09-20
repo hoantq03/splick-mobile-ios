@@ -35,5 +35,18 @@ let package = Package(
             ],
             path: "Sources/FeatureSocialFeed"
         ),
+        .testTarget(
+            name: "FeatureSocialFeedTests",
+            dependencies: [
+                "FeatureSocialFeed",
+                .product(name: "Networking", package: "SplickCore"),
+                .product(name: "Storage", package: "SplickCore"),
+                .product(name: "Common", package: "SplickCore"),
+                .product(name: "Localization", package: "SplickCore"),
+                .product(name: "SplickDomain", package: "SplickDomain"),
+                .product(name: "FeatureFriends", package: "FeatureFriends"),
+            ],
+            path: "Tests/FeatureSocialFeedTests"
+        ),
     ]
 )
