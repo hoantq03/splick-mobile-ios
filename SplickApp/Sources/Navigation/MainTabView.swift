@@ -273,16 +273,21 @@ struct MainTabView: View {
             }
             .overlay {
                 if showsCameraLayer {
-                    cameraTabContent
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .cameraOpenReveal(
-                            progress: cameraReveal,
-                            cameraSize: SplickTabBarMetrics.cameraSize,
-                            bottomInset: SplickTabBarMetrics.cameraButtonBottomInset
-                        )
-                        .opacity(appState.selectedTab == .camera ? 1 : min(max(cameraReveal / 0.08, 0), 1))
-                        .ignoresSafeArea()
-                        .zIndex(80)
+                    ZStack {
+                        // Opaque base so the soft water rim never ghosts the tab underneath.
+                        Color.black
+                        cameraTabContent
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .cameraOpenReveal(
+                        progress: cameraReveal,
+                        cameraSize: SplickTabBarMetrics.cameraSize,
+                        bottomInset: SplickTabBarMetrics.cameraButtonBottomInset
+                    )
+                    // Collapse only: fade after the water has shrunk into the button.
+                    .opacity(appState.selectedTab == .camera ? 1 : min(max(cameraReveal / 0.08, 0), 1))
+                    .ignoresSafeArea()
+                    .zIndex(80)
                 }
             }
             .onChange(of: appState.selectedTab, perform: handleSelectedTabChange)
@@ -474,6 +479,12 @@ struct MainTabView: View {
             feedPlaybackActive = false
         }
         if tab == .camera {
+            // Snap to the button-sized drop first so expand never starts mid-haze.
+            var reset = Transaction()
+            reset.disablesAnimations = true
+            withTransaction(reset) {
+                cameraReveal = 0
+            }
             withAnimation(CameraOpenRevealMotion.expand) {
                 cameraReveal = 1
             }

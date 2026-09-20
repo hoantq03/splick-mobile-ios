@@ -29,8 +29,8 @@ struct ARCameraView: UIViewRepresentable {
         let view = ARSCNView(frame: .zero)
         view.automaticallyUpdatesLighting = true
         view.clipsToBounds = true
-        view.isOpaque = false
-        view.backgroundColor = .clear
+        view.isOpaque = true
+        view.backgroundColor = .black
         view.layer.cornerRadius = SplickTheme.CornerRadius.card
         view.layer.cornerCurve = .continuous
         view.layer.masksToBounds = true

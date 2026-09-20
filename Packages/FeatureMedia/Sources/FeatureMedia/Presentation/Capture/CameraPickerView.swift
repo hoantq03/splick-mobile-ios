@@ -145,7 +145,8 @@ struct CameraPickerView: View {
             )
             let waterFeather = CameraOpenRevealGeometry.feather(
                 progress: revealProgress,
-                maxFeather: min(canvas.width, canvas.height) * 0.28
+                maxFeather: min(canvas.width, canvas.height)
+                    * CameraOpenRevealGeometry.maxFeatherFraction
             )
             let originInFinder = CGPoint(
                 x: waterOrigin.x - slot.minX - (geo.size.width - frameWidth) / 2,

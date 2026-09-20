@@ -55,8 +55,11 @@ final class MetalPreviewMTKView: MTKView, MTKViewDelegate {
         if let device {
             ciContext = CIContext(mtlDevice: device, options: [.cacheIntermediates: false])
         }
-        isOpaque = false
-        backgroundColor = .clear
+        // Opaque black under the Metal layer so soft water-mask edges never show
+        // the tab feed through empty preview pixels.
+        isOpaque = true
+        backgroundColor = .black
+        clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
         isUserInteractionEnabled = false
     }
 

@@ -44,7 +44,6 @@ public struct MediaCaptureView: View {
                         filterCatalogRepository: filterCatalogRepository
                     )
                     .id(cameraSessionID)
-                    .transition(.opacity)
                 } else {
                     cameraUnavailableView
                 }

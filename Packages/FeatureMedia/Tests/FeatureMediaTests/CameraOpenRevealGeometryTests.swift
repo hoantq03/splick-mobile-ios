@@ -32,6 +32,7 @@ final class CameraOpenRevealGeometryTests: XCTestCase {
         XCTAssertEqual(CameraOpenRevealGeometry.feather(progress: 0.5, maxFeather: 48), 48, accuracy: 0.01)
         XCTAssertEqual(CameraOpenRevealGeometry.feather(progress: 1, maxFeather: 48), 0, accuracy: 0.01)
         XCTAssertEqual(CameraOpenRevealGeometry.feather(progress: 0.25, maxFeather: 48), 36, accuracy: 0.01)
+        XCTAssertEqual(CameraOpenRevealGeometry.maxFeatherFraction, 0.22, accuracy: 0.001)
     }
 
     func testShutterRowLiftsWithRevealProgress() {

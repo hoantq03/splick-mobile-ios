@@ -77,10 +77,15 @@ public enum CameraOpenRevealGeometry {
     }
 
     /// Soft rim that peaks mid-spread and is 0 at both ends so close does not leave a foggy stain.
+    /// Keep narrower than Android's visual soft edge — SwiftUI mask alpha composites with the
+    /// underlying tab, so a wide haze reads as feed bleeding into camera chrome.
     public static func feather(progress: CGFloat, maxFeather: CGFloat) -> CGFloat {
         let t = min(max(progress, 0), 1)
         return 4 * t * (1 - t) * maxFeather
     }
+
+    /// Fraction of canvas min-side used as peak feather (matches Android `0.22`).
+    public static let maxFeatherFraction: CGFloat = 0.22
 }
 
 public struct CameraFinderSpread: Equatable {
@@ -134,11 +139,13 @@ public enum CameraWaterRevealMask {
         gradient.startPoint = CGPoint(x: 0.5, y: 0.5)
         gradient.endPoint = CGPoint(x: 1, y: 1)
         let coreStop = min(max(radius / outer, 0), 1)
-        let hazeStop = min(coreStop + (1 - coreStop) * 0.36, 0.96)
+        // Keep the soft rim short and mostly opaque so the live preview does not
+        // ghost over chrome / the tab underneath.
+        let hazeStop = min(coreStop + (1 - coreStop) * 0.22, 0.98)
         gradient.colors = [
             UIColor.white.cgColor,
             UIColor.white.cgColor,
-            UIColor.white.withAlphaComponent(0.42).cgColor,
+            UIColor.white.withAlphaComponent(0.88).cgColor,
             UIColor.clear.cgColor,
         ]
         gradient.locations = [0, NSNumber(value: Double(coreStop)), NSNumber(value: Double(hazeStop)), 1]
@@ -146,15 +153,21 @@ public enum CameraWaterRevealMask {
 }
 
 public enum CameraOpenRevealMotion {
-    /// Ease-out open that finishes instead of spring-settling.
+    /// Ease-out open that finishes instead of spring-settling (matches Android ExpandSpec).
     public static let expand = Animation.timingCurve(0.16, 1, 0.3, 1, duration: 0.46)
     public static let collapse = Animation.timingCurve(0.32, 0, 0.18, 1, duration: 0.46)
 }
 
-public struct CameraOpenRevealMask: ViewModifier {
+/// Animatable so SwiftUI interpolates `progress` every frame (without this the water jumps).
+public struct CameraOpenRevealMask: ViewModifier, Animatable {
     public var progress: CGFloat
     public var cameraSize: CGFloat
     public var bottomInset: CGFloat
+
+    public var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
 
     public init(progress: CGFloat, cameraSize: CGFloat, bottomInset: CGFloat) {
         self.progress = progress
@@ -170,8 +183,12 @@ public struct CameraOpenRevealMask: ViewModifier {
                 bottomInset: bottomInset
             )
             let covering = CameraOpenRevealGeometry.coveringRadius(origin: origin, size: geo.size)
+            // Flatten first so BrandAtmosphere translucency cannot composite with the
+            // feed under the soft water rim.
             content
                 .frame(width: geo.size.width, height: geo.size.height)
+                .background(Color.black)
+                .compositingGroup()
                 .mask {
                     WaterRevealMaskShape(
                         progress: progress,
@@ -185,13 +202,18 @@ public struct CameraOpenRevealMask: ViewModifier {
     }
 }
 
-/// Radial gradient mask — cheaper than Gaussian blur, wider fog on the water rim.
-private struct WaterRevealMaskShape: View {
+/// Radial gradient mask — short opaque rim; cheap vs Gaussian blur.
+private struct WaterRevealMaskShape: View, Animatable {
     var progress: CGFloat
     var origin: CGPoint
     var cameraSize: CGFloat
     var covering: CGFloat
     var canvasSize: CGSize
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
 
     var body: some View {
         let radius = CameraOpenRevealGeometry.radius(
@@ -201,11 +223,12 @@ private struct WaterRevealMaskShape: View {
         )
         let feather = CameraOpenRevealGeometry.feather(
             progress: progress,
-            maxFeather: min(canvasSize.width, canvasSize.height) * 0.28
+            maxFeather: min(canvasSize.width, canvasSize.height)
+                * CameraOpenRevealGeometry.maxFeatherFraction
         )
         let outer = max(radius + feather, 0.5)
         let core = min(max(radius / outer, 0), 1)
-        let haze = min(core + (1 - core) * 0.36, 0.96)
+        let haze = min(core + (1 - core) * 0.22, 0.98)
         Canvas { context, _ in
             let rect = CGRect(
                 x: origin.x - outer,
@@ -219,7 +242,7 @@ private struct WaterRevealMaskShape: View {
                     Gradient(stops: [
                         .init(color: .white, location: 0),
                         .init(color: .white, location: core),
-                        .init(color: .white.opacity(0.42), location: haze),
+                        .init(color: .white.opacity(0.88), location: haze),
                         .init(color: .clear, location: 1),
                     ]),
                     center: origin,
@@ -229,7 +252,7 @@ private struct WaterRevealMaskShape: View {
             )
         }
         .frame(width: canvasSize.width, height: canvasSize.height)
-        .transaction { $0.animation = nil }
+        .allowsHitTesting(false)
     }
 }
 
