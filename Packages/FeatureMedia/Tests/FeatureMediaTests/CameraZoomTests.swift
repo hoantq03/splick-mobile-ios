@@ -73,6 +73,15 @@ final class CameraZoomTests: XCTestCase {
         XCTAssertEqual(narrower, 1, accuracy: 0.05)
     }
 
+    func testVerticalDragUpZoomsInAndDownZoomsOut() {
+        let hw = CameraZoom.hardware(minVideo: 1, maxVideo: 10, switchOverVideo: [])
+        let wider = CameraZoom.applyVerticalDrag(base: 2, deltaY: -200, travelPx: 400, hardware: hw)
+        let narrower = CameraZoom.applyVerticalDrag(base: 2, deltaY: 200, travelPx: 400, hardware: hw)
+        XCTAssertGreaterThan(wider, 2)
+        XCTAssertLessThan(narrower, 2)
+        XCTAssertEqual(narrower, 1, accuracy: 0.05)
+    }
+
     func testDialProgressIsZeroAtMinAndOneAtMax() {
         let hw = CameraZoom.hardware(minVideo: 1, maxVideo: 10, switchOverVideo: [2])
         XCTAssertEqual(CameraZoom.dialProgress(display: hw.minDisplay, hardware: hw), 0, accuracy: 0.01)

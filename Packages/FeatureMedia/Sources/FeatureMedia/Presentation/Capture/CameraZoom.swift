@@ -111,16 +111,40 @@ enum CameraZoom {
         viewWidth: CGFloat,
         hardware: Hardware
     ) -> CGFloat {
+        applyLogDrag(base: base, deltaPx: deltaPx, travelPx: viewWidth, hardware: hardware)
+    }
+
+    /// Hold-to-record vertical drag: finger up zooms in, finger down zooms out.
+    /// `deltaY` is screen points (positive = down). `travelPx` spans the full log zoom range.
+    static func applyVerticalDrag(
+        base: CGFloat,
+        deltaY: CGFloat,
+        travelPx: CGFloat,
+        hardware: Hardware
+    ) -> CGFloat {
+        // Invert Y so upward motion increases zoom.
+        applyLogDrag(base: base, deltaPx: -deltaY, travelPx: travelPx, hardware: hardware)
+    }
+
+    /// Default finger travel (pt) that maps the full min…max display zoom while recording.
+    static let holdDragTravelPx: CGFloat = 320
+
+    private static func applyLogDrag(
+        base: CGFloat,
+        deltaPx: CGFloat,
+        travelPx: CGFloat,
+        hardware: Hardware
+    ) -> CGFloat {
         let minD = max(hardware.minDisplay, 0.1)
         let maxD = max(hardware.maxDisplay, minD)
-        guard deltaPx.isFinite, viewWidth > 1, maxD > minD else {
+        guard deltaPx.isFinite, travelPx > 1, maxD > minD else {
             return clampDisplay(base, hardware: hardware)
         }
         let logMin = log(minD)
         let logMax = log(maxD)
         let baseLog = log(max(base, minD))
         let t = (baseLog - logMin) / (logMax - logMin)
-        let nextT = t + (deltaPx / viewWidth)
+        let nextT = t + (deltaPx / travelPx)
         let next = exp(logMin + min(max(nextT, 0), 1) * (logMax - logMin))
         return clampDisplay(next, hardware: hardware)
     }
