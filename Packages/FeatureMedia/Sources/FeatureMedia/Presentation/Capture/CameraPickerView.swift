@@ -9,9 +9,27 @@ struct CameraPickerView: View {
     enum Result: Equatable {
         case image(UIImage, initialFilter: FilterPreset = .none)
         case video(URL)
+        case pendingVideo(PendingCapturedVideo)
         case cancelled
         case openLibrary
         case openTextCreation
+
+        static func == (lhs: Result, rhs: Result) -> Bool {
+            switch (lhs, rhs) {
+            case (.image(let a, let af), .image(let b, let bf)):
+                return a === b && af == bf
+            case (.video(let a), .video(let b)):
+                return a == b
+            case (.pendingVideo(let a), .pendingVideo(let b)):
+                return a.id == b.id
+            case (.cancelled, .cancelled),
+                 (.openLibrary, .openLibrary),
+                 (.openTextCreation, .openTextCreation):
+                return true
+            default:
+                return false
+            }
+        }
     }
 
     let onResult: (Result) -> Void
@@ -19,7 +37,7 @@ struct CameraPickerView: View {
     var filterCatalogRepository: FilterCatalogRepositoryProtocol?
 
     @EnvironmentObject private var languageService: LanguageService
-    @Environment(\.cameraOpenRevealProgress) private var revealProgress
+    @EnvironmentObject private var cameraRevealProgress: CameraOpenRevealProgressSource
     @StateObject private var session = AVCameraSessionModel()
     @StateObject private var arHandle = ARCaptureHandle()
     @State private var arEffect: ARFaceEffect = .glasses
@@ -28,10 +46,17 @@ struct CameraPickerView: View {
     @State private var toastMessage: String?
     @State private var timerModeSeconds = 0
     @State private var countdownRemaining = 0
+    @State private var activePendingVideo: PendingCapturedVideo?
+    @State private var didHandOffPendingVideo = false
     @State private var boomerangMode = false
     @State private var boomerangProgress: CGFloat = 0
     @State private var shutterPressActive = false
     @State private var shortVideoHoldStarted = false
+    @State private var holdZoomTracking = false
+    @State private var holdZoomBase: CGFloat = 1
+    @State private var holdZoomStartTranslationY: CGFloat = 0
+
+    private var revealProgress: CGFloat { cameraRevealProgress.value }
 
     private var faceTrackingSupported: Bool {
         ARFaceTrackingConfiguration.isSupported
@@ -82,7 +107,12 @@ struct CameraPickerView: View {
             .coordinateSpace(name: "cameraCanvas")
         }
         .onAppear {
-            session.start()
+            // Let the water expand on black chrome before spinning up AVCapture —
+            // starting the session on the same frame as mount is a major hitch.
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(140))
+                session.start()
+            }
             Task { await loadFilterCatalog() }
         }
         .onDisappear { session.stop() }
@@ -137,68 +167,57 @@ struct CameraPickerView: View {
                 cameraSize: SplickTabBarMetrics.cameraSize,
                 bottomInset: metrics.bottomPadding
             )
-            let covering = CameraOpenRevealGeometry.coveringRadius(origin: waterOrigin, size: canvas)
-            let waterRadius = CameraOpenRevealGeometry.radius(
-                progress: revealProgress,
-                start: SplickTabBarMetrics.cameraSize / 2,
-                end: covering
-            )
-            let waterFeather = CameraOpenRevealGeometry.feather(
-                progress: revealProgress,
-                maxFeather: min(canvas.width, canvas.height)
-                    * CameraOpenRevealGeometry.maxFeatherFraction
-            )
+            let showZoom = !(session.filterPreset == .ar && faceTrackingSupported)
+            let stackHeight = frameHeight + (showZoom ? zoomReserve : 0)
             let originInFinder = CGPoint(
                 x: waterOrigin.x - slot.minX - (geo.size.width - frameWidth) / 2,
-                y: waterOrigin.y - slot.minY - (geo.size.height - frameHeight) / 2 + lift
+                y: waterOrigin.y - slot.minY - (geo.size.height - stackHeight) / 2 + lift
             )
-            ZStack {
+            VStack(spacing: 10) {
                 previewLayer(
                     cornerRadius: SplickTheme.CornerRadius.card,
                     waterOriginInView: originInFinder,
-                    waterRadius: waterRadius,
-                    waterFeather: waterFeather
+                    waterRadius: .greatestFiniteMagnitude,
+                    waterFeather: 0
                 )
-                    .frame(width: frameWidth, height: frameHeight)
-                    .clipShape(finderShape)
-                    .compositingGroup()
-                    .overlay {
-                        ZStack {
-                            finderShape.strokeBorder(SplickTheme.Colors.divider, lineWidth: 0.5)
-                            if let indicator = session.focusIndicator {
-                                CameraFocusReticle(indicator: indicator)
-                            }
+                .frame(width: frameWidth, height: frameHeight)
+                .clipShape(finderShape)
+                .compositingGroup()
+                .overlay {
+                    ZStack {
+                        finderShape.strokeBorder(SplickTheme.Colors.divider, lineWidth: 0.5)
+                        if let indicator = session.focusIndicator {
+                            CameraFocusReticle(indicator: indicator)
                         }
                     }
-                    .contentShape(finderShape)
-                    .highPriorityGesture(
-                        SpatialTapGesture()
-                            .onEnded { event in
-                                guard !(session.filterPreset == .ar && faceTrackingSupported) else { return }
-                                session.focus(
-                                    at: event.location,
-                                    viewSize: CGSize(width: frameWidth, height: frameHeight)
-                                )
-                            }
-                    )
-                    .simultaneousGesture(
-                        MagnificationGesture()
-                            .onChanged { session.updatePinch(magnification: $0) }
-                            .onEnded { _ in session.endPinch() }
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                    .offset(y: -lift)
+                }
+                .contentShape(finderShape)
+                .highPriorityGesture(
+                    SpatialTapGesture()
+                        .onEnded { event in
+                            guard !(session.filterPreset == .ar && faceTrackingSupported) else { return }
+                            session.focus(
+                                at: event.location,
+                                viewSize: CGSize(width: frameWidth, height: frameHeight)
+                            )
+                        }
+                )
+                .simultaneousGesture(
+                    MagnificationGesture()
+                        .onChanged { session.updatePinch(magnification: $0) }
+                        .onEnded { _ in session.endPinch() }
+                )
 
-                if !(session.filterPreset == .ar && faceTrackingSupported) {
+                if showZoom {
                     CameraNativeZoomChrome(
                         displayZoom: session.zoomFactor,
                         onTap: { session.cycleZoomStep() }
                     )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                    .padding(.bottom, 4)
+                    .frame(height: 34)
                 }
             }
-            .clipped()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            .offset(y: -lift)
         }
     }
 
@@ -216,7 +235,7 @@ struct CameraPickerView: View {
                 waterOriginInView: waterOriginInView,
                 waterRadius: waterRadius,
                 waterFeather: waterFeather,
-                waterActive: revealProgress < 0.995
+                waterActive: false
             )
         } else {
             ZStack {
@@ -226,7 +245,7 @@ struct CameraPickerView: View {
                     waterOriginInView: waterOriginInView,
                     waterRadius: waterRadius,
                     waterFeather: waterFeather,
-                    waterActive: revealProgress < 0.995
+                    waterActive: false
                 )
                 if session.filterPreset == .ar {
                     VisionFaceOverlayView(
@@ -344,10 +363,36 @@ struct CameraPickerView: View {
             .contentShape(Circle())
             .gesture(
                 DragGesture(minimumDistance: 0)
-                    .onChanged { _ in shutterPressBegan() }
-                    .onEnded { _ in shutterPressEnded() }
+                    .onChanged { value in
+                        shutterPressBegan()
+                        applyHoldDragZoomIfRecording(translationY: value.translation.height)
+                    }
+                    .onEnded { _ in
+                        holdZoomTracking = false
+                        shutterPressEnded()
+                    }
             )
             .disabled((isCapturing && !recording) || countdownRemaining > 0)
+    }
+
+    /// While hold-to-record is active, vertical drag zooms the lens (up = in, down = out).
+    private func applyHoldDragZoomIfRecording(translationY: CGFloat) {
+        guard session.isRecordingBoomerang else { return }
+        if !holdZoomTracking {
+            holdZoomTracking = true
+            holdZoomBase = session.zoomFactor
+            holdZoomStartTranslationY = translationY
+        }
+        let deltaY = translationY - holdZoomStartTranslationY
+        session.setDisplayZoom(
+            CameraZoom.applyVerticalDrag(
+                base: holdZoomBase,
+                deltaY: deltaY,
+                travelPx: CameraZoom.holdDragTravelPx,
+                hardware: session.zoomHardware
+            ),
+            animated: false
+        )
     }
 
     private var flashSymbol: String {
@@ -415,20 +460,25 @@ struct CameraPickerView: View {
     private func captureBoomerang() {
         guard !isCapturing else { return }
         isCapturing = true
+        didHandOffPendingVideo = false
+        let pending = PendingCapturedVideo(pingPong: true, previewImage: nil)
+        activePendingVideo = pending
         Task {
             do {
                 let frames = try await session.captureBoomerang()
-                let url = try await BoomerangClipComposer.writeLoopingClip(images: frames)
+                pending.deliverFrames(frames)
                 await MainActor.run {
-                    isCapturing = false
-                    onResult(.video(url))
+                    finishPendingVideoCapture(pending: pending, failed: false)
                 }
             } catch {
+                pending.fail(mapBoomerangFailure(error))
                 await MainActor.run {
-                    isCapturing = false
-                    toastMessage = languageService.text(.mediaCameraBoomerangFailed)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                        toastMessage = nil
+                    finishPendingVideoCapture(pending: pending, failed: true)
+                    if !didHandOffPendingVideo {
+                        toastMessage = languageService.text(.mediaCameraBoomerangFailed)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            toastMessage = nil
+                        }
                     }
                 }
             }
@@ -438,24 +488,61 @@ struct CameraPickerView: View {
     private func captureShortVideo() {
         guard !isCapturing else { return }
         isCapturing = true
+        didHandOffPendingVideo = false
+        let pending = PendingCapturedVideo(pingPong: false, previewImage: nil)
+        activePendingVideo = pending
         Task {
             do {
                 let frames = try await session.captureBoomerang()
-                let url = try await BoomerangClipComposer.writeForwardClip(images: frames)
+                pending.deliverFrames(frames)
                 await MainActor.run {
-                    isCapturing = false
-                    onResult(.video(url))
+                    finishPendingVideoCapture(pending: pending, failed: false)
                 }
             } catch {
+                pending.fail(mapBoomerangFailure(error))
                 await MainActor.run {
-                    isCapturing = false
-                    toastMessage = languageService.text(.mediaLoadFailed)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                        toastMessage = nil
+                    finishPendingVideoCapture(pending: pending, failed: true)
+                    if !didHandOffPendingVideo {
+                        toastMessage = languageService.text(.mediaLoadFailed)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            toastMessage = nil
+                        }
                     }
                 }
             }
         }
+    }
+
+    /// Opens compose immediately on finger-up; frames keep flushing in the background.
+    private func handOffPendingVideoIfNeeded() {
+        guard let pending = activePendingVideo, !didHandOffPendingVideo else { return }
+        didHandOffPendingVideo = true
+        activePendingVideo = nil
+        isCapturing = false
+        onResult(.pendingVideo(pending))
+    }
+
+    private func finishPendingVideoCapture(pending: PendingCapturedVideo, failed: Bool) {
+        if activePendingVideo?.id == pending.id {
+            activePendingVideo = nil
+        }
+        isCapturing = false
+        // Max-duration finish without finger-up — still hand off (or drop on failure).
+        if !didHandOffPendingVideo {
+            if failed { return }
+            didHandOffPendingVideo = true
+            onResult(.pendingVideo(pending))
+        }
+    }
+
+    private func mapBoomerangFailure(_ error: Error) -> PendingCapturedVideo.Failure {
+        if let cameraError = error as? CameraSessionError {
+            switch cameraError {
+            case .boomerangTooShort: return .tooShort
+            case .busy, .captureFailed: return .captureFailed
+            }
+        }
+        return .captureFailed
     }
 
     private func shutterPressBegan() {
@@ -480,11 +567,12 @@ struct CameraPickerView: View {
             endBoomerangHold()
             return
         }
-        let startedVideo = shortVideoHoldStarted || session.isRecordingBoomerang
+        let startedVideo = shortVideoHoldStarted || session.isRecordingBoomerang || activePendingVideo != nil
         shutterPressActive = false
         shortVideoHoldStarted = false
         if startedVideo {
             session.stopBoomerangCapture()
+            handOffPendingVideoIfNeeded()
         } else if !isCapturing {
             shutterTapped()
         }
@@ -497,6 +585,7 @@ struct CameraPickerView: View {
 
     private func endBoomerangHold() {
         session.stopBoomerangCapture()
+        handOffPendingVideoIfNeeded()
     }
 
     private func shutterTapped() {
