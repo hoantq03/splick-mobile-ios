@@ -515,17 +515,6 @@ struct ConversationPeekOverlay: View {
         return PeekLayout(optionsFrame: optionsFrame, previewFrame: previewFrame)
     }
 
-    private static var displayCornerRadius: CGFloat {
-        let screen = UIScreen.main
-        if let radius = screen.value(forKey: "_displayCornerRadius") as? CGFloat, radius > 0 {
-            return radius
-        }
-        if let radius = screen.value(forKey: "displayCornerRadius") as? CGFloat, radius > 0 {
-            return radius
-        }
-        return SplickTheme.CornerRadius.extraLarge
-    }
-
     private static var windowSafeAreaTop: CGFloat {
         windowSafeAreaInsets.top
     }
@@ -695,7 +684,7 @@ private struct PeekTimelineScrollBridge: UIViewRepresentable {
 }
 
 private struct PeekOptionsSizeKey: PreferenceKey {
-    static var defaultValue: CGSize = CGSize(width: 320, height: 96)
+    static var defaultValue: CGSize = CGSize(width: 320, height: 104)
 
     static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
         let next = nextValue()

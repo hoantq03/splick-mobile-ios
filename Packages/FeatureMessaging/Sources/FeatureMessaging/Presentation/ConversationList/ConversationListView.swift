@@ -504,9 +504,11 @@ public struct ConversationListView: View {
                     )
                     .id(peekSession)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.clear)
                 }
             }
             .ignoresSafeArea()
+            .background(Color.clear)
             .zIndex(100)
         }
     }
