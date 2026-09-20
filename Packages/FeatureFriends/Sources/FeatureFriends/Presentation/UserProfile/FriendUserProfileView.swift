@@ -337,7 +337,7 @@ public struct FriendUserProfileView: View {
         guard let openLinkedPost else { return }
         dismiss()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            openLinkedPost(postId, false)
+            openLinkedPost(postId, false, false)
         }
     }
 
