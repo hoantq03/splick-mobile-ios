@@ -56,7 +56,12 @@ struct SharedPostPreviewCard: View {
             : languageService.text(.feedShareFallbackCaption)
 
         return VStack(alignment: .leading, spacing: 8) {
-            mediaPreview(url: preview.imageURL, isVideo: preview.isVideo)
+            SharedPostMediaPreview(
+                imageURL: preview.imageURL,
+                videoURL: preview.videoURL,
+                isVideo: preview.isVideo,
+                height: Self.mediaHeight
+            )
             VStack(alignment: .leading, spacing: 2) {
                 Text(languageService.text(.messagingSharedPostLabel))
                     .font(.system(size: 11, weight: .semibold))
@@ -117,32 +122,6 @@ struct SharedPostPreviewCard: View {
         }
     }
 
-    private func mediaPreview(url: URL?, isVideo: Bool) -> some View {
-        ZStack {
-            GridThumbnailImage(url: url, thumbnailWidth: 480) {
-                Image(systemName: "photo")
-                    .font(.system(size: 28, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.75))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.black.opacity(0.18))
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: Self.mediaHeight)
-            .clipped()
-
-            if isVideo {
-                Image(systemName: "play.fill")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color.white)
-                    .frame(width: 36, height: 36)
-                    .background(Color.black.opacity(0.45), in: Circle())
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: Self.mediaHeight)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-    }
-
     private var cardBackground: Color {
         if isOutgoing {
             return Color.white.opacity(0.16)
@@ -177,23 +156,129 @@ struct SharedPostPreviewCard: View {
     }
 }
 
-/// Still frame for a shared-post card: first image, or video poster — never the raw video file.
+/// Still preview for shared posts: remote image when available, otherwise first video frame.
+private struct SharedPostMediaPreview: View {
+    let imageURL: URL?
+    let videoURL: URL?
+    let isVideo: Bool
+    let height: CGFloat
+
+    @State private var generatedFrame: UIImage?
+    @State private var isDecodingFrame = false
+
+    private var remoteImageURL: URL? {
+        if let videoURL {
+            return VideoPosterURL.usableImageURL(imageURL, videoURL: videoURL)
+                ?? (isVideo ? nil : imageURL)
+        }
+        return imageURL
+    }
+
+    var body: some View {
+        ZStack {
+            mediaLayer
+            if isVideo {
+                Image(systemName: "play.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .frame(width: 36, height: 36)
+                    .background(Color.black.opacity(0.45), in: Circle())
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: height)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .task(id: taskKey) {
+            await ensureFirstFrameIfNeeded()
+        }
+    }
+
+    private var taskKey: String {
+        "\(remoteImageURL?.absoluteString ?? "")|\(videoURL?.absoluteString ?? "")|\(isVideo)"
+    }
+
+    @ViewBuilder
+    private var mediaLayer: some View {
+        if let remoteImageURL {
+            GridThumbnailImage(url: remoteImageURL, thumbnailWidth: 480) {
+                generatedOrPlaceholder
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: height)
+            .clipped()
+        } else {
+            generatedOrPlaceholder
+                .frame(maxWidth: .infinity)
+                .frame(height: height)
+        }
+    }
+
+    @ViewBuilder
+    private var generatedOrPlaceholder: some View {
+        if let generatedFrame {
+            Image(uiImage: generatedFrame)
+                .resizable()
+                .scaledToFill()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+        } else if isDecodingFrame {
+            ZStack {
+                Color.black.opacity(0.18)
+                SplickSpinner(usesBrandColors: false)
+            }
+        } else {
+            Image(systemName: "photo")
+                .font(.system(size: 28, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.75))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black.opacity(0.18))
+        }
+    }
+
+    private func ensureFirstFrameIfNeeded() async {
+        generatedFrame = nil
+        guard isVideo, let videoURL else {
+            isDecodingFrame = false
+            return
+        }
+        // Prefer a real image poster; only decode the first frame when needed.
+        if remoteImageURL != nil {
+            isDecodingFrame = false
+            return
+        }
+        isDecodingFrame = true
+        defer { isDecodingFrame = false }
+        if let cached = await VideoFirstFrameCache.shared.image(for: videoURL) {
+            generatedFrame = cached
+            return
+        }
+        generatedFrame = await VideoFirstFrameCache.shared.generate(for: videoURL)
+    }
+}
+
+/// Still frame for a shared-post card: first image, or video poster / first frame — never the raw video file.
 enum SharedPostPreviewMedia {
     struct Resolved: Equatable {
         let imageURL: URL?
+        let videoURL: URL?
         let isVideo: Bool
     }
 
     static func resolve(from post: Post) -> Resolved {
         let first = post.displayMediaItems.first
         let isVideo = (first?.mediaType ?? post.mediaType) == .video
-        if let thumb = first?.thumbnailURL ?? post.thumbnailURL {
-            return Resolved(imageURL: thumb, isVideo: isVideo)
+        let thumbnail = first?.thumbnailURL ?? post.thumbnailURL
+        let mediaURL = first?.mediaURL ?? (isVideo ? post.videoURL : nil) ?? post.imageURL
+        if let thumbnail {
+            return Resolved(
+                imageURL: thumbnail,
+                videoURL: isVideo ? mediaURL : nil,
+                isVideo: isVideo
+            )
         }
         if !isVideo {
-            let imageURL = first?.mediaURL ?? post.imageURL
-            return Resolved(imageURL: imageURL, isVideo: false)
+            return Resolved(imageURL: mediaURL, videoURL: nil, isVideo: false)
         }
-        return Resolved(imageURL: nil, isVideo: true)
+        return Resolved(imageURL: nil, videoURL: mediaURL, isVideo: true)
     }
 }

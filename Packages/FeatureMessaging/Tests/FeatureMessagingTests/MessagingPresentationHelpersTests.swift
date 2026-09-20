@@ -319,4 +319,63 @@ final class MessagingPresentationHelpersTests: XCTestCase {
         )
         XCTAssertFalse(s3.isEmpty)
     }
+
+    func testSharedPostPreviewMedia_imageUsesMediaURLWhenThumbnailMissing() {
+        let imageURL = URL(string: "https://cdn.example/photo.jpg")!
+        let post = makePost(
+            mediaItems: [
+                PostMediaItem(mediaURL: imageURL, thumbnailURL: nil, mediaType: .image, sortOrder: 0),
+            ]
+        )
+        let preview = SharedPostPreviewMedia.resolve(from: post)
+        XCTAssertEqual(preview.imageURL, imageURL)
+        XCTAssertNil(preview.videoURL)
+        XCTAssertFalse(preview.isVideo)
+    }
+
+    func testSharedPostPreviewMedia_videoKeepsVideoURLForFirstFrame() {
+        let videoURL = URL(string: "https://cdn.example/clip.mp4")!
+        let thumbURL = URL(string: "https://cdn.example/frame.jpg")!
+        let withThumb = makePost(
+            mediaType: .video,
+            videoURL: videoURL,
+            mediaItems: [
+                PostMediaItem(mediaURL: videoURL, thumbnailURL: thumbURL, mediaType: .video, sortOrder: 0),
+            ]
+        )
+        let thumbPreview = SharedPostPreviewMedia.resolve(from: withThumb)
+        XCTAssertEqual(thumbPreview.imageURL, thumbURL)
+        XCTAssertEqual(thumbPreview.videoURL, videoURL)
+        XCTAssertTrue(thumbPreview.isVideo)
+
+        let withoutThumb = makePost(
+            mediaType: .video,
+            videoURL: videoURL,
+            mediaItems: [
+                PostMediaItem(mediaURL: videoURL, thumbnailURL: nil, mediaType: .video, sortOrder: 0),
+            ]
+        )
+        let framePreview = SharedPostPreviewMedia.resolve(from: withoutThumb)
+        XCTAssertNil(framePreview.imageURL)
+        XCTAssertEqual(framePreview.videoURL, videoURL)
+        XCTAssertTrue(framePreview.isVideo)
+    }
+
+    private func makePost(
+        mediaType: PostMediaType = .image,
+        videoURL: URL? = nil,
+        mediaItems: [PostMediaItem]
+    ) -> Post {
+        let author = UserSummary(id: UUID(), username: "alice", displayName: "Alice")
+        return Post(
+            id: UUID(),
+            author: author,
+            imageURL: mediaItems.first?.mediaURL ?? URL(string: "https://cdn.example/fallback.jpg")!,
+            thumbnailURL: mediaItems.first?.thumbnailURL,
+            mediaType: mediaType,
+            videoURL: videoURL,
+            mediaItems: mediaItems,
+            mentions: []
+        )
+    }
 }
