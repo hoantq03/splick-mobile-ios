@@ -543,6 +543,25 @@ struct ConversationPeekOverlay: View {
     }
 }
 
+enum ConversationPeekLayout {
+    static let previewMaxUsableFraction: CGFloat = 0.62
+    static let minPreviewHeight: CGFloat = 120
+
+    static func previewDestination(
+        top: CGFloat,
+        bottom: CGFloat,
+        optionsHeight: CGFloat,
+        gap: CGFloat
+    ) -> CGRect {
+        let usable = max(bottom - top, minPreviewHeight)
+        let previewTop = min(top + optionsHeight + gap, bottom - minPreviewHeight)
+        let available = max(bottom - previewTop, 0)
+        let preferred = usable * previewMaxUsableFraction
+        let height = min(max(preferred, min(minPreviewHeight, available)), available)
+        return CGRect(x: 0, y: previewTop, width: 0, height: height)
+    }
+}
+
 private enum ConversationPeekMotion {
     /// Morph from the list row with a soft overshoot (bounce).
     static let appear = Animation.spring(response: 0.42, dampingFraction: 0.58)
