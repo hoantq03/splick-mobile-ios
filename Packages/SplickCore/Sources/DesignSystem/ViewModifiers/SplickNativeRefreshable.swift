@@ -548,9 +548,15 @@ public final class SplickScrollRefreshHost: NSObject, ObservableObject, UIGestur
                 handleContentOffsetChange()
             }
         case .changed:
+            let translationY = recognizer.translation(in: recognizer.view).y
+            // Engage mid-gesture when the finger clearly pulls down from near top —
+            // `.began` alone can miss if the scroll view isn't settled yet.
+            if usesChromePullVisual, !chromePulling, translationY > 8, isScrollViewAtTop() {
+                chromePulling = true
+            }
             if chromePulling {
-                let translationY = recognizer.translation(in: recognizer.view).y
-                if translationY < 0 {
+                // Small negative noise used to drop chrome pull and kill overscroll haptics.
+                if translationY < -10 {
                     chromePulling = false
                     SplickViewUpdate.after { [weak self] in
                         self?.pullDistance = 0
@@ -558,7 +564,7 @@ public final class SplickScrollRefreshHost: NSObject, ObservableObject, UIGestur
                     applyChromeTransform(0)
                     handleContentOffsetChange()
                 } else {
-                    updateTrackedPull(translationY, applyChromeResistance: true)
+                    updateTrackedPull(max(0, translationY), applyChromeResistance: true)
                     lockChromeOffsetToRest()
                 }
             } else {
@@ -632,11 +638,15 @@ public final class SplickScrollRefreshHost: NSObject, ObservableObject, UIGestur
             overscrollHaptic.prepare()
             return
         }
-        guard repeatingOverscroll,
-              didThresholdHaptic,
+        // Keep step ticks after threshold for any active downward pull. Gating on
+        // `repeatingOverscroll` alone dropped haptics when chromePulling flickered off.
+        guard didThresholdHaptic,
               finger > lastOverscrollHapticFinger + Self.overscrollHapticStep else {
             return
         }
+        // Prefer chrome-resistance pulls; still tick on rubber-band distance when the
+        // finger keeps traveling past the threshold (mapped tracks offset pull).
+        guard repeatingOverscroll || mapped >= Self.fullRotationPull else { return }
         lastOverscrollHapticFinger = finger
         overscrollHaptic.impactOccurred(intensity: 0.72)
         overscrollHaptic.prepare()

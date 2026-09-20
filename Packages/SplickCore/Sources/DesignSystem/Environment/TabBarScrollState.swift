@@ -80,6 +80,9 @@ public final class TabBarScrollState: ObservableObject {
     private var suppressUpdatesUntil: Date = .distantPast
     private let hideThreshold: CGFloat = 8
     private let showAtTopThreshold: CGFloat = SplickTabBarMetrics.showNearTopThreshold
+    /// Wait until past feed-segment collapse before hiding the tab bar so both
+    /// chrome changes don't compete on the first leave-from-top frames.
+    private let minDistanceBeforeHide: CGFloat = 52
     private let visibilityChangeCooldown: TimeInterval = 0.35
 
     /// Raw `contentOffset.y + contentInsets.top` from the active list.
@@ -107,8 +110,12 @@ public final class TabBarScrollState: ObservableObject {
     }
 
     public func updateScrollOffset(_ rawOffset: CGFloat) {
-        DispatchQueue.main.async { [weak self] in
-            self?.applyScrollOffset(rawOffset)
+        if Thread.isMainThread {
+            applyScrollOffset(rawOffset)
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                self?.applyScrollOffset(rawOffset)
+            }
         }
     }
 
@@ -135,7 +142,7 @@ public final class TabBarScrollState: ObservableObject {
         let delta = offset - lastOffset
         guard abs(delta) > hideThreshold else { return }
 
-        if delta > hideThreshold {
+        if delta > hideThreshold, lastDistanceFromTop >= minDistanceBeforeHide {
             setVisible(false)
         } else if delta < -hideThreshold {
             setVisible(true)

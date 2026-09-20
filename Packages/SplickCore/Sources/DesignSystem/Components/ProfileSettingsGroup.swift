@@ -59,8 +59,7 @@ public struct ProfileSettingsGroup: View {
                     }
                 }
             }
-            .background(SplickTheme.Colors.cardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.control))
+            .splickSettingsCardChrome()
         }
     }
 }

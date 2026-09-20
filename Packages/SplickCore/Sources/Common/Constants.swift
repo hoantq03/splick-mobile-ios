@@ -109,9 +109,13 @@ public enum AppConstants {
     }
 
     public enum PushNotifications {
-        /// System banners with action categories stay until dismissed and block newer banners.
-        /// Auto-remove delivered notifications after this delay so the next push can appear.
+        /// How long the system heads-up banner stays visible before retracting.
+        /// The notification is then re-posted quietly so it remains in Notification Center.
         public static let bannerAutoDismissDelay: Duration = .milliseconds(2500)
+
+        /// Marked on the quiet re-post that replaces a retracted heads-up banner.
+        /// Must stay in sync with `SplickNotificationServiceExtension`.
+        public static let headsUpRetractedUserInfoKey = "splickHeadsUpRetracted"
     }
 
     public enum Links {

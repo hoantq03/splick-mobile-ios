@@ -20,7 +20,7 @@ enum StringsEn {
         .profileTitle: "Profile",
         .profileEdit: "Edit profile",
         .profileChangePassword: "Change password",
-        .profileChangePasswordUnavailable: "This account signed in with a third-party provider and has no password yet. Add one under Connected accounts.",
+        .profileChangePasswordUnavailable: "You don't have a password yet. Verify your email and set a password now.",
         .profileChangePasswordUnavailableShort: "No password yet",
         .profileDevicesSessions: "Devices & sessions",
         .sessionsTitle: "Devices & sessions",

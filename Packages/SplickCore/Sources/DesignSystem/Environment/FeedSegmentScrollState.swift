@@ -39,14 +39,22 @@ public final class FeedSegmentScrollState: ObservableObject {
     public init() {}
 
     public func updateScrollOffset(_ rawOffset: CGFloat) {
-        DispatchQueue.main.async { [weak self] in
-            self?.applyScrollOffset(rawOffset)
+        if Thread.isMainThread {
+            applyScrollOffset(rawOffset)
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                self?.applyScrollOffset(rawOffset)
+            }
         }
     }
 
     public func snapCollapseProgress() {
-        DispatchQueue.main.async { [weak self] in
-            self?.applySnapCollapseProgress()
+        if Thread.isMainThread {
+            applySnapCollapseProgress()
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                self?.applySnapCollapseProgress()
+            }
         }
     }
 
@@ -62,17 +70,18 @@ public final class FeedSegmentScrollState: ObservableObject {
         }
 
         let offset = offsetNormalizer.normalize(rawOffset)
+        lastOffset = offset
 
         if offset <= showAtTopThreshold {
             setCollapseProgress(0)
-            lastOffset = offset
             return
         }
 
+        // Binary expand/collapse while scrolling — continuous morph rebuilt the
+        // principal toolbar every few points and hitching leave-from-top scroll.
         let scrolledPastThreshold = offset - showAtTopThreshold
-        let next = min(1, scrolledPastThreshold / collapseDistance)
+        let next: CGFloat = scrolledPastThreshold >= collapseDistance * 0.45 ? 1 : 0
         setCollapseProgress(next)
-        lastOffset = offset
     }
 
     private func applySnapCollapseProgress() {
@@ -100,14 +109,18 @@ public final class FeedSegmentScrollState: ObservableObject {
     }
 
     private func setCollapseProgress(_ value: CGFloat, animated: Bool = false) {
-        let clamped = min(1, max(0, value))
+        let clamped: CGFloat = value >= 0.5 ? 1 : 0
         guard abs(collapseProgress - clamped) > 0.001 else { return }
         if animated {
             withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) {
                 collapseProgress = clamped
             }
         } else {
-            collapseProgress = clamped
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                collapseProgress = clamped
+            }
         }
     }
 }
@@ -138,7 +151,7 @@ public struct FeedSegmentHideOnScrollModifier: ViewModifier {
                     } action: { previous, offset in
                         guard scrollChromeTrackingEnabled else { return }
                         let nearTop = offset <= SplickTabBarMetrics.showNearTopThreshold
-                        guard nearTop || abs(previous - offset) > 0.25 else { return }
+                        guard nearTop || abs(previous - offset) > 1 else { return }
                         feedSegmentScrollState.updateScrollOffset(offset)
                     }
                     .onScrollPhaseChange { _, newPhase, context in
@@ -198,7 +211,7 @@ public struct ScrollChromeTrackingModifier: ViewModifier {
                         }
                         return
                     }
-                    guard nearTop || abs(previous - offsetY) > 0.25 else { return }
+                    guard nearTop || abs(previous - offsetY) > 1 else { return }
                     feedSegmentScrollState?.updateScrollOffset(offsetY)
                     tabBarScrollState?.updateScrollOffset(offsetY)
                 }

@@ -83,7 +83,7 @@ public enum CameraOpenRevealGeometry {
         return 4 * t * (1 - t) * maxFeather
     }
 
-    public static let maxFeatherFraction: CGFloat = 0.10
+    public static let maxFeatherFraction: CGFloat = 0.12
 
     /// Near-linear so the disk visibly grows from the shutter (not a fog pop).
     public static func expandEase(_ t: CGFloat) -> CGFloat {
@@ -144,7 +144,8 @@ public struct CameraFinderSpread: Equatable {
 }
 
 public enum CameraOpenRevealMotion {
-    public static let duration: TimeInterval = 0.72
+    /// ~15% faster than the prior 0.72s open/close water motion.
+    public static let duration: TimeInterval = 0.612
     /// Kept for call sites that still use SwiftUI animations (tab chrome fades).
     public static let expand = Animation.timingCurve(0.33, 0.0, 0.2, 1, duration: duration)
     public static let collapse = Animation.timingCurve(0.32, 0, 0.2, 1, duration: duration)
@@ -303,7 +304,7 @@ public final class CameraOpenRevealHostController<Content: View>: UIViewControll
     private(set) var isAnimatingWater = false
 
     private let hosting: UIHostingController<Content>
-    /// Solid growing circle from the tab shutter — radius expands; no alpha fade.
+    /// Solid growing circle from the tab shutter — radius expands (the “loang”).
     private let maskLayer = CAShapeLayer()
     private var progress: CGFloat = 0
     private var displayLink: CADisplayLink?
@@ -466,12 +467,16 @@ public final class CameraOpenRevealHostController<Content: View>: UIViewControll
             bottomInset: bottomInset
         )
         let covering = CameraOpenRevealGeometry.coveringRadius(origin: origin, size: size)
-        // Radius grows from the tab shutter circle → screen. Opaque disk, not an alpha fade.
+        // Opaque disk grows from the shutter — this is the visible “loang”.
         let radius = CameraOpenRevealGeometry.radius(
             progress: progress,
             start: max(cameraSize / 2, 1),
             end: covering
         )
+        // Soft rim outside the core (peaks mid-spread). Drawn as a translucent stroke so
+        // the bloom stays a crisp growing disk, not a full-screen fog fade.
+        let maxFeather = min(size.width, size.height) * CameraOpenRevealGeometry.maxFeatherFraction
+        let feather = CameraOpenRevealGeometry.feather(progress: progress, maxFeather: maxFeather)
 
         if progress >= 0.999 {
             CATransaction.begin()
@@ -485,16 +490,25 @@ public final class CameraOpenRevealHostController<Content: View>: UIViewControll
             view.layer.mask = maskLayer
         }
 
-        let rect = CGRect(
+        let coreRect = CGRect(
             x: origin.x - radius,
             y: origin.y - radius,
-            width: radius * 2,
-            height: radius * 2
+            width: max(radius * 2, 1),
+            height: max(radius * 2, 1)
         )
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         maskLayer.frame = view.bounds
-        maskLayer.path = UIBezierPath(ovalIn: rect).cgPath
+        maskLayer.path = UIBezierPath(ovalIn: coreRect).cgPath
+        maskLayer.fillColor = UIColor.white.cgColor
+        if feather > 1.5 {
+            // Stroke centered on the path edge: outer half softens the rim in the mask alpha.
+            maskLayer.lineWidth = feather * 2
+            maskLayer.strokeColor = UIColor.white.withAlphaComponent(0.4).cgColor
+        } else {
+            maskLayer.lineWidth = 0
+            maskLayer.strokeColor = nil
+        }
         CATransaction.commit()
     }
 
