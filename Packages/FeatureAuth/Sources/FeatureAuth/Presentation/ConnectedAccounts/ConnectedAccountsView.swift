@@ -8,8 +8,6 @@ public struct ConnectedAccountsView: View {
     @StateObject private var viewModel: ConnectedAccountsViewModel
     @EnvironmentObject private var languageService: LanguageService
 
-    @State private var isEmailPasswordVisible = false
-    @State private var isEmailConfirmPasswordVisible = false
     @State private var isUnlinkPasswordVisible = false
 
     public init(viewModel: @autoclosure @escaping () -> ConnectedAccountsViewModel) {
@@ -26,7 +24,11 @@ public struct ConnectedAccountsView: View {
                     listBanner(text: error, isError: true)
                 }
 
-                if let accounts = viewModel.accounts {
+                if viewModel.isLoading && viewModel.accounts == nil {
+                    SplickSpinner()
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, SplickTheme.Spacing.xxl)
+                } else if let accounts = viewModel.accounts {
                     VStack(spacing: 0) {
                         providerRow(
                             kind: .google,
@@ -73,11 +75,11 @@ public struct ConnectedAccountsView: View {
                             onUnlink: {}
                         )
                     }
-                    .background(SplickTheme.Colors.cardBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.control, style: .continuous))
+                    .splickSettingsCardChrome()
                 }
             }
-            .padding(SplickTheme.Spacing.lg)
+            .padding(.horizontal, SplickTheme.Spacing.xl)
+            .padding(.vertical, SplickTheme.Spacing.lg)
         }
         .background(SplickTheme.Colors.background)
         .navigationTitle(languageService.text(.profileConnectedAccounts))
@@ -192,12 +194,17 @@ public struct ConnectedAccountsView: View {
                     }
 
                     if !viewModel.hasSentPhoneCode {
-                        SplickTextField(
-                            languageService.text(.connectedAccountsPhoneField),
+                        ConnectPhoneNumberField(
                             text: $viewModel.connectPhoneNumber,
-                            icon: "phone"
+                            selectedRegion: viewModel.selectedPhoneRegion,
+                            errorMessage: nil,
+                            placeholder: languageService.text(.connectedAccountsPhoneField),
+                            locale: Locale(identifier: languageService.locale.rawValue),
+                            onSelectRegion: { viewModel.selectPhoneRegion($0) }
                         )
-                        .keyboardType(.phonePad)
+                        .onChange(of: viewModel.connectPhoneNumber) { _ in
+                            viewModel.onConnectPhoneNumberChanged()
+                        }
                         .transition(.opacity)
 
                         SplickButton(
@@ -327,7 +334,7 @@ public struct ConnectedAccountsView: View {
                             errorMessage: viewModel.emailSheetOtpError
                         )
                         .onChange(of: viewModel.connectEmailOtp) { _ in
-                            viewModel.emailSheetOtpError = nil
+                            viewModel.onEmailOtpChanged()
                         }
                         .transition(.move(edge: .bottom).combined(with: .opacity))
 
@@ -342,52 +349,6 @@ public struct ConnectedAccountsView: View {
                                 Task { await viewModel.resendEmailConnectCode() }
                             }
                         )
-
-                        SplickTextField(
-                            languageService.text(.connectedAccountsPasswordField),
-                            text: $viewModel.connectEmailPassword,
-                            isSecure: true,
-                            errorMessage: viewModel.emailSheetPasswordError,
-                            icon: "lock",
-                            validationStatus: viewModel.connectEmailPassword.isEmpty
-                                ? .neutral
-                                : (PasswordStrengthValidator.evaluate(viewModel.connectEmailPassword).isStrong ? .valid : .warning),
-                            requirementItems: passwordRequirementGuideItems(
-                                for: viewModel.connectEmailPassword,
-                                languageService: languageService
-                            ),
-                            requirementIntro: languageService.text(.authPasswordRequirementsIntro),
-                            showsPasswordVisibilityToggle: true,
-                            isPasswordVisible: $isEmailPasswordVisible,
-                            passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
-                            passwordHiddenAccessibilityLabel: languageService.text(.authHidePassword)
-                        )
-                        .textContentType(.newPassword)
-                        .onChange(of: viewModel.connectEmailPassword) { _ in
-                            viewModel.validateEmailPasswordFields()
-                        }
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-
-                        SplickTextField(
-                            languageService.text(.connectedAccountsConfirmPasswordField),
-                            text: $viewModel.connectEmailConfirm,
-                            isSecure: true,
-                            errorMessage: nil,
-                            icon: "lock.fill",
-                            validationStatus: viewModel.connectEmailConfirm.isEmpty
-                                ? .neutral
-                                : (viewModel.connectEmailPassword == viewModel.connectEmailConfirm ? .valid : .warning),
-                            overlayNote: viewModel.emailSheetConfirmPasswordError,
-                            showsPasswordVisibilityToggle: true,
-                            isPasswordVisible: $isEmailConfirmPasswordVisible,
-                            passwordVisibleAccessibilityLabel: languageService.text(.authShowPassword),
-                            passwordHiddenAccessibilityLabel: languageService.text(.authHidePassword)
-                        )
-                        .textContentType(.newPassword)
-                        .onChange(of: viewModel.connectEmailConfirm) { _ in
-                            viewModel.validateEmailPasswordFields()
-                        }
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
 
                         SplickButton(
                             languageService.text(.connectedAccountsConnectEmail),
@@ -435,17 +396,21 @@ public struct ConnectedAccountsView: View {
 
                     VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
                         Text(languageService.text(.connectedAccountsVerifyWith))
-                            .font(SplickTheme.Typography.caption)
-                            .foregroundStyle(SplickTheme.Colors.textSecondary)
+                            .font(SplickTheme.Typography.headline)
+                            .foregroundStyle(SplickTheme.Colors.textPrimary)
                             .padding(.leading, SplickTheme.Spacing.sm)
 
-                        Picker("", selection: $viewModel.unlinkMethod) {
-                            Text(languageService.text(.connectedAccountsVerifyPassword))
-                                .tag(ConnectedAccountsViewModel.VerificationMethod.password)
-                            Text(languageService.text(.connectedAccountsVerifyEmailCode))
-                                .tag(ConnectedAccountsViewModel.VerificationMethod.emailCode)
-                        }
-                        .pickerStyle(.segmented)
+                        SplickSlidingSegmentedControl(
+                            titles: [
+                                languageService.text(.connectedAccountsVerifyPassword),
+                                languageService.text(.connectedAccountsVerifyEmailCode),
+                            ],
+                            values: [
+                                ConnectedAccountsViewModel.VerificationMethod.password,
+                                ConnectedAccountsViewModel.VerificationMethod.emailCode,
+                            ],
+                            selection: $viewModel.unlinkMethod
+                        )
                     }
 
                     switch viewModel.unlinkMethod {

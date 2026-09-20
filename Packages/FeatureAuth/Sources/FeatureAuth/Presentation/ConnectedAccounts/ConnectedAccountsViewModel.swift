@@ -18,6 +18,7 @@ public final class ConnectedAccountsViewModel: ObservableObject {
 
     // Phone connect sheet
     @Published public var connectPhoneNumber = ""
+    @Published public var selectedPhoneRegion: PhoneCallingRegion = .vietnam
     @Published public var connectPhoneOtp = ""
     @Published public var phoneSheetError: String?
     @Published public var phoneSheetOtpError: String?
@@ -30,12 +31,8 @@ public final class ConnectedAccountsViewModel: ObservableObject {
     // Email connect sheet
     @Published public var connectEmail = ""
     @Published public var connectEmailOtp = ""
-    @Published public var connectEmailPassword = ""
-    @Published public var connectEmailConfirm = ""
     @Published public var emailSheetError: String?
     @Published public var emailSheetOtpError: String?
-    @Published public var emailSheetPasswordError: String?
-    @Published public var emailSheetConfirmPasswordError: String?
     @Published public var emailSheetInfo: String?
     @Published public private(set) var hasSentEmailCode = false
     @Published public private(set) var isRequestingEmailCode = false
@@ -163,8 +160,7 @@ public final class ConnectedAccountsViewModel: ObservableObject {
     public func requestPhoneConnectCode() async {
         guard phoneResendSecondsRemaining == 0 else { return }
 
-        let phone = connectPhoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !phone.isEmpty else {
+        guard let phone = resolvedLinkPhoneE164() else {
             phoneSheetError = languageService.text(.connectedAccountsPhoneRequired)
             return
         }
@@ -197,6 +193,10 @@ public final class ConnectedAccountsViewModel: ObservableObject {
             phoneSheetOtpError = languageService.text(.changePasswordOtpRequired)
             return false
         }
+        guard let phone = resolvedLinkPhoneE164() else {
+            phoneSheetError = languageService.text(.connectedAccountsPhoneRequired)
+            return false
+        }
 
         isConnectingPhone = true
         phoneSheetOtpError = nil
@@ -204,7 +204,7 @@ public final class ConnectedAccountsViewModel: ObservableObject {
 
         do {
             try await linkPhoneAccountUseCase.execute(
-                phoneNumber: connectPhoneNumber.trimmingCharacters(in: .whitespacesAndNewlines),
+                phoneNumber: phone,
                 otpCode: connectPhoneOtp
             )
             showConnectPhoneSheet = false
@@ -222,6 +222,29 @@ public final class ConnectedAccountsViewModel: ObservableObject {
             phoneSheetOtpError = languageService.text(.connectedAccountsPhoneLinkFailed)
             return false
         }
+    }
+
+    public func selectPhoneRegion(_ region: PhoneCallingRegion) {
+        selectedPhoneRegion = region
+        onConnectPhoneNumberChanged()
+    }
+
+    public func onConnectPhoneNumberChanged() {
+        phoneSheetError = nil
+        guard let normalized = PhoneNumberParser.normalizeTypedIdentifier(
+            connectPhoneNumber,
+            selectedRegion: selectedPhoneRegion
+        ) else { return }
+        if selectedPhoneRegion != normalized.region {
+            selectedPhoneRegion = normalized.region
+        }
+        if connectPhoneNumber != normalized.displayText {
+            connectPhoneNumber = normalized.displayText
+        }
+    }
+
+    private func resolvedLinkPhoneE164() -> String? {
+        PhoneNumberParser.parse(connectPhoneNumber, defaultRegion: selectedPhoneRegion)?.e164
     }
 
     public func requestEmailConnectCode() async {
@@ -256,33 +279,8 @@ public final class ConnectedAccountsViewModel: ObservableObject {
         await requestEmailConnectCode()
     }
 
-    public func validateEmailPasswordFields() {
-        if connectEmailPassword.isEmpty {
-            emailSheetPasswordError = nil
-        } else {
-            emailSheetPasswordError = nil
-        }
-
-        if connectEmailConfirm.isEmpty {
-            emailSheetConfirmPasswordError = nil
-        } else if connectEmailPassword != connectEmailConfirm {
-            emailSheetConfirmPasswordError = languageService.text(.changePasswordPasswordsMismatch)
-        } else {
-            emailSheetConfirmPasswordError = nil
-        }
-    }
-
     public func linkEmail() async -> Bool {
-        validateEmailPasswordFields()
-        guard connectEmailPassword == connectEmailConfirm else {
-            emailSheetConfirmPasswordError = languageService.text(.changePasswordPasswordsMismatch)
-            return false
-        }
-        let passwordStrength = PasswordStrengthValidator.evaluate(connectEmailPassword)
-        guard passwordStrength.isStrong else {
-            emailSheetPasswordError = nil
-            return false
-        }
+        guard !isConnectingEmail else { return false }
         guard connectEmailOtp.count == SplickOtpField.defaultLength else {
             emailSheetOtpError = languageService.text(.changePasswordOtpRequired)
             return false
@@ -297,7 +295,7 @@ public final class ConnectedAccountsViewModel: ObservableObject {
             try await linkEmailAccountUseCase.execute(
                 email: email,
                 otpCode: connectEmailOtp,
-                password: connectEmailPassword
+                password: nil
             )
             showConnectEmailSheet = false
             resetEmailSheetState()
@@ -318,6 +316,15 @@ public final class ConnectedAccountsViewModel: ObservableObject {
             emailSheetError = languageService.text(.connectedAccountsEmailLinkFailed)
             return false
         }
+    }
+
+    /// Auto-submit when OTP reaches full length (parity with Android ConnectEmailSheet).
+    public func onEmailOtpChanged() {
+        emailSheetOtpError = nil
+        guard hasSentEmailCode,
+              !isConnectingEmail,
+              connectEmailOtp.count == SplickOtpField.defaultLength else { return }
+        Task { _ = await linkEmail() }
     }
 
     public func requestUnlinkCode() async {
@@ -451,6 +458,7 @@ public final class ConnectedAccountsViewModel: ObservableObject {
     private func resetPhoneSheetState() {
         stopResendCountdown(for: .phone)
         connectPhoneNumber = ""
+        selectedPhoneRegion = .vietnam
         connectPhoneOtp = ""
         phoneSheetError = nil
         phoneSheetOtpError = nil
@@ -461,12 +469,8 @@ public final class ConnectedAccountsViewModel: ObservableObject {
     private func resetEmailSheetState() {
         stopResendCountdown(for: .email)
         connectEmailOtp = ""
-        connectEmailPassword = ""
-        connectEmailConfirm = ""
         emailSheetError = nil
         emailSheetOtpError = nil
-        emailSheetPasswordError = nil
-        emailSheetConfirmPasswordError = nil
         emailSheetInfo = nil
         hasSentEmailCode = false
         if isPhoneOnlyAccount {

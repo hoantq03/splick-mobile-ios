@@ -125,17 +125,21 @@ public struct AccountClosureSheet: View {
     private var verificationPicker: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
             Text(languageService.text(.changePasswordVerifyWith))
-                .font(SplickTheme.Typography.caption)
-                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                .font(SplickTheme.Typography.headline)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
                 .padding(.leading, SplickTheme.Spacing.sm)
 
-            Picker("", selection: $viewModel.method) {
-                Text(languageService.text(.changePasswordMethodCurrent))
-                    .tag(AccountClosureSheetViewModel.VerificationMethod.password)
-                Text(languageService.text(.changePasswordMethodEmail))
-                    .tag(AccountClosureSheetViewModel.VerificationMethod.emailCode)
-            }
-            .pickerStyle(.segmented)
+            SplickSlidingSegmentedControl(
+                titles: [
+                    languageService.text(.changePasswordMethodCurrent),
+                    languageService.text(.changePasswordMethodEmail),
+                ],
+                values: [
+                    AccountClosureSheetViewModel.VerificationMethod.password,
+                    AccountClosureSheetViewModel.VerificationMethod.emailCode,
+                ],
+                selection: $viewModel.method
+            )
         }
     }
 

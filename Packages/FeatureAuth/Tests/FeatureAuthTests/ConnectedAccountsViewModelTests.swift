@@ -155,30 +155,13 @@ final class ConnectedAccountsViewModelTests: XCTestCase {
         await vm.requestEmailConnectCode()
         XCTAssertTrue(vm.hasSentEmailCode)
 
-        // Password mismatch
-        vm.connectEmailPassword = "StrongPassword123!"
-        vm.connectEmailConfirm = "Mismatch123!"
-        vm.validateEmailPasswordFields()
-        XCTAssertNotNil(vm.emailSheetConfirmPasswordError)
-
-        let mismatchLink = await vm.linkEmail()
-        XCTAssertFalse(mismatchLink)
-
-        // Weak password
-        vm.connectEmailPassword = "weak"
-        vm.connectEmailConfirm = "weak"
-        let weakLink = await vm.linkEmail()
-        XCTAssertFalse(weakLink)
-
-        // Strong password with short OTP
-        vm.connectEmailPassword = "StrongPassword123!"
-        vm.connectEmailConfirm = "StrongPassword123!"
+        // Short OTP
         vm.connectEmailOtp = "12"
         let shortOtpLink = await vm.linkEmail()
         XCTAssertFalse(shortOtpLink)
         XCTAssertNotNil(vm.emailSheetOtpError)
 
-        // Success link
+        // Success link (OTP only — no password)
         vm.connectEmailOtp = "123456"
         let success = await vm.linkEmail()
         XCTAssertTrue(success)
@@ -248,8 +231,6 @@ final class ConnectedAccountsViewModelTests: XCTestCase {
         XCTAssertNotNil(normalVm.emailSheetError)
 
         // 5. Link email failure with AuthError
-        normalVm.connectEmailPassword = "StrongPassword123!"
-        normalVm.connectEmailConfirm = "StrongPassword123!"
         normalVm.connectEmailOtp = "123456"
         mockRepo.linkEmailResult = .failure(AuthError.invalidOtp("wrong code"))
         let failedLinkEmail = await normalVm.linkEmail()

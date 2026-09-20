@@ -737,31 +737,32 @@ final class AuthViewModelsExtendedTests: XCTestCase {
         let changePasswordUC = ChangePasswordUseCase(repository: mockRepo, sessionManager: mockSession)
         let verifyPasswordUC = VerifyPasswordChangeUseCase(repository: mockRepo)
         let requestEmailOtpUC = RequestEmailOtpUseCase(repository: mockRepo)
-        let getConnectedAccountsUC = GetConnectedAccountsUseCase(repository: mockRepo)
 
         let vm = ChangePasswordViewModel(
             accountEmail: "user@example.com",
+            initialHasPassword: true,
             changePasswordUseCase: changePasswordUC,
             verifyPasswordChangeUseCase: verifyPasswordUC,
             requestEmailOtpUseCase: requestEmailOtpUC,
-            getConnectedAccountsUseCase: getConnectedAccountsUC,
             languageService: languageService
         )
 
-        // 1. loadPasswordLoginState failure defaults hasPasswordLogin to true
-        mockRepo.connectedAccountsResult = .failure(NetworkError.serverError(statusCode: 500))
+        // 1. loadPasswordLoginState keeps initial hasPasswordLogin
         await vm.loadPasswordLoginState()
         XCTAssertTrue(vm.hasPasswordLogin)
 
-        // 2. loadPasswordLoginState with false sets method to .emailCode
-        mockRepo.connectedAccountsResult = .success(ConnectedAccounts(
-            google: .init(isLinked: true, detail: nil),
-            emailPassword: .init(isLinked: false, detail: nil),
-            phone: .init(isLinked: false, detail: nil)
-        ))
-        await vm.loadPasswordLoginState()
-        XCTAssertFalse(vm.hasPasswordLogin)
-        XCTAssertEqual(vm.method, .emailCode)
+        // 2. initialHasPassword false sets method to .emailCode
+        let noPasswordVm = ChangePasswordViewModel(
+            accountEmail: "user@example.com",
+            initialHasPassword: false,
+            changePasswordUseCase: changePasswordUC,
+            verifyPasswordChangeUseCase: verifyPasswordUC,
+            requestEmailOtpUseCase: requestEmailOtpUC,
+            languageService: languageService
+        )
+        await noPasswordVm.loadPasswordLoginState()
+        XCTAssertFalse(noPasswordVm.hasPasswordLogin)
+        XCTAssertEqual(noPasswordVm.method, .emailCode)
 
         // 3. verifyCurrentPassword failure with invalidCredentials
         vm.method = .currentPassword

@@ -690,10 +690,10 @@ final class AuthViewModelsTests: XCTestCase {
 
         let vm = ChangePasswordViewModel(
             accountEmail: "user@example.com",
+            initialHasPassword: true,
             changePasswordUseCase: ChangePasswordUseCase(repository: mockRepo, sessionManager: mockSession),
             verifyPasswordChangeUseCase: VerifyPasswordChangeUseCase(repository: mockRepo),
             requestEmailOtpUseCase: RequestEmailOtpUseCase(repository: mockRepo),
-            getConnectedAccountsUseCase: GetConnectedAccountsUseCase(repository: mockRepo),
             languageService: languageService
         )
 

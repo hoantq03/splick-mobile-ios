@@ -40,7 +40,6 @@ public final class ChangePasswordViewModel: ObservableObject {
     private let changePasswordUseCase: ChangePasswordUseCaseProtocol
     private let verifyPasswordChangeUseCase: VerifyPasswordChangeUseCaseProtocol
     private let requestEmailOtpUseCase: RequestEmailOtpUseCaseProtocol
-    private let getConnectedAccountsUseCase: GetConnectedAccountsUseCaseProtocol
     private let languageService: LanguageService
     private var resendCountdownTask: Task<Void, Never>?
 
@@ -48,29 +47,29 @@ public final class ChangePasswordViewModel: ObservableObject {
 
     public init(
         accountEmail: String,
+        initialHasPassword: Bool = true,
         changePasswordUseCase: ChangePasswordUseCaseProtocol,
         verifyPasswordChangeUseCase: VerifyPasswordChangeUseCaseProtocol,
         requestEmailOtpUseCase: RequestEmailOtpUseCaseProtocol,
-        getConnectedAccountsUseCase: GetConnectedAccountsUseCaseProtocol,
         languageService: LanguageService
     ) {
         self.accountEmail = accountEmail
+        self.hasPasswordLogin = initialHasPassword
+        self.isResolvingPasswordLogin = false
         self.changePasswordUseCase = changePasswordUseCase
         self.verifyPasswordChangeUseCase = verifyPasswordChangeUseCase
         self.requestEmailOtpUseCase = requestEmailOtpUseCase
-        self.getConnectedAccountsUseCase = getConnectedAccountsUseCase
         self.languageService = languageService
+        if !initialHasPassword {
+            method = .emailCode
+        }
     }
 
     func loadPasswordLoginState() async {
-        isResolvingPasswordLogin = true
-        defer { isResolvingPasswordLogin = false }
-        do {
-            let accounts = try await getConnectedAccountsUseCase.execute()
-            applyHasPasswordLogin(accounts.emailPassword.isLinked)
-        } catch {
-            applyHasPasswordLogin(true)
-        }
+        // Password presence comes from the authenticated user (`User.hasPassword`),
+        // not from connected-accounts email linkage (OTP-only link does not set a password).
+        isResolvingPasswordLogin = false
+        applyHasPasswordLogin(hasPasswordLogin)
     }
 
     private func applyHasPasswordLogin(_ hasPassword: Bool) {

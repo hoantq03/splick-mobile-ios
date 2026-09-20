@@ -32,7 +32,7 @@ public struct ChangePasswordView: View {
             } else if viewModel.hasPasswordLogin {
                 VStack(spacing: SplickTheme.Spacing.md) {
                     verificationPicker
-                        .padding(.horizontal, SplickTheme.Spacing.lg)
+                        .padding(.horizontal, SplickTheme.Spacing.xl)
                         .padding(.top, SplickTheme.Spacing.lg)
 
                     TabView(selection: $viewModel.method) {
@@ -47,14 +47,22 @@ public struct ChangePasswordView: View {
                 }
             } else {
                 ScrollView {
-                    unavailableSection
+                    createPasswordContent
                         .padding(SplickTheme.Spacing.lg)
                 }
+                .scrollDismissesKeyboard(.interactively)
+                .splickAllowsOverflowingOverlays()
             }
         }
         .background(SplickTheme.Colors.background)
         .dismissKeyboardOnTap()
-        .navigationTitle(languageService.text(.changePasswordTitle))
+        .navigationTitle(
+            languageService.text(
+                viewModel.hasPasswordLogin || viewModel.isResolvingPasswordLogin
+                    ? .changePasswordTitle
+                    : .createPasswordTitle
+            )
+        )
         .navigationBarTitleDisplayMode(.inline)
         .task { await viewModel.loadPasswordLoginState() }
         .onChange(of: viewModel.method) { _ in
@@ -78,7 +86,7 @@ public struct ChangePasswordView: View {
     private func pageScroll<Content: View>(_ content: Content) -> some View {
         ScrollView {
             content
-                .padding(.horizontal, SplickTheme.Spacing.lg)
+                .padding(.horizontal, SplickTheme.Spacing.xl)
                 .padding(.bottom, SplickTheme.Spacing.xl)
         }
         .scrollDismissesKeyboard(.interactively)
@@ -92,50 +100,120 @@ public struct ChangePasswordView: View {
                 .foregroundStyle(SplickTheme.Colors.textPrimary)
                 .padding(.leading, SplickTheme.Spacing.sm)
 
-            Picker("", selection: $viewModel.method) {
-                Text(languageService.text(.changePasswordMethodCurrent))
-                    .tag(ChangePasswordViewModel.VerificationMethod.currentPassword)
-                Text(languageService.text(.changePasswordMethodEmail))
-                    .tag(ChangePasswordViewModel.VerificationMethod.emailCode)
-            }
-            .pickerStyle(.segmented)
+            SplickSlidingSegmentedControl(
+                titles: [
+                    languageService.text(.changePasswordMethodCurrent),
+                    languageService.text(.changePasswordMethodEmail),
+                ],
+                values: [
+                    ChangePasswordViewModel.VerificationMethod.currentPassword,
+                    ChangePasswordViewModel.VerificationMethod.emailCode,
+                ],
+                selection: $viewModel.method
+            )
         }
     }
 
-    private var unavailableSection: some View {
-        settingsGroup(title: languageService.text(.changePasswordTitle)) {
-            Text(languageService.text(.profileChangePasswordUnavailable))
-                .font(SplickTheme.Typography.callout)
-                .foregroundStyle(SplickTheme.Colors.textSecondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(SplickTheme.Spacing.md)
+    /// Mirrors Connected Accounts → Connect Email sheet for accounts without a password yet.
+    private var createPasswordContent: some View {
+        VStack(spacing: SplickTheme.Spacing.lg) {
+            ConnectAccountSheetHeader(
+                kind: .email,
+                title: languageService.text(.createPasswordTitle),
+                subtitle: viewModel.accountEmail.isEmpty
+                    ? languageService.text(.createPasswordHint)
+                    : languageService.format(
+                        .connectedAccountsEmailSheetHint,
+                        viewModel.accountEmail
+                    )
+            )
+
+            if case .failed(let message) = viewModel.state {
+                ConnectAccountSheetErrorBanner(message: message)
+            }
+
+            ConnectAccountReadOnlyField(
+                label: languageService.text(.changePasswordEmailHint),
+                value: viewModel.accountEmail,
+                icon: "envelope.fill"
+            )
+
+            if viewModel.isEmailCodeVerified {
+                verifiedNewPasswordFields(showMascot: false)
+                verifiedSubmitButton
+            } else if !viewModel.hasSentEmailCode {
+                SplickButton(
+                    languageService.text(.changePasswordSendCode),
+                    style: .secondary,
+                    isLoading: viewModel.isRequestingEmailCode,
+                    isDisabled: viewModel.isRequestingEmailCode
+                        || viewModel.accountEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ) {
+                    Task { await viewModel.requestEmailCode() }
+                }
+                .transition(.opacity)
+            } else {
+                if let info = viewModel.otpInfoMessage {
+                    Text(info)
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .transition(.opacity)
+                }
+
+                SplickOtpField(
+                    code: $viewModel.otpCode,
+                    errorMessage: viewModel.otpError
+                )
+                .onChange(of: viewModel.otpCode) { _ in
+                    viewModel.onOtpCodeChanged()
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+
+                ConnectAccountResendControl(
+                    secondsRemaining: viewModel.otpResendSecondsRemaining,
+                    isRequesting: viewModel.isRequestingEmailCode,
+                    resendLabel: languageService.text(.changePasswordResendCode),
+                    countdownFormat: { seconds in
+                        languageService.format(.changePasswordResendIn, seconds)
+                    },
+                    onResend: {
+                        Task { await viewModel.resendEmailCode() }
+                    }
+                )
+
+                SplickButton(
+                    languageService.text(.changePasswordVerifyContinue),
+                    isLoading: viewModel.isVerifyingEmailCode,
+                    isDisabled: viewModel.isVerifyingEmailCode
+                        || viewModel.otpCode.count != SplickOtpField.defaultLength
+                ) {
+                    hideKeyboard()
+                    Task { await viewModel.verifyEmailCodeStep() }
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
+        .animation(.spring(response: 0.42, dampingFraction: 0.86), value: viewModel.hasSentEmailCode)
+        .animation(.spring(response: 0.48, dampingFraction: 0.86), value: viewModel.isEmailCodeVerified)
     }
 
     private func settingsGroup<Content: View>(
         title: String,
-        clipsContent: Bool = true,
+        clipsContent _: Bool = true,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        let shape = RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.control, style: .continuous)
-        return VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
             Text(title)
                 .font(SplickTheme.Typography.headline)
                 .foregroundStyle(SplickTheme.Colors.textPrimary)
                 .padding(.leading, SplickTheme.Spacing.sm)
 
-            Group {
-                if clipsContent {
-                    VStack(spacing: 0) { content() }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(SplickTheme.Colors.cardBackground)
-                        .clipShape(shape)
-                } else {
-                    VStack(spacing: 0) { content() }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(shape.fill(SplickTheme.Colors.cardBackground))
-                }
-            }
+            VStack(spacing: 0) { content() }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                // Soft card chrome (no hard clip) so password-requirement overlays can overflow.
+                .splickSettingsCardChrome()
         }
     }
 
