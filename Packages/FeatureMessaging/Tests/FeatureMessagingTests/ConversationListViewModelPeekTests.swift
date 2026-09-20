@@ -309,7 +309,7 @@ final class ConversationListViewModelPeekTests: XCTestCase {
         XCTAssertEqual(deletedIds, [conversation.id])
     }
 
-    func test_toggleMuteFromPeek_updatesInboxWithoutWipingUnread() async {
+    func test_toggleMuteFromPeek_updatesInboxWithoutWipingUnread() async throws {
         let conversation = Conversation(
             id: UUID(),
             unreadCount: 3,
@@ -340,7 +340,7 @@ final class ConversationListViewModelPeekTests: XCTestCase {
         XCTAssertEqual(muted.first?.1, false)
     }
 
-    func test_loadOlderPeekMessages_prependsNextPageAndKeepsPeekOpen() async {
+    func test_loadOlderPeekMessages_prependsNextPageAndKeepsPeekOpen() async throws {
         let conversation = makeConversation()
         var newestFirst: [ChatMessage] = []
         for index in 0..<20 {

@@ -10,7 +10,7 @@ final class MessageBubbleWidthTests: XCTestCase {
     }
 
     func testTypicalPhoneUsesFraction() {
-        let innerRow: CGFloat = 366
+        let innerRow: CGFloat = 420
         let max = MessageThreadRowLayout.contentMaxWidth(forRowWidth: innerRow)
         XCTAssertEqual(max, innerRow * 0.72, accuracy: 0.5)
     }

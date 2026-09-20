@@ -16,6 +16,22 @@ struct ConversationPeerResponseDTO: Decodable {
         case userId, username, displayName, avatarUrl, online, isOnline, lastSeenAt
     }
 
+    init(
+        userId: UUID,
+        username: String,
+        displayName: String? = nil,
+        avatarUrl: String? = nil,
+        online: Bool? = nil,
+        lastSeenAt: Date? = nil
+    ) {
+        self.userId = userId
+        self.username = username
+        self.displayName = displayName
+        self.avatarUrl = avatarUrl
+        self.online = online
+        self.lastSeenAt = lastSeenAt
+    }
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         userId = try container.decode(UUID.self, forKey: .userId)

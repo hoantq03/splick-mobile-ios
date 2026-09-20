@@ -12,7 +12,7 @@ final class MessageThreadCacheTests: XCTestCase {
         return (MessageThreadCache(capacity: capacity, diskDirectory: directory), directory)
     }
 
-    func test_lruEvictsOldestFromMemory_diskStillRestores() {
+    func test_lruEvictsOldestFromMemory_diskStillRestores() async throws {
         let (cache, directory) = makeIsolatedCache(capacity: 2)
         defer { try? FileManager.default.removeItem(at: directory) }
         let ids = (0..<3).map { _ in UUID() }
@@ -35,6 +35,8 @@ final class MessageThreadCacheTests: XCTestCase {
             )
         }
 
+        try await Task.sleep(for: .milliseconds(400))
+
         // Fresh instance — only disk, proves eviction left files behind.
         let reader = MessageThreadCache(capacity: 2, diskDirectory: directory)
         XCTAssertNotNil(reader.entry(for: ids[0]))
@@ -42,7 +44,7 @@ final class MessageThreadCacheTests: XCTestCase {
         XCTAssertNotNil(reader.entry(for: ids[2]))
     }
 
-    func test_getTouchesOrderSoRecentlyReadSurvivesEviction() {
+    func test_getTouchesOrderSoRecentlyReadSurvivesEviction() async throws {
         let (cache, directory) = makeIsolatedCache(capacity: 2)
         defer { try? FileManager.default.removeItem(at: directory) }
         let a = UUID()
@@ -72,13 +74,15 @@ final class MessageThreadCacheTests: XCTestCase {
         _ = cache.entry(for: a) // touch a → b becomes oldest in memory
         store(c, body: "c")
 
+        try await Task.sleep(for: .milliseconds(400))
+
         // a and c should be restorable; b was oldest in memory after touch but still on disk.
         XCTAssertEqual(cache.entry(for: a)?.messages.first?.body, "a")
         XCTAssertEqual(cache.entry(for: c)?.messages.first?.body, "c")
         XCTAssertEqual(cache.entry(for: b)?.messages.first?.body, "b")
     }
 
-    func test_diskPersistsAcrossCacheInstances() {
+    func test_diskPersistsAcrossCacheInstances() async throws {
         let (writer, directory) = makeIsolatedCache(capacity: 5)
         defer { try? FileManager.default.removeItem(at: directory) }
 
@@ -99,6 +103,8 @@ final class MessageThreadCacheTests: XCTestCase {
             highestLoadedPage: 1,
             hasMoreMessages: true
         )
+
+        try await Task.sleep(for: .milliseconds(400))
 
         let reader = MessageThreadCache(capacity: 5, diskDirectory: directory)
         let entry = reader.entry(for: conversationId)
