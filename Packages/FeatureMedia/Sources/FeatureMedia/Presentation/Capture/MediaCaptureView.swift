@@ -193,6 +193,8 @@ public struct MediaCaptureView: View {
             route = .editor
         case .video(let url):
             onMediaCaptured(.video(url))
+        case .pendingVideo(let pending):
+            onMediaCaptured(.pendingVideo(pending))
         case .cancelled:
             onCancel()
         case .openLibrary:

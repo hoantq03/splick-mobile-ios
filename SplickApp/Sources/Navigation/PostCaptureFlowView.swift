@@ -48,6 +48,7 @@ struct PostCaptureFlowView: View {
                 previewImages: images,
                 previewVideoURL: mediaVideoURL(media),
                 previewVideoURLs: mediaVideoURLs(media),
+                pendingVideoEncodes: mediaPendingVideos(media),
                 fetchFriendsUseCase: container.fetchFriendsUseCase,
                 fetchMyGroupsUseCase: container.fetchMyGroupsUseCase,
                 fetchGroupMembersUseCase: container.fetchGroupMembersUseCase,
@@ -118,7 +119,7 @@ struct PostCaptureFlowView: View {
             return [image]
         case .images(let images):
             return images
-        case .video:
+        case .video, .pendingVideo:
             return []
         case .mixed(let images, _):
             return images
@@ -132,6 +133,11 @@ struct PostCaptureFlowView: View {
 
     private func mediaVideoURLs(_ media: CapturedMedia) -> [URL] {
         if case .mixed(_, let videos) = media { return videos }
+        return []
+    }
+
+    private func mediaPendingVideos(_ media: CapturedMedia) -> [PendingCapturedVideo] {
+        if case .pendingVideo(let pending) = media { return [pending] }
         return []
     }
 }

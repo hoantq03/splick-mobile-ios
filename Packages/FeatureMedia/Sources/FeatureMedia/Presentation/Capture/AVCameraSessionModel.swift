@@ -38,6 +38,10 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
     private var boomerangFrames: [UIImage] = []
     private var boomerangStartedAt: TimeInterval = 0
     private var lastBoomerangFrameAt: TimeInterval = 0
+    /// Cleared synchronously on stop so already-queued sample callbacks skip heavy work.
+    private var boomerangCapturing = false
+    /// Stop arrived before `captureBoomerang` installed its continuation.
+    private var boomerangStopPending = false
     private var isDetectingFace = false
     private var pinchBase: CGFloat = 1
     private var isPinching = false
@@ -74,8 +78,10 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
 
     func stop() {
         hideFocusTask?.cancel()
+        boomerangCapturing = false
         sessionQueue.async { [weak self] in
             guard let self else { return }
+            self.boomerangStopPending = false
             if let continuation = self.boomerangContinuation {
                 self.boomerangContinuation = nil
                 self.boomerangFrames = []
@@ -206,16 +212,29 @@ final class AVCameraSessionModel: NSObject, ObservableObject {
                 self.boomerangStartedAt = CACurrentMediaTime()
                 self.lastBoomerangFrameAt = 0
                 self.boomerangContinuation = continuation
+                self.boomerangCapturing = true
+                let shouldStopNow = self.boomerangStopPending
+                self.boomerangStopPending = false
                 DispatchQueue.main.async { self.isRecordingBoomerang = true }
+                if shouldStopNow {
+                    self.boomerangCapturing = false
+                    self.finishBoomerang()
+                }
             }
         }
     }
 
-    /// Ends an in-progress hold-to-record boomerang early (finger up).
+    /// Ends an in-progress hold-to-record early (finger up).
+    /// Marks capture inactive immediately so queued sample callbacks skip `prepareFrame`.
     func stopBoomerangCapture() {
+        boomerangCapturing = false
         sessionQueue.async {
-            guard self.boomerangContinuation != nil else { return }
-            self.finishBoomerang()
+            if self.boomerangContinuation != nil {
+                self.finishBoomerang()
+            } else {
+                // Finger-up beat `captureBoomerang`'s session-queue install.
+                self.boomerangStopPending = true
+            }
         }
     }
 
@@ -475,7 +494,7 @@ extension AVCameraSessionModel: AVCaptureVideoDataOutputSampleBufferDelegate {
         if preset == .ar {
             detectFaceIfNeeded(pixelBuffer)
         }
-        if boomerangContinuation != nil {
+        if boomerangContinuation != nil, boomerangCapturing {
             appendBoomerangFrame(filtered)
         }
         DispatchQueue.main.async {
@@ -484,9 +503,11 @@ extension AVCameraSessionModel: AVCaptureVideoDataOutputSampleBufferDelegate {
     }
 
     private func appendBoomerangFrame(_ image: CIImage) {
+        guard boomerangCapturing, boomerangContinuation != nil else { return }
         let now = CACurrentMediaTime()
         if now - lastBoomerangFrameAt < BoomerangTimeline.minFrameInterval {
             if now - boomerangStartedAt >= BoomerangTimeline.captureDuration {
+                boomerangCapturing = false
                 finishBoomerang()
             }
             return
@@ -498,6 +519,7 @@ extension AVCameraSessionModel: AVCaptureVideoDataOutputSampleBufferDelegate {
         let reachedLimit = boomerangFrames.count >= BoomerangTimeline.maxFrames
         let reachedDuration = now - boomerangStartedAt >= BoomerangTimeline.captureDuration
         if reachedLimit || reachedDuration {
+            boomerangCapturing = false
             finishBoomerang()
         }
     }
@@ -505,6 +527,8 @@ extension AVCameraSessionModel: AVCaptureVideoDataOutputSampleBufferDelegate {
     private func finishBoomerang() {
         let continuation = boomerangContinuation
         boomerangContinuation = nil
+        boomerangCapturing = false
+        boomerangStopPending = false
         let frames = boomerangFrames
         boomerangFrames = []
         DispatchQueue.main.async { self.isRecordingBoomerang = false }
