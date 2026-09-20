@@ -25,5 +25,17 @@ let package = Package(
             ],
             path: "Sources/FeatureNotification"
         ),
+        .testTarget(
+            name: "FeatureNotificationTests",
+            dependencies: [
+                "FeatureNotification",
+                .product(name: "Networking", package: "SplickCore"),
+                .product(name: "Storage", package: "SplickCore"),
+                .product(name: "Common", package: "SplickCore"),
+                .product(name: "Localization", package: "SplickCore"),
+                .product(name: "SplickDomain", package: "SplickDomain"),
+            ],
+            path: "Tests/FeatureNotificationTests"
+        ),
     ]
 )
