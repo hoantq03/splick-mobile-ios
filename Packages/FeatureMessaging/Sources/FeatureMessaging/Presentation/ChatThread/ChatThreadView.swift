@@ -37,7 +37,6 @@ public struct ChatThreadView: View {
     @State private var confirmDeleteConversation = false
     @State private var confirmRecallMessageId: UUID?
     @State private var comingSoonFeatureTitle: String?
-    @State private var showNotificationSettings = false
     @State private var pendingPeerConfirm: PendingPeerConfirm?
     @State private var detailsMessage: ChatMessage?
     @State private var isDetailsPresented = false
@@ -214,24 +213,6 @@ public struct ChatThreadView: View {
                         }
                     )
                 }
-            }
-        }
-        .sheet(isPresented: $showNotificationSettings) {
-            if let displayConversation, let repository {
-                ChatNotificationSettingsSheet(conversation: displayConversation) { enabled in
-                    let updated = try await repository.updateNotificationSettings(
-                        conversationId: displayConversation.id,
-                        notificationsEnabled: enabled,
-                        notificationSound: displayConversation.notificationSound
-                    )
-                    applyConversationUpdate(
-                        displayConversation.updatingNotificationSettings(
-                            enabled: updated.notificationsEnabled,
-                            sound: updated.notificationSound
-                        )
-                    )
-                }
-                .environmentObject(languageService)
             }
         }
         .confirmationDialog(
@@ -504,6 +485,7 @@ public struct ChatThreadView: View {
 
     @ViewBuilder
     private var conversationComingSoonActions: some View {
+        let notificationsEnabled = displayConversation?.notificationsEnabled ?? true
         Button {
             openThreadSearch()
         } label: {
@@ -514,11 +496,15 @@ public struct ChatThreadView: View {
         }
 
         Button {
-            showNotificationSettings = true
+            toggleThreadNotifications()
         } label: {
             Label(
-                languageService.text(.messagingChatNotificationsToggle),
-                systemImage: (displayConversation?.notificationsEnabled ?? true) ? "bell" : "bell.slash"
+                languageService.text(
+                    notificationsEnabled
+                        ? .messagingChatMuteNotifications
+                        : .messagingChatUnmuteNotifications
+                ),
+                systemImage: notificationsEnabled ? "bell.slash" : "bell"
             )
         }
         .disabled(repository == nil)
@@ -657,6 +643,37 @@ public struct ChatThreadView: View {
     private func applyConversationUpdate(_ updated: Conversation) {
         groupConversation = updated
         onConversationUpdated?(updated)
+    }
+
+    private func toggleThreadNotifications() {
+        guard let displayConversation, let repository else { return }
+        let previous = displayConversation
+        let nextEnabled = !previous.notificationsEnabled
+        AppNotificationSound.playMuteToggleFeedback(enablingNotifications: nextEnabled)
+        applyConversationUpdate(
+            previous.updatingNotificationSettings(
+                enabled: nextEnabled,
+                sound: previous.notificationSound
+            )
+        )
+        Task {
+            do {
+                let updated = try await repository.updateNotificationSettings(
+                    conversationId: previous.id,
+                    notificationsEnabled: nextEnabled,
+                    notificationSound: previous.notificationSound
+                )
+                applyConversationUpdate(
+                    previous.updatingNotificationSettings(
+                        enabled: updated.notificationsEnabled,
+                        sound: updated.notificationSound
+                    )
+                )
+            } catch {
+                applyConversationUpdate(previous)
+                leaveError = languageService.localizedMessage(for: error)
+            }
+        }
     }
 
     /// Wait for the overflow `Menu` to dismiss so the confirm alert anchors to the

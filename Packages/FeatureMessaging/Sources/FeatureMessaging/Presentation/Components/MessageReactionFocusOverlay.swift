@@ -245,10 +245,11 @@ struct MessageReactionFocusOverlay: View {
         let id: String
         let titleKey: L10nKey
         let systemImage: String
+        let destructive: Bool
         let action: () -> Void
     }
 
-    private func orderedActionItems(placeAbove: Bool) -> [FocusActionItem] {
+    private func orderedActionItems() -> [FocusActionItem] {
         var items: [FocusActionItem] = []
         if allowsThreadInteraction && !message.recalled {
             items.append(
@@ -256,6 +257,7 @@ struct MessageReactionFocusOverlay: View {
                     id: "reply",
                     titleKey: .messagingReplyAction,
                     systemImage: "arrowshape.turn.up.left.fill",
+                    destructive: false,
                     action: { dismissCommitted(then: onReply) }
                 )
             )
@@ -266,6 +268,7 @@ struct MessageReactionFocusOverlay: View {
                     id: "edit",
                     titleKey: .messagingEditAction,
                     systemImage: "pencil",
+                    destructive: false,
                     action: { dismissCommitted(then: onEdit) }
                 )
             )
@@ -276,6 +279,7 @@ struct MessageReactionFocusOverlay: View {
                     id: "copy",
                     titleKey: .messagingCopyAction,
                     systemImage: "doc.on.doc",
+                    destructive: false,
                     action: {
                         onCopy()
                         dismissCommitted()
@@ -288,6 +292,7 @@ struct MessageReactionFocusOverlay: View {
                 id: "details",
                 titleKey: .messagingDetailsAction,
                 systemImage: "info.circle",
+                destructive: false,
                 action: { onDetails() }
             )
         )
@@ -297,27 +302,31 @@ struct MessageReactionFocusOverlay: View {
                     id: "recall",
                     titleKey: .messagingRecallAction,
                     systemImage: "arrow.uturn.backward",
+                    destructive: true,
                     action: { dismissCommitted(then: onRecall) }
                 )
             )
         }
-        let shortestFirst = items.sorted { lhs, rhs in
+        return items.sorted { lhs, rhs in
+            if lhs.destructive != rhs.destructive {
+                return !lhs.destructive && rhs.destructive
+            }
             let left = languageService.text(lhs.titleKey)
             let right = languageService.text(rhs.titleKey)
             if left.count != right.count { return left.count < right.count }
             return left < right
         }
-        return placeAbove ? shortestFirst : Array(shortestFirst.reversed())
     }
 
     private func actionButtons(placeAbove: Bool) -> some View {
-        let items = orderedActionItems(placeAbove: placeAbove)
+        let items = orderedActionItems()
         return VStack(alignment: horizontalAlignment, spacing: SplickTheme.Spacing.xs) {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                 let closeness = placeAbove ? index : items.count - 1 - index
                 actionButton(
                     titleKey: item.titleKey,
                     systemImage: item.systemImage,
+                    destructive: item.destructive,
                     minWidth: 108 + CGFloat(closeness) * 16,
                     action: item.action
                 )
@@ -338,6 +347,7 @@ struct MessageReactionFocusOverlay: View {
     private func actionButton(
         titleKey: L10nKey,
         systemImage: String,
+        destructive: Bool = false,
         minWidth: CGFloat = 0,
         action: @escaping () -> Void
     ) -> some View {
@@ -351,7 +361,7 @@ struct MessageReactionFocusOverlay: View {
                 Text(languageService.text(titleKey))
                     .font(SplickTheme.Typography.callout.weight(.semibold))
             }
-            .foregroundStyle(SplickTheme.Colors.textPrimary)
+            .foregroundStyle(destructive ? SplickTheme.Colors.error : SplickTheme.Colors.textPrimary)
             .padding(.horizontal, SplickTheme.Spacing.md)
             .padding(.vertical, SplickTheme.Spacing.sm)
             .frame(minWidth: minWidth, alignment: context.isOutgoing ? .trailing : .leading)

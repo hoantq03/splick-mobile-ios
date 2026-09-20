@@ -291,10 +291,7 @@ public final class ConversationListViewModel: ObservableObject {
         )
         peekConversation = optimistic
         upsertConversation(optimistic)
-        if nextEnabled {
-            // Preview the tone the user currently has selected in notification settings.
-            AppNotificationSound.playCurrentSelection()
-        }
+        AppNotificationSound.playMuteToggleFeedback(enablingNotifications: nextEnabled)
 
         do {
             let updated = try await repository.updateNotificationSettings(

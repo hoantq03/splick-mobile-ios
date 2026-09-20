@@ -59,6 +59,15 @@ public enum AppNotificationSound: String, CaseIterable, Sendable {
         loadFromAppGroup().play()
     }
 
+    /// Mute → device vibrate. Unmute → preview the current notification tone.
+    public static func playMuteToggleFeedback(enablingNotifications: Bool) {
+        if enablingNotifications {
+            playCurrentSelection()
+        } else {
+            AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+        }
+    }
+
     public func play() {
         guard !isSilent else { return }
         let fileName = bundledFileName

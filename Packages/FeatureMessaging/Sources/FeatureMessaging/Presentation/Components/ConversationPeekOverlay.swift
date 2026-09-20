@@ -174,12 +174,6 @@ struct ConversationPeekOverlay: View {
         ]
         return LazyVGrid(columns: columns, alignment: .leading, spacing: SplickTheme.Spacing.xs) {
             optionChip(
-                titleKey: .messagingChatDeleteConversation,
-                systemImage: "trash",
-                destructive: true,
-                action: onDelete
-            )
-            optionChip(
                 titleKey: context.conversation.notificationsEnabled
                     ? .messagingChatMuteNotifications
                     : .messagingChatUnmuteNotifications,
@@ -188,6 +182,12 @@ struct ConversationPeekOverlay: View {
                 action: onMute
             )
             .animation(ConversationPeekMotion.muteToggle, value: context.conversation.notificationsEnabled)
+            optionChip(
+                titleKey: .messagingChatDeleteConversation,
+                systemImage: "trash",
+                destructive: true,
+                action: onDelete
+            )
         }
         .frame(maxWidth: maxWidth, alignment: .leading)
     }
@@ -201,11 +201,16 @@ struct ConversationPeekOverlay: View {
         HStack(spacing: SplickTheme.Spacing.xs) {
             Image(systemName: systemImage)
                 .font(.system(size: 14, weight: .semibold))
+                .id(systemImage)
+                .transition(.scale(scale: 0.72).combined(with: .opacity))
             Text(languageService.text(titleKey))
                 .font(SplickTheme.Typography.callout.weight(.semibold))
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
+                .id(titleKey)
+                .transition(.opacity)
         }
+        .animation(ConversationPeekMotion.muteToggle, value: systemImage)
         .frame(maxWidth: .infinity)
         .foregroundStyle(destructive ? SplickTheme.Colors.error : SplickTheme.Colors.textPrimary)
         .padding(.horizontal, SplickTheme.Spacing.md)
