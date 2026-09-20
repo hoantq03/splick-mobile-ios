@@ -341,4 +341,15 @@ final class CreatePostComposeViewModelTests: XCTestCase {
         XCTAssertEqual(submit4?.input.feedKind, .shareBill)
         XCTAssertEqual(submit4?.input.billSplit?.totalAmount, Decimal(150000))
     }
+
+    func testVideoDraftKeepsSourceURLForPreview() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("compose-preview.mp4")
+        try Data([0, 1, 2, 3, 4, 5, 6, 7]).write(to: url)
+        let vm = makeViewModel()
+        vm.addVideo(url: url)
+        XCTAssertEqual(vm.selectedMediaItems.count, 1)
+        XCTAssertEqual(vm.selectedMediaItems.first?.mediaType, .video)
+        XCTAssertEqual(vm.selectedMediaItems.first?.sourceURL, url)
+        XCTAssertEqual(vm.selectedMediaItems.first?.previewPlaybackURL, url)
+    }
 }

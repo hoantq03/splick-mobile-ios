@@ -216,13 +216,20 @@ public struct CreatePostComposeView: View {
         }
         .fullScreenCover(isPresented: reviewCoverPresented) {
             if let id = reviewingMediaID,
-               let image = viewModel.selectedMediaItems.first(where: { $0.id == id })?.previewImage {
-                SelectedPhotoReviewView(
-                    image: image,
-                    stickerPickerBuilder: stickerPickerBuilder,
-                    onImageUpdated: { viewModel.updateMediaImage(id: id, image: $0) },
-                    onDismiss: { reviewingMediaID = nil }
-                )
+               let item = viewModel.selectedMediaItems.first(where: { $0.id == id }) {
+                if item.mediaType == .video, let url = item.previewPlaybackURL {
+                    SelectedVideoReviewView(
+                        url: url,
+                        onDismiss: { reviewingMediaID = nil }
+                    )
+                } else if let image = item.previewImage, item.mediaType == .image {
+                    SelectedPhotoReviewView(
+                        image: image,
+                        stickerPickerBuilder: stickerPickerBuilder,
+                        onImageUpdated: { viewModel.updateMediaImage(id: id, image: $0) },
+                        onDismiss: { reviewingMediaID = nil }
+                    )
+                }
             }
         }
         .sheet(item: $profileRoute) { route in
@@ -256,31 +263,41 @@ public struct CreatePostComposeView: View {
                             Group {
                                 if let image = item.previewImage {
                                     Button {
-                                        if item.mediaType == .image {
-                                            reviewingMediaID = item.id
-                                        }
+                                        reviewingMediaID = item.id
                                     } label: {
                                         Image(uiImage: image)
                                             .resizable()
                                             .scaledToFill()
-                                            .overlay(alignment: .bottomLeading) {
+                                            .overlay(alignment: .center) {
                                                 if item.mediaType == .video {
-                                                    Image(systemName: "infinity")
-                                                        .font(.system(size: 14, weight: .bold))
+                                                    Image(systemName: "play.circle.fill")
+                                                        .font(.system(size: 28, weight: .semibold))
                                                         .foregroundStyle(.white)
-                                                        .padding(6)
+                                                        .shadow(radius: 4, y: 1)
                                                 }
                                             }
                                     }
                                     .buttonStyle(.plain)
-                                    .accessibilityLabel(languageService.text(.feedCreateEditMediaA11y))
+                                    .accessibilityLabel(
+                                        item.mediaType == .video
+                                            ? languageService.text(.mediaTypeVideo)
+                                            : languageService.text(.feedCreateEditMediaA11y)
+                                    )
                                 } else {
-                                    ZStack {
-                                        SplickTheme.Colors.tertiaryBackground
-                                        Image(systemName: "play.rectangle.fill")
-                                            .font(.system(size: 28))
-                                            .foregroundStyle(SplickTheme.Colors.textSecondary)
+                                    Button {
+                                        if item.mediaType == .video {
+                                            reviewingMediaID = item.id
+                                        }
+                                    } label: {
+                                        ZStack {
+                                            SplickTheme.Colors.tertiaryBackground
+                                            Image(systemName: "play.rectangle.fill")
+                                                .font(.system(size: 28))
+                                                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                                        }
                                     }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel(languageService.text(.mediaTypeVideo))
                                 }
                             }
                             .frame(width: 108, height: 136)

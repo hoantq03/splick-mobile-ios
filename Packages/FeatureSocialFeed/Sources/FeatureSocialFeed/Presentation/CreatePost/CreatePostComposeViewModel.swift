@@ -451,7 +451,8 @@ public final class CreatePostComposeViewModel: ObservableObject {
             mediaType: draft.mediaType,
             data: draft.data,
             mimeType: draft.mimeType,
-            videoDurationSeconds: draft.videoDurationSeconds
+            videoDurationSeconds: draft.videoDurationSeconds,
+            sourceURL: nil
         )
     }
 
@@ -1117,7 +1118,8 @@ public final class CreatePostComposeViewModel: ObservableObject {
             mediaType: .image,
             data: data,
             mimeType: jpegData != nil ? "image/jpeg" : "image/png",
-            videoDurationSeconds: nil
+            videoDurationSeconds: nil,
+            sourceURL: nil
         )
     }
 
@@ -1136,7 +1138,8 @@ public final class CreatePostComposeViewModel: ObservableObject {
             mediaType: .video,
             data: data,
             mimeType: "video/mp4",
-            videoDurationSeconds: duration > 0 ? duration : 1
+            videoDurationSeconds: duration > 0 ? duration : 1,
+            sourceURL: url
         )
     }
 }
@@ -1148,6 +1151,7 @@ public struct ComposeMediaDraft: Identifiable {
     public let data: Data
     public let mimeType: String
     public let videoDurationSeconds: Int?
+    public let sourceURL: URL?
 
     public init(
         id: UUID = UUID(),
@@ -1155,7 +1159,8 @@ public struct ComposeMediaDraft: Identifiable {
         mediaType: PostMediaType,
         data: Data,
         mimeType: String,
-        videoDurationSeconds: Int?
+        videoDurationSeconds: Int?,
+        sourceURL: URL? = nil
     ) {
         self.id = id
         self.previewImage = previewImage
@@ -1163,6 +1168,21 @@ public struct ComposeMediaDraft: Identifiable {
         self.data = data
         self.mimeType = mimeType
         self.videoDurationSeconds = videoDurationSeconds
+        self.sourceURL = sourceURL
+    }
+
+    /// File the compose preview player should load. Prefers the original capture URL.
+    public var previewPlaybackURL: URL? {
+        if let sourceURL { return sourceURL }
+        guard mediaType == .video, !data.isEmpty else { return nil }
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(id.uuidString).mp4")
+        do {
+            try data.write(to: url, options: .atomic)
+            return url
+        } catch {
+            return nil
+        }
     }
 }
 
