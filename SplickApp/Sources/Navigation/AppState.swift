@@ -334,19 +334,23 @@ final class AppState: ObservableObject {
         )
     }
 
-    func openLinkedPost(_ postId: UUID, expandBillSplit: Bool) {
-        withAnimation(LinkedPostMotion.spring) {
-            linkedPostPresentation = PendingFeedPostNavigation(
-                postId: postId,
-                expandBillSplit: expandBillSplit
-            )
-        }
+    func openLinkedPost(
+        _ postId: UUID,
+        expandBillSplit: Bool,
+        scrollToPendingEvidence: Bool = false
+    ) {
+        linkedPostPresentation = PendingFeedPostNavigation(
+            postId: postId,
+            expandBillSplit: expandBillSplit,
+            scrollToPendingEvidence: scrollToPendingEvidence
+        )
         Log.debug(
             "Present linked post overlay",
             category: .ui,
             metadata: [
                 "postId": postId.uuidString,
                 "expandBillSplit": String(expandBillSplit),
+                "scrollToPendingEvidence": String(scrollToPendingEvidence),
             ]
         )
     }

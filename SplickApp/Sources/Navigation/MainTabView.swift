@@ -78,6 +78,11 @@ struct MainTabView: View {
             // Fills the full screen (including safe areas) so system white never shows
             // through at the top (status bar) or bottom (home indicator) safe area regions.
             SplickBrandAtmosphere()
+                // When a full-screen overlay is up, atmosphere must not absorb
+                // pass-through taps that miss the overlay's content shape.
+                .allowsHitTesting(
+                    !appState.showNotifications && appState.linkedPostPresentation == nil
+                )
 
             MainTabContentPager(
                 selectedTab: $appState.selectedTab,
@@ -87,44 +92,11 @@ struct MainTabView: View {
                 messages: { messagesTabContent }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .allowsHitTesting(!appState.showNotifications)
-
-            if let presentation = appState.linkedPostPresentation {
-                LinkedPostDetailOverlay(
-                    presentation: presentation,
-                    feedViewModel: container.feedViewModel,
-                    fetchFriendsUseCase: container.fetchFriendsUseCase,
-                    profileDependencies: container.friendUserProfileDependencies,
-                    makeGifPickerViewModel: container.makeGifPickerViewModel(groupId:),
-                    uploadCommentImage: { data, mimeType in
-                        let upload = try await container.uploadCommentAttachment(data: data, mimeType: mimeType)
-                        return UploadedMediaReference(
-                            id: upload.id,
-                            url: upload.url,
-                            thumbnailURL: upload.thumbnailURL,
-                            sizeBytes: upload.sizeBytes
-                        )
-                    },
-                    onDismiss: { animated in
-                        if animated {
-                            withAnimation(LinkedPostMotion.spring) {
-                                appState.dismissLinkedPostPresentation()
-                            }
-                        } else {
-                            var transaction = Transaction()
-                            transaction.disablesAnimations = true
-                            withTransaction(transaction) {
-                                appState.dismissLinkedPostPresentation()
-                            }
-                        }
-                    }
-                )
-                .environmentObject(container.languageService)
-                .environmentObject(container.customEmojiStore)
-                .environment(\.customEmojiDependencies, container.customEmojiDependencies)
-                .transition(.move(edge: .trailing))
-                .zIndex(1)
-            }
+            // Linked post / notifications sit above the pager — never let the
+            // underlying tab steal taps through transparent holes.
+            .allowsHitTesting(
+                !appState.showNotifications && appState.linkedPostPresentation == nil
+            )
         }
             .onAppear {
                 if appState.selectedTab.isPagerTab {
@@ -190,8 +162,12 @@ struct MainTabView: View {
             .environment(\.openPostCaptureFlow) {
                 appState.selectedTab = .camera
             }
-            .environment(\.openLinkedPost) { postId, expandBillSplit in
-                appState.openLinkedPost(postId, expandBillSplit: expandBillSplit)
+            .environment(\.openLinkedPost) { postId, expandBillSplit, scrollToPendingEvidence in
+                appState.openLinkedPost(
+                    postId,
+                    expandBillSplit: expandBillSplit,
+                    scrollToPendingEvidence: scrollToPendingEvidence
+                )
             }
             .environment(\.fetchSharedPost) { postId in
                 try await container.fetchPostUseCase.execute(postId: postId)
@@ -292,7 +268,9 @@ struct MainTabView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .ignoresSafeArea()
-                    .allowsHitTesting(cameraExpanded)
+                    .allowsHitTesting(
+                        cameraExpanded && appState.linkedPostPresentation == nil
+                    )
                 }
             }
             .overlay(alignment: .bottom) {
@@ -312,6 +290,9 @@ struct MainTabView: View {
                         cameraSize: SplickTabBarMetrics.cameraSize,
                         bottomInset: SplickTabBarMetrics.cameraRevealBottomInset
                     )
+                    // GeometryReader is full-screen and hittable by default —
+                    // must not sit above a linked post / under transparent holes.
+                    .allowsHitTesting(false)
                 }
             }
             .onChange(of: appState.selectedTab, perform: handleSelectedTabChange)
@@ -340,23 +321,55 @@ struct MainTabView: View {
         .sheet(isPresented: $appState.showProfileSettings) {
             ProfileSettingsView()
         }
-        .overlay {
-            if appState.showNotifications {
-                NotificationRevealHost(
-                    viewModel: container.notificationListViewModel,
-                    languageService: container.languageService,
-                    isPresented: $appState.showNotifications,
-                    dismissRequest: $notificationDismissRequest,
-                    notificationIsDismissing: $notificationIsDismissing,
-                    anchorFrame: appState.notificationAnchorFrame,
-                    onNavigate: { target in
-                        appState.routeNotification(target: target)
+            .overlay {
+                if appState.showNotifications {
+                    NotificationRevealHost(
+                        viewModel: container.notificationListViewModel,
+                        languageService: container.languageService,
+                        isPresented: $appState.showNotifications,
+                        dismissRequest: $notificationDismissRequest,
+                        notificationIsDismissing: $notificationIsDismissing,
+                        anchorFrame: appState.notificationAnchorFrame,
+                        onNavigate: { target in
+                            appState.routeNotification(target: target)
+                        }
+                    )
+                    .zIndex(100)
+                }
+            }
+            // Modal cover — isolated from tab pager / camera / tab-bar hit testing.
+            // Overlay presentation kept getting every tap swallowed by sibling layers
+            // or by a UIKit pan installed on the nav controller.
+            .fullScreenCover(item: $appState.linkedPostPresentation) { presentation in
+                LinkedPostDetailOverlay(
+                    presentation: presentation,
+                    feedViewModel: container.feedViewModel,
+                    fetchFriendsUseCase: container.fetchFriendsUseCase,
+                    profileDependencies: container.friendUserProfileDependencies,
+                    makeGifPickerViewModel: container.makeGifPickerViewModel(groupId:),
+                    uploadCommentImage: { data, mimeType in
+                        let upload = try await container.uploadCommentAttachment(
+                            data: data,
+                            mimeType: mimeType
+                        )
+                        return UploadedMediaReference(
+                            id: upload.id,
+                            url: upload.url,
+                            thumbnailURL: upload.thumbnailURL,
+                            sizeBytes: upload.sizeBytes
+                        )
+                    },
+                    onDismiss: { _ in
+                        appState.dismissLinkedPostPresentation()
                     }
                 )
-                .zIndex(100)
+                .environmentObject(container.languageService)
+                .environmentObject(container.customEmojiStore)
+                .environment(\.customEmojiDependencies, container.customEmojiDependencies)
+                .environment(\.currentUserSummary, currentUserSummary)
+                .environment(\.tabBarScrollState, tabBarChrome.tabBar)
             }
-        }
-        .tint(brandPalette.accent)
+            .tint(brandPalette.accent)
     }
 
     @ViewBuilder
@@ -529,6 +542,7 @@ struct MainTabView: View {
 }
 
 /// Shutter proxy above the water mask — full-screen so lift/scale is never clipped by the tab frame.
+/// Visual only: the real shutter lives in the tab bar / camera layer.
 private struct CameraRevealFloatingShutter: View {
     @ObservedObject var progressSource: CameraOpenRevealProgressSource
     let cameraSize: CGFloat
@@ -549,8 +563,8 @@ private struct CameraRevealFloatingShutter: View {
                 .position(x: origin.x, y: origin.y - lift)
                 // Crossfade to the in-camera shutter at the end of the lift.
                 .opacity(progress > 0.92 ? 0 : 1)
-                .allowsHitTesting(false)
         }
+        .allowsHitTesting(false)
         .ignoresSafeArea()
     }
 }
@@ -900,10 +914,10 @@ struct ProfileSettingsView: View {
                     ChangePasswordView(
                         viewModel: ChangePasswordViewModel(
                             accountEmail: email,
+                            initialHasPassword: appState.currentUser?.hasPassword ?? true,
                             changePasswordUseCase: container.changePasswordUseCase,
                             verifyPasswordChangeUseCase: container.verifyPasswordChangeUseCase,
                             requestEmailOtpUseCase: container.requestEmailOtpUseCase,
-                            getConnectedAccountsUseCase: container.getConnectedAccountsUseCase,
                             languageService: languageService
                         ),
                         onPasswordChanged: { user in
@@ -1305,7 +1319,6 @@ struct ProfileSettingsView: View {
                     subtitle: hasPasswordLogin == false
                         ? languageService.text(.profileChangePasswordUnavailableShort)
                         : nil,
-                    isEnabled: hasPasswordLogin == true,
                     action: { showChangePassword = true }
                 ),
                 ProfileSettingsItem(
@@ -1600,12 +1613,7 @@ struct ProfileSettingsView: View {
     }
 
     private func refreshPasswordLoginState() async {
-        do {
-            let accounts = try await container.getConnectedAccountsUseCase.execute()
-            hasPasswordLogin = accounts.emailPassword.isLinked
-        } catch {
-            hasPasswordLogin = hasPasswordLogin ?? true
-        }
+        hasPasswordLogin = appState.currentUser?.hasPassword ?? hasPasswordLogin ?? true
     }
 
     private func syncDeviceTimezoneIfNeeded(_ user: User) async {

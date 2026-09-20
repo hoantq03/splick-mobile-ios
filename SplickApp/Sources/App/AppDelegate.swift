@@ -52,20 +52,22 @@ final class AppDelegate: NSObject, UIApplicationDelegate, @preconcurrency UNUser
             userInfo: userInfo,
             queueDestination: false
         )
-        // When woken for a background push (content-available), auto-hide the system banner
-        // so later notifications are not blocked behind a sticky heads-up.
-        if application.applicationState != .active {
+        // Retract the heads-up after a short delay; the quiet re-post keeps it in NC.
+        if application.applicationState != .active,
+           !PushNotificationCoordinator.isHeadsUpRetractedRetain(userInfo)
+        {
             var backgroundTask = UIBackgroundTaskIdentifier.invalid
-            backgroundTask = application.beginBackgroundTask(withName: "splick.banner-auto-dismiss") {
+            backgroundTask = application.beginBackgroundTask(withName: "splick.banner-retract") {
                 if backgroundTask != .invalid {
                     application.endBackgroundTask(backgroundTask)
                     backgroundTask = .invalid
                 }
             }
-            coordinator.scheduleBannerAutoDismiss(userInfo: userInfo)
             Task { @MainActor in
+                // Newer push → hide previous heads-up immediately, then arm 2.5s for this one.
+                await coordinator.retractStaleHeadsUpsImmediately(exceptUserInfo: userInfo)
+                coordinator.scheduleBannerAutoDismiss(userInfo: userInfo)
                 try? await Task.sleep(for: AppConstants.PushNotifications.bannerAutoDismissDelay)
-                // Extra beat so dismiss + NSE/main-app retry can finish.
                 try? await Task.sleep(for: .milliseconds(600))
                 if backgroundTask != .invalid {
                     application.endBackgroundTask(backgroundTask)
@@ -90,14 +92,24 @@ final class AppDelegate: NSObject, UIApplicationDelegate, @preconcurrency UNUser
             queueDestination: false
         )
         let options = coordinator.foregroundPresentationOptions(userInfo: userInfo)
-        if !options.isEmpty {
-            coordinator.dismissPendingBanners(except: requestIdentifier)
+        guard options.contains(.banner) else {
+            completionHandler(options)
+            return
+        }
+
+        Task { @MainActor in
+            // Rapid successive pushes: retract the previous banner now, keep full 2.5s only
+            // when nothing newer arrives.
+            await coordinator.retractStaleHeadsUpsImmediately(
+                exceptRequestIdentifier: requestIdentifier,
+                exceptUserInfo: userInfo
+            )
             coordinator.scheduleBannerAutoDismiss(
                 requestIdentifier: requestIdentifier,
                 userInfo: userInfo
             )
+            completionHandler(options)
         }
-        completionHandler(options)
     }
 
     func userNotificationCenter(
