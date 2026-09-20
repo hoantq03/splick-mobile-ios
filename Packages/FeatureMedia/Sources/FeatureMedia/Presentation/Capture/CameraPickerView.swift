@@ -58,6 +58,17 @@ struct CameraPickerView: View {
 
     private var revealProgress: CGFloat { cameraRevealProgress.value }
 
+    /// Top/bottom chrome appears once the disk has left the shutter (no fade — avoids
+    /// reading as “fog → solid” instead of a growing circle).
+    private var chromeRevealOpacity: Double {
+        revealProgress > 0.08 ? 1 : 0
+    }
+
+    /// Finder appears with the expanding disk — full opacity inside the circle.
+    private var finderRevealOpacity: Double {
+        revealProgress > 0.02 ? 1 : 0
+    }
+
     private var faceTrackingSupported: Bool {
         ARFaceTrackingConfiguration.isSupported
     }
@@ -69,26 +80,39 @@ struct CameraPickerView: View {
                 safeArea: CameraChromeLayout.windowSafeAreaInsets()
             )
             ZStack {
+                // Water-masked chrome (atmosphere + finder + tools) lives under the shutter.
                 SplickBrandAtmosphere()
 
                 VStack(spacing: 0) {
                     topBar
                         .padding(.top, metrics.topPadding)
+                        .opacity(chromeRevealOpacity)
 
                     finder(metrics: metrics, canvas: geo.size)
+                        .opacity(finderRevealOpacity)
 
-                    bottomBar(metrics: metrics)
+                    bottomBar(metrics: metrics, includeShutter: false)
                 }
+
+                // Capture button on a higher layer so it stays crisp above the soft water rim.
+                VStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    shutterLayer(metrics: metrics)
+                }
+                .zIndex(20)
 
                 if countdownRemaining > 0 {
                     Text(String(format: languageService.text(.mediaCameraTimerSeconds), countdownRemaining))
                         .font(.system(size: 48, weight: .bold))
                         .foregroundStyle(.white)
+                        .opacity(chromeRevealOpacity)
+                        .zIndex(30)
                 }
 
                 if isCapturing, !session.isRecordingBoomerang {
                     Color.black.opacity(0.35).ignoresSafeArea()
                     SplickSpinner(size: .large, usesBrandColors: false)
+                        .zIndex(40)
                 }
 
                 if let toastMessage {
@@ -102,6 +126,7 @@ struct CameraPickerView: View {
                             .background(Capsule().fill(Color.black.opacity(0.75)))
                             .padding(.bottom, 140)
                     }
+                    .zIndex(50)
                 }
             }
             .coordinateSpace(name: "cameraCanvas")
@@ -269,7 +294,7 @@ struct CameraPickerView: View {
         .padding(.bottom, 6)
     }
 
-    private func bottomBar(metrics: CameraChromeMetrics) -> some View {
+    private func bottomBar(metrics: CameraChromeMetrics, includeShutter: Bool = true) -> some View {
         VStack(spacing: metrics.toolsToShutterSpacing) {
             CameraCaptureToolsRow(
                 metrics: metrics,
@@ -281,6 +306,7 @@ struct CameraPickerView: View {
                 onHandsFree: cycleHandsFree,
                 onFilter: cycleFilter
             )
+            .opacity(chromeRevealOpacity)
 
             HStack(alignment: .bottom, spacing: 16) {
                 ZStack(alignment: .topTrailing) {
@@ -298,33 +324,65 @@ struct CameraPickerView: View {
                             .offset(x: 8, y: -8)
                     }
                 }
+                .opacity(chromeRevealOpacity)
 
                 Spacer(minLength: 0)
 
-                ZStack(alignment: .top) {
-                    shutterButton
-                        .accessibilityLabel(
-                            boomerangMode
-                                ? languageService.text(.mediaCameraToolBoomerang)
-                                : languageService.text(.mediaTypePhoto)
-                        )
-
-                    if session.filterPreset != .none {
-                        CameraFilterNameBadge(title: activeFilterTitle)
-                            .offset(y: -28)
-                            .allowsHitTesting(false)
-                    }
+                if includeShutter {
+                    shutterCluster(metrics: metrics)
+                } else {
+                    Color.clear
+                        .frame(width: metrics.shutterDiameter, height: metrics.shutterDiameter)
                 }
 
                 Spacer(minLength: 0)
 
                 circleButton(systemName: "arrow.triangle.2.circlepath") { session.flipCamera() }
                     .padding(.bottom, shutterVerticalInset(metrics.shutterDiameter, metrics.sideControlDiameter))
+                    .opacity(chromeRevealOpacity)
             }
             .padding(.horizontal, metrics.shutterRowHorizontalPadding)
         }
         .padding(.bottom, metrics.bottomPadding)
         .offset(y: -CameraOpenRevealGeometry.shutterRowLift(progress: revealProgress))
+    }
+
+    /// Floating shutter row — drawn above the water-masked chrome.
+    private func shutterLayer(metrics: CameraChromeMetrics) -> some View {
+        HStack(alignment: .bottom, spacing: 16) {
+            Color.clear
+                .frame(width: metrics.galleryDiameter, height: metrics.galleryDiameter)
+            Spacer(minLength: 0)
+            shutterCluster(metrics: metrics)
+                // Hand off from the tab-bar button (which owns lift/scale above the
+                // water) only at the end — keeps one continuous sliding shutter.
+                .opacity(Double(min(max((revealProgress - 0.85) / 0.12, 0), 1)))
+            Spacer(minLength: 0)
+            Color.clear
+                .frame(width: metrics.sideControlDiameter, height: metrics.sideControlDiameter)
+        }
+        .padding(.horizontal, metrics.shutterRowHorizontalPadding)
+        .padding(.bottom, metrics.bottomPadding)
+        .offset(y: -CameraOpenRevealGeometry.shutterRowLift(progress: revealProgress))
+        .allowsHitTesting(revealProgress > 0.9)
+    }
+
+    private func shutterCluster(metrics: CameraChromeMetrics) -> some View {
+        ZStack(alignment: .top) {
+            shutterButton
+                .accessibilityLabel(
+                    boomerangMode
+                        ? languageService.text(.mediaCameraToolBoomerang)
+                        : languageService.text(.mediaTypePhoto)
+                )
+
+            if session.filterPreset != .none {
+                CameraFilterNameBadge(title: activeFilterTitle)
+                    .offset(y: -28)
+                    .allowsHitTesting(false)
+                    .opacity(chromeRevealOpacity)
+            }
+        }
     }
 
     private var activeFilterTitle: String {

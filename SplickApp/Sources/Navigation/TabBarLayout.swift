@@ -11,6 +11,8 @@ enum TabBarLayout {
 enum TabBarMotion {
     static let slide = TabBarChromeMotion.slide
     static let show = TabBarChromeMotion.show
+    /// Matches `TabBarChromeMotion.slide` duration (0.18s) for hit-test settle.
+    static let slideSettleMilliseconds: Int = 180
 }
 
 struct FloatingTabBarContentPadding: ViewModifier {

@@ -32,9 +32,26 @@ public enum SplickTabBarMetrics {
         if #available(iOS 26.0, *) { cameraSizeIOS26 } else { cameraSizeLegacy }
     }
 
-    /// Distance from the screen bottom to the camera circle’s bottom edge.
+    /// Distance from the tab-bar content’s bottom edge to the camera circle’s bottom edge.
     public static var cameraButtonBottomInset: CGFloat {
         barBottomPadding - max(cameraSize - barHeight, 0) / 2
+    }
+
+    /// Height of the tab bar stack inside `floatingClearance` (bar + bottom padding).
+    public static var tabBarContentHeight: CGFloat {
+        barHeight + barBottomPadding
+    }
+
+    /// `MainTabBarChrome` centers the tab bar in `floatingClearance`, leaving this
+    /// gap under the bar. Reveal/shutter must include it or close snaps ~14pt.
+    public static var tabBarClearanceBottomGap: CGFloat {
+        max(floatingClearance - tabBarContentHeight, 0) / 2
+    }
+
+    /// Screen-bottom inset for the water origin and in-camera shutter at progress 0.
+    /// Matches the centered tab camera — not raw `cameraButtonBottomInset` alone.
+    public static var cameraRevealBottomInset: CGFloat {
+        cameraButtonBottomInset + tabBarClearanceBottomGap
     }
 }
 

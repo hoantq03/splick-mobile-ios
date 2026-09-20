@@ -32,10 +32,10 @@ final class CameraOpenRevealGeometryTests: XCTestCase {
         XCTAssertEqual(CameraOpenRevealGeometry.feather(progress: 0.5, maxFeather: 48), 48, accuracy: 0.01)
         XCTAssertEqual(CameraOpenRevealGeometry.feather(progress: 1, maxFeather: 48), 0, accuracy: 0.01)
         XCTAssertEqual(CameraOpenRevealGeometry.feather(progress: 0.25, maxFeather: 48), 36, accuracy: 0.01)
-        XCTAssertEqual(CameraOpenRevealGeometry.maxFeatherFraction, 0.18, accuracy: 0.001)
+        XCTAssertEqual(CameraOpenRevealGeometry.maxFeatherFraction, 0.10, accuracy: 0.001)
         XCTAssertEqual(CameraOpenRevealGeometry.expandEase(0), 0, accuracy: 0.02)
         XCTAssertEqual(CameraOpenRevealGeometry.expandEase(1), 1, accuracy: 0.02)
-        XCTAssertGreaterThan(CameraOpenRevealGeometry.expandEase(0.5), 0.45)
+        XCTAssertGreaterThan(CameraOpenRevealGeometry.expandEase(0.5), 0.35)
         XCTAssertLessThan(CameraOpenRevealGeometry.expandEase(0.5), 0.92)
     }
 

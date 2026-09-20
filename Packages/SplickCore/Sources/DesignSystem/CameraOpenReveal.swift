@@ -61,7 +61,8 @@ public enum CameraOpenRevealGeometry {
         return start + (end - start) * t
     }
 
-    public static let shutterRestLift: CGFloat = 56
+    /// Tab-aligned at progress 0; settles `56 + 18` pt higher once open (matches prior rest).
+    public static let shutterRestLift: CGFloat = 74
 
     /// Lift completes in the first half of the reveal — slide up before the shutter grows.
     public static func shutterRowLift(progress: CGFloat) -> CGFloat {
@@ -82,11 +83,11 @@ public enum CameraOpenRevealGeometry {
         return 4 * t * (1 - t) * maxFeather
     }
 
-    public static let maxFeatherFraction: CGFloat = 0.18
+    public static let maxFeatherFraction: CGFloat = 0.10
 
-    /// Softer ease-out than (0.16, 1, 0.3, 1) — less early jump while staying liquid.
+    /// Near-linear so the disk visibly grows from the shutter (not a fog pop).
     public static func expandEase(_ t: CGFloat) -> CGFloat {
-        unitBezier(t, c1x: 0.22, c1y: 0.82, c2x: 0.28, c2y: 1)
+        unitBezier(t, c1x: 0.4, c1y: 0.0, c2x: 0.2, c2y: 1)
     }
 
     /// Matches Android CollapseSpec with a slightly gentler finish.
@@ -143,14 +144,16 @@ public struct CameraFinderSpread: Equatable {
 }
 
 public enum CameraOpenRevealMotion {
-    public static let duration: TimeInterval = 0.62
+    public static let duration: TimeInterval = 0.72
     /// Kept for call sites that still use SwiftUI animations (tab chrome fades).
-    public static let expand = Animation.timingCurve(0.22, 0.82, 0.28, 1, duration: duration)
+    public static let expand = Animation.timingCurve(0.33, 0.0, 0.2, 1, duration: duration)
     public static let collapse = Animation.timingCurve(0.32, 0, 0.2, 1, duration: duration)
 }
 
-/// Lightweight progress bridge updated by the UIKit water mask display-link.
-/// Camera chrome (shutter lift/scale) observes this without rewriting the hosting root view.
+/// Progress bridge updated by the UIKit water mask display-link.
+///
+/// Own this with `@State` (not `@StateObject`) in the tab root so per-frame
+/// publishes do not rebuild `CameraOpenRevealContainer` mid-animation.
 public final class CameraOpenRevealProgressSource: ObservableObject {
     @Published public var value: CGFloat = 0
 
@@ -181,7 +184,7 @@ public enum CameraWaterRevealMask {
             view.layer.mask = nil
             return
         }
-        let outer = max(radius + feather, 0.5)
+        let outer = max(radius + max(feather, 2), 0.5)
         let farthest = hypot(
             max(originInView.x, view.bounds.width - originInView.x),
             max(originInView.y, view.bounds.height - originInView.y)
@@ -205,23 +208,27 @@ public enum CameraWaterRevealMask {
             height: outer * 2
         )
         gradient.startPoint = CGPoint(x: 0.5, y: 0.5)
-        gradient.endPoint = CGPoint(x: 1, y: 1)
-        let coreStop = min(max(radius / outer, 0), 1)
-        let hazeStop = min(coreStop + (1 - coreStop) * 0.2, 0.98)
+        gradient.endPoint = CGPoint(x: 1, y: 0.5)
+        let coreStop = min(max(radius / outer, 0), 0.98)
+        let hazeStop = min(max(coreStop + (1 - coreStop) * 0.2, coreStop), 0.99)
         gradient.colors = [
             UIColor.white.cgColor,
             UIColor.white.cgColor,
-            UIColor.white.withAlphaComponent(0.9).cgColor,
+            UIColor.white.withAlphaComponent(0.85).cgColor,
             UIColor.clear.cgColor,
         ]
-        gradient.locations = [0, NSNumber(value: Double(coreStop)), NSNumber(value: Double(hazeStop)), 1]
+        gradient.locations = [
+            0,
+            NSNumber(value: Double(coreStop)),
+            NSNumber(value: Double(hazeStop)),
+            1,
+        ]
     }
 }
 
 // MARK: - UIKit host (GPU mask — does not invalidate SwiftUI every frame)
 
-/// Hosts camera content and expands/collapses a radial `CALayer` mask on the display link.
-/// This matches Android’s offscreen `DstIn` approach: one GPU mask, no SwiftUI Canvas rebuild.
+/// Hosts camera content and expands/collapses a solid circular mask on the display link.
 public struct CameraOpenRevealContainer<Content: View>: UIViewControllerRepresentable {
     public var isExpanded: Bool
     public var cameraSize: CGFloat
@@ -258,8 +265,7 @@ public struct CameraOpenRevealContainer<Content: View>: UIViewControllerRepresen
         )
         controller.onCollapseFinished = onCollapseFinished
         controller.progressSource = progressSource
-        // Always mount clipped to the tab camera circle; the first
-        // `updateUIViewController` expands when `isExpanded` is true.
+        // Mount at the tab camera circle; expand on first update when `isExpanded` is true.
         context.coordinator.lastExpanded = false
         controller.applyProgress(0, animated: false)
         return controller
@@ -297,7 +303,8 @@ public final class CameraOpenRevealHostController<Content: View>: UIViewControll
     private(set) var isAnimatingWater = false
 
     private let hosting: UIHostingController<Content>
-    private let maskLayer = CAGradientLayer()
+    /// Solid growing circle from the tab shutter — radius expands; no alpha fade.
+    private let maskLayer = CAShapeLayer()
     private var progress: CGFloat = 0
     private var displayLink: CADisplayLink?
     private var animationFrom: CGFloat = 0
@@ -305,15 +312,15 @@ public final class CameraOpenRevealHostController<Content: View>: UIViewControll
     private var animationStart: CFTimeInterval = 0
     private var animationExpanding = true
     private var pendingRootView: Content?
+    private var pendingAnimatedTarget: CGFloat?
 
     init(rootView: Content, cameraSize: CGFloat, bottomInset: CGFloat) {
         self.cameraSize = cameraSize
         self.bottomInset = bottomInset
         self.hosting = UIHostingController(rootView: rootView)
         super.init(nibName: nil, bundle: nil)
-        // Kill the default white hosting flash before the view appears.
-        hosting.view.backgroundColor = .black
-        hosting.view.isOpaque = true
+        hosting.view.backgroundColor = .clear
+        hosting.view.isOpaque = false
     }
 
     @available(*, unavailable)
@@ -321,19 +328,19 @@ public final class CameraOpenRevealHostController<Content: View>: UIViewControll
 
     override public func loadView() {
         let root = UIView()
-        root.backgroundColor = .black
-        root.isOpaque = true
+        root.backgroundColor = .clear
+        root.isOpaque = false
         view = root
     }
 
     override public func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .black
-        view.isOpaque = true
+        view.backgroundColor = .clear
+        view.isOpaque = false
         view.clipsToBounds = true
 
-        hosting.view.backgroundColor = .black
-        hosting.view.isOpaque = true
+        hosting.view.backgroundColor = .clear
+        hosting.view.isOpaque = false
         hosting.view.translatesAutoresizingMaskIntoConstraints = false
         if #available(iOS 16.4, *) {
             hosting.safeAreaRegions = []
@@ -348,21 +355,20 @@ public final class CameraOpenRevealHostController<Content: View>: UIViewControll
         ])
         hosting.didMove(toParent: self)
 
-        maskLayer.type = .radial
-        maskLayer.startPoint = CGPoint(x: 0.5, y: 0.5)
-        maskLayer.endPoint = CGPoint(x: 1, y: 1)
-        maskLayer.colors = [
-            UIColor.white.cgColor,
-            UIColor.white.cgColor,
-            UIColor.clear.cgColor,
-        ]
-        maskLayer.locations = [0, 0.92, 1]
+        maskLayer.fillColor = UIColor.white.cgColor
+        maskLayer.backgroundColor = UIColor.clear.cgColor
         view.layer.mask = maskLayer
     }
 
     override public func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         applyMask(for: progress)
+        if let pending = pendingAnimatedTarget,
+           view.bounds.width > 1,
+           view.bounds.height > 1 {
+            pendingAnimatedTarget = nil
+            applyProgress(pending, animated: true)
+        }
     }
 
     func updateRootView(_ rootView: Content) {
@@ -376,22 +382,36 @@ public final class CameraOpenRevealHostController<Content: View>: UIViewControll
     func applyProgress(_ target: CGFloat, animated: Bool) {
         let clamped = min(max(target, 0), 1)
         stopDisplayLink()
+        let hasSize = view.bounds.width > 1 && view.bounds.height > 1
+        if animated, !hasSize {
+            pendingAnimatedTarget = clamped
+            applyMask(for: progress)
+            publishProgress(progress)
+            return
+        }
         guard animated, abs(clamped - progress) > 0.001 else {
+            pendingAnimatedTarget = nil
             progress = clamped
             applyMask(for: progress)
             publishProgress(progress)
             flushPendingRootView()
             return
         }
+        pendingAnimatedTarget = nil
         isAnimatingWater = true
         animationFrom = progress
         animationTo = clamped
         animationExpanding = clamped > progress
         animationStart = CACurrentMediaTime()
-        // Ensure mask is attached before the first tick (collapse from fully-open).
-        if view.layer.mask !== maskLayer {
-            view.layer.mask = maskLayer
+        if animationExpanding {
             applyMask(for: progress)
+        } else {
+            // Collapse from a settled open state (mask was removed). Re-attach at
+            // nearly-full coverage so the first frame is not an unmasked flash.
+            if view.layer.mask !== maskLayer {
+                view.layer.mask = maskLayer
+            }
+            applyMask(for: min(max(progress, 0), 0.998))
         }
         publishProgress(progress)
         let link = CADisplayLink(target: self, selector: #selector(tickAnimation))
@@ -446,40 +466,35 @@ public final class CameraOpenRevealHostController<Content: View>: UIViewControll
             bottomInset: bottomInset
         )
         let covering = CameraOpenRevealGeometry.coveringRadius(origin: origin, size: size)
+        // Radius grows from the tab shutter circle → screen. Opaque disk, not an alpha fade.
         let radius = CameraOpenRevealGeometry.radius(
             progress: progress,
             start: max(cameraSize / 2, 1),
             end: covering
         )
-        // Keep a covering mask when fully open instead of nil — removing/re-adding
-        // the mask on toggle caused a one-frame white flash on the logo.
+
+        if progress >= 0.999 {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            view.layer.mask = nil
+            CATransaction.commit()
+            return
+        }
+
         if view.layer.mask !== maskLayer {
             view.layer.mask = maskLayer
         }
-        let feather: CGFloat
-        if progress >= 0.999 {
-            feather = 0
-        } else {
-            feather = CameraOpenRevealGeometry.feather(
-                progress: progress,
-                maxFeather: min(size.width, size.height) * CameraOpenRevealGeometry.maxFeatherFraction
-            )
-        }
-        let outer = max(radius + feather, 0.5)
-        let core = min(max(radius / outer, 0), 1)
+
+        let rect = CGRect(
+            x: origin.x - radius,
+            y: origin.y - radius,
+            width: radius * 2,
+            height: radius * 2
+        )
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        maskLayer.frame = CGRect(
-            x: origin.x - outer,
-            y: origin.y - outer,
-            width: outer * 2,
-            height: outer * 2
-        )
-        maskLayer.locations = [
-            0,
-            NSNumber(value: Double(core)),
-            1,
-        ]
+        maskLayer.frame = view.bounds
+        maskLayer.path = UIBezierPath(ovalIn: rect).cgPath
         CATransaction.commit()
     }
 

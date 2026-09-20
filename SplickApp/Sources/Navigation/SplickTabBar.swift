@@ -67,6 +67,7 @@ private struct ModernSplickTabBar: View {
                     tabButton(.expenses, badge: badgeCounts.expenses)
                 }
                 .frame(maxWidth: .infinity)
+                .opacity(sidePanelOpacity)
                 .allowsHitTesting(selectedTab != .camera && cameraRevealProgress < 0.02)
 
                 Color.clear
@@ -78,6 +79,7 @@ private struct ModernSplickTabBar: View {
                     tabButton(.messages, badge: badgeCounts.messages)
                 }
                 .frame(maxWidth: .infinity)
+                .opacity(sidePanelOpacity)
                 .allowsHitTesting(selectedTab != .camera && cameraRevealProgress < 0.02)
             }
 
@@ -86,6 +88,10 @@ private struct ModernSplickTabBar: View {
         .frame(height: barHeight)
         .padding(.horizontal, SplickTheme.Spacing.md)
         .padding(.bottom, SplickTheme.Spacing.xxs)
+    }
+
+    private var sidePanelOpacity: Double {
+        Double(max(0, 1 - cameraRevealProgress / 0.22))
     }
 
     private func sidePanel<Content: View>(
@@ -200,6 +206,7 @@ private struct LegacySplickTabBar: View {
                     tabButton(.expenses, badge: badgeCounts.expenses)
                 }
                 .frame(maxWidth: .infinity)
+                .opacity(sidePanelOpacity)
                 .allowsHitTesting(selectedTab != .camera && cameraRevealProgress < 0.02)
 
                 Color.clear
@@ -211,6 +218,7 @@ private struct LegacySplickTabBar: View {
                     tabButton(.messages, badge: badgeCounts.messages)
                 }
                 .frame(maxWidth: .infinity)
+                .opacity(sidePanelOpacity)
                 .allowsHitTesting(selectedTab != .camera && cameraRevealProgress < 0.02)
             }
 
@@ -219,6 +227,10 @@ private struct LegacySplickTabBar: View {
         .frame(height: barHeight)
         .padding(.horizontal, SplickTheme.Spacing.md)
         .padding(.bottom, SplickTheme.Spacing.xxs)
+    }
+
+    private var sidePanelOpacity: Double {
+        Double(max(0, 1 - cameraRevealProgress / 0.22))
     }
 
     private func sidePanel<Content: View>(
@@ -322,6 +334,12 @@ private struct TabBarCameraButton: View {
         .contentShape(Circle())
         .accessibilityLabel(title)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+        // Lift + scale live on this higher layer (above the water). The in-camera
+        // shutter only crossfades in at the end — otherwise the button vanishes
+        // mid-lift when it leaves the circular mask.
+        .offset(y: -CameraOpenRevealGeometry.shutterRowLift(progress: revealProgress))
+        .scaleEffect(CameraOpenRevealGeometry.shutterOpenScale(progress: revealProgress))
+        .opacity(revealProgress > 0.88 ? 0 : 1)
         .allowsHitTesting(!isSelected && revealProgress <= 0.001)
     }
 }

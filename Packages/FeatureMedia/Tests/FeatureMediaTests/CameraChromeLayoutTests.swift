@@ -24,9 +24,11 @@ final class CameraChromeLayoutTests: XCTestCase {
         XCTAssertEqual(pro.shutterDiameter, SplickTabBarMetrics.cameraSize)
         XCTAssertLessThan(se.previewLift, pro.previewLift)
         XCTAssertLessThan(se.toolIconSize, pro.toolIconSize)
-        XCTAssertEqual(se.bottomPadding, SplickTabBarMetrics.cameraButtonBottomInset, accuracy: 0.01)
-        XCTAssertEqual(pro.bottomPadding, SplickTabBarMetrics.cameraButtonBottomInset, accuracy: 0.01)
+        XCTAssertEqual(se.bottomPadding, SplickTabBarMetrics.cameraRevealBottomInset, accuracy: 0.01)
+        XCTAssertEqual(pro.bottomPadding, SplickTabBarMetrics.cameraRevealBottomInset, accuracy: 0.01)
         XCTAssertGreaterThanOrEqual(se.topPadding, 20)
+        XCTAssertEqual(se.toolsToShutterSpacing, 20, accuracy: 0.01)
+        XCTAssertEqual(pro.toolsToShutterSpacing, 24, accuracy: 0.01)
     }
 
     func testHomeIndicatorIsReservedInBottomPadding() {
@@ -34,6 +36,21 @@ final class CameraChromeLayoutTests: XCTestCase {
             in: CGSize(width: 375, height: 812),
             safeArea: UIEdgeInsets(top: 47, left: 0, bottom: 34, right: 0)
         )
-        XCTAssertEqual(metrics.bottomPadding, SplickTabBarMetrics.cameraButtonBottomInset, accuracy: 0.01)
+        // Reveal inset matches the centered tab camera (clearance gap + button inset).
+        XCTAssertEqual(
+            metrics.bottomPadding,
+            SplickTabBarMetrics.cameraRevealBottomInset,
+            accuracy: 0.01
+        )
+        XCTAssertEqual(
+            SplickTabBarMetrics.cameraRevealBottomInset,
+            SplickTabBarMetrics.cameraButtonBottomInset + SplickTabBarMetrics.tabBarClearanceBottomGap,
+            accuracy: 0.01
+        )
+        XCTAssertEqual(
+            CameraOpenRevealGeometry.shutterRestLift,
+            56 + CameraChromeLayout.chromeBottomExtraLift,
+            accuracy: 0.01
+        )
     }
 }

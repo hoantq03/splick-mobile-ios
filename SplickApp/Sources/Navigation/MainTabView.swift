@@ -48,7 +48,9 @@ struct MainTabView: View {
     /// Drives the UIKit radial mask (not a per-frame SwiftUI animatable).
     @State private var cameraExpanded = false
     /// Shutter lift/scale follow this; updated by the water mask display-link.
-    @StateObject private var cameraRevealProgress = CameraOpenRevealProgressSource()
+    /// Use `@State` (not `@StateObject`) so per-frame publishes do not rebuild this view
+    /// and tear down the water representable mid-animation.
+    @State private var cameraRevealProgress = CameraOpenRevealProgressSource()
 
     private var currentUserSummary: UserSummary? {
         appState.currentUser.map {
@@ -274,7 +276,8 @@ struct MainTabView: View {
                     badgeCounts: badgeCounts,
                     isChromePresented: isTabBarChromePresented,
                     cameraRevealProgress: cameraRevealProgress,
-                    scrollState: tabBarChrome.tabBar
+                    scrollState: tabBarChrome.tabBar,
+                    cameraLayerVisible: showsCameraLayer
                 )
             }
             .overlay {
@@ -282,7 +285,7 @@ struct MainTabView: View {
                     CameraOpenRevealContainer(
                         isExpanded: cameraExpanded,
                         cameraSize: SplickTabBarMetrics.cameraSize,
-                        bottomInset: SplickTabBarMetrics.cameraButtonBottomInset,
+                        bottomInset: SplickTabBarMetrics.cameraRevealBottomInset,
                         progressSource: cameraRevealProgress,
                         onCollapseFinished: {
                             // Ignore late callbacks if the user reopened mid-collapse.
@@ -522,7 +525,11 @@ private struct MainTabBarChrome: View {
     let isChromePresented: Bool
     @ObservedObject var cameraRevealProgress: CameraOpenRevealProgressSource
     @ObservedObject var scrollState: TabBarScrollState
+    var cameraLayerVisible: Bool = false
     @Environment(\.colorScheme) private var colorScheme
+    /// Hit-testing lags hide animation so mid-slide taps are not dead; show enables immediately.
+    @State private var hitTestingEnabled = true
+    @State private var hideHitDisableGeneration = 0
 
     private var animationToken: TabBarChromeAnimationToken {
         TabBarChromeAnimationToken(
@@ -545,6 +552,13 @@ private struct MainTabBarChrome: View {
         isChromePresented ? 1 : 0
     }
 
+    /// Crisp tab shutter sits above the soft water while it blooms / collapses.
+    /// Stay above until nearly settled open — otherwise on close the tab button is
+    /// trapped under the water and pops in with a flash when the camera unmounts.
+    private var floatsAboveCameraWater: Bool {
+        cameraLayerVisible && cameraRevealProgress.value < 0.97
+    }
+
     var body: some View {
         SplickTabBar(
             selectedTab: $selectedTab,
@@ -556,14 +570,71 @@ private struct MainTabBarChrome: View {
         .equatable()
         .opacity(opacity)
         .offset(y: slideOffset)
-        .allowsHitTesting(isChromePresented && scrollState.isVisible)
+        .allowsHitTesting(
+            isChromePresented
+                && hitTestingEnabled
+                && cameraRevealProgress.value < 0.02
+        )
+        // Keep centered layout inside floatingClearance (matches cameraRevealBottomInset).
+        // Skip clipping while revealing so the tab camera can lift above the bar.
         .frame(height: insetHeight)
-        .clipped()
+        .modifier(CameraRevealClipModifier(clip: !floatsAboveCameraWater))
+        .zIndex(floatsAboveCameraWater ? 90 : 20)
         .animation(
             animationToken.animated ? TabBarMotion.slide : nil,
             value: animationToken
         )
         .ignoresSafeArea(edges: .bottom)
+        .onAppear {
+            syncHitTesting(visible: scrollState.isVisible, animated: scrollState.animatesVisibility)
+        }
+        .onChange(of: scrollState.isVisible) { visible in
+            syncHitTesting(visible: visible, animated: scrollState.animatesVisibility)
+        }
+        .onChange(of: isChromePresented) { presented in
+            if presented {
+                syncHitTesting(visible: scrollState.isVisible, animated: scrollState.animatesVisibility)
+            } else {
+                hideHitDisableGeneration += 1
+                hitTestingEnabled = false
+            }
+        }
+    }
+
+    private func syncHitTesting(visible: Bool, animated: Bool) {
+        if visible {
+            hideHitDisableGeneration += 1
+            hitTestingEnabled = true
+            return
+        }
+        guard animated else {
+            hideHitDisableGeneration += 1
+            hitTestingEnabled = false
+            return
+        }
+        // Keep hits during slide-out (bar still on screen); disable after settle.
+        hideHitDisableGeneration += 1
+        let generation = hideHitDisableGeneration
+        hitTestingEnabled = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(TabBarMotion.slideSettleMilliseconds))
+            guard generation == hideHitDisableGeneration else { return }
+            guard !scrollState.isVisible else { return }
+            hitTestingEnabled = false
+        }
+    }
+}
+
+private struct CameraRevealClipModifier: ViewModifier {
+    var clip: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if clip {
+            content.clipped()
+        } else {
+            content
+        }
     }
 }
 
@@ -1581,6 +1652,10 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
     @State private var activatedTabs: Set<Tab> = [.feed]
     /// Bumps on every tab request so a deferred slide can be cancelled by a newer tap.
     @State private var transitionGeneration: Int = 0
+    /// Hit-testing follows the page still on screen until the slide settles.
+    /// `pagerIndex` jumps immediately inside `withAnimation`, so using it for hits
+    /// would dead-zone the visible outgoing page mid-transition.
+    @State private var hitTestPagerIndex: Int = 0
 
     var body: some View {
         GeometryReader { proxy in
@@ -1602,11 +1677,13 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             let initial = selectedTab.isPagerTab ? selectedTab : .feed
+            let initialIndex = Tab.pagerTabs.firstIndex(of: initial) ?? 0
             var transaction = Transaction()
             transaction.disablesAnimations = true
             withTransaction(transaction) {
                 activatedTabs.insert(initial)
-                pagerIndex = Tab.pagerTabs.firstIndex(of: initial) ?? 0
+                pagerIndex = initialIndex
+                hitTestPagerIndex = initialIndex
             }
             prewarmRemainingTabs()
         }
@@ -1633,6 +1710,7 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
         let idx = Tab.pagerTabs.firstIndex(of: newTab) ?? 0
         guard idx != pagerIndex else {
             activatedTabs.insert(newTab)
+            hitTestPagerIndex = idx
             return
         }
 
@@ -1642,6 +1720,8 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
 
         transitionGeneration += 1
         let generation = transitionGeneration
+        // Keep hits on the outgoing (still visible) page until the slide settles.
+        hitTestPagerIndex = from
 
         if needsMount {
             // Mount destination first without sliding, then ease the page on the next turn.
@@ -1658,11 +1738,21 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
                 withAnimation(MainTabPagerMotion.slide) {
                     pagerIndex = idx
                 }
+                scheduleHitTestSettle(to: idx, generation: generation)
             }
         } else {
             withAnimation(MainTabPagerMotion.slide) {
                 pagerIndex = idx
             }
+            scheduleHitTestSettle(to: idx, generation: generation)
+        }
+    }
+
+    private func scheduleHitTestSettle(to idx: Int, generation: Int) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(MainTabPagerMotion.settleMilliseconds))
+            guard generation == transitionGeneration else { return }
+            hitTestPagerIndex = idx
         }
     }
 
@@ -1681,8 +1771,7 @@ private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Mes
         }
         .frame(width: width)
         .frame(maxHeight: .infinity)
-        // Keep hit-testing on the selected tab immediately; heavy activation is deferred.
-        .allowsHitTesting(selectedTab == tab)
+        .allowsHitTesting((Tab.pagerTabs.firstIndex(of: tab) ?? -1) == hitTestPagerIndex)
     }
 }
 

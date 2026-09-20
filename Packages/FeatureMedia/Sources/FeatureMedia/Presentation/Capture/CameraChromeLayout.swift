@@ -19,6 +19,10 @@ struct CameraChromeMetrics: Equatable {
 enum CameraChromeLayout {
     static let previewAspect: CGFloat = 8 / 9
     static let toolCount: CGFloat = 4
+    /// Extra rise of tools + shutter above the tab-aligned bottom inset once open.
+    /// Applied via `CameraOpenRevealGeometry.shutterRowLift`, not the base padding —
+    /// so progress 0 sits on the tab camera circle for the water reveal.
+    static let chromeBottomExtraLift: CGFloat = 18
 
     static func metrics(in size: CGSize, safeArea: UIEdgeInsets) -> CameraChromeMetrics {
         let compactWidth = size.width < 400
@@ -34,8 +38,8 @@ enum CameraChromeLayout {
             previewLift: compactHeight ? 8 : 24,
             previewInset: 12,
             topPadding: max(safeArea.top, 8),
-            bottomPadding: SplickTabBarMetrics.cameraButtonBottomInset,
-            toolsToShutterSpacing: compactHeight ? 8 : 12,
+            bottomPadding: SplickTabBarMetrics.cameraRevealBottomInset,
+            toolsToShutterSpacing: compactHeight ? 20 : 24,
             shutterRowHorizontalPadding: compactWidth ? 16 : 20
         )
     }
