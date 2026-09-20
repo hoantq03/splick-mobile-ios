@@ -41,8 +41,7 @@ enum VNDMoneyFormat {
         Binding(
             get: { storage.wrappedValue },
             set: { newValue in
-                let filtered = newValue.filter { $0.isNumber || $0 == "," || $0 == "." }
-                storage.wrappedValue = filtered
+                storage.wrappedValue = BillSplitShareInput.sanitizePercentInput(newValue)
             }
         )
     }

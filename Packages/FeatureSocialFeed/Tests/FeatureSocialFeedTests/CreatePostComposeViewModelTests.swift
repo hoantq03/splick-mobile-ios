@@ -180,13 +180,16 @@ final class CreatePostComposeViewModelTests: XCTestCase {
         vm.enableBillSplit = true
         vm.billTotalText = "1000000"
         vm.splitMode = .percentage
-        vm.percentageTexts[friendId] = "25"
+        vm.setPercentage(userId: currentUser.id, raw: "25")
 
-        XCTAssertEqual(vm.amountForPercentage(userId: friendId), Decimal(250000))
+        XCTAssertEqual(vm.amountForPercentage(userId: currentUser.id), Decimal(250000))
+        XCTAssertEqual(vm.percentageTexts[currentUser.id], "25")
+        XCTAssertEqual(vm.percentageTexts[friendId], "75")
 
         vm.splitMode = .exact
-        vm.exactAmountTexts[friendId] = "400000"
-        XCTAssertEqual(vm.exactAmountTexts[friendId], "400000")
+        vm.setExactAmount(userId: currentUser.id, raw: "400000")
+        XCTAssertEqual(vm.exactAmountTexts[currentUser.id], VNDMoneyFormat.format(400_000))
+        XCTAssertEqual(vm.exactAmountTexts[friendId], VNDMoneyFormat.format(600_000))
     }
 
     func testCompanionAndGroupSelection() async {
@@ -351,5 +354,19 @@ final class CreatePostComposeViewModelTests: XCTestCase {
         XCTAssertEqual(vm.selectedMediaItems.first?.mediaType, .video)
         XCTAssertEqual(vm.selectedMediaItems.first?.sourceURL, url)
         XCTAssertEqual(vm.selectedMediaItems.first?.previewPlaybackURL, url)
+    }
+
+    func testCompanionDirectoryLoadsFriendsWithoutActivatingSearch() async {
+        let friend = UserSummary(id: UUID(), username: "lan", displayName: "Lan", avatarURL: nil)
+        mockFriendsUseCase.friendsToReturn = [friend]
+        let vm = makeViewModel()
+
+        await vm.preloadFriendSuggestionsIfNeeded()
+
+        XCTAssertFalse(vm.isFriendSearchActive)
+        XCTAssertTrue(vm.shouldShowFriendSuggestions)
+        XCTAssertEqual(vm.friendSearchResults.map(\.id), [friend.id])
+        XCTAssertEqual(mockFriendsUseCase.lastQuery, "")
+        XCTAssertEqual(mockFriendsUseCase.lastPage, 0)
     }
 }

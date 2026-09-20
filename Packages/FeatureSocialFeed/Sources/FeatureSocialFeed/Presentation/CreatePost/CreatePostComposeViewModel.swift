@@ -7,6 +7,7 @@ import Common
 import Localization
 import SplickDomain
 import FeatureFriends
+import FeatureMedia
 
 public enum ComposeBillSplitMode: String, CaseIterable, Identifiable {
     case equal
@@ -62,12 +63,20 @@ public final class CreatePostComposeViewModel: ObservableObject {
     @Published private(set) var selectedCompanionGroups: [Group] = []
     @Published private(set) var expandedCompanionGroupIds: Set<UUID> = []
     @Published private(set) var loadingCompanionGroupIds: Set<UUID> = []
-    @Published var enableBillSplit = false
-    @Published var autoReminderEnabled = false
-    @Published var billTotalText = ""
-    @Published var splitMode: ComposeBillSplitMode = .equal
+    @Published var enableBillSplit = false {
+        didSet { rebalanceBillSplitShares() }
+    }
+    @Published var autoReminderEnabled = true
+    @Published var billTotalText = "" {
+        didSet { rebalanceBillSplitShares() }
+    }
+    @Published var splitMode: ComposeBillSplitMode = .equal {
+        didSet { rebalanceBillSplitShares() }
+    }
     @Published var percentageTexts: [UUID: String] = [:]
     @Published var exactAmountTexts: [UUID: String] = [:]
+    private var explicitPercentageIds: Set<UUID> = []
+    private var explicitExactIds: Set<UUID> = []
     @Published private(set) var isSearchingFriends = false
     @Published private(set) var hasMoreFriendSearch = true
     @Published private(set) var isFriendSearchActive = false
@@ -140,7 +149,15 @@ public final class CreatePostComposeViewModel: ObservableObject {
         self.currentUser = currentUser
         self.currentUserId = currentUserId ?? currentUser?.id
         self.feedRepository = feedRepository
-        var drafts: [ComposeMediaDraft] = previewImages.compactMap(Self.makeImageDraft)
+        var drafts: [ComposeMediaDraft] = []
+        var pendingSessionID = PhotoEditorSessionStore.shared.takePendingSessionID()
+        for image in previewImages {
+            let sessionId = pendingSessionID ?? UUID()
+            pendingSessionID = nil
+            if let draft = Self.makeImageDraft(from: image, id: sessionId) {
+                drafts.append(draft)
+            }
+        }
         var videoURLs = previewVideoURLs
         if let previewVideoURL {
             videoURLs.insert(previewVideoURL, at: 0)
@@ -177,7 +194,8 @@ public final class CreatePostComposeViewModel: ObservableObject {
     func addImages(_ images: [UIImage]) {
         for image in images {
             guard remainingMediaSlots > 0 else { break }
-            guard let draft = Self.makeImageDraft(from: image) else { continue }
+            let sessionId = PhotoEditorSessionStore.shared.takePendingSessionID() ?? UUID()
+            guard let draft = Self.makeImageDraft(from: image, id: sessionId) else { continue }
             selectedMediaItems.append(draft)
         }
     }
@@ -281,6 +299,54 @@ public final class CreatePostComposeViewModel: ObservableObject {
         return participants
     }
 
+    var billSplitPartyIds: [UUID] {
+        billSplitParticipants.map(\.id) + pendingGuests.map(\.id)
+    }
+
+    func setPercentage(userId: UUID, raw: String) {
+        let snapshot = BillSplitShareInput.applyPercent(
+            editedId: userId,
+            raw: raw,
+            orderedIds: billSplitPartyIds,
+            current: percentageTexts,
+            explicitIds: explicitPercentageIds
+        )
+        percentageTexts = snapshot.texts
+        explicitPercentageIds = snapshot.explicitIds
+    }
+
+    func setExactAmount(userId: UUID, raw: String) {
+        let snapshot = BillSplitShareInput.applyExact(
+            editedId: userId,
+            raw: raw,
+            orderedIds: billSplitPartyIds,
+            current: exactAmountTexts,
+            explicitIds: explicitExactIds,
+            total: parsedBillTotal
+        )
+        exactAmountTexts = snapshot.texts
+        explicitExactIds = snapshot.explicitIds
+    }
+
+    private func rebalanceBillSplitShares() {
+        let ids = billSplitPartyIds
+        let percent = BillSplitShareInput.rebalancePercent(
+            orderedIds: ids,
+            current: percentageTexts,
+            explicitIds: explicitPercentageIds
+        )
+        percentageTexts = percent.texts
+        explicitPercentageIds = percent.explicitIds
+        let exact = BillSplitShareInput.rebalanceExact(
+            orderedIds: ids,
+            current: exactAmountTexts,
+            explicitIds: explicitExactIds,
+            total: parsedBillTotal
+        )
+        exactAmountTexts = exact.texts
+        explicitExactIds = exact.explicitIds
+    }
+
     var companionUsersForSubmit: [UserSummary] {
         var companions: [UserSummary] = []
         var seen = Set<UUID>()
@@ -333,10 +399,14 @@ public final class CreatePostComposeViewModel: ObservableObject {
         let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedName = name.isEmpty ? displayNameFromEmail(normalizedEmail) : name
         pendingGuests.append(ComposePendingGuest(displayName: resolvedName, email: normalizedEmail))
+        rebalanceBillSplitShares()
     }
 
     func removePendingGuest(_ guest: ComposePendingGuest) {
         pendingGuests.removeAll { $0.id == guest.id }
+        percentageTexts.removeValue(forKey: guest.id)
+        exactAmountTexts.removeValue(forKey: guest.id)
+        rebalanceBillSplitShares()
     }
 
     private func isLikelyEmail(_ value: String) -> Bool {
@@ -436,12 +506,13 @@ public final class CreatePostComposeViewModel: ObservableObject {
 
     func removeMediaItem(id: UUID) {
         selectedMediaItems.removeAll { $0.id == id }
+        PhotoEditorSessionStore.shared.remove(id)
     }
 
     func updateMediaImage(id: UUID, image: UIImage) {
         guard let index = selectedMediaItems.firstIndex(where: { $0.id == id }),
               selectedMediaItems[index].mediaType == .image,
-              let draft = Self.makeImageDraft(from: image)
+              let draft = Self.makeImageDraft(from: image, id: id)
         else { return }
 
         let existingId = selectedMediaItems[index].id
@@ -469,6 +540,9 @@ public final class CreatePostComposeViewModel: ObservableObject {
     func startCompanionDirectoryLoadIfNeeded() {
         guard companionDirectoryTask == nil else { return }
         guard !hasCompletedInitialFriendFetch || !hasLoadedAudienceGroups else { return }
+        if !hasCompletedInitialFriendFetch {
+            isSearchingFriends = true
+        }
         companionDirectoryTask = Task { [weak self] in
             await self?.preloadFriendSuggestionsIfNeeded()
             await self?.loadCompanionGroupsIfNeeded()
@@ -484,20 +558,13 @@ public final class CreatePostComposeViewModel: ObservableObject {
 
     func setFriendSearchActive(_ active: Bool) {
         isFriendSearchActive = active
-        if active {
+        if active, !hasCompletedInitialFriendFetch {
             scheduleFriendSearch(reset: true)
-        } else if friendSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            friendSearchTask?.cancel()
-            isSearchingFriends = false
         }
     }
 
     func updateFriendSearch(_ query: String) {
         friendSearchQuery = query
-        guard shouldShowFriendSuggestions else {
-            cancelFriendSearch()
-            return
-        }
         scheduleFriendSearch(reset: true, debounce: true)
     }
 
@@ -555,12 +622,14 @@ public final class CreatePostComposeViewModel: ObservableObject {
         friendSearchResults.removeAll { $0.id == user.id }
         friendSearchQuery = ""
         scheduleFriendSearch(reset: true)
+        rebalanceBillSplitShares()
     }
 
     func removeCompanion(_ user: UserSummary) {
         selectedCompanions.removeAll { $0.id == user.id }
         percentageTexts.removeValue(forKey: user.id)
         exactAmountTexts.removeValue(forKey: user.id)
+        rebalanceBillSplitShares()
     }
 
     func loadCompanionGroupsIfNeeded() async {
@@ -599,6 +668,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
             percentageTexts.removeValue(forKey: user.id)
             exactAmountTexts.removeValue(forKey: user.id)
         }
+        rebalanceBillSplitShares()
     }
 
     func removeCompanionGroup(_ group: Group) {
@@ -607,6 +677,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
         selectedCompanionGroups.removeAll { $0.id == group.id }
         expandedCompanionGroupIds.remove(group.id)
         loadingCompanionGroupIds.remove(group.id)
+        rebalanceBillSplitShares()
     }
 
     private func loadCompanionGroupMembers(for group: Group) async {
@@ -637,6 +708,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
             if !members.isEmpty {
                 expandedCompanionGroupIds.insert(group.id)
             }
+            rebalanceBillSplitShares()
         } catch {
             guard !Task.isCancelled else { return }
             guard selectedCompanionGroupIds.contains(group.id) else { return }
@@ -1109,11 +1181,12 @@ public final class CreatePostComposeViewModel: ObservableObject {
         }
     }
 
-    private static func makeImageDraft(from previewImage: UIImage) -> ComposeMediaDraft? {
+    private static func makeImageDraft(from previewImage: UIImage, id: UUID = UUID()) -> ComposeMediaDraft? {
         let jpegData = previewImage.jpegData(compressionQuality: AppConstants.Media.compressionQuality)
         let pngData = jpegData == nil ? previewImage.pngData() : nil
         guard let data = jpegData ?? pngData else { return nil }
         return ComposeMediaDraft(
+            id: id,
             previewImage: previewImage,
             mediaType: .image,
             data: data,

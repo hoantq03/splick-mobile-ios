@@ -38,6 +38,8 @@ final class SocialFeedMoreViewModelAndMapperTests: XCTestCase {
         let percentBinding = VNDMoneyFormat.percentBinding(Binding(get: { percentString }, set: { percentString = $0 }))
         percentBinding.wrappedValue = "50,5%"
         XCTAssertEqual(percentString, "50,5")
+        percentBinding.wrappedValue = "150"
+        XCTAssertEqual(percentString, "100")
     }
 
     func testPhotoAlbumFilters() {
