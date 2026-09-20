@@ -1,6 +1,7 @@
 import XCTest
 import SplickDomain
 import Networking
+import Localization
 @testable import FeatureAuth
 
 final class AuthEndpointAndMappersTests: XCTestCase {
@@ -245,5 +246,71 @@ final class AuthEndpointAndMappersTests: XCTestCase {
         XCTAssertEqual(payload.deviceInfo, SessionMetadata.deviceInfo)
         XCTAssertEqual(payload.deviceName, SessionMetadata.deviceName)
         XCTAssertEqual(payload.loginLocation, SessionMetadata.loginLocation)
+    }
+
+    @MainActor
+    func testPasswordRequirementGuideItems() {
+        let mockDefaults = MockUserDefaultsService()
+        let languageService = LanguageService(userDefaults: mockDefaults)
+        let items = passwordRequirementGuideItems(for: "Weak", languageService: languageService)
+        XCTAssertFalse(items.isEmpty)
+    }
+
+    func testAuthPreviewMockUseCases() async throws {
+        let checkId = MockCheckIdentifierUseCase()
+        let exists1 = try await checkId.execute(email: "existing@example.com", phoneNumber: nil)
+        XCTAssertTrue(exists1)
+        let exists2 = try await checkId.execute(email: nil, phoneNumber: "0999")
+        XCTAssertTrue(exists2)
+        let exists3 = try await checkId.execute(email: "other@example.com", phoneNumber: "0111")
+        XCTAssertFalse(exists3)
+
+        let login = MockLoginUseCase()
+        let session = try await login.execute(email: "a@b.com", password: "p")
+        XCTAssertEqual(session.token.accessToken, "mock-token")
+
+        let reqEmail = MockRequestEmailOtpUseCase()
+        try await reqEmail.execute(email: "a@b.com")
+
+        let reqPhone = MockRequestPhoneOtpUseCase()
+        try await reqPhone.execute(phoneNumber: "+84901234567")
+
+        let verifyPhone = MockVerifyPhoneOtpUseCase()
+        let vpSession = try await verifyPhone.execute(phoneNumber: "+84901234567", otpCode: "123456")
+        XCTAssertEqual(vpSession.token.accessToken, "mock-token")
+
+        let google = MockGoogleSignInUseCase()
+        let gSession = try await google.execute(idToken: "tok")
+        XCTAssertEqual(gSession.token.accessToken, "mock-token")
+
+        let apple = MockAppleSignInUseCase()
+        let aSession = try await apple.execute(idToken: "tok")
+        XCTAssertEqual(aSession.token.accessToken, "mock-token")
+
+        let reactivate = MockReactivateAccountUseCase()
+        let rSession = try await reactivate.execute(reactivationToken: "tok")
+        XCTAssertEqual(rSession.token.accessToken, "mock-token")
+
+        let forgot = MockForgotPasswordUseCase()
+        try await forgot.execute(email: "a@b.com")
+
+        let verifyReset = MockVerifyResetPasswordOtpUseCase()
+        try await verifyReset.execute(email: "a@b.com", otpCode: "123456")
+
+        let reset = MockResetPasswordUseCase()
+        let resetSession = try await reset.execute(email: "a@b.com", otpCode: "123456", newPassword: "p")
+        XCTAssertEqual(resetSession.token.accessToken, "mock-token")
+
+        let register = MockRegisterUseCase()
+        let regSession = try await register.execute(
+            channel: .email,
+            identifier: "a@b.com",
+            username: "u",
+            password: "p",
+            otpCode: "123456",
+            displayName: "D",
+            dateOfBirth: nil
+        )
+        XCTAssertEqual(regSession.token.accessToken, "mock-token")
     }
 }

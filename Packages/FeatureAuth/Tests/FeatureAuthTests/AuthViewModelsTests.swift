@@ -8,11 +8,35 @@ import DesignSystem
 @testable import FeatureAuth
 
 @MainActor
+private final class MockLoginGooglePresenter: GoogleSignInPresenting {
+    var isAvailable = true
+    var token = "mock_gid"
+    var errorToThrow: Error?
+    func fetchIdToken() async throws -> String {
+        if let error = errorToThrow { throw error }
+        return token
+    }
+}
+
+@MainActor
+private final class MockLoginApplePresenter: AppleSignInPresenting {
+    var isAvailable = true
+    var token = "mock_aid"
+    var errorToThrow: Error?
+    func fetchIdToken() async throws -> String {
+        if let error = errorToThrow { throw error }
+        return token
+    }
+}
+
+@MainActor
 final class AuthViewModelsTests: XCTestCase {
 
     private var mockRepo: MockAuthRepository!
     private var mockSession: MockSessionManager!
     private var languageService: LanguageService!
+    private var googlePresenter: MockLoginGooglePresenter!
+    private var applePresenter: MockLoginApplePresenter!
 
     override func setUp() {
         super.setUp()
@@ -20,6 +44,8 @@ final class AuthViewModelsTests: XCTestCase {
         mockSession = MockSessionManager()
         let mockDefaults = MockUserDefaultsService()
         languageService = LanguageService(userDefaults: mockDefaults)
+        googlePresenter = MockLoginGooglePresenter()
+        applePresenter = MockLoginApplePresenter()
     }
 
     private func createDummySession() -> AuthSession {
@@ -58,7 +84,9 @@ final class AuthViewModelsTests: XCTestCase {
             googleSignInUseCase: GoogleSignInUseCase(repository: mockRepo, sessionManager: mockSession),
             appleSignInUseCase: AppleSignInUseCase(repository: mockRepo, sessionManager: mockSession),
             reactivateAccountUseCase: ReactivateAccountUseCase(repository: mockRepo, sessionManager: mockSession),
-            languageService: languageService
+            languageService: languageService,
+            googleSignInPresenter: googlePresenter,
+            appleSignInPresenter: applePresenter
         )
     }
 
@@ -174,6 +202,106 @@ final class AuthViewModelsTests: XCTestCase {
         XCTAssertEqual(vm.step, .credentials)
     }
 
+    func testLoginViewModel_oauthFlows() async {
+        let dummy = createDummySession()
+        mockRepo.signInWithGoogleResult = .success(dummy)
+        mockRepo.signInWithAppleResult = .success(dummy)
+
+        let vm = makeLoginViewModel()
+        XCTAssertTrue(vm.isGoogleSignInAvailable)
+        XCTAssertTrue(vm.isAppleSignInAvailable)
+
+        // Google Sign In
+        await vm.signInWithGoogle()
+        if case .loaded = vm.state {
+            // Success
+        } else {
+            XCTFail("Expected loaded state from Google sign in, got \(vm.state)")
+        }
+        _ = vm.consumeShouldCompleteOAuthProfile()
+
+        // Apple Sign In
+        await vm.signInWithApple()
+        if case .loaded = vm.state {
+            // Success
+        } else {
+            XCTFail("Expected loaded state from Apple sign in, got \(vm.state)")
+        }
+
+        // Apple cancelled
+        applePresenter.errorToThrow = AppleSignInError.cancelled
+        await vm.signInWithApple()
+        XCTAssertEqual(vm.state, .idle)
+    }
+
+    func testLoginViewModel_keyboardAndSubmit() async {
+        let dummy = createDummySession()
+        mockRepo.loginResult = .success(dummy)
+        mockRepo.checkIdentifierResult = .success(true)
+
+        let vm = makeLoginViewModel()
+        vm.identifier = "test@example.com"
+        await vm.submitIdentifierFromKeyboard()
+        XCTAssertEqual(vm.lookupState, .existingUser)
+
+        vm.password = "password123"
+        await vm.submit()
+        if case .loaded = vm.state {
+            // Success
+        } else {
+            XCTFail("Expected loaded state from email login, got \(vm.state)")
+        }
+    }
+
+    func testLoginViewModel_registrationFlow() async {
+        mockRepo.checkIdentifierResult = .success(false)
+        let dummy = createDummySession()
+        mockRepo.registerEmailResult = .success(dummy)
+
+        let vm = makeLoginViewModel()
+        vm.identifier = "newuser@example.com"
+        await vm.checkIdentifier()
+        XCTAssertEqual(vm.lookupState, .newUser)
+
+        vm.username = "new_user"
+        vm.password = "StrongPassword123!"
+        vm.confirmPassword = "StrongPassword123!"
+        vm.hasAcceptedLegalTerms = true
+
+        await vm.beginRegistration()
+        XCTAssertEqual(vm.step, .registerOtp)
+
+        vm.otpCode = "123456"
+        await vm.completeRegistration()
+        if case .loaded = vm.state {
+            // Success
+        } else {
+            XCTFail("Expected loaded state from completeRegistration, got \(vm.state)")
+        }
+    }
+
+    func testLoginViewModel_phoneLoginFlow() async {
+        mockRepo.checkIdentifierResult = .success(true)
+        let dummy = createDummySession()
+        mockRepo.verifyPhoneOtpResult = .success(dummy)
+
+        let vm = makeLoginViewModel()
+        vm.identifier = "0901234567"
+        await vm.checkIdentifier()
+        XCTAssertEqual(vm.lookupState, .existingUser)
+
+        await vm.requestPhoneOtpAndContinue()
+        XCTAssertEqual(vm.step, .phoneOtp)
+
+        vm.otpCode = "123456"
+        await vm.verifyPhoneOtp()
+        if case .loaded = vm.state {
+            // Success
+        } else {
+            XCTFail("Expected loaded state from verifyPhoneOtp, got \(vm.state)")
+        }
+    }
+
     // MARK: - RegisterViewModel Tests
 
     private func makeRegisterViewModel() -> RegisterViewModel {
@@ -215,6 +343,29 @@ final class AuthViewModelsTests: XCTestCase {
         XCTAssertEqual(vm.otpCode, "")
     }
 
+    func testRegisterViewModel_executeRegisterFlow() async {
+        let dummy = createDummySession()
+        mockRepo.registerEmailResult = .success(dummy)
+
+        let vm = makeRegisterViewModel()
+        vm.channel = .email
+        vm.email = "newuser@example.com"
+        vm.username = "new_user"
+        vm.password = "StrongPassword123!"
+        vm.confirmPassword = "StrongPassword123!"
+
+        await vm.requestOtpAndContinue()
+        XCTAssertEqual(vm.step, .otpVerification)
+
+        vm.otpCode = "123456"
+        await vm.register()
+        if case .loaded = vm.state {
+            // Success
+        } else {
+            XCTFail("Expected loaded state from register, got \(vm.state)")
+        }
+    }
+
     // MARK: - ForgotPasswordViewModel Tests
 
     private func makeForgotPasswordViewModel() -> ForgotPasswordViewModel {
@@ -252,6 +403,29 @@ final class AuthViewModelsTests: XCTestCase {
         vm.reset()
         XCTAssertEqual(vm.identifier, "")
         XCTAssertEqual(vm.step, .identifier)
+    }
+
+    func testForgotPasswordViewModel_fullResetFlow() async {
+        let dummy = createDummySession()
+        mockRepo.resetPasswordResult = .success(dummy)
+
+        let vm = makeForgotPasswordViewModel()
+        vm.identifier = "user@example.com"
+        await vm.requestResetCode()
+        XCTAssertEqual(vm.step, .otp)
+
+        vm.otpCode = "123456"
+        await vm.verifyResetCode()
+        XCTAssertEqual(vm.step, .newPassword)
+
+        vm.password = "NewStrongPassword123!"
+        vm.confirmPassword = "NewStrongPassword123!"
+        await vm.resetPassword()
+        if case .loaded = vm.state {
+            // Success
+        } else {
+            XCTFail("Expected loaded state from resetPassword, got \(vm.state)")
+        }
     }
 
     // MARK: - ChangeUsernameSheetViewModel Tests

@@ -1017,5 +1017,77 @@ final class AuthUseCasesTests: XCTestCase {
             XCTFail("Expected .updated, got \(result)")
         }
     }
+
+    func testRestoreSessionUseCase_execute_flow() async {
+        let mockRepo = MockAuthRepository()
+        let mockSession = MockSessionManager()
+        let mockKeychain = MockKeychainService()
+        let tokenProvider = InMemoryTokenProvider()
+        let mockRefresh = MockRefreshTokenUseCase()
+        let mockDefaults = MockUserDefaultsService()
+
+        try? mockKeychain.saveString("acc123", for: AppConstants.Keychain.accessTokenKey)
+        try? mockKeychain.saveString("ref123", for: AppConstants.Keychain.refreshTokenKey)
+        try? mockKeychain.saveString(UUID().uuidString, for: AppConstants.Keychain.userIdKey)
+
+        let remoteUser = User(
+            id: UUID(),
+            email: "remote@example.com",
+            username: "remote_user",
+            displayName: "Remote User",
+            avatarURL: nil,
+            status: .active,
+            preferredLocale: "vi",
+            timezone: "Asia/Ho_Chi_Minh",
+            dateOfBirth: nil,
+            createdAt: Date()
+        )
+        mockRepo.currentUserResult = .success(remoteUser)
+
+        let useCase = RestoreSessionUseCase(
+            repository: mockRepo,
+            sessionManager: mockSession,
+            keychainService: mockKeychain,
+            tokenProvider: tokenProvider,
+            refreshTokenUseCase: mockRefresh,
+            userDefaultsService: mockDefaults
+        )
+
+        let session = await useCase.execute()
+        XCTAssertNotNil(session)
+        XCTAssertEqual(session?.user.email, "remote@example.com")
+    }
+
+    func testRestoreSessionUseCase_confirmRemote_unauthorized_and_invalidates() async {
+        let mockRepo = MockAuthRepository()
+        let mockSession = MockSessionManager()
+        let mockKeychain = MockKeychainService()
+        let tokenProvider = InMemoryTokenProvider()
+        let mockRefresh = MockRefreshTokenUseCase()
+        let mockDefaults = MockUserDefaultsService()
+
+        try? mockKeychain.saveString("acc123", for: AppConstants.Keychain.accessTokenKey)
+        try? mockKeychain.saveString("ref123", for: AppConstants.Keychain.refreshTokenKey)
+        try? mockKeychain.saveString(UUID().uuidString, for: AppConstants.Keychain.userIdKey)
+
+        mockRepo.currentUserResult = .failure(NetworkError.unauthorized)
+        mockRefresh.refreshSessionResult = .failure(NetworkError.unauthorized)
+
+        let useCase = RestoreSessionUseCase(
+            repository: mockRepo,
+            sessionManager: mockSession,
+            keychainService: mockKeychain,
+            tokenProvider: tokenProvider,
+            refreshTokenUseCase: mockRefresh,
+            userDefaultsService: mockDefaults
+        )
+
+        let confirmation = await useCase.confirmRemote()
+        if case .signedOut = confirmation {
+            // Expected
+        } else {
+            XCTFail("Expected .signedOut, got \(confirmation)")
+        }
+    }
 }
 
