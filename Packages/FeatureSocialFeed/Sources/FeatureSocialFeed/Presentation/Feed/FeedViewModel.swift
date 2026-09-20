@@ -74,6 +74,10 @@ public final class FeedViewModel: ObservableObject {
     private var viewDwellTasks: [UUID: Task<Void, Never>] = [:]
     private static let viewTrackDebounceNanos: UInt64 = 2_000_000_000
     private static let viewDwellNanos: UInt64 = 1_000_000_000
+    private static let initialPrefetchPostCount = 12
+    private static let prefetchLookaheadCount = 6
+    private static let visibilityPrefetchDebounceNanos: UInt64 = 180_000_000
+    private var visibilityPrefetchTask: Task<Void, Never>?
 
     /// Optimistic comment ids not yet confirmed by the server — block reply to avoid invalid parent ids.
     @Published private(set) var pendingCommentIds = Set<UUID>()
@@ -203,7 +207,7 @@ public final class FeedViewModel: ObservableObject {
         currentPage = 0
         canLoadMore = startupPosts.count >= 20
         hasReachedFeedEnd = startupPosts.count < 20
-        prefetchImages(for: posts)
+        prefetchImages(for: Array(posts.prefix(Self.initialPrefetchPostCount)))
         persistFeedCache()
     }
 
@@ -216,7 +220,7 @@ public final class FeedViewModel: ObservableObject {
         currentPage = 0
         canLoadMore = cached.count >= 20
         hasReachedFeedEnd = false
-        prefetchImages(for: posts)
+        prefetchImages(for: Array(posts.prefix(Self.initialPrefetchPostCount)))
     }
 
     /// Loads feed disk cache when posts are still empty (before/alongside startup).
@@ -389,7 +393,7 @@ public final class FeedViewModel: ObservableObject {
             updateHasReachedFeedEnd()
             Log.info("Loaded feed", category: .feed, metadata: ["count": String(posts.count)])
             FeedSignposts.endFeedLoad(signpost, count: posts.count)
-            prefetchImages(for: self.posts)
+            prefetchImages(for: Array(self.posts.prefix(Self.initialPrefetchPostCount)))
             persistFeedCache()
             await onFeedLoaded?(self.posts, currentUserId)
             // Pin from the raw server page — not merged posts — so optimistic uploads
@@ -553,6 +557,32 @@ public final class FeedViewModel: ObservableObject {
                 await self.trackViewOnScrollIfNeeded(for: post)
             }
         }
+        scheduleVisibilityPrefetch(visibleIds: visibleIds)
+    }
+
+    private func scheduleVisibilityPrefetch(visibleIds: Set<UUID>) {
+        visibilityPrefetchTask?.cancel()
+        visibilityPrefetchTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: Self.visibilityPrefetchDebounceNanos)
+            guard let self, !Task.isCancelled else { return }
+            self.prefetchAroundVisiblePosts(visibleIds)
+        }
+    }
+
+    private func prefetchAroundVisiblePosts(_ visibleIds: Set<UUID>) {
+        guard !visibleIds.isEmpty, !posts.isEmpty else { return }
+        var indices: [Int] = []
+        indices.reserveCapacity(visibleIds.count)
+        for id in visibleIds {
+            if let index = postIndexById[id], posts.indices.contains(index) {
+                indices.append(index)
+            }
+        }
+        guard let minVisible = indices.min(), let maxVisible = indices.max() else { return }
+        let lower = max(0, minVisible)
+        let upper = min(posts.count - 1, maxVisible + Self.prefetchLookaheadCount)
+        guard lower <= upper else { return }
+        prefetchImages(for: Array(posts[lower...upper]))
     }
 
     func trackViewOnScrollIfNeeded(for post: Post) async {

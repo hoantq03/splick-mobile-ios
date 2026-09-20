@@ -9,7 +9,6 @@ import FeatureStickers
 struct PostCardView: View, Equatable {
     @EnvironmentObject private var languageService: LanguageService
     @EnvironmentObject private var emojiStore: CustomEmojiStore
-    @EnvironmentObject private var presenceStore: PresenceStore
     let post: Post
     let currentUser: UserSummary?
     let actions: PostCardActions
@@ -185,23 +184,10 @@ struct PostCardView: View, Equatable {
 
     private var authorHeader: some View {
         HStack(spacing: SplickTheme.Spacing.xs) {
-            Button { actions.onUserTap(post.author) } label: {
-                AvatarWithPresenceView(
-                    imageURL: post.author.avatarURL,
-                    name: post.author.displayName,
-                    size: .small,
-                    userId: post.author.id,
-                    showOnlineIndicator: PresenceDisplayPolicy.shouldShowOnlineIndicator(
-                        isOnline: resolvedAuthorPresence.isOnline
-                    ),
-                    lastSeenLabel: PresenceDisplayPolicy.compactLastSeenLabel(
-                        isOnline: resolvedAuthorPresence.isOnline,
-                        lastSeenAt: resolvedAuthorPresence.lastSeenAt,
-                        appLocale: languageService.locale
-                    )
-                )
-            }
-            .buttonStyle(.plain)
+            PostAuthorPresenceAvatar(
+                author: post.author,
+                onTap: { actions.onUserTap(post.author) }
+            )
 
             Button { actions.onUserTap(post.author) } label: {
                 Text(post.author.displayName)
@@ -247,14 +233,6 @@ struct PostCardView: View, Equatable {
         } else if showsNewBadge {
             newBadgeMounted = true
         }
-    }
-
-    private var resolvedAuthorPresence: (isOnline: Bool, lastSeenAt: Date?) {
-        _ = presenceStore.states
-        if let state = presenceStore.state(for: post.author.id) {
-            return (state.isOnline, state.lastSeenAt)
-        }
-        return (false, nil)
     }
 
     @ViewBuilder
