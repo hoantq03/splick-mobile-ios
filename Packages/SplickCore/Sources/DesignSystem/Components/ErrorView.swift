@@ -8,17 +8,34 @@ public struct ErrorView: View {
 
     private let error: Error?
     private let staticMessage: String?
+    private let isLoading: Bool
+    private let isFailed: Bool
     private let retryAction: (() -> Void)?
+    @State private var attemptedRetry = false
 
-    public init(message: String, retryAction: (() -> Void)? = nil) {
+    public init(
+        message: String,
+        isLoading: Bool = false,
+        isFailed: Bool = false,
+        retryAction: (() -> Void)? = nil
+    ) {
         self.error = nil
         self.staticMessage = message
+        self.isLoading = isLoading
+        self.isFailed = isFailed
         self.retryAction = retryAction
     }
 
-    public init(error: Error, retryAction: (() -> Void)? = nil) {
+    public init(
+        error: Error,
+        isLoading: Bool = false,
+        isFailed: Bool = false,
+        retryAction: (() -> Void)? = nil
+    ) {
         self.error = error
         self.staticMessage = nil
+        self.isLoading = isLoading
+        self.isFailed = isFailed
         self.retryAction = retryAction
     }
 
@@ -53,7 +70,13 @@ public struct ErrorView: View {
                 .padding(.horizontal, SplickTheme.Spacing.xl)
 
             if let retryAction {
-                SplickButton(retryLabel, style: .primary) {
+                SplickButton(
+                    retryLabel,
+                    style: .primary,
+                    isLoading: isLoading,
+                    isFailed: isFailed || attemptedRetry
+                ) {
+                    attemptedRetry = true
                     retryAction()
                 }
                 .fixedSize(horizontal: true, vertical: false)
