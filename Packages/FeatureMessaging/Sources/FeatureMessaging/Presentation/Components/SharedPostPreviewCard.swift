@@ -27,7 +27,7 @@ struct SharedPostPreviewCard: View {
             .contentShape(Rectangle())
             .onTapGesture {
                 guard enabled else { return }
-                openLinkedPost?(postId, false)
+                openLinkedPost?(postId, false, false)
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel(languageService.text(.postPreviewAccessibility))

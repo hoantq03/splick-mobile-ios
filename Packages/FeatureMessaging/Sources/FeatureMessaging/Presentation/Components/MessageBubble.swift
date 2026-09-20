@@ -505,7 +505,7 @@ struct MessageBubble: View {
         .environment(\.openURL, OpenURLAction { url in
             if let postId = PostShareUrlParser.extractPostId(from: url.absoluteString),
                let openLinkedPost {
-                openLinkedPost(postId, false)
+                openLinkedPost(postId, false, false)
                 return .handled
             }
             UIApplication.shared.open(url)
