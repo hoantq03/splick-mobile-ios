@@ -6,6 +6,10 @@ import SwiftUI
 struct MetalCameraPreviewView: UIViewRepresentable {
     var image: CIImage?
     var cornerRadius: CGFloat = SplickTheme.CornerRadius.card
+    var waterOriginInView: CGPoint = .zero
+    var waterRadius: CGFloat = .greatestFiniteMagnitude
+    var waterFeather: CGFloat = 0
+    var waterActive: Bool = false
 
     func makeUIView(context: Context) -> MetalPreviewMTKView {
         let view = MetalPreviewMTKView(frame: .zero, device: MTLCreateSystemDefaultDevice())
@@ -25,6 +29,13 @@ struct MetalCameraPreviewView: UIViewRepresentable {
         uiView.ciImage = image
         uiView.layer.cornerRadius = cornerRadius
         uiView.clipsToBounds = true
+        CameraWaterRevealMask.apply(
+            to: uiView,
+            originInView: waterOriginInView,
+            radius: waterRadius,
+            feather: waterFeather,
+            active: waterActive
+        )
     }
 }
 
@@ -44,8 +55,8 @@ final class MetalPreviewMTKView: MTKView, MTKViewDelegate {
         if let device {
             ciContext = CIContext(mtlDevice: device, options: [.cacheIntermediates: false])
         }
-        isOpaque = true
-        backgroundColor = .black
+        isOpaque = false
+        backgroundColor = .clear
         isUserInteractionEnabled = false
     }
 

@@ -16,6 +16,10 @@ final class ARCaptureHandle: ObservableObject {
 struct ARCameraView: UIViewRepresentable {
     @Binding var effect: ARFaceEffect
     var captureHandle: ARCaptureHandle
+    var waterOriginInView: CGPoint = .zero
+    var waterRadius: CGFloat = .greatestFiniteMagnitude
+    var waterFeather: CGFloat = 0
+    var waterActive: Bool = false
 
     func makeCoordinator() -> FaceOverlayRenderer {
         FaceOverlayRenderer()
@@ -25,6 +29,8 @@ struct ARCameraView: UIViewRepresentable {
         let view = ARSCNView(frame: .zero)
         view.automaticallyUpdatesLighting = true
         view.clipsToBounds = true
+        view.isOpaque = false
+        view.backgroundColor = .clear
         view.layer.cornerRadius = SplickTheme.CornerRadius.card
         view.layer.cornerCurve = .continuous
         view.layer.masksToBounds = true
@@ -41,6 +47,13 @@ struct ARCameraView: UIViewRepresentable {
 
     func updateUIView(_ uiView: ARSCNView, context: Context) {
         context.coordinator.effect = effect
+        CameraWaterRevealMask.apply(
+            to: uiView,
+            originInView: waterOriginInView,
+            radius: waterRadius,
+            feather: waterFeather,
+            active: waterActive
+        )
     }
 
     static func dismantleUIView(_ uiView: ARSCNView, coordinator: FaceOverlayRenderer) {

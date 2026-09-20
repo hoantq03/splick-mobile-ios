@@ -322,8 +322,7 @@ private struct TabBarCameraButton: View {
         .contentShape(Circle())
         .accessibilityLabel(title)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .opacity(isSelected || revealProgress > 0.02 ? 0 : 1)
-        .allowsHitTesting(!isSelected && revealProgress <= 0.02)
+        .allowsHitTesting(!isSelected && revealProgress <= 0.001)
     }
 }
 

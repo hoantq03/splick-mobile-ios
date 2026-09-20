@@ -281,6 +281,7 @@ struct MainTabView: View {
                             cameraSize: SplickTabBarMetrics.cameraSize,
                             bottomInset: SplickTabBarMetrics.cameraButtonBottomInset
                         )
+                        .opacity(appState.selectedTab == .camera ? 1 : min(max(cameraReveal / 0.08, 0), 1))
                         .ignoresSafeArea()
                         .zIndex(80)
                 }

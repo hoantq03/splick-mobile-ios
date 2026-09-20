@@ -1,5 +1,7 @@
 import CoreGraphics
+import QuartzCore
 import SwiftUI
+import UIKit
 
 /// Circular “water” reveal from the floating camera control to the capture screen.
 public enum CameraOpenRevealGeometry {
@@ -67,10 +69,17 @@ public enum CameraOpenRevealGeometry {
         min(max(progress, 0), 1) * shutterRestLift
     }
 
-    /// Soft rim; 0 when fully open so the finder stays sharp.
+    /// Capture button grows from the tab camera size as the water opens.
+    public static let shutterOpenedScale: CGFloat = 1.25
+
+    public static func shutterOpenScale(progress: CGFloat) -> CGFloat {
+        lerp(1, shutterOpenedScale, progress)
+    }
+
+    /// Soft rim that peaks mid-spread and is 0 at both ends so close does not leave a foggy stain.
     public static func feather(progress: CGFloat, maxFeather: CGFloat) -> CGFloat {
-        let remain = 1 - min(max(progress, 0), 1)
-        return remain * remain * maxFeather
+        let t = min(max(progress, 0), 1)
+        return 4 * t * (1 - t) * maxFeather
     }
 }
 
@@ -86,10 +95,60 @@ public struct CameraFinderSpread: Equatable {
     }
 }
 
+/// Radial water mask for UIKit camera surfaces that ignore SwiftUI `.mask`.
+public enum CameraWaterRevealMask {
+    public static func apply(
+        to view: UIView,
+        originInView: CGPoint,
+        radius: CGFloat,
+        feather: CGFloat,
+        active: Bool
+    ) {
+        guard active else {
+            view.layer.mask = nil
+            return
+        }
+        let outer = max(radius + feather, 0.5)
+        let farthest = hypot(
+            max(originInView.x, view.bounds.width - originInView.x),
+            max(originInView.y, view.bounds.height - originInView.y)
+        )
+        if radius >= farthest, feather <= 0.5 {
+            view.layer.mask = nil
+            return
+        }
+        let gradient: CAGradientLayer
+        if let existing = view.layer.mask as? CAGradientLayer {
+            gradient = existing
+        } else {
+            gradient = CAGradientLayer()
+            gradient.type = .radial
+            view.layer.mask = gradient
+        }
+        gradient.frame = CGRect(
+            x: originInView.x - outer,
+            y: originInView.y - outer,
+            width: outer * 2,
+            height: outer * 2
+        )
+        gradient.startPoint = CGPoint(x: 0.5, y: 0.5)
+        gradient.endPoint = CGPoint(x: 1, y: 1)
+        let coreStop = min(max(radius / outer, 0), 1)
+        let hazeStop = min(coreStop + (1 - coreStop) * 0.36, 0.96)
+        gradient.colors = [
+            UIColor.white.cgColor,
+            UIColor.white.cgColor,
+            UIColor.white.withAlphaComponent(0.42).cgColor,
+            UIColor.clear.cgColor,
+        ]
+        gradient.locations = [0, NSNumber(value: Double(coreStop)), NSNumber(value: Double(hazeStop)), 1]
+    }
+}
+
 public enum CameraOpenRevealMotion {
-    /// Overdamped spring — no bounce, long liquid settle.
-    public static let expand = Animation.spring(response: 0.58, dampingFraction: 1)
-    public static let collapse = Animation.spring(response: 0.46, dampingFraction: 1)
+    /// Ease-out open that finishes instead of spring-settling.
+    public static let expand = Animation.timingCurve(0.16, 1, 0.3, 1, duration: 0.46)
+    public static let collapse = Animation.timingCurve(0.32, 0, 0.18, 1, duration: 0.46)
 }
 
 public struct CameraOpenRevealMask: ViewModifier {
@@ -126,18 +185,13 @@ public struct CameraOpenRevealMask: ViewModifier {
     }
 }
 
-/// Fixed covering circle + GPU scale/blur so the rim interpolates on the render tick.
-private struct WaterRevealMaskShape: View, Animatable {
+/// Radial gradient mask — cheaper than Gaussian blur, wider fog on the water rim.
+private struct WaterRevealMaskShape: View {
     var progress: CGFloat
     var origin: CGPoint
     var cameraSize: CGFloat
     var covering: CGFloat
     var canvasSize: CGSize
-
-    var animatableData: CGFloat {
-        get { progress }
-        set { progress = newValue }
-    }
 
     var body: some View {
         let radius = CameraOpenRevealGeometry.radius(
@@ -147,16 +201,35 @@ private struct WaterRevealMaskShape: View, Animatable {
         )
         let feather = CameraOpenRevealGeometry.feather(
             progress: progress,
-            maxFeather: min(canvasSize.width, canvasSize.height) * 0.18
+            maxFeather: min(canvasSize.width, canvasSize.height) * 0.28
         )
-        let scale = max(radius / max(covering, 1), 0.001)
-        Circle()
-            .fill(Color.white)
-            .frame(width: covering * 2, height: covering * 2)
-            .scaleEffect(scale, anchor: .center)
-            .blur(radius: feather)
-            .position(origin)
-            .transaction { $0.animation = nil }
+        let outer = max(radius + feather, 0.5)
+        let core = min(max(radius / outer, 0), 1)
+        let haze = min(core + (1 - core) * 0.36, 0.96)
+        Canvas { context, _ in
+            let rect = CGRect(
+                x: origin.x - outer,
+                y: origin.y - outer,
+                width: outer * 2,
+                height: outer * 2
+            )
+            context.fill(
+                Path(ellipseIn: rect),
+                with: .radialGradient(
+                    Gradient(stops: [
+                        .init(color: .white, location: 0),
+                        .init(color: .white, location: core),
+                        .init(color: .white.opacity(0.42), location: haze),
+                        .init(color: .clear, location: 1),
+                    ]),
+                    center: origin,
+                    startRadius: 0,
+                    endRadius: outer
+                )
+            )
+        }
+        .frame(width: canvasSize.width, height: canvasSize.height)
+        .transaction { $0.animation = nil }
     }
 }
 

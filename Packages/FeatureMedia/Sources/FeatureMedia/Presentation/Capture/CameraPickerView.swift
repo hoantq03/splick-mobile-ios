@@ -32,7 +32,6 @@ struct CameraPickerView: View {
     @State private var boomerangProgress: CGFloat = 0
     @State private var shutterPressActive = false
     @State private var shortVideoHoldStarted = false
-    @State private var finderSlot: CGRect = .zero
 
     private var faceTrackingSupported: Bool {
         ARFaceTrackingConfiguration.isSupported
@@ -45,32 +44,16 @@ struct CameraPickerView: View {
                 safeArea: CameraChromeLayout.windowSafeAreaInsets()
             )
             ZStack {
-                SplickTheme.Colors.background.ignoresSafeArea()
+                SplickBrandAtmosphere()
 
                 VStack(spacing: 0) {
                     topBar
                         .padding(.top, metrics.topPadding)
 
-                    Color.clear
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .padding(.horizontal, metrics.previewInset)
-                        .background(
-                            GeometryReader { slot in
-                                Color.clear.preference(
-                                    key: FinderSlotPreferenceKey.self,
-                                    value: slot.frame(in: .named("cameraCanvas"))
-                                )
-                            }
-                        )
+                    finder(metrics: metrics, canvas: geo.size)
 
                     bottomBar(metrics: metrics)
                 }
-
-                finder(
-                    metrics: metrics,
-                    canvas: geo.size,
-                    slot: finderSlot
-                )
 
                 if countdownRemaining > 0 {
                     Text(String(format: languageService.text(.mediaCameraTimerSeconds), countdownRemaining))
@@ -97,7 +80,6 @@ struct CameraPickerView: View {
                 }
             }
             .coordinateSpace(name: "cameraCanvas")
-            .onPreferenceChange(FinderSlotPreferenceKey.self) { finderSlot = $0 }
         }
         .onAppear {
             session.start()
@@ -140,84 +122,111 @@ struct CameraPickerView: View {
         }
     }
 
-    private func finder(metrics: CameraChromeMetrics, canvas: CGSize, slot: CGRect) -> some View {
-        let lift = metrics.previewLift
-        let zoomReserve: CGFloat = 44
-        let slotSize = slot == .zero ? canvas : slot.size
-        let slotOrigin = slot == .zero ? .zero : slot.origin
-        let maxWidth = max(slotSize.width, 1)
-        let maxHeight = max(slotSize.height - lift - zoomReserve, 1)
-        let restWidth = min(maxWidth, maxHeight * CameraChromeLayout.previewAspect)
-        let restHeight = restWidth / CameraChromeLayout.previewAspect
-        let restCenter = CGPoint(
-            x: slotOrigin.x + slotSize.width / 2,
-            y: slotOrigin.y + slotSize.height / 2 - lift
-        )
-        let spread = CameraOpenRevealGeometry.finderSpread(
-            progress: revealProgress,
-            cameraSize: SplickTabBarMetrics.cameraSize,
-            canvas: canvas,
-            bottomInset: metrics.bottomPadding,
-            restWidth: restWidth,
-            restHeight: restHeight,
-            restCenter: restCenter,
-            restCorner: SplickTheme.CornerRadius.card
-        )
-        let shape = RoundedRectangle(cornerRadius: spread.corner, style: .continuous)
-        ZStack {
-            previewLayer(cornerRadius: spread.corner)
-                .frame(width: spread.width, height: spread.height)
-                .clipShape(shape)
-                .compositingGroup()
-                .overlay {
-                    ZStack {
-                        shape.strokeBorder(SplickTheme.Colors.divider, lineWidth: 0.5)
-                        if let indicator = session.focusIndicator {
-                            CameraFocusReticle(indicator: indicator)
+    private func finder(metrics: CameraChromeMetrics, canvas: CGSize) -> some View {
+        GeometryReader { geo in
+            let lift = metrics.previewLift
+            let zoomReserve: CGFloat = 44
+            let maxWidth = geo.size.width - (metrics.previewInset * 2)
+            let maxHeight = max(geo.size.height - lift - zoomReserve, 1)
+            let frameWidth = min(maxWidth, maxHeight * CameraChromeLayout.previewAspect)
+            let frameHeight = frameWidth / CameraChromeLayout.previewAspect
+            let finderShape = RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous)
+            let slot = geo.frame(in: .named("cameraCanvas"))
+            let waterOrigin = CameraOpenRevealGeometry.origin(
+                in: canvas,
+                cameraSize: SplickTabBarMetrics.cameraSize,
+                bottomInset: metrics.bottomPadding
+            )
+            let covering = CameraOpenRevealGeometry.coveringRadius(origin: waterOrigin, size: canvas)
+            let waterRadius = CameraOpenRevealGeometry.radius(
+                progress: revealProgress,
+                start: SplickTabBarMetrics.cameraSize / 2,
+                end: covering
+            )
+            let waterFeather = CameraOpenRevealGeometry.feather(
+                progress: revealProgress,
+                maxFeather: min(canvas.width, canvas.height) * 0.28
+            )
+            let originInFinder = CGPoint(
+                x: waterOrigin.x - slot.minX - (geo.size.width - frameWidth) / 2,
+                y: waterOrigin.y - slot.minY - (geo.size.height - frameHeight) / 2 + lift
+            )
+            ZStack {
+                previewLayer(
+                    cornerRadius: SplickTheme.CornerRadius.card,
+                    waterOriginInView: originInFinder,
+                    waterRadius: waterRadius,
+                    waterFeather: waterFeather
+                )
+                    .frame(width: frameWidth, height: frameHeight)
+                    .clipShape(finderShape)
+                    .compositingGroup()
+                    .overlay {
+                        ZStack {
+                            finderShape.strokeBorder(SplickTheme.Colors.divider, lineWidth: 0.5)
+                            if let indicator = session.focusIndicator {
+                                CameraFocusReticle(indicator: indicator)
+                            }
                         }
                     }
-                }
-                .contentShape(shape)
-                .highPriorityGesture(
-                    SpatialTapGesture()
-                        .onEnded { event in
-                            guard !(session.filterPreset == .ar && faceTrackingSupported) else { return }
-                            session.focus(
-                                at: event.location,
-                                viewSize: CGSize(width: spread.width, height: spread.height)
-                            )
-                        }
-                )
-                .simultaneousGesture(
-                    MagnificationGesture()
-                        .onChanged { session.updatePinch(magnification: $0) }
-                        .onEnded { _ in session.endPinch() }
-                )
-                .position(x: spread.center.x, y: spread.center.y)
+                    .contentShape(finderShape)
+                    .highPriorityGesture(
+                        SpatialTapGesture()
+                            .onEnded { event in
+                                guard !(session.filterPreset == .ar && faceTrackingSupported) else { return }
+                                session.focus(
+                                    at: event.location,
+                                    viewSize: CGSize(width: frameWidth, height: frameHeight)
+                                )
+                            }
+                    )
+                    .simultaneousGesture(
+                        MagnificationGesture()
+                            .onChanged { session.updatePinch(magnification: $0) }
+                            .onEnded { _ in session.endPinch() }
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                    .offset(y: -lift)
 
-            if !(session.filterPreset == .ar && faceTrackingSupported) {
-                CameraNativeZoomChrome(
-                    displayZoom: session.zoomFactor,
-                    onTap: { session.cycleZoomStep() }
-                )
-                .opacity(revealProgress)
-                .position(
-                    x: spread.center.x,
-                    y: spread.top + spread.height + 28
-                )
+                if !(session.filterPreset == .ar && faceTrackingSupported) {
+                    CameraNativeZoomChrome(
+                        displayZoom: session.zoomFactor,
+                        onTap: { session.cycleZoomStep() }
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .padding(.bottom, 4)
+                }
             }
+            .clipped()
         }
-        .frame(width: canvas.width, height: canvas.height)
-        .allowsHitTesting(true)
     }
 
     @ViewBuilder
-    private func previewLayer(cornerRadius: CGFloat) -> some View {
+    private func previewLayer(
+        cornerRadius: CGFloat,
+        waterOriginInView: CGPoint,
+        waterRadius: CGFloat,
+        waterFeather: CGFloat
+    ) -> some View {
         if session.filterPreset == .ar, faceTrackingSupported {
-            ARCameraView(effect: $arEffect, captureHandle: arHandle)
+            ARCameraView(
+                effect: $arEffect,
+                captureHandle: arHandle,
+                waterOriginInView: waterOriginInView,
+                waterRadius: waterRadius,
+                waterFeather: waterFeather,
+                waterActive: revealProgress < 0.995
+            )
         } else {
             ZStack {
-                MetalCameraPreviewView(image: session.previewImage, cornerRadius: cornerRadius)
+                MetalCameraPreviewView(
+                    image: session.previewImage,
+                    cornerRadius: cornerRadius,
+                    waterOriginInView: waterOriginInView,
+                    waterRadius: waterRadius,
+                    waterFeather: waterFeather,
+                    waterActive: revealProgress < 0.995
+                )
                 if session.filterPreset == .ar {
                     VisionFaceOverlayView(
                         effect: arEffect,
@@ -321,11 +330,14 @@ struct CameraPickerView: View {
                 Circle()
                     .trim(from: 0, to: boomerangProgress)
                     .stroke(Color.white, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
+                    .rotationEffect(.degrees(-90), anchor: .center)
                     .frame(width: diameter, height: diameter)
             }
         }
-        .scaleEffect((isCapturing || recording) ? 0.9 : 1)
+        .scaleEffect(
+            ((isCapturing || recording) ? 0.9 : 1) *
+                CameraOpenRevealGeometry.shutterOpenScale(progress: revealProgress)
+        )
 
         return visual
             .contentShape(Circle())
@@ -576,14 +588,6 @@ enum VisionFaceOverlayCompositor {
                 }
             }
         }
-    }
-}
-
-private struct FinderSlotPreferenceKey: PreferenceKey {
-    static var defaultValue: CGRect = .zero
-
-    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
-        value = nextValue()
     }
 }
 
