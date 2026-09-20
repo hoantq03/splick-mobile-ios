@@ -17,7 +17,6 @@ struct InlineReactionBar: View {
     @State private var barFrame: CGRect = .zero
     @State private var bounceIndex: Int?
     @State private var fingerLocation: CGPoint?
-    @State private var longPressWorkItem: DispatchWorkItem?
     @State private var suppressTapAfterLongPress = false
 
     private let slotSize: CGFloat = 36
@@ -105,61 +104,57 @@ struct InlineReactionBar: View {
     }
 
     private var longPressDragGesture: some Gesture {
-        DragGesture(minimumDistance: 0, coordinateSpace: .global)
-            .onChanged { value in
-                fingerLocation = value.location
-                if longPressWorkItem == nil {
-                    cancelledForScroll = false
-                    suppressTapAfterLongPress = false
-                    armLongPress()
+        // Long-press arms selection without requiring movement (preserves hover UX).
+        // Drag uses minimumDistance > 0 so short taps are not claimed as a drag
+        // from finger-down (which previously starved `onTapGesture`).
+        LongPressGesture(minimumDuration: longPressDuration, maximumDistance: scrollCancelDistance)
+            .onEnded { _ in
+                guard !cancelledForScroll, !isDragSelecting else { return }
+                isDragSelecting = true
+                suppressTapAfterLongPress = true
+                FeedScrollLock.setLocked(true)
+                if let fingerLocation {
+                    updateHighlight(at: fingerLocation)
                 }
-                guard !cancelledForScroll else { return }
-                if isVerticalScroll(value) {
-                    cancelSelectionForScroll()
-                    return
-                }
-                if isDragSelecting {
-                    updateHighlight(at: value.location)
-                }
+                Self.impactFeedback.impactOccurred()
+                Self.impactFeedback.prepare()
             }
-            .onEnded { value in
-                disarmLongPress()
-                let shouldCommit = isDragSelecting && !cancelledForScroll
-                let location = fingerLocation ?? value.location
-                let keepCancelled = cancelledForScroll
-                highlightedIndex = nil
-                isDragSelecting = false
-                fingerLocation = nil
-                FeedScrollLock.setLocked(false)
-                if !keepCancelled {
-                    cancelledForScroll = false
-                }
-                if shouldCommit {
-                    suppressTapAfterLongPress = true
-                    commitDragSelection(at: location)
-                }
-            }
-    }
-
-    private func armLongPress() {
-        disarmLongPress()
-        let work = DispatchWorkItem {
-            guard !cancelledForScroll else { return }
-            isDragSelecting = true
-            FeedScrollLock.setLocked(true)
-            if let fingerLocation {
-                updateHighlight(at: fingerLocation)
-            }
-            Self.impactFeedback.impactOccurred()
-            Self.impactFeedback.prepare()
-        }
-        longPressWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + longPressDuration, execute: work)
-    }
-
-    private func disarmLongPress() {
-        longPressWorkItem?.cancel()
-        longPressWorkItem = nil
+            .simultaneously(with:
+                DragGesture(minimumDistance: 8, coordinateSpace: .global)
+                    .onChanged { value in
+                        fingerLocation = value.location
+                        guard !cancelledForScroll else { return }
+                        if isVerticalScroll(value) {
+                            cancelSelectionForScroll()
+                            return
+                        }
+                        if isDragSelecting {
+                            updateHighlight(at: value.location)
+                        }
+                    }
+                    .onEnded { value in
+                        let shouldCommit = isDragSelecting && !cancelledForScroll
+                        let location = fingerLocation ?? value.location
+                        let keepCancelled = cancelledForScroll
+                        highlightedIndex = nil
+                        isDragSelecting = false
+                        fingerLocation = nil
+                        FeedScrollLock.setLocked(false)
+                        if !keepCancelled {
+                            cancelledForScroll = false
+                        }
+                        if shouldCommit {
+                            suppressTapAfterLongPress = true
+                            commitDragSelection(at: location)
+                        } else {
+                            // Clear suppress so a following quick tap still works after a cancelled press.
+                            Task { @MainActor in
+                                try? await Task.sleep(for: .milliseconds(50))
+                                suppressTapAfterLongPress = false
+                            }
+                        }
+                    }
+            )
     }
 
     private func isVerticalScroll(_ drag: DragGesture.Value) -> Bool {
@@ -171,7 +166,6 @@ struct InlineReactionBar: View {
     private func cancelSelectionForScroll() {
         cancelledForScroll = true
         highlightedIndex = nil
-        disarmLongPress()
         if isDragSelecting {
             isDragSelecting = false
             FeedScrollLock.setLocked(false)
