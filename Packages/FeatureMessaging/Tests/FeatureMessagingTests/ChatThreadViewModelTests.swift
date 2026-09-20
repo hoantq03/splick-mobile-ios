@@ -198,13 +198,14 @@ final class ChatThreadViewModelTests: XCTestCase {
 
     private func makeMessage(
         id: UUID = UUID(),
+        senderId: UUID = ChatThreadViewModelTestFixtures.senderId,
         body: String = "Hello",
         sequenceNo: Int64 = 0
     ) -> ChatMessage {
         ChatMessage(
             id: id,
             conversationId: ChatThreadViewModelTestFixtures.conversationId,
-            senderId: ChatThreadViewModelTestFixtures.senderId,
+            senderId: senderId,
             body: body,
             clientMessageId: UUID(),
             createdAt: .now,
@@ -731,4 +732,116 @@ final class ChatThreadViewModelTests: XCTestCase {
         await Task.yield()
         XCTAssertTrue(vm.typingUserIds.isEmpty)
     }
+
+    func test_replyFlow_beginAndCancel() {
+        let repo = StubMessagingRepository(messages: [])
+        let wsClient = makeTestWsClient()
+        let vm = makeViewModel(repo: repo, wsClient: wsClient)
+        let message = makeMessage(body: "Replying to this")
+
+        vm.beginReply(to: message, senderDisplayName: "Alice")
+        XCTAssertEqual(vm.replyDraft?.messageId, message.id)
+        XCTAssertEqual(vm.replyDraft?.senderDisplayName, "Alice")
+        XCTAssertEqual(vm.replyDraft?.bodySnippet, "Replying to this")
+
+        vm.cancelReply()
+        XCTAssertNil(vm.replyDraft)
+    }
+
+    func test_editFlow_beginAndCancel() {
+        let repo = StubMessagingRepository(messages: [])
+        let wsClient = makeTestWsClient()
+        let vm = makeViewModel(repo: repo, wsClient: wsClient)
+        let message = makeMessage(senderId: ChatThreadViewModelTestFixtures.currentUserId, body: "Initial text")
+
+        let text = vm.beginEdit(message)
+        XCTAssertEqual(text, "Initial text")
+        XCTAssertEqual(vm.editDraft?.messageId, message.id)
+
+        vm.cancelEdit()
+        XCTAssertNil(vm.editDraft)
+    }
+
+    func test_viewportAndScrollTracking() {
+        let repo = StubMessagingRepository(messages: [])
+        let wsClient = makeTestWsClient()
+        let vm = makeViewModel(repo: repo, wsClient: wsClient)
+
+        vm.noteNearBottom(true)
+        XCTAssertTrue(vm.isNearBottom)
+
+        vm.userScrolledAwayFromLatest()
+        XCTAssertFalse(vm.autoFollowLatest)
+
+        vm.userReturnedToLatest()
+        XCTAssertTrue(vm.autoFollowLatest)
+
+        vm.noteNearBottom(false)
+
+        vm.onViewportReturnedToBottom()
+        XCTAssertTrue(vm.isNearBottom)
+    }
+
+    func test_floatSwayAndPrependAnchor() {
+        let repo = StubMessagingRepository(messages: [])
+        let wsClient = makeTestWsClient()
+        let vm = makeViewModel(repo: repo, wsClient: wsClient)
+        let id = UUID()
+
+        let sway = vm.floatSway(for: id)
+        XCTAssertNotNil(sway)
+
+        vm.clearPrependAnchor()
+        XCTAssertNil(vm.prependAnchorMessageId)
+
+        vm.clearCachedThread()
+    }
+
+    func test_composerTypingEvents() {
+        let repo = StubMessagingRepository(messages: [])
+        let wsClient = makeTestWsClient()
+        let vm = makeViewModel(repo: repo, wsClient: wsClient)
+
+        vm.onComposerTextChanged("typing something")
+        vm.onComposerTextChanged("")
+        vm.stopLocalTyping()
+    }
+
+    func test_threadSearchAndDismissMutationError() {
+        let repo = StubMessagingRepository(messages: [])
+        let wsClient = makeTestWsClient()
+        let vm = makeViewModel(repo: repo, wsClient: wsClient)
+
+        vm.onThreadSearchQueryChanged("search text")
+        vm.clearThreadSearch()
+        XCTAssertTrue(vm.threadSearchHits.isEmpty)
+
+        vm.dismissMutationError()
+        XCTAssertNil(vm.mutationError)
+    }
+
+    func test_groupThreadCapabilities() {
+        let repo = StubMessagingRepository(messages: [])
+        let wsClient = makeTestWsClient()
+        let vm = makeViewModel(repo: repo, wsClient: wsClient)
+
+        let directCaps = vm.groupThreadCapabilities(isGroup: false)
+        XCTAssertFalse(directCaps.canInviteMembers)
+
+        let groupCaps = vm.groupThreadCapabilities(isGroup: true)
+        XCTAssertTrue(groupCaps.canInviteMembers)
+    }
+
+    func test_reactAndMarkRead() {
+        let message = makeMessage(body: "React here")
+        let repo = StubMessagingRepository(messages: [message])
+        let wsClient = makeTestWsClient()
+        let vm = makeViewModel(repo: repo, wsClient: wsClient)
+
+        let existing = vm.react(to: message.id, emoji: "❤️")
+        XCTAssertNil(existing)
+
+        vm.markRead(upToMessageId: message.id)
+    }
 }
+
