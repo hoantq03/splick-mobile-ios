@@ -30,5 +30,19 @@ let package = Package(
                 .process("Resources")
             ]
         ),
+        .testTarget(
+            name: "FeatureAuthTests",
+            dependencies: [
+                "FeatureAuth",
+                .product(name: "Networking", package: "SplickCore"),
+                .product(name: "Storage", package: "SplickCore"),
+                .product(name: "Common", package: "SplickCore"),
+                .product(name: "SplickDomain", package: "SplickDomain"),
+                .product(name: "Localization", package: "SplickCore"),
+                .product(name: "DesignSystem", package: "SplickCore"),
+            ],
+            path: "Tests/FeatureAuthTests"
+        ),
     ]
 )
+
