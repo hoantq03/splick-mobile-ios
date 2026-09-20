@@ -301,7 +301,7 @@ final class ExpenseEndpointsAndUseCasesTests: XCTestCase {
             creditorUserId: UUID(),
             amount: "100",
             currency: "VND",
-            evidenceUrl: "::not a valid url::",
+            evidenceUrl: "   invalid url with spaces   ",
             note: nil,
             status: "PENDING_APPROVAL",
             splitCount: 1,

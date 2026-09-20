@@ -99,9 +99,10 @@ final class ExpenseDebtFilterTests: XCTestCase {
         var filters = ExpenseListFilters()
         XCTAssertFalse(filters.hasCaptionSearch)
         XCTAssertFalse(filters.hasPeopleFilter)
-        XCTAssertFalse(filters.hasAdvancedFilters)
-        XCTAssertFalse(filters.hasAnyFilter)
+        XCTAssertTrue(filters.hasAdvancedFilters) // default month dateFrom is set
+        XCTAssertTrue(filters.hasAnyFilter)
         XCTAssertTrue(filters.isDefaultDateFilter)
+        XCTAssertFalse(filters.hasNonDefaultListFilters)
         XCTAssertEqual(filters.activeDatePreset, .month)
 
         // Caption query
