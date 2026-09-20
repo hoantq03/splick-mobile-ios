@@ -57,6 +57,7 @@ struct ConversationResponseDTO: Decodable {
     let updatedAt: Date
     let notificationsEnabled: Bool?
     let notificationSound: String?
+    let mutedUntil: Date?
     let leftAt: Date?
 
     init(
@@ -72,6 +73,7 @@ struct ConversationResponseDTO: Decodable {
         updatedAt: Date,
         notificationsEnabled: Bool? = true,
         notificationSound: String? = "default",
+        mutedUntil: Date? = nil,
         leftAt: Date? = nil
     ) {
         self.id = id
@@ -86,6 +88,7 @@ struct ConversationResponseDTO: Decodable {
         self.updatedAt = updatedAt
         self.notificationsEnabled = notificationsEnabled
         self.notificationSound = notificationSound
+        self.mutedUntil = mutedUntil
         self.leftAt = leftAt
     }
 }
@@ -218,6 +221,13 @@ struct UpdateGroupAvatarRequestDTO: Encodable {
 struct UpdateConversationNotificationSettingsRequestDTO: Encodable {
     let notificationsEnabled: Bool
     let notificationSound: String
+    let mutedUntil: Date?
+
+    init(notificationsEnabled: Bool, notificationSound: String, mutedUntil: Date? = nil) {
+        self.notificationsEnabled = notificationsEnabled
+        self.notificationSound = notificationSound
+        self.mutedUntil = mutedUntil
+    }
 }
 
 struct TransferGroupAdminRequestDTO: Encodable {

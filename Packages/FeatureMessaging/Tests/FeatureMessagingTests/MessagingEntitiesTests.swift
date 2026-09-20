@@ -133,9 +133,15 @@ final class MessagingEntitiesTests: XCTestCase {
         XCTAssertEqual(updatedMsg.lastMessage?.body, "Live hello")
         XCTAssertEqual(updatedMsg.unreadCount, 5)
 
-        let updatedSettings = direct.updatingNotificationSettings(enabled: false, sound: "chime")
+        let updatedSettings = direct.updatingNotificationSettings(enabled: false, sound: "chime", mutedUntil: nil)
         XCTAssertFalse(updatedSettings.notificationsEnabled)
         XCTAssertEqual(updatedSettings.notificationSound, "chime")
+        XCTAssertTrue(updatedSettings.isMuted())
+
+        let until = Date().addingTimeInterval(3600)
+        let timed = direct.updatingNotificationSettings(enabled: false, sound: "chime", mutedUntil: until)
+        XCTAssertTrue(timed.isMuted(now: Date()))
+        XCTAssertFalse(timed.isMuted(now: until.addingTimeInterval(1)))
 
         let newPeer = ConversationPeer(userId: UUID(), username: "bob", displayName: "Bob", avatarUrl: nil)
         let updatedPeer = direct.updating(peer: newPeer)

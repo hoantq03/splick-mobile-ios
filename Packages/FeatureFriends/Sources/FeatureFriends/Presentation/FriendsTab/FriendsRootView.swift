@@ -282,6 +282,7 @@ public struct FriendsRootView: View {
                 }
             }
             .dismissKeyboardOnTap()
+            .background(SplickBrandAtmosphere())
             .splickFastPageSlide()
             .onPreferenceChange(PullToRefreshActivePreferenceKey.self) { isActive in
                 DispatchQueue.main.async {

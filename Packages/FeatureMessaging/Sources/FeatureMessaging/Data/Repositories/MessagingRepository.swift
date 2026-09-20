@@ -97,14 +97,16 @@ public final class MessagingRepository: MessagingRepositoryProtocol, Sendable {
     public func updateNotificationSettings(
         conversationId: UUID,
         notificationsEnabled: Bool,
-        notificationSound: String
+        notificationSound: String,
+        mutedUntil: Date?
     ) async throws -> Conversation {
         let dto: ConversationResponseDTO = try await apiClient.request(
             MessagingEndpoint.updateNotificationSettings(
                 conversationId: conversationId,
                 UpdateConversationNotificationSettingsRequestDTO(
                     notificationsEnabled: notificationsEnabled,
-                    notificationSound: notificationSound
+                    notificationSound: notificationSound,
+                    mutedUntil: mutedUntil
                 )
             )
         )

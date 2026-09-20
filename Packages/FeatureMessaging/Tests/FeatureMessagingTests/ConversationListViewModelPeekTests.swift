@@ -57,7 +57,8 @@ private actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
     func updateNotificationSettings(
         conversationId: UUID,
         notificationsEnabled: Bool,
-        notificationSound: String
+        notificationSound: String,
+        mutedUntil: Date?
     ) async throws -> Conversation {
         mutedConversationIds.append((conversationId, notificationsEnabled, notificationSound))
         // API returns unreadCount=0 — callers must patch onto the existing inbox row.
@@ -69,7 +70,8 @@ private actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
             createdAt: .now,
             updatedAt: .now,
             notificationsEnabled: notificationsEnabled,
-            notificationSound: notificationSound
+            notificationSound: notificationSound,
+            mutedUntil: mutedUntil
         )
     }
     func renameGroup(groupId: UUID, name: String) async throws -> Conversation {
@@ -328,7 +330,7 @@ final class ConversationListViewModelPeekTests: XCTestCase {
         viewModel.applyStartupConversations([conversation])
         await viewModel.beginPeek(conversation: conversation)
 
-        await viewModel.toggleMuteFromPeek()
+        await viewModel.muteFromPeek(.forever)
 
         let peek = try XCTUnwrap(viewModel.peekConversation)
         XCTAssertEqual(peek.id, conversation.id)

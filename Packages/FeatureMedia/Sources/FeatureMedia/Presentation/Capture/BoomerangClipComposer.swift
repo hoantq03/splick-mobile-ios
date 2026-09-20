@@ -16,7 +16,7 @@ enum BoomerangClipComposer {
         try await writeClip(images: images, fps: fps, aspectRatio: aspectRatio, pingPong: true)
     }
 
-    /// Forward-only clip for hold-to-record video in photo mode (max ~5s).
+    /// Forward-only clip for hold-to-record video in photo mode (max ~30s).
     static func writeForwardClip(
         images: [UIImage],
         fps: Int = BoomerangTimeline.targetFPS,

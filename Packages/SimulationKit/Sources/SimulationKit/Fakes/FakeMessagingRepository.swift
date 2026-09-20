@@ -136,10 +136,11 @@ public actor FakeMessagingRepository: MessagingRepositoryProtocol {
     public func updateNotificationSettings(
         conversationId: UUID,
         notificationsEnabled: Bool,
-        notificationSound: String
+        notificationSound: String,
+        mutedUntil: Date?
     ) async throws -> Conversation {
         logger.log(
-            "updateNotificationSettings conversationId=\(conversationId) enabled=\(notificationsEnabled) sound=\(notificationSound)"
+            "updateNotificationSettings conversationId=\(conversationId) enabled=\(notificationsEnabled) sound=\(notificationSound) mutedUntil=\(String(describing: mutedUntil))"
         )
         return Conversation(
             id: conversationId,
@@ -149,7 +150,8 @@ public actor FakeMessagingRepository: MessagingRepositoryProtocol {
             createdAt: Date(),
             updatedAt: Date(),
             notificationsEnabled: notificationsEnabled,
-            notificationSound: notificationSound
+            notificationSound: notificationSound,
+            mutedUntil: mutedUntil
         )
     }
 

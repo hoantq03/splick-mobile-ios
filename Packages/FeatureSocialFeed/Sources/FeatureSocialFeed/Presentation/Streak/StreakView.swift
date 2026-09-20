@@ -64,7 +64,6 @@ public struct StreakView: View {
                 .padding(.bottom, SplickTheme.Spacing.xxs)
         }
         .feedPagerPageTopInset(isEnabled: true)
-        .background(SplickTheme.Colors.background)
         .sheet(item: $viewModel.selectedDay) { day in
             StreakDayDetailView(
                 day: day,

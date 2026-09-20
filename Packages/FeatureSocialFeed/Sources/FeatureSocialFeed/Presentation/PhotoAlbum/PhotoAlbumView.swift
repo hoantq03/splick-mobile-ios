@@ -109,7 +109,6 @@ public struct PhotoAlbumView: View {
                 .zIndex(0)
         }
         .feedPagerPageTopInset(isEnabled: isEmbedded)
-        .background(SplickTheme.Colors.background)
         .modifier(PhotoAlbumNavigationModifier(isEmbedded: isEmbedded, title: languageService.text(.feedAlbumTitle)))
         .task {
             await viewModel.loadInitialIfNeeded()
@@ -254,7 +253,6 @@ public struct PhotoAlbumView: View {
             .feedPagerScrollInsets()
             .feedScrollSoftTopEdge()
             .scrollContentBackground(.hidden)
-            .background(SplickTheme.Colors.background)
             .scrollChromeTracking()
             .splickNativeRefreshable(
                 controller: refreshController,

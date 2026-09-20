@@ -59,7 +59,15 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
     public let updatedAt: Date
     public let notificationsEnabled: Bool
     public let notificationSound: String
+    public let mutedUntil: Date?
     public let leftAt: Date?
+
+    public func isMuted(now: Date = Date()) -> Bool {
+        if let mutedUntil {
+            return mutedUntil > now
+        }
+        return !notificationsEnabled
+    }
 
     public var isRemovedFromGroup: Bool { leftAt != nil }
     
@@ -87,6 +95,7 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
         updatedAt: Date,
         notificationsEnabled: Bool = true,
         notificationSound: String = ConversationNotificationSound.`default`.rawValue,
+        mutedUntil: Date? = nil,
         leftAt: Date? = nil
     ) {
         self.id = id
@@ -101,6 +110,7 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
         self.updatedAt = updatedAt
         self.notificationsEnabled = notificationsEnabled
         self.notificationSound = notificationSound
+        self.mutedUntil = mutedUntil
         self.leftAt = leftAt
     }
     
@@ -118,6 +128,7 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
             updatedAt: updatedAt,
             notificationsEnabled: notificationsEnabled,
             notificationSound: notificationSound,
+            mutedUntil: mutedUntil,
             leftAt: leftAt
         )
     }
@@ -136,6 +147,7 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
             updatedAt: updatedAt,
             notificationsEnabled: notificationsEnabled,
             notificationSound: notificationSound,
+            mutedUntil: mutedUntil,
             leftAt: leftAt
         )
     }
@@ -154,6 +166,7 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
             updatedAt: updatedAt,
             notificationsEnabled: notificationsEnabled,
             notificationSound: notificationSound,
+            mutedUntil: mutedUntil,
             leftAt: leftAt
         )
     }
@@ -177,11 +190,12 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
             updatedAt: updatedAt,
             notificationsEnabled: notificationsEnabled,
             notificationSound: notificationSound,
+            mutedUntil: mutedUntil,
             leftAt: leftAt
         )
     }
     
-    public func updatingNotificationSettings(enabled: Bool, sound: String) -> Conversation {
+    public func updatingNotificationSettings(enabled: Bool, sound: String, mutedUntil: Date?) -> Conversation {
         Conversation(
             id: id,
             type: type,
@@ -195,6 +209,7 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
             updatedAt: updatedAt,
             notificationsEnabled: enabled,
             notificationSound: sound,
+            mutedUntil: mutedUntil,
             leftAt: leftAt
         )
     }
@@ -213,6 +228,7 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
             updatedAt: updatedAt,
             notificationsEnabled: notificationsEnabled,
             notificationSound: notificationSound,
+            mutedUntil: mutedUntil,
             leftAt: leftAt
         )
     }
@@ -231,6 +247,7 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
             updatedAt: updatedAt,
             notificationsEnabled: notificationsEnabled,
             notificationSound: notificationSound,
+            mutedUntil: mutedUntil,
             leftAt: leftAt
         )
     }

@@ -41,15 +41,14 @@ struct ConversationRowView: View {
                         .font(SplickTheme.Typography.headline)
                         .foregroundStyle(SplickTheme.Colors.textPrimary)
                         .lineLimit(1)
+                        .layoutPriority(0)
                     if conversation.isGroup, let memberCount = conversation.memberCount {
                         Text("(\(memberCount))")
                             .font(SplickTheme.Typography.caption)
                             .foregroundStyle(SplickTheme.Colors.textTertiary)
                     }
-                    if !conversation.notificationsEnabled {
-                        Image(systemName: "bell.slash.fill")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(SplickTheme.Colors.textTertiary)
+                    if conversation.isMuted() {
+                        ConversationMuteBadge(mutedUntil: conversation.mutedUntil)
                             .accessibilityLabel(languageService.text(.messagingChatMuteNotifications))
                             .transition(
                                 .asymmetric(
@@ -58,14 +57,17 @@ struct ConversationRowView: View {
                                 )
                             )
                     }
-                    Spacer()
+                    Spacer(minLength: SplickTheme.Spacing.xs)
                     if let lastMessage = conversation.lastMessage {
                         Text(lastMessage.createdAt.relativeString)
                             .font(SplickTheme.Typography.caption)
                             .foregroundStyle(SplickTheme.Colors.textTertiary)
+                            .lineLimit(1)
+                            .fixedSize()
+                            .layoutPriority(1)
                     }
                 }
-                .animation(Self.muteIconMotion, value: conversation.notificationsEnabled)
+                .animation(Self.muteIconMotion, value: conversation.isMuted())
 
                 HStack(spacing: SplickTheme.Spacing.xxs) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -84,12 +86,13 @@ struct ConversationRowView: View {
                     .animation(.easeInOut(duration: 0.24), value: inboxTyping != nil)
                     if conversation.unreadCount > 0 {
                         Text("\(conversation.unreadCount)")
-                            .font(SplickTheme.Typography.caption.bold())
+                            .font(SplickTheme.Typography.callout.weight(.bold))
                             .foregroundStyle(.white)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.red)
+                            .padding(.horizontal, 7)
+                            .frame(minWidth: 20, minHeight: 20)
+                            .background(SplickTheme.Colors.error)
                             .clipShape(Capsule())
+                            .layoutPriority(1)
                     }
                 }
             }
@@ -193,4 +196,42 @@ struct ConversationRowView: View {
     }
 
     private static let muteIconMotion = Animation.spring(response: 0.34, dampingFraction: 0.72)
+}
+
+private struct ConversationMuteBadge: View {
+    @EnvironmentObject private var languageService: LanguageService
+    let mutedUntil: Date?
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            let remaining = ConversationMuteSchedule.remaining(
+                mutedUntil: mutedUntil,
+                now: context.date
+            )
+            HStack(spacing: 4) {
+                Image(systemName: "bell.slash.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                if let remaining {
+                    Text(remainingLabel(remaining))
+                        .font(.system(size: 12, weight: .semibold))
+                }
+            }
+            .foregroundStyle(SplickTheme.Colors.error)
+            .padding(.horizontal, 8)
+            .frame(height: 22)
+            .background(SplickTheme.Colors.error.opacity(0.14))
+            .clipShape(Capsule())
+        }
+    }
+
+    private func remainingLabel(_ remaining: ConversationMuteRemaining) -> String {
+        switch remaining.unit {
+        case .minutes:
+            languageService.format(.timeCompactMinutes, remaining.amount)
+        case .hours:
+            languageService.format(.timeCompactHours, remaining.amount)
+        case .days:
+            languageService.format(.timeCompactDays, remaining.amount)
+        }
+    }
 }

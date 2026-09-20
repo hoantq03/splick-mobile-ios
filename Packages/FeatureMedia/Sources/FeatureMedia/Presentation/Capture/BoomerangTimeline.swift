@@ -2,12 +2,12 @@ import CoreGraphics
 import Foundation
 
 enum BoomerangTimeline {
-    /// Lower FPS keeps hold-to-record feel while cutting encode time after release.
-    static let targetFPS = 12
-    /// 5s × 12fps.
-    static let maxFrames = 60
+    /// Hold-to-record and boomerang encode at 24 fps.
+    static let targetFPS = 24
+    /// 30s × 24fps.
+    static let maxFrames = 720
     static let minFrames = 6
-    static let captureDuration: TimeInterval = 5
+    static let captureDuration: TimeInterval = 30
     static let minFrameInterval: TimeInterval = 1 / Double(targetFPS)
     /// 540 keeps feed quality acceptable and roughly halves encode cost vs 720.
     static let maxLongSide: CGFloat = 540

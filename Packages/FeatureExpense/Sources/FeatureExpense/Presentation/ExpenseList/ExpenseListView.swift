@@ -86,7 +86,7 @@ public struct ExpenseListView: View {
             } friends: {
                 friendsPage
             }
-            .background(SplickTheme.Colors.background.ignoresSafeArea())
+            .background(SplickBrandAtmosphere())
             .splickFastPageSlide()
             .splickScrollSoftTopEdge()
             .navigationTitle("")

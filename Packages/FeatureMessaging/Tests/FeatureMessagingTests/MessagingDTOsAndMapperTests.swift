@@ -213,6 +213,25 @@ final class MessagingDTOsAndMapperTests: XCTestCase {
         XCTAssertEqual(conversation.notificationSound, ConversationNotificationSound.`default`.rawValue)
         XCTAssertEqual(conversation.leftAt, now)
         XCTAssertEqual(conversation.peer?.username, "peerUser")
+        XCTAssertNil(conversation.mutedUntil)
+    }
+
+    func testConversationMapperMutedUntil() {
+        let convId = UUID()
+        let now = Date()
+        let until = now.addingTimeInterval(3600)
+        let convDto = ConversationResponseDTO(
+            id: convId,
+            unreadCount: 0,
+            peer: nil,
+            createdAt: now,
+            updatedAt: now,
+            notificationsEnabled: false,
+            mutedUntil: until
+        )
+        let conversation = MessagingMapper.toConversation(convDto)
+        XCTAssertEqual(conversation.mutedUntil, until)
+        XCTAssertTrue(conversation.isMuted(now: now))
     }
 
     func testConversationMapperFallbacks() {

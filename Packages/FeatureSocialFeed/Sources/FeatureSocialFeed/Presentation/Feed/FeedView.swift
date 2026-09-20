@@ -108,7 +108,7 @@ public struct FeedView: View {
                 )
             }
             .environment(\.pullToRefreshActive, viewModel.isRefreshing)
-            .background(SplickTheme.Colors.background.ignoresSafeArea())
+            .background(SplickBrandAtmosphere())
             .splickInteractivePopEnabled()
             .navigationTitle("")
             .splickTabNavigationBarChrome()

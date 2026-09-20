@@ -70,8 +70,7 @@ struct MainTabView: View {
         ZStack {
             // Fills the full screen (including safe areas) so system white never shows
             // through at the top (status bar) or bottom (home indicator) safe area regions.
-            SplickTheme.Colors.background
-                .ignoresSafeArea(.container)
+            SplickBrandAtmosphere()
 
             MainTabContentPager(
                 selectedTab: $appState.selectedTab,

@@ -82,6 +82,19 @@ struct ConversationPeekOverlay: View {
                         dismissAnimated(completion: onDismiss)
                     }
 
+                previewCard(shape: previewShape)
+                    .frame(width: currentFrame.width, height: currentFrame.height)
+                    .clipShape(previewShape)
+                    .compositingGroup()
+                    .scaleEffect(isRevealed ? 1 : 0.96, anchor: .top)
+                    .offset(x: currentFrame.minX, y: currentFrame.minY)
+                    .animation(ConversationPeekMotion.appear, value: isRevealed)
+                    .zIndex(1)
+                    .onTapGesture {
+                        guard dismissIsArmed else { return }
+                        dismissAnimated(completion: onOpen)
+                    }
+
                 optionsStack(maxWidth: layout.optionsFrame.width)
                     .frame(width: layout.optionsFrame.width, alignment: .leading)
                     .background(optionsSizeReader)
@@ -102,31 +115,22 @@ struct ConversationPeekOverlay: View {
                         anchor: .top
                     )
                     .opacity(isOptionsRevealed ? 1 : 0)
-                    .offset(y: isOptionsRevealed ? 0 : -16)
-                    .allowsHitTesting(isOptionsRevealed)
-                    .position(
-                        x: layout.optionsFrame.midX,
-                        y: layout.optionsFrame.midY
+                    .offset(
+                        x: layout.optionsFrame.minX,
+                        y: layout.optionsFrame.minY + (isOptionsRevealed ? 0 : -16)
                     )
+                    .allowsHitTesting(isOptionsRevealed)
                     .compositingGroup()
                     .zIndex(2)
             }
-            .overlay {
-                previewCard(shape: previewShape)
-                    .frame(width: currentFrame.width, height: currentFrame.height)
-                    .clipShape(previewShape)
-                    .compositingGroup()
-                    .scaleEffect(isRevealed ? 1 : 0.96, anchor: .top)
-                    .position(x: currentFrame.midX, y: currentFrame.midY)
-                    .animation(ConversationPeekMotion.appear, value: isRevealed)
-                    .zIndex(1)
-                    .onTapGesture {
-                        guard dismissIsArmed else { return }
-                        dismissAnimated(completion: onOpen)
-                    }
-            }
         }
         .ignoresSafeArea()
+        .background {
+            PeekStatusBarTapCatcher {
+                guard dismissIsArmed else { return }
+                dismissAnimated(completion: onDismiss)
+            }
+        }
         .background(Color.clear)
         .onAppear {
             // Paint the first frame at the list-row anchor, then spring-morph open.
@@ -145,11 +149,6 @@ struct ConversationPeekOverlay: View {
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.dismissArmDelay) {
                 dismissIsArmed = true
-            }
-        }
-        .transaction { transaction in
-            if !isDismissing {
-                transaction.disablesAnimations = false
             }
         }
         .accessibilityElement(children: .contain)
@@ -710,5 +709,107 @@ private struct PeekOptionsSizeKey: PreferenceKey {
         if next.width > 1, next.height > 1, next.height < 400 {
             value = next
         }
+    }
+}
+
+/// Clock / cellular / battery sit in a system window above SwiftUI. A thin
+/// scene window at alert level covers that strip so peek can dismiss there.
+private struct PeekStatusBarTapCatcher: UIViewRepresentable {
+    var onTap: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onTap: onTap)
+    }
+
+    func makeUIView(context: Context) -> UIView {
+        context.coordinator.hostView
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        context.coordinator.onTap = onTap
+        context.coordinator.installIfNeeded()
+    }
+
+    static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) {
+        coordinator.teardown()
+    }
+
+    final class Coordinator {
+        var onTap: () -> Void
+        let hostView = UIView()
+        private var overlayWindow: UIWindow?
+
+        init(onTap: @escaping () -> Void) {
+            self.onTap = onTap
+            hostView.isUserInteractionEnabled = false
+            hostView.backgroundColor = .clear
+        }
+
+        func installIfNeeded() {
+            if overlayWindow != nil { return }
+            let install = { [weak self] in
+                guard let self, self.overlayWindow == nil else { return }
+                guard let scene = self.hostView.window?.windowScene
+                    ?? UIApplication.shared.connectedScenes
+                    .compactMap({ $0 as? UIWindowScene })
+                    .first(where: { $0.activationState == .foregroundActive })
+                else { return }
+                let window = UIWindow(windowScene: scene)
+                window.windowLevel = .alert
+                window.backgroundColor = .clear
+                window.frame = Self.stripFrame(in: scene)
+                let controller = PeekStatusBarTapController()
+                controller.onTap = { [weak self] in self?.onTap() }
+                window.rootViewController = controller
+                window.isHidden = false
+                self.overlayWindow = window
+            }
+            if hostView.window == nil {
+                DispatchQueue.main.async(execute: install)
+            } else {
+                install()
+            }
+        }
+
+        func teardown() {
+            overlayWindow?.isHidden = true
+            overlayWindow?.rootViewController = nil
+            overlayWindow = nil
+        }
+
+        static func stripFrame(in scene: UIWindowScene) -> CGRect {
+            let bounds = scene.coordinateSpace.bounds
+            let statusHeight = scene.statusBarManager?.statusBarFrame.height ?? 0
+            let safeTop = (scene.windows.first(where: \.isKeyWindow) ?? scene.windows.first)?
+                .safeAreaInsets.top ?? 0
+            let height = max(statusHeight, safeTop, 54)
+            return CGRect(x: bounds.minX, y: bounds.minY, width: bounds.width, height: height)
+        }
+    }
+}
+
+private final class PeekStatusBarTapController: UIViewController {
+    var onTap: () -> Void = {}
+
+    override func loadView() {
+        let view = UIView()
+        view.backgroundColor = .clear
+        view.isUserInteractionEnabled = true
+        let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap))
+        tap.cancelsTouchesInView = true
+        view.addGestureRecognizer(tap)
+        self.view = view
+    }
+
+    override var prefersStatusBarHidden: Bool { false }
+
+    override func viewWillLayoutSubviews() {
+        super.viewWillLayoutSubviews()
+        guard let scene = view.window?.windowScene else { return }
+        view.window?.frame = PeekStatusBarTapCatcher.Coordinator.stripFrame(in: scene)
+    }
+
+    @objc private func handleTap() {
+        onTap()
     }
 }

@@ -123,13 +123,17 @@ public final class ConversationListViewModel: ObservableObject {
 
     public func beginPeek(conversation: Conversation) async {
         peekTask?.cancel()
-        peekConversation = conversation
-        peekMessages = []
-        peekLoadState = .loading
-        peekHasMoreMessages = false
-        peekIsLoadingOlder = false
-        peekPrependAnchorMessageId = nil
-        peekHighestLoadedPage = 0
+        var openTransaction = Transaction()
+        openTransaction.disablesAnimations = true
+        withTransaction(openTransaction) {
+            peekConversation = conversation
+            peekMessages = []
+            peekLoadState = .loading
+            peekHasMoreMessages = false
+            peekIsLoadingOlder = false
+            peekPrependAnchorMessageId = nil
+            peekHighestLoadedPage = 0
+        }
 
         let conversationId = conversation.id
         let task = Task {
@@ -280,28 +284,50 @@ public final class ConversationListViewModel: ObservableObject {
         pendingDeleteConversationId = nil
     }
 
+    public func muteFromPeek(_ preset: ConversationMutePreset) async {
+        await applyPeekNotificationSettings(
+            enabled: false,
+            mutedUntil: ConversationMuteSchedule.mutedUntil(preset: preset)
+        )
+    }
+
+    public func unmuteFromPeek() async {
+        await applyPeekNotificationSettings(enabled: true, mutedUntil: nil)
+    }
+
     /// Toggle mute from list peek — patches prefs onto the existing row so unread/preview stay intact
     /// (PATCH notification-settings returns unreadCount=0). Peek stays open; header bell updates live.
     public func toggleMuteFromPeek() async {
         guard let peek = peekConversation else { return }
-        let nextEnabled = !peek.notificationsEnabled
+        if peek.isMuted() {
+            await unmuteFromPeek()
+        } else {
+            await muteFromPeek(.forever)
+        }
+    }
+
+    private func applyPeekNotificationSettings(enabled: Bool, mutedUntil: Date?) async {
+        guard let peek = peekConversation else { return }
         let optimistic = peek.updatingNotificationSettings(
-            enabled: nextEnabled,
-            sound: peek.notificationSound
+            enabled: enabled,
+            sound: peek.notificationSound,
+            mutedUntil: mutedUntil
         )
         peekConversation = optimistic
         upsertConversation(optimistic)
-        AppNotificationSound.playMuteToggleFeedback(enablingNotifications: nextEnabled)
+        AppNotificationSound.playMuteToggleFeedback(enablingNotifications: enabled)
 
         do {
             let updated = try await repository.updateNotificationSettings(
                 conversationId: peek.id,
-                notificationsEnabled: nextEnabled,
-                notificationSound: peek.notificationSound
+                notificationsEnabled: enabled,
+                notificationSound: peek.notificationSound,
+                mutedUntil: mutedUntil
             )
             let patched = optimistic.updatingNotificationSettings(
                 enabled: updated.notificationsEnabled,
-                sound: updated.notificationSound
+                sound: updated.notificationSound,
+                mutedUntil: updated.mutedUntil
             )
             if peekConversation?.id == patched.id {
                 peekConversation = patched
@@ -316,9 +342,9 @@ public final class ConversationListViewModel: ObservableObject {
                 error,
                 category: .network,
                 metadata: [
-                    "action": "toggleMuteFromPeek",
+                    "action": "applyPeekNotificationSettings",
                     "conversationId": peek.id.uuidString,
-                    "notificationsEnabled": String(nextEnabled),
+                    "notificationsEnabled": String(enabled),
                 ]
             )
         }

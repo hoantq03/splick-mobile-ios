@@ -76,7 +76,12 @@ private actor MockMessagingRepositoryForUseCases: MessagingRepositoryProtocol {
     func removeGroupMember(groupId: UUID, memberUserId: UUID) async throws {}
     func leaveGroup(groupId: UUID) async throws {}
     func deleteConversation(conversationId: UUID) async throws {}
-    func updateNotificationSettings(conversationId: UUID, notificationsEnabled: Bool, notificationSound: String) async throws -> Conversation {
+    func updateNotificationSettings(
+        conversationId: UUID,
+        notificationsEnabled: Bool,
+        notificationSound: String,
+        mutedUntil: Date?
+    ) async throws -> Conversation {
         Conversation(id: conversationId, unreadCount: 0, peer: nil, lastMessage: nil, createdAt: Date(), updatedAt: Date())
     }
     func renameGroup(groupId: UUID, name: String) async throws -> Conversation {

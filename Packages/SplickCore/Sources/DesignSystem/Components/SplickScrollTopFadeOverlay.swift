@@ -132,6 +132,32 @@ private struct SplickScrollTopFadeOverlayObserved: View {
 
 private struct SplickScrollTopFadeOverlayContent: View {
     let mode: SplickScrollTopFadeOverlay.Mode
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.splickBrandPalette) private var brandPalette
+
+    private var canvas: Color {
+        brandPalette.resolvedBrandCanvas(colorScheme)
+    }
+
+    private var backgroundStops: [Gradient.Stop] {
+        [
+            .init(color: canvas, location: 0),
+            .init(color: canvas.opacity(0.98), location: 0.22),
+            .init(color: canvas.opacity(0.88), location: 0.42),
+            .init(color: canvas.opacity(0.58), location: 0.62),
+            .init(color: canvas.opacity(0.18), location: 0.82),
+            .init(color: canvas.opacity(0), location: 1)
+        ]
+    }
+
+    private var compactBackgroundStops: [Gradient.Stop] {
+        [
+            .init(color: canvas.opacity(0.42), location: 0),
+            .init(color: canvas.opacity(0.22), location: 0.4),
+            .init(color: canvas.opacity(0.08), location: 0.72),
+            .init(color: canvas.opacity(0), location: 1)
+        ]
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -144,8 +170,8 @@ private struct SplickScrollTopFadeOverlayContent: View {
             ZStack(alignment: .top) {
                 LinearGradient(
                     stops: usesFullGradient
-                        ? SplickScrollChromeFadeMetrics.backgroundStops
-                        : SplickScrollChromeFadeMetrics.compactBackgroundStops,
+                        ? backgroundStops
+                        : compactBackgroundStops,
                     startPoint: .top,
                     endPoint: .bottom
                 )

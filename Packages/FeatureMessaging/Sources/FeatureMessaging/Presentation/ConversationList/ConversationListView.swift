@@ -42,6 +42,7 @@ public struct ConversationListView: View {
     @State private var peekFrozenFrame: CGRect?
     @State private var peekSession = UUID()
     @State private var confirmDeletePeekedConversation = false
+    @State private var showPeekMuteDurationPicker = false
 
     private static let peekImpact = UIImpactFeedbackGenerator(style: .medium)
 
@@ -84,11 +85,11 @@ public struct ConversationListView: View {
 
                         if isSearching {
                             searchResultsContent
-                                .background(SplickTheme.Colors.background)
                                 .transition(.opacity)
                         }
                     }
                 }
+                .background(SplickBrandAtmosphere())
                 // Native NavigationStack push/pop. Swipe-back is edge-only via
                 // `splickEdgeOnlyInteractivePop` on ChatThreadView (reply pans own mid-screen).
                 .environment(\.scrollChromeTrackingEnabled, path.isEmpty)
@@ -163,6 +164,18 @@ public struct ConversationListView: View {
             }
         } message: {
             Text(languageService.text(.messagingChatDeleteConversationConfirmMessage))
+        }
+        .confirmationDialog(
+            languageService.text(.messagingChatMuteFor),
+            isPresented: $showPeekMuteDurationPicker,
+            titleVisibility: .visible
+        ) {
+            ForEach(ConversationMutePreset.allCases, id: \.self) { preset in
+                Button(languageService.text(preset.titleKey)) {
+                    Task { await viewModel.muteFromPeek(preset) }
+                }
+            }
+            Button(languageService.text(.commonCancel), role: .cancel) {}
         }
         .onFirstAppear {
             hasCompletedInitialLoad = true
@@ -490,7 +503,11 @@ public struct ConversationListView: View {
                             }
                         },
                         onMute: {
-                            Task { await viewModel.toggleMuteFromPeek() }
+                            if conversation.isMuted() {
+                                Task { await viewModel.unmuteFromPeek() }
+                            } else {
+                                showPeekMuteDurationPicker = true
+                            }
                         },
                         onMarkRead: {
                             Task { await viewModel.markReadFromPeek() }
@@ -638,6 +655,7 @@ public struct ConversationListView: View {
                         .opacity(
                             viewModel.peekConversation?.id == conversation.id ? 0 : 1
                         )
+                        .animation(nil, value: viewModel.peekConversation?.id)
                         .contentShape(Rectangle())
                         // Avoid `Button` + long-press: on iOS 17 either taps die
                         // (`highPriorityGesture`) or peek never fires (`onLongPressGesture`).

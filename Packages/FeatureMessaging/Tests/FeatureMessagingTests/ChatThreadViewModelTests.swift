@@ -50,7 +50,8 @@ private actor StubMessagingRepository: MessagingRepositoryProtocol {
     func updateNotificationSettings(
         conversationId: UUID,
         notificationsEnabled: Bool,
-        notificationSound: String
+        notificationSound: String,
+        mutedUntil: Date?
     ) async throws -> Conversation {
         Conversation(
             id: conversationId,

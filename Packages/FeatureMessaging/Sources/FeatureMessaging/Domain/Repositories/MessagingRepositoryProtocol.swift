@@ -19,7 +19,8 @@ public protocol MessagingRepositoryProtocol: Sendable {
     func updateNotificationSettings(
         conversationId: UUID,
         notificationsEnabled: Bool,
-        notificationSound: String
+        notificationSound: String,
+        mutedUntil: Date?
     ) async throws -> Conversation
     func renameGroup(groupId: UUID, name: String) async throws -> Conversation
     func updateGroupAvatar(groupId: UUID, avatarUrl: String) async throws -> Conversation
@@ -54,6 +55,19 @@ public protocol MessagingRepositoryProtocol: Sendable {
 }
 
 public extension MessagingRepositoryProtocol {
+    func updateNotificationSettings(
+        conversationId: UUID,
+        notificationsEnabled: Bool,
+        notificationSound: String
+    ) async throws -> Conversation {
+        try await updateNotificationSettings(
+            conversationId: conversationId,
+            notificationsEnabled: notificationsEnabled,
+            notificationSound: notificationSound,
+            mutedUntil: nil
+        )
+    }
+
     func fetchConversations(page: Int, limit: Int) async throws -> MessagingPage<Conversation> {
         try await fetchConversations(
             query: ConversationInboxQuery(page: page, limit: limit)

@@ -11,6 +11,7 @@ final class ConversationPeekLayoutTests: XCTestCase {
         )
         XCTAssertEqual(dest.minY, 192, accuracy: 0.5)
         XCTAssertLessThan(dest.maxY, 800)
+        XCTAssertGreaterThan(dest.minY, 80, "Band above the card must stay empty so dimmer taps can dismiss")
         XCTAssertEqual(
             dest.height,
             (800 - 80) * ConversationPeekLayout.previewMaxUsableFraction,

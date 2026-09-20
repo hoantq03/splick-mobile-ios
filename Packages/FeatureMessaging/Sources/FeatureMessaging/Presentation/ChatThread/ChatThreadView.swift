@@ -37,6 +37,7 @@ public struct ChatThreadView: View {
     @State private var confirmDeleteConversation = false
     @State private var confirmRecallMessageId: UUID?
     @State private var comingSoonFeatureTitle: String?
+    @State private var showMuteDurationPicker = false
     @State private var pendingPeerConfirm: PendingPeerConfirm?
     @State private var detailsMessage: ChatMessage?
     @State private var isDetailsPresented = false
@@ -214,6 +215,18 @@ public struct ChatThreadView: View {
                     )
                 }
             }
+        }
+        .confirmationDialog(
+            languageService.text(.messagingChatMuteFor),
+            isPresented: $showMuteDurationPicker,
+            titleVisibility: .visible
+        ) {
+            ForEach(ConversationMutePreset.allCases, id: \.self) { preset in
+                Button(languageService.text(preset.titleKey)) {
+                    muteThreadNotifications(preset)
+                }
+            }
+            Button(languageService.text(.commonCancel), role: .cancel) {}
         }
         .confirmationDialog(
             languageService.text(.messagingLeaveGroupConfirmTitle),
@@ -485,7 +498,7 @@ public struct ChatThreadView: View {
 
     @ViewBuilder
     private var conversationComingSoonActions: some View {
-        let notificationsEnabled = displayConversation?.notificationsEnabled ?? true
+        let notificationsMuted = displayConversation?.isMuted() ?? false
         Button {
             openThreadSearch()
         } label: {
@@ -496,15 +509,19 @@ public struct ChatThreadView: View {
         }
 
         Button {
-            toggleThreadNotifications()
+            if notificationsMuted {
+                unmuteThreadNotifications()
+            } else {
+                showMuteDurationPicker = true
+            }
         } label: {
             Label(
                 languageService.text(
-                    notificationsEnabled
-                        ? .messagingChatMuteNotifications
-                        : .messagingChatUnmuteNotifications
+                    notificationsMuted
+                        ? .messagingChatUnmuteNotifications
+                        : .messagingChatMuteNotifications
                 ),
-                systemImage: notificationsEnabled ? "bell.slash" : "bell"
+                systemImage: notificationsMuted ? "bell" : "bell.slash"
             )
         }
         .disabled(repository == nil)
@@ -645,28 +662,41 @@ public struct ChatThreadView: View {
         onConversationUpdated?(updated)
     }
 
-    private func toggleThreadNotifications() {
+    private func unmuteThreadNotifications() {
+        applyThreadNotificationSettings(enabled: true, mutedUntil: nil)
+    }
+
+    private func muteThreadNotifications(_ preset: ConversationMutePreset) {
+        applyThreadNotificationSettings(
+            enabled: false,
+            mutedUntil: ConversationMuteSchedule.mutedUntil(preset: preset)
+        )
+    }
+
+    private func applyThreadNotificationSettings(enabled: Bool, mutedUntil: Date?) {
         guard let displayConversation, let repository else { return }
         let previous = displayConversation
-        let nextEnabled = !previous.notificationsEnabled
-        AppNotificationSound.playMuteToggleFeedback(enablingNotifications: nextEnabled)
+        AppNotificationSound.playMuteToggleFeedback(enablingNotifications: enabled)
         applyConversationUpdate(
             previous.updatingNotificationSettings(
-                enabled: nextEnabled,
-                sound: previous.notificationSound
+                enabled: enabled,
+                sound: previous.notificationSound,
+                mutedUntil: mutedUntil
             )
         )
         Task {
             do {
                 let updated = try await repository.updateNotificationSettings(
                     conversationId: previous.id,
-                    notificationsEnabled: nextEnabled,
-                    notificationSound: previous.notificationSound
+                    notificationsEnabled: enabled,
+                    notificationSound: previous.notificationSound,
+                    mutedUntil: mutedUntil
                 )
                 applyConversationUpdate(
                     previous.updatingNotificationSettings(
                         enabled: updated.notificationsEnabled,
-                        sound: updated.notificationSound
+                        sound: updated.notificationSound,
+                        mutedUntil: updated.mutedUntil
                     )
                 )
             } catch {

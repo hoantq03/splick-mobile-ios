@@ -55,7 +55,12 @@ private struct MockSharePostMessagingRepository: MessagingRepositoryProtocol, @u
     func leaveGroup(groupId: UUID) async throws {}
     func deleteConversation(conversationId: UUID) async throws {}
 
-    func updateNotificationSettings(conversationId: UUID, notificationsEnabled: Bool, notificationSound: String) async throws -> Conversation {
+    func updateNotificationSettings(
+        conversationId: UUID,
+        notificationsEnabled: Bool,
+        notificationSound: String,
+        mutedUntil: Date?
+    ) async throws -> Conversation {
         fatalError()
     }
 

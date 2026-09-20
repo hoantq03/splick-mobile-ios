@@ -362,7 +362,8 @@ private actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
     func updateNotificationSettings(
         conversationId: UUID,
         notificationsEnabled: Bool,
-        notificationSound: String
+        notificationSound: String,
+        mutedUntil: Date?
     ) async throws -> Conversation {
         Conversation(
             id: conversationId,
