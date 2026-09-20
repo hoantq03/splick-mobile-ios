@@ -83,7 +83,6 @@ struct StreakMonthScrollView<Header: View>: View {
                         .id(StreakScrollAnchor.bottom)
                 }
                 .scrollContentBackground(.hidden)
-                .background(SplickTheme.Colors.background)
                 .background {
                     StreakScrollViewAnchor(host: scrollHost)
                 }

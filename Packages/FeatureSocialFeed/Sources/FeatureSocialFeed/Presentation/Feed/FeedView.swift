@@ -550,6 +550,7 @@ private struct FeedPrimaryPage: View {
                     content()
                 }
             }
+            .scrollContentBackground(.hidden)
             .coordinateSpace(name: FeedScrollAnchor.coordinateSpace)
             .feedPagerScrollInsets()
             .feedScrollSoftTopEdge()

@@ -421,6 +421,7 @@ private struct ExpenseHistoryPage: View {
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
             .scrollChromeTracking()
             .splickSegmentPagerScrollInsets()
             .splickScrollSoftTopEdge()

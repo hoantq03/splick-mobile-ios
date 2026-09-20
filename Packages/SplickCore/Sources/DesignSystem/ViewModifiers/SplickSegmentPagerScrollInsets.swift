@@ -92,7 +92,6 @@ private struct SplickSegmentPagerScrollInsetsModifier: ViewModifier {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(SplickTheme.Colors.background)
         .background {
             if style == .underChrome {
                 GeometryReader { geometry in

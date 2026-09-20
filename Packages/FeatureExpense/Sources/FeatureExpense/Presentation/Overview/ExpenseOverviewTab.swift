@@ -67,6 +67,7 @@ struct ExpenseOverviewTab: View {
           }
         }
       }
+      .scrollContentBackground(.hidden)
       .scrollChromeTracking()
       .splickSegmentPagerScrollInsets()
       .splickScrollSoftTopEdge()

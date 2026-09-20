@@ -130,6 +130,7 @@ public struct ExpenseFriendListView: View {
           )
           .frame(maxWidth: .infinity)
         }
+        .scrollContentBackground(.hidden)
         .splickSegmentPagerScrollInsets()
         .refreshable { await viewModel.load(isPullToRefresh: true) }
       case .loaded:
@@ -141,6 +142,7 @@ public struct ExpenseFriendListView: View {
           }
           .frame(maxWidth: .infinity)
         }
+        .scrollContentBackground(.hidden)
         .splickSegmentPagerScrollInsets()
         .refreshable { await viewModel.load(isPullToRefresh: true) }
       }
@@ -181,6 +183,7 @@ public struct ExpenseFriendListView: View {
           SplickTabBarMetrics.floatingClearance + SplickTheme.Spacing.md
         )
       }
+      .scrollContentBackground(.hidden)
       .splickInstantScrollTaps()
       .scrollChromeTracking()
       .tabBarHideOnScroll()

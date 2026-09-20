@@ -52,6 +52,8 @@ struct FeedContentPager<Feed: View, Album: View, Streak: View>: View {
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.splickVisualTheme) private var splickVisualTheme
+    @Environment(\.splickColorTheme) private var splickColorTheme
+    @Environment(\.splickBrandPalette) private var splickBrandPalette
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.feedSegmentScrollState) private var feedSegmentScrollState
     @Environment(\.pullToRefreshActive) private var pullToRefreshActive
@@ -64,6 +66,7 @@ struct FeedContentPager<Feed: View, Album: View, Streak: View>: View {
         hasher.combine(languageService.locale)
         hasher.combine(colorScheme == .dark)
         hasher.combine(splickVisualTheme)
+        hasher.combine(splickColorTheme)
         return hasher.finalize()
     }
 
@@ -102,6 +105,8 @@ struct FeedContentPager<Feed: View, Album: View, Streak: View>: View {
             languageService: languageService,
             colorScheme: colorScheme,
             splickVisualTheme: splickVisualTheme,
+            splickColorTheme: splickColorTheme,
+            splickBrandPalette: splickBrandPalette,
             tabBarScrollState: tabBarScrollState,
             feedSegmentScrollState: feedSegmentScrollState
         )
@@ -114,6 +119,8 @@ private struct _PagerEnvironmentForwarding: ViewModifier {
     let languageService: LanguageService
     let colorScheme: ColorScheme
     let splickVisualTheme: SplickVisualTheme?
+    let splickColorTheme: SplickColorTheme
+    let splickBrandPalette: SplickBrandPalette
     let tabBarScrollState: TabBarScrollState?
     let feedSegmentScrollState: FeedSegmentScrollState?
 
@@ -122,6 +129,8 @@ private struct _PagerEnvironmentForwarding: ViewModifier {
             .environmentObject(languageService)
             .environment(\.colorScheme, colorScheme)
             .environment(\.splickVisualTheme, splickVisualTheme)
+            .environment(\.splickColorTheme, splickColorTheme)
+            .environment(\.splickBrandPalette, splickBrandPalette)
             .environment(\.tabBarScrollState, tabBarScrollState)
             .environment(\.feedSegmentScrollState, feedSegmentScrollState)
     }
@@ -373,6 +382,8 @@ private struct _PagerPageRoot<Content: View>: View {
     var body: some View {
         let chrome = activityState.chrome
         content
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(SplickBrandAtmosphere())
             .environment(\.scrollChromeTrackingEnabled, chrome.activeSelection == segment)
             .environment(\.feedTabIsActive, chrome.feedTabIsActive && segment == .feed)
             .environment(
@@ -495,6 +506,7 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
 
     private func prepareHost<Content: View>(_ hosting: UIHostingController<Content>) {
         hosting.view.backgroundColor = .clear
+        hosting.view.isOpaque = false
         hosting.view.clipsToBounds = false
         if #available(iOS 16.4, *) {
             hosting.safeAreaRegions = []
@@ -613,6 +625,10 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
         if currentContentRevision != contentRevision {
             currentContentRevision = contentRevision
             refreshMountedRoots()
+        }
+        hostedPageViews.forEach { pageView in
+            pageView?.backgroundColor = .clear
+            pageView?.isOpaque = false
         }
 
         if geometryChanged {
