@@ -47,12 +47,42 @@ final class PostDetailViewModel: ObservableObject {
         await fetchPages(reset: false, ensureVisibleId: nil)
     }
 
-    func reload(ensureVisibleId: UUID? = nil, loadThroughEnd: Bool = false) async {
+    func reload(
+        ensureVisibleId: UUID? = nil,
+        loadThroughEnd: Bool = false,
+        scrollToPendingEvidence: Bool = false,
+        preferPendingEvidence: ((PostComment) -> Bool)? = nil
+    ) async {
         await fetchPages(
             reset: true,
             ensureVisibleId: ensureVisibleId,
-            loadThroughEnd: loadThroughEnd
+            loadThroughEnd: loadThroughEnd,
+            scrollToPendingEvidence: scrollToPendingEvidence,
+            preferPendingEvidence: preferPendingEvidence
         )
+    }
+
+    /// Pending payment-evidence comment to bring into view (approve / review flows).
+    func firstPendingEvidenceCommentId(
+        preferring prefer: ((PostComment) -> Bool)? = nil
+    ) -> UUID? {
+        Self.firstPendingEvidenceCommentId(in: allComments, preferring: prefer)
+    }
+
+    static func firstPendingEvidenceCommentId(
+        in comments: [PostComment],
+        preferring prefer: ((PostComment) -> Bool)? = nil
+    ) -> UUID? {
+        let pending = comments
+            .filter { $0.isEvidence && !$0.isDeleted && $0.evidenceStatus == .pending }
+            .sorted {
+                if $0.createdAt != $1.createdAt { return $0.createdAt < $1.createdAt }
+                return $0.id.uuidString < $1.id.uuidString
+            }
+        if let prefer, let match = pending.first(where: prefer) {
+            return match.id
+        }
+        return pending.first?.id
     }
 
     func upsertOptimistic(_ comment: PostComment) {
@@ -96,7 +126,13 @@ final class PostDetailViewModel: ObservableObject {
             .id
     }
 
-    private func fetchPages(reset: Bool, ensureVisibleId: UUID?, loadThroughEnd: Bool = false) async {
+    private func fetchPages(
+        reset: Bool,
+        ensureVisibleId: UUID?,
+        loadThroughEnd: Bool = false,
+        scrollToPendingEvidence: Bool = false,
+        preferPendingEvidence: ((PostComment) -> Bool)? = nil
+    ) async {
         await SplickViewUpdate.hop()
         requestID += 1
         let currentRequest = requestID
@@ -106,6 +142,13 @@ final class PostDetailViewModel: ObservableObject {
             if currentRequest == requestID {
                 isLoadingPage = false
             }
+        }
+
+        if let ensureVisibleId {
+            alignFilterIfNeeded(for: ensureVisibleId, in: allComments)
+        } else if scrollToPendingEvidence {
+            // Evidence-only list is small and matches the approval destination.
+            commentFilter = .evidence
         }
 
         do {
@@ -127,7 +170,17 @@ final class PostDetailViewModel: ObservableObject {
                 more = result.hasMore
                 page += 1
                 nextPage = page
-                let found = ensureVisibleId == nil || merged.contains(where: { $0.id == ensureVisibleId })
+                let pendingTarget = scrollToPendingEvidence
+                    ? Self.firstPendingEvidenceCommentId(in: merged, preferring: preferPendingEvidence)
+                    : nil
+                let found: Bool
+                if let ensureVisibleId {
+                    found = merged.contains(where: { $0.id == ensureVisibleId })
+                } else if scrollToPendingEvidence {
+                    found = pendingTarget != nil
+                } else {
+                    found = true
+                }
                 if loadThroughEnd {
                     if !more { break }
                 } else if found || !more {
@@ -141,11 +194,31 @@ final class PostDetailViewModel: ObservableObject {
             displayedTopLevel = displayed
             hasMore = more
             commentsLoaded = true
-            if let ensureVisibleId {
-                ensureCommentVisible(ensureVisibleId)
+            let pendingTarget = scrollToPendingEvidence
+                ? Self.firstPendingEvidenceCommentId(in: merged, preferring: preferPendingEvidence)
+                : nil
+            if let visibleId = ensureVisibleId ?? pendingTarget {
+                ensureCommentVisible(visibleId)
             }
         } catch {
             commentsLoaded = true
+        }
+    }
+
+    /// Switch away from a filter that would hide the target root (e.g. Comments vs Evidence).
+    private func alignFilterIfNeeded(for commentId: UUID, in comments: [PostComment]) {
+        var current = comments.first(where: { $0.id == commentId })
+        while let parentId = current?.parentCommentId {
+            current = comments.first(where: { $0.id == parentId }) ?? current
+            if current?.parentCommentId == nil { break }
+        }
+        guard let root = current, root.parentCommentId == nil else { return }
+        guard !commentFilter.includesRoot(root) else { return }
+        switch root.commentType {
+        case .evidence:
+            commentFilter = .evidence
+        case .standard, .evidenceModeration:
+            commentFilter = .comments
         }
     }
 

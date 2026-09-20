@@ -20,7 +20,8 @@ private struct FeedPostVisibilityPreferenceKey: PreferenceKey {
     }
 }
 
-/// Reports how much of a feed card sits in the window, without `onChange(of: CGRect)`.
+/// Continuous geometry reporting — only attach to video cards (autoplay needs ratios).
+/// Photo cards use appear/disappear so leave-from-top scroll isn't flooded with PreferenceKeys.
 struct FeedPostVisibilityReporter: View {
     let postId: UUID
 
@@ -29,7 +30,6 @@ struct FeedPostVisibilityReporter: View {
             let frame = geo.frame(in: .global)
             let screen = UIScreen.main.bounds
             let visibleHeight = max(0, min(frame.maxY, screen.maxY) - max(frame.minY, screen.minY))
-            // Prefer viewport coverage so tall cards still count when only the header peeks on screen.
             let cardRatio = frame.height > 0 ? visibleHeight / frame.height : 0
             let viewportRatio = screen.height > 0 ? visibleHeight / screen.height : 0
             let ratio = max(cardRatio, viewportRatio)
@@ -54,10 +54,30 @@ extension View {
         threshold: CGFloat = 0.35,
         _ action: @escaping (_ visibleIds: Set<UUID>, _ reports: [FeedPostVisibilityReport]) -> Void
     ) -> some View {
-        onPreferenceChange(FeedPostVisibilityPreferenceKey.self) { reports in
-            DispatchQueue.main.async {
-                let visibleIds = Set(reports.filter { $0.ratio >= threshold }.map(\.postId))
-                action(visibleIds, reports)
+        modifier(
+            FeedPostVisibilityChangeModifier(threshold: threshold, action: action)
+        )
+    }
+}
+
+/// Coalesces PreferenceKey floods while scrolling so leave-from-top doesn't hitch the main thread.
+private struct FeedPostVisibilityChangeModifier: ViewModifier {
+    let threshold: CGFloat
+    let action: (_ visibleIds: Set<UUID>, _ reports: [FeedPostVisibilityReport]) -> Void
+    @State private var pendingReports: [FeedPostVisibilityReport]?
+    @State private var flushTask: Task<Void, Never>?
+
+    func body(content: Content) -> some View {
+        content.onPreferenceChange(FeedPostVisibilityPreferenceKey.self) { reports in
+            pendingReports = reports
+            guard flushTask == nil else { return }
+            flushTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 48_000_000)
+                flushTask = nil
+                guard let pending = pendingReports else { return }
+                pendingReports = nil
+                let visibleIds = Set(pending.filter { $0.ratio >= threshold }.map(\.postId))
+                action(visibleIds, pending)
             }
         }
     }

@@ -18,9 +18,11 @@ struct PostDetailView: View {
     let expandBillSplitInitially: Bool
     let focusComposerOnAppear: Bool
     let initialCommentId: UUID?
+    let scrollToPendingEvidence: Bool
 
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.currentUserSummary) private var currentUserSummary
+    @Environment(\.isLinkedPostPresentation) private var isLinkedPostPresentation
 
     @Environment(\.customEmojiDependencies) private var customEmojiDependencies
     @StateObject private var commentPager: PostDetailViewModel
@@ -34,6 +36,7 @@ struct PostDetailView: View {
     @State private var composerHitTestingEnabled = false
     @State private var rejectEvidenceTarget: PostComment?
     @State private var rejectReason = ""
+    @State private var moderatingEvidenceId: UUID?
     @State private var gifPickerViewModel: GifPickerViewModel?
     @State private var detailScrollLocked = false
     @State private var cardPresentation: PostCardPresentation?
@@ -53,7 +56,8 @@ struct PostDetailView: View {
         makeGifPickerViewModel: GifPickerViewModelFactory? = nil,
         expandBillSplitInitially: Bool = false,
         focusComposerOnAppear: Bool = false,
-        initialCommentId: UUID? = nil
+        initialCommentId: UUID? = nil,
+        scrollToPendingEvidence: Bool = false
     ) {
         self.post = post
         self.initialMediaIndex = initialMediaIndex
@@ -64,6 +68,7 @@ struct PostDetailView: View {
         self.expandBillSplitInitially = expandBillSplitInitially
         self.focusComposerOnAppear = focusComposerOnAppear
         self.initialCommentId = initialCommentId
+        self.scrollToPendingEvidence = scrollToPendingEvidence
         _commentPager = StateObject(
             wrappedValue: PostDetailViewModel(postId: post.id) { postId, page, limit, filter in
                 try await feedViewModel.fetchPostComments(
@@ -114,6 +119,8 @@ struct PostDetailView: View {
 
                     commentsSection
                         .opacity(commentsRevealed ? 1 : 0)
+                        // Opacity alone still receives hits — keep the thread inert until revealed.
+                        .allowsHitTesting(commentsRevealed)
                 }
                 .padding(.horizontal, SplickTheme.Spacing.md)
                 .splickDetailScrollContentTopPadding()
@@ -161,8 +168,7 @@ struct PostDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar(mediaViewerRoute == nil ? .visible : .hidden, for: .navigationBar)
-        .splickInteractivePopEnabled()
-        .splickHorizontalDominantInteractivePop()
+        .modifier(PostDetailInteractivePopModifier(isLinkedPostPresentation: isLinkedPostPresentation))
         .overlay(alignment: .top) {
             SplickScrollTopFadeOverlay(mode: .detailScreen)
         }
@@ -216,6 +222,15 @@ struct PostDetailView: View {
             async let comments: Void = {
                 if let initialCommentId {
                     await commentPager.reload(ensureVisibleId: initialCommentId)
+                } else if scrollToPendingEvidence {
+                    // Expense / needs-approval entry: load evidence thread and page
+                    // until a pending evidence comment is available to scroll to.
+                    await commentPager.reload(
+                        scrollToPendingEvidence: true,
+                        preferPendingEvidence: { comment in
+                            feedViewModel.canModerateEvidence(on: comment, post: livePost)
+                        }
+                    )
                 } else {
                     await commentPager.loadInitial()
                 }
@@ -232,6 +247,18 @@ struct PostDetailView: View {
                 let expectsMedia = commentPager.allComments.first(where: { $0.id == initialCommentId })?
                     .attachments.isEmpty == false
                 requestScroll(to: initialCommentId, expectsMedia: expectsMedia)
+            } else if scrollToPendingEvidence,
+                      let pendingId = commentPager.firstPendingEvidenceCommentId(preferring: { comment in
+                          feedViewModel.canModerateEvidence(on: comment, post: livePost)
+                      }) {
+                let expectsMedia = commentPager.allComments.first(where: { $0.id == pendingId })?
+                    .attachments.isEmpty == false
+                // Pin near the top so Duyệt / Từ chối stay above the composer dock.
+                requestScroll(
+                    to: pendingId,
+                    expectsMedia: expectsMedia,
+                    anchor: UnitPoint(x: 0.5, y: 0.22)
+                )
             }
         }
         .onDisappear {
@@ -332,19 +359,30 @@ struct PostDetailView: View {
                 text: $rejectReason
             )
             Button(languageService.text(.feedPaymentEvidenceReject), role: .destructive) {
-                guard let target = rejectEvidenceTarget,
-                      let evidenceId = target.evidenceId else { return }
-                let reason = rejectReason.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !reason.isEmpty else { return }
-                Task {
+                // Capture before the alert dismisses and clears `rejectEvidenceTarget`.
+                let evidenceId = rejectEvidenceTarget?.evidenceId
+                let postId = livePost.id
+                Task { @MainActor in
+                    // Let the alert TextField commit typed text before reading.
+                    await Task.yield()
+                    try? await Task.sleep(nanoseconds: 50_000_000)
+                    let reason = rejectReason.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard let evidenceId else { return }
+                    guard !reason.isEmpty else {
+                        feedViewModel.alertMessage = languageService.text(
+                            .feedPaymentEvidenceRejectReasonPlaceholder
+                        )
+                        return
+                    }
+                    moderatingEvidenceId = evidenceId
                     await feedViewModel.rejectPaymentEvidence(
-                        postId: post.id,
+                        postId: postId,
                         evidenceId: evidenceId,
                         reason: reason
                     )
-                    await commentPager.reload()
+                    await reloadEvidenceComments()
+                    moderatingEvidenceId = nil
                 }
-                rejectEvidenceTarget = nil
             }
             Button(languageService.text(.commonCancel), role: .cancel) {
                 rejectEvidenceTarget = nil
@@ -464,11 +502,16 @@ struct PostDetailView: View {
         }
     }
 
-    private func requestScroll(to commentId: UUID, expectsMedia: Bool) {
+    private func requestScroll(
+        to commentId: UUID,
+        expectsMedia: Bool,
+        anchor: UnitPoint = UnitPoint(x: 0.5, y: 0.62)
+    ) {
         commentScrollRequest = CommentScrollRequest(
             commentId: commentId,
             nonce: UUID(),
-            expectsMedia: expectsMedia
+            expectsMedia: expectsMedia,
+            anchor: anchor
         )
     }
 
@@ -493,6 +536,7 @@ struct PostDetailView: View {
         proxy: ScrollViewProxy
     ) {
         let commentId = request.commentId
+        let anchor = request.anchor
         Task { @MainActor in
             commentPager.ensureCommentVisible(commentId)
             // Wait for thread insert + keyboard collapse so the row has a real frame.
@@ -501,18 +545,18 @@ struct PostDetailView: View {
             try? await Task.sleep(nanoseconds: initialDelay)
             guard commentScrollRequest == request else { return }
             withAnimation(.easeInOut(duration: 0.35)) {
-                proxy.scrollTo(commentId, anchor: UnitPoint(x: 0.5, y: 0.62))
+                proxy.scrollTo(commentId, anchor: anchor)
             }
             try? await Task.sleep(nanoseconds: retryDelay)
             guard commentScrollRequest == request else { return }
             withAnimation(.easeInOut(duration: 0.28)) {
-                proxy.scrollTo(commentId, anchor: UnitPoint(x: 0.5, y: 0.62))
+                proxy.scrollTo(commentId, anchor: anchor)
             }
             if request.expectsMedia {
                 try? await Task.sleep(nanoseconds: 400_000_000)
                 guard commentScrollRequest == request else { return }
                 withAnimation(.easeInOut(duration: 0.25)) {
-                    proxy.scrollTo(commentId, anchor: UnitPoint(x: 0.5, y: 0.62))
+                    proxy.scrollTo(commentId, anchor: anchor)
                 }
             }
             if commentScrollRequest == request {
@@ -566,7 +610,10 @@ struct PostDetailView: View {
                     pendingCommentIds: feedViewModel.pendingCommentIds,
                     repliesPreviewCount: commentPager.repliesPreviewCount,
                     canReplyToComment: { feedViewModel.canReply(to: $0) },
-                    canModerateEvidence: { feedViewModel.canModerateEvidence(on: $0, post: livePost) },
+                    canModerateEvidence: { comment in
+                        moderatingEvidenceId == nil
+                            && feedViewModel.canModerateEvidence(on: comment, post: livePost)
+                    },
                     onReply: { comment in
                         guard feedViewModel.canReply(to: comment) else { return }
                         commentPager.expandAncestorChain(of: comment)
@@ -580,12 +627,19 @@ struct PostDetailView: View {
                     },
                     onApproveEvidence: { comment in
                         guard let evidenceId = comment.evidenceId else { return }
-                        Task {
-                            await feedViewModel.approvePaymentEvidence(postId: post.id, evidenceId: evidenceId)
-                            await commentPager.reload()
+                        guard moderatingEvidenceId == nil else { return }
+                        moderatingEvidenceId = evidenceId
+                        Task { @MainActor in
+                            await feedViewModel.approvePaymentEvidence(
+                                postId: livePost.id,
+                                evidenceId: evidenceId
+                            )
+                            await reloadEvidenceComments()
+                            moderatingEvidenceId = nil
                         }
                     },
                     onRejectEvidence: { comment in
+                        guard moderatingEvidenceId == nil else { return }
                         rejectEvidenceTarget = comment
                         rejectReason = ""
                     }
@@ -700,10 +754,36 @@ private enum PostDetailScrollAnchor {
     static let top = "postDetailTop"
 }
 
+/// Full-screen horizontal pop is for stacked Navigation pushes (feed → detail).
+/// Linked-post overlay already owns dismiss — installing nav pop / full-screen pan
+/// there can swallow every button tap on the screen.
+private struct PostDetailInteractivePopModifier: ViewModifier {
+    let isLinkedPostPresentation: Bool
+
+    func body(content: Content) -> some View {
+        if isLinkedPostPresentation {
+            content
+        } else {
+            content
+                .splickInteractivePopEnabled()
+                .splickHorizontalDominantInteractivePop()
+        }
+    }
+}
+
 private struct CommentScrollRequest: Equatable {
     let commentId: UUID
     let nonce: UUID
     let expectsMedia: Bool
+    let anchor: UnitPoint
+
+    static func == (lhs: CommentScrollRequest, rhs: CommentScrollRequest) -> Bool {
+        lhs.commentId == rhs.commentId
+            && lhs.nonce == rhs.nonce
+            && lhs.expectsMedia == rhs.expectsMedia
+            && lhs.anchor.x == rhs.anchor.x
+            && lhs.anchor.y == rhs.anchor.y
+    }
 }
 
 private struct CommentThreadFilterBar: View {

@@ -97,6 +97,55 @@ final class SocialFeedViewModelsCoverageTests: XCTestCase {
         await viewModel.reload()
     }
 
+    func testFirstPendingEvidenceCommentIdPrefersModeratable() {
+        let author = UserSummary(id: UUID(), username: "a", displayName: "A", avatarURL: nil)
+        let other = UserSummary(id: UUID(), username: "b", displayName: "B", avatarURL: nil)
+        let olderPending = PostComment(
+            id: UUID(),
+            author: other,
+            text: "Paid",
+            createdAt: Date(timeIntervalSince1970: 1),
+            commentType: .evidence,
+            evidenceId: UUID(),
+            evidenceStatus: .pending,
+            mentions: []
+        )
+        let newerPending = PostComment(
+            id: UUID(),
+            author: other,
+            text: "Paid again",
+            createdAt: Date(timeIntervalSince1970: 2),
+            commentType: .evidence,
+            evidenceId: UUID(),
+            evidenceStatus: .pending,
+            mentions: []
+        )
+        let approved = PostComment(
+            id: UUID(),
+            author: other,
+            text: "Done",
+            createdAt: Date(timeIntervalSince1970: 0),
+            commentType: .evidence,
+            evidenceId: UUID(),
+            evidenceStatus: .approved,
+            mentions: []
+        )
+        let standard = PostComment(id: UUID(), author: author, text: "Hi", mentions: [])
+
+        let comments = [standard, approved, newerPending, olderPending]
+        XCTAssertEqual(
+            PostDetailViewModel.firstPendingEvidenceCommentId(in: comments),
+            olderPending.id
+        )
+        XCTAssertEqual(
+            PostDetailViewModel.firstPendingEvidenceCommentId(in: comments) { $0.id == newerPending.id },
+            newerPending.id
+        )
+        XCTAssertNil(
+            PostDetailViewModel.firstPendingEvidenceCommentId(in: [standard, approved])
+        )
+    }
+
     func testMentionFriendsViewModel() async {
         struct MockFetchFriends: FetchFriendsUseCaseProtocol {
             func execute(query: String, page: Int, limit: Int) async throws -> [UserSummary] {

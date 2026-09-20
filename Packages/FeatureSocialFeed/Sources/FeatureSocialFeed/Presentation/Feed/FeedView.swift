@@ -211,7 +211,8 @@ public struct FeedView: View {
                             postId: navigation.postId,
                             mediaIndex: 0,
                             expandBillSplit: navigation.expandBillSplit,
-                            commentId: navigation.commentId
+                            commentId: navigation.commentId,
+                            scrollToPendingEvidence: navigation.scrollToPendingEvidence
                         )
                     )
                 }
@@ -599,12 +600,23 @@ private struct FeedPrimaryPage: View {
                         cardActions.onPresent(.editHistory(post))
                     }
                     .background {
-                        FeedPostVisibilityReporter(postId: post.id)
+                        // Geometry PreferenceKeys on every card hitch leave-from-top scroll.
+                        // Only video cards need continuous viewport ratios for autoplay.
+                        if post.containsPlayableVideo {
+                            FeedPostVisibilityReporter(postId: post.id)
+                        }
                     }
                     .onAppear {
                         guard feedTabIsActive, !viewModel.isRefreshing else { return }
+                        viewModel.onPostCardAppeared(post.id)
                         if post.id == viewModel.posts.last?.id {
                             Task { await viewModel.loadMore() }
+                        }
+                    }
+                    .onDisappear {
+                        viewModel.onPostCardDisappeared(post.id)
+                        if post.containsPlayableVideo {
+                            videoCoordinator.clearPost(post.id)
                         }
                     }
                 }
@@ -622,9 +634,8 @@ private struct FeedPrimaryPage: View {
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
             .padding(.top, SplickTheme.Spacing.md)
-            .onFeedPostVisibilityChange(threshold: 0.01) { visibleIds, reports in
-                let ids = feedTabIsActive ? visibleIds : []
-                viewModel.onVisiblePostsChanged(ids)
+            .onFeedPostVisibilityChange(threshold: 0.01) { _, reports in
+                guard feedTabIsActive else { return }
                 videoCoordinator.scheduleVisibilityUpdate(videoAutoplayReports(from: reports))
             }
         }

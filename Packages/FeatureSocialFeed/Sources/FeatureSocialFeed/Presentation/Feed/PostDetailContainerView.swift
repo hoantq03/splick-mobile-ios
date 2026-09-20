@@ -36,7 +36,8 @@ struct PostDetailContainerView: View {
                     makeGifPickerViewModel: makeGifPickerViewModel,
                     expandBillSplitInitially: destination.expandBillSplit,
                     focusComposerOnAppear: destination.focusComposerOnAppear,
-                    initialCommentId: destination.commentId
+                    initialCommentId: destination.commentId,
+                    scrollToPendingEvidence: destination.scrollToPendingEvidence
                 )
             } else if !loadAttemptFinished {
                 SkeletonShimmerHost {

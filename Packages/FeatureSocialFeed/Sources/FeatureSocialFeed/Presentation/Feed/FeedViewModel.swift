@@ -72,6 +72,8 @@ public final class FeedViewModel: ObservableObject {
     private var pendingViewPostIds = Set<UUID>()
     private var viewTrackFlushTask: Task<Void, Never>?
     private var viewDwellTasks: [UUID: Task<Void, Never>] = [:]
+    /// Cards currently in the LazyVStack appear window (photo + video).
+    private var appearedPostIds = Set<UUID>()
     private static let viewTrackDebounceNanos: UInt64 = 2_000_000_000
     private static let viewDwellNanos: UInt64 = 1_000_000_000
     private static let initialPrefetchPostCount = 12
@@ -560,6 +562,21 @@ public final class FeedViewModel: ObservableObject {
         scheduleVisibilityPrefetch(visibleIds: visibleIds)
     }
 
+    /// Appear/disappear tracking for photo cards (avoids GeometryReader PreferenceKeys on every cell).
+    func onPostCardAppeared(_ postId: UUID) {
+        guard !isRefreshing else { return }
+        let inserted = appearedPostIds.insert(postId).inserted
+        guard inserted else { return }
+        onVisiblePostsChanged(appearedPostIds)
+    }
+
+    func onPostCardDisappeared(_ postId: UUID) {
+        guard appearedPostIds.remove(postId) != nil else { return }
+        viewDwellTasks[postId]?.cancel()
+        viewDwellTasks[postId] = nil
+        scheduleVisibilityPrefetch(visibleIds: appearedPostIds)
+    }
+
     private func scheduleVisibilityPrefetch(visibleIds: Set<UUID>) {
         visibilityPrefetchTask?.cancel()
         visibilityPrefetchTask = Task { @MainActor [weak self] in
@@ -647,6 +664,7 @@ public final class FeedViewModel: ObservableObject {
             task.cancel()
         }
         viewDwellTasks.removeAll()
+        appearedPostIds.removeAll()
     }
 
     private func cancelViewTrackFlush() {

@@ -49,7 +49,9 @@ struct FeedNavPills: View {
                 .opacity(t)
                 .allowsHitTesting(false)
         }
+        // Collapse is scroll-driven — don't spring-animate every offset tick (causes leave-top hitch).
         .animation(.spring(response: 0.28, dampingFraction: 0.80), value: selection)
+        .animation(nil, value: collapseProgress)
     }
 
     @ViewBuilder

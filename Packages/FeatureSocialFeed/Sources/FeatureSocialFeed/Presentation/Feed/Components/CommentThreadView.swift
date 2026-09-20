@@ -634,8 +634,9 @@ struct CommentRowView: View {
                     Capsule(style: .continuous)
                         .strokeBorder(tint.opacity(0.2), lineWidth: 1)
                 }
+                .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.borderless)
     }
 
     @ViewBuilder
