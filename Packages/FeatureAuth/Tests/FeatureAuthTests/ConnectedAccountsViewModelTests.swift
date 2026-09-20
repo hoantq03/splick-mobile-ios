@@ -217,4 +217,57 @@ final class ConnectedAccountsViewModelTests: XCTestCase {
         let otpSuccess = await vm.unlinkGoogle()
         XCTAssertTrue(otpSuccess)
     }
+
+    func testConnectedAccounts_extendedBranches() async {
+        // 1. Phone only account
+        let phoneVm = makeViewModel(email: "user@phone.splick.local")
+        XCTAssertTrue(phoneVm.isPhoneOnlyAccount)
+        phoneVm.connectEmail = "real@email.com"
+        XCTAssertEqual(phoneVm.linkEmailAddress, "real@email.com")
+
+        let normalVm = makeViewModel(email: "normal@example.com")
+        XCTAssertFalse(normalVm.isPhoneOnlyAccount)
+        XCTAssertEqual(normalVm.linkEmailAddress, "normal@example.com")
+
+        // 2. Request phone code failure
+        normalVm.connectPhoneNumber = "+84901234567"
+        mockRepo.requestLinkPhoneOtpResult = .failure(AuthError.otpRateLimited)
+        await normalVm.requestPhoneConnectCode()
+        XCTAssertNotNil(normalVm.phoneSheetError)
+
+        // 3. Link phone failure with AuthError
+        normalVm.connectPhoneOtp = "123456"
+        mockRepo.linkPhoneResult = .failure(AuthError.invalidOtp("wrong code"))
+        let failedLinkPhone = await normalVm.linkPhone()
+        XCTAssertFalse(failedLinkPhone)
+        XCTAssertNotNil(normalVm.phoneSheetOtpError)
+
+        // 4. Request email code failure
+        mockRepo.requestLinkEmailOtpResult = .failure(AuthError.otpRateLimited)
+        await normalVm.requestEmailConnectCode()
+        XCTAssertNotNil(normalVm.emailSheetError)
+
+        // 5. Link email failure with AuthError
+        normalVm.connectEmailPassword = "StrongPassword123!"
+        normalVm.connectEmailConfirm = "StrongPassword123!"
+        normalVm.connectEmailOtp = "123456"
+        mockRepo.linkEmailResult = .failure(AuthError.invalidOtp("wrong code"))
+        let failedLinkEmail = await normalVm.linkEmail()
+        XCTAssertFalse(failedLinkEmail)
+        XCTAssertNotNil(normalVm.emailSheetOtpError)
+
+        // 6. Unlink Google failure with AuthError
+        normalVm.prepareUnlinkSheet()
+        normalVm.unlinkMethod = .password
+        normalVm.unlinkPassword = "wrong_password"
+        mockRepo.unlinkGoogleResult = .failure(AuthError.invalidCredentials)
+        let failedUnlink = await normalVm.unlinkGoogle()
+        XCTAssertFalse(failedUnlink)
+        XCTAssertNotNil(normalVm.unlinkSheetPasswordError)
+
+        // 7. Request unlink code failure
+        mockRepo.requestEmailOtpResult = .failure(AuthError.otpRateLimited)
+        await normalVm.requestUnlinkCode()
+        XCTAssertNotNil(normalVm.unlinkSheetOtpError)
+    }
 }

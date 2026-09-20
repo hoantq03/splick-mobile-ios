@@ -293,8 +293,10 @@ final class MockKeychainService: KeychainServiceProtocol, @unchecked Sendable {
 
 final class MockRefreshTokenUseCase: RefreshTokenUseCaseProtocol, @unchecked Sendable {
     var refreshSessionResult: Result<Void, Error> = .success(())
+    var onRefresh: (@Sendable () async -> Void)?
 
     func refreshSession() async throws {
+        await onRefresh?()
         try refreshSessionResult.get()
     }
 }
