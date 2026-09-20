@@ -81,7 +81,16 @@ enum OptimisticPostBuilder {
                 try draft.data.write(to: fileURL, options: .atomic)
             case .video:
                 fileURL = directory.appendingPathComponent("\(index).mp4")
-                try draft.data.write(to: fileURL, options: .atomic)
+                if let sourceURL = draft.sourceURL,
+                   FileManager.default.fileExists(atPath: sourceURL.path) {
+                    if FileManager.default.fileExists(atPath: fileURL.path) {
+                        try? FileManager.default.removeItem(at: fileURL)
+                    }
+                    try FileManager.default.copyItem(at: sourceURL, to: fileURL)
+                } else {
+                    guard !draft.data.isEmpty else { throw BuildError.mediaWriteFailed }
+                    try draft.data.write(to: fileURL, options: .atomic)
+                }
             }
 
             var thumbnailURL: URL?

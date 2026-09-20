@@ -666,6 +666,7 @@ enum StringsFeatureEn {
         .feedCreateLocationEnableGps: "Turn on location to see places near you.",
         .feedCreateEqualSplitPreview: "%@ ÷ %d people = %@ / person",
         .feedCreateNeedMedia: "Select at least one photo or video.",
+        .feedCreateVideoStillProcessing: "Wait for the video to finish processing.",
         .feedCreateBillInvalid: "Please check the bill split details.",
         .feedCreateBillAmountMinimum: "Amount must be at least 1,000 đ.",
         .feedCreateBillNeedPeople: "Select at least one person to split the bill with.",

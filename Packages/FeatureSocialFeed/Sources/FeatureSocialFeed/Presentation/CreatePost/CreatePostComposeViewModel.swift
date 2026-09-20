@@ -120,6 +120,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
 
     private let friendSearchPageSize = 20
     private let audienceFriendPageSize = 10
+    private var videoEncodeTasks: [UUID: Task<Void, Never>] = [:]
 
     var shouldShowFriendSuggestions: Bool {
         isFriendSearchActive
@@ -134,6 +135,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
         previewImages: [UIImage] = [],
         previewVideoURL: URL? = nil,
         previewVideoURLs: [URL] = [],
+        pendingVideoEncodes: [PendingCapturedVideo] = [],
         fetchFriendsUseCase: FetchFriendsUseCaseProtocol,
         fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol,
         fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol,
@@ -168,8 +170,21 @@ public final class CreatePostComposeViewModel: ObservableObject {
                 drafts.append(draft)
             }
         }
+        for pending in pendingVideoEncodes {
+            guard drafts.count < maxMediaItems else { break }
+            drafts.append(Self.makePendingVideoDraft(from: pending))
+        }
         selectedMediaItems = Array(drafts.prefix(maxMediaItems))
         observeLocationQuery()
+        for pending in pendingVideoEncodes where selectedMediaItems.contains(where: { $0.id == pending.id }) {
+            startPendingVideoEncode(pending)
+        }
+    }
+
+    deinit {
+        for task in videoEncodeTasks.values {
+            task.cancel()
+        }
     }
 
     private func observeLocationQuery() {
@@ -504,7 +519,17 @@ public final class CreatePostComposeViewModel: ObservableObject {
         remainingMediaSlots > 0
     }
 
+    var hasEncodingMedia: Bool {
+        selectedMediaItems.contains(where: \.isEncoding)
+    }
+
+    var canSubmitPost: Bool {
+        !selectedMediaItems.isEmpty && !hasEncodingMedia
+    }
+
     func removeMediaItem(id: UUID) {
+        videoEncodeTasks[id]?.cancel()
+        videoEncodeTasks[id] = nil
         selectedMediaItems.removeAll { $0.id == id }
         PhotoEditorSessionStore.shared.remove(id)
     }
@@ -523,7 +548,8 @@ public final class CreatePostComposeViewModel: ObservableObject {
             data: draft.data,
             mimeType: draft.mimeType,
             videoDurationSeconds: draft.videoDurationSeconds,
-            sourceURL: nil
+            sourceURL: nil,
+            encodingProgress: nil
         )
     }
 
@@ -535,6 +561,13 @@ public final class CreatePostComposeViewModel: ObservableObject {
     func addVideo(url: URL) {
         guard let draft = Self.makeVideoDraft(from: url) else { return }
         addMediaDraft(draft)
+    }
+
+    func addPendingVideoEncode(_ pending: PendingCapturedVideo) {
+        guard remainingMediaSlots > 0 else { return }
+        guard !selectedMediaItems.contains(where: { $0.id == pending.id }) else { return }
+        selectedMediaItems.append(Self.makePendingVideoDraft(from: pending))
+        startPendingVideoEncode(pending)
     }
 
     func startCompanionDirectoryLoadIfNeeded() {
@@ -829,6 +862,10 @@ public final class CreatePostComposeViewModel: ObservableObject {
     }
 
     func prepareSubmit() -> PreparedPostSubmit? {
+        guard !hasEncodingMedia else {
+            submitState = .failed(languageService.text(.feedCreateVideoStillProcessing))
+            return nil
+        }
         guard let input = buildCreatePostInput() else { return nil }
         guard let author = currentUser else {
             submitState = .failed(languageService.text(.feedErrorAccountUnknown))
@@ -853,6 +890,10 @@ public final class CreatePostComposeViewModel: ObservableObject {
     private func buildCreatePostInput() -> CreatePostInput? {
         guard !selectedMediaItems.isEmpty else {
             submitState = .failed(languageService.text(.feedCreateNeedMedia))
+            return nil
+        }
+        guard !hasEncodingMedia else {
+            submitState = .failed(languageService.text(.feedCreateVideoStillProcessing))
             return nil
         }
 
@@ -887,15 +928,25 @@ public final class CreatePostComposeViewModel: ObservableObject {
             }
         }
 
-        return CreatePostInput(
-            mediaItems: selectedMediaItems.map {
+        var mediaInputs: [CreatePostMediaInput] = []
+        mediaInputs.reserveCapacity(selectedMediaItems.count)
+        for item in selectedMediaItems {
+            guard let data = Self.resolvedMediaData(for: item), !data.isEmpty else {
+                submitState = .failed(languageService.text(.mediaLoadFailed))
+                return nil
+            }
+            mediaInputs.append(
                 CreatePostMediaInput(
-                    data: $0.data,
-                    mimeType: $0.mimeType,
-                    mediaType: $0.mediaType,
-                    videoDurationSeconds: $0.videoDurationSeconds
+                    data: data,
+                    mimeType: item.mimeType,
+                    mediaType: item.mediaType,
+                    videoDurationSeconds: item.videoDurationSeconds
                 )
-            },
+            )
+        }
+
+        return CreatePostInput(
+            mediaItems: mediaInputs,
             caption: caption.nilIfBlank,
             companionIds: companionUsersForSubmit.map(\.id),
             companionGroupName: companionGroupDisplayName,
@@ -1192,28 +1243,158 @@ public final class CreatePostComposeViewModel: ObservableObject {
             data: data,
             mimeType: jpegData != nil ? "image/jpeg" : "image/png",
             videoDurationSeconds: nil,
-            sourceURL: nil
+            sourceURL: nil,
+            encodingProgress: nil
         )
     }
 
-    private static func makeVideoDraft(from url: URL) -> ComposeMediaDraft? {
-        guard let data = try? Data(contentsOf: url), !data.isEmpty else { return nil }
-        let asset = AVURLAsset(url: url)
-        let duration = Int(round(CMTimeGetSeconds(asset.duration)))
-        var preview: UIImage?
-        let generator = AVAssetImageGenerator(asset: asset)
-        generator.appliesPreferredTrackTransform = true
-        if let cgImage = try? generator.copyCGImage(at: .zero, actualTime: nil) {
-            preview = UIImage(cgImage: cgImage)
+    private static func makePendingVideoDraft(from pending: PendingCapturedVideo) -> ComposeMediaDraft {
+        ComposeMediaDraft(
+            id: pending.id,
+            previewImage: pending.previewImage,
+            mediaType: .video,
+            data: Data(),
+            mimeType: "video/mp4",
+            videoDurationSeconds: nil,
+            sourceURL: nil,
+            encodingProgress: 0
+        )
+    }
+
+    /// Keeps only a file URL + light poster — never loads the whole MP4 into memory here.
+    private static func makeVideoDraft(
+        from url: URL,
+        id: UUID = UUID(),
+        previewImage: UIImage? = nil,
+        durationSeconds: Int? = nil
+    ) -> ComposeMediaDraft? {
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        let duration: Int
+        var preview = previewImage
+        if let durationSeconds, durationSeconds > 0 {
+            duration = durationSeconds
+        } else {
+            let asset = AVURLAsset(url: url)
+            let secs = CMTimeGetSeconds(asset.duration)
+            duration = (secs.isFinite && secs > 0) ? Int(secs.rounded()) : 1
+            if preview == nil {
+                let generator = AVAssetImageGenerator(asset: asset)
+                generator.appliesPreferredTrackTransform = true
+                if let cgImage = try? generator.copyCGImage(at: .zero, actualTime: nil) {
+                    preview = UIImage(cgImage: cgImage)
+                }
+            }
         }
         return ComposeMediaDraft(
+            id: id,
             previewImage: preview,
             mediaType: .video,
-            data: data,
+            data: Data(),
             mimeType: "video/mp4",
-            videoDurationSeconds: duration > 0 ? duration : 1,
-            sourceURL: url
+            videoDurationSeconds: duration,
+            sourceURL: url,
+            encodingProgress: nil
         )
+    }
+
+    private static func resolvedMediaData(for item: ComposeMediaDraft) -> Data? {
+        if !item.data.isEmpty { return item.data }
+        guard let url = item.sourceURL else { return nil }
+        return try? Data(contentsOf: url)
+    }
+
+    private func startPendingVideoEncode(_ pending: PendingCapturedVideo) {
+        videoEncodeTasks[pending.id]?.cancel()
+        let draftId = pending.id
+        let pingPong = pending.pingPong
+        // Detached so encode never inherits @MainActor and freezes compose.
+        videoEncodeTasks[draftId] = Task.detached(priority: .userInitiated) { [weak self] in
+            do {
+                let frames = try await pending.waitForFrames()
+                guard !Task.isCancelled else { return }
+                guard frames.count >= BoomerangTimeline.minFrames else {
+                    await MainActor.run { self?.failVideoEncode(id: draftId) }
+                    return
+                }
+                let preview = pending.previewImage ?? frames.first
+                await MainActor.run {
+                    self?.updateEncodingProgress(id: draftId, progress: 0.02, previewImage: preview)
+                }
+                let url: URL
+                if pingPong {
+                    url = try await BoomerangClipComposer.writeLoopingClip(images: frames) { progress in
+                        Task { @MainActor in
+                            self?.updateEncodingProgress(id: draftId, progress: progress)
+                        }
+                    }
+                } else {
+                    url = try await BoomerangClipComposer.writeForwardClip(images: frames) { progress in
+                        Task { @MainActor in
+                            self?.updateEncodingProgress(id: draftId, progress: progress)
+                        }
+                    }
+                }
+                guard !Task.isCancelled else { return }
+                let duration = max(
+                    1,
+                    Int((Double(frames.count) / Double(BoomerangTimeline.targetFPS)).rounded())
+                )
+                await MainActor.run {
+                    self?.finishVideoEncode(
+                        id: draftId,
+                        url: url,
+                        previewImage: preview,
+                        durationSeconds: duration
+                    )
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    self?.failVideoEncode(id: draftId)
+                }
+            }
+        }
+    }
+
+    private func updateEncodingProgress(id: UUID, progress: Double, previewImage: UIImage? = nil) {
+        guard let index = selectedMediaItems.firstIndex(where: { $0.id == id }) else { return }
+        let current = selectedMediaItems[index]
+        selectedMediaItems[index] = ComposeMediaDraft(
+            id: current.id,
+            previewImage: previewImage ?? current.previewImage,
+            mediaType: current.mediaType,
+            data: current.data,
+            mimeType: current.mimeType,
+            videoDurationSeconds: current.videoDurationSeconds,
+            sourceURL: current.sourceURL,
+            encodingProgress: min(max(progress, 0), 0.99)
+        )
+    }
+
+    private func finishVideoEncode(
+        id: UUID,
+        url: URL,
+        previewImage: UIImage?,
+        durationSeconds: Int
+    ) {
+        videoEncodeTasks[id] = nil
+        guard let index = selectedMediaItems.firstIndex(where: { $0.id == id }),
+              let ready = Self.makeVideoDraft(
+                from: url,
+                id: id,
+                previewImage: previewImage,
+                durationSeconds: durationSeconds
+              )
+        else { return }
+        selectedMediaItems[index] = ready
+    }
+
+    private func failVideoEncode(id: UUID) {
+        videoEncodeTasks[id] = nil
+        selectedMediaItems.removeAll { $0.id == id }
+        submitState = .failed(languageService.text(.mediaLoadFailed))
     }
 }
 
@@ -1225,6 +1406,10 @@ public struct ComposeMediaDraft: Identifiable {
     public let mimeType: String
     public let videoDurationSeconds: Int?
     public let sourceURL: URL?
+    /// `nil` when ready. `0...1` while this clip is still encoding.
+    public let encodingProgress: Double?
+
+    public var isEncoding: Bool { encodingProgress != nil }
 
     public init(
         id: UUID = UUID(),
@@ -1233,7 +1418,8 @@ public struct ComposeMediaDraft: Identifiable {
         data: Data,
         mimeType: String,
         videoDurationSeconds: Int?,
-        sourceURL: URL? = nil
+        sourceURL: URL? = nil,
+        encodingProgress: Double? = nil
     ) {
         self.id = id
         self.previewImage = previewImage
@@ -1242,6 +1428,7 @@ public struct ComposeMediaDraft: Identifiable {
         self.mimeType = mimeType
         self.videoDurationSeconds = videoDurationSeconds
         self.sourceURL = sourceURL
+        self.encodingProgress = encodingProgress
     }
 
     /// File the compose preview player should load. Prefers the original capture URL.

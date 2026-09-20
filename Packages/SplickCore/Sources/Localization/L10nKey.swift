@@ -952,6 +952,7 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case feedCreateLocationEnableGps = "feed.create.location_enable_gps"
     case feedCreateEqualSplitPreview = "feed.create.equal_split_preview"
     case feedCreateNeedMedia = "feed.create.need_media"
+    case feedCreateVideoStillProcessing = "feed.create.video_still_processing"
     case feedCreateBillInvalid = "feed.create.bill_invalid"
     case feedCreateBillAmountMinimum = "feed.create.bill_amount_minimum"
     case feedCreateBillNeedPeople = "feed.create.bill_need_people"

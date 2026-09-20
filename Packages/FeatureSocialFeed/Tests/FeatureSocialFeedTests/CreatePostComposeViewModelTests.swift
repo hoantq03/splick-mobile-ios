@@ -5,6 +5,7 @@ import Common
 import Storage
 import Localization
 import FeatureFriends
+import FeatureMedia
 @testable import FeatureSocialFeed
 
 final class MockUserDefaultsService: UserDefaultsServiceProtocol {
@@ -354,6 +355,31 @@ final class CreatePostComposeViewModelTests: XCTestCase {
         XCTAssertEqual(vm.selectedMediaItems.first?.mediaType, .video)
         XCTAssertEqual(vm.selectedMediaItems.first?.sourceURL, url)
         XCTAssertEqual(vm.selectedMediaItems.first?.previewPlaybackURL, url)
+        XCTAssertTrue(vm.selectedMediaItems.first?.data.isEmpty == true)
+        XCTAssertFalse(vm.hasEncodingMedia)
+    }
+
+    func testPendingVideoEncodeBlocksSubmitUntilReady() {
+        let frames = (0..<8).map { _ in
+            UIGraphicsImageRenderer(size: CGSize(width: 32, height: 48)).image { ctx in
+                UIColor.red.setFill()
+                ctx.fill(CGRect(x: 0, y: 0, width: 32, height: 48))
+            }
+        }
+        let pending = PendingCapturedVideo(frames: frames, pingPong: false, previewImage: frames.first)
+        let vm = CreatePostComposeViewModel(
+            pendingVideoEncodes: [pending],
+            fetchFriendsUseCase: mockFriendsUseCase,
+            fetchMyGroupsUseCase: mockGroupsUseCase,
+            fetchGroupMembersUseCase: mockMembersUseCase,
+            languageService: languageService,
+            currentUser: currentUser,
+            currentUserId: currentUser.id
+        )
+        XCTAssertEqual(vm.selectedMediaItems.count, 1)
+        XCTAssertTrue(vm.hasEncodingMedia)
+        XCTAssertFalse(vm.canSubmitPost)
+        XCTAssertNil(vm.prepareSubmit())
     }
 
     func testCompanionDirectoryLoadsFriendsWithoutActivatingSearch() async {

@@ -159,6 +159,7 @@ public struct CreatePostComposeView: View {
                         onPostSubmit(prepared)
                     }
                 }
+                .disabled(!viewModel.canSubmitPost)
             }
         }
         .alert(
@@ -207,6 +208,8 @@ public struct CreatePostComposeView: View {
                         viewModel.addImages(images)
                     case .video(let url):
                         viewModel.addVideo(url: url)
+                    case .pendingVideo(let pending):
+                        viewModel.addPendingVideoEncode(pending)
                     case .mixed(let images, let videos):
                         viewModel.addImages(images)
                         for url in videos {
@@ -220,6 +223,7 @@ public struct CreatePostComposeView: View {
                 stickerPickerBuilder: stickerPickerBuilder,
                 maxLibrarySelection: viewModel.remainingMediaSlots
             )
+            .environmentObject(CameraOpenRevealProgressSource(value: 1))
         }
         .fullScreenCover(isPresented: reviewCoverPresented) {
             if let id = reviewingMediaID,
@@ -271,13 +275,16 @@ public struct CreatePostComposeView: View {
                             Group {
                                 if let image = item.previewImage {
                                     Button {
+                                        guard !item.isEncoding else { return }
                                         reviewingMediaID = item.id
                                     } label: {
                                         Image(uiImage: image)
                                             .resizable()
                                             .scaledToFill()
                                             .overlay(alignment: .center) {
-                                                if item.mediaType == .video {
+                                                if item.isEncoding, let progress = item.encodingProgress {
+                                                    encodingOverlay(progress: progress)
+                                                } else if item.mediaType == .video {
                                                     Image(systemName: "play.circle.fill")
                                                         .font(.system(size: 28, weight: .semibold))
                                                         .foregroundStyle(.white)
@@ -286,6 +293,7 @@ public struct CreatePostComposeView: View {
                                             }
                                     }
                                     .buttonStyle(.plain)
+                                    .disabled(item.isEncoding)
                                     .accessibilityLabel(
                                         item.mediaType == .video
                                             ? languageService.text(.mediaTypeVideo)
@@ -293,18 +301,24 @@ public struct CreatePostComposeView: View {
                                     )
                                 } else {
                                     Button {
+                                        guard !item.isEncoding else { return }
                                         if item.mediaType == .video {
                                             reviewingMediaID = item.id
                                         }
                                     } label: {
                                         ZStack {
                                             SplickTheme.Colors.tertiaryBackground
-                                            Image(systemName: "play.rectangle.fill")
-                                                .font(.system(size: 28))
-                                                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                                            if item.isEncoding, let progress = item.encodingProgress {
+                                                encodingOverlay(progress: progress)
+                                            } else {
+                                                Image(systemName: "play.rectangle.fill")
+                                                    .font(.system(size: 28))
+                                                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                                            }
                                         }
                                     }
                                     .buttonStyle(.plain)
+                                    .disabled(item.isEncoding)
                                     .accessibilityLabel(languageService.text(.mediaTypeVideo))
                                 }
                             }
@@ -352,6 +366,22 @@ public struct CreatePostComposeView: View {
             Text(languageService.text(.feedCreateMediaLimit))
                 .font(SplickTheme.Typography.caption)
                 .foregroundStyle(SplickTheme.Colors.textTertiary)
+        }
+    }
+
+    private func encodingOverlay(progress: Double) -> some View {
+        let percent = min(max(Int((progress * 100).rounded(.down)), 0), 99)
+        return ZStack {
+            Color.black.opacity(0.45)
+            VStack(spacing: 6) {
+                ProgressView(value: progress)
+                    .tint(.white)
+                    .frame(width: 56)
+                Text("\(percent)%")
+                    .font(SplickTheme.Typography.caption.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .monospacedDigit()
+            }
         }
     }
 

@@ -666,6 +666,7 @@ enum StringsFeatureVi {
         .feedCreateLocationEnableGps: "Bật vị trí để xem địa điểm gần bạn.",
         .feedCreateEqualSplitPreview: "%@ ÷ %d người = %@ / người",
         .feedCreateNeedMedia: "Chọn ít nhất một ảnh hoặc video.",
+        .feedCreateVideoStillProcessing: "Đợi video xử lý xong.",
         .feedCreateBillInvalid: "Kiểm tra lại thông tin chia bill.",
         .feedCreateBillAmountMinimum: "Số tiền tối thiểu là 1.000 đ.",
         .feedCreateBillNeedPeople: "Chọn ít nhất một người để chia bill.",
