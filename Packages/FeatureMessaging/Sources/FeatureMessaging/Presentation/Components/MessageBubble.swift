@@ -8,6 +8,7 @@ import SplickDomain
 struct MessageBubble: View {
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.openLinkedPost) private var openLinkedPost
+    @Environment(\.splickBrandPalette) private var brandPalette
 
     enum Presentation {
         /// Full chat row with spacers, timestamps, and gestures.
@@ -493,7 +494,7 @@ struct MessageBubble: View {
             )
         )
         .font(SplickTheme.Typography.body)
-        .tint(isOutgoing ? .white : SplickTheme.Colors.primaryGradientStart)
+        .tint(isOutgoing ? .white : brandPalette.accent)
         .multilineTextAlignment(.leading)
         .lineLimit(lineLimit)
         // Selection / link pans on iOS 17.5 steal bubble swipe-to-reply (avatar worked).
@@ -590,18 +591,11 @@ struct MessageBubble: View {
     @ViewBuilder
     private var bubbleBackground: some View {
         if isOutgoing {
-            LinearGradient(
-                colors: [SplickTheme.Colors.primaryGradientStart, SplickTheme.Colors.primaryGradientEnd],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .opacity(message.deliveryStatus == .failed ? 0.45 : 1)
+            brandPalette.primaryGradient
+                .opacity(message.deliveryStatus == .failed ? 0.45 : 1)
         } else {
-            LinearGradient(
-                colors: [SplickTheme.Colors.secondaryBackground, SplickTheme.Colors.secondaryBackground],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            // Contrasts against ChatThread / peek card `background` surface.
+            SplickTheme.Colors.secondaryBackground
         }
     }
 
@@ -757,6 +751,7 @@ private struct MessageReactionStrip: View {
     let onReact: (String) -> Void
     let onOverflowTap: (() -> Void)?
 
+    @Environment(\.splickBrandPalette) private var brandPalette
     @State private var bouncingEmoji: String?
 
     private static let impactFeedback = UIImpactFeedbackGenerator(style: .light)
@@ -767,6 +762,7 @@ private struct MessageReactionStrip: View {
 
     var body: some View {
         let layout = self.layout
+        let reactedStroke = brandPalette.accent.opacity(0.55)
         HStack(spacing: 4) {
             ForEach(layout.visible, id: \.emoji) { item in
                 let userReacted = reactions.contains { $0.userId == currentUserId && $0.emoji == item.emoji }
@@ -793,9 +789,7 @@ private struct MessageReactionStrip: View {
                     .overlay {
                         Capsule(style: .continuous)
                             .strokeBorder(
-                                userReacted
-                                    ? SplickTheme.Colors.primaryGradientStart.opacity(0.55)
-                                    : SplickTheme.Colors.divider,
+                                userReacted ? reactedStroke : SplickTheme.Colors.divider,
                                 lineWidth: 0.5
                             )
                     }

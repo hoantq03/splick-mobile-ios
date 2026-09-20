@@ -657,8 +657,9 @@ public struct ConversationListView: View {
                         )
                         .animation(nil, value: viewModel.peekConversation?.id)
                         .contentShape(Rectangle())
-                        // Avoid `Button` + long-press: on iOS 17 either taps die
-                        // (`highPriorityGesture`) or peek never fires (`onLongPressGesture`).
+                        // Tap waits for long-press to fail — same exclusivity as Android
+                        // `combinedClickable`. Simultaneous tap+long-press was opening the
+                        // thread on finger-up after a hold.
                         .onTapGesture {
                             pushThread(ChatThreadRoute(conversation: conversation))
                         }
