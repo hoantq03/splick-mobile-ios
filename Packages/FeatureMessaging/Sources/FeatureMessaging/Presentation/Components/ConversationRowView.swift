@@ -42,11 +42,6 @@ struct ConversationRowView: View {
                         .foregroundStyle(SplickTheme.Colors.textPrimary)
                         .lineLimit(1)
                         .layoutPriority(0)
-                    if conversation.isGroup, let memberCount = conversation.memberCount {
-                        Text("(\(memberCount))")
-                            .font(SplickTheme.Typography.caption)
-                            .foregroundStyle(SplickTheme.Colors.textTertiary)
-                    }
                     if conversation.isMuted() {
                         ConversationMuteBadge(mutedUntil: conversation.mutedUntil)
                             .accessibilityLabel(languageService.text(.messagingChatMuteNotifications))
