@@ -30,7 +30,10 @@ let package = Package(
         ),
         .testTarget(
             name: "FeatureMediaTests",
-            dependencies: ["FeatureMedia"],
+            dependencies: [
+                "FeatureMedia",
+                .product(name: "DesignSystem", package: "SplickCore"),
+            ],
             path: "Tests/FeatureMediaTests"
         ),
     ]

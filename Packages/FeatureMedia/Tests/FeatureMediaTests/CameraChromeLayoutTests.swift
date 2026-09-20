@@ -1,3 +1,4 @@
+import DesignSystem
 import UIKit
 import XCTest
 @testable import FeatureMedia
@@ -19,12 +20,13 @@ final class CameraChromeLayoutTests: XCTestCase {
             in: CGSize(width: 430, height: 932),
             safeArea: UIEdgeInsets(top: 59, left: 0, bottom: 34, right: 0)
         )
-        XCTAssertLessThan(se.shutterDiameter, pro.shutterDiameter)
+        XCTAssertEqual(se.shutterDiameter, SplickTabBarMetrics.cameraSize)
+        XCTAssertEqual(pro.shutterDiameter, SplickTabBarMetrics.cameraSize)
         XCTAssertLessThan(se.previewLift, pro.previewLift)
         XCTAssertLessThan(se.toolIconSize, pro.toolIconSize)
-        XCTAssertGreaterThanOrEqual(se.bottomPadding, 8)
+        XCTAssertEqual(se.bottomPadding, SplickTabBarMetrics.cameraButtonBottomInset, accuracy: 0.01)
+        XCTAssertEqual(pro.bottomPadding, SplickTabBarMetrics.cameraButtonBottomInset, accuracy: 0.01)
         XCTAssertGreaterThanOrEqual(se.topPadding, 20)
-        XCTAssertEqual(pro.bottomPadding, 46, accuracy: 0.01)
     }
 
     func testHomeIndicatorIsReservedInBottomPadding() {
@@ -32,6 +34,6 @@ final class CameraChromeLayoutTests: XCTestCase {
             in: CGSize(width: 375, height: 812),
             safeArea: UIEdgeInsets(top: 47, left: 0, bottom: 34, right: 0)
         )
-        XCTAssertGreaterThanOrEqual(metrics.bottomPadding, 34)
+        XCTAssertEqual(metrics.bottomPadding, SplickTabBarMetrics.cameraButtonBottomInset, accuracy: 0.01)
     }
 }

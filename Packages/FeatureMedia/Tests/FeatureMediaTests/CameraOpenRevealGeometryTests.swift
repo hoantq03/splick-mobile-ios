@@ -1,0 +1,93 @@
+import DesignSystem
+import XCTest
+
+final class CameraOpenRevealGeometryTests: XCTestCase {
+    func testCoveringRadiusReachesFarthestCorner() {
+        let origin = CGPoint(x: 50, y: 90)
+        let radius = CameraOpenRevealGeometry.coveringRadius(
+            origin: origin,
+            size: CGSize(width: 100, height: 100)
+        )
+        XCTAssertEqual(radius, hypot(50, 90), accuracy: 0.01)
+    }
+
+    func testOriginSitsOnCameraButtonCenter() {
+        let origin = CameraOpenRevealGeometry.origin(
+            in: CGSize(width: 360, height: 800),
+            cameraSize: 70,
+            bottomInset: 10
+        )
+        XCTAssertEqual(origin.x, 180, accuracy: 0.01)
+        XCTAssertEqual(origin.y, 800 - 10 - 35, accuracy: 0.01)
+    }
+
+    func testRadiusStartsAtButtonAndFillsScreen() {
+        XCTAssertEqual(CameraOpenRevealGeometry.radius(progress: 0, start: 35, end: 400), 35, accuracy: 0.01)
+        XCTAssertEqual(CameraOpenRevealGeometry.radius(progress: 1, start: 35, end: 400), 400, accuracy: 0.01)
+        XCTAssertEqual(CameraOpenRevealGeometry.radius(progress: 0.5, start: 35, end: 400), 217.5, accuracy: 0.01)
+    }
+
+    func testFeatherSoftensDuringSpreadThenClears() {
+        XCTAssertEqual(CameraOpenRevealGeometry.feather(progress: 0, maxFeather: 48), 48, accuracy: 0.01)
+        XCTAssertEqual(CameraOpenRevealGeometry.feather(progress: 0.5, maxFeather: 48), 12, accuracy: 0.01)
+        XCTAssertEqual(CameraOpenRevealGeometry.feather(progress: 1, maxFeather: 48), 0, accuracy: 0.01)
+    }
+
+    func testShutterRowLiftsWithRevealProgress() {
+        XCTAssertEqual(CameraOpenRevealGeometry.shutterRowLift(progress: 0), 0, accuracy: 0.01)
+        XCTAssertEqual(CameraOpenRevealGeometry.shutterRowLift(progress: 1), CameraOpenRevealGeometry.shutterRestLift, accuracy: 0.01)
+        XCTAssertEqual(CameraOpenRevealGeometry.shutterRowLift(progress: 0.5), 28, accuracy: 0.01)
+    }
+
+    func testFinderSpreadStartsOnCameraButton() {
+        let spread = CameraOpenRevealGeometry.finderSpread(
+            progress: 0,
+            cameraSize: 70,
+            canvas: CGSize(width: 360, height: 800),
+            bottomInset: 10,
+            restWidth: 336,
+            restHeight: 378,
+            restCenter: CGPoint(x: 180, y: 360),
+            restCorner: 22
+        )
+        XCTAssertEqual(spread.width, 70, accuracy: 0.01)
+        XCTAssertEqual(spread.height, 70, accuracy: 0.01)
+        XCTAssertEqual(spread.corner, 35, accuracy: 0.01)
+        XCTAssertEqual(spread.center.x, 180, accuracy: 0.01)
+        XCTAssertEqual(spread.center.y, 800 - 10 - 35, accuracy: 0.01)
+    }
+
+    func testFinderSpreadSettlesOnRestFrame() {
+        let spread = CameraOpenRevealGeometry.finderSpread(
+            progress: 1,
+            cameraSize: 70,
+            canvas: CGSize(width: 360, height: 800),
+            bottomInset: 10,
+            restWidth: 336,
+            restHeight: 378,
+            restCenter: CGPoint(x: 180, y: 360),
+            restCorner: 22
+        )
+        XCTAssertEqual(spread.width, 336, accuracy: 0.01)
+        XCTAssertEqual(spread.height, 378, accuracy: 0.01)
+        XCTAssertEqual(spread.corner, 22, accuracy: 0.01)
+        XCTAssertEqual(spread.center.x, 180, accuracy: 0.01)
+        XCTAssertEqual(spread.center.y, 360, accuracy: 0.01)
+    }
+
+    func testFinderSpreadMidpointIsHalfway() {
+        let spread = CameraOpenRevealGeometry.finderSpread(
+            progress: 0.5,
+            cameraSize: 70,
+            canvas: CGSize(width: 360, height: 800),
+            bottomInset: 10,
+            restWidth: 336,
+            restHeight: 378,
+            restCenter: CGPoint(x: 180, y: 360),
+            restCorner: 22
+        )
+        XCTAssertEqual(spread.width, 203, accuracy: 0.01)
+        XCTAssertEqual(spread.height, 224, accuracy: 0.01)
+        XCTAssertEqual(spread.corner, 28.5, accuracy: 0.01)
+    }
+}

@@ -5,6 +5,7 @@ import SwiftUI
 
 struct MetalCameraPreviewView: UIViewRepresentable {
     var image: CIImage?
+    var cornerRadius: CGFloat = SplickTheme.CornerRadius.card
 
     func makeUIView(context: Context) -> MetalPreviewMTKView {
         let view = MetalPreviewMTKView(frame: .zero, device: MTLCreateSystemDefaultDevice())
@@ -14,7 +15,7 @@ struct MetalCameraPreviewView: UIViewRepresentable {
         view.preferredFramesPerSecond = 30
         view.contentMode = .scaleAspectFill
         view.clipsToBounds = true
-        view.layer.cornerRadius = SplickTheme.CornerRadius.card
+        view.layer.cornerRadius = cornerRadius
         view.layer.cornerCurve = .continuous
         view.layer.masksToBounds = true
         return view
@@ -22,6 +23,8 @@ struct MetalCameraPreviewView: UIViewRepresentable {
 
     func updateUIView(_ uiView: MetalPreviewMTKView, context: Context) {
         uiView.ciImage = image
+        uiView.layer.cornerRadius = cornerRadius
+        uiView.clipsToBounds = true
     }
 }
 

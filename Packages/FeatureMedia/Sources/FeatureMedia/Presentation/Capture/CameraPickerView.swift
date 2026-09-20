@@ -19,6 +19,7 @@ struct CameraPickerView: View {
     var filterCatalogRepository: FilterCatalogRepositoryProtocol?
 
     @EnvironmentObject private var languageService: LanguageService
+    @Environment(\.cameraOpenRevealProgress) private var revealProgress
     @StateObject private var session = AVCameraSessionModel()
     @StateObject private var arHandle = ARCaptureHandle()
     @State private var arEffect: ARFaceEffect = .glasses
@@ -31,13 +32,10 @@ struct CameraPickerView: View {
     @State private var boomerangProgress: CGFloat = 0
     @State private var shutterPressActive = false
     @State private var shortVideoHoldStarted = false
+    @State private var finderSlot: CGRect = .zero
 
     private var faceTrackingSupported: Bool {
         ARFaceTrackingConfiguration.isSupported
-    }
-
-    private var finderShape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous)
     }
 
     var body: some View {
@@ -53,10 +51,26 @@ struct CameraPickerView: View {
                     topBar
                         .padding(.top, metrics.topPadding)
 
-                    finder(metrics: metrics)
+                    Color.clear
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(.horizontal, metrics.previewInset)
+                        .background(
+                            GeometryReader { slot in
+                                Color.clear.preference(
+                                    key: FinderSlotPreferenceKey.self,
+                                    value: slot.frame(in: .named("cameraCanvas"))
+                                )
+                            }
+                        )
 
                     bottomBar(metrics: metrics)
                 }
+
+                finder(
+                    metrics: metrics,
+                    canvas: geo.size,
+                    slot: finderSlot
+                )
 
                 if countdownRemaining > 0 {
                     Text(String(format: languageService.text(.mediaCameraTimerSeconds), countdownRemaining))
@@ -82,6 +96,8 @@ struct CameraPickerView: View {
                     }
                 }
             }
+            .coordinateSpace(name: "cameraCanvas")
+            .onPreferenceChange(FinderSlotPreferenceKey.self) { finderSlot = $0 }
         }
         .onAppear {
             session.start()
@@ -124,66 +140,84 @@ struct CameraPickerView: View {
         }
     }
 
-    private func finder(metrics: CameraChromeMetrics) -> some View {
-        GeometryReader { geo in
-            let lift = metrics.previewLift
-            let zoomReserve: CGFloat = 44
-            let maxWidth = geo.size.width - (metrics.previewInset * 2)
-            let maxHeight = max(geo.size.height - lift - zoomReserve, 1)
-            let frameWidth = min(maxWidth, maxHeight * CameraChromeLayout.previewAspect)
-            let frameHeight = frameWidth / CameraChromeLayout.previewAspect
-            ZStack {
-                previewLayer
-                    .frame(width: frameWidth, height: frameHeight)
-                    .clipShape(finderShape)
-                    .compositingGroup()
-                    .overlay {
-                        ZStack {
-                            finderShape.strokeBorder(SplickTheme.Colors.divider, lineWidth: 0.5)
-                            if let indicator = session.focusIndicator {
-                                CameraFocusReticle(indicator: indicator)
-                            }
+    private func finder(metrics: CameraChromeMetrics, canvas: CGSize, slot: CGRect) -> some View {
+        let lift = metrics.previewLift
+        let zoomReserve: CGFloat = 44
+        let slotSize = slot == .zero ? canvas : slot.size
+        let slotOrigin = slot == .zero ? .zero : slot.origin
+        let maxWidth = max(slotSize.width, 1)
+        let maxHeight = max(slotSize.height - lift - zoomReserve, 1)
+        let restWidth = min(maxWidth, maxHeight * CameraChromeLayout.previewAspect)
+        let restHeight = restWidth / CameraChromeLayout.previewAspect
+        let restCenter = CGPoint(
+            x: slotOrigin.x + slotSize.width / 2,
+            y: slotOrigin.y + slotSize.height / 2 - lift
+        )
+        let spread = CameraOpenRevealGeometry.finderSpread(
+            progress: revealProgress,
+            cameraSize: SplickTabBarMetrics.cameraSize,
+            canvas: canvas,
+            bottomInset: metrics.bottomPadding,
+            restWidth: restWidth,
+            restHeight: restHeight,
+            restCenter: restCenter,
+            restCorner: SplickTheme.CornerRadius.card
+        )
+        let shape = RoundedRectangle(cornerRadius: spread.corner, style: .continuous)
+        ZStack {
+            previewLayer(cornerRadius: spread.corner)
+                .frame(width: spread.width, height: spread.height)
+                .clipShape(shape)
+                .compositingGroup()
+                .overlay {
+                    ZStack {
+                        shape.strokeBorder(SplickTheme.Colors.divider, lineWidth: 0.5)
+                        if let indicator = session.focusIndicator {
+                            CameraFocusReticle(indicator: indicator)
                         }
                     }
-                    .contentShape(finderShape)
-                    .highPriorityGesture(
-                        SpatialTapGesture()
-                            .onEnded { event in
-                                guard !(session.filterPreset == .ar && faceTrackingSupported) else { return }
-                                session.focus(
-                                    at: event.location,
-                                    viewSize: CGSize(width: frameWidth, height: frameHeight)
-                                )
-                            }
-                    )
-                    .simultaneousGesture(
-                        MagnificationGesture()
-                            .onChanged { session.updatePinch(magnification: $0) }
-                            .onEnded { _ in session.endPinch() }
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                    .offset(y: -lift)
-
-                if !(session.filterPreset == .ar && faceTrackingSupported) {
-                    CameraNativeZoomChrome(
-                        displayZoom: session.zoomFactor,
-                        onTap: { session.cycleZoomStep() }
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                    .padding(.bottom, 4)
                 }
+                .contentShape(shape)
+                .highPriorityGesture(
+                    SpatialTapGesture()
+                        .onEnded { event in
+                            guard !(session.filterPreset == .ar && faceTrackingSupported) else { return }
+                            session.focus(
+                                at: event.location,
+                                viewSize: CGSize(width: spread.width, height: spread.height)
+                            )
+                        }
+                )
+                .simultaneousGesture(
+                    MagnificationGesture()
+                        .onChanged { session.updatePinch(magnification: $0) }
+                        .onEnded { _ in session.endPinch() }
+                )
+                .position(x: spread.center.x, y: spread.center.y)
+
+            if !(session.filterPreset == .ar && faceTrackingSupported) {
+                CameraNativeZoomChrome(
+                    displayZoom: session.zoomFactor,
+                    onTap: { session.cycleZoomStep() }
+                )
+                .opacity(revealProgress)
+                .position(
+                    x: spread.center.x,
+                    y: spread.top + spread.height + 28
+                )
             }
-            .clipped()
         }
+        .frame(width: canvas.width, height: canvas.height)
+        .allowsHitTesting(true)
     }
 
     @ViewBuilder
-    private var previewLayer: some View {
+    private func previewLayer(cornerRadius: CGFloat) -> some View {
         if session.filterPreset == .ar, faceTrackingSupported {
             ARCameraView(effect: $arEffect, captureHandle: arHandle)
         } else {
             ZStack {
-                MetalCameraPreviewView(image: session.previewImage)
+                MetalCameraPreviewView(image: session.previewImage, cornerRadius: cornerRadius)
                 if session.filterPreset == .ar {
                     VisionFaceOverlayView(
                         effect: arEffect,
@@ -261,6 +295,7 @@ struct CameraPickerView: View {
             .padding(.horizontal, metrics.shutterRowHorizontalPadding)
         }
         .padding(.bottom, metrics.bottomPadding)
+        .offset(y: -CameraOpenRevealGeometry.shutterRowLift(progress: revealProgress))
     }
 
     private var activeFilterTitle: String {
@@ -278,17 +313,10 @@ struct CameraPickerView: View {
     }
 
     private var shutterButton: some View {
-        let diameter = CameraBottomBarMetrics.shutterDiameter
+        let diameter = SplickTabBarMetrics.cameraSize
         let recording = session.isRecordingBoomerang
         let visual = ZStack {
-            Circle()
-                .fill(boomerangMode ? SplickTheme.Colors.primary : (recording ? Color.red : Color.white))
-                .frame(width: diameter, height: diameter)
-                .overlay(
-                    Circle()
-                        .stroke(Color.black.opacity(0.15), lineWidth: 3)
-                        .padding(6)
-                )
+            SplickCameraCaptureButton(size: diameter)
             if recording {
                 Circle()
                     .trim(from: 0, to: boomerangProgress)
@@ -548,6 +576,14 @@ enum VisionFaceOverlayCompositor {
                 }
             }
         }
+    }
+}
+
+private struct FinderSlotPreferenceKey: PreferenceKey {
+    static var defaultValue: CGRect = .zero
+
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        value = nextValue()
     }
 }
 

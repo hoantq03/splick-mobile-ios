@@ -1,4 +1,5 @@
 import UIKit
+import DesignSystem
 
 /// Adaptive camera chrome so tools stay fully visible on compact phones.
 struct CameraChromeMetrics: Equatable {
@@ -22,7 +23,7 @@ enum CameraChromeLayout {
     static func metrics(in size: CGSize, safeArea: UIEdgeInsets) -> CameraChromeMetrics {
         let compactWidth = size.width < 400
         let compactHeight = size.height < 720
-        let shutter: CGFloat = compactHeight ? 64 : 72
+        let shutter = SplickTabBarMetrics.cameraSize
         let toolIcon: CGFloat = compactWidth ? 36 : 44
         return CameraChromeMetrics(
             shutterDiameter: shutter,
@@ -33,7 +34,7 @@ enum CameraChromeLayout {
             previewLift: compactHeight ? 8 : 24,
             previewInset: 12,
             topPadding: max(safeArea.top, 8),
-            bottomPadding: max(safeArea.bottom, 8) + (compactHeight ? 4 : 12),
+            bottomPadding: SplickTabBarMetrics.cameraButtonBottomInset,
             toolsToShutterSpacing: compactHeight ? 8 : 12,
             shutterRowHorizontalPadding: compactWidth ? 16 : 20
         )

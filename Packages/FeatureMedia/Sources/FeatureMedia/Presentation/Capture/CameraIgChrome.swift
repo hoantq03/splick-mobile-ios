@@ -80,7 +80,7 @@ struct CameraCaptureToolsRow: View {
 }
 
 enum CameraBottomBarMetrics {
-    static let shutterDiameter: CGFloat = 72
+    static var shutterDiameter: CGFloat { SplickTabBarMetrics.cameraSize }
     static let sideControlDiameter: CGFloat = 44
     static let galleryDiameter: CGFloat = 50
     /// Width / height. 4:3 frame raised 50% → 8:9.
