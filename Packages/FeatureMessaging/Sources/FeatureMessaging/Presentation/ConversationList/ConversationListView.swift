@@ -572,7 +572,14 @@ public struct ConversationListView: View {
     private func consumeConversationToOpen() {
         guard let route = conversationToOpen else { return }
         conversationToOpen = nil
-        pushThread(route)
+        // Defer the NavigationStack push to the next run loop turn so it does
+        // not mutate `path` in the same frame as the tab-switch state update.
+        // Without this, SwiftUI emits "NavigationRequestObserver tried to update
+        // multiple times per frame" and the transition can glitch.
+        Task { @MainActor in
+            await Task.yield()
+            pushThread(route)
+        }
     }
 
     private func syncThreadPresentation(isPresented: Bool) {

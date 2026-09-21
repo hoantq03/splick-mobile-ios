@@ -443,7 +443,11 @@ public final class ConversationListViewModel: ObservableObject {
     }
 
     /// Quiet inbox reload for the active filter (no full-screen loading).
+    /// Skips silently if a user-initiated pull-to-refresh is already in flight
+    /// to prevent duplicate GET /conversations + /conversations/summary calls.
     public func softSyncInbox() async {
+        // A pull-to-refresh is already running — don't race it.
+        if refreshTask != nil { return }
         if let existing = softSyncTask {
             await existing.value
             return
