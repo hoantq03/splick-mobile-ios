@@ -88,6 +88,13 @@ public final class TabBarScrollState: ObservableObject {
     /// Raw `contentOffset.y + contentInsets.top` from the active list.
     private var lastRawOffset: CGFloat = 0
 
+    /// Guards normalizer resets inside `revealAtTop` — only reset when
+    /// *transitioning into* the near-top zone, not on every scroll frame within it.
+    /// Without this, the offsetNormalizer baseline is cleared on every sample
+    /// ≤ showAtTopThreshold, causing a large delta jump on the first frame that
+    /// leaves the zone and producing visible stutter at the top of every screen.
+    private var wasInTopZone = true
+
     /// Custom PTR spinner is showing (pull or loading). Used to hide top fade overlays.
     @Published public private(set) var refreshIndicatorVisible = false
 
@@ -126,10 +133,24 @@ public final class TabBarScrollState: ObservableObject {
 
         // Use raw geometry for "at top" so a drifted baseline / hide-cooldown
         // can never leave the tab bar stuck hidden after returning near the top.
-        if lastDistanceFromTop <= showAtTopThreshold || rawOffset <= showAtTopThreshold {
-            revealAtTop(rawOffset: rawOffset)
+        let inTopZone = lastDistanceFromTop <= showAtTopThreshold || rawOffset <= showAtTopThreshold
+        if inTopZone {
+            if !wasInTopZone {
+                // Only reset normalizers on the *first* frame entering the near-top
+                // zone. Resetting on every frame within the zone causes the baseline
+                // to drift so the delta jumps the instant the user scrolls past the
+                // threshold — producing a stutter / premature tab-bar hide on every
+                // screen at the very start of a slow downward scroll.
+                revealAtTop(rawOffset: rawOffset)
+                wasInTopZone = true
+            } else {
+                // Already in zone: keep normalizers stable but always ensure
+                // the tab bar is visible without a full normalizer reset.
+                setVisibleImmediate(true, applyCooldown: false)
+            }
             return
         }
+        wasInTopZone = false
 
         let offset = offsetNormalizer.normalize(rawOffset)
 
@@ -162,6 +183,7 @@ public final class TabBarScrollState: ObservableObject {
         lastRawOffset = 0
         offsetNormalizer.reset()
         distanceNormalizer.reset()
+        wasInTopZone = true
         if refreshIndicatorVisible {
             refreshIndicatorVisible = false
         }
@@ -207,6 +229,9 @@ public final class TabBarScrollState: ObservableObject {
         lastOffset = offsetNormalizer.normalize(rawOffset)
         // Never leave the bar hidden near the top — bypass hide cooldown.
         setVisibleImmediate(true, applyCooldown: false)
+        // Ensure wasInTopZone is consistent when called directly
+        // (e.g. from applyScrollOffset transition guard).
+        wasInTopZone = true
     }
 
     private func setVisibleImmediate(_ visible: Bool, applyCooldown: Bool = true) {
