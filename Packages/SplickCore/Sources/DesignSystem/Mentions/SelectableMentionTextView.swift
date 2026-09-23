@@ -9,9 +9,12 @@ struct SelectableMentionTextView: UIViewRepresentable {
     let displayNamesByUsername: [String: String]
     var onMentionTap: ((String) -> Void)?
     var displayNamesByUserId: [UUID: String] = [:]
+    var maximumNumberOfLines: Int = 0
+    var onTruncationChange: ((Bool) -> Void)?
+    var onPlainTap: (() -> Void)?
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onMentionTap: onMentionTap)
+        Coordinator(onMentionTap: onMentionTap, onPlainTap: onPlainTap)
     }
 
     func makeUIView(context: Context) -> UITextView {
@@ -29,14 +32,67 @@ struct SelectableMentionTextView: UIViewRepresentable {
         textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         textView.setContentHuggingPriority(.defaultLow, for: .horizontal)
         textView.setContentHuggingPriority(.required, for: .vertical)
+        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
+        tap.delegate = context.coordinator
+        textView.addGestureRecognizer(tap)
         applyContent(to: textView)
         return textView
     }
 
     func updateUIView(_ textView: UITextView, context: Context) {
         context.coordinator.onMentionTap = onMentionTap
+        context.coordinator.onPlainTap = onPlainTap
+        if textView.textContainer.maximumNumberOfLines != maximumNumberOfLines {
+            textView.textContainer.maximumNumberOfLines = maximumNumberOfLines
+            textView.textContainer.lineBreakMode = maximumNumberOfLines > 0
+                ? .byTruncatingTail
+                : .byWordWrapping
+        }
         applyContent(to: textView)
         textView.invalidateIntrinsicContentSize()
+        if context.coordinator.appliedText != text
+            || context.coordinator.appliedLineLimit != maximumNumberOfLines {
+            context.coordinator.appliedText = text
+            context.coordinator.appliedLineLimit = maximumNumberOfLines
+            context.coordinator.lastReportedTruncation = nil
+        }
+        let report = { self.reportTruncation(of: textView, coordinator: context.coordinator) }
+        (textView as? IntrinsicHeightTextView)?.onLayout = report
+        report()
+    }
+
+    private func reportTruncation(of textView: UITextView, coordinator: Coordinator) {
+        guard maximumNumberOfLines > 0, let onTruncationChange else { return }
+        let width = textView.bounds.width
+        guard width > 1, let attributed = textView.attributedText else { return }
+        let truncated = Self.isTruncated(
+            attributed: attributed,
+            width: width,
+            maximumLines: maximumNumberOfLines
+        )
+        guard coordinator.lastReportedTruncation != truncated else { return }
+        coordinator.lastReportedTruncation = truncated
+        DispatchQueue.main.async {
+            onTruncationChange(truncated)
+        }
+    }
+
+    private static func isTruncated(
+        attributed: NSAttributedString,
+        width: CGFloat,
+        maximumLines: Int
+    ) -> Bool {
+        let storage = NSTextStorage(attributedString: attributed)
+        let layout = NSLayoutManager()
+        let container = NSTextContainer(size: CGSize(width: width, height: .greatestFiniteMagnitude))
+        container.lineFragmentPadding = 0
+        container.maximumNumberOfLines = maximumLines
+        container.lineBreakMode = .byTruncatingTail
+        layout.addTextContainer(container)
+        storage.addLayoutManager(layout)
+        let glyphRange = layout.glyphRange(for: container)
+        let characterRange = layout.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
+        return NSMaxRange(characterRange) < attributed.length
     }
 
     private func applyContent(to textView: UITextView) {
@@ -118,11 +174,47 @@ struct SelectableMentionTextView: UIViewRepresentable {
         ).string
     }
 
-    final class Coordinator: NSObject, UITextViewDelegate {
+    final class Coordinator: NSObject, UITextViewDelegate, UIGestureRecognizerDelegate {
         var onMentionTap: ((String) -> Void)?
+        var onPlainTap: (() -> Void)?
+        var lastReportedTruncation: Bool?
+        var appliedText: String?
+        var appliedLineLimit: Int?
 
-        init(onMentionTap: ((String) -> Void)?) {
+        init(onMentionTap: ((String) -> Void)?, onPlainTap: (() -> Void)? = nil) {
             self.onMentionTap = onMentionTap
+            self.onPlainTap = onPlainTap
+        }
+
+        @objc func handleTap(_ gesture: UITapGestureRecognizer) {
+            guard gesture.state == .ended, let textView = gesture.view as? UITextView else { return }
+            let location = gesture.location(in: textView)
+            let inset = textView.textContainerInset
+            let point = CGPoint(
+                x: location.x - inset.left - textView.textContainer.lineFragmentPadding,
+                y: location.y - inset.top
+            )
+            var fraction: CGFloat = 0
+            let characterIndex = textView.layoutManager.characterIndex(
+                for: point,
+                in: textView.textContainer,
+                fractionOfDistanceBetweenInsertionPoints: &fraction
+            )
+            let textLength = textView.attributedText?.length ?? 0
+            if textLength > 0, characterIndex < textLength,
+               let url = textView.attributedText.attribute(.link, at: characterIndex, effectiveRange: nil) as? URL,
+               let username = MentionLink.username(from: url) {
+                onMentionTap?(username)
+                return
+            }
+            onPlainTap?()
+        }
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            true
         }
 
         func textView(
@@ -131,17 +223,14 @@ struct SelectableMentionTextView: UIViewRepresentable {
             in characterRange: NSRange,
             interaction: UITextItemInteraction
         ) -> Bool {
-            guard interaction == .invokeDefaultAction,
-                  let username = MentionLink.username(from: url) else {
-                return interaction != .invokeDefaultAction
-            }
-            onMentionTap?(username)
-            return false
+            interaction != .invokeDefaultAction
         }
     }
 }
 
 private final class IntrinsicHeightTextView: UITextView {
+    var onLayout: (() -> Void)?
+
     override var intrinsicContentSize: CGSize {
         let width = bounds.width > 0 ? bounds.width : UIScreen.main.bounds.width
         let fitted = sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
@@ -151,5 +240,6 @@ private final class IntrinsicHeightTextView: UITextView {
     override func layoutSubviews() {
         super.layoutSubviews()
         invalidateIntrinsicContentSize()
+        onLayout?()
     }
 }

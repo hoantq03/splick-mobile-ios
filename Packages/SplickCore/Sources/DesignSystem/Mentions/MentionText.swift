@@ -12,6 +12,9 @@ public struct MentionText: View {
     /// Enables native text selection / copy. Prefer for captions and comments.
     var isSelectable: Bool
     var displayNamesByUserId: [UUID: String] = [:]
+    var lineLimit: Int? = nil
+    var onTruncationChange: ((Bool) -> Void)? = nil
+    var onPlainTap: (() -> Void)? = nil
 
     public init(
         _ text: String,
@@ -20,7 +23,10 @@ public struct MentionText: View {
         displayNamesByUsername: [String: String] = [:],
         onMentionTap: ((String) -> Void)? = nil,
         isSelectable: Bool = false,
-        displayNamesByUserId: [UUID: String] = [:]
+        displayNamesByUserId: [UUID: String] = [:],
+        lineLimit: Int? = nil,
+        onTruncationChange: ((Bool) -> Void)? = nil,
+        onPlainTap: (() -> Void)? = nil
     ) {
         self.text = text
         self.fontSize = fontSize
@@ -29,6 +35,9 @@ public struct MentionText: View {
         self.onMentionTap = onMentionTap
         self.isSelectable = isSelectable
         self.displayNamesByUserId = displayNamesByUserId
+        self.lineLimit = lineLimit
+        self.onTruncationChange = onTruncationChange
+        self.onPlainTap = onPlainTap
     }
 
     public var body: some View {
@@ -39,7 +48,10 @@ public struct MentionText: View {
             displayNamesByUsername: displayNamesByUsername,
             onMentionTap: onMentionTap,
             isSelectable: isSelectable,
-            displayNamesByUserId: displayNamesByUserId
+            displayNamesByUserId: displayNamesByUserId,
+            lineLimit: lineLimit,
+            onTruncationChange: onTruncationChange,
+            onPlainTap: onPlainTap
         )
     }
 }

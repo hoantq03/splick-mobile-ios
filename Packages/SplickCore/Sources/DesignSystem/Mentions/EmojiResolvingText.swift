@@ -10,6 +10,9 @@ public struct EmojiResolvingText: View {
     private let onMentionTap: ((String) -> Void)?
     private let isSelectable: Bool
     private let displayNamesByUserId: [UUID: String]
+    private let lineLimit: Int?
+    private let onTruncationChange: ((Bool) -> Void)?
+    private let onPlainTap: (() -> Void)?
 
     public init(
         _ text: String,
@@ -18,7 +21,10 @@ public struct EmojiResolvingText: View {
         displayNamesByUsername: [String: String] = [:],
         onMentionTap: ((String) -> Void)? = nil,
         isSelectable: Bool = false,
-        displayNamesByUserId: [UUID: String] = [:]
+        displayNamesByUserId: [UUID: String] = [:],
+        lineLimit: Int? = nil,
+        onTruncationChange: ((Bool) -> Void)? = nil,
+        onPlainTap: (() -> Void)? = nil
     ) {
         self.text = text
         self.fontSize = fontSize
@@ -27,6 +33,9 @@ public struct EmojiResolvingText: View {
         self.onMentionTap = onMentionTap
         self.isSelectable = isSelectable
         self.displayNamesByUserId = displayNamesByUserId
+        self.lineLimit = lineLimit
+        self.onTruncationChange = onTruncationChange
+        self.onPlainTap = onPlainTap
     }
 
     private var tokens: [FeedTextParser.Token] {
@@ -51,11 +60,28 @@ public struct EmojiResolvingText: View {
                     plainColor: plainColor,
                     displayNamesByUsername: displayNamesByUsername,
                     onMentionTap: onMentionTap,
-                    displayNamesByUserId: displayNamesByUserId
+                    displayNamesByUserId: displayNamesByUserId,
+                    maximumNumberOfLines: lineLimit ?? 0,
+                    onTruncationChange: onTruncationChange,
+                    onPlainTap: onPlainTap
                 )
-                .fixedSize(horizontal: false, vertical: true)
+                .fixedSize(horizontal: false, vertical: lineLimit == nil)
             } else {
                 tokenFlow
+                    .frame(
+                        maxHeight: lineLimit.map { CGFloat($0) * (fontSize + 6) },
+                        alignment: .top
+                    )
+                    .clipped()
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        onPlainTap?()
+                    }
+                    .onAppear {
+                        guard let lineLimit else { return }
+                        let lineCount = text.split(whereSeparator: \.isNewline).count
+                        onTruncationChange?(lineCount > lineLimit || text.count > lineLimit * 42)
+                    }
             }
         }
     }
