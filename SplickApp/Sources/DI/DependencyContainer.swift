@@ -818,6 +818,21 @@ final class DependencyContainer: ObservableObject {
         )
     }
 
+    private var cachedChatThreadFactory: ChatThreadViewModelFactory?
+    private var cachedChatThreadFactoryUserId: UUID?
+
+    /// Stable for the signed-in user. A new factory on every tab render drops the
+    /// environment object mid-update and crashes when the messages tab appears.
+    func chatThreadViewModelFactory(currentUserId: UUID) -> ChatThreadViewModelFactory {
+        if let cachedChatThreadFactory, cachedChatThreadFactoryUserId == currentUserId {
+            return cachedChatThreadFactory
+        }
+        let factory = makeChatThreadViewModelFactory(currentUserId: currentUserId)
+        cachedChatThreadFactory = factory
+        cachedChatThreadFactoryUserId = currentUserId
+        return factory
+    }
+
     func makeChatThreadViewModelFactory(currentUserId: UUID) -> ChatThreadViewModelFactory {
         ChatThreadViewModelFactory(
             currentUserId: currentUserId,

@@ -58,7 +58,7 @@ struct MessagingTabRoot: View {
                 )
             }
         )
-        .environmentObject(container.makeChatThreadViewModelFactory(
+        .environmentObject(container.chatThreadViewModelFactory(
             currentUserId: appState.currentUser?.id ?? UUID()
         ))
         .environment(\.chatPeerRelationshipActions, container.makeChatPeerRelationshipActions())
