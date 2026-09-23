@@ -158,7 +158,7 @@ public struct PhotoAlbumView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.top, SplickTheme.Spacing.xxl)
                 }
-                .feedPagerScrollInsets()
+                .feedPagerScrollInsets(style: .tight)
                 .refreshable { await viewModel.refresh() }
 
             case .loaded:
@@ -172,7 +172,7 @@ public struct PhotoAlbumView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.top, SplickTheme.Spacing.xxl)
                 }
-                .feedPagerScrollInsets()
+                .feedPagerScrollInsets(style: .tight)
                 .refreshable { await viewModel.refresh() }
             }
         }
@@ -250,13 +250,14 @@ public struct PhotoAlbumView: View {
                     .frame(height: Self.bottomScrollClearance)
                     .accessibilityHidden(true)
             }
-            .feedPagerScrollInsets()
+            .feedPagerScrollInsets(style: .tight)
             .feedScrollSoftTopEdge()
             .scrollContentBackground(.hidden)
             .scrollChromeTracking()
             .splickNativeRefreshable(
                 controller: refreshController,
-                chromeTopInset: FeedPagerTopInsetMetrics.refreshChromeTopInset
+                chromeTopInset: FeedPagerTopInsetMetrics.refreshChromeTopInset,
+                spinnerTopPadding: SplickTheme.Spacing.sm
             ) {
                 await viewModel.refresh()
             }
