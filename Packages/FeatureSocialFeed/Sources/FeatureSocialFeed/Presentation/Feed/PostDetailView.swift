@@ -41,6 +41,7 @@ struct PostDetailView: View {
     @State private var detailScrollLocked = false
     @State private var cardPresentation: PostCardPresentation?
     @State private var editingPost: Post?
+    @State private var editingFailedUploadPost: Post?
     @State private var observedPendingCommentIds = Set<UUID>()
     @State private var commentsListMinHeight: CGFloat = 0
     @StateObject private var cardActions = PostCardActions()
@@ -304,6 +305,17 @@ struct PostDetailView: View {
                 updatePost: { try await feedViewModel.updatePost($0) },
                 onSaved: { _ in editingPost = nil },
                 onCancel: { editingPost = nil }
+            )
+            .environmentObject(languageService)
+        }
+        .sheet(item: $editingFailedUploadPost) { post in
+            FailedUploadCaptionEditor(
+                post: post,
+                onSave: { caption in
+                    feedViewModel.savePendingUploadCaption(caption, localPostId: post.id)
+                    editingFailedUploadPost = nil
+                },
+                onCancel: { editingFailedUploadPost = nil }
             )
             .environmentObject(languageService)
         }
@@ -700,6 +712,9 @@ struct PostDetailView: View {
         }
         cardActions.onRetryUpload = { postId in
             feedViewModel.retryPostUpload(localPostId: postId)
+        }
+        cardActions.onEditFailedUpload = { post in
+            editingFailedUploadPost = post
         }
         cardActions.onMediaTap = { _, index in
             mediaViewerRoute = MediaViewerRoute(index: index)

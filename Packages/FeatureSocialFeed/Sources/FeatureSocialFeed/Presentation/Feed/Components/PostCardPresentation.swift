@@ -54,6 +54,7 @@ final class PostCardActions: ObservableObject {
     var onOpenComments: (Post) -> Void = { _ in }
     var onShowCompanions: (Post) -> Void = { _ in }
     var onRetryUpload: (UUID) -> Void = { _ in }
+    var onEditFailedUpload: (Post) -> Void = { _ in }
     var onOpenDetail: ((Post, Int) -> Void)?
     var onMediaTap: ((Post, Int) -> Void)?
     var onPresent: (PostCardPresentation) -> Void = { _ in }

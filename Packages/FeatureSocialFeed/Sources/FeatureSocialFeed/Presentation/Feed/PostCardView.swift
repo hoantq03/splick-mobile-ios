@@ -21,6 +21,8 @@ struct PostCardView: View, Equatable {
     var initialMediaIndex: Int = 0
     var uploadState: PostUploadState? = nil
     var showsVideoScrubber: Bool = false
+    /// Feed cards collapse long captions behind a See more control. Detail shows the full text.
+    var collapsesLongCaption: Bool = false
     @Environment(\.feedVideoCoordinator) private var videoCoordinator
 
     @State private var mediaPageIndex = 0
@@ -44,6 +46,7 @@ struct PostCardView: View, Equatable {
             && lhs.initialMediaIndex == rhs.initialMediaIndex
             && lhs.uploadState == rhs.uploadState
             && lhs.showsVideoScrubber == rhs.showsVideoScrubber
+            && lhs.collapsesLongCaption == rhs.collapsesLongCaption
             && lhs.actions === rhs.actions
     }
 
@@ -118,11 +121,11 @@ struct PostCardView: View, Equatable {
         .allowsHitTesting(uploadState != .uploading)
         .overlay {
             if let uploadState {
-                PostUploadOverlay(state: uploadState) {
-                    if case .failed = uploadState {
-                        actions.onRetryUpload(post.id)
-                    }
-                }
+                PostUploadOverlay(
+                    state: uploadState,
+                    onRetry: { actions.onRetryUpload(post.id) },
+                    onEdit: { actions.onEditFailedUpload(post) }
+                )
             }
         }
         .onAppear {
@@ -271,13 +274,16 @@ struct PostCardView: View, Equatable {
     }
 
     private func captionSection(_ caption: String) -> some View {
-        MentionText(
-            caption,
-            fontSize: 16,
-            displayNamesByUsername: post.mentionDisplayNamesByUsername,
+        ExpandableFeedCaption(
+            caption: caption,
+            post: post,
+            seeMoreTitle: languageService.text(.feedPostSeeMore),
+            seeLessTitle: languageService.text(.feedPostSeeLess),
             onMentionTap: openMentionedUser,
-            isSelectable: true,
-            displayNamesByUserId: post.mentionDisplayNamesByUserId
+            overflowMode: collapsesLongCaption ? .openDetail : .toggleInPlace,
+            onOpenPostDetail: {
+                actions.onOpenDetail?(post, mediaPageIndex)
+            }
         )
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -447,7 +453,7 @@ struct PostCardView: View, Equatable {
     }
 
     private var commentEntryButton: some View {
-        let countLabel = post.commentCount > 0 ? CompactCount.format(post.commentCount) : nil
+        let countLabel = CompactCount.format(post.commentCount)
         return Button {
             actions.onOpenComments(post)
         } label: {
@@ -455,12 +461,10 @@ struct PostCardView: View, Equatable {
                 Image(systemName: "bubble.right")
                     .font(.system(size: Layout.commentIconSize, weight: .regular))
                     .frame(width: Layout.commentIconSize, height: Layout.commentIconSize)
-                if let countLabel {
-                    Text(countLabel)
-                        .font(.system(size: commentCountFontSize(for: countLabel), weight: .semibold))
-                        .monospacedDigit()
-                        .offset(y: -2)
-                }
+                Text(countLabel)
+                    .font(.system(size: commentCountFontSize(for: countLabel), weight: .semibold))
+                    .monospacedDigit()
+                    .offset(y: -2)
             }
             .foregroundStyle(SplickTheme.Colors.textSecondary)
             .frame(width: Layout.commentIconSize, height: Layout.reactionBarHeight)
@@ -668,5 +672,185 @@ private struct BoundFeedPostMedia: View {
             showsVideoScrubber: showsVideoScrubber,
             isAutoplayTarget: coordinator.isAutoplayTarget(post.id)
         )
+    }
+}
+
+private enum FeedCaptionOverflowMode {
+    case openDetail
+    case toggleInPlace
+}
+
+private struct FeedCaptionHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct ExpandableFeedCaption: View {
+    let caption: String
+    let post: Post
+    let seeMoreTitle: String
+    let seeLessTitle: String
+    let onMentionTap: (String) -> Void
+    let overflowMode: FeedCaptionOverflowMode
+    let onOpenPostDetail: () -> Void
+
+    private static let collapsedLineLimit = 4
+    private static let captionFontSize: CGFloat = 16
+    private static let collapsedHeight = CGFloat(collapsedLineLimit) * (captionFontSize + 6)
+    private static let collapsedCharacterBudget = 160
+    private static let revealAnimation = Animation.easeInOut(duration: 0.32)
+
+    @State private var isExpanded: Bool
+    @State private var isTruncated: Bool
+    @State private var measuredExpandedHeight: CGFloat = 0
+
+    init(
+        caption: String,
+        post: Post,
+        seeMoreTitle: String,
+        seeLessTitle: String,
+        onMentionTap: @escaping (String) -> Void,
+        overflowMode: FeedCaptionOverflowMode,
+        onOpenPostDetail: @escaping () -> Void
+    ) {
+        self.caption = caption
+        self.post = post
+        self.seeMoreTitle = seeMoreTitle
+        self.seeLessTitle = seeLessTitle
+        self.onMentionTap = onMentionTap
+        self.overflowMode = overflowMode
+        self.onOpenPostDetail = onOpenPostDetail
+        _isExpanded = State(initialValue: overflowMode == .toggleInPlace)
+        _isTruncated = State(initialValue: Self.needsCollapse(caption))
+    }
+
+    private var expandsInPlace: Bool {
+        overflowMode == .toggleInPlace
+    }
+
+    private var showsCollapsedText: Bool {
+        !expandsInPlace || !isExpanded
+    }
+
+    private var showsToggle: Bool {
+        isTruncated || Self.needsCollapse(caption)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            captionText
+                .overlay(alignment: .bottom) {
+                    truncatedCaptionFade
+                }
+            if showsToggle {
+                Button(action: handleCaptionTap) {
+                    Text(showsCollapsedText ? seeMoreTitle : seeLessTitle)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(SplickTheme.Colors.primary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .onChange(of: caption) { newValue in
+            isTruncated = Self.needsCollapse(newValue)
+            isExpanded = expandsInPlace
+            measuredExpandedHeight = 0
+        }
+    }
+
+    private var truncatedCaptionFade: some View {
+        LinearGradient(
+            colors: [
+                SplickTheme.Colors.cardBackground.opacity(0),
+                SplickTheme.Colors.cardBackground
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(height: 28)
+        .opacity(showsToggle && showsCollapsedText ? 1 : 0)
+        .allowsHitTesting(false)
+    }
+
+    @ViewBuilder
+    private var captionText: some View {
+        if expandsInPlace {
+            MentionText(
+                caption,
+                fontSize: Self.captionFontSize,
+                displayNamesByUsername: post.mentionDisplayNamesByUsername,
+                onMentionTap: onMentionTap,
+                isSelectable: true,
+                displayNamesByUserId: post.mentionDisplayNamesByUserId,
+                onPlainTap: handleCaptionTap
+            )
+            .fixedSize(horizontal: false, vertical: true)
+            .background {
+                GeometryReader { proxy in
+                    Color.clear.preference(key: FeedCaptionHeightKey.self, value: proxy.size.height)
+                }
+            }
+            .onPreferenceChange(FeedCaptionHeightKey.self) { height in
+                guard height > 1 else { return }
+                measuredExpandedHeight = height
+                if height > Self.collapsedHeight + 1 {
+                    isTruncated = true
+                }
+            }
+            .frame(height: clippedHeight, alignment: .top)
+            .clipped()
+        } else {
+            MentionText(
+                caption,
+                fontSize: Self.captionFontSize,
+                displayNamesByUsername: post.mentionDisplayNamesByUsername,
+                onMentionTap: onMentionTap,
+                isSelectable: true,
+                displayNamesByUserId: post.mentionDisplayNamesByUserId,
+                lineLimit: Self.collapsedLineLimit,
+                onTruncationChange: { truncated in
+                    if truncated {
+                        isTruncated = true
+                    }
+                },
+                onPlainTap: handleCaptionTap
+            )
+        }
+    }
+
+    private var clippedHeight: CGFloat? {
+        guard showsToggle else { return measuredExpandedHeight > 1 ? measuredExpandedHeight : nil }
+        if isExpanded {
+            return measuredExpandedHeight > 1 ? measuredExpandedHeight : nil
+        }
+        if measuredExpandedHeight > 1 {
+            return min(measuredExpandedHeight, Self.collapsedHeight)
+        }
+        return Self.collapsedHeight
+    }
+
+    private func handleCaptionTap() {
+        if expandsInPlace {
+            guard showsToggle else { return }
+            withAnimation(Self.revealAnimation) {
+                isExpanded.toggle()
+            }
+        } else {
+            onOpenPostDetail()
+        }
+    }
+
+    private static func needsCollapse(_ caption: String) -> Bool {
+        var lineCount = 1
+        for character in caption where character.isNewline {
+            lineCount += 1
+            if lineCount > collapsedLineLimit {
+                return true
+            }
+        }
+        return caption.count > collapsedCharacterBudget
     }
 }
