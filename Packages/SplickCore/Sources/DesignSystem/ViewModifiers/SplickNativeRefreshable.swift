@@ -34,12 +34,16 @@ public extension View {
     func splickNativeRefreshable(
         controller: SplickRefreshController? = nil,
         chromeTopInset: CGFloat = 0,
+        heldPullDistance: CGFloat? = nil,
+        spinnerTopPadding: CGFloat? = nil,
         action: @escaping () async -> Void
     ) -> some View {
         modifier(
             SplickNativeRefreshableModifier(
                 controller: controller,
                 chromeTopInset: chromeTopInset,
+                heldPullDistance: heldPullDistance,
+                spinnerTopPadding: spinnerTopPadding,
                 action: action
             )
         )
@@ -49,6 +53,8 @@ public extension View {
 private struct SplickNativeRefreshableModifier: ViewModifier {
     let controller: SplickRefreshController?
     let chromeTopInset: CGFloat
+    let heldPullDistance: CGFloat?
+    let spinnerTopPadding: CGFloat?
     let action: () async -> Void
 
     func body(content: Content) -> some View {
@@ -57,6 +63,8 @@ private struct SplickNativeRefreshableModifier: ViewModifier {
                 SplickNativeRefreshableWithController(
                     controller: controller,
                     chromeTopInset: chromeTopInset,
+                    heldPullDistance: heldPullDistance,
+                    spinnerTopPaddingOverride: spinnerTopPadding,
                     action: action
                 )
             )
@@ -69,6 +77,8 @@ private struct SplickNativeRefreshableModifier: ViewModifier {
 private struct SplickNativeRefreshableWithController: ViewModifier {
     @ObservedObject var controller: SplickRefreshController
     let chromeTopInset: CGFloat
+    let heldPullDistance: CGFloat?
+    let spinnerTopPaddingOverride: CGFloat?
     let action: () async -> Void
 
     @Environment(\.tabBarScrollState) private var tabBarScrollState
@@ -84,7 +94,12 @@ private struct SplickNativeRefreshableWithController: ViewModifier {
 
     /// Content shift while spinner spins. Chrome tabs need less because the spinner
     /// already sits below the nav bar; non-chrome tabs need more visible pull space.
-    private var heldRefreshPull: CGFloat { chromeTopInset > 0 ? 15 : 40 }
+    private var heldRefreshPull: CGFloat {
+        if let heldPullDistance {
+            return heldPullDistance
+        }
+        return chromeTopInset > 0 ? 15 : 40
+    }
 
     private var trackingRotation: Double {
         Double(visiblePull / SplickScrollRefreshHost.fullRotationPull) * 360
@@ -105,12 +120,12 @@ private struct SplickNativeRefreshableWithController: ViewModifier {
     }
 
     private var spinnerTopPadding: CGFloat {
-        if chromeTopInset > 0 {
-            return chromeTopInset + 6
+        if let spinnerTopPaddingOverride {
+            return spinnerTopPaddingOverride
         }
-        // Hosted feed/expense lists pass an overlapping-nav inset. Overlay
-        // sheets (notifications) sit below their own header — pin the spinner
-        // to the scroll top so it is visible in the pull gap.
+        if chromeTopInset > 0 {
+            return SplickSegmentPagerTopInsetMetrics.refreshSpinnerTopPadding
+        }
         return 8
     }
 
@@ -337,14 +352,16 @@ public final class SplickScrollRefreshHost: NSObject, ObservableObject, UIGestur
         }
     }
 
-    /// Sit just under overlapping nav chrome; do not follow pull distance (that jumps at 100%).
+    /// Sit below the inline pills inside the under-chrome gap.
+    /// Nested lists (album grid) keep a tight pad so the spinner stays under the filter.
     public func spinnerOverlayTopPadding() -> CGFloat {
-        guard let scrollView else { return 8 }
+        let chromePad = SplickSegmentPagerTopInsetMetrics.refreshSpinnerTopPadding
+        guard let scrollView else { return chromePad }
         let inset = max(0, scrollView.adjustedContentInset.top)
-        let originY = scrollView.convert(CGPoint.zero, to: nil).y
-        let safeTop = scrollView.window?.safeAreaInsets.top ?? 59
-        let overlappingNav = max(0, (safeTop + FeedSegmentChromeMetrics.navigationBarHeight) - originY)
-        return max(inset, overlappingNav) + 6
+        if inset >= SplickSegmentPagerTopInsetMetrics.underChromeTopGap * 0.75 {
+            return chromePad
+        }
+        return 8
     }
 
     public func currentPullDistance() -> CGFloat {
@@ -352,19 +369,22 @@ public final class SplickScrollRefreshHost: NSObject, ObservableObject, UIGestur
         return max(0, -(scrollView.contentOffset.y + scrollView.adjustedContentInset.top))
     }
 
+    /// Slack for LazyVStack / inset rest error. Must stay well below the first
+    /// content-scroll region or chrome-pull will fight the user's first drag.
+    private static let atTopSlack: CGFloat = SplickTabBarMetrics.sameTabAtTopThreshold
+
     private func isScrollViewAtTop() -> Bool {
         guard let scrollView else { return true }
         let restY = -scrollView.adjustedContentInset.top
-        // Overlay/safe-area lists often sit a few points below rest until the
-        // first scroll. Match the bootstrap snap window so chrome pull can start.
-        return scrollView.contentOffset.y <= restY + 64
+        return scrollView.contentOffset.y <= restY + Self.atTopSlack
     }
 
     private func prepareScrollViewForPull(_ scrollView: UIScrollView) {
         scrollView.alwaysBounceVertical = true
         scrollView.bounces = true
+        guard !scrollView.isDragging, !scrollView.isDecelerating else { return }
         let restY = -scrollView.adjustedContentInset.top
-        if scrollView.contentOffset.y > restY, scrollView.contentOffset.y < restY + 64 {
+        if scrollView.contentOffset.y > restY, scrollView.contentOffset.y < restY + Self.atTopSlack {
             scrollView.setContentOffset(
                 CGPoint(x: scrollView.contentOffset.x, y: restY),
                 animated: false
@@ -536,27 +556,21 @@ public final class SplickScrollRefreshHost: NSObject, ObservableObject, UIGestur
             didThresholdHaptic = false
             lastOverscrollHapticFinger = 0
             wasDragging = true
-            chromePulling = usesChromePullVisual && isScrollViewAtTop()
+            // Do not lock offset on `.began` — translation is 0, and "near top"
+            // includes the first content-scroll points. Wait for a clear downward pull.
+            chromePulling = false
             thresholdHaptic.prepare()
             overscrollHaptic.prepare()
-            if chromePulling {
-                updateTrackedPull(
-                    max(0, recognizer.translation(in: recognizer.view).y),
-                    applyChromeResistance: true
-                )
-            } else {
-                handleContentOffsetChange()
-            }
+            handleContentOffsetChange()
         case .changed:
             let translationY = recognizer.translation(in: recognizer.view).y
-            // Engage mid-gesture when the finger clearly pulls down from near top —
-            // `.began` alone can miss if the scroll view isn't settled yet.
+            // Engage only on a real downward pull while parked at rest. Finger-up
+            // (negative Y) is list scrolling and must never lock contentOffset.
             if usesChromePullVisual, !chromePulling, translationY > 8, isScrollViewAtTop() {
                 chromePulling = true
             }
             if chromePulling {
-                // Small negative noise used to drop chrome pull and kill overscroll haptics.
-                if translationY < -10 {
+                if translationY < -8 {
                     chromePulling = false
                     SplickViewUpdate.after { [weak self] in
                         self?.pullDistance = 0
@@ -848,9 +862,10 @@ public struct SplickRefreshableScrollBootstrap: UIViewRepresentable {
 
             let top = scrollView.adjustedContentInset.top
             let restingY = -top
-            // LazyVStack / safeAreaInset can leave a small positive offset so
-            // UIRefreshControl thinks we are not at the top until the user scrolls.
-            if scrollView.contentOffset.y > restingY, scrollView.contentOffset.y < restingY + 64 {
+            // Only snap leftover layout error, never the first content-scroll window.
+            guard !scrollView.isDragging, !scrollView.isDecelerating else { return }
+            if scrollView.contentOffset.y > restingY,
+               scrollView.contentOffset.y < restingY + SplickTabBarMetrics.sameTabAtTopThreshold {
                 scrollView.setContentOffset(
                     CGPoint(x: scrollView.contentOffset.x, y: restingY),
                     animated: false

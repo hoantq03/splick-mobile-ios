@@ -60,12 +60,14 @@ public final class FeedSegmentScrollState: ObservableObject {
 
     private func applyScrollOffset(_ rawOffset: CGFloat) {
         lastRawOffset = rawOffset
-        // Use raw geometry for "at top" so a drifted baseline cannot leave the
-        // title collapsed after the list has already settled at offset 0.
+        // Do not expand on every near-top sample. Inset/chrome jitter can dip
+        // measured offset under the threshold mid-drag and yank the list back.
         if rawOffset <= showAtTopThreshold {
             offsetNormalizer.reset()
             lastOffset = 0
-            setCollapseProgress(0)
+            if collapseProgress < 0.5 {
+                setCollapseProgress(0)
+            }
             return
         }
 
