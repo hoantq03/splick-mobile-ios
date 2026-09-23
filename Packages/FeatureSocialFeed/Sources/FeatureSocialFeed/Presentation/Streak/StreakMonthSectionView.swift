@@ -4,6 +4,8 @@ import Localization
 import SplickDomain
 
 struct StreakMonthSectionView: View {
+    @Environment(\.locale) private var locale
+
     let section: StreakMonthSection
     let onDayTap: (StreakDay) -> Void
 
@@ -24,10 +26,12 @@ struct StreakMonthSectionView: View {
 
     private var weekdayLabels: some View {
         HStack(spacing: 4) {
-            ForEach(Array(StreakCalendarLayout.weekdaySymbols().enumerated()), id: \.offset) { _, symbol in
+            ForEach(Array(StreakCalendarLayout.weekdaySymbols(locale: locale).enumerated()), id: \.offset) { _, symbol in
                 Text(symbol)
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
                     .frame(maxWidth: .infinity)
             }
         }
