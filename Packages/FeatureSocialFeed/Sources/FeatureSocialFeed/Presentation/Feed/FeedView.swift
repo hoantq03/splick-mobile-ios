@@ -358,6 +358,7 @@ private struct FeedPrimaryPage: View {
     @StateObject private var refreshController = SplickRefreshController()
     @State private var cardPresentation: PostCardPresentation?
     @State private var editingPost: Post?
+    @State private var editingFailedUploadPost: Post?
     @StateObject private var cardActions = PostCardActions()
 
     var body: some View {
@@ -428,6 +429,17 @@ private struct FeedPrimaryPage: View {
                 )
                 .environmentObject(languageService)
             }
+            .sheet(item: $editingFailedUploadPost) { post in
+                FailedUploadCaptionEditor(
+                    post: post,
+                    onSave: { caption in
+                        viewModel.savePendingUploadCaption(caption, localPostId: post.id)
+                        editingFailedUploadPost = nil
+                    },
+                    onCancel: { editingFailedUploadPost = nil }
+                )
+                .environmentObject(languageService)
+            }
     }
 
     private func configureCardActions() {
@@ -460,6 +472,9 @@ private struct FeedPrimaryPage: View {
         }
         cardActions.onRetryUpload = { postId in
             viewModel.retryPostUpload(localPostId: postId)
+        }
+        cardActions.onEditFailedUpload = { post in
+            editingFailedUploadPost = post
         }
         cardActions.onOpenDetail = { post, mediaIndex in
             guard viewModel.postUploadState(for: post.id) == nil else { return }
@@ -559,7 +574,8 @@ private struct FeedPrimaryPage: View {
             .feedScrollBounceAlways()
             .splickNativeRefreshable(
                 controller: refreshController,
-                chromeTopInset: FeedPagerTopInsetMetrics.refreshChromeTopInset
+                chromeTopInset: FeedPagerTopInsetMetrics.refreshChromeTopInset,
+                heldPullDistance: FeedPagerTopInsetMetrics.refreshHeldPullDistance
             ) {
                 await SplickViewUpdate.hop()
                 FeedScrollLock.forceUnlock()
@@ -592,7 +608,8 @@ private struct FeedPrimaryPage: View {
                         currentUser: viewModel.currentUser ?? currentUserSummary,
                         actions: cardActions,
                         showsNewBadge: viewModel.showsNewBadge(for: post),
-                        uploadState: viewModel.postUploadState(for: post.id)
+                        uploadState: viewModel.postUploadState(for: post.id),
+                        collapsesLongCaption: true
                     )
                     .equatable()
                     .feedPostZoomSource(postId: post.id)

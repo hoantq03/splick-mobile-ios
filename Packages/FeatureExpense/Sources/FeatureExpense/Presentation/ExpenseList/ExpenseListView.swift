@@ -429,7 +429,8 @@ private struct ExpenseHistoryPage: View {
             .splickScrollSoftTopEdge()
             .splickNativeRefreshable(
                 controller: refreshController,
-                chromeTopInset: FeedSegmentChromeMetrics.overlappingNavigationInset
+                chromeTopInset: FeedSegmentChromeMetrics.overlappingNavigationInset,
+                heldPullDistance: SplickSegmentPagerTopInsetMetrics.refreshHeldPullDistance
             ) {
                 await viewModel.load(isPullToRefresh: true)
             }
