@@ -13,6 +13,7 @@ private enum ComposeMetrics {
     static let companionTileWidth: CGFloat = 72
     static let companionNameWidth: CGFloat = 64
     static let searchResultsMaxHeight: CGFloat = 240
+    static let actionChipHeight: CGFloat = 36
 }
 
 enum ComposeSearchAnchor: Hashable {
@@ -84,6 +85,87 @@ private enum ExpandedComposeOption {
     case location
 }
 
+private enum ComposeDropdownMotion {
+    static let reveal = Animation.spring(response: 0.32, dampingFraction: 0.86)
+}
+
+private struct ComposeDropdownHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+/// Expands content downward from the row above it. A `move(edge: .top)` transition
+/// inside the compose `ScrollView` travels from the top of the scroll view instead.
+private struct ComposeDropdownSlide<Content: View>: View {
+    let isExpanded: Bool
+    let content: Content
+
+    init(isExpanded: Bool, @ViewBuilder content: () -> Content) {
+        self.isExpanded = isExpanded
+        self.content = content()
+    }
+
+    var body: some View {
+        ComposeDropdownSlideLayout(isExpanded: isExpanded, content: content)
+    }
+}
+
+private struct ComposeDropdownSlideLayout<Content: View>: View {
+    let isExpanded: Bool
+    let content: Content
+    @State private var measuredHeight: CGFloat = 0
+
+    var body: some View {
+        content
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .background {
+                GeometryReader { proxy in
+                    Color.clear.preference(key: ComposeDropdownHeightKey.self, value: proxy.size.height)
+                }
+            }
+            .frame(height: isExpanded ? measuredHeight : 0, alignment: .top)
+            .clipped()
+            .allowsHitTesting(isExpanded)
+            .accessibilityHidden(!isExpanded)
+            .animation(ComposeDropdownMotion.reveal, value: isExpanded)
+            .onPreferenceChange(ComposeDropdownHeightKey.self) { newHeight in
+                updateMeasuredHeight(newHeight)
+            }
+    }
+
+    private func updateMeasuredHeight(_ newHeight: CGFloat) {
+        guard newHeight.isFinite, newHeight > 1 else { return }
+        guard abs(newHeight - measuredHeight) > 0.5 else { return }
+
+        if measuredHeight == 0 {
+            if isExpanded {
+                withAnimation(ComposeDropdownMotion.reveal) {
+                    measuredHeight = newHeight
+                }
+            } else {
+                measuredHeight = newHeight
+            }
+            return
+        }
+
+        if isExpanded {
+            withAnimation(.easeOut(duration: 0.22)) {
+                measuredHeight = newHeight
+            }
+        } else {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                measuredHeight = newHeight
+            }
+        }
+    }
+}
+
 private struct ComposeProfileRoute: Identifiable {
     let user: UserSummary
     var id: UUID { user.id }
@@ -102,6 +184,7 @@ public struct CreatePostComposeView: View {
     @State private var showCameraCapture = false
     @State private var reviewingMediaID: UUID?
     @State private var expandedComposeOption: ExpandedComposeOption?
+    @State private var billPanelMounted = false
     @State private var profileRoute: ComposeProfileRoute?
 
     public init(
@@ -408,6 +491,17 @@ public struct CreatePostComposeView: View {
                     viewModel.syncMentionPicker(with: newValue)
                 }
 
+                if !viewModel.caption.isEmpty {
+                    Text("\(PostCaption.characterCount(viewModel.caption))/\(PostCaption.maxLength)")
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(
+                            viewModel.isCaptionAtLimit
+                                ? SplickTheme.Colors.error
+                                : SplickTheme.Colors.textTertiary
+                        )
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
+
                 if let mentionViewModel = viewModel.mentionPickerViewModel {
                     MentionPickerPopup(viewModel: mentionViewModel) { user in
                         viewModel.insertMention(user)
@@ -456,15 +550,7 @@ public struct CreatePostComposeView: View {
                     isOn: Binding(
                         get: { viewModel.enableBillSplit },
                         set: { isEnabled in
-                            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
-                                viewModel.enableBillSplit = isEnabled
-                                if isEnabled {
-                                    expandedComposeOption = .bill
-                                    viewModel.startCompanionDirectoryLoadIfNeeded()
-                                } else if expandedComposeOption == .bill {
-                                    expandedComposeOption = nil
-                                }
-                            }
+                            setBillSplitEnabled(isEnabled)
                         }
                     )
                 )
@@ -482,11 +568,15 @@ public struct CreatePostComposeView: View {
             .padding(.horizontal, SplickTheme.Spacing.md)
             .padding(.vertical, 8)
 
-            if viewModel.enableBillSplit, expandedComposeOption == .bill {
-                billSplitDetails(onRevealCompanionsSearch: onRevealCompanionsSearch)
-                    .padding(.horizontal, SplickTheme.Spacing.md)
-                    .padding(.bottom, SplickTheme.Spacing.sm)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+            if billPanelMounted {
+                ComposeDropdownSlide(
+                    isExpanded: viewModel.enableBillSplit && expandedComposeOption == .bill
+                ) {
+                    billSplitDetails(onRevealCompanionsSearch: onRevealCompanionsSearch)
+                        .padding(.horizontal, SplickTheme.Spacing.md)
+                        .padding(.bottom, SplickTheme.Spacing.sm)
+                }
+                .transition(.identity)
             }
 
             insetDivider
@@ -584,11 +674,35 @@ public struct CreatePostComposeView: View {
         if viewModel.enableBillSplit {
             toggleComposeOption(.bill)
         } else {
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
-                viewModel.enableBillSplit = true
+            setBillSplitEnabled(true)
+        }
+    }
+
+    private func setBillSplitEnabled(_ isEnabled: Bool) {
+        withAnimation(ComposeDropdownMotion.reveal) {
+            viewModel.enableBillSplit = isEnabled
+            if isEnabled {
+                billPanelMounted = true
                 expandedComposeOption = .bill
+            } else if expandedComposeOption == .bill {
+                expandedComposeOption = nil
             }
+        }
+        if isEnabled {
             viewModel.startCompanionDirectoryLoadIfNeeded()
+        } else {
+            scheduleBillPanelUnmount()
+        }
+    }
+
+    private func scheduleBillPanelUnmount() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) {
+            guard !viewModel.enableBillSplit else { return }
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                billPanelMounted = false
+            }
         }
     }
 
@@ -1115,21 +1229,9 @@ private struct ComposeCompanionsEditorView: View {
         Button {
             showAddGuestSheet = true
         } label: {
-            HStack(spacing: SplickTheme.Spacing.xxs) {
-                Image(systemName: "plus.circle.fill")
-                Text(languageService.text(.feedCreateGuestSection))
-                    .font(SplickTheme.Typography.callout.weight(.semibold))
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.85)
-                    .multilineTextAlignment(.leading)
-            }
-            .foregroundStyle(SplickTheme.Colors.primary)
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            .padding(.horizontal, SplickTheme.Spacing.sm)
-            .padding(.vertical, SplickTheme.Spacing.xs)
-            .background(SplickTheme.Colors.primary.opacity(0.08))
-            .clipShape(
-                RoundedRectangle(cornerRadius: ComposeMetrics.fieldCornerRadius, style: .continuous)
+            BillShareActionChip(
+                title: languageService.text(.feedCreateGuestChip),
+                systemImage: "plus.circle.fill"
             )
         }
         .buttonStyle(.plain)
@@ -1643,6 +1745,29 @@ private struct ComposeLocationEditorView: View {
     }
 }
 
+private struct BillShareActionChip: View {
+    let title: String
+    let systemImage: String
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: systemImage)
+                .font(.system(size: 13, weight: .semibold))
+            Text(title)
+                .font(SplickTheme.Typography.captionBold)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+        }
+        .foregroundStyle(SplickTheme.Colors.primary)
+        .frame(maxWidth: .infinity, minHeight: ComposeMetrics.actionChipHeight)
+        .padding(.horizontal, SplickTheme.Spacing.sm)
+        .background(SplickTheme.Colors.primary.opacity(0.08))
+        .clipShape(
+            RoundedRectangle(cornerRadius: ComposeMetrics.fieldCornerRadius, style: .continuous)
+        )
+    }
+}
+
 private struct ComposeNearbyRadarButton: View {
     @EnvironmentObject private var languageService: LanguageService
     @StateObject private var nearbyRadar: NearbyRadarSessionViewModel
@@ -1682,21 +1807,9 @@ private struct ComposeNearbyRadarButton: View {
             showNearbyRadar = true
             nearbyRadar.startRadarSession()
         } label: {
-            HStack(spacing: SplickTheme.Spacing.xxs) {
-                Image(systemName: "dot.radiowaves.left.and.right")
-                Text(languageService.text(.friendsNearbyOpen))
-                    .font(SplickTheme.Typography.callout.weight(.semibold))
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.85)
-                    .multilineTextAlignment(.leading)
-            }
-            .foregroundStyle(SplickTheme.Colors.primary)
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            .padding(.horizontal, SplickTheme.Spacing.sm)
-            .padding(.vertical, SplickTheme.Spacing.xs)
-            .background(SplickTheme.Colors.primary.opacity(0.08))
-            .clipShape(
-                RoundedRectangle(cornerRadius: ComposeMetrics.fieldCornerRadius, style: .continuous)
+            BillShareActionChip(
+                title: languageService.text(.feedCreateNearbyChip),
+                systemImage: "dot.radiowaves.left.and.right"
             )
         }
         .buttonStyle(.plain)

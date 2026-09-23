@@ -442,13 +442,36 @@ public final class FeedViewModel: ObservableObject {
         let localPostId = optimisticPost.id
         prependCreatedPost(optimisticPost)
         pendingPostUploadInputs[localPostId] = input
+        if PostCaption.exceedsLimit(input.caption) {
+            postUploadStates[localPostId] = .failed(
+                message: languageService.text(.feedErrorCaptionTooLong),
+                recovery: .edit
+            )
+            return
+        }
         postUploadStates[localPostId] = .uploading
         startPostUpload(localPostId: localPostId, input: input)
+    }
+
+    public func savePendingUploadCaption(_ caption: String, localPostId: UUID) {
+        guard let input = pendingPostUploadInputs[localPostId] else { return }
+        pendingPostUploadInputs[localPostId] = input.withCaption(caption)
+        if let existing = post(byId: localPostId) {
+            replacePost(existing.updating(caption: caption))
+        }
+        retryPostUpload(localPostId: localPostId)
     }
 
     public func retryPostUpload(localPostId: UUID) {
         guard let input = pendingPostUploadInputs[localPostId] else { return }
         guard case .failed = postUploadStates[localPostId] else { return }
+        if PostCaption.exceedsLimit(input.caption) {
+            postUploadStates[localPostId] = .failed(
+                message: languageService.text(.feedErrorCaptionTooLong),
+                recovery: .edit
+            )
+            return
+        }
         postUploadStates[localPostId] = .uploading
         startPostUpload(localPostId: localPostId, input: input)
     }
@@ -1056,7 +1079,14 @@ public final class FeedViewModel: ObservableObject {
             presentGuestInviteShareIfNeeded(for: serverPost)
         } catch {
             if error.isRequestCancellation { return }
-            postUploadStates[localPostId] = .failed(message: postUploadFailureMessage(for: error))
+            let recovery = PostUploadFailure.recovery(for: error)
+            let message: String
+            if PostUploadFailure.isCaptionTooLong(error) {
+                message = languageService.text(.feedErrorCaptionTooLong)
+            } else {
+                message = postUploadFailureMessage(for: error)
+            }
+            postUploadStates[localPostId] = .failed(message: message, recovery: recovery)
             Log.error(error, category: .feed)
         }
     }

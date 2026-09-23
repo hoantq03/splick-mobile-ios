@@ -74,4 +74,23 @@ public struct CreatePostInput: Sendable {
         self.groupId = groupId
         self.groupIds = groupIds
     }
+
+    public func withCaption(_ caption: String?) -> CreatePostInput {
+        CreatePostInput(
+            mediaItems: mediaItems,
+            caption: caption,
+            companionIds: companionIds,
+            companionGroupName: companionGroupName,
+            checkInPlace: checkInPlace,
+            location: location,
+            feedKind: feedKind,
+            billSplit: billSplit,
+            billSplitType: billSplitType,
+            autoReminderEnabled: autoReminderEnabled,
+            pendingCompanions: pendingCompanions,
+            audience: audience,
+            groupId: groupId,
+            groupIds: groupIds
+        )
+    }
 }

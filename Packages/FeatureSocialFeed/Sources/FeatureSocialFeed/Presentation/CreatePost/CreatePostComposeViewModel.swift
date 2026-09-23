@@ -49,7 +49,14 @@ public struct PreparedPostSubmit: Sendable {
 
 @MainActor
 public final class CreatePostComposeViewModel: ObservableObject {
-    @Published var caption = ""
+    @Published var caption = "" {
+        didSet {
+            let limited = PostCaption.limited(caption)
+            if limited != caption {
+                caption = limited
+            }
+        }
+    }
     @Published var location = ""
     @Published private(set) var selectedPlace: PostPlace?
     @Published private(set) var nearbyPlaces: [PostPlace] = []
@@ -524,7 +531,11 @@ public final class CreatePostComposeViewModel: ObservableObject {
     }
 
     var canSubmitPost: Bool {
-        !selectedMediaItems.isEmpty && !hasEncodingMedia
+        !selectedMediaItems.isEmpty && !hasEncodingMedia && !PostCaption.exceedsLimit(caption)
+    }
+
+    var isCaptionAtLimit: Bool {
+        PostCaption.characterCount(caption) >= PostCaption.maxLength
     }
 
     func removeMediaItem(id: UUID) {
@@ -890,6 +901,10 @@ public final class CreatePostComposeViewModel: ObservableObject {
     private func buildCreatePostInput() -> CreatePostInput? {
         guard !selectedMediaItems.isEmpty else {
             submitState = .failed(languageService.text(.feedCreateNeedMedia))
+            return nil
+        }
+        if PostCaption.exceedsLimit(caption) {
+            submitState = .failed(languageService.text(.feedErrorCaptionTooLong))
             return nil
         }
         guard !hasEncodingMedia else {
