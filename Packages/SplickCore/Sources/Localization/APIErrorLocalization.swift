@@ -120,6 +120,8 @@ public enum APIErrorLocalization {
             return L10n.string(.friendsTransferBeforeLeave, locale: locale)
         case "MEDIA_FORBIDDEN":
             return L10n.string(.errorMediaForbiddenGroupAvatar, locale: locale)
+        case "CAPTION_TOO_LONG":
+            return L10n.string(.feedErrorCaptionTooLong, locale: locale)
         default:
             return sanitizedFallback(fallback, locale: locale)
         }
