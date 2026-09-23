@@ -12,6 +12,9 @@ struct ConversationRowView: View {
     let conversation: Conversation
     var reportsAnchorFrame = true
     var inboxTyping: InboxTypingState? = nil
+    /// Inbox rows report frames in the list's own space. Global frames move on every
+    /// pager tick and rewrite preferences until SwiftUI traps.
+    var anchorCoordinateSpace: CoordinateSpace = .global
 
     var body: some View {
         HStack(spacing: SplickTheme.Spacing.sm) {
@@ -101,7 +104,7 @@ struct ConversationRowView: View {
                     Color.clear
                         .preference(
                             key: ConversationRowAnchorFrameKey.self,
-                            value: [conversation.id: geometry.frame(in: .global)]
+                            value: [conversation.id: geometry.frame(in: anchorCoordinateSpace)]
                         )
                 }
                 .allowsHitTesting(false)

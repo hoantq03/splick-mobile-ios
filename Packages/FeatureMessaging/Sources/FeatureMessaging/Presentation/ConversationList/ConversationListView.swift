@@ -5,6 +5,13 @@ import DesignSystem
 import Localization
 import SplickDomain
 
+/// Stable space for peek anchors. The messages page is translated by the tab pager;
+/// `.global` frames change every animation frame and re-enter layout until crash.
+private enum InboxAnchorCoordinateSpace {
+    static let name = "messagingInboxAnchor"
+    static var space: CoordinateSpace { .named(name) }
+}
+
 private struct NewMessageComposePresentation: Identifiable {
     let id = UUID()
     let viewModel: NewMessageComposeViewModel
@@ -126,6 +133,7 @@ public struct ConversationListView: View {
             .overlay {
                 conversationPeekLayer
             }
+            .coordinateSpace(name: InboxAnchorCoordinateSpace.name)
         .onChange(of: searchDraft) { newValue in
             viewModel.onSearchQueryChanged(newValue)
         }
@@ -473,7 +481,7 @@ public struct ConversationListView: View {
                 if let conversation = viewModel.peekConversation,
                    let globalFrame = peekFrozenFrame,
                    let currentUserId = currentUserSummary?.id {
-                    let overlayOrigin = geometry.frame(in: .global).origin
+                    let overlayOrigin = geometry.frame(in: InboxAnchorCoordinateSpace.space).origin
                     let localFrame = globalFrame.offsetBy(
                         dx: -overlayOrigin.x,
                         dy: -overlayOrigin.y
@@ -645,7 +653,8 @@ public struct ConversationListView: View {
     }
 
     private func conversationList(_ items: [Conversation]) -> some View {
-        ScrollViewReader { proxy in
+        let rows = uniquedInboxRows(items)
+        return ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 0) {
                     Color.clear
@@ -654,10 +663,11 @@ public struct ConversationListView: View {
                         .background {
                             SplickRefreshableScrollBootstrap()
                         }
-                    ForEach(items) { conversation in
+                    ForEach(rows) { conversation in
                         ConversationRowView(
                             conversation: conversation,
-                            inboxTyping: inboxTyping(for: conversation)
+                            inboxTyping: inboxTyping(for: conversation),
+                            anchorCoordinateSpace: InboxAnchorCoordinateSpace.space
                         )
                         .opacity(
                             viewModel.peekConversation?.id == conversation.id ? 0 : 1
@@ -715,6 +725,11 @@ public struct ConversationListView: View {
                 tabBarScrollState?.reset()
             }
         }
+    }
+
+    private func uniquedInboxRows(_ items: [Conversation]) -> [Conversation] {
+        var seen = Set<UUID>()
+        return items.filter { seen.insert($0.id).inserted }
     }
 
     private var messagingSearchBar: some View {

@@ -396,6 +396,26 @@ final class ConversationListViewModelComprehensiveTests: XCTestCase {
         XCTAssertFalse(vm.isLoadingMore)
     }
 
+    func testLoadMoreDropsConversationsAlreadyInInbox() async {
+        let (vm, _, repo, _) = makeViewModel()
+        var items: [Conversation] = []
+        for _ in 0..<20 {
+            items.append(makeTestConversation())
+        }
+        vm.applyStartupConversations(items)
+        let overlap = items[0]
+        let fresh = makeTestConversation()
+        await repo.setFetchConversationsResult(
+            .success(MessagingPage(items: [overlap, fresh], hasMore: false))
+        )
+
+        await vm.loadMoreIfNeeded(current: items.last!)
+
+        XCTAssertEqual(vm.conversations.count, 21)
+        XCTAssertEqual(Set(vm.conversations.map(\.id)).count, vm.conversations.count)
+        XCTAssertEqual(vm.conversations.last?.id, fresh.id)
+    }
+
     // MARK: - Search Tests
 
     func testSearchQueryChangedAndRefresh() async {

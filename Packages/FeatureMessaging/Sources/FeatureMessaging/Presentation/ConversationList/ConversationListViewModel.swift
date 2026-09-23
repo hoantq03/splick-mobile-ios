@@ -77,6 +77,9 @@ public final class ConversationListViewModel: ObservableObject {
     private var inboxDirectoryObserver: AnyCancellable?
     private var remoteTypingTimeouts: [String: Task<Void, Never>] = [:]
     private var currentPage = 0
+    /// Bumped when a full inbox reload starts so an in-flight page append cannot
+    /// publish a list that overlaps the refreshed page (ForEach duplicate-id trap).
+    private var inboxLoadGeneration = 0
     private var pendingDeleteConversationId: UUID?
     private var refreshQueued = false
     private let visiblePollInterval: Duration = .seconds(30)
@@ -658,6 +661,8 @@ public final class ConversationListViewModel: ObservableObject {
     }
 
     private func reloadInbox(showLoadingState: Bool = true) async {
+        inboxLoadGeneration += 1
+        let generation = inboxLoadGeneration
         currentPage = 0
         hasMorePages = false
         if showLoadingState {
@@ -668,11 +673,12 @@ public final class ConversationListViewModel: ObservableObject {
             async let conversationsTask = fetchConversationsUseCase.execute(query: inboxQuery(page: 0))
             async let summaryTask = repository.fetchConversationInboxSummary()
             let (page, summary) = try await (conversationsTask, summaryTask)
+            guard generation == inboxLoadGeneration else { return }
 
             var transaction = Transaction()
             transaction.disablesAnimations = true
             withTransaction(transaction) {
-                state = .loaded(page.items)
+                state = .loaded(uniquedConversations(page.items))
                 unreadConversationCount = summary
                 hasMorePages = page.hasMore
             }
@@ -689,9 +695,11 @@ public final class ConversationListViewModel: ObservableObject {
         isLoadingMore = true
         defer { isLoadingMore = false }
 
+        let generation = inboxLoadGeneration
         let nextPage = currentPage + 1
         do {
             let page = try await fetchConversationsUseCase.execute(query: inboxQuery(page: nextPage))
+            guard generation == inboxLoadGeneration else { return }
             guard !page.items.isEmpty else {
                 hasMorePages = false
                 return
@@ -700,14 +708,19 @@ public final class ConversationListViewModel: ObservableObject {
             var transaction = Transaction()
             transaction.disablesAnimations = true
             withTransaction(transaction) {
-                let merged = conversations + page.items
-                state = .loaded(merged)
+                state = .loaded(uniquedConversations(conversations + page.items))
                 currentPage = nextPage
                 hasMorePages = page.hasMore
             }
         } catch {
             Log.error(error, category: .network, metadata: ["action": "loadMoreConversations"])
         }
+    }
+
+    /// SwiftUI `ForEach` traps when the same conversation id appears twice.
+    private func uniquedConversations(_ items: [Conversation]) -> [Conversation] {
+        var seen = Set<UUID>()
+        return items.filter { seen.insert($0.id).inserted }
     }
 
     private func inboxQuery(page: Int) -> ConversationInboxQuery {
