@@ -271,7 +271,9 @@ final class CommonCoreExtensionsAndLogicTests: XCTestCase {
 
     func testDeletedUser_and_Notifications() {
         XCTAssertTrue(DeletedUser.isDeleted(displayName: "Deleted User"))
+        XCTAssertTrue(DeletedUser.isDeleted(displayName: "Alice ( Deleted )"))
         XCTAssertFalse(DeletedUser.isDeleted(displayName: "Active User"))
+        XCTAssertFalse(DeletedUser.isDeleted(displayName: "Alice (Deleted)"))
 
         XCTAssertEqual(Notification.Name.expensesDirectoryDidChange, ExpensesDirectoryChange.notification)
         XCTAssertEqual(Notification.Name.paymentEvidenceStatusDidChange, ExpensesDirectoryChange.notification)
@@ -279,5 +281,24 @@ final class CommonCoreExtensionsAndLogicTests: XCTestCase {
         XCTAssertEqual(AppNotificationSound.resolved("custom").rawValue, "default")
         XCTAssertFalse(AppNotificationSound.default.isSilent)
         XCTAssertEqual(AppNotificationSound.loadFromAppGroup(), .default)
+    }
+
+    func testPostUploadFailure_classifiesCaptionAndNetwork() {
+        XCTAssertTrue(PostCaption.exceedsLimit(String(repeating: "a", count: PostCaption.maxLength + 1)))
+        XCTAssertFalse(PostCaption.exceedsLimit("ok"))
+        XCTAssertEqual(PostCaption.characterCount(nil), 0)
+        XCTAssertEqual(
+            PostCaption.limited(String(repeating: "a", count: PostCaption.maxLength + 25)).count,
+            PostCaption.maxLength
+        )
+
+        let tooLong = NetworkError.apiError(code: "CAPTION_TOO_LONG", message: "too long")
+        XCTAssertEqual(PostUploadFailure.recovery(for: tooLong), .edit)
+        XCTAssertTrue(PostUploadFailure.isCaptionTooLong(tooLong))
+
+        let conflict = NetworkError.apiError(code: "CONFLICT", message: "Data integrity violation")
+        XCTAssertEqual(PostUploadFailure.recovery(for: conflict), .edit)
+
+        XCTAssertEqual(PostUploadFailure.recovery(for: NetworkError.timeout), .retry)
     }
 }
