@@ -41,11 +41,23 @@ struct StreakMonthScrollView<Header: View>: View {
         VStack(spacing: 0) {
             header()
                 .frame(maxWidth: .infinity)
-                .background(SplickTheme.Colors.background)
-                .zIndex(1)
+                .padding(.top, SplickSegmentPagerTopInsetMetrics.underChromeTopGap)
+                .background {
+                    LinearGradient(
+                        stops: [
+                            .init(color: SplickTheme.Colors.background.opacity(0.98), location: 0),
+                            .init(color: SplickTheme.Colors.background.opacity(0.92), location: 0.42),
+                            .init(color: SplickTheme.Colors.background.opacity(0.55), location: 0.78),
+                            .init(color: SplickTheme.Colors.background.opacity(0.12), location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+                .compositingGroup()
+                .zIndex(10)
 
-            ZStack(alignment: .top) {
-                ScrollViewReader { proxy in
+            ScrollViewReader { proxy in
                 ScrollView {
                     Color.clear
                         .frame(height: 0)
@@ -75,7 +87,7 @@ struct StreakMonthScrollView<Header: View>: View {
                                 .padding(.vertical, SplickTheme.Spacing.sm)
                         }
                     }
-                    .padding(.top, 36)
+                    .padding(.top, SplickTheme.Spacing.sm)
                     .padding(.bottom, SplickTheme.Spacing.xl)
 
                     Color.clear
@@ -86,14 +98,23 @@ struct StreakMonthScrollView<Header: View>: View {
                 .background {
                     StreakScrollViewAnchor(host: scrollHost)
                 }
+                .feedPagerScrollInsets(style: .tight)
                 .feedScrollSoftTopEdge()
                 .feedScrollBounceAlways()
+                .modifier(StreakScrollTopEdgeClear())
                 .scrollChromeTracking()
                 .splickNativeRefreshable(
                     controller: refreshController,
-                    chromeTopInset: FeedPagerTopInsetMetrics.refreshChromeTopInset
+                    chromeTopInset: FeedPagerTopInsetMetrics.refreshChromeTopInset,
+                    heldPullDistance: 44,
+                    spinnerTopPadding: SplickTheme.Spacing.xs
                 ) {
+                    let started = Date()
                     await onRefresh()
+                    let remaining = 0.42 - Date().timeIntervalSince(started)
+                    if remaining > 0.02 {
+                        try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
+                    }
                 }
                 .splickSameTabTapBehavior(
                     scrollTopID: StreakScrollAnchor.top,
@@ -126,17 +147,6 @@ struct StreakMonthScrollView<Header: View>: View {
                     guard nearBottom, didPinToStart, let oldest = sections.last else { return }
                     requestOlderMonthIfNeeded(for: oldest)
                 }
-                }
-
-                LinearGradient(
-                    stops: SplickScrollChromeFadeMetrics.backgroundStops,
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: 52)
-                .frame(maxWidth: .infinity, alignment: .top)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
             }
         }
     }
@@ -205,6 +215,16 @@ struct StreakMonthScrollView<Header: View>: View {
         lastOlderLoadTriggerSectionID = nil
         if scrollHost.isNearBottom, let oldest = sections.last {
             requestOlderMonthIfNeeded(for: oldest)
+        }
+    }
+}
+
+private struct StreakScrollTopEdgeClear: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.scrollEdgeEffectHidden(true, for: .top)
+        } else {
+            content
         }
     }
 }

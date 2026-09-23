@@ -63,7 +63,6 @@ public struct StreakView: View {
                 .padding(.top, 0)
                 .padding(.bottom, SplickTheme.Spacing.xxs)
         }
-        .feedPagerPageTopInset(isEnabled: true)
         .sheet(item: $viewModel.selectedDay) { day in
             StreakDayDetailView(
                 day: day,
@@ -99,9 +98,12 @@ public struct StreakView: View {
         VStack(spacing: 6) {
             HStack(spacing: 11) {
                 StreakFlameView(isLit: viewModel.currentStreak > 0, size: 67)
+                    .zIndex(1)
 
                 StreakCountView(count: viewModel.currentStreak)
+                    .zIndex(2)
             }
+            .zIndex(2)
 
             Text(languageService.text(.feedStreakDays))
                 .font(.system(size: 21, weight: .medium))
@@ -119,6 +121,8 @@ public struct StreakView: View {
             }
         }
         .padding(.top, 0)
+        .compositingGroup()
+        .zIndex(2)
         .animation(.spring(response: 0.4, dampingFraction: 0.7), value: viewModel.currentStreak)
     }
 

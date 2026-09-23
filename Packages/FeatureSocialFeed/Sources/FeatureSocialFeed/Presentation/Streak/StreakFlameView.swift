@@ -91,6 +91,7 @@ struct StreakCountView: View {
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
             }
         }
+        .compositingGroup()
         .accessibilityLabel("\(count)")
     }
 
