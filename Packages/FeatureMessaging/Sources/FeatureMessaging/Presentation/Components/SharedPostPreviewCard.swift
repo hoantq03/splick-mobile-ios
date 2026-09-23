@@ -17,13 +17,16 @@ struct SharedPostPreviewCard: View {
     @State private var loadFailed = false
 
     private static let mediaHeight: CGFloat = 148
+    private static let mediaCornerRadius: CGFloat = 12
+    private static let sectionSpacing: CGFloat = 8
 
     var body: some View {
+        // Width is fixed to the bubble's inner lane. Padding applied *outside*
+        // `maxWidth` used to overflow the trailing edge; the bubble clip then
+        // ate the right inset while the left inset stayed put.
         content
-            .frame(maxWidth: maxWidth, alignment: .leading)
-            .padding(8)
-            .background(cardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: MessageThreadRowLayout.quoteCornerRadius, style: .continuous))
+            .frame(width: maxWidth, alignment: .leading)
+            .clipped()
             .contentShape(Rectangle())
             .onTapGesture {
                 guard enabled else { return }
@@ -55,12 +58,13 @@ struct SharedPostPreviewCard: View {
             ? caption!
             : languageService.text(.feedShareFallbackCaption)
 
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: Self.sectionSpacing) {
             SharedPostMediaPreview(
                 imageURL: preview.imageURL,
                 videoURL: preview.videoURL,
                 isVideo: preview.isVideo,
-                height: Self.mediaHeight
+                height: Self.mediaHeight,
+                cornerRadius: Self.mediaCornerRadius
             )
             VStack(alignment: .leading, spacing: 2) {
                 Text(languageService.text(.messagingSharedPostLabel))
@@ -79,15 +83,15 @@ struct SharedPostPreviewCard: View {
     }
 
     private var loadingColumn: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Self.sectionSpacing) {
             ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: Self.mediaCornerRadius, style: .continuous)
                     .fill(Color.black.opacity(0.12))
                 SplickSpinner(usesBrandColors: false)
             }
             .frame(maxWidth: .infinity)
             .frame(height: Self.mediaHeight)
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(languageService.text(.messagingSharedPostLabel))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(labelColor)
@@ -100,9 +104,9 @@ struct SharedPostPreviewCard: View {
     }
 
     private var unavailableColumn: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Self.sectionSpacing) {
             ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: Self.mediaCornerRadius, style: .continuous)
                     .fill(Color.black.opacity(0.12))
                 Image(systemName: "photo.badge.exclamationmark")
                     .font(.system(size: 28, weight: .medium))
@@ -120,13 +124,6 @@ struct SharedPostPreviewCard: View {
                     .lineLimit(2)
             }
         }
-    }
-
-    private var cardBackground: Color {
-        if isOutgoing {
-            return Color.white.opacity(0.16)
-        }
-        return SplickTheme.Colors.cardBackground.opacity(0.92)
     }
 
     private var titleColor: Color {
@@ -162,6 +159,7 @@ private struct SharedPostMediaPreview: View {
     let videoURL: URL?
     let isVideo: Bool
     let height: CGFloat
+    let cornerRadius: CGFloat
 
     @State private var generatedFrame: UIImage?
     @State private var isDecodingFrame = false
@@ -175,22 +173,27 @@ private struct SharedPostMediaPreview: View {
     }
 
     var body: some View {
-        ZStack {
-            mediaLayer
-            if isVideo {
-                Image(systemName: "play.fill")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color.white)
-                    .frame(width: 36, height: 36)
-                    .background(Color.black.opacity(0.45), in: Circle())
+        // Color sizes the slot. The photo is an overlay so its pixel size
+        // cannot widen the bubble and get clipped on one side only.
+        Color.clear
+            .frame(maxWidth: .infinity)
+            .frame(height: height)
+            .overlay {
+                mediaLayer
             }
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: height)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .task(id: taskKey) {
-            await ensureFirstFrameIfNeeded()
-        }
+            .overlay {
+                if isVideo {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color.white)
+                        .frame(width: 36, height: 36)
+                        .background(Color.black.opacity(0.45), in: Circle())
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .task(id: taskKey) {
+                await ensureFirstFrameIfNeeded()
+            }
     }
 
     private var taskKey: String {
@@ -203,13 +206,11 @@ private struct SharedPostMediaPreview: View {
             GridThumbnailImage(url: remoteImageURL, thumbnailWidth: 480) {
                 generatedOrPlaceholder
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: height)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
         } else {
             generatedOrPlaceholder
-                .frame(maxWidth: .infinity)
-                .frame(height: height)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 

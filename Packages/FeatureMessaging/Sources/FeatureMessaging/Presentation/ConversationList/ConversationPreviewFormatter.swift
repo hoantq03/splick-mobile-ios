@@ -16,6 +16,14 @@ enum ConversationPreviewFormatter {
             return .recalled
         }
 
+        let body = message.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let share = PostShareUrlParser.parse(body) {
+            if let note = share.note, !note.isEmpty {
+                return .text(note)
+            }
+            return .sharedPost
+        }
+
         if message.imageAttachments.count == 1,
            message.imageAttachments[0].mediaId == nil {
             return .gif
@@ -23,14 +31,6 @@ enum ConversationPreviewFormatter {
 
         if !message.imageAttachments.isEmpty {
             return .images(message.imageAttachments.count)
-        }
-
-        let body = message.body.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let share = PostShareUrlParser.parse(body) {
-            if let note = share.note, !note.isEmpty {
-                return .text(note)
-            }
-            return .sharedPost
         }
         if isEmojiOnly(body) {
             return .emoji

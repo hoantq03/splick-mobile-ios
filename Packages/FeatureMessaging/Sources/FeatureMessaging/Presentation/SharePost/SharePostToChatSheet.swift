@@ -4,6 +4,7 @@ import Common
 import DesignSystem
 import Localization
 import SplickDomain
+import FeatureStickers
 
 public struct SharePostToChatSheet: View {
     @ObservedObject private var viewModel: SharePostViewModel
@@ -14,8 +15,18 @@ public struct SharePostToChatSheet: View {
     @State private var showSystemShare = false
     @State private var copiedPulse = false
     @State private var sendSucceeded = false
-    @State private var sheetDetent: PresentationDetent = .medium
+    @State private var compactSheetHeight: CGFloat = ShareSheetLayout.defaultHeight
+    @State private var sheetDetent: PresentationDetent = .height(ShareSheetLayout.defaultHeight)
     @FocusState private var messageFocused: Bool
+    @EnvironmentObject private var emojiStore: CustomEmojiStore
+    @Environment(\.customEmojiDependencies) private var customEmojiDependencies
+    @Environment(\.currentUserSummary) private var currentUserSummary
+    @Environment(\.messagingGifPickerFactory) private var messagingGifPickerFactory
+    @State private var gifPickerViewModel: GifPickerViewModel?
+    @State private var showAttachmentPicker = false
+    @State private var showEmojiInsertPicker = false
+    @State private var showCustomEmojiUpload = false
+    @State private var gifPreviewRoute: AttachmentPreviewRoute?
 
     public init(viewModel: SharePostViewModel, shareText: String) {
         self._viewModel = ObservedObject(wrappedValue: viewModel)
@@ -39,30 +50,92 @@ public struct SharePostToChatSheet: View {
                     .padding(.bottom, SplickTheme.Spacing.xs)
             }
             recipientContent
-            Spacer(minLength: SplickTheme.Spacing.sm)
-            if !messageFocused {
-                externalActions
-            }
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+            externalActions
             composerBar
         }
+        .fixedSize(horizontal: false, vertical: !isSearching)
+        .background {
+            GeometryReader { proxy in
+                Color.clear.preference(key: ShareSheetHeightKey.self, value: proxy.size.height)
+            }
+        }
+        .onPreferenceChange(ShareSheetHeightKey.self, perform: updateCompactHeight)
+        .ignoresSafeArea(.keyboard)
         .task {
             await viewModel.loadDirectoryIfNeeded()
         }
         .onChange(of: viewModel.searchQuery) { newValue in
             viewModel.onSearchQueryChanged(newValue)
         }
-        .onChange(of: messageFocused) { focused in
-            if focused {
-                sheetDetent = .large
-            }
+        .onChange(of: isSearching) { searching in
+            sheetDetent = searching ? .large : .height(compactSheetHeight)
         }
         .sheet(isPresented: $showSystemShare) {
             SystemActivityShareSheet(items: [shareText, viewModel.shareURL])
         }
-        .presentationDetents([.medium, .large], selection: $sheetDetent)
+        .sheet(isPresented: $showEmojiInsertPicker) {
+            EmojiPickerSheet(
+                currentUserId: currentUserSummary?.id,
+                mode: .inlineInsert,
+                onPick: { emoji in viewModel.insertEmoji(emoji) },
+                onOpenUpload: { openCustomEmojiUpload() }
+            )
+        }
+        .sheet(isPresented: $showCustomEmojiUpload) {
+            if let deps = customEmojiDependencies {
+                CustomEmojiUploadSheet(
+                    currentUserId: currentUserSummary?.id,
+                    customEmojiFetcher: deps.fetcher,
+                    uploadMediaUseCase: deps.uploadMediaUseCase,
+                    addEmojiUseCase: deps.addEmojiUseCase,
+                    deleteEmojiUseCase: deps.deleteEmojiUseCase
+                )
+            }
+        }
+        .sheet(isPresented: $showAttachmentPicker) {
+            if let gifPickerViewModel {
+                AttachmentPickerView(
+                    viewModel: gifPickerViewModel,
+                    currentUserId: currentUserSummary?.id,
+                    onSelectGif: { sticker in
+                        showAttachmentPicker = false
+                        viewModel.attachGif(stickerId: sticker.id, url: sticker.url)
+                    },
+                    onSelectEmoji: { emoji in
+                        viewModel.insertEmoji(emoji)
+                        showAttachmentPicker = false
+                    }
+                )
+                .environmentObject(languageService)
+                .environmentObject(emojiStore)
+                .environment(\.currentUserSummary, currentUserSummary)
+                .environment(\.customEmojiDependencies, customEmojiDependencies)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+        }
+        .splickWindowFullScreenCover(item: $gifPreviewRoute) { route in
+            gifFullscreenPreview(at: route.index)
+        }
+        .presentationDetents(presentedDetents, selection: $sheetDetent)
+        .modifier(ShareSheetContentInteraction())
         .presentationDragIndicator(.visible)
+    }
+
+    private var presentedDetents: Set<PresentationDetent> {
+        if isSearching {
+            return [.medium, .large]
+        }
+        return [.height(compactSheetHeight)]
+    }
+
+    private func updateCompactHeight(_ height: CGFloat) {
+        guard height > 0, abs(height - compactSheetHeight) > 1 else { return }
+        compactSheetHeight = height
+        if !isSearching {
+            sheetDetent = .height(height)
+        }
     }
 
     private var header: some View {
@@ -118,15 +191,17 @@ public struct SharePostToChatSheet: View {
     private var recipientContent: some View {
         if viewModel.isLoading {
             SplickSpinner()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, SplickTheme.Spacing.lg)
         } else if isSearching {
             searchResults
         } else if viewModel.visibleRecipients.isEmpty && viewModel.visibleRemoteUsers.isEmpty {
             Text(languageService.text(.feedShareToChatSelectHint))
                 .font(SplickTheme.Typography.caption)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, SplickTheme.Spacing.md)
+                .padding(.bottom, SplickTheme.Spacing.sm)
         } else {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: SplickTheme.Spacing.md) {
@@ -154,7 +229,6 @@ public struct SharePostToChatSheet: View {
                 .padding(.horizontal, SplickTheme.Spacing.md)
                 .padding(.bottom, SplickTheme.Spacing.sm)
             }
-            .frame(maxHeight: .infinity, alignment: .top)
         }
     }
 
@@ -235,6 +309,7 @@ public struct SharePostToChatSheet: View {
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
         }
+        .frame(maxHeight: .infinity)
     }
 
     private func searchRow(
@@ -297,6 +372,7 @@ public struct SharePostToChatSheet: View {
             Spacer()
         }
         .padding(.horizontal, SplickTheme.Spacing.md)
+        .padding(.top, SplickTheme.Spacing.md)
         .padding(.bottom, SplickTheme.Spacing.sm)
     }
 
@@ -322,19 +398,36 @@ public struct SharePostToChatSheet: View {
     }
 
     private var composerBar: some View {
-        HStack(alignment: .bottom, spacing: 10) {
-            TextField(
-                languageService.text(.feedShareToChatMessagePlaceholder),
-                text: $viewModel.messageNote,
-                axis: .vertical
-            )
-            .font(SplickTheme.Typography.body)
-            .lineLimit(1...4)
-            .padding(.horizontal, SplickTheme.Spacing.sm)
-            .padding(.vertical, 8)
-            .background { ShareGlassRoundedRect(cornerRadius: 20) }
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .focused($messageFocused)
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+            if !viewModel.gifSubmissions.isEmpty {
+                PendingAttachmentStrip(
+                    attachments: viewModel.gifSubmissions,
+                    thumbnailWidth: 64,
+                    thumbnailHeight: 64,
+                    onTapAttachment: { index in
+                        gifPreviewRoute = AttachmentPreviewRoute(index: index)
+                    },
+                    onRemoveAttachment: { index in
+                        viewModel.removeGif(at: index)
+                    }
+                )
+            }
+
+            HStack(alignment: .bottom, spacing: 10) {
+                emojiMenuButton
+
+                TextField(
+                    languageService.text(.feedShareToChatMessagePlaceholder),
+                    text: $viewModel.messageNote,
+                    axis: .vertical
+                )
+                .font(SplickTheme.Typography.body)
+                .lineLimit(1...4)
+                .padding(.horizontal, SplickTheme.Spacing.sm)
+                .padding(.vertical, 8)
+                .background { ShareGlassRoundedRect(cornerRadius: 20) }
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .focused($messageFocused)
 
             Button {
                 Task { await sendIfPossible() }
@@ -361,9 +454,58 @@ public struct SharePostToChatSheet: View {
             .scaleEffect(viewModel.canSend || sendSucceeded ? 1 : 0.86)
             .animation(.spring(response: 0.32, dampingFraction: 0.72), value: viewModel.canSend)
             .accessibilityLabel(languageService.text(.feedShareToChatSend))
+            }
         }
         .padding(.horizontal, SplickTheme.Spacing.md)
         .padding(.bottom, SplickTheme.Spacing.md)
+    }
+
+    @ViewBuilder
+    private var emojiMenuButton: some View {
+        Button {
+            presentAttachmentPicker()
+        } label: {
+            Image(systemName: "face.smiling")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                .frame(width: 36, height: 36)
+                .background { ShareGlassCircle() }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(languageService.text(.stickersEmoji))
+    }
+
+    private func presentAttachmentPicker() {
+        messageFocused = false
+        if gifPickerViewModel == nil {
+            gifPickerViewModel = messagingGifPickerFactory?()
+            guard gifPickerViewModel != nil else {
+                showEmojiInsertPicker = true
+                return
+            }
+            DispatchQueue.main.async {
+                showAttachmentPicker = true
+            }
+            return
+        }
+        showAttachmentPicker = true
+    }
+
+    private func openCustomEmojiUpload() {
+        showEmojiInsertPicker = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            showCustomEmojiUpload = true
+        }
+    }
+
+    @ViewBuilder
+    private func gifFullscreenPreview(at index: Int) -> some View {
+        if viewModel.gifSubmissions.indices.contains(index),
+           let url = viewModel.gifSubmissions[index].remoteURL {
+            RemoteGifFullscreenPreview(url: url) {
+                gifPreviewRoute = nil
+            }
+        }
     }
 
     private func sendIfPossible() async {
@@ -412,4 +554,26 @@ struct SystemActivityShareSheet: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+private enum ShareSheetLayout {
+    static let defaultHeight: CGFloat = 420
+}
+
+private struct ShareSheetContentInteraction: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 16.4, *) {
+            content.presentationContentInteraction(.scrolls)
+        } else {
+            content
+        }
+    }
+}
+
+private struct ShareSheetHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
 }

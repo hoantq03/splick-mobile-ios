@@ -14,6 +14,7 @@ import FeatureMedia
 import FeatureNotification
 import FeatureFriends
 import FeatureMessaging
+import FeatureStickers
 
 private struct TabBarChromeAnimationToken: Equatable {
     let isChromePresented: Bool
@@ -406,6 +407,9 @@ struct MainTabView: View {
         )
         .environment(\.makeSharePostViewModel) { url in
             container.makeSharePostViewModel(shareURL: url, currentUserId: appState.currentUser?.id)
+        }
+        .environment(\.messagingGifPickerFactory) {
+            container.makeGifPickerViewModel(groupId: nil)
         }
         .environment(\.sameTabTapHandlingEnabled, settledPagerTab == .feed)
     }

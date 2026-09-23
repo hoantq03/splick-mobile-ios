@@ -10,6 +10,7 @@ public final class SharePostViewModel: ObservableObject {
     @Published public private(set) var remoteSearchUsers: [UserSummary] = []
     @Published public var searchQuery = ""
     @Published public var messageNote = ""
+    @Published public private(set) var gifSubmissions: [CommentSubmissionAttachment] = []
     @Published public private(set) var selectedTargets: Set<SharePostChatTarget> = []
     @Published public private(set) var isLoading = false
     @Published public private(set) var isSearching = false
@@ -138,6 +139,30 @@ public final class SharePostViewModel: ObservableObject {
         selectedTargets.contains(.friend(user.id))
     }
 
+    public func insertEmoji(_ emoji: String) {
+        let token = EmojiKind.from(emoji).storageValue
+        if messageNote.isEmpty || messageNote.last?.isWhitespace == true {
+            messageNote += token
+        } else {
+            messageNote += " \(token)"
+        }
+    }
+
+    public func attachGif(stickerId: String, url: URL) {
+        gifSubmissions = [
+            CommentSubmissionAttachment(
+                kind: .gif,
+                remoteURL: url,
+                fileName: "gif-\(stickerId).gif"
+            )
+        ]
+    }
+
+    public func removeGif(at index: Int) {
+        guard gifSubmissions.indices.contains(index) else { return }
+        gifSubmissions.remove(at: index)
+    }
+
     public func send() async -> Bool {
         guard canSend else { return false }
         isSending = true
@@ -145,10 +170,12 @@ public final class SharePostViewModel: ObservableObject {
         statusMessage = nil
         defer { isSending = false }
 
+        let gifAttachments = gifSubmissions.compactMap(MessageAttachmentMapper.messageGif)
         let outcome = await shareUseCase.execute(
             shareURL: shareURL,
             note: messageNote,
-            targets: Array(selectedTargets)
+            targets: Array(selectedTargets),
+            imageAttachments: gifAttachments
         )
         if outcome.failedCount > 0, outcome.didSendAny {
             errorMessage = languageService.format(
@@ -162,6 +189,7 @@ public final class SharePostViewModel: ObservableObject {
             errorMessage = languageService.text(.feedShareToChatSendFailed)
             return false
         }
+        gifSubmissions = []
         statusMessage = languageService.text(.feedShareToChatSent)
         return true
     }

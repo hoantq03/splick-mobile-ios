@@ -6,7 +6,7 @@ private actor MockMessagingRepositoryForUseCases: MessagingRepositoryProtocol {
     var createdGroupArgs: (name: String, avatarUrl: String?, memberUserIds: [UUID], groupId: UUID?)?
     var addedReactions: [(conversationId: UUID, messageId: UUID, emoji: String)] = []
     var conversationsByFriend: [UUID: Conversation] = [:]
-    var sentMessages: [(conversationId: UUID, body: String, clientId: UUID)] = []
+    var sentMessages: [(conversationId: UUID, body: String, clientId: UUID, attachments: [MessageImageAttachment])] = []
 
     func createGroup(
         name: String,
@@ -56,7 +56,7 @@ private actor MockMessagingRepositoryForUseCases: MessagingRepositoryProtocol {
         imageAttachments: [MessageImageAttachment],
         replyToMessageId: UUID?
     ) async throws -> ChatMessage {
-        sentMessages.append((conversationId, body, clientMessageId))
+        sentMessages.append((conversationId, body, clientMessageId, imageAttachments))
         return ChatMessage(
             id: UUID(),
             conversationId: conversationId,
@@ -177,5 +177,29 @@ final class MessagingUseCasesTests: XCTestCase {
 
         let sent = await repo.sentMessages
         XCTAssertEqual(sent.count, 3)
+        XCTAssertTrue(sent.allSatisfy(\.attachments.isEmpty))
+    }
+
+    func testSharePostToChatUseCase_forwardsGifAttachments() async {
+        let repo = MockMessagingRepositoryForUseCases()
+        let sendUseCase = SendMessageUseCase(repository: repo)
+        let sut = SharePostToChatUseCase(repository: repo, sendMessageUseCase: sendUseCase)
+        let gif = MessageImageAttachment(
+            mediaId: nil,
+            url: URL(string: "https://cdn.example/fun.gif")!,
+            thumbnailURL: URL(string: "https://cdn.example/fun-preview.gif")
+        )
+
+        let outcome = await sut.execute(
+            shareURL: URL(string: "https://splick.app/post/123")!,
+            note: "😂",
+            targets: [.conversation(UUID())],
+            imageAttachments: [gif]
+        )
+
+        XCTAssertEqual(outcome.sentCount, 1)
+        let sent = await repo.sentMessages
+        XCTAssertEqual(sent.first?.attachments, [gif])
+        XCTAssertTrue(sent.first?.body.contains("😂") == true)
     }
 }

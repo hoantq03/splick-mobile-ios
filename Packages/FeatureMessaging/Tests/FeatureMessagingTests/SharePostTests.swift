@@ -259,4 +259,37 @@ final class SharePostTests: XCTestCase {
         XCTAssertFalse(sendFailed)
         XCTAssertNotNil(vm.errorMessage)
     }
+
+    @MainActor
+    func testSharePostViewModelEmojiAndGifDraft() async {
+        let shareUrl = URL(string: "https://splick.app/p/test-post")!
+        let repo = MockSharePostMessagingRepository()
+        let vm = SharePostViewModel(
+            shareURL: shareUrl,
+            currentUserId: UUID(),
+            shareUseCase: SharePostToChatUseCase(
+                repository: repo,
+                sendMessageUseCase: SendMessageUseCase(repository: repo)
+            ),
+            fetchConversationsUseCase: FetchConversationsUseCase(repository: repo),
+            friendsProvider: { [] },
+            searchUsersProvider: { _ in [] },
+            languageService: LanguageService(userDefaults: MockUserDefaultsService())
+        )
+
+        vm.insertEmoji("🎉")
+        XCTAssertEqual(vm.messageNote, "🎉")
+        vm.insertEmoji(":wave:")
+        XCTAssertEqual(vm.messageNote, "🎉 :wave:")
+
+        let gifURL = URL(string: "https://cdn.example/party.gif")!
+        vm.attachGif(stickerId: "klipy-1", url: gifURL)
+        XCTAssertEqual(vm.gifSubmissions.count, 1)
+        XCTAssertEqual(vm.gifSubmissions.first?.remoteURL, gifURL)
+        vm.attachGif(stickerId: "klipy-2", url: URL(string: "https://cdn.example/other.gif")!)
+        XCTAssertEqual(vm.gifSubmissions.count, 1)
+        XCTAssertEqual(vm.gifSubmissions.first?.remoteURL, URL(string: "https://cdn.example/other.gif"))
+        vm.removeGif(at: 0)
+        XCTAssertTrue(vm.gifSubmissions.isEmpty)
+    }
 }

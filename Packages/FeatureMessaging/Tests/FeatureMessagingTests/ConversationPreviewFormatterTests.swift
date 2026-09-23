@@ -37,6 +37,16 @@ final class ConversationPreviewFormatterTests: XCTestCase {
         XCTAssertEqual(ConversationPreviewFormatter.content(for: message), .gif)
     }
 
+    func test_content_returnsSharedPost_whenShareUrlIsSentWithGif() {
+        let postId = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let message = makeMessage(
+            body: "https://splick.app/post/\(postId.uuidString)",
+            imageAttachments: [makeAttachment(mediaId: nil, fileExtension: "gif")]
+        )
+
+        XCTAssertEqual(ConversationPreviewFormatter.content(for: message), .sharedPost)
+    }
+
     func test_senderLabel_returnsMe_whenCurrentUserSentMessage() {
         let message = makeMessage(senderId: Self.currentUserId, senderDisplayName: "Nguyễn Văn An")
 

@@ -1,4 +1,5 @@
 import Foundation
+import SplickDomain
 
 public enum SharePostChatTarget: Hashable, Sendable {
     case conversation(UUID)
@@ -32,7 +33,8 @@ public final class SharePostToChatUseCase: Sendable {
     public func execute(
         shareURL: URL,
         note: String,
-        targets: [SharePostChatTarget]
+        targets: [SharePostChatTarget],
+        imageAttachments: [MessageImageAttachment] = []
     ) async -> SharePostToChatOutcome {
         let uniqueTargets = Array(Set(targets))
         let body = SharePostMessageComposer.composeBody(note: note, shareURL: shareURL)
@@ -50,7 +52,8 @@ public final class SharePostToChatUseCase: Sendable {
                 _ = try await sendMessageUseCase.execute(
                     conversationId: conversationId,
                     body: body,
-                    clientMessageId: UUID()
+                    clientMessageId: UUID(),
+                    imageAttachments: imageAttachments
                 )
                 sentConversationIds.insert(conversationId)
                 sent += 1

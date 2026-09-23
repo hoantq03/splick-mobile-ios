@@ -343,7 +343,7 @@ struct MessageBubble: View {
     }
 
     private var postShare: PostSharePayload? {
-        guard !message.recalled, imageAttachments.isEmpty else { return nil }
+        guard !message.recalled else { return nil }
         return PostShareUrlParser.parse(message.body)
     }
 
@@ -351,32 +351,34 @@ struct MessageBubble: View {
         postShare?.note
     }
 
-    private var showsSharedPostCard: Bool {
-        postShare != nil
-    }
-
-    private var showsPlainTextBody: Bool {
-        guard hasTextBody else { return false }
-        guard let postShare else { return true }
-        return postShare.note != nil
-    }
-
     @ViewBuilder
     private var bubbleContent: some View {
         if message.recalled {
             recalledBubbleBody
                 .modifier(MessageDeliveryStatusAnchor(isActive: true))
+        } else if let share = postShare {
+            sharedPostBubble(share)
+                .overlay {
+                    if message.deliveryStatus == .failed {
+                        failedOverlay
+                    }
+                }
+                .contentShape(Rectangle())
+                .modifier(FailedMessageRetryTap(isFailed: message.deliveryStatus == .failed, onRetry: onRetry))
+                .splickWindowFullScreenCover(item: $imageViewerRoute) { route in
+                    attachmentFullscreenPreview(at: route.index)
+                }
         } else {
             VStack(alignment: .leading, spacing: MessageThreadRowLayout.quoteBodySpacing) {
                 if !imageAttachments.isEmpty {
                     if let preview = message.replyPreview {
                         mediaReplyPreview(preview)
                     }
-                    messageMediaAttachments
-                        .modifier(MessageDeliveryStatusAnchor(isActive: !hasTextBody && !showsSharedPostCard))
+                    messageMediaAttachments(maxWidth: resolvedContentMaxWidth)
+                        .modifier(MessageDeliveryStatusAnchor(isActive: !hasTextBody))
                 }
 
-                if showsSharedPostCard || hasTextBody || (message.replyPreview != nil && imageAttachments.isEmpty) {
+                if hasTextBody || (message.replyPreview != nil && imageAttachments.isEmpty) {
                     textBubbleBody
                         .modifier(MessageDeliveryStatusAnchor(isActive: true))
                 }
@@ -426,9 +428,60 @@ struct MessageBubble: View {
         )
     }
 
+    private func sharedPostBubble(_ share: PostSharePayload) -> some View {
+        let core = VStack(alignment: .leading, spacing: 10) {
+            SharedPostPreviewCard(
+                postId: share.postId,
+                isOutgoing: isOutgoing,
+                enabled: presentation == .threadRow,
+                maxWidth: textWrapMaxWidth
+            )
+            if !imageAttachments.isEmpty {
+                messageMediaAttachments(maxWidth: textWrapMaxWidth)
+            }
+            if let note = share.note {
+                shareNoteLabel(note)
+            }
+            if message.isEdited {
+                editedCaption
+            }
+        }
+
+        return core
+            .frame(maxWidth: textWrapMaxWidth, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, MessageThreadRowLayout.bubbleHorizontalPadding)
+            .padding(.vertical, MessageThreadRowLayout.bubbleVerticalPadding)
+            .frame(
+                minWidth: textReactionMinWidth,
+                maxWidth: resolvedContentMaxWidth,
+                alignment: .leading
+            )
+            .background(bubbleBackground)
+            .clipShape(bubbleShape)
+            .modifier(MessageDeliveryStatusAnchor(isActive: true))
+    }
+
+    private func shareNoteLabel(_ note: String) -> some View {
+        messageTextLabel(
+            text: note,
+            lineLimit: nil,
+            font: Self.isEmojiHeavy(note) ? .system(size: 34) : SplickTheme.Typography.body
+        )
+    }
+
+    private static func isEmojiHeavy(_ text: String) -> Bool {
+        let characters = text.filter { !$0.isWhitespace }
+        guard !characters.isEmpty else { return false }
+        return characters.allSatisfy(\.isShareNoteEmoji)
+    }
+
     private var textBubbleBody: some View {
         // Quote + text share one clipped bubble. Width hugs content up to wrap max.
-        let core = VStack(alignment: .leading, spacing: MessageThreadRowLayout.quoteBodySpacing) {
+        let core = VStack(
+            alignment: .leading,
+            spacing: MessageThreadRowLayout.quoteBodySpacing
+        ) {
             if imageAttachments.isEmpty, let preview = message.replyPreview {
                 MessageQuotedReplyView(
                     preview: preview,
@@ -439,20 +492,8 @@ struct MessageBubble: View {
                     onTap: quotedReplyTap
                 )
             }
-            if showsPlainTextBody {
-                if let note = shareNote {
-                    messageTextLabel(text: note, lineLimit: nil)
-                } else {
-                    messageTextLabel(text: message.body, lineLimit: nil)
-                }
-            }
-            if let share = postShare {
-                SharedPostPreviewCard(
-                    postId: share.postId,
-                    isOutgoing: isOutgoing,
-                    enabled: presentation == .threadRow,
-                    maxWidth: textWrapMaxWidth
-                )
+            if hasTextBody {
+                messageTextLabel(text: message.body, lineLimit: nil)
             }
             if message.isEdited {
                 editedCaption
@@ -486,14 +527,18 @@ struct MessageBubble: View {
         max(resolvedContentMaxWidth - MessageThreadRowLayout.bubbleHorizontalPadding * 2, 80)
     }
 
-    private func messageTextLabel(text: String, lineLimit: Int?) -> some View {
+    private func messageTextLabel(
+        text: String,
+        lineLimit: Int?,
+        font: Font = SplickTheme.Typography.body
+    ) -> some View {
         Text(
             MessageBodyLinkifier.attributed(
                 text,
                 isOutgoing: isOutgoing
             )
         )
-        .font(SplickTheme.Typography.body)
+        .font(font)
         .tint(isOutgoing ? .white : brandPalette.accent)
         .multilineTextAlignment(.leading)
         .lineLimit(lineLimit)
@@ -518,8 +563,7 @@ struct MessageBubble: View {
     }
 
     @ViewBuilder
-    private var messageMediaAttachments: some View {
-        let mediaWidth = resolvedContentMaxWidth
+    private func messageMediaAttachments(maxWidth mediaWidth: CGFloat) -> some View {
         if imageAttachments.count == 1,
            let attachment = imageAttachments.first,
            attachment.url.isLikelyAnimatedImage {
@@ -900,5 +944,15 @@ private struct MessageHighlightBounceModifier: ViewModifier {
             scale = 1
             lift = 0
         }
+    }
+}
+
+private extension Character {
+    var isShareNoteEmoji: Bool {
+        let scalars = unicodeScalars
+        return scalars.contains { scalar in
+            scalar.properties.isEmojiPresentation
+                || (scalar.properties.isEmoji && scalar.value > 0x238C)
+        } || (scalars.count > 1 && scalars.contains { $0.properties.isEmoji })
     }
 }
