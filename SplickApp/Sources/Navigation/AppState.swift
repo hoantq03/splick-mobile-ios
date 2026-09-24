@@ -494,4 +494,10 @@ enum Tab: String, CaseIterable {
         case .profile: return "person.circle.fill"
         }
     }
+
+    static let pagerTabs: [Tab] = [.feed, .expenses, .friends, .messages]
+
+    var isPagerTab: Bool {
+        Self.pagerTabs.contains(self)
+    }
 }

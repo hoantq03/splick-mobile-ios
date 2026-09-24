@@ -28,6 +28,9 @@ struct MainTabView: View {
     @EnvironmentObject private var pushNotificationCoordinator: PushNotificationCoordinator
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.splickBrandPalette) private var brandPalette
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.splickVisualTheme) private var splickVisualTheme
+    @Environment(\.splickColorTheme) private var splickColorTheme
     @StateObject private var tabBarChrome = TabBarScrollStateHolder()
     @State private var badgeCounts: TabBadgeCounts = .zero
     /// Drives heavy tab work (loads, chrome) — updated after the pager slide settles
@@ -74,6 +77,19 @@ struct MainTabView: View {
         cameraMounted
     }
 
+    /// Hosted pager roots refresh only when this changes — not when a chat thread
+    /// hides the tab bar or other chrome-only AppState publishes fire.
+    private var pagerContentEpoch: Int {
+        var hasher = Hasher()
+        hasher.combine(settledPagerTab)
+        hasher.combine(feedPlaybackActive)
+        hasher.combine(container.languageService.locale)
+        hasher.combine(colorScheme == .dark)
+        hasher.combine(splickVisualTheme)
+        hasher.combine(splickColorTheme)
+        return hasher.finalize()
+    }
+
     var body: some View {
         ZStack {
             // Fills the full screen (including safe areas) so system white never shows
@@ -87,6 +103,8 @@ struct MainTabView: View {
 
             MainTabContentPager(
                 selectedTab: $appState.selectedTab,
+                onSlideSettled: handlePagerSlideSettled,
+                contentEpoch: pagerContentEpoch,
                 feed: { feedTabContent },
                 expenses: { expensesTabContent },
                 friends: { friendsTabContent },
@@ -171,7 +189,14 @@ struct MainTabView: View {
                 )
             }
             .environment(\.fetchSharedPost) { postId in
-                try await container.fetchPostUseCase.execute(postId: postId)
+                if let cached = container.feedViewModel.post(byId: postId) {
+                    return cached
+                }
+                _ = await container.feedViewModel.ensurePostLoaded(id: postId)
+                if let loaded = container.feedViewModel.post(byId: postId) {
+                    return loaded
+                }
+                return try await container.fetchPostUseCase.execute(postId: postId)
             }
             .environment(\.openDirectMessage) { friendUserId in
                 guard let conversationId = await container.getOrCreateConversationId(friendUserId: friendUserId) else {
@@ -517,9 +542,10 @@ struct MainTabView: View {
     private func handleSelectedTabChange(_ tab: Tab) {
         Log.debug("Tab selected", category: .ui, metadata: ["tab": tab.rawValue])
         if tab != .feed {
-            feedPlaybackActive = false
+            FeedVideoPlaybackControl.suspend()
         }
         if tab == .camera {
+            feedPlaybackActive = false
             cameraMounted = true
             cameraExpanded = true
             return
@@ -527,21 +553,20 @@ struct MainTabView: View {
         if cameraExpanded || cameraMounted {
             cameraExpanded = false
         }
-        // Defer heavy tab activation + chrome reset until the pager slide has finished.
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(MainTabPagerMotion.settleMilliseconds))
-            guard appState.selectedTab == tab else { return }
-            settledPagerTab = tab
-            feedPlaybackActive = tab == .feed
-            if tab == .messages,
-               appState.isMessagingThreadPresented || appState.pendingMessagingNavigation != nil {
-                tabBarChrome.tabBar.hide(flushToBottom: true)
-            } else {
-                tabBarChrome.tabBar.reset()
-            }
-        }
         // Badge counts: startup apply + 30s polling + force refresh on mutations.
         // Do not refresh on every tab select — that races and floods /badge-counts.
+    }
+
+    private func handlePagerSlideSettled(_ tab: Tab) {
+        guard appState.selectedTab == tab else { return }
+        settledPagerTab = tab
+        feedPlaybackActive = tab == .feed
+        if tab == .messages,
+           appState.isMessagingThreadPresented || appState.pendingMessagingNavigation != nil {
+            tabBarChrome.tabBar.hide(flushToBottom: true)
+        } else {
+            tabBarChrome.tabBar.reset()
+        }
     }
 }
 
@@ -626,11 +651,13 @@ private struct MainTabBarChrome: View {
         .allowsHitTesting(
             isChromePresented
                 && hitTestingEnabled
+                && selectedTab != .camera
                 && cameraRevealProgress.value < 0.02
         )
         // Keep centered layout inside floatingClearance (matches cameraRevealBottomInset).
         // Skip clipping while revealing so the tab camera can lift above the bar.
         .frame(height: insetHeight)
+        .contentShape(Rectangle())
         .modifier(CameraRevealClipModifier(clip: !floatsAboveCameraWater))
         .animation(
             animationToken.animated ? TabBarMotion.slide : nil,
@@ -1636,188 +1663,6 @@ struct ProfileSettingsView: View {
         } catch {
             Log.error("Failed to sync device timezone: \(error)", category: .auth)
         }
-    }
-}
-
-// MARK: - Main tab pager
-
-private enum MainTabPagerMotion {
-    static let slide = SplickPageSlideMotion.animation
-    static let settleMilliseconds: UInt64 = 180
-}
-
-/// Interpolates only the X translation at the render level — avoids SwiftUI
-/// re-animating child layout on every pager tick (main hitch source).
-private struct MainTabPagerSlideOffset: GeometryEffect {
-    var offsetX: CGFloat
-
-    var animatableData: CGFloat {
-        get { offsetX }
-        set { offsetX = newValue }
-    }
-
-    func effectValue(size: CGSize) -> ProjectionTransform {
-        ProjectionTransform(CGAffineTransform(translationX: offsetX, y: 0))
-    }
-}
-
-private extension Tab {
-    static let pagerTabs: [Tab] = [.feed, .expenses, .friends, .messages]
-
-    var isPagerTab: Bool {
-        Self.pagerTabs.contains(self)
-    }
-}
-
-private struct MainTabContentPager<Feed: View, Expenses: View, Friends: View, Messages: View>: View {
-    @Binding var selectedTab: Tab
-    @ViewBuilder var feed: () -> Feed
-    @ViewBuilder var expenses: () -> Expenses
-    @ViewBuilder var friends: () -> Friends
-    @ViewBuilder var messages: () -> Messages
-
-    var body: some View {
-        MainTabOffsetPager(
-            selectedTab: $selectedTab,
-            feed: feed,
-            expenses: expenses,
-            friends: friends,
-            messages: messages
-        )
-    }
-}
-
-private struct MainTabOffsetPager<Feed: View, Expenses: View, Friends: View, Messages: View>: View {
-    @Binding var selectedTab: Tab
-    @ViewBuilder var feed: () -> Feed
-    @ViewBuilder var expenses: () -> Expenses
-    @ViewBuilder var friends: () -> Friends
-    @ViewBuilder var messages: () -> Messages
-
-    @State private var pagerIndex: Int = 0
-    @State private var activatedTabs: Set<Tab> = [.feed]
-    /// Bumps on every tab request so a deferred slide can be cancelled by a newer tap.
-    @State private var transitionGeneration: Int = 0
-    /// Hit-testing follows the page still on screen until the slide settles.
-    /// `pagerIndex` jumps immediately inside `withAnimation`, so using it for hits
-    /// would dead-zone the visible outgoing page mid-transition.
-    @State private var hitTestPagerIndex: Int = 0
-
-    var body: some View {
-        GeometryReader { proxy in
-            let width = max(proxy.size.width, 1)
-            let pageCount = CGFloat(Tab.pagerTabs.count)
-
-            ZStack(alignment: .topLeading) {
-                HStack(spacing: 0) {
-                    tabPage(.feed, width: width, content: feed)
-                    tabPage(.expenses, width: width, content: expenses)
-                    tabPage(.friends, width: width, content: friends)
-                    tabPage(.messages, width: width, content: messages)
-                }
-                .frame(width: width * pageCount, alignment: .leading)
-                .modifier(MainTabPagerSlideOffset(offsetX: -CGFloat(pagerIndex) * width))
-            }
-        }
-        .ignoresSafeArea(edges: [.top, .bottom])
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear {
-            let initial = selectedTab.isPagerTab ? selectedTab : .feed
-            let initialIndex = Tab.pagerTabs.firstIndex(of: initial) ?? 0
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                activatedTabs.insert(initial)
-                pagerIndex = initialIndex
-                hitTestPagerIndex = initialIndex
-            }
-            prewarmRemainingTabs()
-        }
-        .onChange(of: selectedTab) { newTab in
-            guard newTab.isPagerTab else { return }
-            moveToPagerTab(newTab)
-        }
-    }
-
-    /// Mount the other pager tabs after first paint so later switches never pay a mount hitch mid-gesture.
-    private func prewarmRemainingTabs() {
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(400))
-            guard activatedTabs.count < Tab.pagerTabs.count else { return }
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                activatedTabs.formUnion(Tab.pagerTabs)
-            }
-        }
-    }
-
-    private func moveToPagerTab(_ newTab: Tab) {
-        let idx = Tab.pagerTabs.firstIndex(of: newTab) ?? 0
-        guard idx != pagerIndex else {
-            activatedTabs.insert(newTab)
-            hitTestPagerIndex = idx
-            return
-        }
-
-        let from = pagerIndex
-        let range = min(from, idx)...max(from, idx)
-        let needsMount = range.contains { !activatedTabs.contains(Tab.pagerTabs[$0]) }
-
-        transitionGeneration += 1
-        let generation = transitionGeneration
-        // Keep hits on the outgoing (still visible) page until the slide settles.
-        hitTestPagerIndex = from
-
-        if needsMount {
-            // Mount destination first without sliding, then ease the page on the next turn.
-            var mountTransaction = Transaction()
-            mountTransaction.disablesAnimations = true
-            withTransaction(mountTransaction) {
-                for i in range {
-                    activatedTabs.insert(Tab.pagerTabs[i])
-                }
-            }
-            Task { @MainActor in
-                await Task.yield()
-                guard generation == transitionGeneration else { return }
-                withAnimation(MainTabPagerMotion.slide) {
-                    pagerIndex = idx
-                }
-                scheduleHitTestSettle(to: idx, generation: generation)
-            }
-        } else {
-            withAnimation(MainTabPagerMotion.slide) {
-                pagerIndex = idx
-            }
-            scheduleHitTestSettle(to: idx, generation: generation)
-        }
-    }
-
-    private func scheduleHitTestSettle(to idx: Int, generation: Int) {
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(MainTabPagerMotion.settleMilliseconds))
-            guard generation == transitionGeneration else { return }
-            hitTestPagerIndex = idx
-        }
-    }
-
-    @ViewBuilder
-    private func tabPage<T: View>(_ tab: Tab, width: CGFloat, @ViewBuilder content: () -> T) -> some View {
-        Group {
-            if activatedTabs.contains(tab) {
-                content()
-                    // Pager `withAnimation` must not leak into feed/messages layout.
-                    .transaction { $0.animation = nil }
-            } else {
-                // Keep a stable-sized placeholder so HStack geometry stays correct
-                // before the tab is visited for the first time.
-                Color.clear
-            }
-        }
-        .frame(width: width)
-        .frame(maxHeight: .infinity)
-        .allowsHitTesting((Tab.pagerTabs.firstIndex(of: tab) ?? -1) == hitTestPagerIndex)
     }
 }
 
