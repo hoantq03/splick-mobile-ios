@@ -70,9 +70,6 @@ public final class CreatePostComposeViewModel: ObservableObject {
     @Published private(set) var selectedCompanionGroups: [Group] = []
     @Published private(set) var expandedCompanionGroupIds: Set<UUID> = []
     @Published private(set) var loadingCompanionGroupIds: Set<UUID> = []
-    @Published var enableBillSplit = false {
-        didSet { rebalanceBillSplitShares() }
-    }
     @Published var autoReminderEnabled = true
     @Published var billTotalText = "" {
         didSet { rebalanceBillSplitShares() }
@@ -312,10 +309,8 @@ public final class CreatePostComposeViewModel: ObservableObject {
         }
 
         selectedCompanions.forEach(append)
-        if enableBillSplit {
-            selectedCompanionGroups.forEach { group in
-                group.members.forEach(append)
-            }
+        selectedCompanionGroups.forEach { group in
+            group.members.forEach(append)
         }
 
         return participants
@@ -485,8 +480,17 @@ public final class CreatePostComposeViewModel: ObservableObject {
         VNDMoneyFormat.parse(billTotalText)
     }
 
+    var enableBillSplit: Bool {
+        guard hasBillSplitCounterparts, let total = parsedBillTotal else { return false }
+        return total > 0
+    }
+
+    var hasBillSplitCounterparts: Bool {
+        !selectedCompanions.isEmpty || !selectedCompanionGroups.isEmpty || !pendingGuests.isEmpty
+    }
+
     var billTotalAmountError: String? {
-        guard enableBillSplit, let total = parsedBillTotal else { return nil }
+        guard let total = parsedBillTotal else { return nil }
         guard !VndAmountRules.isAtLeastMinimum(total) else { return nil }
         return languageService.text(.feedCreateBillAmountMinimum)
     }

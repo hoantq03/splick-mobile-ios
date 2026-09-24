@@ -156,7 +156,6 @@ final class CreatePostComposeViewModelTests: XCTestCase {
         vm.addCompanion(friend)
         vm.addPendingGuest(displayName: "Guest 1", email: "guest1@example.com")
 
-        vm.enableBillSplit = true
         vm.billTotalText = "300000"
 
         XCTAssertEqual(vm.parsedBillTotal, Decimal(300000))
@@ -178,7 +177,6 @@ final class CreatePostComposeViewModelTests: XCTestCase {
         let friend = UserSummary(id: friendId, username: "friend1", displayName: "Friend 1", avatarURL: nil)
         vm.addCompanion(friend)
 
-        vm.enableBillSplit = true
         vm.billTotalText = "1000000"
         vm.splitMode = .percentage
         vm.setPercentage(userId: currentUser.id, raw: "25")
@@ -331,15 +329,13 @@ final class CreatePostComposeViewModelTests: XCTestCase {
         XCTAssertEqual(submit2?.input.mediaItems.count, 1)
         XCTAssertEqual(submit2?.input.feedKind, .checkIn)
 
-        // Bill split enabled without companions -> Fails
-        vm.enableBillSplit = true
+        vm.billTotalText = "150000"
         let submit3 = vm.prepareSubmit()
-        XCTAssertNil(submit3)
+        XCTAssertNotNil(submit3)
+        XCTAssertEqual(submit3?.input.feedKind, .checkIn)
 
-        // Add companion & valid bill total -> Success
         let companion = UserSummary(id: UUID(), username: "comp", displayName: "Companion", avatarURL: nil)
         vm.addCompanion(companion)
-        vm.billTotalText = "150000"
         let submit4 = vm.prepareSubmit()
         XCTAssertNotNil(submit4)
         XCTAssertEqual(submit4?.input.feedKind, .shareBill)
