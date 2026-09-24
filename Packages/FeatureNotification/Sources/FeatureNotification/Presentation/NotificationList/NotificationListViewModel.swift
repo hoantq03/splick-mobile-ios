@@ -214,7 +214,7 @@ public final class NotificationListViewModel: ObservableObject {
         return target
     }
 
-    public func markMessageNotificationsRead(conversationId: UUID) async {
+    public func markMessageNotificationsRead(conversationId: UUID, refreshBadges: Bool = true) async {
         let unreadMessageNotifications = notifications.filter {
             !$0.isRead
                 && $0.type.isMessagingNotification
@@ -237,7 +237,9 @@ public final class NotificationListViewModel: ObservableObject {
             }
         }
 
-        await onBadgeCountsChanged?()
+        if refreshBadges {
+            await onBadgeCountsChanged?()
+        }
     }
 
     public func markInboxSeen() async {
