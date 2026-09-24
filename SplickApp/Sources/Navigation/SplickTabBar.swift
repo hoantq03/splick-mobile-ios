@@ -139,7 +139,7 @@ private struct ModernSplickTabBar: View {
         } label: {
             tabLabel(tab: tab, isSelected: isSelected, badge: badge)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(TabBarPressDownButtonStyle())
         .frame(maxWidth: .infinity, minHeight: 48)
         .contentShape(Rectangle())
         .accessibilityLabel(tab.localizedTitle(using: languageService))
@@ -281,7 +281,7 @@ private struct LegacySplickTabBar: View {
         } label: {
             tabLabel(tab: tab, isSelected: isSelected, badge: badge)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(TabBarPressDownButtonStyle())
         .frame(maxWidth: .infinity, minHeight: 48)
         .contentShape(Rectangle())
         .accessibilityLabel(tab.localizedTitle(using: languageService))
@@ -330,7 +330,7 @@ private struct TabBarCameraButton: View {
         Button(action: action) {
             SplickCameraCaptureButton(size: size)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(TabBarPressDownButtonStyle())
         .contentShape(Circle())
         .accessibilityLabel(title)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
@@ -375,5 +375,34 @@ struct SplickTabBar: View, Equatable {
                 )
             }
         }
+    }
+}
+
+/// System `Button` waits for touch-up (and for competing pans to fail). Tab switches
+/// fire on press so the pager can start sliding on the same frame as the finger.
+private struct TabBarPressDownButtonStyle: PrimitiveButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        TabBarPressDownButton(configuration: configuration)
+    }
+}
+
+private struct TabBarPressDownButton: View {
+    let configuration: PrimitiveButtonStyle.Configuration
+    @State private var didFire = false
+
+    var body: some View {
+        configuration.label
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in
+                        guard !didFire else { return }
+                        didFire = true
+                        configuration.trigger()
+                    }
+                    .onEnded { _ in
+                        didFire = false
+                    }
+            )
     }
 }
