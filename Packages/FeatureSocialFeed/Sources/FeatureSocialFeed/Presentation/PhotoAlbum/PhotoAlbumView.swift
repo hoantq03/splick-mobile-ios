@@ -340,40 +340,29 @@ private struct AlbumPhotoCell: View {
     let onTap: () -> Void
     let onLongPress: () -> Void
 
-    @State private var didLongPress = false
-
     private var cellShape: RoundedRectangle {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
     }
 
     var body: some View {
-        Button {
-            guard !didLongPress else {
-                didLongPress = false
-                return
+        Color.clear
+            .aspectRatio(1, contentMode: .fit)
+            .overlay { photoContent }
+            .overlay {
+                if isLoadingPreview {
+                    Color.black.opacity(0.28)
+                    SplickSpinner(usesBrandColors: false)
+                }
             }
-            onTap()
-        } label: {
-            Color.clear
-                .aspectRatio(1, contentMode: .fit)
-                .overlay { photoContent }
-                .overlay {
-                    if isLoadingPreview {
-                        Color.black.opacity(0.28)
-                        SplickSpinner(usesBrandColors: false)
-                    }
-                }
-                .clipShape(cellShape)
-                .contentShape(cellShape)
-        }
-        .buttonStyle(.plain)
-        .simultaneousGesture(
-            LongPressGesture(minimumDuration: 0.45)
-                .onEnded { _ in
-                    didLongPress = true
-                    onLongPress()
-                }
-        )
+            .clipShape(cellShape)
+            .contentShape(cellShape)
+            .overlay {
+                // Plain hit target — a Button or LongPressGesture claims the touch,
+                // so a drag that starts on a thumbnail never reaches the album scroll
+                // view or the segment pager.
+                AlbumPhotoInteractionCatcher(onTap: onTap, onLongPress: onLongPress)
+            }
+            .accessibilityAddTraits(.isButton)
     }
 
     @ViewBuilder
@@ -390,5 +379,133 @@ private struct AlbumPhotoCell: View {
                 Image(systemName: "photo")
                     .foregroundStyle(SplickTheme.Colors.textTertiary)
             }
+    }
+}
+
+/// Records tap and long-press with raw touches so parent pan gestures keep the drag.
+private struct AlbumPhotoInteractionCatcher: UIViewRepresentable {
+    var onTap: () -> Void
+    var onLongPress: () -> Void
+
+    func makeUIView(context: Context) -> AlbumPhotoInteractionView {
+        let view = AlbumPhotoInteractionView()
+        view.onTap = onTap
+        view.onLongPress = onLongPress
+        return view
+    }
+
+    func updateUIView(_ view: AlbumPhotoInteractionView, context: Context) {
+        view.onTap = onTap
+        view.onLongPress = onLongPress
+    }
+
+    func sizeThatFits(
+        _ proposal: ProposedViewSize,
+        uiView: AlbumPhotoInteractionView,
+        context: Context
+    ) -> CGSize? {
+        CGSize(width: proposal.width ?? 0, height: proposal.height ?? 0)
+    }
+}
+
+private final class AlbumPhotoInteractionView: UIView {
+    var onTap: (() -> Void)?
+    var onLongPress: (() -> Void)?
+
+    private var longPressTimer: Timer?
+    private var originInWindow: CGPoint = .zero
+    private var movedBeyondSlop = false
+    private var didLongPress = false
+
+    private static let movementSlop: CGFloat = 12
+    private static let longPressDuration: TimeInterval = 0.45
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isOpaque = false
+        backgroundColor = .clear
+        isAccessibilityElement = false
+        isUserInteractionEnabled = true
+        setContentHuggingPriority(.fittingSizeLevel, for: .horizontal)
+        setContentHuggingPriority(.fittingSizeLevel, for: .vertical)
+        setContentCompressionResistancePriority(.fittingSizeLevel, for: .horizontal)
+        setContentCompressionResistancePriority(.fittingSizeLevel, for: .vertical)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { nil }
+
+    deinit {
+        longPressTimer?.invalidate()
+    }
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesBegan(touches, with: event)
+        guard let touch = touches.first else { return }
+        originInWindow = locationInWindow(of: touch)
+        movedBeyondSlop = false
+        didLongPress = false
+        scheduleLongPress()
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesMoved(touches, with: event)
+        guard let touch = touches.first else { return }
+        noteMovement(of: touch)
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesEnded(touches, with: event)
+        if let touch = touches.first {
+            noteMovement(of: touch)
+        }
+        let shouldTap = !movedBeyondSlop && !didLongPress
+        cancelLongPress()
+        if shouldTap {
+            onTap?()
+        }
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesCancelled(touches, with: event)
+        cancelLongPress()
+    }
+
+    private func locationInWindow(of touch: UITouch) -> CGPoint {
+        if let window {
+            return touch.location(in: window)
+        }
+        return touch.location(in: self)
+    }
+
+    private func noteMovement(of touch: UITouch) {
+        guard !movedBeyondSlop else { return }
+        let point = locationInWindow(of: touch)
+        let dx = point.x - originInWindow.x
+        let dy = point.y - originInWindow.y
+        guard dx * dx + dy * dy > Self.movementSlop * Self.movementSlop else { return }
+        movedBeyondSlop = true
+        cancelLongPress()
+    }
+
+    private func scheduleLongPress() {
+        cancelLongPress()
+        let timer = Timer(timeInterval: Self.longPressDuration, repeats: false) { [weak self] _ in
+            self?.fireLongPress()
+        }
+        longPressTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func fireLongPress() {
+        longPressTimer = nil
+        guard !movedBeyondSlop, !didLongPress else { return }
+        didLongPress = true
+        onLongPress?()
+    }
+
+    private func cancelLongPress() {
+        longPressTimer?.invalidate()
+        longPressTimer = nil
     }
 }
