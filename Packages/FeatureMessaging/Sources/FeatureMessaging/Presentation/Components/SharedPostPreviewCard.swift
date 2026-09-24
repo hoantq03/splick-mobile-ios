@@ -36,6 +36,8 @@ struct SharedPostPreviewCard: View {
             .accessibilityLabel(languageService.text(.postPreviewAccessibility))
             .accessibilityAddTraits(.isButton)
             .task(id: postId) {
+                try? await Task.sleep(for: .milliseconds(350))
+                guard !Task.isCancelled else { return }
                 await load()
             }
     }
