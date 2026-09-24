@@ -84,6 +84,7 @@ struct FeedContentPager<Feed: View, Album: View, Streak: View>: View {
                 feedTabIsActive: feedTabIsActive,
                 sameTabTapHandlingEnabled: sameTabTapHandlingEnabled,
                 pullToRefreshActive: pullToRefreshActive,
+                tabBarVisible: tabBarScrollState?.isVisible ?? true,
                 feed: {
                     feed().modifier(pagerEnvironment)
                 },
@@ -179,6 +180,8 @@ private final class _PagerGestureCoordinator: NSObject, UIGestureRecognizerDeleg
     var onSelectionChanged: ((FeedContentSegment) -> Void)?
     var onInteractiveDragChanged: ((CGFloat) -> Void)?
     var onSettled: ((_ targetIndex: Int, _ adjustedOffset: CGFloat, _ response: CGFloat, _ damping: CGFloat) -> Void)?
+    /// When the floating tab bar is on-screen, ignore pans in its clearance so taps are not eaten.
+    var tabBarIsVisible: () -> Bool = { true }
 
     private weak var hostView: UIView?
     private var dragAxis: Axis?
@@ -259,6 +262,13 @@ private final class _PagerGestureCoordinator: NSObject, UIGestureRecognizerDeleg
         scrollLockStates = []
     }
 
+    func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        guard let hostView else { return true }
+        guard tabBarIsVisible() else { return true }
+        let point = touch.location(in: hostView)
+        return point.y <= hostView.bounds.height - SplickTabBarMetrics.floatingClearance
+    }
+
     func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
         guard let pan = recognizer as? UIPanGestureRecognizer,
               let hostView = pan.view else { return true }
@@ -321,6 +331,7 @@ private struct _PagerHostRep<Feed: View, Album: View, Streak: View>: UIViewContr
     let feedTabIsActive: Bool
     let sameTabTapHandlingEnabled: Bool
     let pullToRefreshActive: Bool
+    let tabBarVisible: Bool
     let feed: () -> Feed
     let album: () -> Album
     let streak: () -> Streak
@@ -354,6 +365,7 @@ private struct _PagerHostRep<Feed: View, Album: View, Streak: View>: UIViewContr
         context: Context
     ) {
         let coordinator = context.coordinator
+        coordinator.tabBarIsVisible = { [tabBarVisible] in tabBarVisible }
         coordinator.onSelectionChanged = { segment in
             selection = segment
         }
@@ -417,6 +429,9 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
     private var currentContentRevision: Int?
     /// Lazy-mount segment UI; feed (index 1) is mounted on first layout.
     private var mountedSegmentIndices: Set<Int> = []
+    private var lastLayoutSize: CGSize = .zero
+    private var isDragging = false
+    private var isSettling = false
 
     init(
         coordinator: _PagerGestureCoordinator,
@@ -454,10 +469,14 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
 
         bindCoordinatorCallbacks()
         embedHosting()
+        prewarmNeighborSegments()
     }
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        let size = pagerSize
+        guard size != lastLayoutSize else { return }
+        lastLayoutSize = size
         applyLayout()
     }
 
@@ -546,15 +565,32 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
         ]
     }
 
+    private var pagerSize: CGSize {
+        CGSize(
+            width: max(currentWidth, view.bounds.width, 1),
+            height: max(currentHeight, view.bounds.height, 1)
+        )
+    }
+
     private func applyLayout() {
         guard isViewLoaded else { return }
-        let width = max(currentWidth, view.bounds.width, 1)
-        let height = max(currentHeight, view.bounds.height, 1)
+        let size = pagerSize
+        let bounds = CGRect(origin: .zero, size: size)
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let translationUnit = size.width
+        let drag = coordinator.state.dragOffset
+        let index = coordinator.state.currentIndex
 
-        for (index, pageView) in hostedPageViews.enumerated() {
+        for (pageIndex, pageView) in hostedPageViews.enumerated() {
             guard let pageView else { continue }
-            let x = CGFloat(index - coordinator.state.currentIndex) * width + coordinator.state.dragOffset
-            pageView.frame = CGRect(x: x, y: 0, width: width, height: height)
+            if pageView.bounds.size != size {
+                pageView.bounds = bounds
+                pageView.center = center
+            }
+            pageView.transform = CGAffineTransform(
+                translationX: CGFloat(pageIndex - index) * translationUnit + drag,
+                y: 0
+            )
         }
     }
 
@@ -569,12 +605,17 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
         applyLayout()
 
         coordinator.state.dragOffset = 0
+        isSettling = true
         UIView.animate(
             withDuration: SplickPageSlideMotion.duration,
             delay: 0,
             options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseOut]
         ) { [weak self] in
             self?.applyLayout()
+        } completion: { [weak self] _ in
+            guard let self else { return }
+            self.isSettling = false
+            self.prewarmNeighborSegments()
         }
     }
 
@@ -640,7 +681,18 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
         }
 
         if geometryChanged {
+            lastLayoutSize = pagerSize
             applyLayout()
+        }
+    }
+
+    private func prewarmNeighborSegments() {
+        let current = coordinator.state.currentIndex
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.isDragging, !self.isSettling else { return }
+            self.ensureSegmentMounted(at: max(current - 1, 0))
+            self.ensureSegmentMounted(at: min(current + 1, feedSegmentOrder.count - 1))
+            self.applyLayout()
         }
     }
 
@@ -650,15 +702,18 @@ private final class _PagerContainerVC<Feed: View, Album: View, Streak: View>: UI
 
         switch pan.state {
         case .began:
+            isDragging = true
             coordinator.handleBegin()
             let current = coordinator.state.currentIndex
             ensureSegmentMounted(at: max(current - 1, 0))
             ensureSegmentMounted(at: min(current + 1, feedSegmentOrder.count - 1))
+            applyLayout()
         case .changed:
             coordinator.handleChanged(
                 translation: CGPoint(x: translation.x, y: translation.y)
             )
         case .ended, .cancelled:
+            isDragging = false
             coordinator.handleEnded(
                 translation: CGPoint(x: translation.x, y: translation.y),
                 velocity: CGPoint(x: velocity.x, y: velocity.y),
