@@ -3,6 +3,15 @@ import UIKit
 import AVFoundation
 import Common
 
+/// Stops feed autoplay without rebuilding `FeedView` on the tab-tap frame.
+public enum FeedVideoPlaybackControl {
+    public static let suspendNotification = Notification.Name("splick.feedVideo.suspend")
+
+    public static func suspend() {
+        NotificationCenter.default.post(name: suspendNotification, object: nil)
+    }
+}
+
 /// Autoplay the single on-screen feed video that covers the most viewport.
 @MainActor
 final class FeedVideoPlaybackCoordinator: ObservableObject {

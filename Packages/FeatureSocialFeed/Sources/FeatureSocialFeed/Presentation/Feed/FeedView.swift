@@ -224,6 +224,9 @@ public struct FeedView: View {
                 videoCoordinator.suspendPlayback()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: FeedVideoPlaybackControl.suspendNotification)) { _ in
+            videoCoordinator.suspendPlayback()
+        }
         .onChange(of: selectedSegment) { segment in
             if segment != .feed {
                 videoCoordinator.suspendPlayback()
