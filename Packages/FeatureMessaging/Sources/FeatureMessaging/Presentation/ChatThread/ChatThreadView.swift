@@ -356,13 +356,13 @@ public struct ChatThreadView: View {
         .onChange(of: inputText) { newValue in
             viewModel.onComposerTextChanged(newValue)
         }
-        .task {
-            async let messages: Void = viewModel.loadIfNeeded()
+        .task(id: viewModel.conversationId) {
+            await viewModel.loadIfNeeded()
             async let relationship: Void = relationshipViewModel.loadIfNeeded()
             async let groupRole: Void = viewModel.refreshGroupViewerRole(
                 isGroup: (groupConversation ?? conversation)?.isGroup == true
             )
-            _ = await (messages, relationship, groupRole)
+            _ = await (relationship, groupRole)
         }
     }
 

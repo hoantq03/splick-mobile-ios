@@ -78,6 +78,8 @@ public final class ChatThreadViewModel: ObservableObject {
     private var highlightClearTask: Task<Void, Never>?
     private var markReadTask: Task<Void, Never>?
     private var gapFillTask: Task<Void, Never>?
+    private var isLoadInFlight = false
+    private var hasCompletedInitialNetworkSync = false
     private var nearBottomFalseTask: Task<Void, Never>?
     private var floatSwayByMessageId: [UUID: CGFloat] = [:]
     private var pendingBodiesByClientId: [UUID: String] = [:]
@@ -204,7 +206,7 @@ public final class ChatThreadViewModel: ObservableObject {
     }
 
     public func loadIfNeeded() async {
-        guard !isLoading else { return }
+        guard !hasCompletedInitialNetworkSync else { return }
         await load()
     }
 
@@ -297,9 +299,9 @@ public final class ChatThreadViewModel: ObservableObject {
     }
 
     public func load() async {
-        guard !isLoading else { return }
-
-        Task { await onConversationRead?(conversationId) }
+        guard !isLoadInFlight else { return }
+        isLoadInFlight = true
+        defer { isLoadInFlight = false }
 
         // Paint cached thread immediately, then reconcile with the network.
         let paintedFromCache = applyCachedThreadIfAvailable()
@@ -338,10 +340,12 @@ public final class ChatThreadViewModel: ObservableObject {
                     sendDeliveryAck(for: lastId)
                 }
             }
+            hasCompletedInitialNetworkSync = true
         } catch {
             Log.error(error, category: .network, metadata: ["action": "loadMessages"])
             if case .loaded = state {
                 restorePendingMessages()
+                hasCompletedInitialNetworkSync = true
                 return
             }
             state = .failed(languageService.localizedMessage(for: error))
@@ -822,7 +826,6 @@ public final class ChatThreadViewModel: ObservableObject {
         if requireNearBottom, !isNearBottom { return }
         if lastMarkedReadMessageId == upToMessageId { return }
 
-        Task { await onConversationRead?(conversationId) }
         markReadTask?.cancel()
         markReadTask = Task { [weak self] in
             try? await Task.sleep(for: Self.markReadDebounce)
@@ -1194,6 +1197,7 @@ public final class ChatThreadViewModel: ObservableObject {
                 guard let self else { return }
                 switch event {
                 case .connected:
+                    guard self.hasCompletedInitialNetworkSync else { return }
                     self.scheduleGapFill()
 
                 case .newMessage(let convId, let msg) where convId == self.conversationId:
