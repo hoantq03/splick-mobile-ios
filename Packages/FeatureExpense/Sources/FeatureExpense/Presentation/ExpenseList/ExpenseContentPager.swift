@@ -51,6 +51,7 @@ struct ExpenseContentPager<History: View, Overview: View, Friends: View>: View {
                 height: height,
                 contentRevision: contentRevision,
                 pullToRefreshActive: pullToRefreshActive,
+                tabBarVisible: tabBarScrollState?.isVisible ?? true,
                 history: {
                     history().modifier(
                         ExpensePagerEnvironmentForwarding(
@@ -183,6 +184,7 @@ private final class ExpensePagerGestureCoordinator: NSObject, UIGestureRecognize
     var onSelectionChanged: ((ExpenseContentSegment) -> Void)?
     var onInteractiveDragChanged: ((CGFloat) -> Void)?
     var onSettled: ((_ targetIndex: Int, _ adjustedOffset: CGFloat) -> Void)?
+    var tabBarIsVisible: () -> Bool = { true }
 
     private weak var hostView: UIView?
     private var dragAxis: Axis?
@@ -253,6 +255,13 @@ private final class ExpensePagerGestureCoordinator: NSObject, UIGestureRecognize
         scrollLockStates = []
     }
 
+    func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        guard let hostView else { return true }
+        guard tabBarIsVisible() else { return true }
+        let point = touch.location(in: hostView)
+        return point.y <= hostView.bounds.height - SplickTabBarMetrics.floatingClearance
+    }
+
     func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
         guard let pan = recognizer as? UIPanGestureRecognizer,
               let hostView = pan.view else { return true }
@@ -307,6 +316,7 @@ private struct ExpensePagerHostRep<History: View, Overview: View, Friends: View>
     let height: CGFloat
     let contentRevision: Int
     let pullToRefreshActive: Bool
+    let tabBarVisible: Bool
     let history: () -> History
     let overview: () -> Overview
     let friends: () -> Friends
@@ -337,6 +347,7 @@ private struct ExpensePagerHostRep<History: View, Overview: View, Friends: View>
         context: Context
     ) {
         let coordinator = context.coordinator
+        coordinator.tabBarIsVisible = { [tabBarVisible] in tabBarVisible }
         coordinator.onSelectionChanged = { selection = $0 }
 
         let idx = expenseSegmentStripOrder.firstIndex(of: selection) ?? 1
@@ -390,6 +401,9 @@ private final class ExpensePagerContainerVC<History: View, Overview: View, Frien
     private var currentHeight: CGFloat
     private var currentContentRevision: Int?
     private var mountedIndices: Set<Int> = []
+    private var lastLayoutSize: CGSize = .zero
+    private var isDragging = false
+    private var isSettling = false
 
     init(
         coordinator: ExpensePagerGestureCoordinator,
@@ -427,10 +441,14 @@ private final class ExpensePagerContainerVC<History: View, Overview: View, Frien
         coordinator.attachHostView(view)
         ensureMounted(at: expenseSegmentStripOrder.firstIndex(of: activityState.chrome.activeSelection) ?? 1)
         applyLayout()
+        prewarmNeighbors()
     }
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        let size = pagerSize
+        guard size != lastLayoutSize else { return }
+        lastLayoutSize = size
         applyLayout()
     }
 
@@ -505,15 +523,32 @@ private final class ExpensePagerContainerVC<History: View, Overview: View, Frien
         [historyHosting?.view, overviewHosting?.view, friendsHosting?.view]
     }
 
+    private var pagerSize: CGSize {
+        CGSize(
+            width: max(currentWidth, view.bounds.width, 1),
+            height: max(currentHeight, view.bounds.height, 1)
+        )
+    }
+
     private func applyLayout() {
         guard isViewLoaded else { return }
-        let width = max(currentWidth, view.bounds.width, 1)
-        let height = max(currentHeight, view.bounds.height, 1)
+        let size = pagerSize
+        let bounds = CGRect(origin: .zero, size: size)
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let translationUnit = size.width
+        let drag = coordinator.state.dragOffset
+        let index = coordinator.state.currentIndex
 
-        for (index, pageView) in hostedPageViews.enumerated() {
+        for (pageIndex, pageView) in hostedPageViews.enumerated() {
             guard let pageView else { continue }
-            let x = CGFloat(index - coordinator.state.currentIndex) * width + coordinator.state.dragOffset
-            pageView.frame = CGRect(x: x, y: 0, width: width, height: height)
+            if pageView.bounds.size != size {
+                pageView.bounds = bounds
+                pageView.center = center
+            }
+            pageView.transform = CGAffineTransform(
+                translationX: CGFloat(pageIndex - index) * translationUnit + drag,
+                y: 0
+            )
         }
     }
 
@@ -523,12 +558,17 @@ private final class ExpensePagerContainerVC<History: View, Overview: View, Frien
         applyLayout()
 
         coordinator.state.dragOffset = 0
+        isSettling = true
         UIView.animate(
             withDuration: ExpensePagerMotion.settleDuration,
             delay: 0,
             options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseOut]
         ) { [weak self] in
             self?.applyLayout()
+        } completion: { [weak self] _ in
+            guard let self else { return }
+            self.isSettling = false
+            self.prewarmNeighbors()
         }
     }
 
@@ -584,7 +624,18 @@ private final class ExpensePagerContainerVC<History: View, Overview: View, Frien
         }
 
         if geometryChanged {
+            lastLayoutSize = pagerSize
             applyLayout()
+        }
+    }
+
+    private func prewarmNeighbors() {
+        let current = coordinator.state.currentIndex
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.isDragging, !self.isSettling else { return }
+            self.ensureMounted(at: max(current - 1, 0))
+            self.ensureMounted(at: min(current + 1, expenseSegmentStripOrder.count - 1))
+            self.applyLayout()
         }
     }
 
@@ -594,13 +645,16 @@ private final class ExpensePagerContainerVC<History: View, Overview: View, Frien
 
         switch pan.state {
         case .began:
+            isDragging = true
             coordinator.handleBegin()
             let current = coordinator.state.currentIndex
             ensureMounted(at: max(current - 1, 0))
             ensureMounted(at: min(current + 1, expenseSegmentStripOrder.count - 1))
+            applyLayout()
         case .changed:
             coordinator.handleChanged(translation: CGPoint(x: translation.x, y: translation.y))
         case .ended, .cancelled:
+            isDragging = false
             coordinator.handleEnded(
                 translation: CGPoint(x: translation.x, y: translation.y),
                 velocity: CGPoint(x: velocity.x, y: velocity.y),
