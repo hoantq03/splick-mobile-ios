@@ -50,6 +50,7 @@ public struct ConversationListView: View {
     @State private var peekSession = UUID()
     @State private var confirmDeletePeekedConversation = false
     @State private var showPeekMuteDurationPicker = false
+    @State private var threadPresentationGeneration = 0
 
     private static let peekImpact = UIImpactFeedbackGenerator(style: .medium)
 
@@ -84,6 +85,15 @@ public struct ConversationListView: View {
                     messagingSearchBar
 
                     if !isSearching {
+                        InboxActiveFriendsStrip(
+                            friends: viewModel.inboxFriends,
+                            isStartingConversation: viewModel.isStartingConversation,
+                            onCompose: beginNewMessage,
+                            onSelect: { friend in
+                                Task { await openFriendConversation(friend) }
+                            }
+                        )
+
                         inboxFilterShortcuts
                     }
 
@@ -120,6 +130,7 @@ public struct ConversationListView: View {
                         conversation: route.conversation,
                         highlightMessageId: route.highlightMessageId
                     )
+                    .id(route.conversation.id)
                 }
                 .sheet(item: $composePresentation) { presentation in
                     NewMessageComposeView(viewModel: presentation.viewModel) { conversation in
@@ -455,6 +466,12 @@ public struct ConversationListView: View {
         viewModel.onSearchQueryChanged("")
     }
 
+    private func openFriendConversation(_ friend: UserSummary) async {
+        guard let route = await viewModel.startConversation(with: friend) else { return }
+        pushThread(route)
+        await viewModel.refresh()
+    }
+
     private func openSearchResult(_ result: MessagingSearchResult) async {
         let route: ChatThreadRoute
         switch result {
@@ -592,11 +609,20 @@ public struct ConversationListView: View {
 
     private func syncThreadPresentation(isPresented: Bool) {
         // Tab-bar / AppState publishes must not run mid-view-update (SwiftUI warning).
+        // Defer `isMessagingThreadPresented` until the stack slide has settled so
+        // MainTabView does not rebuild chrome during the push.
         DispatchQueue.main.async {
-            onThreadPresentedChange?(isPresented)
             if isPresented {
                 tabBarScrollState?.hide(flushToBottom: true)
+                threadPresentationGeneration += 1
+                let generation = threadPresentationGeneration
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.38) {
+                    guard generation == threadPresentationGeneration, !path.isEmpty else { return }
+                    onThreadPresentedChange?(true)
+                }
             } else {
+                threadPresentationGeneration += 1
+                onThreadPresentedChange?(false)
                 tabBarScrollState?.show()
             }
         }
@@ -664,30 +690,20 @@ public struct ConversationListView: View {
                             SplickRefreshableScrollBootstrap()
                         }
                     ForEach(rows) { conversation in
-                        ConversationRowView(
+                        InboxConversationOpenRow(
                             conversation: conversation,
                             inboxTyping: inboxTyping(for: conversation),
-                            anchorCoordinateSpace: InboxAnchorCoordinateSpace.space
+                            isPeeked: viewModel.peekConversation?.id == conversation.id,
+                            onOpen: {
+                                pushThread(ChatThreadRoute(conversation: conversation))
+                            },
+                            onPeek: {
+                                openConversationPeek(conversation)
+                            },
+                            onAppear: {
+                                Task { await viewModel.loadMoreIfNeeded(current: conversation) }
+                            }
                         )
-                        .opacity(
-                            viewModel.peekConversation?.id == conversation.id ? 0 : 1
-                        )
-                        .animation(nil, value: viewModel.peekConversation?.id)
-                        .contentShape(Rectangle())
-                        // Tap waits for long-press to fail — same exclusivity as Android
-                        // `combinedClickable`. Simultaneous tap+long-press was opening the
-                        // thread on finger-up after a hold.
-                        .onTapGesture {
-                            pushThread(ChatThreadRoute(conversation: conversation))
-                        }
-                        .onLongPressGesture(minimumDuration: 0.28, maximumDistance: 14) {
-                            openConversationPeek(conversation)
-                        }
-                        .accessibilityAddTraits(.isButton)
-                        .allowsHitTesting(viewModel.peekConversation?.id != conversation.id)
-                        .onAppear {
-                            Task { await viewModel.loadMoreIfNeeded(current: conversation) }
-                        }
                         Divider()
                             .padding(.leading, 56)
                     }
@@ -941,6 +957,48 @@ public struct ConversationListView: View {
                 Capsule(style: .continuous)
                     .fill(SplickTheme.Colors.error)
             }
+    }
+}
+
+/// Opens a thread on finger-up without waiting for the 280ms peek long-press to fail.
+/// Peek stays simultaneous; the following Button action is ignored after a hold.
+private struct InboxConversationOpenRow: View {
+    let conversation: Conversation
+    let inboxTyping: InboxTypingState?
+    let isPeeked: Bool
+    let onOpen: () -> Void
+    let onPeek: () -> Void
+    let onAppear: () -> Void
+
+    @State private var suppressOpenAfterPeek = false
+
+    var body: some View {
+        Button {
+            guard !isPeeked, !suppressOpenAfterPeek else {
+                suppressOpenAfterPeek = false
+                return
+            }
+            onOpen()
+        } label: {
+            ConversationRowView(
+                conversation: conversation,
+                inboxTyping: inboxTyping,
+                anchorCoordinateSpace: InboxAnchorCoordinateSpace.space
+            )
+        }
+        .buttonStyle(.plain)
+        .opacity(isPeeked ? 0 : 1)
+        .animation(nil, value: isPeeked)
+        .contentShape(Rectangle())
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.28, maximumDistance: 14)
+                .onEnded { _ in
+                    suppressOpenAfterPeek = true
+                    onPeek()
+                }
+        )
+        .allowsHitTesting(!isPeeked)
+        .onAppear(perform: onAppear)
     }
 }
 
