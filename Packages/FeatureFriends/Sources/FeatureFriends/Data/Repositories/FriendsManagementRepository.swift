@@ -74,8 +74,9 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
         )
         if let state = FriendsMapper.presenceState(from: response), let presenceStore {
             await presenceStore.apply(state)
+        } else {
+            await hydrateMessagingPresence(userIds: [userId])
         }
-        await hydrateMessagingPresence(userIds: [userId])
         let profile = FriendsMapper.toPublicUserProfile(response)
         if profile.friendStatus == .friends, let friendDisplayNameStore {
             await friendDisplayNameStore.upsert(from: profile.user)
