@@ -650,7 +650,7 @@ enum StringsFeatureVi {
         .feedCreateTakePhoto: "Chụp ảnh",
         .feedCreatePickLibrary: "Chọn từ thư viện",
         .feedCreatePickVideo: "Chọn video",
-        .feedCreateCaptionPlaceholder: "Viết gì đó về khoảnh khắc này...",
+        .feedCreateCaptionPlaceholder: "Bạn đang nghĩ gì?",
         .feedCreateMoreOptions: "Tùy chọn khác",
         .feedCreateBillCompanionsHint: "Chạm để chọn những người sẽ cùng chia bill với bạn.",
         .feedCreateMomentCompanionsHint: "Chạm để chọn những người có trong khoảnh khắc này.",

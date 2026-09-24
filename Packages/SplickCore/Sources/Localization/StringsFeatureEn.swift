@@ -650,7 +650,7 @@ enum StringsFeatureEn {
         .feedCreateTakePhoto: "Take photo",
         .feedCreatePickLibrary: "Choose from library",
         .feedCreatePickVideo: "Choose video",
-        .feedCreateCaptionPlaceholder: "Write something about this moment...",
+        .feedCreateCaptionPlaceholder: "What's on your mind?",
         .feedCreateMoreOptions: "More options",
         .feedCreateBillCompanionsHint: "Tap to choose who will split the bill with you.",
         .feedCreateMomentCompanionsHint: "Tap to choose who was in this moment.",
