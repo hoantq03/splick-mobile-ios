@@ -895,7 +895,10 @@ final class DependencyContainer: ObservableObject {
     @MainActor
     private func handleConversationRead(conversationId: UUID) async {
         conversationListViewModel.markConversationAsRead(conversationId: conversationId)
-        await notificationListViewModel.markMessageNotificationsRead(conversationId: conversationId)
+        await notificationListViewModel.markMessageNotificationsRead(
+            conversationId: conversationId,
+            refreshBadges: false
+        )
         await badgeCountService.refresh(force: true)
     }
 
@@ -1172,7 +1175,8 @@ final class DependencyContainer: ObservableObject {
                     )
                 }
                 await self.presenceStore.applyBulk(snapshots)
-            }
+            },
+            inboxFriendsProvider: InboxFriendsAdapter(fetchMyFriendsUseCase: fetchMyFriendsUseCase)
         )
     }
 

@@ -48,6 +48,7 @@ public final class ConversationListViewModel: ObservableObject {
     /// Keep scroll position when older messages prepend into the peek timeline.
     @Published public private(set) var peekPrependAnchorMessageId: UUID?
     @Published public private(set) var typingUserIdsByConversation: [UUID: [UUID]] = [:]
+    @Published public private(set) var inboxFriends: [UserSummary] = []
 
     /// Used to decide whether an incoming WS message should bump unread.
     public var currentUserId: UUID?
@@ -64,6 +65,7 @@ public final class ConversationListViewModel: ObservableObject {
     private let languageService: LanguageService
     private let messageCache: MessageThreadCache?
     private let onInboxLoaded: (([Conversation], Int) async -> Void)?
+    private let inboxFriendsProvider: (any InboxFriendsProviding)?
     private var cancellables = Set<AnyCancellable>()
     private var searchTask: Task<Void, Never>?
     private var refreshTask: Task<Void, Never>?
@@ -74,6 +76,7 @@ public final class ConversationListViewModel: ObservableObject {
     private var debouncedRefreshTask: Task<Void, Never>?
     private var softSyncTask: Task<Void, Never>?
     private var visiblePollingTask: Task<Void, Never>?
+    private var inboxFriendsTask: Task<Void, Never>?
     private var inboxDirectoryObserver: AnyCancellable?
     private var remoteTypingTimeouts: [String: Task<Void, Never>] = [:]
     private var currentPage = 0
@@ -92,7 +95,8 @@ public final class ConversationListViewModel: ObservableObject {
         wsClient: MessagingWebSocketClient,
         languageService: LanguageService,
         messageCache: MessageThreadCache? = nil,
-        onInboxLoaded: (([Conversation], Int) async -> Void)? = nil
+        onInboxLoaded: (([Conversation], Int) async -> Void)? = nil,
+        inboxFriendsProvider: (any InboxFriendsProviding)? = nil
     ) {
         self.fetchConversationsUseCase = fetchConversationsUseCase
         self.fetchMessagesUseCase = fetchMessagesUseCase
@@ -102,6 +106,7 @@ public final class ConversationListViewModel: ObservableObject {
         self.languageService = languageService
         self.messageCache = messageCache
         self.onInboxLoaded = onInboxLoaded
+        self.inboxFriendsProvider = inboxFriendsProvider
         bindWsEvents()
         bindInboxDirectoryChanges()
     }
@@ -422,6 +427,7 @@ public final class ConversationListViewModel: ObservableObject {
     /// Soft-refresh when the Messages tab becomes visible.
     public func onInboxVisible() {
         Task { await softSyncInbox() }
+        Task { await loadInboxFriends() }
         startVisiblePolling()
     }
 
@@ -494,7 +500,9 @@ public final class ConversationListViewModel: ObservableObject {
         }
 
         let task = Task { @MainActor in
-            await reloadInbox(showLoadingState: false)
+            async let inbox: Void = reloadInbox(showLoadingState: false)
+            async let friends: Void = loadInboxFriends()
+            _ = await (inbox, friends)
         }
         refreshTask = task
         await task.value
@@ -625,6 +633,28 @@ public final class ConversationListViewModel: ObservableObject {
                 unreadConversationCount = max(0, unreadConversationCount - 1)
             }
         }
+    }
+
+    public func loadInboxFriends() async {
+        guard let inboxFriendsProvider else { return }
+        if let existing = inboxFriendsTask {
+            await existing.value
+            return
+        }
+
+        let task = Task { @MainActor in
+            do {
+                let friends = try await inboxFriendsProvider.fetchFriends()
+                guard !Task.isCancelled else { return }
+                inboxFriends = friends
+            } catch {
+                guard !Task.isCancelled else { return }
+                Log.error(error, category: .network, metadata: ["action": "loadInboxFriends"])
+            }
+        }
+        inboxFriendsTask = task
+        await task.value
+        inboxFriendsTask = nil
     }
 
     public func startConversation(with user: UserSummary) async -> ChatThreadRoute? {
