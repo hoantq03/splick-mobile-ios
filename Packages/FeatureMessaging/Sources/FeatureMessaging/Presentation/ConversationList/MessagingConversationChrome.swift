@@ -6,6 +6,12 @@ import SplickDomain
 enum MessagingSearchChromeAnimation {
     static let focusSpring = Animation.spring(response: 0.32, dampingFraction: 0.88, blendDuration: 0.06)
     static let resultsSpring = Animation.spring(response: 0.28, dampingFraction: 0.9, blendDuration: 0.05)
+    /// Soft settle with a visible bounce for the empty-search landing.
+    static let landingSpring = Animation.spring(response: 0.46, dampingFraction: 0.68, blendDuration: 0.08)
+
+    static func landingItemSpring(index: Int) -> Animation {
+        landingSpring.delay(min(Double(index), 8) * 0.035)
+    }
 }
 
 private enum MessagingSearchChromeMetrics {

@@ -52,7 +52,13 @@ public final class ConversationListViewModel: ObservableObject {
     @Published public private(set) var inboxFriends: [UserSummary] = []
 
     /// Used to decide whether an incoming WS message should bump unread.
-    public var currentUserId: UUID?
+    public var currentUserId: UUID? {
+        didSet {
+            guard oldValue != currentUserId else { return }
+            recentSearchPeople = MessagingRecentPeopleStore.load(userId: currentUserId)
+        }
+    }
+    @Published public private(set) var recentSearchPeople: [UserSummary] = []
 
     private static let pageSize = 20
     private static let peekMessageLimit = 16
@@ -608,6 +614,18 @@ public final class ConversationListViewModel: ObservableObject {
                 Log.error(error, category: .network, metadata: ["action": "searchMessaging", "query": trimmed])
             }
         }
+    }
+
+    public func recordRecentSearchPerson(_ user: UserSummary) {
+        var next = recentSearchPeople.filter { $0.id != user.id }
+        next.insert(user, at: 0)
+        recentSearchPeople = Array(next.prefix(12))
+        MessagingRecentPeopleStore.save(recentSearchPeople, userId: currentUserId)
+    }
+
+    public func removeRecentSearchPerson(id: UUID) {
+        recentSearchPeople.removeAll { $0.id == id }
+        MessagingRecentPeopleStore.save(recentSearchPeople, userId: currentUserId)
     }
 
     public func clearStartConversationError() {

@@ -17,6 +17,7 @@ struct InboxActiveFriendsStrip: View {
     private static let inboxAvatarSize: CGFloat = 48
     private static let labelWidth: CGFloat = 78
     private static let dividerHeight: CGFloat = 32
+    private static let leadingFadeWidth: CGFloat = 22
 
     var body: some View {
         HStack(alignment: .top, spacing: SplickTheme.Spacing.sm) {
@@ -36,6 +37,19 @@ struct InboxActiveFriendsStrip: View {
                     }
                 }
                 .padding(.trailing, SplickTheme.Spacing.md)
+            }
+            .mask {
+                HStack(spacing: 0) {
+                    LinearGradient(
+                        colors: [.clear, .black],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: Self.leadingFadeWidth)
+                    Rectangle()
+                        .fill(.black)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             }
         }
         .padding(.leading, SplickTheme.Spacing.md)

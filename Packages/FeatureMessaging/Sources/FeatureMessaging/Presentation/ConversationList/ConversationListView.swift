@@ -85,7 +85,7 @@ public struct ConversationListView: View {
             VStack(spacing: 0) {
                     messagingSearchBar
 
-                    if !isSearching {
+                    if !isSearching && !isSearchFocused {
                         InboxActiveFriendsStrip(
                             friends: viewModel.inboxFriends,
                             isStartingConversation: viewModel.isStartingConversation,
@@ -105,8 +105,23 @@ public struct ConversationListView: View {
                             searchResultsContent
                                 .transition(.opacity)
                         } else if isSearchFocused {
-                            inboxRecentSearches
-                                .transition(.opacity)
+                            InboxSearchLanding(
+                                recentPeople: viewModel.recentSearchPeople,
+                                suggestions: viewModel.inboxFriends,
+                                onSelect: { person in
+                                    viewModel.recordRecentSearchPerson(person)
+                                    Task { await openFriendConversation(person) }
+                                },
+                                onRemoveRecent: { viewModel.removeRecentSearchPerson(id: $0) }
+                            )
+                            .transition(
+                                .asymmetric(
+                                    insertion: .opacity
+                                        .combined(with: .scale(scale: 0.94, anchor: .top))
+                                        .combined(with: .move(edge: .top)),
+                                    removal: .opacity.combined(with: .scale(scale: 0.98, anchor: .top))
+                                )
+                            )
                         }
                     }
                 }
@@ -117,6 +132,10 @@ public struct ConversationListView: View {
                 .animation(
                     suppressRefreshAnimations ? nil : MessagingSearchChromeAnimation.resultsSpring,
                     value: isSearching
+                )
+                .animation(
+                    suppressRefreshAnimations ? nil : MessagingSearchChromeAnimation.landingSpring,
+                    value: isSearchFocused
                 )
                 .onPreferenceChange(PullToRefreshActivePreferenceKey.self) { isActive in
                     DispatchQueue.main.async {
@@ -356,26 +375,6 @@ public struct ConversationListView: View {
     }
 
     @ViewBuilder
-    private var inboxRecentSearches: some View {
-        if let history = viewModel.searchHistory {
-            ScrollView {
-                InboxBoundRecentSearches(
-                    session: history,
-                    languageService: languageService,
-                    onSelect: { item in
-                        searchDraft = item.query
-                        viewModel.onSearchQueryChanged(item.query)
-                    }
-                )
-                .padding(.horizontal, SplickTheme.Spacing.md)
-                .padding(.top, SplickTheme.Spacing.md)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(SplickTheme.Colors.background)
-        }
-    }
-
-    @ViewBuilder
     private var searchResultsContent: some View {
         switch viewModel.searchState {
         case .loading where viewModel.searchResults.isEmpty:
@@ -494,6 +493,11 @@ public struct ConversationListView: View {
     }
 
     private func openFriendConversation(_ friend: UserSummary) async {
+        withAnimation(MessagingSearchChromeAnimation.focusSpring) {
+            isSearchFocused = false
+        }
+        searchDraft = ""
+        viewModel.onSearchQueryChanged("")
         guard let route = await viewModel.startConversation(with: friend) else { return }
         pushThread(route)
         await viewModel.refresh()
@@ -503,6 +507,7 @@ public struct ConversationListView: View {
         let route: ChatThreadRoute
         switch result {
         case .user(let user):
+            viewModel.recordRecentSearchPerson(user)
             guard let userRoute = await viewModel.startConversation(with: user) else { return }
             route = userRoute
         case .message(let hit):
@@ -1035,21 +1040,5 @@ private extension CGRect {
             && abs(minY - other.minY) <= tolerance
             && abs(width - other.width) <= tolerance
             && abs(height - other.height) <= tolerance
-    }
-}
-
-private struct InboxBoundRecentSearches: View {
-    @ObservedObject var session: SearchHistorySession
-    let languageService: LanguageService
-    let onSelect: (SearchHistoryItem) -> Void
-
-    var body: some View {
-        RecentSearchesSection(
-            items: session.items,
-            languageService: languageService,
-            onSelect: onSelect,
-            onDelete: { session.delete($0) },
-            onClearAll: { session.clear() }
-        )
     }
 }
