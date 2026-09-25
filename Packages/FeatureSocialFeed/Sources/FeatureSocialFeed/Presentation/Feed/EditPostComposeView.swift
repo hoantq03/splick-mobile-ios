@@ -174,6 +174,7 @@ struct EditPostComposeView: View {
                 }
                 editBottomBar
             }
+            .coordinateSpace(name: ComposeMenuSpace.name)
             .background(SplickTheme.Colors.background)
             .overlay(alignment: .bottomLeading) {
                 if showAudienceMenu {
@@ -184,16 +185,40 @@ struct EditPostComposeView: View {
                             }
                         }
                     }
-                } else if showCompanionsMenu {
-                    editBottomFloatingMenu {
+                }
+            }
+            .overlayPreferenceValue(ComposeMenuAnchorKey.self) { frames in
+                GeometryReader { proxy in
+                    if showCompanionsMenu {
+                        Color.clear
+                            .frame(width: proxy.size.width, height: proxy.size.height)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                withAnimation(ComposeSearchExpandMotion.spring) {
+                                    showCompanionsMenu = false
+                                }
+                                composeViewModel.setFriendSearchActive(false)
+                            }
+                    }
+                    if showCompanionsMenu, let frame = frames[.tags] {
+                        let inset = SplickTheme.Spacing.md
+                        let width = max(proxy.size.width - inset * 2, 0)
+                        let originX = width > 0 ? min(max((frame.midX - inset) / width, 0), 1) : 0
                         ComposeCompanionsMenuPopup(
                             viewModel: composeViewModel,
                             onUserTap: { _ in },
                             nearbyDiscoveryUseCase: nearbyDiscoveryUseCase,
                             profileDependencies: profileDependencies
                         )
+                        .frame(width: width, alignment: .top)
+                        .offset(x: inset, y: frame.maxY + 8)
+                        .transition(
+                            .scale(scale: 0.82, anchor: UnitPoint(x: originX, y: 0))
+                                .combined(with: .opacity)
+                        )
                     }
                 }
+                .allowsHitTesting(showCompanionsMenu)
             }
             .animation(ComposeSearchExpandMotion.spring, value: showAudienceMenu)
             .animation(ComposeSearchExpandMotion.spring, value: showCompanionsMenu)
@@ -255,6 +280,7 @@ struct EditPostComposeView: View {
                         composeViewModel.setFriendSearchActive(false)
                     }
                 }
+                .background(ComposeMenuAnchorReporter(anchor: .tags))
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
         }

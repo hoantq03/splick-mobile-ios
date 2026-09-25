@@ -590,7 +590,7 @@ public struct CreatePostComposeView: View {
                     ComposeOptionPill(
                         title: languageService.text(.feedBillSplitTitle),
                         systemImage: "banknote.fill",
-                        isActive: viewModel.hasBillSplitCounterparts || viewModel.parsedBillTotal != nil
+                        isActive: viewModel.hasBillSplitCounterparts
                     ) {
                         openBillSplitScreen()
                     }
@@ -851,7 +851,7 @@ public struct CreatePostComposeView: View {
     }
 
     private var hasComposeOptionSummaries: Bool {
-        (viewModel.hasBillSplitCounterparts || viewModel.parsedBillTotal != nil)
+        (viewModel.hasBillSplitCounterparts)
             || hasSelectedCompanions
             || hasSelectedLocation
     }
@@ -1030,9 +1030,13 @@ private struct ComposeBillSplitView: View {
         .dismissKeyboardOnTap()
         .navigationTitle(languageService.text(.feedBillSplitTitle))
         .navigationBarTitleDisplayMode(.inline)
+        .onDisappear {
+            viewModel.deactivateBillSplitIfEmpty()
+        }
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button(languageService.text(.commonDone)) {
+                    viewModel.deactivateBillSplitIfEmpty()
                     dismiss()
                 }
             }
@@ -1718,6 +1722,11 @@ struct ComposeCompanionsEditorView: View {
                 viewModel.startCompanionDirectoryLoadIfNeeded()
                 viewModel.setFriendSearchActive(true)
                 isFriendSearchFocused = true
+            }
+        }
+        .onDisappear {
+            if billMode {
+                viewModel.peoplePickerTarget = .tags
             }
         }
     }

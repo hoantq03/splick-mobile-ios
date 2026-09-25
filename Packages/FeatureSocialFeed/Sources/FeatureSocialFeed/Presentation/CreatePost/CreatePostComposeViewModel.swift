@@ -555,6 +555,20 @@ public final class CreatePostComposeViewModel: ObservableObject {
         !selectedBillCompanions.isEmpty || !selectedBillCompanionGroups.isEmpty || !pendingGuests.isEmpty
     }
 
+    /// Leaving the bill editor with nobody to split with turns the option off.
+    func deactivateBillSplitIfEmpty() {
+        peoplePickerTarget = .tags
+        guard !hasBillSplitCounterparts else { return }
+        billTotalText = ""
+        splitMode = .equal
+        pendingGuests.removeAll()
+        percentageTexts.removeAll()
+        exactAmountTexts.removeAll()
+        explicitPercentageIds.removeAll()
+        explicitExactIds.removeAll()
+        autoReminderEnabled = true
+    }
+
     var billTotalAmountError: String? {
         guard let total = parsedBillTotal else { return nil }
         guard !VndAmountRules.isAtLeastMinimum(total) else { return nil }
@@ -1113,10 +1127,6 @@ public final class CreatePostComposeViewModel: ObservableObject {
         }
 
         if enableBillSplit {
-            if !hasBillSplitCounterparts {
-                submitState = .failed(languageService.text(.feedCreateBillNeedPeople))
-                return nil
-            }
             guard let total = parsedBillTotal, total > 0 else {
                 submitState = .failed(languageService.text(.feedCreateBillInvalid))
                 return nil

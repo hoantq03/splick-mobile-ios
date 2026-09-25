@@ -337,12 +337,30 @@ final class CreatePostComposeViewModelTests: XCTestCase {
         XCTAssertNotNil(submit3)
         XCTAssertEqual(submit3?.input.feedKind, .checkIn)
 
+        vm.deactivateBillSplitIfEmpty()
+        XCTAssertEqual(vm.billTotalText, "")
+        XCTAssertFalse(vm.enableBillSplit)
+        XCTAssertEqual(vm.peoplePickerTarget, .tags)
+
         let companion = UserSummary(id: UUID(), username: "comp", displayName: "Companion", avatarURL: nil)
         vm.addCompanion(companion)
         let submit4 = vm.prepareSubmit()
         XCTAssertNotNil(submit4)
-        XCTAssertEqual(submit4?.input.feedKind, .shareBill)
-        XCTAssertEqual(submit4?.input.billSplit?.totalAmount, Decimal(150000))
+        XCTAssertEqual(submit4?.input.feedKind, .checkIn)
+
+        vm.addCompanion(companion, to: .bill)
+        vm.billTotalText = "150000"
+        let submit5 = vm.prepareSubmit()
+        XCTAssertNotNil(submit5)
+        XCTAssertEqual(submit5?.input.feedKind, .shareBill)
+        XCTAssertEqual(submit5?.input.billSplit?.totalAmount, Decimal(150000))
+
+        vm.removeBillSplitParticipant(companion)
+        vm.deactivateBillSplitIfEmpty()
+        XCTAssertFalse(vm.enableBillSplit)
+        let submit6 = vm.prepareSubmit()
+        XCTAssertNotNil(submit6)
+        XCTAssertEqual(submit6?.input.feedKind, .checkIn)
     }
 
     func testVideoDraftKeepsSourceURLForPreview() throws {
