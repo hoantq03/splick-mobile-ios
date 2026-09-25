@@ -35,12 +35,20 @@ struct PostEditHistorySheet: View {
                     ScrollView {
                         LazyVGrid(columns: columns, spacing: SplickTheme.Spacing.sm) {
                             ForEach(items) { item in
-                                PostEditHistoryCell(item: item)
+                                NavigationLink(value: item.version) {
+                                    PostEditHistoryCell(item: item)
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
                         .padding(.horizontal, SplickTheme.Spacing.md)
                         .padding(.top, SplickTheme.Spacing.sm)
                         .padding(.bottom, SplickTheme.Spacing.lg)
+                    }
+                    .navigationDestination(for: Int.self) { version in
+                        if let item = items.first(where: { $0.version == version }) {
+                            PostEditHistoryDetailView(item: item)
+                        }
                     }
                 }
             }
@@ -66,7 +74,9 @@ struct PostEditHistorySheet: View {
                 previousNewestFirst: previous,
                 currentCaption: post.caption,
                 currentMedia: post.displayMediaItems,
-                currentAt: post.editedAt ?? post.createdAt
+                currentAt: post.editedAt ?? post.createdAt,
+                currentAudience: post.audience,
+                currentCompanions: post.companions
             )
             errorMessage = nil
         } catch {
@@ -104,11 +114,7 @@ private struct PostEditHistoryCell: View {
                 .font(.system(size: 11))
                 .foregroundStyle(SplickTheme.Colors.textTertiary)
                 .lineLimit(1)
-            Text(changeLabel)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(SplickTheme.Colors.textSecondary)
-                .lineLimit(3)
-                .fixedSize(horizontal: false, vertical: true)
+            changeChips
         }
         .padding(SplickTheme.Spacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -148,16 +154,213 @@ private struct PostEditHistoryCell: View {
             .clipShape(mediaShape)
     }
 
-    private var changeLabel: String {
-        switch item.change {
-        case .original:
-            languageService.text(.feedPostEditHistoryOriginal)
-        case .caption:
-            languageService.text(.feedPostEditHistoryChangeCaption)
-        case .media:
-            languageService.text(.feedPostEditHistoryChangePhotos)
-        case .captionAndMedia:
-            languageService.text(.feedPostEditHistoryChangeCaptionAndPhotos)
+    private var changeChips: some View {
+        let labels = chipLabels
+        return WrappingHStack(spacing: 4) {
+            ForEach(labels, id: \.self) { label in
+                Text(label)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(SplickTheme.Colors.tertiaryBackground, in: Capsule())
+            }
+        }
+    }
+
+    private var chipLabels: [String] {
+        if item.diff.isOriginal {
+            return [languageService.text(.feedPostEditHistoryOriginal)]
+        }
+        var labels: [String] = []
+        if item.diff.captionChanged { labels.append(languageService.text(.feedPostEditHistoryChangeCaption)) }
+        if item.diff.mediaChanged { labels.append(languageService.text(.feedPostEditHistoryChangePhotos)) }
+        if item.diff.audienceChanged { labels.append(languageService.text(.feedPostEditHistoryChangeAudience)) }
+        if item.diff.companionsChanged { labels.append(languageService.text(.feedPostEditHistoryChangeTags)) }
+        if labels.isEmpty {
+            labels.append(languageService.text(.feedPostEditHistoryChangeMixed))
+        }
+        return labels
+    }
+}
+
+private struct WrappingHStack<Content: View>: View {
+    let spacing: CGFloat
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        FlexibleChipWrap(spacing: spacing, content: content)
+    }
+}
+
+private struct FlexibleChipWrap<Content: View>: View {
+    let spacing: CGFloat
+    let content: () -> Content
+
+    var body: some View {
+        FlowLayout(spacing: spacing) {
+            content()
+        }
+    }
+}
+
+private struct FlowLayout: Layout {
+    var spacing: CGFloat = 4
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var widthUsed: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x + size.width > maxWidth, x > 0 {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            widthUsed = max(widthUsed, x + size.width)
+            rowHeight = max(rowHeight, size.height)
+            x += size.width + spacing
+        }
+        return CGSize(width: maxWidth.isFinite ? maxWidth : widthUsed, height: y + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX
+        var y = bounds.minY
+        var rowHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x + size.width > bounds.maxX, x > bounds.minX {
+                x = bounds.minX
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+            rowHeight = max(rowHeight, size.height)
+            x += size.width + spacing
+        }
+    }
+}
+
+private struct PostEditHistoryDetailView: View {
+    @EnvironmentObject private var languageService: LanguageService
+    let item: PostEditHistoryItem
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
+                Text(item.caption?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                     ? item.caption!
+                     : "—")
+                    .font(SplickTheme.Typography.body)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(item.mediaItems) { media in
+                            GridThumbnailImage(url: media.thumbnailURL ?? media.mediaURL) {
+                                SplickTheme.Colors.tertiaryBackground
+                            }
+                            .frame(width: 88, height: 88)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
+                    }
+                }
+
+                if let audience = item.audience {
+                    Text("\(languageService.text(.feedAudienceTitle)): \(audienceLabel(audience))")
+                        .font(SplickTheme.Typography.callout)
+                }
+                if let companions = item.companions, !companions.isEmpty {
+                    Text(companions.map(\.displayName).joined(separator: ", "))
+                        .font(SplickTheme.Typography.callout)
+                }
+
+                if !item.diff.isOriginal {
+                    Text(languageService.text(.feedPostEditHistoryWhatChanged))
+                        .font(SplickTheme.Typography.headline)
+                    diffSection
+                }
+            }
+            .padding(SplickTheme.Spacing.md)
+        }
+        .background(SplickTheme.Colors.background)
+        .navigationTitle(
+            item.isCurrent
+                ? languageService.text(.feedPostEditHistoryCurrent)
+                : languageService.format(.feedPostEditHistoryVersion, item.version)
+        )
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    @ViewBuilder
+    private var diffSection: some View {
+        let diff = item.diff
+        if diff.captionChanged {
+            labeled(languageService.text(.feedPostEditHistoryCaptionBefore), diff.previousCaption)
+            labeled(languageService.text(.feedPostEditHistoryCaptionAfter), diff.nextCaption)
+        }
+        if !diff.addedMedia.isEmpty {
+            Text(languageService.text(.feedPostEditHistoryPhotosAdded))
+                .fontWeight(.medium)
+            mediaRow(diff.addedMedia)
+        }
+        if !diff.removedMedia.isEmpty {
+            Text(languageService.text(.feedPostEditHistoryPhotosRemoved))
+                .fontWeight(.medium)
+            mediaRow(diff.removedMedia)
+        }
+        if diff.audienceChanged {
+            labeled(languageService.text(.feedPostEditHistoryAudienceFrom), diff.previousAudience.map(audienceLabel))
+            labeled(languageService.text(.feedPostEditHistoryAudienceTo), diff.nextAudience.map(audienceLabel))
+        }
+        if !diff.addedCompanions.isEmpty {
+            labeled(
+                languageService.text(.feedPostEditHistoryTagsAdded),
+                diff.addedCompanions.map(\.displayName).joined(separator: ", ")
+            )
+        }
+        if !diff.removedCompanions.isEmpty {
+            labeled(
+                languageService.text(.feedPostEditHistoryTagsRemoved),
+                diff.removedCompanions.map(\.displayName).joined(separator: ", ")
+            )
+        }
+    }
+
+    private func labeled(_ title: String, _ value: String?) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).fontWeight(.medium)
+            Text((value?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? value! : "—")
+        }
+    }
+
+    private func mediaRow(_ mediaItems: [PostMediaItem]) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(mediaItems) { media in
+                    GridThumbnailImage(url: media.thumbnailURL ?? media.mediaURL) {
+                        SplickTheme.Colors.tertiaryBackground
+                    }
+                    .frame(width: 72, height: 72)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+            }
+        }
+    }
+
+    private func audienceLabel(_ audience: PostAudience) -> String {
+        switch audience.mode {
+        case .friends:
+            languageService.text(.friendsTabFriends)
+        case .groups:
+            languageService.format(.feedAudienceGroupsCount, audience.allowedGroupIds.count)
+        case .specificUsers:
+            languageService.format(.feedAudienceUsersCount, audience.allowedUserIds.count)
+        case .friendsExcept:
+            languageService.format(.feedAudienceFriendsExceptCount, audience.excludedUserIds.count)
         }
     }
 }
