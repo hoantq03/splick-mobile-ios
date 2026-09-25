@@ -91,6 +91,7 @@ final class PhotoEditorViewModel: ObservableObject {
     @Published var selectedTextID: UUID?
     @Published var selectedStickerID: UUID?
     @Published var inkColor: UIColor = .white
+    @Published var isErasing = false
     @Published var inkWidth: CGFloat = 5
     @Published var activeFilter: FilterPreset = .none
     @Published var adjustments: ImageAdjustments = .identity
@@ -122,11 +123,16 @@ final class PhotoEditorViewModel: ObservableObject {
     private(set) var drawingSyncRevision = 0
 
     static let inkPalette: [UIColor] = [
-        .white, .black,
-        UIColor(red: 1, green: 0.3, blue: 0.35, alpha: 1),
-        UIColor(red: 1, green: 0.82, blue: 0.2, alpha: 1),
-        UIColor(red: 0.35, green: 0.78, blue: 0.98, alpha: 1),
-        UIColor(red: 0.42, green: 0.85, blue: 0.55, alpha: 1),
+        .white,
+        .black,
+        UIColor(red: 1, green: 0.23, blue: 0.19, alpha: 1),
+        UIColor(red: 1, green: 0.58, blue: 0, alpha: 1),
+        UIColor(red: 1, green: 0.8, blue: 0, alpha: 1),
+        UIColor(red: 0.2, green: 0.78, blue: 0.35, alpha: 1),
+        UIColor(red: 0.2, green: 0.68, blue: 0.9, alpha: 1),
+        UIColor(red: 0.35, green: 0.34, blue: 0.84, alpha: 1),
+        UIColor(red: 1, green: 0.18, blue: 0.33, alpha: 1),
+        UIColor(red: 0.69, green: 0.32, blue: 0.87, alpha: 1),
     ]
 
     init(sourceImage: UIImage, initialFilter: FilterPreset = .none, sessionId: UUID? = nil) {
@@ -211,6 +217,11 @@ final class PhotoEditorViewModel: ObservableObject {
         }
 
         if activeTool == tool {
+            if tool == .crop || tool == .adjust {
+                activeTool = nil
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                return
+            }
             enterViewMode()
             return
         }

@@ -161,6 +161,11 @@ struct PhotoEditorView: View {
     }
 
     private func handleComposerTool(_ tool: ComposerTool) {
+        if tool == .edit, activeComposerTool == .edit {
+            viewModel.clearCanvasTool()
+            activeComposerTool = nil
+            return
+        }
         activeComposerTool = tool
 
         switch tool {
@@ -291,6 +296,7 @@ private struct EditorCanvasView: View {
                     isEnabled: viewModel.activeTool == .draw,
                     inkColor: viewModel.inkColor,
                     inkWidth: viewModel.inkWidth,
+                    isErasing: viewModel.isErasing,
                     flushToken: viewModel.finalizeFlushToken,
                     drawingSyncRevision: viewModel.drawingSyncRevision,
                     onStrokeEnded: { viewModel.commitDrawing($0) }

@@ -126,21 +126,45 @@ struct EditorToolbar: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: SplickTheme.Spacing.md) {
+                    Button {
+                        viewModel.isErasing = true
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    } label: {
+                        Image(systemName: "eraser.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(viewModel.isErasing ? Color.white : Color.black.opacity(0.8))
+                            .frame(width: 30, height: 30)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(viewModel.isErasing ? SplickTheme.Colors.primary : Color.white)
+                            )
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(viewModel.isErasing ? 1 : 0.55), lineWidth: viewModel.isErasing ? 2.5 : 1)
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(languageService.text(.mediaDrawEraser))
+
                     ForEach(Array(PhotoEditorViewModel.inkPalette.enumerated()), id: \.offset) { _, color in
+                        let selected = !viewModel.isErasing && viewModel.inkColor.isEqual(color)
                         Button {
                             viewModel.inkColor = color
+                            viewModel.isErasing = false
                             UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         } label: {
                             Circle()
                                 .fill(Color(color))
                                 .frame(width: 30, height: 30)
                                 .overlay {
-                                    if viewModel.inkColor.isEqual(color) {
-                                        Circle().strokeBorder(Color.white, lineWidth: 2.5)
-                                    }
+                                    Circle().strokeBorder(
+                                        selected ? SplickTheme.Colors.primary : Color.white.opacity(0.55),
+                                        lineWidth: selected ? 2.5 : 1
+                                    )
                                 }
                                 .shadow(color: .black.opacity(0.2), radius: 2, y: 1)
                         }
+                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -224,7 +248,12 @@ struct EditorToolbar: View {
 
     private var adjustOptionsBar: some View {
         VStack(spacing: SplickTheme.Spacing.sm) {
-            adjustRow(title: languageService.text(.mediaAdjustBrightness), range: -1...1, keyPath: \.brightness)
+            adjustRow(
+                title: languageService.text(.mediaAdjustBrightness),
+                range: -1...1,
+                keyPath: \.brightness,
+                valueText: Self.brightnessLevel
+            )
             adjustRow(title: languageService.text(.mediaAdjustContrast), range: 0.5...1.5, keyPath: \.contrast)
             adjustRow(title: languageService.text(.mediaAdjustSaturation), range: 0...2, keyPath: \.saturation)
             adjustRow(title: languageService.text(.mediaAdjustExposure), range: -2...2, keyPath: \.exposure)
@@ -237,30 +266,46 @@ struct EditorToolbar: View {
     private func adjustRow(
         title: String,
         range: ClosedRange<Double>,
-        keyPath: WritableKeyPath<ImageAdjustments, Float>
+        keyPath: WritableKeyPath<ImageAdjustments, Float>,
+        valueText: ((Double) -> String)? = nil
     ) -> some View {
-        HStack(spacing: 10) {
+        let current = Double(viewModel.adjustments[keyPath: keyPath])
+        return HStack(spacing: 10) {
             Text(title)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.white.opacity(0.85))
                 .frame(width: 88, alignment: .leading)
-    Slider(
-                    value: Binding(
-                        get: { Double(viewModel.adjustments[keyPath: keyPath]) },
-                        set: { newValue in
-                            var next = viewModel.adjustments
-                            next[keyPath: keyPath] = Float(newValue)
-                            viewModel.setAdjustments(next)
-                        }
-                    ),
-                    in: range,
-                    onEditingChanged: { editing in
-                        viewModel.setAdjustingLive(editing)
-                        if !editing { viewModel.commitAdjustments() }
+            Slider(
+                value: Binding(
+                    get: { Double(viewModel.adjustments[keyPath: keyPath]) },
+                    set: { newValue in
+                        var next = viewModel.adjustments
+                        next[keyPath: keyPath] = Float(newValue)
+                        viewModel.setAdjustments(next)
                     }
-                )
+                ),
+                in: range,
+                onEditingChanged: { editing in
+                    viewModel.setAdjustingLive(editing)
+                    if !editing { viewModel.commitAdjustments() }
+                }
+            )
             .tint(.white)
+            if let valueText {
+                Text(valueText(current))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .monospacedDigit()
+                    .frame(width: 40, alignment: .trailing)
+            }
         }
+    }
+
+    /// Signed percent (−100…100) so the brightness slider has a readable level.
+    static func brightnessLevel(_ value: Double) -> String {
+        let percent = Int((value * 100).rounded())
+        let clamped = min(100, max(-100, percent))
+        return clamped > 0 ? "+\(clamped)" : "\(clamped)"
     }
 }
 

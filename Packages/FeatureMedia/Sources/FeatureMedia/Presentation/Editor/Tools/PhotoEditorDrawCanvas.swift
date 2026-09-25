@@ -6,6 +6,7 @@ struct PhotoEditorDrawCanvas: UIViewRepresentable {
     let isEnabled: Bool
     let inkColor: UIColor
     let inkWidth: CGFloat
+    var isErasing: Bool = false
     var flushToken: Int = 0
     var drawingSyncRevision: Int = 0
     let onStrokeEnded: (PKDrawing) -> Void
@@ -21,7 +22,7 @@ struct PhotoEditorDrawCanvas: UIViewRepresentable {
         canvas.drawingPolicy = .anyInput
         canvas.delegate = context.coordinator
         canvas.drawing = drawing
-        canvas.tool = PKInkingTool(.pen, color: inkColor, width: inkWidth)
+        canvas.tool = Self.drawingTool(isErasing: isErasing, inkColor: inkColor, inkWidth: inkWidth)
         context.coordinator.wasEnabled = isEnabled
         context.coordinator.lastAppliedSyncRevision = drawingSyncRevision
         context.coordinator.lastCommittedDrawing = drawing
@@ -58,7 +59,17 @@ struct PhotoEditorDrawCanvas: UIViewRepresentable {
         }
 
         canvas.isUserInteractionEnabled = isEnabled
-        canvas.tool = PKInkingTool(.pen, color: inkColor, width: inkWidth)
+        canvas.tool = Self.drawingTool(isErasing: isErasing, inkColor: inkColor, inkWidth: inkWidth)
+    }
+
+    private static func drawingTool(isErasing: Bool, inkColor: UIColor, inkWidth: CGFloat) -> PKTool {
+        if isErasing {
+            if #available(iOS 16.4, *) {
+                return PKEraserTool(.bitmap, width: inkWidth)
+            }
+            return PKEraserTool(.bitmap)
+        }
+        return PKInkingTool(.pen, color: inkColor, width: inkWidth)
     }
 
     final class Coordinator: NSObject, PKCanvasViewDelegate {
