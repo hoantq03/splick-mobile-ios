@@ -125,6 +125,7 @@ enum StringsFeatureVi {
         .feedCreateCaption: "Caption",
         .feedCreateTagFriends: "Gắn thẻ bạn bè",
         .feedCreateTagFriendsHint: "Gắn thẻ bạn bè hoặc thêm người chưa có Splick.",
+        .feedCreateTagSummary: "Gắn thẻ %@",
         .feedCreateAlreadyTagged: "Đã có mặt trong gắn thẻ",
         .feedCreateAlreadyOnBill: "Đã có mặt trong chia bill",
         .feedCreateGuestSection: "Bạn bè chưa có Splick",
@@ -641,6 +642,7 @@ enum StringsFeatureVi {
         .commonLoading: "Đang tải...",
         .commonShare: "Chia sẻ",
         .commonNotice: "Thông báo",
+        .commonInvalidUser: "Người dùng không hợp lệ",
 
         // Messaging compose
         .messagingComposeSearchPlaceholder: "Tìm người dùng hoặc nhóm...",
@@ -675,6 +677,7 @@ enum StringsFeatureVi {
         .feedCreateLocationPlaceholder: "Quán, địa điểm, thành phố...",
         .feedCreateLocationNearby: "Gần bạn",
         .feedCreateLocationSearchResults: "Kết quả tìm kiếm",
+        .feedCreateLocationNotFound: "Không tìm thấy vị trí",
         .feedCreateLocationUseTyped: "Dùng “%@”",
         .feedCreateLocationEnableGps: "Bật vị trí để xem địa điểm gần bạn.",
         .feedCreateEqualSplitPreview: "%@ ÷ %d người = %@ / người",
@@ -840,6 +843,7 @@ enum StringsFeatureVi {
         .mediaToolFilter: "Filter",
         .mediaToolAdjust: "Chỉnh",
         .mediaToolDraw: "Vẽ",
+        .mediaDrawEraser: "Tẩy",
         .mediaToolText: "Chữ",
         .mediaToolSticker: "Sticker",
         .mediaToolAudio: "Âm thanh",

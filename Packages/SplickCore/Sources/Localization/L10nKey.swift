@@ -290,6 +290,7 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case commonLoading = "common.loading"
     case commonShare = "common.share"
     case commonNotice = "common.notice"
+    case commonInvalidUser = "common.invalid_user"
 
     // Feed
     case feedTitle = "feed.title"
@@ -418,6 +419,7 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case feedCreateCaption = "feed.create.caption"
     case feedCreateTagFriends = "feed.create.tag_friends"
     case feedCreateTagFriendsHint = "feed.create.tag_friends_hint"
+    case feedCreateTagSummary = "feed.create.tag_summary"
     case feedCreateAlreadyTagged = "feed.create.already_tagged"
     case feedCreateAlreadyOnBill = "feed.create.already_on_bill"
     case feedCreateGuestSection = "feed.create.guest.section"
@@ -961,6 +963,7 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case feedCreateLocationPlaceholder = "feed.create.location_placeholder"
     case feedCreateLocationNearby = "feed.create.location_nearby"
     case feedCreateLocationSearchResults = "feed.create.location_search_results"
+    case feedCreateLocationNotFound = "feed.create.location_not_found"
     case feedCreateLocationUseTyped = "feed.create.location_use_typed"
     case feedCreateLocationEnableGps = "feed.create.location_enable_gps"
     case feedCreateEqualSplitPreview = "feed.create.equal_split_preview"
@@ -1125,6 +1128,7 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case mediaToolFilter = "media.tool.filter"
     case mediaToolAdjust = "media.tool.adjust"
     case mediaToolDraw = "media.tool.draw"
+    case mediaDrawEraser = "media.draw.eraser"
     case mediaToolText = "media.tool.text"
     case mediaToolSticker = "media.tool.sticker"
     case mediaToolAudio = "media.tool.audio"

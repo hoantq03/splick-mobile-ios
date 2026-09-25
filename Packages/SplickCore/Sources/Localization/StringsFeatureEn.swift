@@ -125,6 +125,7 @@ enum StringsFeatureEn {
         .feedCreateCaption: "Caption",
         .feedCreateTagFriends: "Tag friends",
         .feedCreateTagFriendsHint: "Tag friends or add people who don’t have Splick yet.",
+        .feedCreateTagSummary: "Tagged %@",
         .feedCreateAlreadyTagged: "Already tagged on this post",
         .feedCreateAlreadyOnBill: "Already on this bill",
         .feedCreateGuestSection: "Friends without Splick",
@@ -641,6 +642,7 @@ enum StringsFeatureEn {
         .commonLoading: "Loading...",
         .commonShare: "Share",
         .commonNotice: "Notice",
+        .commonInvalidUser: "Invalid user",
 
         // Messaging compose
         .messagingComposeSearchPlaceholder: "Search people or groups...",
@@ -675,6 +677,7 @@ enum StringsFeatureEn {
         .feedCreateLocationPlaceholder: "Cafe, place, city...",
         .feedCreateLocationNearby: "Nearby",
         .feedCreateLocationSearchResults: "Search results",
+        .feedCreateLocationNotFound: "No places found",
         .feedCreateLocationUseTyped: "Use “%@”",
         .feedCreateLocationEnableGps: "Turn on location to see places near you.",
         .feedCreateEqualSplitPreview: "%@ ÷ %d people = %@ / person",
@@ -840,6 +843,7 @@ enum StringsFeatureEn {
         .mediaToolFilter: "Filter",
         .mediaToolAdjust: "Adjust",
         .mediaToolDraw: "Draw",
+        .mediaDrawEraser: "Eraser",
         .mediaToolText: "Text",
         .mediaToolSticker: "Sticker",
         .mediaToolAudio: "Audio",
