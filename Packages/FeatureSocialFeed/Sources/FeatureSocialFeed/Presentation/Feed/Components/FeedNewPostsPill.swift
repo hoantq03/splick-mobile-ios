@@ -30,6 +30,7 @@ struct FeedNewPostsPillOverlay: View {
                 FeedNewPostsPill(count: count, onTap: onTap)
                     .padding(.top, topInset)
                 Spacer(minLength: 0)
+                    .allowsHitTesting(false)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
