@@ -32,6 +32,36 @@ enum ComposeSearchAnchor: Hashable {
     case audience
 }
 
+enum ComposeMenuAnchor: Hashable {
+    case tags
+    case location
+}
+
+struct ComposeMenuAnchorKey: PreferenceKey {
+    static var defaultValue: [ComposeMenuAnchor: CGRect] = [:]
+
+    static func reduce(value: inout [ComposeMenuAnchor: CGRect], nextValue: () -> [ComposeMenuAnchor: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { $1 })
+    }
+}
+
+struct ComposeMenuAnchorReporter: View {
+    let anchor: ComposeMenuAnchor
+
+    var body: some View {
+        GeometryReader { proxy in
+            Color.clear.preference(
+                key: ComposeMenuAnchorKey.self,
+                value: [anchor: proxy.frame(in: .named(ComposeMenuSpace.name))]
+            )
+        }
+    }
+}
+
+enum ComposeMenuSpace {
+    static let name = "composeMenus"
+}
+
 func revealComposeSearch(_ proxy: ScrollViewProxy, _ id: ComposeSearchAnchor) {
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
         withAnimation(ComposeSearchExpandMotion.spring) {
@@ -81,6 +111,7 @@ private struct ComposeSearchResultsExpand<Content: View>: View {
                 }
             }
             .modifier(ComposeSearchHeightClip(isExpanded: isExpanded))
+            .frame(maxWidth: .infinity, alignment: .top)
     }
 }
 
@@ -90,7 +121,9 @@ private struct ComposeSearchHeightClip: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .frame(maxWidth: .infinity, alignment: .top)
             .frame(height: isExpanded ? measuredHeight : 0, alignment: .top)
+            .frame(maxWidth: .infinity, alignment: .top)
             .clipped()
             .opacity(isExpanded && measuredHeight > 1 ? 1 : 0)
             .allowsHitTesting(isExpanded)
@@ -186,6 +219,7 @@ public struct CreatePostComposeView: View {
             .scrollDismissesKeyboard(.immediately)
             composeBottomBar
         }
+        .coordinateSpace(name: ComposeMenuSpace.name)
         .background(SplickTheme.Colors.background)
         .overlay(alignment: .bottomLeading) {
             if showAudienceMenu {
@@ -196,24 +230,10 @@ public struct CreatePostComposeView: View {
                         }
                     }
                 }
-            } else if showCompanionsMenu {
-                composeBottomFloatingMenu {
-                    ComposeCompanionsMenuPopup(
-                        viewModel: viewModel,
-                        onUserTap: openProfile,
-                        nearbyDiscoveryUseCase: nearbyDiscoveryUseCase,
-                        profileDependencies: profileDependencies
-                    )
-                }
-            } else if showLocationMenu {
-                composeBottomFloatingMenu {
-                    ComposeLocationMenuPopup(viewModel: viewModel) {
-                        withAnimation(ComposeSearchExpandMotion.spring) {
-                            showLocationMenu = false
-                        }
-                    }
-                }
             }
+        }
+        .overlayPreferenceValue(ComposeMenuAnchorKey.self) { frames in
+            composeAnchoredMenus(frames)
         }
         .animation(ComposeSearchExpandMotion.spring, value: showAudienceMenu)
         .animation(ComposeSearchExpandMotion.spring, value: showCompanionsMenu)
@@ -360,18 +380,19 @@ public struct CreatePostComposeView: View {
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: ComposeMetrics.mediaCardSpacing) {
-                        ForEach(Array(viewModel.selectedMediaItems.enumerated()), id: \.element.id) { index, item in
+                        ForEach(viewModel.selectedMediaItems) { item in
                             composeMediaCard(item: item, width: cardWidth, height: cardHeight)
-                                .overlay(alignment: .bottomLeading) {
-                                    if index == 0, viewModel.canAddMoreMedia {
-                                        addMediaOverlayChip
-                                            .padding(SplickTheme.Spacing.sm)
-                                    }
-                                }
                         }
                     }
                     .padding(.leading, SplickTheme.Spacing.md)
                     .padding(.trailing, SplickTheme.Spacing.sm)
+                }
+                .overlay(alignment: .bottomLeading) {
+                    if viewModel.canAddMoreMedia {
+                        addMediaOverlayChip
+                            .padding(.leading, SplickTheme.Spacing.md + SplickTheme.Spacing.sm)
+                            .padding(.bottom, SplickTheme.Spacing.sm)
+                    }
                 }
 
                 Text(languageService.text(.feedCreateMediaLimit))
@@ -448,12 +469,11 @@ public struct CreatePostComposeView: View {
             .foregroundStyle(SplickTheme.Colors.textPrimary)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(SplickTheme.Colors.secondaryBackground)
+            .background(.ultraThinMaterial, in: Capsule())
             .overlay {
                 Capsule()
-                    .strokeBorder(SplickTheme.Colors.divider.opacity(0.7), lineWidth: 1)
+                    .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
             }
-            .clipShape(Capsule())
         }
         .accessibilityLabel(languageService.text(.feedCreateAddMedia))
     }
@@ -470,7 +490,11 @@ public struct CreatePostComposeView: View {
             .foregroundStyle(SplickTheme.Colors.textPrimary)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(.regularMaterial, in: Capsule())
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay {
+                Capsule()
+                    .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+            }
         }
     }
 
@@ -577,6 +601,7 @@ public struct CreatePostComposeView: View {
                     ) {
                         toggleCompanionsMenu()
                     }
+                    .background(ComposeMenuAnchorReporter(anchor: .tags))
                     ComposeOptionPill(
                         title: languageService.text(.feedCreateLocation),
                         systemImage: "mappin.and.ellipse",
@@ -584,6 +609,7 @@ public struct CreatePostComposeView: View {
                     ) {
                         toggleLocationMenu()
                     }
+                    .background(ComposeMenuAnchorReporter(anchor: .location))
                 }
                 .padding(.horizontal, SplickTheme.Spacing.md)
             }
@@ -695,6 +721,62 @@ public struct CreatePostComposeView: View {
     }
 
     @ViewBuilder
+    private func composeAnchoredMenus(_ frames: [ComposeMenuAnchor: CGRect]) -> some View {
+        GeometryReader { proxy in
+            if showCompanionsMenu || showLocationMenu {
+                Color.clear
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation(ComposeSearchExpandMotion.spring) {
+                            showCompanionsMenu = false
+                            showLocationMenu = false
+                        }
+                        hideKeyboard()
+                        viewModel.setFriendSearchActive(false)
+                    }
+            }
+            if showCompanionsMenu, let frame = frames[.tags] {
+                anchoredMenu(frame: frame, containerWidth: proxy.size.width) {
+                    ComposeCompanionsMenuPopup(
+                        viewModel: viewModel,
+                        onUserTap: openProfile,
+                        nearbyDiscoveryUseCase: nearbyDiscoveryUseCase,
+                        profileDependencies: profileDependencies
+                    )
+                }
+            }
+            if showLocationMenu, let frame = frames[.location] {
+                anchoredMenu(frame: frame, containerWidth: proxy.size.width) {
+                    ComposeLocationMenuPopup(viewModel: viewModel) {
+                        withAnimation(ComposeSearchExpandMotion.spring) {
+                            showLocationMenu = false
+                        }
+                    }
+                }
+            }
+        }
+        .allowsHitTesting(showCompanionsMenu || showLocationMenu)
+    }
+
+    private func anchoredMenu<Content: View>(
+        frame: CGRect,
+        containerWidth: CGFloat,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        let inset = SplickTheme.Spacing.md
+        let width = max(containerWidth - inset * 2, 0)
+        let originX = width > 0 ? min(max((frame.midX - inset) / width, 0), 1) : 0
+        return content()
+            .frame(width: width, alignment: .top)
+            .offset(x: inset, y: frame.maxY + 8)
+            .transition(
+                .scale(scale: 0.82, anchor: UnitPoint(x: originX, y: 0))
+                    .combined(with: .opacity)
+            )
+    }
+
+    @ViewBuilder
     private func composeBottomFloatingMenu<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             content()
@@ -775,7 +857,15 @@ public struct CreatePostComposeView: View {
     }
 
     private var companionsSummaryText: String {
-        let companionNames = viewModel.selectedCompanions.map(\.displayName)
+        let phrase = companionsSummaryPhrase
+        guard !phrase.isEmpty else {
+            return languageService.text(.feedCreateMomentCompanionsHint)
+        }
+        return languageService.format(.feedCreateTagSummary, phrase)
+    }
+
+    private var companionsSummaryPhrase: String {
+        let companionNames = viewModel.selectedCompanions.map(composeGivenName)
 
         if let groupName = viewModel.companionGroupDisplayName,
            !groupName.isEmpty {
@@ -786,9 +876,7 @@ public struct CreatePostComposeView: View {
             return groupName + languageService.format(.feedCompanionsAndOthers, otherCount)
         }
 
-        guard !companionNames.isEmpty else {
-            return languageService.text(.feedCreateMomentCompanionsHint)
-        }
+        guard !companionNames.isEmpty else { return "" }
 
         if companionNames.count == 1 {
             return companionNames[0]
@@ -1448,14 +1536,19 @@ struct ComposeCompanionsMenuPopup: View {
                 billMode: false,
                 autoExpandSearch: true
             )
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, maxHeight: 420, alignment: .topLeading)
+        .padding(.horizontal, 12)
+        .padding(.top, 12)
+        .padding(.bottom, 6)
+        .frame(maxWidth: .infinity, alignment: .top)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxHeight: 420, alignment: .top)
         .background(SplickTheme.Colors.secondaryBackground)
         .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.large, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.large, style: .continuous)
-                .strokeBorder(SplickTheme.Colors.divider.opacity(0.7), lineWidth: 1)
+                .strokeBorder(SplickTheme.Colors.divider.opacity(0.5), lineWidth: 0.5)
         }
         .shadow(color: Color.black.opacity(0.12), radius: 16, y: 8)
     }
@@ -1599,21 +1692,23 @@ struct ComposeCompanionsEditorView: View {
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .background(autoExpandSearch ? SplickTheme.Colors.background : SplickTheme.Colors.secondaryBackground)
                         .clipShape(Capsule())
 
                         ComposeSearchResultsExpand(isExpanded: showsFriendSearchResults) {
                             friendSearchResultsList
-                                .frame(maxHeight: ComposeMetrics.searchResultsMaxHeight)
-                                .background(autoExpandSearch ? SplickTheme.Colors.background : SplickTheme.Colors.secondaryBackground)
+                                .frame(maxWidth: .infinity, maxHeight: ComposeMetrics.searchResultsMaxHeight, alignment: .top)
+                                .background(autoExpandSearch ? Color.clear : SplickTheme.Colors.secondaryBackground)
                                 .clipShape(
                                     RoundedRectangle(
-                                        cornerRadius: SplickTheme.CornerRadius.large,
+                                        cornerRadius: autoExpandSearch ? 0 : SplickTheme.CornerRadius.large,
                                         style: .continuous
                                     )
                                 )
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .id(ComposeSearchAnchor.companions)
                     .animation(ComposeSearchExpandMotion.spring, value: showsFriendSearchResults)
         }
@@ -1867,6 +1962,8 @@ struct ComposeCompanionsEditorView: View {
                     }
                     .padding(.horizontal, SplickTheme.Spacing.sm)
                     .padding(.vertical, SplickTheme.Spacing.xs)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
                     .onAppear {
                         viewModel.loadMoreFriendSearchIfNeeded(currentFriend: friend)
                     }
@@ -1883,8 +1980,9 @@ struct ComposeCompanionsEditorView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity)
         }
-        .frame(maxHeight: ComposeMetrics.searchResultsMaxHeight)
+        .frame(maxWidth: .infinity, maxHeight: ComposeMetrics.searchResultsMaxHeight)
     }
 
     private var groupSearchResultsSection: some View {
@@ -1984,6 +2082,8 @@ struct ComposeCompanionsEditorView: View {
         }
         .padding(.horizontal, SplickTheme.Spacing.sm)
         .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 
     private func companionShortName(_ user: UserSummary) -> String {
@@ -2014,13 +2114,17 @@ struct ComposeLocationMenuPopup: View {
                 onPlacePicked: onPlacePicked
             )
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, maxHeight: 420, alignment: .topLeading)
+        .padding(.horizontal, 12)
+        .padding(.top, 12)
+        .padding(.bottom, 6)
+        .frame(maxWidth: .infinity, alignment: .top)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxHeight: 420, alignment: .top)
         .background(SplickTheme.Colors.secondaryBackground)
         .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.large, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.large, style: .continuous)
-                .strokeBorder(SplickTheme.Colors.divider.opacity(0.7), lineWidth: 1)
+                .strokeBorder(SplickTheme.Colors.divider.opacity(0.5), lineWidth: 0.5)
         }
         .shadow(color: Color.black.opacity(0.12), radius: 16, y: 8)
     }
@@ -2066,25 +2170,6 @@ private struct ComposeLocationEditorView: View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
             SplickTextField(languageService.text(.feedCreateLocationPlaceholder), text: $viewModel.location)
                 .focused($isLocationFocused)
-                .onChange(of: isLocationFocused) { focused in
-                    if focused && viewModel.location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Task { await viewModel.locationSearchHistory?.refresh() }
-                    }
-                }
-            if isLocationFocused,
-               viewModel.location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-               let history = viewModel.locationSearchHistory {
-                RecentSearchesSection(
-                    items: history.items,
-                    languageService: languageService,
-                    onSelect: { item in
-                        viewModel.location = item.query
-                        viewModel.locationQueryDidChange()
-                    },
-                    onDelete: { history.delete($0) },
-                    onClearAll: { history.clear() }
-                )
-            }
             if !viewModel.locationGpsAvailable {
                 Button {
                     locationProvider.request()
@@ -2097,25 +2182,38 @@ private struct ComposeLocationEditorView: View {
             }
             if viewModel.isSearchingPlaces {
                 SplickSpinner(size: .small)
-            }
-            if showsCustomPlaceRow {
-                Button {
-                    viewModel.useTypedLocation()
-                    onPlacePicked?()
-                } label: {
-                    Text(languageService.format(.feedCreateLocationUseTyped, trimmedQuery))
+                    .frame(maxWidth: .infinity)
+            } else if trimmedQuery.count >= 2 {
+                if !viewModel.searchPlaces.isEmpty {
+                    if showsCustomPlaceRow {
+                        Button {
+                            viewModel.useTypedLocation()
+                            onPlacePicked?()
+                        } label: {
+                            Text(languageService.format(.feedCreateLocationUseTyped, trimmedQuery))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    ForEach(Array(viewModel.searchPlaces.prefix(6).enumerated()), id: \.offset) { _, place in
+                        placeButton(place)
+                    }
+                } else {
+                    Text(languageService.text(.feedCreateLocationNotFound))
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.textTertiary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 4)
                 }
-            }
-            if trimmedQuery.count >= 2 {
-                ForEach(Array(viewModel.searchPlaces.prefix(6).enumerated()), id: \.offset) { _, place in
-                    placeButton(place)
-                }
+            } else if viewModel.nearbyPlaces.isEmpty {
+                EmptyView()
             } else {
                 ForEach(Array(viewModel.nearbyPlaces.prefix(6).enumerated()), id: \.offset) { _, place in
                     placeButton(place)
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var fullLocationList: some View {
@@ -2171,6 +2269,14 @@ private struct ComposeLocationEditorView: View {
                     ForEach(viewModel.searchPlaces, id: \.self) { place in
                         placeButton(place)
                     }
+                }
+            }
+
+            if trimmedQuery.count >= 2, viewModel.searchPlaces.isEmpty, !viewModel.isSearchingPlaces {
+                Section {
+                    Text(languageService.text(.feedCreateLocationNotFound))
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.textTertiary)
                 }
             }
 
