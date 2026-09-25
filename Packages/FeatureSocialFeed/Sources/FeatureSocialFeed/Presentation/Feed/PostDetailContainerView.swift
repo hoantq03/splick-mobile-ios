@@ -12,6 +12,8 @@ struct PostDetailContainerView: View {
     let destination: FeedPostDestination
     @ObservedObject var feedViewModel: FeedViewModel
     let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
+    let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
+    let fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol?
     let profileDependencies: FriendUserProfileDependencies?
     let makeGifPickerViewModel: GifPickerViewModelFactory?
     /// Called when the post is unavailable (403/404) and the user dismisses the error.
@@ -32,6 +34,8 @@ struct PostDetailContainerView: View {
                     initialMediaIndex: destination.mediaIndex,
                     feedViewModel: feedViewModel,
                     fetchFriendsUseCase: fetchFriendsUseCase,
+                    fetchMyGroupsUseCase: fetchMyGroupsUseCase,
+                    fetchGroupMembersUseCase: fetchGroupMembersUseCase,
                     profileDependencies: profileDependencies,
                     makeGifPickerViewModel: makeGifPickerViewModel,
                     expandBillSplitInitially: destination.expandBillSplit,

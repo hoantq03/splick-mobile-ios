@@ -35,6 +35,7 @@ public struct FeedView: View {
     private let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
     private let fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol?
     private let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
+    private let fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol?
     private let profileDependencies: FriendUserProfileDependencies?
     private let makeGifPickerViewModel: GifPickerViewModelFactory?
     private let photoAlbumViewModel: PhotoAlbumViewModel
@@ -56,6 +57,7 @@ public struct FeedView: View {
         fetchFriendsUseCase: FetchFriendsUseCaseProtocol? = nil,
         fetchMyFriendsUseCase: FetchMyFriendsUseCaseProtocol? = nil,
         fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol? = nil,
+        fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol? = nil,
         profileDependencies: FriendUserProfileDependencies? = nil,
         makeGifPickerViewModel: GifPickerViewModelFactory? = nil,
         navigationPath: Binding<NavigationPath> = .constant(NavigationPath()),
@@ -70,6 +72,7 @@ public struct FeedView: View {
         self.fetchFriendsUseCase = fetchFriendsUseCase
         self.fetchMyFriendsUseCase = fetchMyFriendsUseCase
         self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
+        self.fetchGroupMembersUseCase = fetchGroupMembersUseCase
         self.profileDependencies = profileDependencies
         self.makeGifPickerViewModel = makeGifPickerViewModel
         self.pendingFeedPostNavigation = pendingFeedPostNavigation
@@ -88,6 +91,10 @@ public struct FeedView: View {
                     navigationPath: $navigationPath,
                     companionsRoute: $companionsRoute,
                     videoCoordinator: videoCoordinator,
+                    fetchFriendsUseCase: fetchFriendsUseCase,
+                    fetchMyGroupsUseCase: fetchMyGroupsUseCase,
+                    fetchGroupMembersUseCase: fetchGroupMembersUseCase,
+                    profileDependencies: profileDependencies,
                     makeGifPickerViewModel: makeGifPickerViewModel,
                     onOpenProfile: openProfile
                 )
@@ -142,6 +149,8 @@ public struct FeedView: View {
                     destination: destination,
                     feedViewModel: viewModel,
                     fetchFriendsUseCase: fetchFriendsUseCase,
+                    fetchMyGroupsUseCase: fetchMyGroupsUseCase,
+                    fetchGroupMembersUseCase: fetchGroupMembersUseCase,
                     profileDependencies: profileDependencies,
                     makeGifPickerViewModel: makeGifPickerViewModel
                 )
@@ -353,6 +362,10 @@ private struct FeedPrimaryPage: View {
     @Binding var navigationPath: NavigationPath
     @Binding var companionsRoute: CompanionsSheetRoute?
     var videoCoordinator: FeedVideoPlaybackCoordinator
+    let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
+    let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
+    let fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol?
+    let profileDependencies: FriendUserProfileDependencies?
     let makeGifPickerViewModel: GifPickerViewModelFactory?
     let onOpenProfile: (UserSummary) -> Void
 
@@ -424,13 +437,23 @@ private struct FeedPrimaryPage: View {
                 customEmojiDependencies: customEmojiDependencies
             )
             .fullScreenCover(item: $editingPost) { post in
-                EditPostComposeView(
-                    post: post,
-                    updatePost: { try await viewModel.updatePost($0) },
-                    onSaved: { _ in editingPost = nil },
-                    onCancel: { editingPost = nil }
-                )
-                .environmentObject(languageService)
+                if let friends = fetchFriendsUseCase,
+                   let groups = fetchMyGroupsUseCase,
+                   let members = fetchGroupMembersUseCase {
+                    EditPostComposeView(
+                        post: post,
+                        updatePost: { try await viewModel.updatePost($0) },
+                        fetchFriendsUseCase: friends,
+                        fetchMyGroupsUseCase: groups,
+                        fetchGroupMembersUseCase: members,
+                        languageService: languageService,
+                        currentUser: currentUserSummary,
+                        profileDependencies: profileDependencies,
+                        onSaved: { _ in editingPost = nil },
+                        onCancel: { editingPost = nil }
+                    )
+                    .environmentObject(languageService)
+                }
             }
             .sheet(item: $editingFailedUploadPost) { post in
                 FailedUploadCaptionEditor(

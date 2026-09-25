@@ -787,7 +787,7 @@ public struct CreatePostComposeView: View {
     }
 }
 
-private struct ComposeOptionPill: View {
+struct ComposeOptionPill: View {
     let title: String
     let systemImage: String
     let isActive: Bool
@@ -1254,7 +1254,7 @@ private struct ComposeBillSplitView: View {
     }
 }
 
-private struct ComposeCompanionsEditorView: View {
+struct ComposeCompanionsEditorView: View {
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var viewModel: CreatePostComposeViewModel

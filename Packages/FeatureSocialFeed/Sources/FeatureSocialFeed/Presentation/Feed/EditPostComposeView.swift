@@ -3,13 +3,15 @@ import PhotosUI
 import UIKit
 import AVFoundation
 import UniformTypeIdentifiers
+import Common
 import DesignSystem
 import Localization
+import Networking
 import SplickDomain
+import FeatureFriends
 
 @MainActor
 final class EditPostComposeViewModel: ObservableObject {
-    @Published var caption: String
     @Published var items: [DraftMedia]
     @Published var isSaving = false
     @Published var errorMessage: String?
@@ -30,7 +32,6 @@ final class EditPostComposeViewModel: ObservableObject {
     init(post: Post, updatePost: @escaping (UpdatePostInput) async throws -> Post) {
         self.post = post
         self.updatePost = updatePost
-        self.caption = post.caption ?? ""
         self.items = post.displayMediaItems.map { item in
             DraftMedia(
                 id: item.id,
@@ -72,7 +73,7 @@ final class EditPostComposeViewModel: ObservableObject {
         items.removeAll { $0.id == id }
     }
 
-    func save() async -> Post? {
+    func save(caption: String, audience: PostAudience, companionIds: [UUID]) async -> Post? {
         guard !items.isEmpty else { return nil }
         isSaving = true
         defer { isSaving = false }
@@ -92,7 +93,9 @@ final class EditPostComposeViewModel: ObservableObject {
                 UpdatePostInput(
                     postId: post.id,
                     caption: caption.isEmpty ? nil : caption,
-                    mediaItems: media
+                    mediaItems: media,
+                    audience: audience,
+                    companionIds: companionIds
                 )
             )
         } catch {
@@ -105,52 +108,99 @@ final class EditPostComposeViewModel: ObservableObject {
 struct EditPostComposeView: View {
     @EnvironmentObject private var languageService: LanguageService
     @StateObject private var viewModel: EditPostComposeViewModel
+    @StateObject private var composeViewModel: CreatePostComposeViewModel
     @State private var pickerItems: [PhotosPickerItem] = []
+    @State private var showCompanionsScreen = false
+    @State private var showAudienceMenu = false
+    let profileDependencies: FriendUserProfileDependencies?
+    let nearbyDiscoveryUseCase: NearbyDiscoveryUseCaseProtocol?
     let onSaved: (Post) -> Void
     let onCancel: () -> Void
 
     init(
         post: Post,
         updatePost: @escaping (UpdatePostInput) async throws -> Post,
+        fetchFriendsUseCase: FetchFriendsUseCaseProtocol,
+        fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol,
+        fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol,
+        languageService: LanguageService,
+        currentUser: UserSummary?,
+        feedRepository: FeedRepositoryProtocol? = nil,
+        searchHistoryRepository: SearchHistoryRepositoryProtocol? = nil,
+        profileDependencies: FriendUserProfileDependencies? = nil,
+        nearbyDiscoveryUseCase: NearbyDiscoveryUseCaseProtocol? = nil,
         onSaved: @escaping (Post) -> Void,
         onCancel: @escaping () -> Void
     ) {
         _viewModel = StateObject(wrappedValue: EditPostComposeViewModel(post: post, updatePost: updatePost))
+        _composeViewModel = StateObject(
+            wrappedValue: CreatePostComposeViewModel(
+                fetchFriendsUseCase: fetchFriendsUseCase,
+                fetchMyGroupsUseCase: fetchMyGroupsUseCase,
+                fetchGroupMembersUseCase: fetchGroupMembersUseCase,
+                languageService: languageService,
+                currentUser: currentUser,
+                currentUserId: currentUser?.id,
+                feedRepository: feedRepository,
+                searchHistoryRepository: searchHistoryRepository,
+                editingPost: post
+            )
+        )
+        self.profileDependencies = profileDependencies
+        self.nearbyDiscoveryUseCase = nearbyDiscoveryUseCase
         self.onSaved = onSaved
         self.onCancel = onCancel
     }
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    mediaStrip
-                    TextField(languageService.text(.feedCreateCaptionPlaceholder), text: $viewModel.caption, axis: .vertical)
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
+                        editActionPills
+                        TextField(
+                            languageService.text(.feedCreateCaptionPlaceholder),
+                            text: $composeViewModel.caption,
+                            axis: .vertical
+                        )
                         .lineLimit(3...8)
                         .padding(12)
                         .background(SplickTheme.Colors.tertiaryBackground, in: RoundedRectangle(cornerRadius: 12))
+                        .padding(.horizontal, SplickTheme.Spacing.md)
+                        mediaStrip
+                            .padding(.horizontal, SplickTheme.Spacing.md)
+                    }
+                    .padding(.bottom, SplickTheme.Spacing.lg)
                 }
-                .padding()
+                editBottomBar
             }
-            .navigationTitle(languageService.text(.feedPostEdit))
+            .background(SplickTheme.Colors.background)
+            .overlay(alignment: .bottomLeading) {
+                if showAudienceMenu {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ComposeAudienceMenuPopup(viewModel: composeViewModel) {
+                            withAnimation {
+                                showAudienceMenu = false
+                            }
+                        }
+                        Color.clear.frame(height: 56).allowsHitTesting(false)
+                    }
+                    .padding(.horizontal, SplickTheme.Spacing.md)
+                }
+            }
+            .navigationTitle(languageService.text(.feedUploadEditPost))
             .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(isPresented: $showCompanionsScreen) {
+                ComposeCompanionsEditorView(
+                    viewModel: composeViewModel,
+                    onUserTap: { _ in },
+                    nearbyDiscoveryUseCase: nearbyDiscoveryUseCase,
+                    profileDependencies: profileDependencies
+                )
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(languageService.text(.commonCancel), action: onCancel)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    if viewModel.isSaving {
-                        SplickSpinner()
-                    } else {
-                        Button(languageService.text(.commonSave)) {
-                            Task {
-                                if let post = await viewModel.save() {
-                                    onSaved(post)
-                                }
-                            }
-                        }
-                        .disabled(viewModel.items.isEmpty)
-                    }
                 }
             }
             .alert(item: Binding(
@@ -158,6 +208,80 @@ struct EditPostComposeView: View {
                 set: { viewModel.errorMessage = $0?.message }
             )) { error in
                 Alert(title: Text(error.message))
+            }
+        }
+    }
+
+    private var hasSelectedCompanions: Bool {
+        !composeViewModel.selectedCompanions.isEmpty || !composeViewModel.selectedCompanionGroups.isEmpty
+    }
+
+    private var editActionPills: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: SplickTheme.Spacing.xs) {
+                ComposeOptionPill(
+                    title: languageService.text(.feedCreateTagFriends),
+                    systemImage: "person.2.fill",
+                    isActive: hasSelectedCompanions
+                ) {
+                    showCompanionsScreen = true
+                }
+            }
+            .padding(.horizontal, SplickTheme.Spacing.md)
+        }
+    }
+
+    private var editBottomBar: some View {
+        VStack(spacing: 0) {
+            Divider().opacity(0.55)
+            HStack(spacing: SplickTheme.Spacing.sm) {
+                KeyboardStickyTapControl(isEnabled: true, action: { showAudienceMenu.toggle() }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "eye.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                        Text(composeViewModel.audienceSummaryTitle)
+                            .font(SplickTheme.Typography.callout)
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(SplickTheme.Colors.textPrimary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(SplickTheme.Colors.secondaryBackground)
+                    .clipShape(Capsule())
+                }
+                Spacer()
+                if viewModel.isSaving {
+                    SplickSpinner()
+                } else {
+                    KeyboardStickyTapControl(isEnabled: !viewModel.items.isEmpty, action: save) {
+                        Text(languageService.text(.commonSave))
+                            .font(SplickTheme.Typography.callout)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(
+                                viewModel.items.isEmpty
+                                    ? SplickTheme.Colors.brandBlue.opacity(0.35)
+                                    : SplickTheme.Colors.brandBlue
+                            )
+                            .clipShape(Capsule())
+                    }
+                }
+            }
+            .padding(.horizontal, SplickTheme.Spacing.md)
+            .padding(.vertical, 10)
+        }
+    }
+
+    private func save() {
+        Task {
+            if let post = await viewModel.save(
+                caption: composeViewModel.caption,
+                audience: composeViewModel.currentAudience,
+                companionIds: composeViewModel.companionUsersForSubmit.map(\.id)
+            ) {
+                onSaved(post)
             }
         }
     }

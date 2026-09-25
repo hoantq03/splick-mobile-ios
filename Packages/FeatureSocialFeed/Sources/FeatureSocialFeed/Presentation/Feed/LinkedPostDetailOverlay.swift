@@ -22,6 +22,8 @@ public struct LinkedPostDetailOverlay: View {
     let presentation: PendingFeedPostNavigation
     @ObservedObject var feedViewModel: FeedViewModel
     let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
+    let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
+    let fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol?
     let profileDependencies: FriendUserProfileDependencies?
     let makeGifPickerViewModel: GifPickerViewModelFactory?
     let uploadCommentImage: CommentImageUploadHandler?
@@ -36,6 +38,8 @@ public struct LinkedPostDetailOverlay: View {
         presentation: PendingFeedPostNavigation,
         feedViewModel: FeedViewModel,
         fetchFriendsUseCase: FetchFriendsUseCaseProtocol? = nil,
+        fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol? = nil,
+        fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol? = nil,
         profileDependencies: FriendUserProfileDependencies? = nil,
         makeGifPickerViewModel: GifPickerViewModelFactory? = nil,
         uploadCommentImage: CommentImageUploadHandler? = nil,
@@ -44,6 +48,8 @@ public struct LinkedPostDetailOverlay: View {
         self.presentation = presentation
         self.feedViewModel = feedViewModel
         self.fetchFriendsUseCase = fetchFriendsUseCase
+        self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
+        self.fetchGroupMembersUseCase = fetchGroupMembersUseCase
         self.profileDependencies = profileDependencies
         self.makeGifPickerViewModel = makeGifPickerViewModel
         self.uploadCommentImage = uploadCommentImage
@@ -62,6 +68,8 @@ public struct LinkedPostDetailOverlay: View {
                 ),
                 feedViewModel: feedViewModel,
                 fetchFriendsUseCase: fetchFriendsUseCase,
+                fetchMyGroupsUseCase: fetchMyGroupsUseCase,
+                fetchGroupMembersUseCase: fetchGroupMembersUseCase,
                 profileDependencies: profileDependencies,
                 makeGifPickerViewModel: makeGifPickerViewModel,
                 onClose: dismissFromBackControl

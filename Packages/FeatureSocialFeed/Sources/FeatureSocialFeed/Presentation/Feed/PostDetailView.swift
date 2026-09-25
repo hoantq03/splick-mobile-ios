@@ -13,6 +13,8 @@ struct PostDetailView: View {
     let initialMediaIndex: Int
     @ObservedObject var feedViewModel: FeedViewModel
     let fetchFriendsUseCase: FetchFriendsUseCaseProtocol?
+    let fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol?
+    let fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol?
     let profileDependencies: FriendUserProfileDependencies?
     let makeGifPickerViewModel: GifPickerViewModelFactory?
     let expandBillSplitInitially: Bool
@@ -53,6 +55,8 @@ struct PostDetailView: View {
         initialMediaIndex: Int = 0,
         feedViewModel: FeedViewModel,
         fetchFriendsUseCase: FetchFriendsUseCaseProtocol? = nil,
+        fetchMyGroupsUseCase: FetchMyGroupsUseCaseProtocol? = nil,
+        fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol? = nil,
         profileDependencies: FriendUserProfileDependencies? = nil,
         makeGifPickerViewModel: GifPickerViewModelFactory? = nil,
         expandBillSplitInitially: Bool = false,
@@ -64,6 +68,8 @@ struct PostDetailView: View {
         self.initialMediaIndex = initialMediaIndex
         self.feedViewModel = feedViewModel
         self.fetchFriendsUseCase = fetchFriendsUseCase
+        self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
+        self.fetchGroupMembersUseCase = fetchGroupMembersUseCase
         self.profileDependencies = profileDependencies
         self.makeGifPickerViewModel = makeGifPickerViewModel
         self.expandBillSplitInitially = expandBillSplitInitially
@@ -300,13 +306,23 @@ struct PostDetailView: View {
             customEmojiDependencies: customEmojiDependencies
         )
         .fullScreenCover(item: $editingPost) { post in
-            EditPostComposeView(
-                post: post,
-                updatePost: { try await feedViewModel.updatePost($0) },
-                onSaved: { _ in editingPost = nil },
-                onCancel: { editingPost = nil }
-            )
-            .environmentObject(languageService)
+            if let friends = fetchFriendsUseCase,
+               let groups = fetchMyGroupsUseCase,
+               let members = fetchGroupMembersUseCase {
+                EditPostComposeView(
+                    post: post,
+                    updatePost: { try await feedViewModel.updatePost($0) },
+                    fetchFriendsUseCase: friends,
+                    fetchMyGroupsUseCase: groups,
+                    fetchGroupMembersUseCase: members,
+                    languageService: languageService,
+                    currentUser: currentUserSummary,
+                    profileDependencies: profileDependencies,
+                    onSaved: { _ in editingPost = nil },
+                    onCancel: { editingPost = nil }
+                )
+                .environmentObject(languageService)
+            }
         }
         .sheet(item: $editingFailedUploadPost) { post in
             FailedUploadCaptionEditor(

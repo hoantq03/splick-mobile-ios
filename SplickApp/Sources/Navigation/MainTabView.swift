@@ -371,6 +371,8 @@ struct MainTabView: View {
                     presentation: presentation,
                     feedViewModel: container.feedViewModel,
                     fetchFriendsUseCase: container.fetchFriendsUseCase,
+                    fetchMyGroupsUseCase: container.fetchMyGroupsUseCase,
+                    fetchGroupMembersUseCase: container.fetchGroupMembersUseCase,
                     profileDependencies: container.friendUserProfileDependencies,
                     makeGifPickerViewModel: container.makeGifPickerViewModel(groupId:),
                     uploadCommentImage: { data, mimeType in
@@ -410,6 +412,7 @@ struct MainTabView: View {
             fetchFriendsUseCase: container.fetchFriendsUseCase,
             fetchMyFriendsUseCase: container.fetchMyFriendsUseCase,
             fetchMyGroupsUseCase: container.fetchMyGroupsUseCase,
+            fetchGroupMembersUseCase: container.fetchGroupMembersUseCase,
             profileDependencies: container.friendUserProfileDependencies,
             makeGifPickerViewModel: container.makeGifPickerViewModel(groupId:),
             navigationPath: $appState.feedNavigationPath,

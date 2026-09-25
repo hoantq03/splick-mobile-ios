@@ -14,7 +14,7 @@ final class MockUserDefaultsService: UserDefaultsServiceProtocol {
     func get<T: Codable>(for key: String) -> T? { storage[key] as? T }
     func setBool(_ value: Bool, for key: String) { storage[key] = value }
     func getBool(for key: String) -> Bool { (storage[key] as? Bool) ?? false }
-    fun remove(for key: String) { storage.removeValue(forKey: key) }
+    func remove(for key: String) { storage.removeValue(forKey: key) }
     func removeKeys(prefixedBy prefix: String) {
         storage.keys.filter { $0.hasPrefix(prefix) }.forEach { storage.removeValue(forKey: $0) }
     }
@@ -393,5 +393,41 @@ final class CreatePostComposeViewModelTests: XCTestCase {
         XCTAssertEqual(vm.friendSearchResults.map(\.id), [friend.id])
         XCTAssertEqual(mockFriendsUseCase.lastQuery, "")
         XCTAssertEqual(mockFriendsUseCase.lastPage, 0)
+    }
+
+    func testEditingPostSeedsCaptionAudienceAndCompanions() {
+        let companion = UserSummary(id: UUID(), username: "mai", displayName: "Mai", avatarURL: nil)
+        let post = Post(
+            id: UUID(),
+            author: currentUser,
+            imageURL: URL(string: "https://cdn.splick.com/pic.jpg")!,
+            caption: "Lunch",
+            reactions: [],
+            reactionCount: 0,
+            reactorCount: 0,
+            comments: [],
+            commentCount: 0,
+            createdAt: Date(),
+            mediaType: .image,
+            companions: [companion],
+            feedKind: .checkIn,
+            viewCount: 0,
+            audience: PostAudience(mode: .specificUsers, allowedUserIds: [companion.id])
+        )
+        let vm = CreatePostComposeViewModel(
+            fetchFriendsUseCase: mockFriendsUseCase,
+            fetchMyGroupsUseCase: mockGroupsUseCase,
+            fetchGroupMembersUseCase: mockMembersUseCase,
+            languageService: languageService,
+            currentUser: currentUser,
+            currentUserId: currentUser.id,
+            feedRepository: mockFeedRepo,
+            editingPost: post
+        )
+        XCTAssertEqual(vm.caption, "Lunch")
+        XCTAssertEqual(vm.audienceMode, .specificUsers)
+        XCTAssertEqual(vm.selectedCompanions.map(\.id), [companion.id])
+        XCTAssertEqual(vm.currentAudience.mode, .specificUsers)
+        XCTAssertEqual(vm.companionUsersForSubmit.map(\.id), [companion.id])
     }
 }

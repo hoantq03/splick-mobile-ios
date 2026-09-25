@@ -137,6 +137,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
     }
 
     private let maxMediaItems = 10
+    private let editingPost: Post?
 
     public init(
         previewImages: [UIImage] = [],
@@ -150,7 +151,8 @@ public final class CreatePostComposeViewModel: ObservableObject {
         currentUser: UserSummary?,
         currentUserId: UUID?,
         feedRepository: FeedRepositoryProtocol? = nil,
-        searchHistoryRepository: SearchHistoryRepositoryProtocol? = nil
+        searchHistoryRepository: SearchHistoryRepositoryProtocol? = nil,
+        editingPost: Post? = nil
     ) {
         self.fetchFriendsUseCase = fetchFriendsUseCase
         self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
@@ -165,6 +167,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
         self.friendsSearchHistory = searchHistoryRepository.map {
             SearchHistorySession(repository: $0, scope: .friends)
         }
+        self.editingPost = editingPost
         var drafts: [ComposeMediaDraft] = []
         var pendingSessionID = PhotoEditorSessionStore.shared.takePendingSessionID()
         for image in previewImages {
@@ -192,6 +195,9 @@ public final class CreatePostComposeViewModel: ObservableObject {
         observeLocationQuery()
         for pending in pendingVideoEncodes where selectedMediaItems.contains(where: { $0.id == pending.id }) {
             startPendingVideoEncode(pending)
+        }
+        if let editingPost {
+            applyEditedPost(editingPost)
         }
     }
 
@@ -819,6 +825,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
             availableAudienceGroups = groups
             audienceGroupsState = .loaded(groups)
             hasLoadedAudienceGroups = true
+            enrichAudienceGroups(from: groups)
         } catch {
             audienceGroupsState = .failed(languageService.localizedMessage(for: error))
         }
@@ -1014,6 +1021,44 @@ public final class CreatePostComposeViewModel: ObservableObject {
             groupId: selectedCompanionGroups.first?.id,
             groupIds: selectedCompanionGroups.map(\.id)
         )
+    }
+
+    var currentAudience: PostAudience { buildAudience() }
+
+    private func applyEditedPost(_ post: Post) {
+        caption = post.caption ?? ""
+        selectedCompanions = post.companions
+        audienceMode = post.audience.mode
+        switch post.audience.mode {
+        case .friends:
+            selectedAudienceUsers = []
+            selectedAudienceGroups = []
+        case .groups:
+            selectedAudienceUsers = []
+            selectedAudienceGroups = post.audience.allowedGroupIds.map { id in
+                Group(id: id, name: "Group", inviteCode: "", createdBy: id)
+            }
+        case .specificUsers:
+            selectedAudienceGroups = []
+            selectedAudienceUsers = resolveUsers(ids: post.audience.allowedUserIds, known: post.companions)
+        case .friendsExcept:
+            selectedAudienceGroups = []
+            selectedAudienceUsers = resolveUsers(ids: post.audience.excludedUserIds, known: post.companions)
+        }
+        Task { await loadAudienceGroupsIfNeeded() }
+    }
+
+    private func enrichAudienceGroups(from groups: [Group]) {
+        guard audienceMode == .groups else { return }
+        let byId = Dictionary(uniqueKeysWithValues: groups.map { ($0.id, $0) })
+        selectedAudienceGroups = selectedAudienceGroups.map { byId[$0.id] ?? $0 }
+    }
+
+    private func resolveUsers(ids: [UUID], known: [UserSummary]) -> [UserSummary] {
+        let byId = Dictionary(uniqueKeysWithValues: known.map { ($0.id, $0) })
+        return ids.map { id in
+            byId[id] ?? UserSummary(id: id, username: "", displayName: "User")
+        }
     }
 
     private func buildAudience() -> PostAudience {
