@@ -87,6 +87,7 @@ struct MainTabView: View {
         hasher.combine(colorScheme == .dark)
         hasher.combine(splickVisualTheme)
         hasher.combine(splickColorTheme)
+        hasher.combine(appState.pendingFeedPostNavigation?.postId)
         return hasher.finalize()
     }
 
@@ -415,7 +416,7 @@ struct MainTabView: View {
             fetchGroupMembersUseCase: container.fetchGroupMembersUseCase,
             profileDependencies: container.friendUserProfileDependencies,
             makeGifPickerViewModel: container.makeGifPickerViewModel(groupId:),
-            navigationPath: $appState.feedNavigationPath,
+            navigationStore: appState.feedNavigationStore,
             pendingFeedPostNavigation: appState.pendingFeedPostNavigation,
             onPendingPostHandled: {
                 appState.clearPendingPostNavigation()

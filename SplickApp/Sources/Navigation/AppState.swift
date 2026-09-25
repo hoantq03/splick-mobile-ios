@@ -21,8 +21,10 @@ final class AppState: ObservableObject {
     @Published var showNotifications = false
     @Published var needsOAuthProfileSetup = false
     @Published var notificationAnchorFrame: CGRect = .zero
-    @Published var feedNavigationPath = NavigationPath()
     @Published var pendingFeedPostNavigation: PendingFeedPostNavigation?
+    /// Feed `NavigationStack` path. Class so nested pagers can append without
+    /// the tab pager rewriting `FeedView`.
+    let feedNavigationStore = FeedNavigationStore()
     /// Slides in over the current tab (e.g. expense row → post detail).
     @Published var linkedPostPresentation: PendingFeedPostNavigation?
 
@@ -105,7 +107,7 @@ final class AppState: ObservableObject {
         needsOAuthProfileSetup = false
         selectedTab = .feed
         showNotifications = false
-        feedNavigationPath = NavigationPath()
+        feedNavigationStore.reset()
         pendingFeedPostNavigation = nil
         linkedPostPresentation = nil
         pendingMessagingNavigation = nil
@@ -122,7 +124,7 @@ final class AppState: ObservableObject {
         authState = .unauthenticated
         selectedTab = .feed
         showNotifications = false
-        feedNavigationPath = NavigationPath()
+        feedNavigationStore.reset()
         pendingFeedPostNavigation = nil
         linkedPostPresentation = nil
         pendingMessagingNavigation = nil

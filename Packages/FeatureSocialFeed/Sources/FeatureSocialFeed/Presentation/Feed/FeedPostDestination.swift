@@ -1,4 +1,18 @@
 import Foundation
+import SwiftUI
+
+/// Shared by the feed tab and nested segment pages. `@Published` invalidates
+/// `FeedView`'s `NavigationStack` even when the tab pager skips `rootView` refresh.
+@MainActor
+public final class FeedNavigationStore: ObservableObject {
+    @Published public var path = NavigationPath()
+
+    public init() {}
+
+    public func reset() {
+        path = NavigationPath()
+    }
+}
 
 public struct FeedPostDestination: Hashable {
     public let postId: UUID

@@ -22,7 +22,7 @@ private final class FeedVideoCoordinatorHolder: ObservableObject {
 public struct FeedView: View {
     @EnvironmentObject private var languageService: LanguageService
     @ObservedObject private var viewModel: FeedViewModel
-    @Binding private var navigationPath: NavigationPath
+    @ObservedObject private var navigationStore: FeedNavigationStore
     private let pendingFeedPostNavigation: PendingFeedPostNavigation?
     private let onPendingPostHandled: (() -> Void)?
     @Environment(\.openPostCaptureFlow) private var openPostCaptureFlow
@@ -50,6 +50,7 @@ public struct FeedView: View {
     private var videoCoordinator: FeedVideoPlaybackCoordinator { videoCoordinatorHolder.coordinator }
     @Namespace private var postZoomNamespace
 
+    @MainActor
     public init(
         viewModel: FeedViewModel,
         photoAlbumViewModel: PhotoAlbumViewModel,
@@ -60,15 +61,15 @@ public struct FeedView: View {
         fetchGroupMembersUseCase: FetchGroupMembersUseCaseProtocol? = nil,
         profileDependencies: FriendUserProfileDependencies? = nil,
         makeGifPickerViewModel: GifPickerViewModelFactory? = nil,
-        navigationPath: Binding<NavigationPath> = .constant(NavigationPath()),
+        navigationStore: FeedNavigationStore? = nil,
         pendingFeedPostNavigation: PendingFeedPostNavigation? = nil,
         onPendingPostHandled: (() -> Void)? = nil,
         isTabActive: Bool = true
     ) {
         self._viewModel = ObservedObject(wrappedValue: viewModel)
+        self._navigationStore = ObservedObject(wrappedValue: navigationStore ?? FeedNavigationStore())
         self.photoAlbumViewModel = photoAlbumViewModel
         self.streakViewModel = streakViewModel
-        _navigationPath = navigationPath
         self.fetchFriendsUseCase = fetchFriendsUseCase
         self.fetchMyFriendsUseCase = fetchMyFriendsUseCase
         self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
@@ -81,14 +82,14 @@ public struct FeedView: View {
     }
 
     public var body: some View {
-        NavigationStack(path: $navigationPath) {
+        NavigationStack(path: $navigationStore.path) {
             FeedContentPager(
                 selection: $selectedSegment,
-                sameTabTapHandlingEnabled: sameTabTapHandlingEnabled && navigationPath.isEmpty
+                sameTabTapHandlingEnabled: sameTabTapHandlingEnabled && navigationStore.path.isEmpty
             ) {
                 FeedPrimaryPage(
                     viewModel: viewModel,
-                    navigationPath: $navigationPath,
+                    navigationPath: $navigationStore.path,
                     companionsRoute: $companionsRoute,
                     videoCoordinator: videoCoordinator,
                     fetchFriendsUseCase: fetchFriendsUseCase,
@@ -102,7 +103,7 @@ public struct FeedView: View {
                 PhotoAlbumView(
                     viewModel: photoAlbumViewModel,
                     feedViewModel: viewModel,
-                    navigationPath: $navigationPath,
+                    navigationPath: $navigationStore.path,
                     fetchMyFriendsUseCase: fetchMyFriendsUseCase,
                     fetchMyGroupsUseCase: fetchMyGroupsUseCase,
                     isEmbedded: true
@@ -111,7 +112,7 @@ public struct FeedView: View {
                 StreakView(
                     viewModel: streakViewModel,
                     feedViewModel: viewModel,
-                    navigationPath: $navigationPath
+                    navigationPath: $navigationStore.path
                 )
             }
             .environment(\.pullToRefreshActive, viewModel.isRefreshing)
@@ -137,7 +138,7 @@ public struct FeedView: View {
                 FeedScrollTopFadeOverlay()
             }
             .overlay(alignment: .top) {
-                if selectedSegment == .feed, navigationPath.isEmpty, !notificationsPresented {
+                if selectedSegment == .feed, navigationStore.path.isEmpty, !notificationsPresented {
                     FeedNewPostsPillOverlay(
                         count: viewModel.isRefreshing ? 0 : viewModel.newPostsCount,
                         onTap: revealNewPostsFromPill
@@ -196,7 +197,7 @@ public struct FeedView: View {
         }
         .environment(\.feedSegmentScrollState, scrollChrome.feedSegment)
         .environment(\.feedPostZoomNamespace, postZoomNamespace)
-        .onChange(of: navigationPath.isEmpty) { isEmpty in
+        .onChange(of: navigationStore.path.isEmpty) { isEmpty in
             guard isEmpty else { return }
             // Off the view-update turn — publishing TabBarScrollState here
             // hits "Publishing changes from within view updates".
@@ -208,6 +209,7 @@ public struct FeedView: View {
             viewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
         }
         .onChange(of: currentUserSummary?.id) { _ in
+            navigationStore.reset()
             viewModel.updateSession(user: currentUserSummary, userId: currentUserSummary?.id)
         }
         .task(id: pendingFeedPostNavigation) {
@@ -215,7 +217,7 @@ public struct FeedView: View {
             let result = await viewModel.ensurePostLoaded(id: navigation.postId)
             if result == .loaded {
                 withFeedPostNavigation {
-                    navigationPath.append(
+                    navigationStore.path.append(
                         FeedPostDestination(
                             postId: navigation.postId,
                             mediaIndex: 0,
@@ -316,8 +318,8 @@ public struct FeedView: View {
     private func handleSameTabTap() {
         guard sameTabTapHandlingEnabled, isTabActive else { return }
 
-        if !navigationPath.isEmpty {
-            navigationPath = NavigationPath()
+        if !navigationStore.path.isEmpty {
+            navigationStore.reset()
             tabBarScrollState?.show()
             return
         }
