@@ -76,7 +76,13 @@ final class SocialFeedMoreViewModelAndMapperTests: XCTestCase {
         let item1 = UpdatePostMediaItem.existing(existingMedia)
         let item2 = UpdatePostMediaItem.uploaded(data: Data(), mimeType: "image/jpeg", mediaType: .image, videoDurationSeconds: nil)
 
-        let input = UpdatePostInput(postId: UUID(), caption: "Cap", mediaItems: [item1, item2])
+        let input = UpdatePostInput(
+            postId: UUID(),
+            caption: "Cap",
+            mediaItems: [item1, item2],
+            audience: .friends,
+            companionIds: []
+        )
         XCTAssertEqual(input.caption, "Cap")
         XCTAssertEqual(input.mediaItems.count, 2)
     }

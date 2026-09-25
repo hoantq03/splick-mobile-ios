@@ -249,7 +249,17 @@ public final class FeedRepository: FeedRepositoryProtocol, Sendable {
         let dto: PostDTO = try await apiClient.request(
             FeedEndpoint.updatePost(
                 id: input.postId,
-                UpdatePostRequestDTO(caption: input.caption, mediaItems: requestMediaItems)
+                UpdatePostRequestDTO(
+                    caption: input.caption,
+                    mediaItems: requestMediaItems,
+                    audience: CreatePostAudienceRequestDTO(
+                        mode: input.audience.mode.rawValue,
+                        allowedGroupIds: input.audience.allowedGroupIds,
+                        allowedUserIds: input.audience.allowedUserIds,
+                        excludedUserIds: input.audience.excludedUserIds
+                    ),
+                    companionIds: input.companionIds
+                )
             )
         )
         return await resolvePosts([FeedMapper.toPost(dto)]).first ?? FeedMapper.toPost(dto)

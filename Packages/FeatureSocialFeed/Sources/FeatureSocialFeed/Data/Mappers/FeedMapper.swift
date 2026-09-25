@@ -63,7 +63,10 @@ enum FeedMapper {
         PostEditRevision(
             editedAt: dto.editedAt,
             caption: dto.caption,
-            mediaItems: dto.mediaItems.compactMap(toMediaItem)
+            mediaItems: dto.mediaItems.compactMap(toMediaItem),
+            audience: dto.audience.map(toAudience),
+            companions: dto.companions?.map(toUserSummary),
+            revisionNumber: dto.revisionNumber
         )
     }
 

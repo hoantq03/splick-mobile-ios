@@ -398,7 +398,9 @@ final class FeedRepositoryTests: XCTestCase {
             mediaItems: [
                 .existing(existingMedia),
                 .uploaded(data: Data("new".utf8), mimeType: "image/jpeg", mediaType: .image, videoDurationSeconds: nil)
-            ]
+            ],
+            audience: .friends,
+            companionIds: []
         )
 
         let updatedPost = try await repo.updatePost(updateInput)

@@ -85,7 +85,13 @@ final class SocialFeedUseCasesCoverageTests: XCTestCase {
         let updateUseCase = UpdatePostUseCase(repository: repo)
 
         let postId = UUID()
-        let input = UpdatePostInput(postId: postId, caption: "Updated caption", mediaItems: [])
+        let input = UpdatePostInput(
+            postId: postId,
+            caption: "Updated caption",
+            mediaItems: [],
+            audience: .friends,
+            companionIds: []
+        )
         let post = try await updateUseCase.execute(input)
         XCTAssertEqual(post.id, postId)
 

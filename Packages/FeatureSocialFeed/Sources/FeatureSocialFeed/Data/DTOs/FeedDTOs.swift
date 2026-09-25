@@ -285,6 +285,8 @@ struct StreakDayDTO: Decodable {
 struct UpdatePostRequestDTO: Encodable {
     let caption: String?
     let mediaItems: [CreatePostMediaItemRequestDTO]
+    let audience: CreatePostAudienceRequestDTO?
+    let companionIds: [UUID]?
 }
 
 struct PostEditsResponseDTO: Decodable {
@@ -292,9 +294,12 @@ struct PostEditsResponseDTO: Decodable {
 }
 
 struct PostEditRevisionDTO: Decodable {
+    let revisionNumber: Int?
     let editedAt: Date
     let caption: String?
     let mediaItems: [PostMediaItemDTO]
+    let audience: PostAudienceDTO?
+    let companions: [AuthorDTO]?
 }
 
 struct FeedAheadCountDTO: Decodable {
