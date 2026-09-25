@@ -3,6 +3,7 @@ import UIKit
 import Common
 import DesignSystem
 import Localization
+import Networking
 import SplickDomain
 
 public struct AttachmentPickerView: View {
@@ -16,6 +17,7 @@ public struct AttachmentPickerView: View {
     private let onSelectEmoji: (String) -> Void
 
     @State private var peekedSticker: Sticker?
+    @FocusState private var isGifSearchFocused: Bool
 
     private var resolvedUserId: UUID? {
         currentUserId ?? currentUserSummary?.id
@@ -65,6 +67,18 @@ public struct AttachmentPickerView: View {
                 searchBar
                     .padding(.horizontal, SplickTheme.Spacing.md)
                     .padding(.bottom, SplickTheme.Spacing.xs)
+                if viewModel.isSearchEmpty, let history = viewModel.searchHistory {
+                    RecentSearchesSection(
+                        items: history.items,
+                        languageService: languageService,
+                        onSelect: { item in
+                            viewModel.onSearchTextChanged(item.query)
+                        },
+                        onDelete: { history.delete($0) },
+                        onClearAll: { history.clear() }
+                    )
+                    .padding(.horizontal, SplickTheme.Spacing.md)
+                }
             }
 
             VStack(spacing: SplickTheme.Spacing.xs) {
@@ -125,6 +139,12 @@ public struct AttachmentPickerView: View {
             ))
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
+            .focused($isGifSearchFocused)
+            .onChange(of: isGifSearchFocused) { focused in
+                if focused && viewModel.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Task { await viewModel.searchHistory?.refresh() }
+                }
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)

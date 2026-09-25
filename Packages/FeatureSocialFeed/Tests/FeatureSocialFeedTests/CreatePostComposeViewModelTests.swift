@@ -14,7 +14,10 @@ final class MockUserDefaultsService: UserDefaultsServiceProtocol {
     func get<T: Codable>(for key: String) -> T? { storage[key] as? T }
     func setBool(_ value: Bool, for key: String) { storage[key] = value }
     func getBool(for key: String) -> Bool { (storage[key] as? Bool) ?? false }
-    func remove(for key: String) { storage.removeValue(forKey: key) }
+    fun remove(for key: String) { storage.removeValue(forKey: key) }
+    func removeKeys(prefixedBy prefix: String) {
+        storage.keys.filter { $0.hasPrefix(prefix) }.forEach { storage.removeValue(forKey: $0) }
+    }
 }
 
 final class MockFetchFriendsUseCase: FetchFriendsUseCaseProtocol, @unchecked Sendable {

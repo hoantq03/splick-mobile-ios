@@ -242,6 +242,8 @@ enum StringsFeatureEn {
         .friendsScanQRUnified: "Scan QR code",
         .friendsCreateGroup: "Create group",
         .friendsSearchPlaceholder: "Search name, username, or group code",
+        .searchHistoryTitle: "Recent searches",
+        .searchHistoryClearAll: "Clear all",
         .friendsJoinGroupByCode: "Join group",
         .friendsScanSimulatorHint: "The Simulator has no camera. Use a real device to scan, or pick a photo from your album below.",
         .friendsScanQRFromAlbum: "Scan QR from photo album",
@@ -375,7 +377,7 @@ enum StringsFeatureEn {
         .expenseCreateSplitType: "Split Type",
         .expenseCreateAction: "Create Expense",
         .expenseSplitEqual: "Split Equally",
-        .expenseSplitExact: "Exact Amounts",
+        .expenseSplitExact: "Custom",
         .expenseSplitPercentage: "By Percentage",
         .expenseRowPaidAccessibility: "Paid",
         .expenseRowUnpaidAccessibility: "Not paid yet",
@@ -1058,6 +1060,8 @@ enum StringsFeatureEn {
         .stickersUploadUnavailable: "Emoji upload isn't available yet.",
         .stickersOpenImageFailed: "Couldn't open the selected image.",
         .stickersGifDoubleTapSend: "Double tap to send",
+        .stickersGifSuggestSeeMore: "See more",
+        .stickersGifSuggestDismissA11y: "Hide GIF suggestions",
 
         // Expense create / categories
         .expenseCreateFailed: "Failed to create expense",

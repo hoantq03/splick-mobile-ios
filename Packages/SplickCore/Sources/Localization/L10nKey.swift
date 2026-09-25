@@ -535,6 +535,8 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case friendsScanQRUnified = "friends.scan_qr.unified"
     case friendsCreateGroup = "friends.create_group"
     case friendsSearchPlaceholder = "friends.search.placeholder"
+    case searchHistoryTitle = "search.history.title"
+    case searchHistoryClearAll = "search.history.clear_all"
     case friendsJoinGroupByCode = "friends.join_group.by_code"
     case friendsScanSimulatorHint = "friends.scan.simulator_hint"
     case friendsScanQRFromAlbum = "friends.scan_qr.from_album"
@@ -1343,6 +1345,8 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case stickersUploadUnavailable = "stickers.upload_unavailable"
     case stickersOpenImageFailed = "stickers.open_image_failed"
     case stickersGifDoubleTapSend = "stickers.gif_double_tap_send"
+    case stickersGifSuggestSeeMore = "stickers.gif_suggest.see_more"
+    case stickersGifSuggestDismissA11y = "stickers.gif_suggest.dismiss_a11y"
 
     // Expense create / categories
     case expenseCreateFailed = "expense.create.failed"

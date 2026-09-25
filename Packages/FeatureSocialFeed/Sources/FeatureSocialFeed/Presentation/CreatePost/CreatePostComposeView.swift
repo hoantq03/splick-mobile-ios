@@ -33,9 +33,98 @@ enum ComposeSearchAnchor: Hashable {
 }
 
 func revealComposeSearch(_ proxy: ScrollViewProxy, _ id: ComposeSearchAnchor) {
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.34) {
-        withAnimation(.easeInOut(duration: 0.25)) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+        withAnimation(ComposeSearchExpandMotion.spring) {
             proxy.scrollTo(id, anchor: .bottom)
+        }
+    }
+}
+
+private enum ComposeSearchExpandMotion {
+    static let spring = Animation.spring(response: 0.44, dampingFraction: 0.66)
+}
+
+private struct ComposeSearchHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct ComposeBottomBarHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+/// Grows downward from the search field's bottom edge. `move(edge:)` inside a
+/// ScrollView travels from the scroll view's top instead of the field.
+private struct ComposeSearchResultsExpand<Content: View>: View {
+    let isExpanded: Bool
+    let content: Content
+
+    init(isExpanded: Bool, @ViewBuilder content: () -> Content) {
+        self.isExpanded = isExpanded
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .frame(maxWidth: .infinity, alignment: .top)
+            .fixedSize(horizontal: false, vertical: true)
+            .background {
+                GeometryReader { proxy in
+                    Color.clear.preference(key: ComposeSearchHeightKey.self, value: proxy.size.height)
+                }
+            }
+            .modifier(ComposeSearchHeightClip(isExpanded: isExpanded))
+    }
+}
+
+private struct ComposeSearchHeightClip: ViewModifier {
+    let isExpanded: Bool
+    @State private var measuredHeight: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .frame(height: isExpanded ? measuredHeight : 0, alignment: .top)
+            .clipped()
+            .opacity(isExpanded && measuredHeight > 1 ? 1 : 0)
+            .allowsHitTesting(isExpanded)
+            .accessibilityHidden(!isExpanded)
+            .onPreferenceChange(ComposeSearchHeightKey.self) { newHeight in
+                updateMeasuredHeight(newHeight)
+            }
+    }
+
+    private func updateMeasuredHeight(_ newHeight: CGFloat) {
+        guard newHeight.isFinite, newHeight > 1 else { return }
+        guard abs(newHeight - measuredHeight) > 0.5 else { return }
+
+        if measuredHeight == 0 {
+            if isExpanded {
+                withAnimation(ComposeSearchExpandMotion.spring) {
+                    measuredHeight = newHeight
+                }
+            } else {
+                measuredHeight = newHeight
+            }
+            return
+        }
+
+        if isExpanded {
+            withAnimation(ComposeSearchExpandMotion.spring) {
+                measuredHeight = newHeight
+            }
+        } else {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                measuredHeight = newHeight
+            }
         }
     }
 }
@@ -59,7 +148,8 @@ public struct CreatePostComposeView: View {
     @State private var reviewingMediaID: UUID?
     @State private var showBillSplitScreen = false
     @State private var showCompanionsScreen = false
-    @State private var showAudienceScreen = false
+    @State private var showAudienceMenu = false
+    @State private var composeBottomBarHeight: CGFloat = 56
     @State private var showLocationScreen = false
     @State private var profileRoute: ComposeProfileRoute?
 
@@ -97,6 +187,30 @@ public struct CreatePostComposeView: View {
             composeBottomBar
         }
         .background(SplickTheme.Colors.background)
+        .overlay(alignment: .bottomLeading) {
+            if showAudienceMenu {
+                VStack(alignment: .leading, spacing: 8) {
+                    ComposeAudienceMenuPopup(viewModel: viewModel) {
+                        withAnimation(ComposeSearchExpandMotion.spring) {
+                            showAudienceMenu = false
+                        }
+                    }
+                    Color.clear
+                        .frame(height: composeBottomBarHeight)
+                        .allowsHitTesting(false)
+                }
+                .padding(.horizontal, SplickTheme.Spacing.md)
+                .transition(
+                    .asymmetric(
+                        insertion: .scale(scale: 0.82, anchor: .bottomLeading)
+                            .combined(with: .opacity)
+                            .combined(with: .offset(y: 10)),
+                        removal: .opacity.combined(with: .offset(y: 6))
+                    )
+                )
+            }
+        }
+        .animation(ComposeSearchExpandMotion.spring, value: showAudienceMenu)
         .navigationTitle(languageService.text(.feedCreateTitle))
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(isPresented: $showBillSplitScreen) {
@@ -113,12 +227,6 @@ public struct CreatePostComposeView: View {
                 onUserTap: openProfile,
                 nearbyDiscoveryUseCase: nearbyDiscoveryUseCase,
                 profileDependencies: profileDependencies
-            )
-        }
-        .navigationDestination(isPresented: $showAudienceScreen) {
-            ComposeAudienceScreen(
-                viewModel: viewModel,
-                onUserTap: openProfile
             )
         }
         .navigationDestination(isPresented: $showLocationScreen) {
@@ -245,33 +353,36 @@ public struct CreatePostComposeView: View {
 
     @ViewBuilder
     private var mediaPreview: some View {
-        let cardWidth = ComposeMetrics.mediaCardWidth
-        let cardHeight = ComposeMetrics.mediaCardHeight
-        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: ComposeMetrics.mediaCardSpacing) {
-                    ForEach(Array(viewModel.selectedMediaItems.enumerated()), id: \.element.id) { index, item in
-                        composeMediaCard(item: item, width: cardWidth, height: cardHeight)
-                            .overlay(alignment: .bottomLeading) {
-                                if index == 0, viewModel.canAddMoreMedia {
-                                    addMediaOverlayChip
-                                        .padding(SplickTheme.Spacing.sm)
-                                }
-                            }
-                    }
-
-                    if viewModel.selectedMediaItems.isEmpty, viewModel.canAddMoreMedia {
-                        addMediaPlaceholderCard(width: cardWidth, height: cardHeight)
-                    }
-                }
-                .padding(.leading, SplickTheme.Spacing.md)
-                .padding(.trailing, SplickTheme.Spacing.sm)
+        if viewModel.selectedMediaItems.isEmpty {
+            if viewModel.canAddMoreMedia {
+                addMediaEmptyButton
+                    .padding(.horizontal, SplickTheme.Spacing.md)
             }
+        } else {
+            let cardWidth = ComposeMetrics.mediaCardWidth
+            let cardHeight = ComposeMetrics.mediaCardHeight
+            VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: ComposeMetrics.mediaCardSpacing) {
+                        ForEach(Array(viewModel.selectedMediaItems.enumerated()), id: \.element.id) { index, item in
+                            composeMediaCard(item: item, width: cardWidth, height: cardHeight)
+                                .overlay(alignment: .bottomLeading) {
+                                    if index == 0, viewModel.canAddMoreMedia {
+                                        addMediaOverlayChip
+                                            .padding(SplickTheme.Spacing.sm)
+                                    }
+                                }
+                        }
+                    }
+                    .padding(.leading, SplickTheme.Spacing.md)
+                    .padding(.trailing, SplickTheme.Spacing.sm)
+                }
 
-            Text(languageService.text(.feedCreateMediaLimit))
-                .font(SplickTheme.Typography.caption)
-                .foregroundStyle(SplickTheme.Colors.textTertiary)
-                .padding(.horizontal, SplickTheme.Spacing.md)
+                Text(languageService.text(.feedCreateMediaLimit))
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.textTertiary)
+                    .padding(.horizontal, SplickTheme.Spacing.md)
+            }
         }
     }
 
@@ -329,22 +440,26 @@ public struct CreatePostComposeView: View {
         )
     }
 
-    private func addMediaPlaceholderCard(width: CGFloat, height: CGFloat) -> some View {
+    private var addMediaEmptyButton: some View {
         addMediaMenu {
-            VStack(spacing: SplickTheme.Spacing.sm) {
-                Image(systemName: "plus.circle")
-                    .font(.system(size: 32, weight: .semibold))
+            HStack(spacing: 6) {
+                Image(systemName: "plus")
+                    .font(.system(size: 14, weight: .semibold))
                 Text(languageService.text(.feedCreateAddMedia))
-                    .font(SplickTheme.Typography.callout)
-                    .multilineTextAlignment(.center)
+                    .font(.system(size: 14, weight: .semibold))
+                    .lineLimit(1)
             }
-            .foregroundStyle(SplickTheme.Colors.textSecondary)
-            .frame(width: width, height: height)
+            .foregroundStyle(SplickTheme.Colors.textPrimary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
             .background(SplickTheme.Colors.secondaryBackground)
-            .clipShape(
-                RoundedRectangle(cornerRadius: ComposeMetrics.mediaCardCornerRadius, style: .continuous)
-            )
+            .overlay {
+                Capsule()
+                    .strokeBorder(SplickTheme.Colors.divider.opacity(0.7), lineWidth: 1)
+            }
+            .clipShape(Capsule())
         }
+        .accessibilityLabel(languageService.text(.feedCreateAddMedia))
     }
 
     private var addMediaOverlayChip: some View {
@@ -445,7 +560,7 @@ public struct CreatePostComposeView: View {
     }
 
     private var isPresentingComposeOptionScreen: Bool {
-        showBillSplitScreen || showCompanionsScreen || showAudienceScreen || showLocationScreen
+        showBillSplitScreen || showCompanionsScreen || showLocationScreen
     }
 
     private var composeActionPills: some View {
@@ -485,51 +600,68 @@ public struct CreatePostComposeView: View {
     }
 
     private var composeBottomBar: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 0) {
             Divider().opacity(0.55)
             HStack(spacing: SplickTheme.Spacing.sm) {
-                Button(action: openAudienceScreen) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "eye.fill")
-                            .font(.system(size: 14, weight: .semibold))
-                        Text(viewModel.audienceSummaryTitle)
-                            .font(SplickTheme.Typography.callout)
-                            .fontWeight(.semibold)
-                            .lineLimit(1)
-                    }
-                    .foregroundStyle(SplickTheme.Colors.textPrimary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(SplickTheme.Colors.secondaryBackground)
-                    .clipShape(Capsule())
+                KeyboardStickyTapControl(isEnabled: true, action: toggleAudienceMenu) {
+                    audienceBarLabel
                 }
-                .buttonStyle(.plain)
 
                 Spacer(minLength: SplickTheme.Spacing.sm)
 
-                Button(action: submitPost) {
-                    Text(languageService.text(.feedCreatePostAction))
-                        .font(SplickTheme.Typography.callout)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(
-                            viewModel.canSubmitPost
-                                ? SplickTheme.Colors.brandBlue
-                                : SplickTheme.Colors.brandBlue.opacity(0.35)
-                        )
-                        .clipShape(Capsule())
+                KeyboardStickyTapControl(isEnabled: true, action: submitPost) {
+                    postBarLabel
                 }
-                .buttonStyle(.plain)
-                .contentShape(Capsule())
-                .accessibilityIdentifier(KeyboardDismissExempt.accessibilityIdentifier)
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
             .padding(.vertical, 10)
             .background(SplickTheme.Colors.background)
             .accessibilityIdentifier(KeyboardDismissExempt.accessibilityIdentifier)
         }
+        .background(SplickTheme.Colors.background)
+        .background {
+            GeometryReader { proxy in
+                Color.clear.preference(key: ComposeBottomBarHeightKey.self, value: proxy.size.height)
+            }
+        }
+        .onPreferenceChange(ComposeBottomBarHeightKey.self) { height in
+            guard height.isFinite, height > 1, abs(height - composeBottomBarHeight) > 0.5 else { return }
+            composeBottomBarHeight = height
+        }
+        .zIndex(1)
+    }
+
+    private var audienceBarLabel: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "eye.fill")
+                .font(.system(size: 14, weight: .semibold))
+            Text(viewModel.audienceSummaryTitle)
+                .font(SplickTheme.Typography.callout)
+                .fontWeight(.semibold)
+                .lineLimit(1)
+        }
+        .foregroundStyle(SplickTheme.Colors.textPrimary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(SplickTheme.Colors.secondaryBackground)
+        .clipShape(Capsule())
+        .contentShape(Capsule())
+    }
+
+    private var postBarLabel: some View {
+        Text(languageService.text(.feedCreatePostAction))
+            .font(SplickTheme.Typography.callout)
+            .fontWeight(.semibold)
+            .foregroundStyle(.white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(
+                viewModel.canSubmitPost
+                    ? SplickTheme.Colors.brandBlue
+                    : SplickTheme.Colors.brandBlue.opacity(0.35)
+            )
+            .clipShape(Capsule())
+            .contentShape(Capsule())
     }
 
     private func submitPost() {
@@ -581,14 +713,16 @@ public struct CreatePostComposeView: View {
         showCompanionsScreen = true
     }
 
-    private func openAudienceScreen() {
-        hideKeyboard()
-        showAudienceScreen = true
-    }
-
     private func openLocationScreen() {
         hideKeyboard()
         showLocationScreen = true
+    }
+
+    private func toggleAudienceMenu() {
+        hideKeyboard()
+        withAnimation(ComposeSearchExpandMotion.spring) {
+            showAudienceMenu.toggle()
+        }
     }
 
     private var hasSelectedCompanions: Bool {
@@ -695,36 +829,6 @@ private struct ComposeOptionPill: View {
     }
 }
 
-private struct ComposeAudienceScreen: View {
-    @EnvironmentObject private var languageService: LanguageService
-    @Environment(\.dismiss) private var dismiss
-    @ObservedObject var viewModel: CreatePostComposeViewModel
-    let onUserTap: (UserSummary) -> Void
-
-    var body: some View {
-        ScrollView {
-            PostAudiencePickerSheet(
-                viewModel: viewModel,
-                onUserTap: onUserTap,
-                embedded: true
-            )
-            .padding(SplickTheme.Spacing.md)
-            .padding(.bottom, SplickTheme.Spacing.xl)
-        }
-        .scrollDismissesKeyboard(.immediately)
-        .dismissKeyboardOnTap()
-        .navigationTitle(languageService.text(.feedAudienceTitle))
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button(languageService.text(.commonDone)) {
-                    dismiss()
-                }
-            }
-        }
-    }
-}
-
 private struct ComposeBillSplitView: View {
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
@@ -734,49 +838,45 @@ private struct ComposeBillSplitView: View {
     let onUserTap: (UserSummary) -> Void
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
-                totalAmountField
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
+                    composerIdentity
+                        .padding(.horizontal, SplickTheme.Spacing.md)
+                        .padding(.top, SplickTheme.Spacing.sm)
 
-                Toggle(languageService.text(.feedCreateAutoReminder), isOn: $viewModel.autoReminderEnabled)
-                    .font(SplickTheme.Typography.callout)
+                    totalAmountField
+                        .padding(.horizontal, SplickTheme.Spacing.md)
 
-                VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-                    Text(languageService.text(.expenseCreateSplitType))
-                        .font(SplickTheme.Typography.caption)
-                        .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    splitModePills
 
-                    Picker(languageService.text(.expenseCreateSplitType), selection: $viewModel.splitMode) {
-                        ForEach(ComposeBillSplitMode.allCases) { mode in
-                            Text(languageService.text(mode.titleKey)).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                }
+                    reminderRow
+                        .padding(.horizontal, SplickTheme.Spacing.md)
 
-                Text(languageService.text(.feedCreateBillWith))
-                    .font(SplickTheme.Typography.callout)
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    Text(languageService.text(.feedCreateBillWith))
+                        .font(SplickTheme.Typography.headline)
+                        .foregroundStyle(SplickTheme.Colors.textPrimary)
+                        .padding(.horizontal, SplickTheme.Spacing.md)
 
-                ComposeCompanionsEditorView(
-                    viewModel: viewModel,
-                    onUserTap: onUserTap,
-                    nearbyDiscoveryUseCase: nearbyDiscoveryUseCase,
-                    profileDependencies: profileDependencies,
-                    embedded: true,
-                    billMode: true
-                )
-
-                if !viewModel.billSplitParticipants.isEmpty || !viewModel.pendingGuests.isEmpty {
                     billSplitDetailFields
+                        .padding(.horizontal, SplickTheme.Spacing.md)
+
+                    ComposeCompanionsEditorView(
+                        viewModel: viewModel,
+                        onUserTap: onUserTap,
+                        nearbyDiscoveryUseCase: nearbyDiscoveryUseCase,
+                        profileDependencies: profileDependencies,
+                        embedded: true,
+                        billMode: true
+                    )
+                    .padding(.horizontal, SplickTheme.Spacing.md)
                 }
+                .padding(.bottom, SplickTheme.Spacing.lg)
             }
-            .splickCard()
-            .padding(SplickTheme.Spacing.md)
-            .padding(.bottom, SplickTheme.Spacing.xl)
+            .scrollDismissesKeyboard(.immediately)
+            billDoneBar
         }
-        .background(SplickTheme.Colors.secondaryBackground)
-        .scrollDismissesKeyboard(.immediately)
+        .background(SplickTheme.Colors.background)
         .dismissKeyboardOnTap()
         .navigationTitle(languageService.text(.feedBillSplitTitle))
         .navigationBarTitleDisplayMode(.inline)
@@ -789,32 +889,133 @@ private struct ComposeBillSplitView: View {
         }
     }
 
-    private var totalAmountField: some View {
-        VStack(alignment: .leading, spacing: SplickTheme.Spacing.xxs) {
-            Text(languageService.text(.feedCreateTotalAmount))
-                .font(SplickTheme.Typography.caption)
-                .foregroundStyle(SplickTheme.Colors.textSecondary)
+    private var composerIdentity: some View {
+        HStack(spacing: SplickTheme.Spacing.sm) {
+            AvatarView(
+                imageURL: viewModel.composerUser?.avatarURL,
+                name: viewModel.composerUser?.displayName ?? "",
+                size: .medium
+            )
+            Text(viewModel.composerUser?.displayName ?? "")
+                .font(SplickTheme.Typography.headline)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+    }
 
-            HStack(spacing: SplickTheme.Spacing.sm) {
+    private var splitModePills: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(ComposeBillSplitMode.allCases.enumerated()), id: \.element.id) { index, mode in
+                if index > 0 {
+                    Rectangle()
+                        .fill(SplickTheme.Colors.divider.opacity(0.7))
+                        .frame(width: 1)
+                        .padding(.vertical, 8)
+                }
+
+                Button {
+                    viewModel.splitMode = mode
+                } label: {
+                    Text(languageService.text(mode.titleKey))
+                        .font(.system(size: 13, weight: .semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                        .foregroundStyle(
+                            viewModel.splitMode == mode
+                                ? SplickTheme.Colors.brandBlue
+                                : SplickTheme.Colors.textPrimary
+                        )
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 6)
+                        .background(
+                            viewModel.splitMode == mode
+                                ? SplickTheme.Colors.brandBlue.opacity(0.12)
+                                : Color.clear
+                        )
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(viewModel.splitMode == mode ? AccessibilityTraits.isSelected : [])
+            }
+        }
+        .background(SplickTheme.Colors.secondaryBackground)
+        .overlay {
+            Capsule()
+                .strokeBorder(SplickTheme.Colors.divider.opacity(0.7), lineWidth: 1)
+        }
+        .clipShape(Capsule())
+        .padding(.horizontal, SplickTheme.Spacing.md)
+        .animation(.easeInOut(duration: 0.16), value: viewModel.splitMode)
+    }
+
+    private var reminderRow: some View {
+        HStack(spacing: SplickTheme.Spacing.sm) {
+            Image(systemName: "bell.fill")
+                .font(.system(size: 14, weight: .semibold))
+            Text(languageService.text(.feedCreateAutoReminder))
+                .font(SplickTheme.Typography.callout)
+                .fontWeight(.semibold)
+                .lineLimit(2)
+            Spacer(minLength: SplickTheme.Spacing.sm)
+            Toggle("", isOn: $viewModel.autoReminderEnabled)
+                .labelsHidden()
+                .tint(SplickTheme.Colors.brandBlue)
+        }
+        .foregroundStyle(SplickTheme.Colors.textPrimary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(SplickTheme.Colors.secondaryBackground)
+        .overlay {
+            Capsule()
+                .strokeBorder(SplickTheme.Colors.divider.opacity(0.7), lineWidth: 1)
+        }
+        .clipShape(Capsule())
+    }
+
+    private var billDoneBar: some View {
+        VStack(spacing: 0) {
+            Divider().opacity(0.55)
+            HStack {
+                Spacer(minLength: 0)
+                Button {
+                    dismiss()
+                } label: {
+                    Text(languageService.text(.commonDone))
+                        .font(SplickTheme.Typography.callout)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(SplickTheme.Colors.brandBlue)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .contentShape(Capsule())
+                .accessibilityIdentifier(KeyboardDismissExempt.accessibilityIdentifier)
+            }
+            .padding(.horizontal, SplickTheme.Spacing.md)
+            .padding(.vertical, 10)
+            .background(SplickTheme.Colors.background)
+            .accessibilityIdentifier(KeyboardDismissExempt.accessibilityIdentifier)
+        }
+    }
+
+    private var totalAmountField: some View {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
+            HStack(alignment: .firstTextBaseline, spacing: SplickTheme.Spacing.sm) {
                 LiveVNDMoneyTextField(
                     text: $viewModel.billTotalText,
-                    font: .systemFont(ofSize: 22, weight: .bold),
-                    textColor: UIColor(SplickTheme.Colors.primaryGradientStart)
+                    font: .systemFont(ofSize: 20, weight: .regular),
+                    textColor: UIColor(SplickTheme.Colors.textPrimary),
+                    placeholder: languageService.text(.feedCreateTotalAmount)
                 )
 
                 Text(languageService.text(.feedCreateCurrencySymbol))
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
             }
-            .padding(SplickTheme.Spacing.sm)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(SplickTheme.Colors.primaryGradientStart.opacity(0.08))
-            .clipShape(
-                RoundedRectangle(
-                    cornerRadius: ComposeMetrics.fieldCornerRadius,
-                    style: .continuous
-                )
-            )
 
             if let error = viewModel.billTotalAmountError {
                 Text(error)
@@ -826,35 +1027,16 @@ private struct ComposeBillSplitView: View {
 
     @ViewBuilder
     private var billSplitDetailFields: some View {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
         switch viewModel.splitMode {
         case .equal:
-            if let preview = viewModel.equalSharePreview {
-                Text(preview)
-                    .font(SplickTheme.Typography.callout)
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(SplickTheme.Spacing.sm)
-                    .background(SplickTheme.Colors.tertiaryBackground)
-                    .clipShape(
-                        RoundedRectangle(
-                            cornerRadius: ComposeMetrics.fieldCornerRadius,
-                            style: .continuous
-                        )
-                    )
+            let amountLabel = viewModel.equalShareAmount.map { VNDMoneyFormat.formatDisplay($0) }
+                ?? ("— " + languageService.text(.feedCreateCurrencySymbol))
+            ForEach(viewModel.billSplitParticipants) { user in
+                participantAmountPreviewRow(for: user, amountLabel: amountLabel)
             }
-            if let share = viewModel.equalShareAmount {
-                ForEach(viewModel.billSplitParticipants) { user in
-                    participantAmountPreviewRow(
-                        for: user,
-                        amountLabel: VNDMoneyFormat.formatDisplay(share)
-                    )
-                }
-                ForEach(viewModel.pendingGuests) { guest in
-                    guestAmountPreviewRow(
-                        guest,
-                        amountLabel: VNDMoneyFormat.formatDisplay(share)
-                    )
-                }
+            ForEach(viewModel.pendingGuests) { guest in
+                guestAmountPreviewRow(guest, amountLabel: amountLabel)
             }
 
         case .percentage:
@@ -872,6 +1054,7 @@ private struct ComposeBillSplitView: View {
             ForEach(viewModel.pendingGuests) { guest in
                 exactAmountRow(guestId: guest.id, identity: guestIdentityView(guest))
             }
+        }
         }
     }
 
@@ -907,16 +1090,15 @@ private struct ComposeBillSplitView: View {
                         ? SplickTheme.Colors.primaryGradientStart
                         : SplickTheme.Colors.textSecondary
                 )
+
+            billRemoveControl(isEnabled: !viewModel.isCurrentUser(user)) {
+                viewModel.removeBillSplitParticipant(user)
+            }
         }
-        .padding(.horizontal, SplickTheme.Spacing.sm)
-        .padding(.vertical, SplickTheme.Spacing.xs)
-        .background(SplickTheme.Colors.tertiaryBackground)
-        .clipShape(
-            RoundedRectangle(
-                cornerRadius: ComposeMetrics.fieldCornerRadius,
-                style: .continuous
-            )
-        )
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(SplickTheme.Colors.secondaryBackground)
+        .clipShape(Capsule())
     }
 
     private func guestIdentityView(_ guest: ComposePendingGuest) -> some View {
@@ -941,16 +1123,15 @@ private struct ComposeBillSplitView: View {
             Text(amountLabel)
                 .font(SplickTheme.Typography.callout)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
+
+            billRemoveControl {
+                viewModel.removePendingGuest(guest)
+            }
         }
-        .padding(.horizontal, SplickTheme.Spacing.sm)
-        .padding(.vertical, SplickTheme.Spacing.xs)
-        .background(SplickTheme.Colors.tertiaryBackground)
-        .clipShape(
-            RoundedRectangle(
-                cornerRadius: ComposeMetrics.fieldCornerRadius,
-                style: .continuous
-            )
-        )
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(SplickTheme.Colors.secondaryBackground)
+        .clipShape(Capsule())
     }
 
     private func percentageRow(for user: UserSummary) -> some View {
@@ -976,17 +1157,14 @@ private struct ComposeBillSplitView: View {
             Text(percentageAmountLabel(for: guestId))
                 .font(SplickTheme.Typography.callout)
                 .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                .frame(width: 110, alignment: .trailing)
+                .lineLimit(1)
+
+            billPartyRemoveButton(partyId: guestId)
         }
-        .padding(.horizontal, SplickTheme.Spacing.sm)
-        .padding(.vertical, SplickTheme.Spacing.xs)
-        .background(SplickTheme.Colors.tertiaryBackground)
-        .clipShape(
-            RoundedRectangle(
-                cornerRadius: ComposeMetrics.fieldCornerRadius,
-                style: .continuous
-            )
-        )
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(SplickTheme.Colors.secondaryBackground)
+        .clipShape(Capsule())
     }
 
     private func exactAmountRow(for user: UserSummary) -> some View {
@@ -1006,22 +1184,52 @@ private struct ComposeBillSplitView: View {
                     textColor: UIColor(SplickTheme.Colors.textPrimary),
                     placeholder: "-"
                 )
-                .frame(minWidth: 100)
+                .frame(minWidth: 88)
 
                 Text(languageService.text(.feedCreateCurrencySymbol))
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textSecondary)
             }
+
+            billPartyRemoveButton(partyId: guestId)
         }
-        .padding(.horizontal, SplickTheme.Spacing.sm)
-        .padding(.vertical, SplickTheme.Spacing.xs)
-        .background(SplickTheme.Colors.tertiaryBackground)
-        .clipShape(
-            RoundedRectangle(
-                cornerRadius: ComposeMetrics.fieldCornerRadius,
-                style: .continuous
-            )
-        )
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(SplickTheme.Colors.secondaryBackground)
+        .clipShape(Capsule())
+    }
+
+    @ViewBuilder
+    private func billPartyRemoveButton(partyId: UUID) -> some View {
+        if viewModel.isCurrentUser(id: partyId) {
+            billRemoveControl(isEnabled: false, action: {})
+        } else if let user = viewModel.billSplitParticipants.first(where: { $0.id == partyId }) {
+            billRemoveControl {
+                viewModel.removeBillSplitParticipant(user)
+            }
+        } else if let guest = viewModel.pendingGuests.first(where: { $0.id == partyId }) {
+            billRemoveControl {
+                viewModel.removePendingGuest(guest)
+            }
+        } else {
+            billRemoveControl(isEnabled: false, action: {})
+        }
+    }
+
+    private func billRemoveControl(
+        isEnabled: Bool = true,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: "xmark.circle.fill")
+                .font(.system(size: 16))
+                .foregroundStyle(isEnabled ? SplickTheme.Colors.textTertiary : .clear)
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .frame(width: 16, height: 16)
+        .accessibilityHidden(!isEnabled)
+        .accessibilityLabel(languageService.text(.commonClear))
     }
 
     private func percentageAmountLabel(for userId: UUID) -> String {
@@ -1059,7 +1267,6 @@ private struct ComposeCompanionsEditorView: View {
     @FocusState private var isFriendSearchFocused: Bool
     @State private var showAddGuestSheet = false
     @State private var isBillSearchExpanded = false
-    @State private var keepBillSearchOpen = false
 
     private var isBillCompanionMode: Bool {
         billMode || viewModel.enableBillSplit
@@ -1138,21 +1345,23 @@ private struct ComposeCompanionsEditorView: View {
     @ViewBuilder
     private var companionFields: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-                    if !viewModel.selectedCompanionGroups.isEmpty {
-                        ForEach(viewModel.selectedCompanionGroups) { group in
-                            selectedCompanionGroupCard(group)
+                    if !billMode {
+                        if !viewModel.selectedCompanionGroups.isEmpty {
+                            ForEach(viewModel.selectedCompanionGroups) { group in
+                                selectedCompanionGroupCard(group)
+                            }
                         }
-                    }
 
-                    if !viewModel.selectedCompanions.isEmpty || !viewModel.pendingGuests.isEmpty {
-                        selectedCompanionsStrip
+                        if !viewModel.selectedCompanions.isEmpty || !viewModel.pendingGuests.isEmpty {
+                            selectedCompanionsStrip
+                        }
                     }
 
                     if isBillCompanionMode {
                         billShareAddActions
                     }
 
-                    VStack(spacing: 0) {
+                    VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {
                         HStack(spacing: SplickTheme.Spacing.xs) {
                             Image(systemName: "magnifyingglass")
                                 .foregroundStyle(SplickTheme.Colors.textTertiary)
@@ -1163,49 +1372,56 @@ private struct ComposeCompanionsEditorView: View {
                                 .onChange(of: viewModel.friendSearchQuery) { query in
                                     viewModel.updateFriendSearch(query)
                                 }
+                                .onChange(of: isFriendSearchFocused) { focused in
+                                    if focused && viewModel.friendSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                        Task { await viewModel.friendsSearchHistory?.refresh() }
+                                    }
+                                }
                         }
-                        .padding(SplickTheme.Spacing.sm)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(SplickTheme.Colors.secondaryBackground)
+                        .clipShape(Capsule())
 
-                        if showsFriendSearchResults {
-                            VStack(spacing: 0) {
-                                Divider()
-                                friendSearchResultsList
+                        ComposeSearchResultsExpand(isExpanded: showsFriendSearchResults) {
+                            Group {
+                                if viewModel.friendSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                                   let history = viewModel.friendsSearchHistory {
+                                    RecentSearchesSection(
+                                        items: history.items,
+                                        languageService: languageService,
+                                        onSelect: { item in
+                                            viewModel.friendSearchQuery = item.query
+                                            viewModel.updateFriendSearch(item.query)
+                                        },
+                                        onDelete: { history.delete($0) },
+                                        onClearAll: { history.clear() }
+                                    )
+                                    .padding(SplickTheme.Spacing.sm)
+                                } else {
+                                    friendSearchResultsList
+                                }
                             }
-                            .transition(
-                                .asymmetric(
-                                    insertion: AnyTransition.opacity.combined(
-                                        with: .move(edge: .top)
-                                    ),
-                                    removal: AnyTransition.opacity.combined(
-                                        with: .move(edge: .top)
+                                .frame(maxHeight: ComposeMetrics.searchResultsMaxHeight)
+                                .background(SplickTheme.Colors.secondaryBackground)
+                                .clipShape(
+                                    RoundedRectangle(
+                                        cornerRadius: SplickTheme.CornerRadius.large,
+                                        style: .continuous
                                     )
                                 )
-                            )
                         }
                     }
                     .id(ComposeSearchAnchor.companions)
-                    .background(SplickTheme.Colors.tertiaryBackground)
-                    .clipShape(
-                        RoundedRectangle(
-                            cornerRadius: ComposeMetrics.fieldCornerRadius,
-                            style: .continuous
-                        )
-                    )
-                    .animation(
-                        .spring(response: 0.34, dampingFraction: 0.86),
-                        value: showsFriendSearchResults
-                    )
+                    .animation(ComposeSearchExpandMotion.spring, value: showsFriendSearchResults)
         }
     }
 
     private func handleFriendSearchFocus(_ focused: Bool, reveal: () -> Void) {
-        withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+        withAnimation(ComposeSearchExpandMotion.spring) {
             viewModel.setFriendSearchActive(focused)
-            guard billMode else { return }
-            if focused {
+            if billMode, focused {
                 isBillSearchExpanded = true
-            } else if !keepBillSearchOpen {
-                isBillSearchExpanded = false
             }
         }
         if focused {
@@ -1213,19 +1429,14 @@ private struct ComposeCompanionsEditorView: View {
         }
     }
 
-    private func addCompanionAndDismissSearch(_ friend: UserSummary) {
+    private func addCompanionAndKeepSearch(_ friend: UserSummary) {
         viewModel.addCompanion(friend)
         guard billMode else {
             isFriendSearchFocused = false
             hideKeyboard()
             return
         }
-        keepBillSearchOpen = true
         isBillSearchExpanded = true
-        DispatchQueue.main.async {
-            isFriendSearchFocused = true
-            keepBillSearchOpen = false
-        }
     }
 
     private var billShareAddActions: some View {
@@ -1399,7 +1610,7 @@ private struct ComposeCompanionsEditorView: View {
                 ForEach(viewModel.friendSearchResults) { friend in
                     HStack(spacing: SplickTheme.Spacing.sm) {
                         Button {
-                            addCompanionAndDismissSearch(friend)
+                            addCompanionAndKeepSearch(friend)
                         } label: {
                             HStack(spacing: SplickTheme.Spacing.sm) {
                                 AvatarView(
@@ -1426,7 +1637,7 @@ private struct ComposeCompanionsEditorView: View {
                         .buttonStyle(.plain)
 
                         Button {
-                            addCompanionAndDismissSearch(friend)
+                            addCompanionAndKeepSearch(friend)
                         } label: {
                             Image(systemName: "plus.circle.fill")
                                 .font(.system(size: 18))
@@ -1472,8 +1683,12 @@ private struct ComposeCompanionsEditorView: View {
             ForEach(viewModel.filteredCompanionGroups) { group in
                 Button {
                     viewModel.selectCompanionGroup(group)
-                    isFriendSearchFocused = false
-                    hideKeyboard()
+                    if billMode {
+                        isBillSearchExpanded = true
+                    } else {
+                        isFriendSearchFocused = false
+                        hideKeyboard()
+                    }
                 } label: {
                     companionGroupRow(group)
                 }
@@ -1510,14 +1725,10 @@ private struct ComposeCompanionsEditorView: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(SplickTheme.Spacing.sm)
-        .background(SplickTheme.Colors.tertiaryBackground)
-        .clipShape(
-            RoundedRectangle(
-                cornerRadius: ComposeMetrics.fieldCornerRadius,
-                style: .continuous
-            )
-        )
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(SplickTheme.Colors.secondaryBackground)
+        .clipShape(Capsule())
     }
 
     private func companionGroupRow(_ group: SplickDomain.Group) -> some View {
@@ -1563,6 +1774,7 @@ private struct ComposeLocationEditorView: View {
     @ObservedObject var viewModel: CreatePostComposeViewModel
     var embedded: Bool = false
     @StateObject private var locationProvider = WhenInUseLocationProvider()
+    @FocusState private var isLocationFocused: Bool
 
     var body: some View {
         Group {
@@ -1588,6 +1800,26 @@ private struct ComposeLocationEditorView: View {
     private var compactLocationContent: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
             SplickTextField(languageService.text(.feedCreateLocationPlaceholder), text: $viewModel.location)
+                .focused($isLocationFocused)
+                .onChange(of: isLocationFocused) { focused in
+                    if focused && viewModel.location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Task { await viewModel.locationSearchHistory?.refresh() }
+                    }
+                }
+            if isLocationFocused,
+               viewModel.location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               let history = viewModel.locationSearchHistory {
+                RecentSearchesSection(
+                    items: history.items,
+                    languageService: languageService,
+                    onSelect: { item in
+                        viewModel.location = item.query
+                        viewModel.locationQueryDidChange()
+                    },
+                    onDelete: { history.delete($0) },
+                    onClearAll: { history.clear() }
+                )
+            }
             if !viewModel.locationGpsAvailable {
                 Button {
                     locationProvider.request()
@@ -1624,6 +1856,26 @@ private struct ComposeLocationEditorView: View {
         List {
             Section {
                 SplickTextField(languageService.text(.feedCreateLocationPlaceholder), text: $viewModel.location)
+                    .focused($isLocationFocused)
+                    .onChange(of: isLocationFocused) { focused in
+                        if focused && viewModel.location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Task { await viewModel.locationSearchHistory?.refresh() }
+                        }
+                    }
+                if isLocationFocused,
+                   viewModel.location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                   let history = viewModel.locationSearchHistory {
+                    RecentSearchesSection(
+                        items: history.items,
+                        languageService: languageService,
+                        onSelect: { item in
+                            viewModel.location = item.query
+                            viewModel.locationQueryDidChange()
+                        },
+                        onDelete: { history.delete($0) },
+                        onClearAll: { history.clear() }
+                    )
+                }
                 if !viewModel.locationGpsAvailable {
                     Button {
                         locationProvider.request()
@@ -1717,13 +1969,16 @@ private struct BillShareActionChip: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.82)
         }
-        .foregroundStyle(SplickTheme.Colors.primary)
+        .foregroundStyle(SplickTheme.Colors.textPrimary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, minHeight: ComposeMetrics.actionChipHeight)
-        .padding(.horizontal, SplickTheme.Spacing.sm)
-        .background(SplickTheme.Colors.primary.opacity(0.08))
-        .clipShape(
-            RoundedRectangle(cornerRadius: ComposeMetrics.fieldCornerRadius, style: .continuous)
-        )
+        .background(SplickTheme.Colors.secondaryBackground)
+        .overlay {
+            Capsule()
+                .strokeBorder(SplickTheme.Colors.divider.opacity(0.7), lineWidth: 1)
+        }
+        .clipShape(Capsule())
     }
 }
 

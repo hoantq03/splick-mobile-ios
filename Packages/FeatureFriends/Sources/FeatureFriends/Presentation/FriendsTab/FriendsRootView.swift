@@ -4,6 +4,7 @@ import DesignSystem
 import Common
 import FeatureMedia
 import Localization
+import Networking
 import SplickDomain
 
 private struct UserProfileRoute: Identifiable {
@@ -134,6 +135,7 @@ public struct FriendsRootView: View {
         revokeGroupQrUseCase: RevokeGroupQrUseCaseProtocol,
         openLinkedGroupConversation: @escaping (_ groupId: UUID, _ name: String, _ memberUserIds: [UUID]) async throws -> Void = { _, _, _ in },
         languageService: LanguageService,
+        searchHistoryRepository: SearchHistoryRepositoryProtocol? = nil,
         onBadgeCountsChanged: (() async -> Void)? = nil,
         onDirectoryLoaded: (([SplickDomain.Group]) async -> Void)? = nil,
         onFriendRequestsLoaded: (([IncomingFriendRequest]) async -> Void)? = nil,
@@ -159,6 +161,7 @@ public struct FriendsRootView: View {
             cancelFriendRequestUseCase: cancelFriendRequestUseCase,
             nearbyDiscoveryUseCase: nearbyDiscoveryUseCase,
             languageService: languageService,
+            searchHistoryRepository: searchHistoryRepository,
             onDirectoryLoaded: onDirectoryLoaded,
             onFriendRequestsLoaded: onFriendRequestsLoaded
         )
@@ -272,6 +275,8 @@ public struct FriendsRootView: View {
                 Group {
                     if viewModel.isSearching {
                         searchResultsContent
+                    } else if isSearchFieldFocused {
+                        recentSearchesContent
                     } else {
                         combinedDirectoryContent
                     }
@@ -292,6 +297,11 @@ public struct FriendsRootView: View {
             .splickTabScreenHeader(languageService.text(.friendsTitle), showsBell: false)
             .onChange(of: viewModel.searchQuery) { newValue in
                 viewModel.onSearchQueryChanged(newValue)
+            }
+            .onChange(of: isSearchFieldFocused) { focused in
+                if focused, !hasSearchText {
+                    Task { await viewModel.searchHistory?.refresh() }
+                }
             }
             .toolbar {
                 toolbarCreateGroup
@@ -774,6 +784,24 @@ public struct FriendsRootView: View {
         viewModel.onSearchQueryChanged("")
     }
 
+    @ViewBuilder
+    private var recentSearchesContent: some View {
+        if let history = viewModel.searchHistory {
+            ScrollView {
+                BoundRecentSearches(
+                    session: history,
+                    languageService: languageService,
+                    onSelect: { item in
+                        viewModel.searchQuery = item.query
+                        viewModel.onSearchQueryChanged(item.query)
+                    }
+                )
+                .padding(.horizontal, SplickTheme.Spacing.md)
+                .padding(.top, SplickTheme.Spacing.md)
+            }
+        }
+    }
+
     @ToolbarContentBuilder
     private var toolbarCreateGroup: some ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
@@ -1121,6 +1149,22 @@ public struct FriendsRootView: View {
             }
             .buttonStyle(.plain)
         }
+    }
+}
+
+private struct BoundRecentSearches: View {
+    @ObservedObject var session: SearchHistorySession
+    let languageService: LanguageService
+    let onSelect: (SearchHistoryItem) -> Void
+
+    var body: some View {
+        RecentSearchesSection(
+            items: session.items,
+            languageService: languageService,
+            onSelect: onSelect,
+            onDelete: { session.delete($0) },
+            onClearAll: { session.clear() }
+        )
     }
 }
 

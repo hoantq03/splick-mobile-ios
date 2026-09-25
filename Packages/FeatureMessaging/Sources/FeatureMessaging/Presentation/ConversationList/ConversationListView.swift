@@ -3,6 +3,7 @@ import Combine
 import Common
 import DesignSystem
 import Localization
+import Networking
 import SplickDomain
 
 /// Stable space for peek anchors. The messages page is translated by the tab pager;
@@ -103,6 +104,9 @@ public struct ConversationListView: View {
                         if isSearching {
                             searchResultsContent
                                 .transition(.opacity)
+                        } else if isSearchFocused {
+                            inboxRecentSearches
+                                .transition(.opacity)
                         }
                     }
                 }
@@ -149,6 +153,9 @@ public struct ConversationListView: View {
             viewModel.onSearchQueryChanged(newValue)
         }
         .onChange(of: isSearchFocused) { focused in
+            if focused, searchDraft.isEmpty {
+                Task { await viewModel.searchHistory?.refresh() }
+            }
             guard !focused, searchDraft.isEmpty else { return }
             viewModel.onSearchQueryChanged("")
         }
@@ -345,6 +352,26 @@ public struct ConversationListView: View {
                     Task { await viewModel.load() }
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var inboxRecentSearches: some View {
+        if let history = viewModel.searchHistory {
+            ScrollView {
+                InboxBoundRecentSearches(
+                    session: history,
+                    languageService: languageService,
+                    onSelect: { item in
+                        searchDraft = item.query
+                        viewModel.onSearchQueryChanged(item.query)
+                    }
+                )
+                .padding(.horizontal, SplickTheme.Spacing.md)
+                .padding(.top, SplickTheme.Spacing.md)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(SplickTheme.Colors.background)
         }
     }
 
@@ -1008,5 +1035,21 @@ private extension CGRect {
             && abs(minY - other.minY) <= tolerance
             && abs(width - other.width) <= tolerance
             && abs(height - other.height) <= tolerance
+    }
+}
+
+private struct InboxBoundRecentSearches: View {
+    @ObservedObject var session: SearchHistorySession
+    let languageService: LanguageService
+    let onSelect: (SearchHistoryItem) -> Void
+
+    var body: some View {
+        RecentSearchesSection(
+            items: session.items,
+            languageService: languageService,
+            onSelect: onSelect,
+            onDelete: { session.delete($0) },
+            onClearAll: { session.clear() }
+        )
     }
 }

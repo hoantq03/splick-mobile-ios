@@ -1,5 +1,6 @@
 import Foundation
 import Common
+import Networking
 import SplickDomain
 
 public typealias GifPickerViewModelFactory = (UUID?) -> GifPickerViewModel
@@ -21,6 +22,7 @@ public final class GifPickerViewModel: ObservableObject {
     @Published public var isLoadingMore = false
 
     public let groupId: UUID?
+    let searchHistory: SearchHistorySession?
 
     private let fetchStickersUseCase: FetchStickersUseCaseProtocol
     private let fetchCategoriesUseCase: FetchStickerCategoriesUseCaseProtocol
@@ -42,8 +44,9 @@ public final class GifPickerViewModel: ObservableObject {
         fetchFavoriteStickersUseCase: FetchFavoriteStickersUseCaseProtocol,
         addFavoriteStickerUseCase: AddFavoriteStickerUseCaseProtocol,
         removeFavoriteStickerUseCase: RemoveFavoriteStickerUseCaseProtocol,
-        registerShareUseCase: RegisterStickerShareUseCaseProtocol,
-        groupId: UUID?
+            registerShareUseCase: RegisterStickerShareUseCaseProtocol,
+            groupId: UUID?,
+            searchHistoryRepository: SearchHistoryRepositoryProtocol? = nil
     ) {
         self.fetchStickersUseCase = fetchStickersUseCase
         self.fetchCategoriesUseCase = fetchCategoriesUseCase
@@ -53,6 +56,9 @@ public final class GifPickerViewModel: ObservableObject {
         self.removeFavoriteStickerUseCase = removeFavoriteStickerUseCase
         self.registerShareUseCase = registerShareUseCase
         self.groupId = groupId
+        self.searchHistory = searchHistoryRepository.map {
+            SearchHistorySession(repository: $0, scope: .gif)
+        }
     }
 
     public var showsCustomPack: Bool { groupId != nil }
@@ -136,6 +142,7 @@ public final class GifPickerViewModel: ObservableObject {
                 relatedSuggestions = []
             } else {
                 await loadAutocomplete(for: trimmed)
+                searchHistory?.record(trimmed)
             }
             await loadStickers(immediate: false)
         }
@@ -144,6 +151,12 @@ public final class GifPickerViewModel: ObservableObject {
     public func onSuggestionTapped(_ term: String) {
         applySearchTerm(term)
         isSearchActive = true
+    }
+
+    public func applyExternalSearch(_ query: String) {
+        isSearchActive = true
+        selectedCategory = .trending
+        applySearchTerm(query)
     }
 
     public func selectSticker(_ sticker: Sticker) {

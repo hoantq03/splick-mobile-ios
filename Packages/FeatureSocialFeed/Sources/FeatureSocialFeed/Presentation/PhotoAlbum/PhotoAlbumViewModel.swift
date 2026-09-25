@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import Common
 import Localization
+import Networking
 import SplickDomain
 import DesignSystem
 
@@ -40,6 +41,7 @@ public final class PhotoAlbumViewModel: ObservableObject {
         filters.hasAnyFilter
     }
 
+    let searchHistory: SearchHistorySession?
     private let fetchPhotoAlbumUseCase: FetchPhotoAlbumUseCaseProtocol
     private var nextCursor: String?
     private var loadTask: Task<Void, Never>?
@@ -47,8 +49,14 @@ public final class PhotoAlbumViewModel: ObservableObject {
 
     private static let pageSize = 50
 
-    public init(fetchPhotoAlbumUseCase: FetchPhotoAlbumUseCaseProtocol) {
+    public init(
+        fetchPhotoAlbumUseCase: FetchPhotoAlbumUseCaseProtocol,
+        searchHistoryRepository: SearchHistoryRepositoryProtocol? = nil
+    ) {
         self.fetchPhotoAlbumUseCase = fetchPhotoAlbumUseCase
+        self.searchHistory = searchHistoryRepository.map {
+            SearchHistorySession(repository: $0, scope: .album)
+        }
     }
 
     func loadInitialIfNeeded() async {
@@ -97,6 +105,10 @@ public final class PhotoAlbumViewModel: ObservableObject {
             var updated = filters
             updated.captionQuery = query
             guard updated != filters else { return }
+            let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                searchHistory?.record(trimmed)
+            }
             await applyFilters(updated)
         }
     }

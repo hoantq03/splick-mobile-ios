@@ -32,6 +32,7 @@ public actor SessionManager: SessionManagerProtocol {
     public func clearSession() {
         session = nil
         userDefaultsService.remove(for: AppConstants.UserDefaults.cachedCurrentUser)
+        userDefaultsService.removeKeys(prefixedBy: "com.splick.searchHistory.")
     }
 
     public func isAuthenticated() -> Bool {

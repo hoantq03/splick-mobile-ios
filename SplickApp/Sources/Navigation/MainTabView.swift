@@ -510,6 +510,7 @@ struct MainTabView: View {
                 )
             },
             languageService: container.languageService,
+            searchHistoryRepository: container.searchHistoryRepository,
             onBadgeCountsChanged: { await container.badgeCountService.refresh(force: true) },
             onDirectoryLoaded: { groups in
                 container.widgetSyncBridge.syncGroups(groups)
@@ -648,12 +649,6 @@ private struct MainTabBarChrome: View {
         // Avoid .equatable() here — it can skip per-frame lift/scale updates.
         .opacity(opacity)
         .offset(y: slideOffset)
-        .allowsHitTesting(
-            isChromePresented
-                && hitTestingEnabled
-                && selectedTab != .camera
-                && cameraRevealProgress.value < 0.02
-        )
         // Keep centered layout inside floatingClearance (matches cameraRevealBottomInset).
         // Skip clipping while revealing so the tab camera can lift above the bar.
         .frame(height: insetHeight)
@@ -678,6 +673,14 @@ private struct MainTabBarChrome: View {
                 hitTestingEnabled = false
             }
         }
+        // Must be last: contentShape / ignoresSafeArea after this would steal
+        // compose bottom-bar taps while the camera layer is up.
+        .allowsHitTesting(
+            isChromePresented
+                && hitTestingEnabled
+                && selectedTab != .camera
+                && cameraRevealProgress.value < 0.02
+        )
     }
 
     private func syncHitTesting(visible: Bool, animated: Bool) {

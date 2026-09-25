@@ -5,6 +5,7 @@ import Combine
 import DesignSystem
 import Common
 import Localization
+import Networking
 import SplickDomain
 import FeatureFriends
 import FeatureMedia
@@ -106,6 +107,8 @@ public final class CreatePostComposeViewModel: ObservableObject {
     private let currentUser: UserSummary?
     private let currentUserId: UUID?
     private let feedRepository: FeedRepositoryProtocol?
+    let locationSearchHistory: SearchHistorySession?
+    let friendsSearchHistory: SearchHistorySession?
     private var friendSearchTask: Task<Void, Never>?
     private var companionGroupMembersTasks: [UUID: Task<Void, Never>] = [:]
     private var locationSearchTask: Task<Void, Never>?
@@ -146,7 +149,8 @@ public final class CreatePostComposeViewModel: ObservableObject {
         languageService: LanguageService,
         currentUser: UserSummary?,
         currentUserId: UUID?,
-        feedRepository: FeedRepositoryProtocol? = nil
+        feedRepository: FeedRepositoryProtocol? = nil,
+        searchHistoryRepository: SearchHistoryRepositoryProtocol? = nil
     ) {
         self.fetchFriendsUseCase = fetchFriendsUseCase
         self.fetchMyGroupsUseCase = fetchMyGroupsUseCase
@@ -155,6 +159,12 @@ public final class CreatePostComposeViewModel: ObservableObject {
         self.currentUser = currentUser
         self.currentUserId = currentUserId ?? currentUser?.id
         self.feedRepository = feedRepository
+        self.locationSearchHistory = searchHistoryRepository.map {
+            SearchHistorySession(repository: $0, scope: .location)
+        }
+        self.friendsSearchHistory = searchHistoryRepository.map {
+            SearchHistorySession(repository: $0, scope: .friends)
+        }
         var drafts: [ComposeMediaDraft] = []
         var pendingSessionID = PhotoEditorSessionStore.shared.takePendingSessionID()
         for image in previewImages {
@@ -439,7 +449,24 @@ public final class CreatePostComposeViewModel: ObservableObject {
     }
 
     func isCurrentUser(_ user: UserSummary) -> Bool {
-        user.id == currentUserId
+        isCurrentUser(id: user.id)
+    }
+
+    func isCurrentUser(id: UUID) -> Bool {
+        id == currentUserId
+    }
+
+    func removeBillSplitParticipant(_ user: UserSummary) {
+        guard !isCurrentUser(user) else { return }
+        if selectedCompanions.contains(where: { $0.id == user.id }) {
+            removeCompanion(user)
+        }
+        let groups = selectedCompanionGroups.filter { group in
+            group.members.contains(where: { $0.id == user.id })
+        }
+        for group in groups {
+            removeCompanionGroupMember(user, from: group)
+        }
     }
 
     func locationQueryDidChange() {
@@ -606,9 +633,8 @@ public final class CreatePostComposeViewModel: ObservableObject {
 
     func setFriendSearchActive(_ active: Bool) {
         isFriendSearchActive = active
-        if active, !hasCompletedInitialFriendFetch {
-            scheduleFriendSearch(reset: true)
-        }
+        guard active else { return }
+        scheduleFriendSearch(reset: true)
     }
 
     func updateFriendSearch(_ query: String) {
@@ -1126,6 +1152,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
                     return
                 }
                 searchPlaces = results
+                locationSearchHistory?.record(query)
             } catch {
                 if !Task.isCancelled {
                     searchPlaces = []
@@ -1213,6 +1240,9 @@ public final class CreatePostComposeViewModel: ObservableObject {
                 hasMoreFriendSearch = results.count == friendSearchPageSize && !appended.isEmpty
             }
             friendSearchPage = page
+            if reset, !friendSearchActiveQuery.isEmpty {
+                friendsSearchHistory?.record(friendSearchActiveQuery)
+            }
             if reset, friendSearchActiveQuery.isEmpty {
                 hasCompletedInitialFriendFetch = true
             }

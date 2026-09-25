@@ -2,6 +2,7 @@ import SwiftUI
 import Common
 import DesignSystem
 import Localization
+import Networking
 
 struct ChatThreadSearchOverlay: View {
     @ObservedObject var viewModel: ChatThreadViewModel
@@ -86,10 +87,26 @@ struct ChatThreadSearchOverlay: View {
             )
 
         case .idle where trimmed.isEmpty:
-            placeholder(
-                message: languageService.text(.messagingChatSearchPlaceholder),
-                showsSpinner: false
-            )
+            if let history = viewModel.searchHistory {
+                ScrollView {
+                    ThreadBoundRecentSearches(
+                        session: history,
+                        languageService: languageService,
+                        onSelect: { item in
+                            query = item.query
+                            viewModel.onThreadSearchQueryChanged(item.query)
+                        }
+                    )
+                    .padding(.horizontal, SplickTheme.Spacing.md)
+                    .padding(.top, SplickTheme.Spacing.md)
+                }
+                .task { await history.refresh() }
+            } else {
+                placeholder(
+                    message: languageService.text(.messagingChatSearchPlaceholder),
+                    showsSpinner: false
+                )
+            }
 
         default:
             ScrollView {
@@ -127,5 +144,21 @@ struct ChatThreadSearchOverlay: View {
                 .padding(.horizontal, SplickTheme.Spacing.lg)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct ThreadBoundRecentSearches: View {
+    @ObservedObject var session: SearchHistorySession
+    let languageService: LanguageService
+    let onSelect: (SearchHistoryItem) -> Void
+
+    var body: some View {
+        RecentSearchesSection(
+            items: session.items,
+            languageService: languageService,
+            onSelect: onSelect,
+            onDelete: { session.delete($0) },
+            onClearAll: { session.clear() }
+        )
     }
 }

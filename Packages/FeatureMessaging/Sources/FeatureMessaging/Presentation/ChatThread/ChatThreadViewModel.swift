@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import Common
 import Localization
+import Networking
 import SplickDomain
 import SwiftUI
 import UIKit
@@ -69,6 +70,7 @@ public final class ChatThreadViewModel: ObservableObject {
     private let repository: MessagingRepositoryProtocol
     private let uploadImage: (Data, String) async throws -> MessageImageAttachment
     private let onConversationRead: ((UUID) async -> Void)?
+    let searchHistory: SearchHistorySession?
     private let wsClient: MessagingWebSocketClient
     private let languageService: LanguageService
     private let messageCache: MessageThreadCache?
@@ -114,7 +116,8 @@ public final class ChatThreadViewModel: ObservableObject {
         pendingMessageStore: PendingMessageStore? = nil,
         networkPathMonitor: NetworkPathMonitor? = nil,
         onConversationRead: ((UUID) async -> Void)? = nil,
-        leftAt: Date? = nil
+        leftAt: Date? = nil,
+        searchHistoryRepository: SearchHistoryRepositoryProtocol? = nil
     ) {
         self.conversationId = conversationId
         self.currentUserId = currentUserId
@@ -131,6 +134,13 @@ public final class ChatThreadViewModel: ObservableObject {
         self.networkPathMonitor = networkPathMonitor
         self.onConversationRead = onConversationRead
         self.leftAt = leftAt
+        self.searchHistory = searchHistoryRepository.map {
+            SearchHistorySession(
+                repository: $0,
+                scope: .messagingThread,
+                scopeKey: conversationId.uuidString
+            )
+        }
         bindWsEvents()
         bindNetworkRetry()
         bindForegroundGapFill()
@@ -268,6 +278,7 @@ public final class ChatThreadViewModel: ObservableObject {
                 threadSearchHits = hits
                 threadSearchState = .loaded(hits)
                 activeThreadSearchQuery = trimmed
+                searchHistory?.record(trimmed)
             } catch {
                 guard !Task.isCancelled else { return }
                 threadSearchHits = []

@@ -31,6 +31,18 @@ final class DependencyContainer: ObservableObject {
 
     let apiClient: APIClientProtocol
     let sessionManager: SessionManagerProtocol
+    lazy var searchHistoryRepository: SearchHistoryRepositoryProtocol = {
+        SearchHistoryRepository(
+            apiClient: apiClient,
+            localStore: UserDefaultsSearchHistoryStore(defaults: userDefaultsService),
+            userIdProvider: { [keychainService] in
+                guard let raw = try? keychainService.loadString(for: AppConstants.Keychain.userIdKey) else {
+                    return nil
+                }
+                return UUID(uuidString: raw)
+            }
+        )
+    }()
 
     // MARK: - Auth (always live API)
 
@@ -252,7 +264,8 @@ final class DependencyContainer: ObservableObject {
             addFavoriteStickerUseCase: addFavoriteStickerUseCase,
             removeFavoriteStickerUseCase: removeFavoriteStickerUseCase,
             registerShareUseCase: registerStickerShareUseCase,
-            groupId: groupId
+            groupId: groupId,
+            searchHistoryRepository: searchHistoryRepository
         )
     }
 
@@ -868,7 +881,8 @@ final class DependencyContainer: ObservableObject {
             },
             onThreadHidden: { [weak self] conversationId in
                 self?.conversationListViewModel.clearActiveConversation(conversationId)
-            }
+            },
+            searchHistoryRepository: searchHistoryRepository
         )
     }
 
@@ -1090,7 +1104,10 @@ final class DependencyContainer: ObservableObject {
     }
 
     private func makePhotoAlbumViewModel() -> PhotoAlbumViewModel {
-        PhotoAlbumViewModel(fetchPhotoAlbumUseCase: fetchPhotoAlbumUseCase)
+        PhotoAlbumViewModel(
+            fetchPhotoAlbumUseCase: fetchPhotoAlbumUseCase,
+            searchHistoryRepository: searchHistoryRepository
+        )
     }
 
     private func makeStreakViewModel() -> StreakViewModel {
@@ -1146,7 +1163,8 @@ final class DependencyContainer: ObservableObject {
                     group: nil,
                     currentUserId: userId
                 )
-            }
+            },
+            searchHistoryRepository: searchHistoryRepository
         )
     }
 
@@ -1176,7 +1194,8 @@ final class DependencyContainer: ObservableObject {
                 }
                 await self.presenceStore.applyBulk(snapshots)
             },
-            inboxFriendsProvider: InboxFriendsAdapter(fetchMyFriendsUseCase: fetchMyFriendsUseCase)
+            inboxFriendsProvider: InboxFriendsAdapter(fetchMyFriendsUseCase: fetchMyFriendsUseCase),
+            searchHistoryRepository: searchHistoryRepository
         )
     }
 

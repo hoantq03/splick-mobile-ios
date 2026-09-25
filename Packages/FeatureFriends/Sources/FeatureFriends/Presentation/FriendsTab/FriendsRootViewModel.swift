@@ -4,6 +4,7 @@ import Combine
 import Common
 import DesignSystem
 import Localization
+import Networking
 import SplickDomain
 
 enum FriendsDirectoryItem: Identifiable {
@@ -98,6 +99,7 @@ public final class FriendsRootViewModel: ObservableObject {
     private let languageService: LanguageService
     private let onDirectoryLoaded: (([SplickDomain.Group]) async -> Void)?
     private let onFriendRequestsLoaded: (([IncomingFriendRequest]) async -> Void)?
+    let searchHistory: SearchHistorySession?
     private var searchTask: Task<Void, Never>?
     private var nearbyTask: Task<Void, Never>?
     private let locationProvider = NearbyLocationProvider()
@@ -133,6 +135,7 @@ public final class FriendsRootViewModel: ObservableObject {
         cancelFriendRequestUseCase: CancelFriendRequestUseCaseProtocol,
         nearbyDiscoveryUseCase: NearbyDiscoveryUseCaseProtocol,
         languageService: LanguageService,
+        searchHistoryRepository: SearchHistoryRepositoryProtocol? = nil,
         onDirectoryLoaded: (([SplickDomain.Group]) async -> Void)? = nil,
         onFriendRequestsLoaded: (([IncomingFriendRequest]) async -> Void)? = nil
     ) {
@@ -148,6 +151,9 @@ public final class FriendsRootViewModel: ObservableObject {
         self.languageService = languageService
         self.onDirectoryLoaded = onDirectoryLoaded
         self.onFriendRequestsLoaded = onFriendRequestsLoaded
+        self.searchHistory = searchHistoryRepository.map {
+            SearchHistorySession(repository: $0, scope: .friends)
+        }
         groupsDirectoryObserver = NotificationCenter.default
             .publisher(for: GroupsDirectoryChange.notification)
             .receive(on: RunLoop.main)
@@ -864,6 +870,7 @@ public final class FriendsRootViewModel: ObservableObject {
                     searchState = .loaded(results)
                     rebuildSearchItems()
                 }
+                searchHistory?.record(trimmed)
             } catch {
                 guard !Task.isCancelled else { return }
                 isSearchFetching = false

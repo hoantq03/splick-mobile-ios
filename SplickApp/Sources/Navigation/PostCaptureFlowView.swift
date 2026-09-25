@@ -55,7 +55,8 @@ struct PostCaptureFlowView: View {
                 languageService: container.languageService,
                 currentUser: currentUser,
                 currentUserId: currentUser?.id,
-                feedRepository: container.composeFeedRepository
+                feedRepository: container.composeFeedRepository,
+                searchHistoryRepository: container.searchHistoryRepository
             ),
             profileDependencies: container.friendUserProfileDependencies,
             nearbyDiscoveryUseCase: container.nearbyDiscoveryUseCase,

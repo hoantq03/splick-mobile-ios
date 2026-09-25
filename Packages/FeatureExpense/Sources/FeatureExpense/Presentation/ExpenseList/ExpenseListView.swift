@@ -1063,6 +1063,7 @@ private struct ExpenseListFilterPanel: View {
 
     @State private var captionSearchTask: Task<Void, Never>?
     @State private var showPeoplePicker = false
+    @FocusState private var isCaptionFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
@@ -1101,8 +1102,14 @@ private struct ExpenseListFilterPanel: View {
                     .font(SplickTheme.Typography.callout)
                     .textFieldStyle(.plain)
                     .autocorrectionDisabled()
+                    .focused($isCaptionFocused)
                     .onChange(of: captionQueryDraft) { query in
                         scheduleCaptionSearch(query)
+                    }
+                    .onChange(of: isCaptionFocused) { focused in
+                        if focused && captionQueryDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Task { await viewModel.searchHistory?.refresh() }
+                        }
                     }
 
                     if !captionQueryDraft.isEmpty {
@@ -1120,6 +1127,20 @@ private struct ExpenseListFilterPanel: View {
                 .padding(.vertical, SplickTheme.Spacing.sm)
                 .background(SplickTheme.Colors.secondaryBackground)
                 .clipShape(RoundedRectangle(cornerRadius: ExpenseScreenChrome.controlRadius, style: .continuous))
+                if isCaptionFocused,
+                   captionQueryDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                   let history = viewModel.searchHistory {
+                    RecentSearchesSection(
+                        items: history.items,
+                        languageService: languageService,
+                        onSelect: { item in
+                            captionQueryDraft = item.query
+                            viewModel.setCaptionQuery(item.query)
+                        },
+                        onDelete: { history.delete($0) },
+                        onClearAll: { history.clear() }
+                    )
+                }
             }
 
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.xs) {

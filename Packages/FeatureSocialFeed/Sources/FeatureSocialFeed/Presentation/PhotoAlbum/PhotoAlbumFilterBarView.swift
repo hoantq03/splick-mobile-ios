@@ -1,6 +1,7 @@
 import SwiftUI
 import DesignSystem
 import Localization
+import Networking
 import SplickDomain
 import FeatureFriends
 
@@ -33,6 +34,7 @@ struct PhotoAlbumFilterBarView: View {
     @Binding var showPeoplePane: Bool
 
     @State private var captionQuery = ""
+    @FocusState private var isCaptionFocused: Bool
     @State private var filterBarWidth: CGFloat = 0
     @State private var captionSearchTask: Task<Void, Never>?
     @State private var filterHosted = false
@@ -42,6 +44,7 @@ struct PhotoAlbumFilterBarView: View {
     private var filters: PhotoAlbumFilters { viewModel.filters }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
         HStack(spacing: SplickTheme.Spacing.sm) {
             captionSearchField
             filterButton
@@ -80,6 +83,21 @@ struct PhotoAlbumFilterBarView: View {
         .onChange(of: showPeoplePane) { shown in
             hostPane(shown: shown, hosted: $peopleHosted, stillExpanded: { showPeoplePane })
         }
+        if isCaptionFocused,
+           captionQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           let history = viewModel.searchHistory {
+            RecentSearchesSection(
+                items: history.items,
+                languageService: languageService,
+                onSelect: { item in
+                    captionQuery = item.query
+                    viewModel.setCaptionQuery(item.query)
+                },
+                onDelete: { history.delete($0) },
+                onClearAll: { history.clear() }
+            )
+        }
+        }
     }
 
     private var captionSearchField: some View {
@@ -92,8 +110,14 @@ struct PhotoAlbumFilterBarView: View {
                 .textFieldStyle(.plain)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                .focused($isCaptionFocused)
                 .onChange(of: captionQuery) { newValue in
                     scheduleCaptionSearch(newValue)
+                }
+                .onChange(of: isCaptionFocused) { focused in
+                    if focused && captionQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Task { await viewModel.searchHistory?.refresh() }
+                    }
                 }
             if !captionQuery.isEmpty {
                 Button {

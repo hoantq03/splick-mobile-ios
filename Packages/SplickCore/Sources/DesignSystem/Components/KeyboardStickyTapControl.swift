@@ -25,6 +25,7 @@ public struct KeyboardStickyTapControl<Label: View>: View {
             .opacity(isEnabled ? 1 : 0.4)
             .overlay {
                 KeyboardStickyUIButton(isEnabled: isEnabled, action: action)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .accessibilityAddTraits(.isButton)
             .accessibilityIdentifier(KeyboardDismissExempt.accessibilityIdentifier)
@@ -50,6 +51,10 @@ private struct KeyboardStickyUIButton: UIViewRepresentable {
     func updateUIView(_ uiView: UIButton, context: Context) {
         uiView.isEnabled = isEnabled
         context.coordinator.action = action
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UIButton, context: Context) -> CGSize? {
+        CGSize(width: proposal.width ?? 0, height: proposal.height ?? 0)
     }
 
     final class Coordinator: NSObject {

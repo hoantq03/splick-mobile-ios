@@ -2,6 +2,7 @@ import SwiftUI
 import Combine
 import Common
 import Localization
+import Networking
 import SplickDomain
 
 @MainActor
@@ -66,6 +67,7 @@ public final class ConversationListViewModel: ObservableObject {
     private let messageCache: MessageThreadCache?
     private let onInboxLoaded: (([Conversation], Int) async -> Void)?
     private let inboxFriendsProvider: (any InboxFriendsProviding)?
+    let searchHistory: SearchHistorySession?
     private var cancellables = Set<AnyCancellable>()
     private var searchTask: Task<Void, Never>?
     private var refreshTask: Task<Void, Never>?
@@ -96,7 +98,8 @@ public final class ConversationListViewModel: ObservableObject {
         languageService: LanguageService,
         messageCache: MessageThreadCache? = nil,
         onInboxLoaded: (([Conversation], Int) async -> Void)? = nil,
-        inboxFriendsProvider: (any InboxFriendsProviding)? = nil
+        inboxFriendsProvider: (any InboxFriendsProviding)? = nil,
+        searchHistoryRepository: SearchHistoryRepositoryProtocol? = nil
     ) {
         self.fetchConversationsUseCase = fetchConversationsUseCase
         self.fetchMessagesUseCase = fetchMessagesUseCase
@@ -107,6 +110,9 @@ public final class ConversationListViewModel: ObservableObject {
         self.messageCache = messageCache
         self.onInboxLoaded = onInboxLoaded
         self.inboxFriendsProvider = inboxFriendsProvider
+        self.searchHistory = searchHistoryRepository.map {
+            SearchHistorySession(repository: $0, scope: .messaging)
+        }
         bindWsEvents()
         bindInboxDirectoryChanges()
     }
@@ -592,6 +598,7 @@ public final class ConversationListViewModel: ObservableObject {
                 searchState = .loaded(results)
                 activeSearchQuery = trimmed
                 isRefreshingSearch = false
+                searchHistory?.record(trimmed)
             } catch {
                 guard !Task.isCancelled else { return }
                 searchResults = []

@@ -6,6 +6,11 @@ public protocol UserDefaultsServiceProtocol {
     func setBool(_ value: Bool, for key: String)
     func getBool(for key: String) -> Bool
     func remove(for key: String)
+    func removeKeys(prefixedBy prefix: String)
+}
+
+public extension UserDefaultsServiceProtocol {
+    func removeKeys(prefixedBy prefix: String) {}
 }
 
 public final class UserDefaultsService: UserDefaultsServiceProtocol {
@@ -38,5 +43,11 @@ public final class UserDefaultsService: UserDefaultsServiceProtocol {
 
     public func remove(for key: String) {
         defaults.removeObject(forKey: key)
+    }
+
+    public func removeKeys(prefixedBy prefix: String) {
+        defaults.dictionaryRepresentation().keys
+            .filter { $0.hasPrefix(prefix) }
+            .forEach { defaults.removeObject(forKey: $0) }
     }
 }

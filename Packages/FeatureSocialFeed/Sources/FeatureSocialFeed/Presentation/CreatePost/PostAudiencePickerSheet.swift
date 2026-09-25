@@ -2,6 +2,7 @@ import SwiftUI
 import DesignSystem
 import Localization
 import SplickDomain
+import Common
 
 private enum AudiencePickerScrollTarget: Hashable {
     case selectionDetails
@@ -573,5 +574,340 @@ struct PostAudiencePickerSheet: View {
         .padding(SplickTheme.Spacing.sm)
         .background(SplickTheme.Colors.tertiaryBackground)
         .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.inset, style: .continuous))
+    }
+}
+
+struct ComposeAudienceMenuPopup: View {
+    @EnvironmentObject private var languageService: LanguageService
+    @ObservedObject var viewModel: CreatePostComposeViewModel
+    var onClose: () -> Void
+    @State private var detailMode: PostAudienceMode?
+    @FocusState private var isSearchFocused: Bool
+
+    private var showsDetail: Bool { detailMode != nil }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let detailMode {
+                detailPage(for: detailMode)
+                    .transition(
+                        .asymmetric(
+                            insertion: .move(edge: .trailing).combined(with: .opacity),
+                            removal: .move(edge: .trailing).combined(with: .opacity)
+                        )
+                    )
+            } else {
+                modeList
+                    .transition(
+                        .asymmetric(
+                            insertion: .move(edge: .leading).combined(with: .opacity),
+                            removal: .move(edge: .leading).combined(with: .opacity)
+                        )
+                    )
+            }
+        }
+        .frame(
+            minWidth: showsDetail ? nil : 220,
+            maxWidth: showsDetail ? .infinity : 280,
+            alignment: .leading
+        )
+        .background(SplickTheme.Colors.secondaryBackground)
+        .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.large, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.large, style: .continuous)
+                .strokeBorder(SplickTheme.Colors.divider.opacity(0.7), lineWidth: 1)
+        }
+        .shadow(color: Color.black.opacity(0.12), radius: 16, y: 8)
+        .animation(Animation.spring(response: 0.44, dampingFraction: 0.66), value: detailMode)
+        .task(id: detailMode) {
+            await loadDetailIfNeeded()
+        }
+    }
+
+    private var modeList: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(PostAudienceMode.allCases.enumerated()), id: \.element) { index, mode in
+                if index > 0 {
+                    Divider().padding(.leading, 14)
+                }
+                KeyboardStickyTapControl(isEnabled: true, action: { chooseMode(mode) }) {
+                    HStack(spacing: SplickTheme.Spacing.sm) {
+                        Text(title(for: mode))
+                            .font(SplickTheme.Typography.callout)
+                            .fontWeight(viewModel.audienceMode == mode ? .semibold : .regular)
+                            .foregroundStyle(SplickTheme.Colors.textPrimary)
+                            .lineLimit(1)
+                        Spacer(minLength: SplickTheme.Spacing.sm)
+                        if viewModel.audienceMode == mode {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(SplickTheme.Colors.brandBlue)
+                        }
+                        if mode != .friends {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(SplickTheme.Colors.textTertiary)
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 11)
+                    .contentShape(Rectangle())
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func detailPage(for mode: PostAudienceMode) -> some View {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+            HStack(spacing: SplickTheme.Spacing.sm) {
+                KeyboardStickyTapControl(isEnabled: true, action: backToModes) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(SplickTheme.Colors.textPrimary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                Text(title(for: mode))
+                    .font(SplickTheme.Typography.callout)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(SplickTheme.Colors.textPrimary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 8)
+            .padding(.top, 8)
+
+            searchField(placeholder: searchPlaceholder(for: mode))
+                .padding(.horizontal, 10)
+
+            resultsList(for: mode)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 10)
+        }
+    }
+
+    private func searchField(placeholder: String) -> some View {
+        HStack(spacing: SplickTheme.Spacing.xs) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(SplickTheme.Colors.textTertiary)
+            if detailMode == .groups {
+                TextField(placeholder, text: $viewModel.audienceGroupSearchQuery)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .focused($isSearchFocused)
+            } else {
+                TextField(
+                    placeholder,
+                    text: Binding(
+                        get: { viewModel.audienceUserSearchQuery },
+                        set: { viewModel.updateAudienceUserSearch($0) }
+                    )
+                )
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .focused($isSearchFocused)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(SplickTheme.Colors.background)
+        .clipShape(Capsule())
+    }
+
+    @ViewBuilder
+    private func resultsList(for mode: PostAudienceMode) -> some View {
+        switch mode {
+        case .friends:
+            EmptyView()
+        case .groups:
+            groupResults
+        case .specificUsers, .friendsExcept:
+            userResults
+        }
+    }
+
+    @ViewBuilder
+    private var groupResults: some View {
+        switch viewModel.audienceGroupsState {
+        case .loading:
+            SplickSpinner(size: .small)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, SplickTheme.Spacing.md)
+        case .failed(let message):
+            Text(message)
+                .font(SplickTheme.Typography.caption)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                .padding(.vertical, SplickTheme.Spacing.sm)
+        default:
+            if viewModel.filteredAudienceGroups.isEmpty {
+                Text(languageService.text(.feedAudienceGroupsNotFound))
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.textTertiary)
+                    .padding(.vertical, SplickTheme.Spacing.sm)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(viewModel.filteredAudienceGroups) { group in
+                            KeyboardStickyTapControl(isEnabled: true, action: {
+                                viewModel.toggleAudienceGroup(group)
+                            }) {
+                                groupRow(group)
+                            }
+                            if group.id != viewModel.filteredAudienceGroups.last?.id {
+                                Divider().padding(.leading, 52)
+                            }
+                        }
+                    }
+                }
+                .frame(maxHeight: AudienceSelectionMetrics.resultsMaxHeight)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var userResults: some View {
+        if viewModel.audienceFriendOptions.isEmpty {
+            if viewModel.isLoadingAudienceFriends {
+                SplickSpinner(size: .small)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, SplickTheme.Spacing.md)
+            } else {
+                Text(languageService.text(.feedAudienceFriendsNotFound))
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.textTertiary)
+                    .padding(.vertical, SplickTheme.Spacing.sm)
+            }
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(viewModel.audienceFriendOptions) { user in
+                        KeyboardStickyTapControl(isEnabled: true, action: {
+                            viewModel.toggleAudienceUser(user)
+                        }) {
+                            userRow(user)
+                        }
+                        if user.id != viewModel.audienceFriendOptions.last?.id {
+                            Divider().padding(.leading, 52)
+                        }
+                    }
+                    if viewModel.isLoadingAudienceFriends {
+                        SplickSpinner(size: .small)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, SplickTheme.Spacing.sm)
+                    }
+                }
+            }
+            .frame(maxHeight: AudienceSelectionMetrics.resultsMaxHeight)
+        }
+    }
+
+    private func groupRow(_ group: SplickDomain.Group) -> some View {
+        HStack(spacing: SplickTheme.Spacing.sm) {
+            Image(systemName: "person.3.fill")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(SplickTheme.Colors.brandBlue)
+                .frame(width: 32, height: 32)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(group.name)
+                    .font(SplickTheme.Typography.callout)
+                    .foregroundStyle(SplickTheme.Colors.textPrimary)
+                    .lineLimit(1)
+                Text(languageService.format(.friendsMemberCount, group.memberCount))
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: viewModel.isAudienceGroupSelected(group) ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(
+                    viewModel.isAudienceGroupSelected(group)
+                        ? SplickTheme.Colors.brandBlue
+                        : SplickTheme.Colors.textTertiary
+                )
+        }
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
+    }
+
+    private func userRow(_ user: UserSummary) -> some View {
+        HStack(spacing: SplickTheme.Spacing.sm) {
+            AvatarView(imageURL: user.avatarURL, name: user.displayName, size: .small)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(user.displayName)
+                    .font(SplickTheme.Typography.callout)
+                    .foregroundStyle(SplickTheme.Colors.textPrimary)
+                    .lineLimit(1)
+                Text("@\(user.username)")
+                    .font(SplickTheme.Typography.caption)
+                    .foregroundStyle(SplickTheme.Colors.textTertiary)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: viewModel.isAudienceUserSelected(user) ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(
+                    viewModel.isAudienceUserSelected(user)
+                        ? SplickTheme.Colors.brandBlue
+                        : SplickTheme.Colors.textTertiary
+                )
+        }
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
+    }
+
+    private func chooseMode(_ mode: PostAudienceMode) {
+        if mode == .friends {
+            if viewModel.audienceMode != .friends {
+                viewModel.selectAudienceMode(.friends)
+            }
+            onClose()
+            return
+        }
+        if viewModel.audienceMode != mode {
+            viewModel.selectAudienceMode(mode)
+        }
+        withAnimation(Animation.spring(response: 0.44, dampingFraction: 0.66)) {
+            detailMode = mode
+        }
+    }
+
+    private func backToModes() {
+        hideKeyboard()
+        withAnimation(Animation.spring(response: 0.44, dampingFraction: 0.66)) {
+            detailMode = nil
+        }
+    }
+
+    private func loadDetailIfNeeded() async {
+        switch detailMode {
+        case .groups:
+            await viewModel.loadAudienceGroupsIfNeeded()
+        case .specificUsers, .friendsExcept:
+            await viewModel.loadAudienceFriendsIfNeeded()
+        case .friends, nil:
+            break
+        }
+    }
+
+    private func title(for mode: PostAudienceMode) -> String {
+        switch mode {
+        case .friends:
+            return languageService.text(.friendsTabFriends)
+        case .groups:
+            return languageService.text(.feedAudienceGroups)
+        case .specificUsers:
+            return languageService.text(.feedAudienceUsers)
+        case .friendsExcept:
+            return languageService.text(.feedAudienceFriendsExcept)
+        }
+    }
+
+    private func searchPlaceholder(for mode: PostAudienceMode) -> String {
+        switch mode {
+        case .groups:
+            return languageService.text(.feedAudienceSearchGroups)
+        case .friendsExcept:
+            return languageService.text(.feedAudienceSearchExcept)
+        default:
+            return languageService.text(.feedCreateSearchFriends)
+        }
     }
 }

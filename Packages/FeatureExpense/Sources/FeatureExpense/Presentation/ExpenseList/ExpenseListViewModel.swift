@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import Common
 import Localization
+import Networking
 import SplickDomain
 import Storage
 
@@ -27,6 +28,7 @@ public final class ExpenseListViewModel: ObservableObject {
     private let onBadgeCountsChanged: (() async -> Void)?
     private let onDataLoaded: (([DebtSummary], [Expense], UUID?) async -> Void)?
     private let groupId: UUID?
+    let searchHistory: SearchHistorySession?
     private(set) var currentUserId: UUID?
     private var nextCursor: String?
     private var hasMorePages = true
@@ -47,7 +49,8 @@ public final class ExpenseListViewModel: ObservableObject {
         groupId: UUID? = nil,
         currentUserId: UUID? = nil,
         onBadgeCountsChanged: (() async -> Void)? = nil,
-        onDataLoaded: (([DebtSummary], [Expense], UUID?) async -> Void)? = nil
+        onDataLoaded: (([DebtSummary], [Expense], UUID?) async -> Void)? = nil,
+        searchHistoryRepository: SearchHistoryRepositoryProtocol? = nil
     ) {
         self.fetchExpensesUseCase = fetchExpensesUseCase
         self.fetchDebtSummaryUseCase = fetchDebtSummaryUseCase
@@ -57,6 +60,9 @@ public final class ExpenseListViewModel: ObservableObject {
         self.onDataLoaded = onDataLoaded
         self.groupId = groupId
         self.currentUserId = currentUserId
+        self.searchHistory = searchHistoryRepository.map {
+            SearchHistorySession(repository: $0, scope: .expense)
+        }
     }
 
     /// Reactive list used by the UI — recomputes whenever `expenses` or `filters` change.
@@ -358,6 +364,10 @@ public final class ExpenseListViewModel: ObservableObject {
 
     func setCaptionQuery(_ query: String) {
         mutateFilters { $0.captionQuery = query }
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            searchHistory?.record(trimmed)
+        }
     }
 
     func setDebtStatus(_ status: ExpenseDebtFilter) {

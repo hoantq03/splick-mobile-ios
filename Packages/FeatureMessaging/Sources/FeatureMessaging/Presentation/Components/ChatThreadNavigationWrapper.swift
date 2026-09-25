@@ -1,6 +1,7 @@
 import SwiftUI
 import Storage
 import Localization
+import Networking
 import SplickDomain
 
 struct ChatThreadNavigationWrapper: View {
@@ -100,6 +101,7 @@ public final class ChatThreadViewModelFactory: ObservableObject {
     public let onConversationDeleted: ((UUID) -> Void)?
     public let onThreadVisible: ((UUID) -> Void)?
     public let onThreadHidden: ((UUID) -> Void)?
+    private let searchHistoryRepository: SearchHistoryRepositoryProtocol?
 
     public init(
         currentUserId: UUID,
@@ -117,7 +119,8 @@ public final class ChatThreadViewModelFactory: ObservableObject {
         onConversationUpdated: ((Conversation) -> Void)? = nil,
         onConversationDeleted: ((UUID) -> Void)? = nil,
         onThreadVisible: ((UUID) -> Void)? = nil,
-        onThreadHidden: ((UUID) -> Void)? = nil
+        onThreadHidden: ((UUID) -> Void)? = nil,
+        searchHistoryRepository: SearchHistoryRepositoryProtocol? = nil
     ) {
         self.currentUserId = currentUserId
         self.fetchMessagesUseCase = fetchMessagesUseCase
@@ -135,6 +138,7 @@ public final class ChatThreadViewModelFactory: ObservableObject {
         self.onConversationDeleted = onConversationDeleted
         self.onThreadVisible = onThreadVisible
         self.onThreadHidden = onThreadHidden
+        self.searchHistoryRepository = searchHistoryRepository
     }
 
     public func make(conversationId: UUID, highlightMessageId: UUID? = nil, leftAt: Date? = nil) -> ChatThreadViewModel {
@@ -153,7 +157,8 @@ public final class ChatThreadViewModelFactory: ObservableObject {
             pendingMessageStore: pendingMessageStore,
             networkPathMonitor: networkPathMonitor,
             onConversationRead: onConversationRead,
-            leftAt: leftAt
+            leftAt: leftAt,
+            searchHistoryRepository: searchHistoryRepository
         )
     }
 }
