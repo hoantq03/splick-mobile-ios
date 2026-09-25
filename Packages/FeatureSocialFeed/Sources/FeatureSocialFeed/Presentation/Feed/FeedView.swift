@@ -242,6 +242,9 @@ public struct FeedView: View {
             if segment != .feed {
                 videoCoordinator.suspendPlayback()
             }
+            if segment == .streak {
+                Task { await streakViewModel.refresh() }
+            }
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(180))
                 scrollChrome.feedSegment.reset()
