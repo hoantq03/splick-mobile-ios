@@ -20,6 +20,8 @@ enum MessageThreadRowLayout {
     static let bubbleAbsoluteMinWidth: CGFloat = 160
     /// Fallback when the list has not measured yet.
     static let mediaFallbackMaxWidth: CGFloat = 220
+    /// Chat GIFs stay smaller than photos/videos in the same row.
+    static let gifMaxWidthFraction: CGFloat = 0.3
 
     /// Outer message bubble radius (matches Android `BUBBLE_CORNER_RADIUS`).
     static let bubbleCornerRadius: CGFloat = 20

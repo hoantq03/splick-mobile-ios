@@ -567,13 +567,14 @@ struct MessageBubble: View {
         if imageAttachments.count == 1,
            let attachment = imageAttachments.first,
            attachment.url.isLikelyAnimatedImage {
+            let gifWidth = max(mediaWidth * MessageThreadRowLayout.gifMaxWidthFraction, 1)
             InlineGifAttachmentView(
                 url: attachment.url,
-                maxWidth: mediaWidth,
+                maxWidth: gifWidth,
                 cornerRadius: Self.mediaCornerRadius,
                 showsLoadingPlaceholder: true
             )
-            .frame(maxWidth: mediaWidth)
+            .frame(maxWidth: gifWidth)
             // simultaneous — exclusive onTapGesture steals list reply pan on iOS 17.
             .simultaneousGesture(TapGesture().onEnded {
                 imageViewerRoute = AttachmentPreviewRoute(index: 0)
