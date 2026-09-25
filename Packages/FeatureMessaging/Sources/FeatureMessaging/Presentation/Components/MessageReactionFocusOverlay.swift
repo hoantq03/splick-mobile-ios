@@ -394,7 +394,7 @@ struct MessageReactionFocusOverlay: View {
         )
         .fixedSize(horizontal: true, vertical: true)
 
-        HStack(alignment: .center, spacing: MessageThreadRowLayout.senderAvatarGap) {
+        HStack(alignment: .bottom, spacing: MessageThreadRowLayout.senderAvatarGap) {
             if context.showsSenderAvatar {
                 AvatarView(
                     imageURL: context.senderAvatarURL,

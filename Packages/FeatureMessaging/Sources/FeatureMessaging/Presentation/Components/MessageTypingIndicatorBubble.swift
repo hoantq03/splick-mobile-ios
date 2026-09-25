@@ -24,11 +24,13 @@ struct MessageTypingIndicatorBubble: View {
     fileprivate static let stagger: TimeInterval = 0.14
 
     var body: some View {
-        HStack(alignment: .messageThreadRowCenter, spacing: 0) {
+        HStack(alignment: .center, spacing: 0) {
             MessageThreadIncomingLeadingSlot()
-            typingSenderAvatar
-            typingBubble
-                .fixedSize(horizontal: true, vertical: false)
+            HStack(alignment: .bottom, spacing: 0) {
+                typingSenderAvatar
+                typingBubble
+                    .fixedSize(horizontal: true, vertical: false)
+            }
             Spacer(minLength: MessageThreadRowLayout.rowSideSpacer)
                 .allowsHitTesting(false)
         }

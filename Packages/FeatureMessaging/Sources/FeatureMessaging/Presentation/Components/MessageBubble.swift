@@ -127,16 +127,20 @@ struct MessageBubble: View {
                     .allowsHitTesting(false)
             } else {
                 incomingLeadingMeta
-                incomingSenderAvatar
-                    .padding(.trailing, MessageThreadRowLayout.senderAvatarGap)
             }
 
-            slidingBubbleContent
-                .fixedSize(horizontal: true, vertical: false)
-                .offset(x: replySwipeTranslation)
-                .overlay(alignment: isOutgoing ? .trailing : .leading) {
-                    replyIconBadge
+            HStack(alignment: .bottom, spacing: 0) {
+                if !isOutgoing {
+                    incomingSenderAvatar
+                        .padding(.trailing, MessageThreadRowLayout.senderAvatarGap)
                 }
+                slidingBubbleContent
+                    .fixedSize(horizontal: true, vertical: false)
+                    .offset(x: replySwipeTranslation)
+                    .overlay(alignment: isOutgoing ? .trailing : .leading) {
+                        replyIconBadge
+                    }
+            }
 
             if isOutgoing {
                 outgoingTrailingMeta
