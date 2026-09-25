@@ -261,6 +261,8 @@ public final class APIClient: APIClientProtocol, @unchecked Sendable {
             return AuthError.invalidCredentials
         case "UNAUTHORIZED", "INVALID_TOKEN":
             return NetworkError.unauthorized
+        case "INVALID_CREDENTIALS":
+            return AuthError.invalidCredentials
         case "ACCOUNT_LOCKED":
             return AuthError.accountLocked
         case "ACCOUNT_INACTIVE":

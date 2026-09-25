@@ -268,6 +268,11 @@ public final class AccountClosureSheetViewModel: ObservableObject {
     }
 
     private func executeFailureMessage(_ error: Error) -> String {
+        if let error = error as? AuthError, error == .invalidCredentials {
+            return method == .password
+                ? languageService.text(.changePasswordInvalidCurrent)
+                : languageService.text(.errorAuthInvalidOtpDefault)
+        }
         if let error = error as? AuthError, error.shouldShowOnOtpStep {
             return otpFailureMessage(error)
         }
