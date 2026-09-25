@@ -10,6 +10,11 @@ import SplickDomain
 import FeatureFriends
 import FeatureMedia
 
+public enum ComposePeopleTarget: Equatable, Sendable {
+    case tags
+    case bill
+}
+
 public enum ComposeBillSplitMode: String, CaseIterable, Identifiable {
     case equal
     case percentage
@@ -71,6 +76,12 @@ public final class CreatePostComposeViewModel: ObservableObject {
     @Published private(set) var selectedCompanionGroups: [Group] = []
     @Published private(set) var expandedCompanionGroupIds: Set<UUID> = []
     @Published private(set) var loadingCompanionGroupIds: Set<UUID> = []
+    @Published private(set) var selectedBillCompanions: [UserSummary] = []
+    @Published private(set) var selectedBillCompanionGroups: [Group] = []
+    @Published private(set) var expandedBillCompanionGroupIds: Set<UUID> = []
+    @Published private(set) var loadingBillCompanionGroupIds: Set<UUID> = []
+    @Published var peoplePickerTarget: ComposePeopleTarget = .tags
+    @Published private(set) var peoplePickerNotice: String?
     @Published var autoReminderEnabled = true
     @Published var billTotalText = "" {
         didSet { rebalanceBillSplitShares() }
@@ -108,9 +119,10 @@ public final class CreatePostComposeViewModel: ObservableObject {
     private let currentUserId: UUID?
     private let feedRepository: FeedRepositoryProtocol?
     let locationSearchHistory: SearchHistorySession?
-    let friendsSearchHistory: SearchHistorySession?
     private var friendSearchTask: Task<Void, Never>?
     private var companionGroupMembersTasks: [UUID: Task<Void, Never>] = [:]
+    private var billGroupMembersTasks: [UUID: Task<Void, Never>] = [:]
+    private var peoplePickerNoticeTask: Task<Void, Never>?
     private var locationSearchTask: Task<Void, Never>?
     private var locationSearchCancellable: AnyCancellable?
     private var audienceFriendSearchTask: Task<Void, Never>?
@@ -163,9 +175,6 @@ public final class CreatePostComposeViewModel: ObservableObject {
         self.feedRepository = feedRepository
         self.locationSearchHistory = searchHistoryRepository.map {
             SearchHistorySession(repository: $0, scope: .location)
-        }
-        self.friendsSearchHistory = searchHistoryRepository.map {
-            SearchHistorySession(repository: $0, scope: .friends)
         }
         self.editingPost = editingPost
         var drafts: [ComposeMediaDraft] = []
@@ -241,7 +250,9 @@ public final class CreatePostComposeViewModel: ObservableObject {
 
     var filteredCompanionGroups: [Group] {
         let query = friendSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        let selectedIds = Set(selectedCompanionGroups.map(\.id))
+        let selectedIds = peoplePickerTarget == .bill
+            ? selectedBillCompanionGroupIds
+            : selectedCompanionGroupIds
         let candidates = availableAudienceGroups.filter { !selectedIds.contains($0.id) }
 
         guard !query.isEmpty else { return Array(candidates.prefix(6)) }
@@ -324,12 +335,33 @@ public final class CreatePostComposeViewModel: ObservableObject {
             append(currentUser)
         }
 
-        selectedCompanions.forEach(append)
-        selectedCompanionGroups.forEach { group in
-            group.members.forEach(append)
+        selectedBillCompanions.forEach(append)
+        selectedBillCompanionGroups.forEach { group in
+            group.members.filter { !taggedUserIds.contains($0.id) }.forEach(append)
         }
 
         return participants
+    }
+
+    var taggedUserIds: Set<UUID> {
+        selectedCompanionIds.union(selectedCompanionGroupMemberIds)
+    }
+
+    var billedUserIds: Set<UUID> {
+        Set(selectedBillCompanions.map(\.id))
+            .union(Set(selectedBillCompanionGroups.flatMap(\.members).map(\.id)))
+    }
+
+    var selectedBillCompanionIds: Set<UUID> {
+        Set(selectedBillCompanions.map(\.id))
+    }
+
+    var selectedBillCompanionGroupIds: Set<UUID> {
+        Set(selectedBillCompanionGroups.map(\.id))
+    }
+
+    var selectedBillCompanionGroupMemberIds: Set<UUID> {
+        Set(selectedBillCompanionGroups.flatMap(\.members).map(\.id))
     }
 
     var billSplitPartyIds: [UUID] {
@@ -392,7 +424,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
 
         selectedCompanions.forEach(append)
         selectedCompanionGroups.forEach { group in
-            group.members.forEach(append)
+            group.members.filter { !billedUserIds.contains($0.id) }.forEach(append)
         }
 
         return companions
@@ -415,15 +447,15 @@ public final class CreatePostComposeViewModel: ObservableObject {
     }
 
     var isLoadingAnyCompanionGroupMembers: Bool {
-        !loadingCompanionGroupIds.isEmpty
+        !loadingCompanionGroupIds.isEmpty || !loadingBillCompanionGroupIds.isEmpty
     }
 
     func isCompanionGroupMembersExpanded(_ group: Group) -> Bool {
-        expandedCompanionGroupIds.contains(group.id)
+        expandedCompanionGroupIds.contains(group.id) || expandedBillCompanionGroupIds.contains(group.id)
     }
 
     func isLoadingCompanionGroupMembers(_ group: Group) -> Bool {
-        loadingCompanionGroupIds.contains(group.id)
+        loadingCompanionGroupIds.contains(group.id) || loadingBillCompanionGroupIds.contains(group.id)
     }
 
     func addPendingGuest(displayName: String, email: String) {
@@ -464,15 +496,16 @@ public final class CreatePostComposeViewModel: ObservableObject {
 
     func removeBillSplitParticipant(_ user: UserSummary) {
         guard !isCurrentUser(user) else { return }
-        if selectedCompanions.contains(where: { $0.id == user.id }) {
-            removeCompanion(user)
-        }
-        let groups = selectedCompanionGroups.filter { group in
+        selectedBillCompanions.removeAll { $0.id == user.id }
+        let groups = selectedBillCompanionGroups.filter { group in
             group.members.contains(where: { $0.id == user.id })
         }
         for group in groups {
-            removeCompanionGroupMember(user, from: group)
+            removeBillCompanionGroupMember(user, from: group)
         }
+        percentageTexts.removeValue(forKey: user.id)
+        exactAmountTexts.removeValue(forKey: user.id)
+        rebalanceBillSplitShares()
     }
 
     func locationQueryDidChange() {
@@ -519,7 +552,7 @@ public final class CreatePostComposeViewModel: ObservableObject {
     }
 
     var hasBillSplitCounterparts: Bool {
-        !selectedCompanions.isEmpty || !selectedCompanionGroups.isEmpty || !pendingGuests.isEmpty
+        !selectedBillCompanions.isEmpty || !selectedBillCompanionGroups.isEmpty || !pendingGuests.isEmpty
     }
 
     var billTotalAmountError: String? {
@@ -695,42 +728,113 @@ public final class CreatePostComposeViewModel: ObservableObject {
         mentionDisplayNamesByUserId[user.id] = display
     }
 
-    func addCompanion(_ user: UserSummary) {
-        guard !selectedCompanionIds.contains(user.id) else { return }
-        if selectedCompanionGroupMemberIds.contains(user.id) { return }
-        selectedCompanions.append(user)
+    func addCompanion(_ user: UserSummary, to target: ComposePeopleTarget? = nil) {
+        let dest = target ?? peoplePickerTarget
+        guard !isCurrentUser(user) else { return }
+        switch dest {
+        case .tags:
+            if billedUserIds.contains(user.id) {
+                showPeoplePickerNotice(.feedCreateAlreadyOnBill)
+                return
+            }
+            guard !selectedCompanionIds.contains(user.id) else { return }
+            if selectedCompanionGroupMemberIds.contains(user.id) { return }
+            selectedCompanions.append(user)
+        case .bill:
+            if taggedUserIds.contains(user.id) {
+                showPeoplePickerNotice(.feedCreateAlreadyTagged)
+                return
+            }
+            guard !selectedBillCompanionIds.contains(user.id) else { return }
+            if selectedBillCompanionGroupMemberIds.contains(user.id) { return }
+            selectedBillCompanions.append(user)
+            rebalanceBillSplitShares()
+        }
+        peoplePickerNotice = nil
         friendSearchResults.removeAll { $0.id == user.id }
         friendSearchQuery = ""
         scheduleFriendSearch(reset: true)
-        rebalanceBillSplitShares()
+    }
+
+    func occupancyNotice(for userId: UUID, target: ComposePeopleTarget? = nil) -> String? {
+        switch target ?? peoplePickerTarget {
+        case .bill:
+            return taggedUserIds.contains(userId) ? languageService.text(.feedCreateAlreadyTagged) : nil
+        case .tags:
+            return billedUserIds.contains(userId) ? languageService.text(.feedCreateAlreadyOnBill) : nil
+        }
+    }
+
+    func occupancyNotice(forGroupId groupId: UUID, target: ComposePeopleTarget? = nil) -> String? {
+        switch target ?? peoplePickerTarget {
+        case .bill:
+            return selectedCompanionGroupIds.contains(groupId) ? languageService.text(.feedCreateAlreadyTagged) : nil
+        case .tags:
+            return selectedBillCompanionGroupIds.contains(groupId) ? languageService.text(.feedCreateAlreadyOnBill) : nil
+        }
+    }
+
+    private func showPeoplePickerNotice(_ key: L10nKey) {
+        peoplePickerNotice = languageService.text(key)
+        peoplePickerNoticeTask?.cancel()
+        peoplePickerNoticeTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_400_000_000)
+            guard !Task.isCancelled else { return }
+            if peoplePickerNotice == languageService.text(key) {
+                peoplePickerNotice = nil
+            }
+        }
     }
 
     func removeCompanion(_ user: UserSummary) {
         selectedCompanions.removeAll { $0.id == user.id }
-        percentageTexts.removeValue(forKey: user.id)
-        exactAmountTexts.removeValue(forKey: user.id)
-        rebalanceBillSplitShares()
     }
 
     func loadCompanionGroupsIfNeeded() async {
         await loadAudienceGroupsIfNeeded()
     }
 
-    func selectCompanionGroup(_ group: Group) {
-        guard !selectedCompanionGroupIds.contains(group.id) else { return }
-        selectedCompanionGroups.append(group)
-        expandedCompanionGroupIds.remove(group.id)
-        loadingCompanionGroupIds.insert(group.id)
+    func selectCompanionGroup(_ group: Group, to target: ComposePeopleTarget? = nil) {
+        let dest = target ?? peoplePickerTarget
+        switch dest {
+        case .tags:
+            if selectedBillCompanionGroupIds.contains(group.id) {
+                showPeoplePickerNotice(.feedCreateAlreadyOnBill)
+                return
+            }
+            guard !selectedCompanionGroupIds.contains(group.id) else { return }
+            selectedCompanionGroups.append(group)
+            expandedCompanionGroupIds.remove(group.id)
+            loadingCompanionGroupIds.insert(group.id)
+            let task = Task { await loadCompanionGroupMembers(for: group, to: .tags) }
+            companionGroupMembersTasks[group.id] = task
+        case .bill:
+            if selectedCompanionGroupIds.contains(group.id) {
+                showPeoplePickerNotice(.feedCreateAlreadyTagged)
+                return
+            }
+            guard !selectedBillCompanionGroupIds.contains(group.id) else { return }
+            selectedBillCompanionGroups.append(group)
+            expandedBillCompanionGroupIds.remove(group.id)
+            loadingBillCompanionGroupIds.insert(group.id)
+            let task = Task { await loadCompanionGroupMembers(for: group, to: .bill) }
+            billGroupMembersTasks[group.id] = task
+            rebalanceBillSplitShares()
+        }
         if case .failed = submitState {
             submitState = .idle
         }
-        let task = Task {
-            await loadCompanionGroupMembers(for: group)
-        }
-        companionGroupMembersTasks[group.id] = task
     }
 
     func toggleCompanionGroupMembersExpanded(_ group: Group) {
+        if selectedBillCompanionGroupIds.contains(group.id) {
+            if expandedBillCompanionGroupIds.contains(group.id) {
+                expandedBillCompanionGroupIds.remove(group.id)
+            } else {
+                expandedBillCompanionGroupIds.insert(group.id)
+            }
+            return
+        }
         if expandedCompanionGroupIds.contains(group.id) {
             expandedCompanionGroupIds.remove(group.id)
         } else {
@@ -745,6 +849,16 @@ public final class CreatePostComposeViewModel: ObservableObject {
         selectedCompanionGroups[index] = groupWithMembers(selectedCompanionGroups[index], members: nextMembers)
         if !selectedCompanionGroupMemberIds.contains(user.id) {
             selectedCompanions.removeAll { $0.id == user.id }
+        }
+    }
+
+    func removeBillCompanionGroupMember(_ user: UserSummary, from group: Group) {
+        guard !isCurrentUser(user) else { return }
+        guard let index = selectedBillCompanionGroups.firstIndex(where: { $0.id == group.id }) else { return }
+        let nextMembers = selectedBillCompanionGroups[index].members.filter { $0.id != user.id }
+        selectedBillCompanionGroups[index] = groupWithMembers(selectedBillCompanionGroups[index], members: nextMembers)
+        if !selectedBillCompanionGroupMemberIds.contains(user.id) {
+            selectedBillCompanions.removeAll { $0.id == user.id }
             percentageTexts.removeValue(forKey: user.id)
             exactAmountTexts.removeValue(forKey: user.id)
         }
@@ -757,19 +871,41 @@ public final class CreatePostComposeViewModel: ObservableObject {
         selectedCompanionGroups.removeAll { $0.id == group.id }
         expandedCompanionGroupIds.remove(group.id)
         loadingCompanionGroupIds.remove(group.id)
+    }
+
+    func removeBillCompanionGroup(_ group: Group) {
+        billGroupMembersTasks[group.id]?.cancel()
+        billGroupMembersTasks[group.id] = nil
+        selectedBillCompanionGroups.removeAll { $0.id == group.id }
+        expandedBillCompanionGroupIds.remove(group.id)
+        loadingBillCompanionGroupIds.remove(group.id)
         rebalanceBillSplitShares()
     }
 
-    private func loadCompanionGroupMembers(for group: Group) async {
-        loadingCompanionGroupIds.insert(group.id)
+    private func loadCompanionGroupMembers(for group: Group, to target: ComposePeopleTarget) async {
+        switch target {
+        case .tags:
+            loadingCompanionGroupIds.insert(group.id)
+        case .bill:
+            loadingBillCompanionGroupIds.insert(group.id)
+        }
         defer {
-            loadingCompanionGroupIds.remove(group.id)
-            companionGroupMembersTasks[group.id] = nil
+            switch target {
+            case .tags:
+                loadingCompanionGroupIds.remove(group.id)
+                companionGroupMembersTasks[group.id] = nil
+            case .bill:
+                loadingBillCompanionGroupIds.remove(group.id)
+                billGroupMembersTasks[group.id] = nil
+            }
         }
         do {
             let items = try await fetchGroupMembersUseCase.execute(groupId: group.id, status: "ACTIVE")
             guard !Task.isCancelled else { return }
-            guard selectedCompanionGroupIds.contains(group.id) else { return }
+            let stillSelected = target == .bill
+                ? selectedBillCompanionGroupIds.contains(group.id)
+                : selectedCompanionGroupIds.contains(group.id)
+            guard stillSelected else { return }
             var seen = Set<UUID>()
             let members = items.compactMap { item -> UserSummary? in
                 guard seen.insert(item.userId).inserted else { return nil }
@@ -784,14 +920,28 @@ public final class CreatePostComposeViewModel: ObservableObject {
                 submitState = .failed(languageService.text(.feedCreateLoadGroupMembersFailed))
                 return
             }
-            replaceSelectedCompanionGroup(groupWithMembers(group, members: members))
-            if !members.isEmpty {
-                expandedCompanionGroupIds.insert(group.id)
+            let updated = groupWithMembers(group, members: members)
+            switch target {
+            case .tags:
+                replaceSelectedCompanionGroup(updated)
+                if !members.isEmpty {
+                    expandedCompanionGroupIds.insert(group.id)
+                }
+            case .bill:
+                if let index = selectedBillCompanionGroups.firstIndex(where: { $0.id == group.id }) {
+                    selectedBillCompanionGroups[index] = updated
+                }
+                if !members.isEmpty {
+                    expandedBillCompanionGroupIds.insert(group.id)
+                }
+                rebalanceBillSplitShares()
             }
-            rebalanceBillSplitShares()
         } catch {
             guard !Task.isCancelled else { return }
-            guard selectedCompanionGroupIds.contains(group.id) else { return }
+            let stillSelected = target == .bill
+                ? selectedBillCompanionGroupIds.contains(group.id)
+                : selectedCompanionGroupIds.contains(group.id)
+            guard stillSelected else { return }
             submitState = .failed(languageService.text(.feedCreateLoadGroupMembersFailed))
         }
     }
@@ -956,13 +1106,14 @@ public final class CreatePostComposeViewModel: ObservableObject {
         }
 
         if isLoadingAnyCompanionGroupMembers ||
-            selectedCompanionGroups.contains(where: { $0.members.isEmpty && $0.memberCount > 0 }) {
+            selectedCompanionGroups.contains(where: { $0.members.isEmpty && $0.memberCount > 0 }) ||
+            selectedBillCompanionGroups.contains(where: { $0.members.isEmpty && $0.memberCount > 0 }) {
             submitState = .failed(languageService.text(.feedCreateLoadGroupMembersFailed))
             return nil
         }
 
         if enableBillSplit {
-            if companionUsersForSubmit.isEmpty && pendingGuests.isEmpty {
+            if !hasBillSplitCounterparts {
                 submitState = .failed(languageService.text(.feedCreateBillNeedPeople))
                 return nil
             }
@@ -1264,7 +1415,13 @@ public final class CreatePostComposeViewModel: ObservableObject {
                 limit: friendSearchPageSize
             )
             guard !Task.isCancelled else { return }
-            let excludedIds = selectedCompanionIds.union(selectedCompanionGroupMemberIds)
+            let excludedIds: Set<UUID> = {
+                var ids = peoplePickerTarget == .bill ? billedUserIds : taggedUserIds
+                if let currentUserId {
+                    ids.insert(currentUserId)
+                }
+                return ids
+            }()
             let filtered = results
                 .filter { !excludedIds.contains($0.id) }
                 .sorted {
@@ -1285,9 +1442,6 @@ public final class CreatePostComposeViewModel: ObservableObject {
                 hasMoreFriendSearch = results.count == friendSearchPageSize && !appended.isEmpty
             }
             friendSearchPage = page
-            if reset, !friendSearchActiveQuery.isEmpty {
-                friendsSearchHistory?.record(friendSearchActiveQuery)
-            }
             if reset, friendSearchActiveQuery.isEmpty {
                 hasCompletedInitialFriendFetch = true
             }

@@ -156,7 +156,7 @@ final class CreatePostComposeViewModelTests: XCTestCase {
     func testBillSplitCalculationsEqualMode() {
         let vm = makeViewModel()
         let friend = UserSummary(id: UUID(), username: "friend1", displayName: "Friend 1", avatarURL: nil)
-        vm.addCompanion(friend)
+        vm.addCompanion(friend, to: .bill)
         vm.addPendingGuest(displayName: "Guest 1", email: "guest1@example.com")
 
         vm.billTotalText = "300000"
@@ -178,7 +178,7 @@ final class CreatePostComposeViewModelTests: XCTestCase {
         let vm = makeViewModel()
         let friendId = UUID()
         let friend = UserSummary(id: friendId, username: "friend1", displayName: "Friend 1", avatarURL: nil)
-        vm.addCompanion(friend)
+        vm.addCompanion(friend, to: .bill)
 
         vm.billTotalText = "1000000"
         vm.splitMode = .percentage
@@ -198,7 +198,7 @@ final class CreatePostComposeViewModelTests: XCTestCase {
         let vm = makeViewModel()
         let friend = UserSummary(id: UUID(), username: "friend1", displayName: "Friend 1", avatarURL: nil)
         
-        vm.addCompanion(friend)
+        vm.addCompanion(friend, to: .bill)
         XCTAssertTrue(vm.selectedCompanionIds.contains(friend.id))
         XCTAssertTrue(vm.companionUsersForSubmit.contains(where: { $0.id == friend.id }))
 
@@ -393,6 +393,53 @@ final class CreatePostComposeViewModelTests: XCTestCase {
         XCTAssertEqual(vm.friendSearchResults.map(\.id), [friend.id])
         XCTAssertEqual(mockFriendsUseCase.lastQuery, "")
         XCTAssertEqual(mockFriendsUseCase.lastPage, 0)
+    }
+
+    func testTagAndBillListsStayIndependent() {
+        let tagged = UserSummary(id: UUID(), username: "tagged", displayName: "Tagged Friend", avatarURL: nil)
+        let billed = UserSummary(id: UUID(), username: "billed", displayName: "Billed Friend", avatarURL: nil)
+        let vm = makeViewModel()
+
+        vm.addCompanion(tagged, to: .tags)
+        vm.addCompanion(billed, to: .bill)
+
+        XCTAssertEqual(vm.selectedCompanions.map(\.id), [tagged.id])
+        XCTAssertEqual(vm.selectedBillCompanions.map(\.id), [billed.id])
+        XCTAssertEqual(vm.companionUsersForSubmit.map(\.id), [tagged.id])
+        XCTAssertTrue(vm.billSplitParticipants.contains { $0.id == billed.id })
+        XCTAssertFalse(vm.billSplitParticipants.contains { $0.id == tagged.id })
+        XCTAssertNil(vm.occupancyNotice(for: tagged.id, target: .tags))
+        XCTAssertEqual(
+            vm.occupancyNotice(for: tagged.id, target: .bill),
+            languageService.text(.feedCreateAlreadyTagged)
+        )
+        XCTAssertEqual(
+            vm.occupancyNotice(for: billed.id, target: .tags),
+            languageService.text(.feedCreateAlreadyOnBill)
+        )
+    }
+
+    func testOccupiedPeopleStayVisibleButCannotBeAddedToTheOtherList() {
+        let friend = UserSummary(id: UUID(), username: "lan", displayName: "Lan", avatarURL: nil)
+        let vm = makeViewModel()
+
+        vm.addCompanion(friend, to: .tags)
+        vm.addCompanion(friend, to: .bill)
+
+        XCTAssertEqual(vm.selectedCompanions.map(\.id), [friend.id])
+        XCTAssertTrue(vm.selectedBillCompanions.isEmpty)
+        XCTAssertEqual(vm.peoplePickerNotice, languageService.text(.feedCreateAlreadyTagged))
+
+        vm.addCompanion(friend, to: .tags)
+        XCTAssertEqual(vm.selectedCompanions.count, 1)
+
+        let other = UserSummary(id: UUID(), username: "minh", displayName: "Minh", avatarURL: nil)
+        vm.addCompanion(other, to: .bill)
+        vm.addCompanion(other, to: .tags)
+
+        XCTAssertEqual(vm.selectedBillCompanions.map(\.id), [other.id])
+        XCTAssertFalse(vm.selectedCompanions.contains { $0.id == other.id })
+        XCTAssertEqual(vm.peoplePickerNotice, languageService.text(.feedCreateAlreadyOnBill))
     }
 
     func testEditingPostSeedsCaptionAudienceAndCompanions() {

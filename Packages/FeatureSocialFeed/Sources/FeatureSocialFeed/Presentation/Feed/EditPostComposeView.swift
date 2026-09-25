@@ -110,7 +110,7 @@ struct EditPostComposeView: View {
     @StateObject private var viewModel: EditPostComposeViewModel
     @StateObject private var composeViewModel: CreatePostComposeViewModel
     @State private var pickerItems: [PhotosPickerItem] = []
-    @State private var showCompanionsScreen = false
+    @State private var showCompanionsMenu = false
     @State private var showAudienceMenu = false
     let profileDependencies: FriendUserProfileDependencies?
     let nearbyDiscoveryUseCase: NearbyDiscoveryUseCaseProtocol?
@@ -177,27 +177,28 @@ struct EditPostComposeView: View {
             .background(SplickTheme.Colors.background)
             .overlay(alignment: .bottomLeading) {
                 if showAudienceMenu {
-                    VStack(alignment: .leading, spacing: 8) {
+                    editBottomFloatingMenu {
                         ComposeAudienceMenuPopup(viewModel: composeViewModel) {
-                            withAnimation {
+                            withAnimation(ComposeSearchExpandMotion.spring) {
                                 showAudienceMenu = false
                             }
                         }
-                        Color.clear.frame(height: 56).allowsHitTesting(false)
                     }
-                    .padding(.horizontal, SplickTheme.Spacing.md)
+                } else if showCompanionsMenu {
+                    editBottomFloatingMenu {
+                        ComposeCompanionsMenuPopup(
+                            viewModel: composeViewModel,
+                            onUserTap: { _ in },
+                            nearbyDiscoveryUseCase: nearbyDiscoveryUseCase,
+                            profileDependencies: profileDependencies
+                        )
+                    }
                 }
             }
+            .animation(ComposeSearchExpandMotion.spring, value: showAudienceMenu)
+            .animation(ComposeSearchExpandMotion.spring, value: showCompanionsMenu)
             .navigationTitle(languageService.text(.feedUploadEditPost))
             .navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(isPresented: $showCompanionsScreen) {
-                ComposeCompanionsEditorView(
-                    viewModel: composeViewModel,
-                    onUserTap: { _ in },
-                    nearbyDiscoveryUseCase: nearbyDiscoveryUseCase,
-                    profileDependencies: profileDependencies
-                )
-            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(languageService.text(.commonCancel), action: onCancel)
@@ -212,6 +213,25 @@ struct EditPostComposeView: View {
         }
     }
 
+    @ViewBuilder
+    private func editBottomFloatingMenu<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            content()
+            Color.clear
+                .frame(height: 56)
+                .allowsHitTesting(false)
+        }
+        .padding(.horizontal, SplickTheme.Spacing.md)
+        .transition(
+            .asymmetric(
+                insertion: .scale(scale: 0.82, anchor: .bottomLeading)
+                    .combined(with: .opacity)
+                    .combined(with: .offset(y: 10)),
+                removal: .opacity.combined(with: .offset(y: 6))
+            )
+        )
+    }
+
     private var hasSelectedCompanions: Bool {
         !composeViewModel.selectedCompanions.isEmpty || !composeViewModel.selectedCompanionGroups.isEmpty
     }
@@ -222,9 +242,18 @@ struct EditPostComposeView: View {
                 ComposeOptionPill(
                     title: languageService.text(.feedCreateTagFriends),
                     systemImage: "person.2.fill",
-                    isActive: hasSelectedCompanions
+                    isActive: hasSelectedCompanions || showCompanionsMenu
                 ) {
-                    showCompanionsScreen = true
+                    composeViewModel.startCompanionDirectoryLoadIfNeeded()
+                    withAnimation(ComposeSearchExpandMotion.spring) {
+                        showAudienceMenu = false
+                        showCompanionsMenu.toggle()
+                    }
+                    if showCompanionsMenu {
+                        composeViewModel.setFriendSearchActive(true)
+                    } else {
+                        composeViewModel.setFriendSearchActive(false)
+                    }
                 }
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
@@ -235,7 +264,12 @@ struct EditPostComposeView: View {
         VStack(spacing: 0) {
             Divider().opacity(0.55)
             HStack(spacing: SplickTheme.Spacing.sm) {
-                KeyboardStickyTapControl(isEnabled: true, action: { showAudienceMenu.toggle() }) {
+                KeyboardStickyTapControl(isEnabled: true, action: {
+                    withAnimation(ComposeSearchExpandMotion.spring) {
+                        showCompanionsMenu = false
+                        showAudienceMenu.toggle()
+                    }
+                }) {
                     HStack(spacing: 6) {
                         Image(systemName: "eye.fill")
                             .font(.system(size: 14, weight: .semibold))
