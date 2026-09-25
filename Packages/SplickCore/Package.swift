@@ -71,5 +71,10 @@ let package = Package(
             dependencies: ["Networking", "Common"],
             path: "Tests/NetworkingTests"
         ),
+        .testTarget(
+            name: "DesignSystemTests",
+            dependencies: ["DesignSystem"],
+            path: "Tests/DesignSystemTests"
+        ),
     ]
 )

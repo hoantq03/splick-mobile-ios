@@ -95,6 +95,34 @@ public enum MentionStyler {
         return token.hasPrefix("@") ? token : "@\(username)"
     }
 
+    /// Rewrites mention tokens for plain-text surfaces. UUID mentions never leak as ids.
+    public static func plainText(
+        text: String,
+        displayNamesByUserId: [UUID: String] = [:],
+        displayNamesByUsername: [String: String] = [:],
+        unresolvedLabel: String
+    ) -> String {
+        segments(in: text).map { segment in
+            guard segment.isMention else { return segment.content }
+            let resolved = mentionLabel(
+                token: segment.content,
+                displayNamesByUsername: displayNamesByUsername,
+                displayNamesByUserId: displayNamesByUserId
+            )
+            if isUnusableMentionDisplay(resolved) {
+                return unresolvedLabel
+            }
+            return resolved
+        }.joined()
+    }
+
+    public static func isUnusableMentionDisplay(_ value: String) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return true }
+        if userId(fromMentionToken: trimmed) != nil { return true }
+        return UUID(uuidString: trimmed) != nil
+    }
+
     public static func attributedString(
         text: String,
         fontSize: CGFloat,

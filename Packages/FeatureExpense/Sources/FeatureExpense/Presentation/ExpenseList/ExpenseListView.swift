@@ -24,7 +24,9 @@ public struct ExpenseListView: View {
     @State private var overviewScrollTopSignal = 0
     @State private var friendsScrollTopSignal = 0
     @State private var navigationPath = NavigationPath()
+    @State private var friendDisplayNames: [UUID: String] = [:]
     @EnvironmentObject private var languageService: LanguageService
+    @Environment(\.friendDisplayNameStore) private var friendDisplayNameStore
     @Environment(\.tabBarScrollState) private var tabBarScrollState
     @Environment(\.sameTabTapHandlingEnabled) private var sameTabTapHandlingEnabled
     @Environment(\.openPostCaptureFlow) private var openPostCaptureFlow
@@ -133,6 +135,13 @@ public struct ExpenseListView: View {
             }
         }
         .environment(\.feedSegmentScrollState, scrollChrome.feedSegment)
+        .environment(\.friendDisplayNames, friendDisplayNames)
+        .task {
+            await refreshFriendDisplayNames()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: FriendDisplayNameStore.didChangeNotification)) { _ in
+            Task { await refreshFriendDisplayNames() }
+        }
         .onFirstAppear {
             Task { @MainActor in
                 viewModel.updateCurrentUserId(currentUserId)
@@ -205,6 +214,10 @@ public struct ExpenseListView: View {
                 )
             }
         }
+    }
+
+    private func refreshFriendDisplayNames() async {
+        friendDisplayNames = await friendDisplayNameStore?.preferredDisplayNames() ?? [:]
     }
 
     private func updateExpensesVisibility(isActive: Bool, phase: ScenePhase) {
@@ -781,6 +794,7 @@ struct ExpenseRowView: View {
     }
 
     @EnvironmentObject private var languageService: LanguageService
+    @Environment(\.friendDisplayNames) private var friendDisplayNames
     let expense: Expense
     let currentUserId: UUID?
     var layout: Layout = .standalone
@@ -861,7 +875,11 @@ struct ExpenseRowView: View {
     private var postCaptionHeader: String? {
         let caption = expense.description.trimmingCharacters(in: .whitespacesAndNewlines)
         guard expense.postId != nil, !caption.isEmpty else { return nil }
-        return caption
+        return MentionStyler.plainText(
+            text: caption,
+            displayNamesByUserId: friendDisplayNames,
+            unresolvedLabel: languageService.text(.commonInvalidUser)
+        )
     }
 
     private let avatarSize: CGFloat = 46

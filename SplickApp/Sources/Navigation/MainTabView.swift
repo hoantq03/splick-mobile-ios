@@ -469,6 +469,7 @@ struct MainTabView: View {
             },
             overviewViewModel: container.expenseOverviewViewModel
         )
+        .environment(\.friendDisplayNameStore, container.friendDisplayNameStore)
         .environment(\.sameTabTapHandlingEnabled, settledPagerTab == .expenses)
     }
 

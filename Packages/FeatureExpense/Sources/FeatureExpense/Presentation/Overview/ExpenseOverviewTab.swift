@@ -336,6 +336,7 @@ struct ExpenseNeedsAttentionRowView: View {
   let item: ExpenseNeedsAttentionItem
   var onOpen: ((ExpenseNeedsAttentionItem) -> Void)? = nil
   @EnvironmentObject private var languageService: LanguageService
+  @Environment(\.friendDisplayNames) private var friendDisplayNames
   @Environment(\.openLinkedPost) private var openLinkedPost
 
   var body: some View {
@@ -366,7 +367,13 @@ struct ExpenseNeedsAttentionRowView: View {
         AvatarView(imageURL: user.avatarURL, name: user.displayName, size: .small)
       }
       VStack(alignment: .leading, spacing: 2) {
-        Text(item.title)
+        Text(
+          MentionStyler.plainText(
+            text: item.title,
+            displayNamesByUserId: friendDisplayNames,
+            unresolvedLabel: languageService.text(.commonInvalidUser)
+          )
+        )
           .font(SplickTheme.Typography.body)
           .foregroundStyle(SplickTheme.Colors.textPrimary)
         Text(typeLabel(item.type))

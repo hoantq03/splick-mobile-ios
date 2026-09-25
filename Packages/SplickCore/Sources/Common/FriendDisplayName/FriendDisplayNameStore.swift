@@ -60,6 +60,26 @@ public actor FriendDisplayNameStore {
         notifyChange()
     }
 
+    public func preferredName(userId: UUID) -> String? {
+        guard let entry = entries[userId] else { return nil }
+        if let nickname = entry.nickname?.trimmingCharacters(in: .whitespacesAndNewlines), !nickname.isEmpty {
+            return nickname
+        }
+        let legal = entry.legalName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return legal.isEmpty ? nil : legal
+    }
+
+    public func preferredDisplayNames() -> [UUID: String] {
+        var names: [UUID: String] = [:]
+        names.reserveCapacity(entries.count)
+        for userId in entries.keys {
+            if let name = preferredName(userId: userId) {
+                names[userId] = name
+            }
+        }
+        return names
+    }
+
     public func resolve(_ user: UserSummary) -> UserSummary {
         guard let entry = entries[user.id] else { return user }
         if let nickname = entry.nickname {
