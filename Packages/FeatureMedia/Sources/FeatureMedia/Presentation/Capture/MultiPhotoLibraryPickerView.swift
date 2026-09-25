@@ -30,7 +30,7 @@ public struct MultiPhotoLibraryPickerView: View {
     public var body: some View {
         NavigationStack {
             ZStack {
-                Color(hex: 0x0A0A0A).ignoresSafeArea()
+                SplickTheme.Colors.background.ignoresSafeArea()
 
                 Group {
                     switch viewModel.accessState {
@@ -48,18 +48,17 @@ public struct MultiPhotoLibraryPickerView: View {
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(Color(hex: 0x0A0A0A), for: .navigationBar)
+            .toolbarBackground(SplickTheme.Colors.background, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(languageService.text(.commonCancel), action: onCancel)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SplickTheme.Colors.textPrimary)
                 }
                 ToolbarItem(placement: .principal) {
                     Text(languageService.text(.mediaLibraryTitle))
                         .font(SplickTheme.Typography.headline)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SplickTheme.Colors.textPrimary)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     confirmToolbarButton
@@ -83,14 +82,18 @@ public struct MultiPhotoLibraryPickerView: View {
         Button {
             Task { await confirmSelection() }
         } label: {
-            Image(systemName: "checkmark")
+                Image(systemName: "checkmark")
                 .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(
+                    viewModel.selectedAssetIDs.isEmpty
+                        ? SplickTheme.Colors.textPrimary
+                        : Color.white
+                )
                 .frame(width: 34, height: 34)
                 .background {
                     Circle().fill(
                         viewModel.selectedAssetIDs.isEmpty
-                            ? AnyShapeStyle(Color.white.opacity(0.18))
+                            ? AnyShapeStyle(SplickTheme.Colors.secondaryBackground)
                             : AnyShapeStyle(SplickTheme.Colors.primaryGradient)
                     )
                 }
@@ -106,10 +109,10 @@ public struct MultiPhotoLibraryPickerView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(languageService.format(.mediaSelectedCount, viewModel.selectedAssetIDs.count, maxSelectionCount))
                         .font(SplickTheme.Typography.callout.weight(.semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SplickTheme.Colors.textPrimary)
                     Text(languageService.text(.mediaAddToPostHint))
                         .font(SplickTheme.Typography.caption)
-                        .foregroundStyle(.white.opacity(0.55))
+                        .foregroundStyle(SplickTheme.Colors.textSecondary)
                 }
 
                 Spacer(minLength: SplickTheme.Spacing.sm)
@@ -135,10 +138,10 @@ public struct MultiPhotoLibraryPickerView: View {
             .frame(maxWidth: .infinity)
             .background(alignment: .bottom) {
                 Rectangle()
-                    .fill(.ultraThinMaterial)
+                    .fill(SplickTheme.Colors.background)
                     .overlay(alignment: .top) {
                         Rectangle()
-                            .fill(Color.white.opacity(0.08))
+                            .fill(SplickTheme.Colors.divider.opacity(0.7))
                             .frame(height: 0.5)
                     }
                     .ignoresSafeArea(edges: .bottom)
@@ -149,10 +152,10 @@ public struct MultiPhotoLibraryPickerView: View {
 
     private var loadingView: some View {
         VStack(spacing: SplickTheme.Spacing.md) {
-            SplickSpinner(usesBrandColors: false)
+            SplickSpinner()
             Text(languageService.text(.mediaLibraryLoading))
                 .font(SplickTheme.Typography.callout)
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
         }
     }
 
@@ -202,13 +205,13 @@ public struct MultiPhotoLibraryPickerView: View {
                 .foregroundStyle(SplickTheme.Colors.warning)
             Text(languageService.text(.mediaLibraryLimitedAccess))
                 .font(SplickTheme.Typography.caption)
-                .foregroundStyle(.white.opacity(0.75))
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
             Spacer(minLength: 0)
         }
         .padding(SplickTheme.Spacing.sm)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(0.08))
+                .fill(SplickTheme.Colors.secondaryBackground)
         )
     }
 
@@ -216,13 +219,13 @@ public struct MultiPhotoLibraryPickerView: View {
         VStack(spacing: SplickTheme.Spacing.md) {
             Image(systemName: "photo.on.rectangle.angled")
                 .font(.system(size: 48))
-                .foregroundStyle(.white.opacity(0.35))
+                .foregroundStyle(SplickTheme.Colors.textTertiary)
             Text(languageService.text(.mediaLibraryEmptyTitle))
                 .font(SplickTheme.Typography.headline)
-                .foregroundStyle(.white)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
             Text(languageService.text(.mediaLibraryEmptyMessage))
                 .font(SplickTheme.Typography.callout)
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .padding(SplickTheme.Spacing.xl)
@@ -232,13 +235,13 @@ public struct MultiPhotoLibraryPickerView: View {
         VStack(spacing: SplickTheme.Spacing.md) {
             Image(systemName: "photo.on.rectangle.angled")
                 .font(.system(size: 48))
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(SplickTheme.Colors.textTertiary)
             Text(languageService.text(.mediaLibraryPermissionTitle))
                 .font(SplickTheme.Typography.headline)
-                .foregroundStyle(.white)
+                .foregroundStyle(SplickTheme.Colors.textPrimary)
             Text(languageService.text(.mediaLibraryPermissionMessage))
                 .font(SplickTheme.Typography.callout)
-                .foregroundStyle(.white.opacity(0.65))
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
             Button(languageService.text(.notificationSettingsOpenSystemSettingsAction)) {
                 guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
@@ -255,15 +258,18 @@ public struct MultiPhotoLibraryPickerView: View {
 
     private var importingOverlay: some View {
         ZStack {
-            Color.black.opacity(0.5).ignoresSafeArea()
+            SplickTheme.Colors.background.opacity(0.55).ignoresSafeArea()
             VStack(spacing: SplickTheme.Spacing.sm) {
-                SplickSpinner(usesBrandColors: false)
+                SplickSpinner()
                 Text(languageService.text(.mediaLoadingSelected))
                     .font(SplickTheme.Typography.callout)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SplickTheme.Colors.textPrimary)
             }
             .padding(SplickTheme.Spacing.lg)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+            .background(
+                SplickTheme.Colors.secondaryBackground,
+                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+            )
         }
     }
 
@@ -517,8 +523,8 @@ private struct PhotoGridCell: View {
                 .clipped()
         } else {
             ZStack {
-                Color.white.opacity(0.06)
-                SplickSpinner(size: .small, usesBrandColors: false)
+                SplickTheme.Colors.secondaryBackground
+                SplickSpinner(size: .small)
             }
             .frame(width: cellSide, height: cellSide)
         }
