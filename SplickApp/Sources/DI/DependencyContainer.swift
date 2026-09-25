@@ -269,6 +269,13 @@ final class DependencyContainer: ObservableObject {
         )
     }
 
+    func makeGifKeywordSuggestController() -> GifKeywordSuggestController {
+        GifKeywordSuggestController(
+            fetchStickersUseCase: fetchStickersUseCase,
+            searchHistoryRepository: searchHistoryRepository
+        )
+    }
+
     lazy var customEmojiRepository: CustomEmojiRepositoryProtocol = {
         CustomEmojiRepository(apiClient: apiClient)
     }()

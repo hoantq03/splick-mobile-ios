@@ -394,6 +394,9 @@ struct MainTabView: View {
                 .environment(\.customEmojiDependencies, container.customEmojiDependencies)
                 .environment(\.currentUserSummary, currentUserSummary)
                 .environment(\.tabBarScrollState, tabBarChrome.tabBar)
+                .environment(\.gifKeywordSuggestFactory) {
+                    container.makeGifKeywordSuggestController()
+                }
             }
             .tint(brandPalette.accent)
     }
@@ -435,6 +438,9 @@ struct MainTabView: View {
         }
         .environment(\.messagingGifPickerFactory) {
             container.makeGifPickerViewModel(groupId: nil)
+        }
+        .environment(\.gifKeywordSuggestFactory) {
+            container.makeGifKeywordSuggestController()
         }
         .environment(\.sameTabTapHandlingEnabled, settledPagerTab == .feed)
     }

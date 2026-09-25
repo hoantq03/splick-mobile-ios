@@ -46,6 +46,9 @@ struct MessagingTabRoot: View {
         .environment(\.messagingGifPickerFactory) {
             container.makeGifPickerViewModel(groupId: nil)
         }
+        .environment(\.gifKeywordSuggestFactory) {
+            container.makeGifKeywordSuggestController()
+        }
         .environment(
             \.imageAttachmentUpload,
             { data, mimeType in

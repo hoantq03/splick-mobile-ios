@@ -10,6 +10,7 @@ struct CommentComposerView: View {
     @EnvironmentObject private var emojiStore: CustomEmojiStore
     @Environment(\.customEmojiDependencies) private var customEmojiDependencies
     @Environment(\.currentUserSummary) private var currentUserSummary
+    @Environment(\.gifKeywordSuggestFactory) private var gifKeywordSuggestFactory
 
     let placeholder: String
     /// When set (e.g. user tapped Reply), pre-fills a durable mention token for the author.
@@ -32,6 +33,7 @@ struct CommentComposerView: View {
     @State private var showAttachmentPicker = false
     @State private var showEmojiInsertPicker = false
     @State private var showCustomEmojiUpload = false
+    @State private var gifSuggest: GifKeywordSuggestController?
 
     private enum Layout {
         static let fieldHeight: CGFloat = 44
@@ -78,6 +80,17 @@ struct CommentComposerView: View {
                     insertMention(user)
                 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else if let gifSuggest {
+                GifKeywordSuggestStrip(
+                    controller: gifSuggest,
+                    mentionActive: showMentionPicker,
+                    onSelect: { sticker in
+                        sendGifImmediately(sticker)
+                    },
+                    onSeeMore: { query in
+                        presentGifPicker(prefilledQuery: query)
+                    }
+                )
             }
 
             AttachmentComposerView(
@@ -103,6 +116,7 @@ struct CommentComposerView: View {
                     )
                     .onChange(of: draft) { newValue in
                         syncMentionPicker(with: newValue)
+                        gifSuggest?.onDraftChanged(newValue, mentionActive: MentionContext.active(in: newValue) != nil)
                     }
                 },
                 accessoryAfterPhoto: {
@@ -127,6 +141,9 @@ struct CommentComposerView: View {
         }
         .onAppear {
             applyPrefillMention(prefillMentionUser)
+            if gifSuggest == nil {
+                gifSuggest = gifKeywordSuggestFactory?()
+            }
         }
         .sheet(isPresented: $showEmojiInsertPicker) {
             EmojiPickerSheet(
@@ -175,11 +192,7 @@ struct CommentComposerView: View {
     @ViewBuilder
     private var emojiMenuButton: some View {
         Button {
-            if gifPickerViewModel != nil {
-                showAttachmentPicker = true
-            } else {
-                showEmojiInsertPicker = true
-            }
+            presentGifPicker(prefilledQuery: nil)
         } label: {
             Image(systemName: "face.smiling")
                 .font(.system(size: Layout.emojiIconSize, weight: .medium))
@@ -284,5 +297,16 @@ struct CommentComposerView: View {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         draft = ""
         onSubmit(text, [submission])
+    }
+
+    private func presentGifPicker(prefilledQuery: String?) {
+        if gifPickerViewModel != nil {
+            if let prefilledQuery {
+                gifPickerViewModel?.applyExternalSearch(prefilledQuery)
+            }
+            showAttachmentPicker = true
+        } else {
+            showEmojiInsertPicker = true
+        }
     }
 }

@@ -12,6 +12,7 @@ struct MessageComposerInputBar: View {
     @Environment(\.currentUserSummary) private var currentUserSummary
 
     @Environment(\.messagingGifPickerFactory) private var messagingGifPickerFactory
+    @Environment(\.gifKeywordSuggestFactory) private var gifKeywordSuggestFactory
 
     @Binding var text: String
     @Binding var attachmentDrafts: [CommentAttachmentDraft]
@@ -31,6 +32,7 @@ struct MessageComposerInputBar: View {
     @State private var showAttachmentPicker = false
     @State private var showEmojiInsertPicker = false
     @State private var showCustomEmojiUpload = false
+    @State private var gifSuggest: GifKeywordSuggestController?
 
     private var currentUserId: UUID? { currentUserSummary?.id }
 
@@ -73,6 +75,20 @@ struct MessageComposerInputBar: View {
             }
 
             VStack(spacing: SplickTheme.Spacing.xxs) {
+                if let gifSuggest {
+                    GifKeywordSuggestStrip(
+                        controller: gifSuggest,
+                        mentionActive: false,
+                        onSelect: { sticker in
+                            sendGifImmediately(sticker)
+                        },
+                        onSeeMore: { query in
+                            presentAttachmentPicker(prefilledQuery: query)
+                        }
+                    )
+                    .padding(.horizontal, SplickTheme.Spacing.md)
+                }
+
                 AttachmentComposerView(
                 text: $text,
                 attachmentDrafts: $attachmentDrafts,
@@ -100,6 +116,9 @@ struct MessageComposerInputBar: View {
                         // Do not animate the focused field on canSend — layout springs
                         // resign first responder and bounce the keyboard on every send.
                         .accessibilityIdentifier(KeyboardDismissExempt.accessibilityIdentifier)
+                        .onChange(of: text) { newValue in
+                            gifSuggest?.onDraftChanged(newValue, mentionActive: false)
+                        }
                 },
                 accessoryAfterPhoto: {
                     emojiMenuButton
@@ -126,6 +145,11 @@ struct MessageComposerInputBar: View {
             )
         }
         .animation(MessageReplyIslandMotion.present, value: replyDraft?.messageId)
+        .onAppear {
+            if gifSuggest == nil {
+                gifSuggest = gifKeywordSuggestFactory?()
+            }
+        }
         .sheet(isPresented: $showEmojiInsertPicker) {
             EmojiPickerSheet(
                 currentUserId: currentUserId,
@@ -173,7 +197,7 @@ struct MessageComposerInputBar: View {
     @ViewBuilder
     private var emojiMenuButton: some View {
         Button {
-            presentAttachmentPicker()
+            presentAttachmentPicker(prefilledQuery: nil)
         } label: {
             Image(systemName: "face.smiling")
                 .font(.system(size: 18, weight: .medium))
@@ -199,7 +223,7 @@ struct MessageComposerInputBar: View {
         return !trimmed.isEmpty || hasReadyAttachments
     }
 
-    private func presentAttachmentPicker() {
+    private func presentAttachmentPicker(prefilledQuery: String? = nil) {
         if gifPickerViewModel == nil {
             gifPickerViewModel = messagingGifPickerFactory?()
             guard gifPickerViewModel != nil else {
@@ -207,9 +231,15 @@ struct MessageComposerInputBar: View {
                 return
             }
             DispatchQueue.main.async {
+                if let prefilledQuery {
+                    gifPickerViewModel?.applyExternalSearch(prefilledQuery)
+                }
                 showAttachmentPicker = true
             }
             return
+        }
+        if let prefilledQuery {
+            gifPickerViewModel?.applyExternalSearch(prefilledQuery)
         }
         showAttachmentPicker = true
     }
