@@ -187,7 +187,8 @@ private struct StreakDayCarouselCard: View {
                     posterURL: photo.thumbnailURL,
                     durationSeconds: nil,
                     displayHeight: imageHeight,
-                    isPlaybackEnabled: true
+                    isPlaybackEnabled: true,
+                    onSurfaceTap: onTap
                 )
             } else if photo.mediaType == .video {
                 FeedVideoPosterView(

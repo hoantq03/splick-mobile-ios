@@ -31,6 +31,8 @@ struct FeedInlineVideoPlayer: View {
     var isAutoplayTarget: Bool = false
     /// Streak carousel turns this off for off-center cards so only the focused video plays.
     var isPlaybackEnabled: Bool = true
+    /// When set, a tap opens this action instead of pausing playback.
+    var onSurfaceTap: (() -> Void)? = nil
 
     @Environment(\.feedVideoCoordinator) private var autoplayCoordinator
     @Environment(\.feedTabIsActive) private var feedTabIsActive
@@ -212,6 +214,10 @@ struct FeedInlineVideoPlayer: View {
     }
 
     private func handleSurfaceTap() {
+        if let onSurfaceTap {
+            onSurfaceTap()
+            return
+        }
         if let controller {
             controller.togglePlaybackFromCenter()
             return
@@ -700,28 +706,48 @@ private struct FeedVideoPlayerLayerView: UIViewRepresentable {
     func updateUIView(_ uiView: FeedPlayerUIView, context: Context) {
         uiView.configure(player: player)
     }
+
+    static func dismantleUIView(_ uiView: FeedPlayerUIView, coordinator: ()) {
+        uiView.clearPlayer()
+    }
 }
 
 private final class FeedPlayerUIView: UIView {
-    private let playerLayer = AVPlayerLayer()
+    override class var layerClass: AnyClass { AVPlayerLayer.self }
+
+    private var playerLayer: AVPlayerLayer {
+        layer as! AVPlayerLayer
+    }
+
+    private var boundPlayer: AVPlayer?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        backgroundColor = .black
+        backgroundColor = .clear
+        clipsToBounds = true
         playerLayer.videoGravity = .resizeAspectFill
-        layer.addSublayer(playerLayer)
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        playerLayer.frame = bounds
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        // Drop the last frame as soon as the view leaves the screen so it
+        // does not linger after the streak sheet finishes dismissing.
+        playerLayer.player = window == nil ? nil : boundPlayer
     }
 
     func configure(player: AVPlayer) {
-        playerLayer.player = player
+        boundPlayer = player
+        if window != nil {
+            playerLayer.player = player
+        }
+    }
+
+    func clearPlayer() {
+        boundPlayer = nil
+        playerLayer.player = nil
     }
 }
