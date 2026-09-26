@@ -10,7 +10,7 @@ struct LiveVNDMoneyTextField: UIViewRepresentable {
     var placeholderColor: UIColor = .placeholderText
 
     func makeUIView(context: Context) -> UITextField {
-        let field = UITextField()
+        let field = BoundedMoneyTextField()
         field.keyboardType = .numberPad
         field.delegate = context.coordinator
         field.font = font
@@ -19,8 +19,12 @@ struct LiveVNDMoneyTextField: UIViewRepresentable {
         field.attributedPlaceholder = attributedPlaceholder
         field.borderStyle = .none
         field.text = text
-        field.contentVerticalAlignment = .top
-        field.setContentHuggingPriority(.defaultLow, for: .vertical)
+        field.contentVerticalAlignment = .center
+        context.coordinator.appliedPlaceholder = placeholder
+        // A flexible text field inside the bill ScrollView is offered unlimited
+        // height and keeps expanding, which freezes the screen on push.
+        field.setContentHuggingPriority(.required, for: .vertical)
+        field.setContentCompressionResistancePriority(.required, for: .vertical)
         field.setContentHuggingPriority(.defaultLow, for: .horizontal)
         field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         return field
@@ -28,9 +32,16 @@ struct LiveVNDMoneyTextField: UIViewRepresentable {
 
     func updateUIView(_ uiView: UITextField, context: Context) {
         context.coordinator.parent = self
-        uiView.font = font
-        uiView.textColor = textColor
-        uiView.attributedPlaceholder = attributedPlaceholder
+        if uiView.font?.pointSize != font.pointSize || uiView.font?.fontName != font.fontName {
+            uiView.font = font
+        }
+        if uiView.textColor?.isEqual(textColor) != true {
+            uiView.textColor = textColor
+        }
+        if context.coordinator.appliedPlaceholder != placeholder {
+            uiView.attributedPlaceholder = attributedPlaceholder
+            context.coordinator.appliedPlaceholder = placeholder
+        }
         if uiView.text != text, !uiView.isFirstResponder {
             uiView.text = text
         }
@@ -50,8 +61,16 @@ struct LiveVNDMoneyTextField: UIViewRepresentable {
         Coordinator(parent: self)
     }
 
+    /// Keeps a finite height so a parent ScrollView cannot grow this field forever.
+    private final class BoundedMoneyTextField: UITextField {
+        override var intrinsicContentSize: CGSize {
+            CGSize(width: UIView.noIntrinsicMetric, height: ceil(font?.lineHeight ?? 22))
+        }
+    }
+
     final class Coordinator: NSObject, UITextFieldDelegate {
         var parent: LiveVNDMoneyTextField
+        var appliedPlaceholder: String?
 
         init(parent: LiveVNDMoneyTextField) {
             self.parent = parent
