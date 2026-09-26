@@ -8,6 +8,10 @@ struct ProfileCompactActionButton: View {
     var isDisabled = false
     let action: () -> Void
 
+    private var shape: Capsule {
+        Capsule(style: .continuous)
+    }
+
     var body: some View {
         Button(action: action) {
             VStack(spacing: SplickTheme.Spacing.xxxs) {
@@ -25,10 +29,9 @@ struct ProfileCompactActionButton: View {
             .padding(.vertical, SplickTheme.Spacing.sm)
             .padding(.horizontal, SplickTheme.Spacing.xxxs)
             .foregroundStyle(tint)
-            .background(SplickTheme.Colors.secondaryBackground)
-            .clipShape(
-                RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.card, style: .continuous)
-            )
+            .background(SplickTheme.Colors.secondaryBackground, in: shape)
+            .clipShape(shape)
+            .contentShape(shape)
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)

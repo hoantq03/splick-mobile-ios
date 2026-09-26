@@ -206,11 +206,6 @@ public struct FriendUserProfileView: View {
 
     private var postsContent: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
-            Text(languageService.text(.profilePostsTitle))
-                .font(SplickTheme.Typography.title)
-                .foregroundStyle(SplickTheme.Colors.textPrimary)
-                .padding(.horizontal, SplickTheme.Spacing.md)
-
             postsGridState
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -237,14 +232,26 @@ public struct FriendUserProfileView: View {
             .frame(minHeight: 180)
             .padding(.horizontal, SplickTheme.Spacing.md)
         } else {
-            LazyVGrid(columns: postGridColumns, spacing: Self.postGridSpacing) {
-                ForEach(viewModel.posts) { post in
-                    profilePostCell(post)
-                        .onAppear {
-                            Task {
-                                await viewModel.loadMorePostsIfNeeded(currentPostId: post.id)
+            let sections = profilePostDaySections(languageService: languageService)
+            VStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
+                ForEach(sections) { section in
+                    VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+                        Text(section.title)
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(SplickTheme.Colors.textPrimary)
+                            .padding(.leading, SplickTheme.Spacing.xxs)
+
+                        LazyVGrid(columns: postGridColumns, spacing: Self.postGridSpacing) {
+                            ForEach(section.posts) { post in
+                                profilePostCell(post)
+                                    .onAppear {
+                                        Task {
+                                            await viewModel.loadMorePostsIfNeeded(currentPostId: post.id)
+                                        }
+                                    }
                             }
                         }
+                    }
                 }
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
@@ -651,6 +658,50 @@ public struct FriendUserProfileView: View {
         let lastSeenAt = stored?.lastSeenAt ?? viewModel.profileLastSeenAt
         return (isOnline, lastSeenAt)
     }
+
+    private func profilePostDaySections(languageService: LanguageService) -> [ProfilePostDaySection] {
+        let calendar = Calendar.current
+        let locale = Locale(identifier: languageService.locale.rawValue)
+        let todayTitle = languageService.text(.notificationSectionToday)
+        let yesterdayTitle = languageService.text(.notificationSectionYesterday)
+        var grouped: [Date: [Post]] = [:]
+        for post in viewModel.posts {
+            let day = calendar.startOfDay(for: post.createdAt)
+            grouped[day, default: []].append(post)
+        }
+        let sameYear = DateFormatter()
+        sameYear.locale = locale
+        sameYear.dateFormat = "d MMMM"
+        let otherYear = DateFormatter()
+        otherYear.locale = locale
+        otherYear.dateFormat = "d MMMM yyyy"
+        let keyFormatter = DateFormatter()
+        keyFormatter.locale = Locale(identifier: "en_US_POSIX")
+        keyFormatter.dateFormat = "yyyy-MM-dd"
+        return grouped.keys.sorted(by: >).map { day in
+            let title: String
+            if calendar.isDateInToday(day) {
+                title = todayTitle
+            } else if calendar.isDateInYesterday(day) {
+                title = yesterdayTitle
+            } else if calendar.isDate(day, equalTo: Date(), toGranularity: .year) {
+                title = sameYear.string(from: day)
+            } else {
+                title = otherYear.string(from: day)
+            }
+            return ProfilePostDaySection(
+                id: keyFormatter.string(from: day),
+                title: title,
+                posts: grouped[day] ?? []
+            )
+        }
+    }
+}
+
+private struct ProfilePostDaySection: Identifiable {
+    let id: String
+    let title: String
+    let posts: [Post]
 }
 
 private struct ProfileVideoFirstFrame: View {
