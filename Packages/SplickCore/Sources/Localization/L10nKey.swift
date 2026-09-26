@@ -88,6 +88,7 @@ public enum L10nKey: String, CaseIterable, Hashable, Sendable {
     case profileEditDisplayName = "profile.edit_display_name"
     case profileGroupAccount = "profile.group.account"
     case profileGroupPersonal = "profile.group.personal"
+    case profilePersonalPage = "profile.personal_page"
     case profileGroupApp = "profile.group.app"
     case profileQrReceive = "profile.qr_receive"
     case profileCopyInviteLink = "profile.copy_invite_link"

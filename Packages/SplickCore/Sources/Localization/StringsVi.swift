@@ -91,6 +91,7 @@ enum StringsVi {
         .profileEditDisplayName: "Sửa tên hiển thị",
         .profileGroupAccount: "Tài khoản",
         .profileGroupPersonal: "Hồ sơ cá nhân",
+        .profilePersonalPage: "Trang cá nhân",
         .profileGroupApp: "Ứng dụng",
         .profileQrReceive: "QR nhận tiền",
         .profileCopyInviteLink: "Chia sẻ link mời",

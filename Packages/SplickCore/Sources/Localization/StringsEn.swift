@@ -91,6 +91,7 @@ enum StringsEn {
         .profileEditDisplayName: "Edit display name",
         .profileGroupAccount: "Account",
         .profileGroupPersonal: "Personal profile",
+        .profilePersonalPage: "My profile",
         .profileGroupApp: "App",
         .profileQrReceive: "Receive money QR",
         .profileCopyInviteLink: "Share invite link",

@@ -958,7 +958,7 @@ enum StringsFeatureVi {
         .friendsJoinCodeRequired: "Nhập mã mời nhóm.",
         .friendsJoinSuccess: "Đã tham gia %@.",
         .friendsGroupName: "Tên nhóm",
-        .friendsGroupNamePlaceholder: "VD: Chuyến Đà Lạt",
+        .friendsGroupNamePlaceholder: "Chuyến Đà Lạt",
         .friendsGroupDescriptionOptional: "Mô tả (tuỳ chọn)",
         .friendsGroupDescription: "Mô tả",
         .friendsGroupDescriptionPlaceholder: "Mô tả ngắn về nhóm",
