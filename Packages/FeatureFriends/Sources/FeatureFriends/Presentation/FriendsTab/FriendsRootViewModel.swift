@@ -685,8 +685,9 @@ public final class FriendsRootViewModel: ObservableObject {
     private func loadDiskCacheIfNeeded() async {
         guard friends.isEmpty, let userId = currentUserId else { return }
         if let cached = await fetchMyFriendsUseCase.loadCached(userId: userId), !cached.isEmpty {
-            friends = cached
-            friendsState = .loaded(cached)
+            let active = cached.filter { !DeletedUser.isDeleted(displayName: $0.displayName) }
+            friends = active
+            friendsState = .loaded(active)
             rebuildDirectoryItems()
             rebuildSearchItems()
             prefetchAvatars(for: Array(cached.prefix(20)))
@@ -723,7 +724,9 @@ public final class FriendsRootViewModel: ObservableObject {
     }
 
     private func rebuildDirectoryItems() {
-        let friendItems = friends.map { FriendsDirectoryItem.friend($0) }
+        let friendItems = friends
+            .filter { !DeletedUser.isDeleted(displayName: $0.displayName) }
+            .map { FriendsDirectoryItem.friend($0) }
         let groupItems = groups.map { FriendsDirectoryItem.group($0) }
         combinedDirectoryItems = (friendItems + groupItems).sorted {
             $0.sortKey.localizedCaseInsensitiveCompare($1.sortKey) == .orderedAscending
@@ -1079,11 +1082,18 @@ public final class FriendsRootViewModel: ObservableObject {
             onFriendAdded()
         case .none, .requestSent, .requestReceived, .blocked:
             if status == .blocked || status == .none {
-                invalidateFriendsCache()
+                friends.removeAll { $0.id == userId }
+                friendsState = .loaded(friends)
+                rebuildDirectoryItems()
+                rebuildSearchItems()
+                persistFriendsCache()
             }
             Task {
                 await refreshIncomingRequestCount()
                 await refreshOutgoingRequestCount()
+                if status == .blocked || status == .none {
+                    await softSyncDirectory()
+                }
             }
         }
     }

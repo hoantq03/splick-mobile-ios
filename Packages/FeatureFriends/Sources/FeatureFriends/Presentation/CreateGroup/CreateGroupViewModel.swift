@@ -3,6 +3,7 @@ import Combine
 import SwiftUI
 import PhotosUI
 import UIKit
+import Common
 import FeatureMedia
 import Localization
 import SplickDomain
@@ -43,7 +44,7 @@ public final class CreateGroupViewModel: ObservableObject {
         languageService: LanguageService,
         onSuccess: @escaping (SplickDomain.Group, [UUID]) -> Void
     ) {
-        self.friends = friends
+        self.friends = Self.activeFriends(friends)
         self.fetchMyFriendsUseCase = fetchMyFriendsUseCase
         self.createGroupUseCase = createGroupUseCase
         self.inviteFriendsUseCase = inviteFriendsUseCase
@@ -63,8 +64,7 @@ public final class CreateGroupViewModel: ObservableObject {
     }
 
     var showsMemberPopup: Bool {
-        let query = memberSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        return isMemberSearchFocused || !query.isEmpty
+        !friends.isEmpty
     }
 
     var filteredFriends: [UserSummary] {
@@ -75,6 +75,10 @@ public final class CreateGroupViewModel: ObservableObject {
             $0.displayName.lowercased().contains(query)
                 || $0.username.lowercased().contains(query)
         }
+    }
+
+    private static func activeFriends(_ friends: [UserSummary]) -> [UserSummary] {
+        friends.filter { !DeletedUser.isDeleted(displayName: $0.displayName) }
     }
 
     func addMember(_ friend: UserSummary) {
@@ -90,22 +94,26 @@ public final class CreateGroupViewModel: ObservableObject {
     }
 
     func loadFriendsIfNeeded() async {
-        guard friends.isEmpty else { return }
         await loadFriends()
     }
 
     func loadFriends() async {
         guard !isLoadingFriends else { return }
 
-        isLoadingFriends = true
+        let shouldShowLoading = friends.isEmpty
+        if shouldShowLoading {
+            isLoadingFriends = true
+        }
         friendsLoadErrorMessage = nil
         defer { isLoadingFriends = false }
 
         do {
-            friends = try await fetchMyFriendsUseCase.execute()
+            friends = Self.activeFriends(try await fetchMyFriendsUseCase.execute())
             selectedMemberIds.formIntersection(Set(friends.map(\.id)))
         } catch {
-            friendsLoadErrorMessage = languageService.localizedMessage(for: error)
+            if friends.isEmpty {
+                friendsLoadErrorMessage = languageService.localizedMessage(for: error)
+            }
         }
     }
 

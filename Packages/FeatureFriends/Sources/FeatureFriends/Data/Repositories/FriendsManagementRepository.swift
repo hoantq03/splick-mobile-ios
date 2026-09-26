@@ -30,7 +30,9 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
         }
         await syncPresence(from: friends)
         await hydrateMessagingPresence(userIds: friends.map(\.friendId))
-        let mapped = friends.map(FriendsMapper.toUserSummary)
+        let mapped = friends
+            .map(FriendsMapper.toUserSummary)
+            .filter { !DeletedUser.isDeleted(displayName: $0.displayName) }
         await syncFriendDisplayNames(mapped)
         return mapped
     }
@@ -41,7 +43,9 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
         )
         await syncPresence(from: response.content)
         await hydrateMessagingPresence(userIds: response.content.map(\.friendId))
-        let friends = response.content.map(FriendsMapper.toUserSummary)
+        let friends = response.content
+            .map(FriendsMapper.toUserSummary)
+            .filter { !DeletedUser.isDeleted(displayName: $0.displayName) }
         await syncFriendDisplayNames(friends)
         let hasMore = page + 1 < max(response.page.totalPages, 1) && !response.content.isEmpty
         return FriendsPageResult(friends: friends, page: page, hasMore: hasMore)
@@ -49,6 +53,7 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
 
     public func loadCachedFriends(userId: UUID) async -> [UserSummary]? {
         let friends = await DiskCache.shared.read(FriendsCachePayload.self, key: Self.cacheKey(for: userId))?.friends
+            .filter { !DeletedUser.isDeleted(displayName: $0.displayName) }
         if let friends {
             await syncFriendDisplayNames(friends)
         }
