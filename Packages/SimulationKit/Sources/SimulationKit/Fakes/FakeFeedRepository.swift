@@ -305,7 +305,7 @@ public actor FakeFeedRepository: FeedRepositoryProtocol {
         }
         var allPhotos: [AlbumPhoto] = sourcePosts.flatMap { post in
             post.displayMediaItems
-                .filter { $0.mediaType == .image }
+                .filter { $0.mediaType == .image || $0.mediaType == .video }
                 .map { item in
                     AlbumPhoto(
                         id: item.id,

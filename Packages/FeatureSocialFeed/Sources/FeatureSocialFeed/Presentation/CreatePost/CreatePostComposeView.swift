@@ -185,6 +185,7 @@ public struct CreatePostComposeView: View {
     @State private var showLocationMenu = false
     @State private var composeBottomBarHeight: CGFloat = 56
     @State private var profileRoute: ComposeProfileRoute?
+    @State private var trackedMediaCount = 0
 
     public init(
         viewModel: @autoclosure @escaping () -> CreatePostComposeViewModel,
@@ -378,14 +379,31 @@ public struct CreatePostComposeView: View {
             let cardWidth = ComposeMetrics.mediaCardWidth
             let cardHeight = ComposeMetrics.mediaCardHeight
             VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: ComposeMetrics.mediaCardSpacing) {
-                        ForEach(viewModel.selectedMediaItems) { item in
-                            composeMediaCard(item: item, width: cardWidth, height: cardHeight)
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: ComposeMetrics.mediaCardSpacing) {
+                            ForEach(viewModel.selectedMediaItems) { item in
+                                composeMediaCard(item: item, width: cardWidth, height: cardHeight)
+                                    .id(item.id)
+                            }
                         }
+                        .padding(.leading, SplickTheme.Spacing.md)
+                        .padding(.trailing, SplickTheme.Spacing.sm)
                     }
-                    .padding(.leading, SplickTheme.Spacing.md)
-                    .padding(.trailing, SplickTheme.Spacing.sm)
+                    .onAppear {
+                        let count = viewModel.selectedMediaItems.count
+                        trackedMediaCount = count
+                        guard count > 1, let lastID = viewModel.selectedMediaItems.last?.id else { return }
+                        scrollComposeStrip(proxy, to: lastID)
+                    }
+                    .onChange(of: viewModel.selectedMediaItems.count) { newCount in
+                        let previous = trackedMediaCount
+                        trackedMediaCount = newCount
+                        guard newCount > previous,
+                              let lastID = viewModel.selectedMediaItems.last?.id
+                        else { return }
+                        scrollComposeStrip(proxy, to: lastID)
+                    }
                 }
                 .overlay(alignment: .bottomLeading) {
                     if viewModel.canAddMoreMedia {
@@ -399,6 +417,14 @@ public struct CreatePostComposeView: View {
                     .font(SplickTheme.Typography.caption)
                     .foregroundStyle(SplickTheme.Colors.textTertiary)
                     .padding(.horizontal, SplickTheme.Spacing.md)
+            }
+        }
+    }
+
+    private func scrollComposeStrip(_ proxy: ScrollViewProxy, to id: UUID) {
+        DispatchQueue.main.async {
+            withAnimation(.easeInOut(duration: 0.28)) {
+                proxy.scrollTo(id, anchor: .trailing)
             }
         }
     }
@@ -1138,13 +1164,17 @@ private struct ComposeBillSplitView: View {
                     text: $viewModel.billTotalText,
                     font: .systemFont(ofSize: 20, weight: .regular),
                     textColor: UIColor(SplickTheme.Colors.textPrimary),
-                    placeholder: languageService.text(.feedCreateTotalAmount)
+                    placeholder: languageService.text(.feedCreateTotalAmount),
+                    placeholderColor: UIColor(SplickTheme.Colors.textTertiary)
                 )
+                .frame(maxWidth: .infinity, minHeight: 52, alignment: .topLeading)
 
                 Text(languageService.text(.feedCreateCurrencySymbol))
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    .font(.system(size: 20, weight: .regular))
+                    .foregroundStyle(SplickTheme.Colors.textTertiary)
             }
+            .frame(minHeight: 52, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             if let error = viewModel.billTotalAmountError {
                 Text(error)

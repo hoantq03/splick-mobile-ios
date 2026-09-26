@@ -29,6 +29,8 @@ struct FeedInlineVideoPlayer: View {
     var showsScrubber: Bool = false
     /// Explicit feed autoplay target (avoids Equatable PostCard swallowing `@Published` updates).
     var isAutoplayTarget: Bool = false
+    /// Streak carousel turns this off for off-center cards so only the focused video plays.
+    var isPlaybackEnabled: Bool = true
 
     @Environment(\.feedVideoCoordinator) private var autoplayCoordinator
     @Environment(\.feedTabIsActive) private var feedTabIsActive
@@ -48,6 +50,7 @@ struct FeedInlineVideoPlayer: View {
     }
 
     private var isAutoplayActive: Bool {
+        guard isPlaybackEnabled else { return false }
         if usesStandalonePlayback { return true }
         return feedTabIsActive && isAutoplayTarget
     }
@@ -96,11 +99,17 @@ struct FeedInlineVideoPlayer: View {
         .onChange(of: isAutoplayActive) { active in
             syncController(active: active)
         }
+        .onChange(of: isPlaybackEnabled) { _ in
+            syncController(active: isAutoplayActive)
+        }
         .onAppear {
             syncController(active: isAutoplayActive)
         }
         .onChange(of: isAutoplayTarget) { target in
             syncController(active: feedTabIsActive && target)
+        }
+        .onChange(of: url) { _ in
+            syncController(active: isAutoplayActive)
         }
         .onDisappear {
             if usesStandalonePlayback {

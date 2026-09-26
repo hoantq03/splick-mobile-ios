@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import DesignSystem
 import Localization
 import SplickDomain
@@ -103,10 +104,8 @@ private struct StreakDayCell: View {
 
     @ViewBuilder
     private var cellContent: some View {
-        if day.hasPhoto, let url = day.firstThumbnailURL ?? day.firstPhotoURL {
-            GridThumbnailImage(url: url) {
-                cellShape.fill(SplickTheme.Colors.secondaryBackground)
-            }
+        if day.hasPhoto {
+            StreakDayCover(day: day)
         } else {
             cellShape
                 .fill(SplickTheme.Colors.secondaryBackground)
@@ -120,5 +119,55 @@ private struct StreakDayCell: View {
 
     private var dayNumber: String {
         "\(Calendar.current.component(.day, from: day.date))"
+    }
+}
+
+/// Image cover when one exists; otherwise the video's first decoded frame.
+private struct StreakDayCover: View {
+    let day: StreakDay
+    @State private var generatedFrame: UIImage?
+
+    private var stillURL: URL? {
+        if let thumb = day.firstThumbnailURL, let photo = day.firstPhotoURL,
+           let usable = VideoPosterURL.usableImageURL(thumb, videoURL: photo) {
+            return usable
+        }
+        guard let candidate = day.firstThumbnailURL ?? day.firstPhotoURL else { return nil }
+        return VideoPosterURL.usableImageURL(candidate, videoURL: URL(string: "https://cdn.splick.local/video.mp4")!)
+    }
+
+    private var videoURL: URL? {
+        stillURL == nil ? (day.firstPhotoURL ?? day.firstThumbnailURL) : nil
+    }
+
+    var body: some View {
+        Group {
+            if let stillURL {
+                GridThumbnailImage(url: stillURL) {
+                    frameOrFill
+                }
+            } else {
+                frameOrFill
+            }
+        }
+        .task(id: videoURL?.absoluteString) {
+            guard let videoURL else { return }
+            if let cached = await VideoFirstFrameCache.shared.image(for: videoURL) {
+                generatedFrame = cached
+                return
+            }
+            generatedFrame = await VideoFirstFrameCache.shared.generate(for: videoURL)
+        }
+    }
+
+    @ViewBuilder
+    private var frameOrFill: some View {
+        if let generatedFrame {
+            Image(uiImage: generatedFrame)
+                .resizable()
+                .scaledToFill()
+        } else {
+            SplickTheme.Colors.secondaryBackground
+        }
     }
 }

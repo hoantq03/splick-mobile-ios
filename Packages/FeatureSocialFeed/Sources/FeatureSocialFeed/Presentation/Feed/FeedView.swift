@@ -376,6 +376,8 @@ private struct FeedPrimaryPage: View {
 
     @State private var feedScrollLocked = false
     @State private var sameTabScrollTopSignal = 0
+    /// Local id of a video upload we are following until the server post replaces it.
+    @State private var autoplayFollowPostId: UUID?
     @StateObject private var refreshController = SplickRefreshController()
     @State private var cardPresentation: PostCardPresentation?
     @State private var editingPost: Post?
@@ -401,6 +403,9 @@ private struct FeedPrimaryPage: View {
                     tabBarScrollState?.reset()
                     feedSegmentScrollState?.reset()
                 }
+            }
+            .onChange(of: viewModel.posts.first?.id) { newId in
+                pinUploadedVideoForAutoplay(newFirstPostId: newId)
             }
             .onChange(of: viewModel.revealNewPostsGeneration) { generation in
                 guard generation > 0 else { return }
@@ -689,6 +694,20 @@ private struct FeedPrimaryPage: View {
         }
         .scrollDisabled(feedScrollLocked)
         .environment(\.feedVideoCoordinator, videoCoordinator)
+    }
+
+    /// Optimistic upload and the server post that replaces it should play at once.
+    private func pinUploadedVideoForAutoplay(newFirstPostId: UUID?) {
+        guard feedTabIsActive, let newId = newFirstPostId, let post = viewModel.posts.first, post.id == newId else {
+            return
+        }
+        let isUploading = viewModel.postUploadState(for: newId) != nil
+        let replacedFollowedUpload = autoplayFollowPostId != nil && autoplayFollowPostId != newId
+        guard isUploading || replacedFollowedUpload else { return }
+        autoplayFollowPostId = isUploading ? newId : nil
+        guard post.containsPlayableVideo else { return }
+        sameTabScrollTopSignal += 1
+        videoCoordinator.updateVisibility(postId: newId, ratio: 1)
     }
 
     private func videoAutoplayReports(

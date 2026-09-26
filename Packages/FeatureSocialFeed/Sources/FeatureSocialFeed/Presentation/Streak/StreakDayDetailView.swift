@@ -71,6 +71,8 @@ private struct StreakDayModernCarousel: View {
     let photos: [AlbumPhoto]
     let onPhotoTap: (AlbumPhoto) -> Void
 
+    @State private var centeredPhotoId: UUID?
+
     private let peekScale: CGFloat = 0.88
     private let peekOpacity: CGFloat = 0.5
     private let cardWidthRatio: CGFloat = 0.76
@@ -79,6 +81,7 @@ private struct StreakDayModernCarousel: View {
         GeometryReader { geometry in
             let cardWidth = geometry.size.width * cardWidthRatio
             let sideInset = (geometry.size.width - cardWidth) / 2
+            let activeId = centeredPhotoId ?? photos.first?.id
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: SplickTheme.Spacing.sm) {
@@ -86,8 +89,10 @@ private struct StreakDayModernCarousel: View {
                         StreakDayCarouselCard(
                             photo: photo,
                             width: cardWidth,
+                            isActive: photo.id == activeId,
                             onTap: { onPhotoTap(photo) }
                         )
+                        .id(photo.id)
                         .scrollTransition(.animated(.spring(response: 0.35, dampingFraction: 0.82))) { content, phase in
                             let distance = abs(phase.value)
                             return content
@@ -99,6 +104,7 @@ private struct StreakDayModernCarousel: View {
                 .scrollTargetLayout()
                 .padding(.horizontal, sideInset)
             }
+            .scrollPosition(id: $centeredPhotoId)
             .scrollTargetBehavior(.viewAligned)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -125,6 +131,7 @@ private struct StreakDayLegacyCarousel: View {
                     StreakDayCarouselCard(
                         photo: photo,
                         width: cardWidth,
+                        isActive: index == currentIndex,
                         onTap: { onPhotoTap(photo) }
                     )
                     .scaleEffect(index == currentIndex ? 1 : peekScale)
@@ -146,30 +153,65 @@ private struct StreakDayCarouselCard: View {
 
     let photo: AlbumPhoto
     let width: CGFloat
+    var isActive: Bool = true
     let onTap: () -> Void
 
     private let cornerRadius: CGFloat = 20
     private var imageHeight: CGFloat { width * 4 / 3 }
 
     var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+            if photo.mediaType == .video, isActive {
                 photoImage
+            } else {
+                Button(action: onTap) {
+                    photoImage
+                }
+                .buttonStyle(.plain)
+            }
+            Button(action: onTap) {
                 photoMeta
             }
-            .frame(width: width)
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+        .frame(width: width)
     }
 
+    @ViewBuilder
     private var photoImage: some View {
-        GridThumbnailImage(url: photo.thumbnailURL ?? photo.mediaURL, thumbnailWidth: 900) {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(SplickTheme.Colors.secondaryBackground)
-                .overlay {
-                    Image(systemName: "photo")
-                        .foregroundStyle(SplickTheme.Colors.textTertiary)
+        ZStack {
+            if photo.mediaType == .video, isActive {
+                FeedInlineVideoPlayer(
+                    postId: photo.id,
+                    url: photo.mediaURL,
+                    posterURL: photo.thumbnailURL,
+                    durationSeconds: nil,
+                    displayHeight: imageHeight,
+                    isPlaybackEnabled: true
+                )
+            } else if photo.mediaType == .video {
+                FeedVideoPosterView(
+                    posterURL: photo.thumbnailURL,
+                    videoURL: photo.mediaURL,
+                    displayHeight: imageHeight
+                )
+            } else {
+                GridThumbnailImage(url: photo.thumbnailURL ?? photo.mediaURL, thumbnailWidth: 900) {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .fill(SplickTheme.Colors.secondaryBackground)
+                        .overlay {
+                            Image(systemName: "photo")
+                                .foregroundStyle(SplickTheme.Colors.textTertiary)
+                        }
                 }
+                if photo.mediaType == .video {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 52, height: 52)
+                        .background(.black.opacity(0.45), in: Circle())
+                }
+            }
         }
         .frame(width: width, height: imageHeight)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))

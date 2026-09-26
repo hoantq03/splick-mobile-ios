@@ -23,7 +23,9 @@ enum DeleteStreakRisk {
     }
 
     static func hasImage(_ post: Post) -> Bool {
-        post.mediaType == .image || post.mediaItems.contains { $0.mediaType == .image }
+        post.mediaType == .image
+            || post.mediaType == .video
+            || post.mediaItems.contains { $0.mediaType == .image || $0.mediaType == .video }
     }
 
     /// Returns the current streak length when deleting `post` would break it; otherwise `nil`.

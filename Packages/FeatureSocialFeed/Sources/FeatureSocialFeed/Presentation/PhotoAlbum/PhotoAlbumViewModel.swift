@@ -167,7 +167,10 @@ public final class PhotoAlbumViewModel: ObservableObject {
     }
 
     private func prefetchThumbnails(in photos: [AlbumPhoto]) {
-        let urls = photos.compactMap { $0.thumbnailURL ?? $0.mediaURL }
+        let urls = photos.compactMap { photo -> URL? in
+            if photo.mediaType == .video { return photo.thumbnailURL }
+            return photo.thumbnailURL ?? photo.mediaURL
+        }
         ImagePrefetching.prefetch(urls: urls)
     }
 }

@@ -7,6 +7,7 @@ struct LiveVNDMoneyTextField: UIViewRepresentable {
     var font: UIFont = .systemFont(ofSize: 28, weight: .bold)
     var textColor: UIColor = .label
     var placeholder: String = "0"
+    var placeholderColor: UIColor = .placeholderText
 
     func makeUIView(context: Context) -> UITextField {
         let field = UITextField()
@@ -14,19 +15,35 @@ struct LiveVNDMoneyTextField: UIViewRepresentable {
         field.delegate = context.coordinator
         field.font = font
         field.textColor = textColor
-        field.placeholder = placeholder
+        field.backgroundColor = .clear
+        field.attributedPlaceholder = attributedPlaceholder
         field.borderStyle = .none
         field.text = text
-        field.setContentHuggingPriority(.required, for: .vertical)
+        field.contentVerticalAlignment = .top
+        field.setContentHuggingPriority(.defaultLow, for: .vertical)
+        field.setContentHuggingPriority(.defaultLow, for: .horizontal)
         field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         return field
     }
 
     func updateUIView(_ uiView: UITextField, context: Context) {
         context.coordinator.parent = self
+        uiView.font = font
+        uiView.textColor = textColor
+        uiView.attributedPlaceholder = attributedPlaceholder
         if uiView.text != text, !uiView.isFirstResponder {
             uiView.text = text
         }
+    }
+
+    private var attributedPlaceholder: NSAttributedString {
+        NSAttributedString(
+            string: placeholder,
+            attributes: [
+                .font: font,
+                .foregroundColor: placeholderColor,
+            ]
+        )
     }
 
     func makeCoordinator() -> Coordinator {

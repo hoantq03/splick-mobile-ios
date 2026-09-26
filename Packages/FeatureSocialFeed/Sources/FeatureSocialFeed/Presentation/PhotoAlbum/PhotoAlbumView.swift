@@ -367,9 +367,32 @@ private struct AlbumPhotoCell: View {
 
     @ViewBuilder
     private var photoContent: some View {
-        GridThumbnailImage(url: photo.thumbnailURL ?? photo.mediaURL) {
-            placeholderContent
+        ZStack {
+            if let poster = albumPosterURL(for: photo) {
+                GridThumbnailImage(url: poster) {
+                    placeholderContent
+                }
+            } else {
+                placeholderContent
+            }
+            if photo.mediaType == .video {
+                Image(systemName: "play.fill")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(8)
+                    .background(.black.opacity(0.45), in: Circle())
+            }
         }
+    }
+
+    private func albumPosterURL(for photo: AlbumPhoto) -> URL? {
+        if photo.mediaType == .video {
+            guard let thumb = photo.thumbnailURL, thumb != photo.mediaURL else { return nil }
+            let ext = thumb.pathExtension.lowercased()
+            if ["mp4", "mov", "m4v", "webm", "mkv"].contains(ext) { return nil }
+            return thumb
+        }
+        return photo.thumbnailURL ?? photo.mediaURL
     }
 
     private var placeholderContent: some View {
