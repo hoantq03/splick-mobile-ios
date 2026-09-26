@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import Common
 import DesignSystem
 import Localization
@@ -9,6 +10,7 @@ public struct FriendUserProfileView: View {
     @StateObject private var refreshController = SplickRefreshController()
     @State private var previewPost: Post?
     @State private var showAvatarViewer = false
+    private let showsPersonalPageChrome: Bool
     @EnvironmentObject private var languageService: LanguageService
     @EnvironmentObject private var presenceStore: PresenceStore
     @Environment(\.dismiss) private var dismiss
@@ -23,60 +25,30 @@ public struct FriendUserProfileView: View {
         count: 4
     )
 
-    public init(viewModel: FriendUserProfileViewModel) {
+    public init(viewModel: FriendUserProfileViewModel, showsPersonalPageChrome: Bool = false) {
         _viewModel = StateObject(wrappedValue: viewModel)
+        self.showsPersonalPageChrome = showsPersonalPageChrome
     }
 
     public var body: some View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: SplickTheme.Spacing.lg) {
-                    Button {
-                        showAvatarViewer = true
-                    } label: {
-                        AvatarWithPresenceView(
-                            imageURL: viewModel.user.avatarURL,
-                            name: viewModel.user.preferredName,
-                            size: .profile,
-                            userId: viewModel.user.id,
-                            showOnlineIndicator: viewModel.isOwnProfile || (
-                                viewModel.friendStatus == .friends &&
-                                PresenceDisplayPolicy.shouldShowOnlineIndicator(
-                                    isOnline: resolvedPresence.isOnline
-                                )
-                            ),
-                            lastSeenLabel: viewModel.isOwnProfile || viewModel.friendStatus != .friends
-                                ? nil
-                                : PresenceDisplayPolicy.compactLastSeenLabel(
-                                    isOnline: resolvedPresence.isOnline,
-                                    lastSeenAt: resolvedPresence.lastSeenAt,
-                                    appLocale: languageService.locale
-                                )
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.top, SplickTheme.Spacing.xl)
-
-                    VStack(spacing: SplickTheme.Spacing.xxs) {
-                        Text(viewModel.user.dualDisplayName)
-                            .font(SplickTheme.Typography.largeTitle)
-                        if viewModel.isBotProfile {
-                            Text(languageService.text(.splickBotProfileTagline))
-                                .font(SplickTheme.Typography.callout)
-                                .foregroundStyle(SplickTheme.Colors.textSecondary)
-                                .multilineTextAlignment(.center)
-                        }
-                        Text("@\(viewModel.user.username)")
-                            .font(SplickTheme.Typography.callout)
-                            .foregroundStyle(SplickTheme.Colors.textSecondary)
-                    }
-
                     if viewModel.isBotProfile {
+                        profileAvatarButton
+                            .padding(.top, SplickTheme.Spacing.xl)
+
+                        profileNameBlock(centered: true)
+
                         botProfileContent
                             .padding(.horizontal, SplickTheme.Spacing.xl)
-                    } else if let stats = viewModel.stats {
-                        statsRow(stats)
-                            .padding(.top, SplickTheme.Spacing.md)
+                    } else {
+                        profileIdentityRow
+                            .padding(.top, SplickTheme.Spacing.xl)
+                            .padding(.horizontal, SplickTheme.Spacing.md)
+
+                        profileNameBlock(centered: false)
+                            .padding(.horizontal, SplickTheme.Spacing.md)
                     }
 
                     if !viewModel.isBotProfile, let profileError = viewModel.profileError {
@@ -106,8 +78,18 @@ public struct FriendUserProfileView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(SplickTheme.Colors.background)
             .navigationBarTitleDisplayMode(.inline)
+            .navigationTitle(showsPersonalPageChrome ? languageService.text(.profilePersonalPage) : "")
             .toolbar {
-                if viewModel.isOwnProfile, let openProfileSettings {
+                if showsPersonalPageChrome {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            dismiss()
+                        } label: {
+                            Image(systemName: "chevron.backward")
+                        }
+                        .accessibilityLabel(languageService.text(.commonBack))
+                    }
+                } else if viewModel.isOwnProfile, let openProfileSettings {
                     ToolbarItem(placement: .topBarLeading) {
                         Button {
                             dismiss()
@@ -120,8 +102,10 @@ public struct FriendUserProfileView: View {
                         .accessibilityLabel(languageService.text(.profileSettingsAccessibility))
                     }
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(languageService.text(.commonClose)) { dismiss() }
+                if !showsPersonalPageChrome {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(languageService.text(.commonClose)) { dismiss() }
+                    }
                 }
             }
             .overlay {
@@ -141,9 +125,7 @@ public struct FriendUserProfileView: View {
                 _ = await (profile, posts)
             }
             .onChange(of: viewModel.posts.map(\.id)) { _ in
-                ImagePrefetching.prefetch(
-                    urls: viewModel.posts.map { $0.thumbnailURL ?? $0.imageURL }
-                )
+                ImagePrefetching.prefetch(urls: viewModel.posts.compactMap(profilePosterURL))
             }
             .alert(languageService.text(.profileTitle), isPresented: Binding(
                 get: { viewModel.alertMessage != nil },
@@ -258,12 +240,6 @@ public struct FriendUserProfileView: View {
             LazyVGrid(columns: postGridColumns, spacing: Self.postGridSpacing) {
                 ForEach(viewModel.posts) { post in
                     profilePostCell(post)
-                        .simultaneousGesture(
-                            LongPressGesture(minimumDuration: 0.45)
-                                .onEnded { _ in
-                                    previewPost = post
-                                }
-                        )
                         .onAppear {
                             Task {
                                 await viewModel.loadMorePostsIfNeeded(currentPostId: post.id)
@@ -296,41 +272,75 @@ public struct FriendUserProfileView: View {
     }
 
     private func profilePostCell(_ post: Post) -> some View {
-        Button {
-            guard previewPost == nil else { return }
-            openPost(post.id)
-        } label: {
-            Color.clear
-                .aspectRatio(1, contentMode: .fit)
-                .overlay {
-                    GridThumbnailImage(url: post.thumbnailURL ?? post.imageURL) {
-                        SplickTheme.Colors.cardBackground
-                    }
+        let cellShape = RoundedRectangle(
+            cornerRadius: SplickTheme.CornerRadius.small,
+            style: .continuous
+        )
+        return Color.clear
+            .aspectRatio(1, contentMode: .fit)
+            .overlay {
+                profilePostThumbnail(post)
+            }
+            .overlay(alignment: .topTrailing) {
+                if post.mediaItems.count > 1 {
+                    Image(systemName: "square.fill.on.square.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .shadow(radius: 1)
+                        .padding(6)
+                } else if post.mediaType == .video {
+                    Image(systemName: "play.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .shadow(radius: 1)
+                        .padding(6)
                 }
-                .overlay(alignment: .topTrailing) {
-                    if post.mediaItems.count > 1 {
-                        Image(systemName: "square.fill.on.square.fill")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .shadow(radius: 1)
-                            .padding(6)
-                    } else if post.mediaType == .video {
-                        Image(systemName: "play.fill")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .shadow(radius: 1)
-                            .padding(6)
+            }
+            .clipShape(cellShape)
+            .contentShape(cellShape)
+            .overlay {
+                GridPressCatcher(
+                    onTap: {
+                        guard previewPost == nil else { return }
+                        openPost(post.id)
+                    },
+                    onLongPress: {
+                        previewPost = post
                     }
-                }
-                .clipShape(
-                    RoundedRectangle(
-                        cornerRadius: SplickTheme.CornerRadius.small,
-                        style: .continuous
-                    )
                 )
+            }
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel(languageService.text(.profileStatPosts))
+    }
+
+    @ViewBuilder
+    private func profilePostThumbnail(_ post: Post) -> some View {
+        if let poster = profilePosterURL(post) {
+            GridThumbnailImage(url: poster) {
+                SplickTheme.Colors.cardBackground
+            }
+        } else if let videoURL = profileVideoURL(post) {
+            ProfileVideoFirstFrame(videoURL: videoURL)
+        } else {
+            SplickTheme.Colors.cardBackground
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(languageService.text(.profileStatPosts))
+    }
+
+    private func profilePosterURL(_ post: Post) -> URL? {
+        let media = post.displayMediaItems.first
+        let isVideo = (media?.mediaType ?? post.mediaType) == .video
+        let videoURL = media?.mediaURL ?? post.videoURL ?? post.imageURL
+        if isVideo {
+            return VideoPosterURL.usableImageURL(media?.thumbnailURL ?? post.thumbnailURL, videoURL: videoURL)
+        }
+        return media?.thumbnailURL ?? post.thumbnailURL ?? post.imageURL
+    }
+
+    private func profileVideoURL(_ post: Post) -> URL? {
+        let media = post.displayMediaItems.first
+        let isVideo = (media?.mediaType ?? post.mediaType) == .video
+        guard isVideo else { return nil }
+        return media?.mediaURL ?? post.videoURL
     }
 
     private func openPost(_ postId: UUID) {
@@ -341,21 +351,119 @@ public struct FriendUserProfileView: View {
         }
     }
 
-    private func statsRow(_ stats: UserProfileStats) -> some View {
-        HStack(spacing: SplickTheme.Spacing.xl) {
-            statBlock(value: stats.friendCount, label: languageService.text(.profileStatFriends))
-            statBlock(value: stats.postCount, label: languageService.text(.profileStatPosts))
-            statBlock(value: stats.groupCount, label: languageService.text(.profileStatGroups))
+    private var profileAvatarButton: some View {
+        Button {
+            showAvatarViewer = true
+        } label: {
+            AvatarWithPresenceView(
+                imageURL: viewModel.user.avatarURL,
+                name: viewModel.user.preferredName,
+                size: .profile,
+                userId: viewModel.user.id,
+                showOnlineIndicator: viewModel.isOwnProfile || (
+                    viewModel.friendStatus == .friends &&
+                    PresenceDisplayPolicy.shouldShowOnlineIndicator(
+                        isOnline: resolvedPresence.isOnline
+                    )
+                ),
+                lastSeenLabel: viewModel.isOwnProfile || viewModel.friendStatus != .friends
+                    ? nil
+                    : PresenceDisplayPolicy.compactLastSeenLabel(
+                        isOnline: resolvedPresence.isOnline,
+                        lastSeenAt: resolvedPresence.lastSeenAt,
+                        appLocale: languageService.locale
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func profileNameBlock(centered: Bool) -> some View {
+        let alignment: Alignment = centered ? .center : .leading
+        return VStack(alignment: centered ? .center : .leading, spacing: SplickTheme.Spacing.xxs) {
+            Text(viewModel.user.dualDisplayName)
+                .font(
+                    centered
+                        ? SplickTheme.Typography.largeTitle
+                        : .system(size: 40, weight: .bold, design: .rounded)
+                )
+                .multilineTextAlignment(centered ? .center : .leading)
+                .frame(maxWidth: .infinity, alignment: alignment)
+            if viewModel.isBotProfile {
+                Text(languageService.text(.splickBotProfileTagline))
+                    .font(SplickTheme.Typography.callout)
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
+            Text("@\(viewModel.user.username)")
+                .font(SplickTheme.Typography.callout)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                .multilineTextAlignment(centered ? .center : .leading)
+                .frame(maxWidth: .infinity, alignment: alignment)
         }
     }
 
-    private func statBlock(value: Int, label: String) -> some View {
+    private var profileIdentityRow: some View {
+        HStack(alignment: .center, spacing: 0) {
+            profileAvatarButton
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Color.clear
+                .frame(maxWidth: .infinity)
+            Color.clear
+                .frame(maxWidth: .infinity)
+        }
+        .overlay {
+            GeometryReader { proxy in
+                HStack(alignment: .center, spacing: 0) {
+                    Color.clear
+                        .frame(width: proxy.size.width / 3)
+                    if let stats = viewModel.stats {
+                        statsRow(stats)
+                            .frame(width: proxy.size.width * 2 / 3)
+                    }
+                }
+                .frame(width: proxy.size.width, height: proxy.size.height)
+            }
+            .allowsHitTesting(false)
+        }
+    }
+
+    private func statsRow(_ stats: UserProfileStats) -> some View {
+        HStack(spacing: 0) {
+            statBlock(
+                value: stats.friendCount,
+                label: languageService.text(.profileStatFriends),
+                prominent: true
+            )
+            Spacer(minLength: 4)
+            statBlock(
+                value: stats.postCount,
+                label: languageService.text(.profileStatPosts),
+                prominent: true
+            )
+            Spacer(minLength: 4)
+            statBlock(
+                value: stats.groupCount,
+                label: languageService.text(.profileStatGroups),
+                prominent: true
+            )
+        }
+    }
+
+    private func statBlock(value: Int, label: String, prominent: Bool = false) -> some View {
         VStack(spacing: 4) {
             Text("\(value)")
-                .font(SplickTheme.Typography.title)
+                .font(
+                    prominent
+                        ? .system(.title, design: .rounded, weight: .semibold)
+                        : SplickTheme.Typography.title
+                )
+                .lineLimit(1)
             Text(label)
-                .font(SplickTheme.Typography.caption)
+                .font(prominent ? .system(.subheadline) : SplickTheme.Typography.caption)
                 .foregroundStyle(SplickTheme.Colors.textTertiary)
+                .lineLimit(1)
         }
     }
 
@@ -542,5 +650,29 @@ public struct FriendUserProfileView: View {
         let isOnline = (stored?.isOnline == true) || viewModel.profileIsOnline
         let lastSeenAt = stored?.lastSeenAt ?? viewModel.profileLastSeenAt
         return (isOnline, lastSeenAt)
+    }
+}
+
+private struct ProfileVideoFirstFrame: View {
+    let videoURL: URL
+    @State private var generatedFrame: UIImage?
+
+    var body: some View {
+        Group {
+            if let generatedFrame {
+                Image(uiImage: generatedFrame)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                SplickTheme.Colors.cardBackground
+            }
+        }
+        .task(id: videoURL.absoluteString) {
+            if let cached = await VideoFirstFrameCache.shared.image(for: videoURL) {
+                generatedFrame = cached
+                return
+            }
+            generatedFrame = await VideoFirstFrameCache.shared.generate(for: videoURL)
+        }
     }
 }

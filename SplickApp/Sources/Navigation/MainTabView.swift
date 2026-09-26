@@ -769,6 +769,7 @@ struct ProfileSettingsView: View {
     @State private var showConnectedAccounts = false
     @State private var accountClosureAction: AccountClosureAction?
     @State private var showPaymentProfile = false
+    @State private var showOwnProfile = false
     @State private var showBirthdayPicker = false
     @State private var birthdayDraft = Calendar.current.date(byAdding: .year, value: -18, to: Date()) ?? Date()
     @State private var isSavingBirthday = false
@@ -933,6 +934,23 @@ struct ProfileSettingsView: View {
                         onSaved: { user in
                             appState.updateAuthenticatedUser(user)
                         }
+                    )
+                    .environmentObject(languageService)
+                }
+            }
+            .sheet(isPresented: $showOwnProfile) {
+                if let user = appState.currentUser {
+                    FriendUserProfileView(
+                        viewModel: container.friendUserProfileDependencies.makeViewModel(
+                            user: UserSummary(
+                                id: user.id,
+                                username: user.username,
+                                displayName: user.displayName,
+                                avatarURL: user.avatarURL
+                            ),
+                            currentUserId: user.id
+                        ),
+                        showsPersonalPageChrome: true
                     )
                     .environmentObject(languageService)
                 }
@@ -1396,6 +1414,11 @@ struct ProfileSettingsView: View {
         ProfileSettingsGroup(
             title: languageService.text(.profileGroupPersonal),
             items: [
+                ProfileSettingsItem(
+                    icon: "person.crop.circle",
+                    title: languageService.text(.profilePersonalPage),
+                    action: { showOwnProfile = true }
+                ),
                 ProfileSettingsItem(
                     icon: "qrcode",
                     title: languageService.text(.profileQrReceive),
