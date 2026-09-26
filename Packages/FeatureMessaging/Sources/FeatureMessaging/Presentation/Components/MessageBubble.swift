@@ -898,57 +898,80 @@ private struct MessageReactionStrip: View {
     }
 }
 
-/// Hop after jump-to-quote. `.task(id:)` runs when the row appears already highlighted
-/// (off-screen originals). Bounce is sequenced outside the list scroll transaction.
+/// Hop after the list has centered the searched message.
+/// The thread list clears SwiftUI transactions, so the hop is sampled on a display link.
 private struct MessageHighlightBounceModifier: ViewModifier {
     let pulseToken: Int
     @State private var scale: CGFloat = 1
     @State private var lift: CGFloat = 0
+    @State private var player = HighlightBouncePlayer()
 
     func body(content: Content) -> some View {
         content
             .scaleEffect(scale)
             .offset(y: lift)
-            .zIndex(pulseToken > 0 ? 2 : 0)
+            .zIndex(scale > 1.01 ? 2 : 0)
             .onChange(of: pulseToken) { token in
-                guard token <= 0 else { return }
-                scale = 1
-                lift = 0
-            }
-            .task(id: pulseToken) {
-                guard pulseToken > 0 else { return }
-                await playBounce()
+                guard token > 0 else {
+                    player.stop()
+                    scale = 1
+                    lift = 0
+                    return
+                }
+                player.play { nextScale, nextLift in
+                    scale = nextScale
+                    lift = nextLift
+                }
             }
     }
+}
 
-    @MainActor
-    private func playBounce() async {
-        var reset = Transaction()
-        reset.disablesAnimations = true
-        withTransaction(reset) {
-            scale = 1
-            lift = 0
+/// Samples the highlight hop itself so a parent `transaction.animation = nil` cannot drop it.
+private final class HighlightBouncePlayer: NSObject {
+    private var link: CADisplayLink?
+    private var startTime: CFTimeInterval = 0
+    private var onFrame: ((CGFloat, CGFloat) -> Void)?
+
+    func play(onFrame: @escaping (CGFloat, CGFloat) -> Void) {
+        stop()
+        self.onFrame = onFrame
+        startTime = CACurrentMediaTime()
+        let link = CADisplayLink(target: self, selector: #selector(tick))
+        link.add(to: .main, forMode: .common)
+        self.link = link
+    }
+
+    func stop() {
+        link?.invalidate()
+        link = nil
+        onFrame = nil
+    }
+
+    deinit {
+        link?.invalidate()
+    }
+
+    @objc private func tick() {
+        let elapsed = CACurrentMediaTime() - startTime
+        let pop = 0.22
+        let settle = 0.34
+        let peakScale = ChatScrollAnimation.highlightPeakScale
+        let peakLift = ChatScrollAnimation.highlightLift
+        if elapsed < pop {
+            let progress = CGFloat(easeOut(elapsed / pop))
+            onFrame?(1 + (peakScale - 1) * progress, peakLift * progress)
+        } else if elapsed < pop + settle {
+            let progress = CGFloat(easeOut((elapsed - pop) / settle))
+            onFrame?(peakScale + (1 - peakScale) * progress, peakLift * (1 - progress))
+        } else {
+            onFrame?(1, 0)
+            stop()
         }
-        // Jump-to-message uses withAnimation on the list; wait it out or the peak is merged away.
-        try? await Task.sleep(for: .milliseconds(240))
-        guard !Task.isCancelled, pulseToken > 0 else { return }
+    }
 
-        var pop = Transaction()
-        pop.animation = ChatScrollAnimation.highlightPop
-        withTransaction(pop) {
-            scale = ChatScrollAnimation.highlightPeakScale
-            lift = ChatScrollAnimation.highlightLift
-        }
-
-        try? await Task.sleep(for: .milliseconds(200))
-        guard !Task.isCancelled, pulseToken > 0 else { return }
-
-        var settle = Transaction()
-        settle.animation = ChatScrollAnimation.highlightSettle
-        withTransaction(settle) {
-            scale = 1
-            lift = 0
-        }
+    private func easeOut(_ t: Double) -> Double {
+        let clamped = min(max(t, 0), 1)
+        return 1 - pow(1 - clamped, 3)
     }
 }
 

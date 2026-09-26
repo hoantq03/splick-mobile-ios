@@ -24,6 +24,8 @@ public final class ChatThreadViewModel: ObservableObject {
     @Published public var attachmentDrafts: [CommentAttachmentDraft] = []
     @Published public private(set) var scrollToBottomToken = 0
     @Published public private(set) var scrollToMessageToken = 0
+    /// Bumped only after the list has scrolled the hit into view, so the hop is on screen.
+    @Published public private(set) var highlightBounceToken = 0
     @Published public private(set) var highlightedMessageId: UUID?
     @Published public private(set) var newlySentMessageIds: Set<UUID> = []
     @Published public var replyDraft: MessageReplyDraft?
@@ -920,6 +922,12 @@ public final class ChatThreadViewModel: ObservableObject {
     private func requestScrollToMessage(_ messageId: UUID) {
         scrollToMessageToken += 1
         _ = messageId
+    }
+
+    /// Call after the thread list has centered the highlighted message.
+    public func armHighlightBounce() {
+        guard highlightedMessageId != nil else { return }
+        highlightBounceToken += 1
     }
 
     private func activateHighlight(for messageId: UUID) {

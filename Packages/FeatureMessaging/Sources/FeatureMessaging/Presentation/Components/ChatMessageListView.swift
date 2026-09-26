@@ -44,6 +44,7 @@ struct ChatMessageListView: View {
     /// User scrolled away during open — stop API/layout retries from yanking back to bottom.
     @State private var userReleasedInitialPin = false
     @State private var lastHandledScrollToBottomToken = 0
+    @State private var lastHandledScrollToMessageToken = 0
     @State private var lastAnchoredMessageClientId: UUID?
 
     private static let longPressImpact = UIImpactFeedbackGenerator(style: .medium)
@@ -238,7 +239,7 @@ struct ChatMessageListView: View {
             // Initial pin is owned solely by `.task(id: bottomScrollTaskKey)` — do not
             // also scroll on appear (that stacked with retries and burned CPU on open).
             .task(id: bottomScrollTaskKey) {
-                guard viewModel.scrollToMessageToken == 0 else { return }
+                guard !isAwaitingMessageReveal else { return }
                 guard viewModel.highlightedMessageId == nil else { return }
                 guard viewModel.prependAnchorMessageId == nil else { return }
                 guard !viewModel.messages.isEmpty else { return }
@@ -279,12 +280,19 @@ struct ChatMessageListView: View {
                 initialOpenBottomScrollPending = true
                 userReleasedInitialPin = false
                 lastHandledScrollToBottomToken = 0
+                lastHandledScrollToMessageToken = 0
                 lastAnchoredMessageClientId = nil
                 viewModel.userReturnedToLatest()
             }
-            .onChange(of: viewModel.scrollToMessageToken) { token in
-                guard token > 0, let targetId = viewModel.highlightedMessageId else { return }
-                scrollToMessage(targetId, proxy: proxy)
+            // Runs on open too, when the highlight token was published before this list existed.
+            .task(id: highlightRevealTaskKey) {
+                guard isAwaitingMessageReveal,
+                      let targetId = viewModel.highlightedMessageId,
+                      messages.contains(where: { $0.id == targetId }) else { return }
+                let token = viewModel.scrollToMessageToken
+                userReleasedInitialPin = true
+                initialOpenBottomScrollPending = false
+                await scrollToMessageUntilLaidOut(targetId, token: token, proxy: proxy)
             }
     }
 
@@ -349,7 +357,7 @@ struct ChatMessageListView: View {
             if abs(rowWidth - listRowWidth) > 0.5 {
                 let wasUnmeasured = listRowWidth <= 1
                 listRowWidth = rowWidth
-                if wasUnmeasured, rowWidth > 1, initialOpenBottomScrollPending {
+                if wasUnmeasured, rowWidth > 1, initialOpenBottomScrollPending, !isAwaitingMessageReveal {
                     scrollToBottom(proxy: proxy, animated: false)
                 }
             }
@@ -388,7 +396,7 @@ struct ChatMessageListView: View {
             replySwipeTranslation: replySwipe,
             isReactionFocusHidden: reactionFocusMessageId == item.message.id,
             isHighlighted: viewModel.highlightedMessageId == item.message.id,
-            highlightPulseToken: viewModel.scrollToMessageToken,
+            highlightPulseToken: viewModel.highlightBounceToken,
             isFloatingSend: viewModel.newlySentMessageIds.contains(item.message.clientMessageId),
             floatSway: viewModel.floatSway(for: item.message.clientMessageId),
             showsReadReceiptAvatar: showsPeerReadAvatar && item.message.id == latestReadOutgoingMessageId,
@@ -455,6 +463,22 @@ struct ChatMessageListView: View {
         let conversation = conversationId?.uuidString ?? "none"
         let last = viewModel.messages.last?.clientMessageId.uuidString ?? "none"
         return "\(conversation)-\(last)"
+    }
+
+    /// Highlight can be published before the list is mounted (open from search).
+    /// Key includes message presence so the scroll retries once the row exists.
+    private var highlightRevealTaskKey: String {
+        let token = viewModel.scrollToMessageToken
+        let target = viewModel.highlightedMessageId?.uuidString ?? "none"
+        let present = viewModel.highlightedMessageId.map { id in
+            messages.contains { $0.id == id }
+        } ?? false
+        return "\(token)-\(target)-\(present)"
+    }
+
+    private var isAwaitingMessageReveal: Bool {
+        viewModel.scrollToMessageToken > lastHandledScrollToMessageToken
+            && viewModel.highlightedMessageId != nil
     }
 
     private func resolvedBottomScrollTarget() -> AnyHashable? {
@@ -772,12 +796,51 @@ struct ChatMessageListView: View {
         scrollToBottom(proxy: proxy, animated: false)
     }
 
-    private func scrollToMessage(_ messageId: UUID, proxy: ScrollViewProxy) {
+    private func scrollToMessage(_ messageId: UUID, proxy: ScrollViewProxy, animated: Bool) {
         // Bubbles use clientMessageId as ScrollViewReader id (stable across optimistic→server replace).
         let scrollId = messages.first(where: { $0.id == messageId })?.clientMessageId ?? messageId
-        withAnimation(ChatScrollAnimation.jumpToMessage) {
+        let performScroll = {
             proxy.scrollTo(scrollId, anchor: .center)
         }
+        if animated {
+            withAnimation(ChatScrollAnimation.jumpToMessage) {
+                performScroll()
+            }
+        } else {
+            performScroll()
+        }
+    }
+
+    /// First frames often have no row geometry yet, so a single scrollTo is a no-op.
+    /// Place the row, then jump once — the highlight hop runs after this spring.
+    private func scrollToMessageUntilLaidOut(
+        _ messageId: UUID,
+        token: Int,
+        proxy: ScrollViewProxy
+    ) async {
+        let attemptAtMs: [UInt64] = [32, 140]
+        var elapsedMs: UInt64 = 0
+        for atMs in attemptAtMs {
+            let wait = atMs > elapsedMs ? atMs - elapsedMs : 0
+            if wait > 0 {
+                try? await Task.sleep(for: .milliseconds(wait))
+                elapsedMs = atMs
+            }
+            guard !Task.isCancelled else { return }
+            guard viewModel.scrollToMessageToken == token,
+                  messages.contains(where: { $0.id == messageId }) else { return }
+            scrollToMessage(messageId, proxy: proxy, animated: atMs == attemptAtMs[0])
+        }
+        // Let the jump settle, then hop. A second scroll here would restart the spring
+        // and swallow the bounce.
+        try? await Task.sleep(for: .milliseconds(280))
+        guard !Task.isCancelled else { return }
+        guard viewModel.scrollToMessageToken == token,
+              viewModel.highlightedMessageId == messageId else { return }
+        lastHandledScrollToMessageToken = token
+        userReleasedInitialPin = true
+        markInitialBottomScrollComplete()
+        viewModel.armHighlightBounce()
     }
 }
 
