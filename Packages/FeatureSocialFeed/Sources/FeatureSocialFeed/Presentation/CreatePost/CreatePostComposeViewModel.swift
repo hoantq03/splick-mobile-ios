@@ -438,8 +438,14 @@ public final class CreatePostComposeViewModel: ObservableObject {
         Set(selectedCompanionGroups.flatMap(\.members).map(\.id))
     }
 
+    /// Groups tagged on the post, including a group added only on the bill.
+    var taggedGroups: [Group] {
+        var seen = Set<UUID>()
+        return (selectedCompanionGroups + selectedBillCompanionGroups).filter { seen.insert($0.id).inserted }
+    }
+
     var companionGroupDisplayName: String? {
-        let names = selectedCompanionGroups
+        let names = taggedGroups
             .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         guard !names.isEmpty else { return nil }
@@ -1179,8 +1185,8 @@ public final class CreatePostComposeViewModel: ObservableObject {
                 }
                 : [],
             audience: audience,
-            groupId: selectedCompanionGroups.first?.id,
-            groupIds: selectedCompanionGroups.map(\.id)
+            groupId: taggedGroups.first?.id,
+            groupIds: taggedGroups.map(\.id)
         )
     }
 
