@@ -89,11 +89,8 @@ public final class NewMessageComposeViewModel: ObservableObject {
     }
 
     public var filteredRemoteUsers: [UserSummary] {
-        remoteSearchUsers.filter { user in
-            user.id != currentUserId
-                && !friends.contains(where: { $0.id == user.id })
-                && !selectedUsers.contains(where: { $0.id == user.id })
-        }
+        // Direct messaging is friends-only — do not offer strangers as recipients.
+        []
     }
 
     public func loadDirectoryIfNeeded() async {
@@ -136,6 +133,11 @@ public final class NewMessageComposeViewModel: ObservableObject {
 
     public func toggleUser(_ user: UserSummary) {
         guard user.id != currentUserId else { return }
+        guard friends.contains(where: { $0.id == user.id })
+            || selectedUsers.contains(where: { $0.id == user.id }) else {
+            errorMessage = languageService.text(.messagingChatNotFriendsBanner)
+            return
+        }
         selectedGroup = nil
         if let index = selectedUsers.firstIndex(where: { $0.id == user.id }) {
             selectedUsers.remove(at: index)

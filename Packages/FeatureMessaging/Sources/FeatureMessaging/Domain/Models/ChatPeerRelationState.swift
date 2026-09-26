@@ -17,6 +17,11 @@ public enum ChatPeerRelationState: Equatable, Sendable {
         }
     }
 
+    /// Direct chats can compose only after friendship is confirmed.
+    public var canComposeDirectMessages: Bool {
+        self == .friends
+    }
+
     public var isBlocked: Bool {
         self == .blocked
     }

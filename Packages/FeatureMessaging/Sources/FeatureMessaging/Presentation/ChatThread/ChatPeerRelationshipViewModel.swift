@@ -37,6 +37,11 @@ public final class ChatPeerRelationshipViewModel: ObservableObject {
         isActive && status.canRemoveFriend
     }
 
+    /// Groups always compose; direct threads require an active friendship.
+    public var canComposeMessages: Bool {
+        !isActive || status.canComposeDirectMessages
+    }
+
     public func loadIfNeeded() async {
         guard isActive else { return }
         await refresh()

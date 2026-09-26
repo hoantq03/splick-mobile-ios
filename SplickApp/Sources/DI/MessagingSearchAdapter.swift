@@ -26,7 +26,9 @@ struct MessagingSearchAdapter: MessagingSearchProviding {
             return (try? await messagingRepository.searchMessages(query: trimmed, page: 0, limit: 20)) ?? []
         }()
 
-        let users = try await userResults.map { MessagingSearchResult.user($0.user) }
+        let users = try await userResults
+            .filter { $0.friendStatus == .friends }
+            .map { MessagingSearchResult.user($0.user) }
         let messages = await messageResults.map { MessagingSearchResult.message($0) }
         return users + messages
     }

@@ -802,7 +802,13 @@ public final class ConversationListViewModel: ObservableObject {
             return ChatThreadRoute(conversation: conversation)
         } catch {
             Log.error(error, category: .network, metadata: ["action": "getOrCreateConversation"])
-            startConversationError = languageService.localizedMessage(for: error)
+            let message = languageService.localizedMessage(for: error)
+            if message.localizedCaseInsensitiveContains("not friends")
+                || message.localizedCaseInsensitiveContains("forbidden") {
+                startConversationError = languageService.text(.messagingChatNotFriendsBanner)
+            } else {
+                startConversationError = message
+            }
             return nil
         }
     }

@@ -18,6 +18,13 @@ final class ChatPeerRelationshipTests: XCTestCase {
 
         XCTAssertTrue(ChatPeerRelationState.friends.canRemoveFriend)
         XCTAssertFalse(ChatPeerRelationState.stranger.canRemoveFriend)
+
+        XCTAssertTrue(ChatPeerRelationState.friends.canComposeDirectMessages)
+        XCTAssertFalse(ChatPeerRelationState.unknown.canComposeDirectMessages)
+        XCTAssertFalse(ChatPeerRelationState.stranger.canComposeDirectMessages)
+        XCTAssertFalse(ChatPeerRelationState.requestSent.canComposeDirectMessages)
+        XCTAssertFalse(ChatPeerRelationState.requestReceived.canComposeDirectMessages)
+        XCTAssertFalse(ChatPeerRelationState.blocked.canComposeDirectMessages)
     }
 
     @MainActor
@@ -27,6 +34,7 @@ final class ChatPeerRelationshipTests: XCTestCase {
         XCTAssertFalse(vm.showsAddFriendBanner)
         XCTAssertFalse(vm.isBlocked)
         XCTAssertFalse(vm.canRemoveFriend)
+        XCTAssertTrue(vm.canComposeMessages)
 
         await vm.loadIfNeeded()
         await vm.refresh()
@@ -88,15 +96,18 @@ final class ChatPeerRelationshipTests: XCTestCase {
         await vm.loadIfNeeded()
         XCTAssertEqual(vm.status, .stranger)
         XCTAssertTrue(vm.showsAddFriendBanner)
+        XCTAssertFalse(vm.canComposeMessages)
 
         await vm.addFriend()
         XCTAssertTrue(stateBox.didCallAdd)
         XCTAssertEqual(vm.status, .requestSent)
+        XCTAssertFalse(vm.canComposeMessages)
 
         await vm.acceptFriendRequest()
         XCTAssertTrue(stateBox.didCallAccept)
         XCTAssertEqual(vm.status, .friends)
         XCTAssertTrue(vm.canRemoveFriend)
+        XCTAssertTrue(vm.canComposeMessages)
 
         await vm.removeFriend()
         XCTAssertTrue(stateBox.didCallRemove)

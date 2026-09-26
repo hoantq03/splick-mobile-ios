@@ -75,6 +75,11 @@ public struct ChatThreadView: View {
     public var body: some View {
         ZStack {
             threadContent
+                .opacity(isSearchingThread ? 0 : 1)
+                .animation(.none, value: isSearchingThread)
+                .allowsHitTesting(!isSearchingThread)
+                .accessibilityHidden(isSearchingThread)
+                .scrollDisabled(isSearchingThread)
             if let peer, displayConversation?.isGroup != true {
                 ChatThreadPresenceSideEffects(
                     peerUserId: peer.userId,
@@ -94,6 +99,8 @@ public struct ChatThreadView: View {
                     },
                     onClose: closeThreadSearch
                 )
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .background(SplickTheme.Colors.background.ignoresSafeArea())
                 .zIndex(20)
                 .transition(.opacity)
             }
@@ -334,6 +341,13 @@ public struct ChatThreadView: View {
             viewModel.cancelReply()
             isInputFocused = false
         }
+        .onChange(of: relationshipViewModel.showsAddFriendBanner) { showsBanner in
+            guard showsBanner else { return }
+            inputText = ""
+            viewModel.attachmentDrafts = []
+            viewModel.cancelReply()
+            isInputFocused = false
+        }
         .onAppear {
             tabBarScrollState?.hide(flushToBottom: true)
             if groupConversation == nil {
@@ -408,11 +422,14 @@ public struct ChatThreadView: View {
                     context: focus.localized(overlayOrigin: geo.frame(in: .global).origin),
                     allowsThreadInteraction: groupCapabilities.canInteractWithMessages
                         && !relationshipViewModel.isBlocked
+                        && relationshipViewModel.canComposeMessages
                         && !focus.displayMessage.message.recalled,
-                    canEdit: focus.displayMessage.message.isEditable(by: currentUserId),
+                    canEdit: focus.displayMessage.message.isEditable(by: currentUserId)
+                        && relationshipViewModel.canComposeMessages,
                     canRecall: focus.displayMessage.message.isRecallable(by: currentUserId)
                         && groupCapabilities.canInteractWithMessages
-                        && !relationshipViewModel.isBlocked,
+                        && !relationshipViewModel.isBlocked
+                        && relationshipViewModel.canComposeMessages,
                     onReact: { emoji in
                         _ = viewModel.react(to: focus.messageId, emoji: emoji)
                     },
@@ -942,10 +959,22 @@ public struct ChatThreadView: View {
             removedFromGroupFooter
         } else if relationshipViewModel.isBlocked {
             blockedFooter
-        } else {
-            // Paint the composer on the first frame; do not wait for peer status.
+        } else if relationshipViewModel.showsAddFriendBanner {
+            notFriendsComposerFooter
+        } else if relationshipViewModel.canComposeMessages {
             inputBar
         }
+    }
+
+    private var notFriendsComposerFooter: some View {
+        Text(addFriendBannerMessage)
+            .font(SplickTheme.Typography.caption)
+            .foregroundStyle(SplickTheme.Colors.textSecondary)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, SplickTheme.Spacing.md)
+            .padding(.vertical, SplickTheme.Spacing.sm)
+            .background(SplickTheme.Colors.background)
     }
 
     private var removedFromGroupFooter: some View {
@@ -1057,7 +1086,8 @@ public struct ChatThreadView: View {
                 bottomOverlayInset: SplickTheme.Spacing.sm,
                 onOpenDetails: openMessageDetails,
                 allowsThreadInteraction: groupCapabilities.canInteractWithMessages
-                    && !relationshipViewModel.isBlocked,
+                    && !relationshipViewModel.isBlocked
+                    && relationshipViewModel.canComposeMessages,
                 onBeginEdit: { message in
                     if let body = viewModel.beginEdit(message) {
                         inputText = body
