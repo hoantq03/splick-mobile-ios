@@ -114,7 +114,14 @@ struct PhotoEditorDrawCanvas: UIViewRepresentable {
             guard !drawing.bounds.isEmpty else { return }
             guard drawing != lastCommittedDrawing else { return }
             lastCommittedDrawing = drawing
-            onStrokeEnded(drawing)
+            let finished = drawing
+            let callback = onStrokeEnded
+            // PencilKit can flush from `dismantleUIView` / `updateUIView` while SwiftUI
+            // is still applying this frame. Publishing `@Published drawing` inline
+            // crashes with exclusive-access / "Publishing changes from within view updates".
+            DispatchQueue.main.async {
+                callback(finished)
+            }
         }
     }
 }
