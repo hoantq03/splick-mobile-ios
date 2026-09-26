@@ -28,6 +28,7 @@ public struct MessageSearchHit: Identifiable, Equatable, Sendable {
 public enum MessagingSearchResult: Identifiable, Equatable, Sendable {
     case user(UserSummary)
     case message(MessageSearchHit)
+    case conversation(Conversation)
 
     public var id: UUID {
         switch self {
@@ -35,6 +36,8 @@ public enum MessagingSearchResult: Identifiable, Equatable, Sendable {
             return user.id
         case .message(let hit):
             return hit.messageId
+        case .conversation(let conversation):
+            return conversation.id
         }
     }
 }

@@ -15,6 +15,12 @@ public final class ConversationListViewModel: ObservableObject {
         case closeFriends
     }
 
+    public enum SearchScope: Equatable, CaseIterable {
+        case users
+        case groups
+        case messages
+    }
+
     public enum State {
         case idle
         case loading
@@ -33,6 +39,9 @@ public final class ConversationListViewModel: ObservableObject {
     @Published public private(set) var searchResults: [MessagingSearchResult] = []
     @Published public private(set) var searchState: LoadingState<[MessagingSearchResult]> = .idle
     @Published public private(set) var isRefreshingSearch = false
+    @Published public var searchScope: SearchScope = .messages
+    @Published public private(set) var groupSearchResults: [Conversation] = []
+    @Published public private(set) var isLoadingGroupSearch = false
     /// Query used for result highlighting — updates when a search completes, not on every keystroke.
     @Published public private(set) var activeSearchQuery = ""
     @Published public private(set) var isStartingConversation = false
@@ -77,6 +86,8 @@ public final class ConversationListViewModel: ObservableObject {
     let searchHistory: SearchHistorySession?
     private var cancellables = Set<AnyCancellable>()
     private var searchTask: Task<Void, Never>?
+    private var groupSearchTask: Task<Void, Never>?
+    private var lastSearchQuery = ""
     private var refreshTask: Task<Void, Never>?
     private var loadMoreTask: Task<Void, Never>?
     private var peekTask: Task<MessagingPage<ChatMessage>, Error>?
@@ -140,6 +151,25 @@ public final class ConversationListViewModel: ObservableObject {
     public var conversations: [Conversation] {
         if case .loaded(let items) = state { return items }
         return []
+    }
+
+    public var visibleSearchResults: [MessagingSearchResult] {
+        switch searchScope {
+        case .users:
+            return searchResults.filter { if case .user = $0 { return true }; return false }
+        case .messages:
+            return searchResults.filter { if case .message = $0 { return true }; return false }
+        case .groups:
+            return groupSearchResults.map { .conversation($0) }
+        }
+    }
+
+    public func setSearchScope(_ scope: SearchScope) {
+        guard searchScope != scope else { return }
+        searchScope = scope
+        if scope == .groups {
+            Task { await refreshGroupSearch(query: lastSearchQuery) }
+        }
     }
 
     public func beginPeek(conversation: Conversation) async {
@@ -576,6 +606,7 @@ public final class ConversationListViewModel: ObservableObject {
     public func refreshSearch(query: String) async {
         searchTask?.cancel()
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        lastSearchQuery = trimmed
         guard !trimmed.isEmpty else { return }
 
         let task = Task { @MainActor in
@@ -589,6 +620,9 @@ public final class ConversationListViewModel: ObservableObject {
                     searchState = .loaded(results)
                     activeSearchQuery = trimmed
                     isRefreshingSearch = false
+                }
+                if searchScope == .groups {
+                    await refreshGroupSearch(query: trimmed)
                 }
             } catch {
                 guard !Task.isCancelled else { return }
@@ -607,14 +641,51 @@ public final class ConversationListViewModel: ObservableObject {
         await task.value
     }
 
+    public func refreshGroupSearch(query: String) async {
+        groupSearchTask?.cancel()
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            groupSearchResults = []
+            isLoadingGroupSearch = false
+            return
+        }
+
+        let task = Task { @MainActor in
+            if groupSearchResults.isEmpty {
+                isLoadingGroupSearch = true
+            }
+            do {
+                let page = try await fetchConversationsUseCase.execute(
+                    query: ConversationInboxQuery(page: 0, limit: 50, type: .group)
+                )
+                guard !Task.isCancelled else { return }
+                groupSearchResults = page.items.filter { conversation in
+                    conversation.displayTitle.localizedCaseInsensitiveContains(trimmed)
+                }
+                isLoadingGroupSearch = false
+            } catch {
+                guard !Task.isCancelled else { return }
+                isLoadingGroupSearch = false
+                Log.error(error, category: .network, metadata: ["action": "searchMessagingGroups", "query": trimmed])
+            }
+        }
+        groupSearchTask = task
+        await task.value
+    }
+
     public func onSearchQueryChanged(_ query: String) {
         searchTask?.cancel()
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        lastSearchQuery = trimmed
         guard !trimmed.isEmpty else {
             searchResults = []
             searchState = .idle
             isRefreshingSearch = false
             activeSearchQuery = ""
+            groupSearchResults = []
+            isLoadingGroupSearch = false
+            searchScope = .messages
+            groupSearchTask?.cancel()
             return
         }
 
@@ -623,6 +694,9 @@ public final class ConversationListViewModel: ObservableObject {
         }
         if !isRefreshingSearch {
             isRefreshingSearch = true
+        }
+        if searchScope == .groups {
+            Task { await refreshGroupSearch(query: trimmed) }
         }
         searchTask = Task {
             try? await Task.sleep(for: .milliseconds(350))

@@ -84,7 +84,9 @@ public struct ConversationListView: View {
             VStack(spacing: 0) {
                     messagingSearchBar
 
-                    if !isSearching && !isSearchFocused {
+                    if isSearching {
+                        messagingSearchScopeBar
+                    } else if !isSearchFocused {
                         InboxActiveFriendsStrip(
                             friends: viewModel.inboxFriends,
                             isStartingConversation: viewModel.isStartingConversation,
@@ -142,11 +144,6 @@ public struct ConversationListView: View {
                     }
                 }
                 .splickTabScreenHeader(languageService.text(.messagingTitle), showsBell: false)
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        composeMenu
-                    }
-                }
                 .navigationDestination(for: ChatThreadRoute.self) { route in
                     ChatThreadNavigationWrapper(
                         conversation: route.conversation,
@@ -292,33 +289,6 @@ public struct ConversationListView: View {
         }
     }
 
-    private var composeMenu: some View {
-        Menu {
-            Button {
-                onCreateGroup()
-            } label: {
-                Label(
-                    languageService.text(.friendsCreateGroup),
-                    systemImage: "person.3.fill"
-                )
-            }
-
-            Button {
-                beginNewMessage()
-            } label: {
-                Label(
-                    languageService.text(.messagingNewConversation),
-                    systemImage: "square.and.pencil"
-                )
-            }
-        } label: {
-            Image(systemName: "plus")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-        }
-        .accessibilityLabel(languageService.text(.messagingNewConversation))
-    }
-
     private func beginNewMessage() {
         composePresentation = NewMessageComposePresentation(
             viewModel: makeComposeViewModel()
@@ -388,31 +358,44 @@ public struct ConversationListView: View {
 
     @ViewBuilder
     private var searchResultsContent: some View {
-        switch viewModel.searchState {
-        case .loading where viewModel.searchResults.isEmpty:
+        let results = viewModel.visibleSearchResults
+        let isScopeLoading: Bool = {
+            if viewModel.searchScope == .groups {
+                return viewModel.isLoadingGroupSearch && results.isEmpty
+            }
+            if case .loading = viewModel.searchState {
+                return results.isEmpty
+            }
+            return false
+        }()
+
+        if isScopeLoading {
             searchResultsPlaceholder(
                 message: languageService.text(.messagingSearchLoading),
                 showsSpinner: true
             )
+        } else {
+            switch viewModel.searchState {
+            case .failed(let message) where viewModel.searchScope != .groups:
+                ErrorView(message: message) {
+                    viewModel.onSearchQueryChanged(searchDraft)
+                }
 
-        case .failed(let message):
-            ErrorView(message: message) {
-                viewModel.onSearchQueryChanged(searchDraft)
+            case .loaded, .idle, .loading, .failed:
+                if results.isEmpty {
+                    inboxRefreshScroll(controller: searchRefreshController) {
+                        await refreshVisibleSearch()
+                    } content: {
+                        EmptyStateView(
+                            icon: "magnifyingglass",
+                            title: languageService.text(.messagingSearchEmptyTitle),
+                            message: languageService.text(.messagingSearchEmptyMessage)
+                        )
+                    }
+                } else {
+                    searchResultsList(results)
+                }
             }
-
-        case .loaded(let results) where results.isEmpty:
-            inboxRefreshScroll(controller: searchRefreshController) {
-                await viewModel.refreshSearch(query: searchDraft)
-            } content: {
-                EmptyStateView(
-                    icon: "magnifyingglass",
-                    title: languageService.text(.messagingSearchEmptyTitle),
-                    message: languageService.text(.messagingSearchEmptyMessage)
-                )
-            }
-
-        case .idle, .loading, .loaded:
-            searchResultsList(viewModel.searchResults)
         }
     }
 
@@ -485,7 +468,7 @@ public struct ConversationListView: View {
             .scrollDismissesKeyboard(.interactively)
             .tabBarHideOnScroll()
             .splickNativeRefreshable(controller: searchRefreshController) {
-                await viewModel.refreshSearch(query: searchDraft)
+                await refreshVisibleSearch()
             }
             .onChange(of: searchScrollTopSignal) { _ in
                 withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
@@ -502,6 +485,15 @@ public struct ConversationListView: View {
         }
         searchDraft = ""
         viewModel.onSearchQueryChanged("")
+        viewModel.searchScope = .messages
+    }
+
+    private func refreshVisibleSearch() async {
+        if viewModel.searchScope == .groups {
+            await viewModel.refreshGroupSearch(query: searchDraft)
+        } else {
+            await viewModel.refreshSearch(query: searchDraft)
+        }
     }
 
     private func openFriendConversation(_ friend: UserSummary) async {
@@ -524,6 +516,8 @@ public struct ConversationListView: View {
             route = userRoute
         case .message(let hit):
             route = viewModel.routeForMessageHit(hit)
+        case .conversation(let conversation):
+            route = ChatThreadRoute(conversation: conversation)
         }
 
         withAnimation(MessagingSearchChromeAnimation.focusSpring) {
@@ -841,6 +835,55 @@ public struct ConversationListView: View {
             suppressRefreshAnimations ? nil : MessagingSearchChromeAnimation.focusSpring,
             value: isSearchFocused
         )
+    }
+
+    private var messagingSearchScopeBar: some View {
+        HStack(spacing: SplickTheme.Spacing.sm) {
+            searchScopeChip(
+                title: languageService.text(.messagingFilterUsers),
+                scope: .users
+            )
+            searchScopeChip(
+                title: languageService.text(.messagingFilterGroups),
+                scope: .groups
+            )
+            searchScopeChip(
+                title: languageService.text(.tabMessages),
+                scope: .messages
+            )
+        }
+        .padding(.horizontal, SplickTheme.Spacing.md)
+        .padding(.bottom, SplickTheme.Spacing.sm)
+    }
+
+    private func searchScopeChip(
+        title: String,
+        scope: ConversationListViewModel.SearchScope
+    ) -> some View {
+        let selected = viewModel.searchScope == scope
+        return Button {
+            viewModel.setSearchScope(scope)
+        } label: {
+            Text(title)
+                .font(SplickTheme.Typography.caption.weight(.semibold))
+                .foregroundStyle(
+                    selected
+                        ? SplickTheme.Colors.primaryGradientStart
+                        : SplickTheme.Colors.textSecondary
+                )
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, SplickTheme.Spacing.sm)
+                .background(
+                    selected
+                        ? SplickTheme.Colors.primaryGradientStart.opacity(0.12)
+                        : SplickTheme.Colors.secondaryBackground
+                )
+                .clipShape(Capsule(style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     private var inboxFilterShortcuts: some View {

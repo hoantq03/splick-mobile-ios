@@ -45,6 +45,9 @@ struct MessagingSearchResultRowView: View {
             return user.avatarURL
         case .message(let hit):
             return hit.peer.avatarUrl.flatMap(URL.init(string:))
+        case .conversation(let conversation):
+            return conversation.groupAvatarUrl.flatMap(URL.init(string:))
+                ?? conversation.peer?.avatarUrl.flatMap(URL.init(string:))
         }
     }
 
@@ -54,6 +57,8 @@ struct MessagingSearchResultRowView: View {
             return user.displayName
         case .message(let hit):
             return hit.peer.displayTitle
+        case .conversation(let conversation):
+            return conversation.displayTitle
         }
     }
 
@@ -71,6 +76,13 @@ struct MessagingSearchResultRowView: View {
             Text(hit.peer.displayTitle)
                 .font(SplickTheme.Typography.headline)
                 .foregroundStyle(SplickTheme.Colors.textPrimary)
+        case .conversation(let conversation):
+            HighlightedText(
+                conversation.displayTitle,
+                query: query,
+                font: SplickTheme.Typography.headline,
+                color: SplickTheme.Colors.textPrimary
+            )
         }
     }
 
@@ -91,11 +103,21 @@ struct MessagingSearchResultRowView: View {
                 font: SplickTheme.Typography.callout,
                 color: SplickTheme.Colors.textSecondary
             )
+        case .conversation(let conversation):
+            Text(conversation.lastMessage?.body ?? "")
+                .font(SplickTheme.Typography.callout)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
         }
     }
 
     private var trailingTimestamp: String? {
-        guard case .message(let hit) = result else { return nil }
-        return hit.createdAt.relativeString
+        switch result {
+        case .message(let hit):
+            return hit.createdAt.relativeString
+        case .conversation(let conversation):
+            return conversation.lastMessage?.createdAt.relativeString
+        case .user:
+            return nil
+        }
     }
 }

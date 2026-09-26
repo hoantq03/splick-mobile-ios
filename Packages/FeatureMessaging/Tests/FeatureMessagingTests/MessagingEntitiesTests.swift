@@ -216,5 +216,18 @@ final class MessagingEntitiesTests: XCTestCase {
         let userSummary = UserSummary(id: UUID(), username: "user_sum", displayName: "User Summary", avatarURL: nil)
         let userResult = MessagingSearchResult.user(userSummary)
         XCTAssertEqual(userResult.id, userSummary.id)
+
+        let conversation = Conversation(
+            id: convId,
+            type: .group,
+            unreadCount: 0,
+            peer: nil,
+            groupName: "Trip",
+            lastMessage: nil,
+            createdAt: date,
+            updatedAt: date
+        )
+        let conversationResult = MessagingSearchResult.conversation(conversation)
+        XCTAssertEqual(conversationResult.id, convId)
     }
 }
