@@ -52,7 +52,8 @@ public struct SplickButton: View {
     }
 
     public var body: some View {
-        Button {
+        let tapEnabled = !isDisabled && phase == .idle
+        KeyboardStickyTapControl(isEnabled: tapEnabled) {
             if phase == .idle {
                 loadingStartedAt = Date()
                 withAnimation(Self.morph) { phase = .loading }
@@ -102,10 +103,7 @@ public struct SplickButton: View {
                 }
             }
         }
-        .buttonStyle(.plain)
         .frame(maxWidth: .infinity, alignment: .center)
-        .disabled(isDisabled || phase != .idle)
-        .opacity(isDisabled && phase == .idle ? 0.5 : 1.0)
         .animation(Self.morph, value: phase)
         .task(id: outcomeFlags) {
             await runOutcome(outcomeFlags)

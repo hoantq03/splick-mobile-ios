@@ -11,9 +11,9 @@ final class GifKeywordSuggestControllerTests: XCTestCase {
             debounceMilliseconds: 40
         )
 
-        controller.onDraftChanged("ca")
-        controller.onDraftChanged("cat")
-        controller.onDraftChanged("cats")
+        controller.onDraftChanged("go ca")
+        controller.onDraftChanged("go cat")
+        controller.onDraftChanged("go cats")
 
         try? await Task.sleep(nanoseconds: 80_000_000)
 

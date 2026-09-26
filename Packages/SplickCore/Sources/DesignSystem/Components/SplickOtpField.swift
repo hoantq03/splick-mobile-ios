@@ -2,8 +2,8 @@ import SwiftUI
 import UIKit
 import Common
 
-/// Six-digit OTP entry with individual boxes. The real `TextField` sits on top so taps
-/// can show the keyboard again after dismiss, and tap-outside can resign first responder.
+/// Six-digit OTP entry with individual boxes. Input is a caret-hidden `UITextField`
+/// so the system cursor cannot sit across the whole row (misaligned with the cells).
 public struct SplickOtpField: View {
     public static let defaultLength = 6
 
@@ -14,7 +14,7 @@ public struct SplickOtpField: View {
     private let onComplete: ((String) -> Void)?
     private let cornerRadius: CGFloat
 
-    @FocusState private var isFocused: Bool
+    @State private var isFocused = false
     @Environment(\.suppressKeyboardAutoFocus) private var suppressKeyboardAutoFocus
     @Environment(\.usesBrandAuthChrome) private var usesBrandAuthChrome
     @Environment(\.colorScheme) private var colorScheme
@@ -41,45 +41,28 @@ public struct SplickOtpField: View {
 
     public var body: some View {
         VStack(alignment: .center, spacing: SplickTheme.Spacing.xs) {
-            GeometryReader { geometry in
-                let boxWidth = boxWidth(for: geometry.size.width)
-
-                ZStack {
-                    HStack(spacing: boxSpacing) {
-                        ForEach(0..<length, id: \.self) { index in
-                            otpBox(at: index, width: boxWidth)
-                        }
+            ZStack {
+                HStack(spacing: boxSpacing) {
+                    ForEach(0..<length, id: \.self) { index in
+                        otpBox(at: index)
                     }
-                    .frame(maxWidth: .infinity)
-                    .allowsHitTesting(false)
-
-                    TextField("", text: $code)
-                        .keyboardType(.numberPad)
-                        .textContentType(.oneTimeCode)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .focused($isFocused)
-                        .font(.system(size: 24, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.clear)
-                        .tint(.clear)
-                        .opacity(0.02)
-                        .textFieldStyle(.plain)
-                        .frame(maxWidth: .infinity, minHeight: boxHeight, maxHeight: boxHeight)
-                        .contentShape(Rectangle())
-                        .accessibilityLabel("Verification code, \(length) digits")
-                        .simultaneousGesture(
-                            TapGesture().onEnded {
-                                focusFromUserTap()
-                            }
-                        )
                 }
-                .accessibilityIdentifier(KeyboardDismissExempt.accessibilityIdentifier)
-                .frame(height: boxHeight)
+                .allowsHitTesting(false)
+
+                HiddenOtpTextField(
+                    code: $code,
+                    length: length,
+                    isFocused: $isFocused,
+                    onComplete: onComplete
+                )
+                .accessibilityLabel("Verification code, \(length) digits")
             }
             .frame(height: boxHeight)
-
-            if let errorMessage, !errorMessage.isEmpty {
-                SplickFieldErrorMessage(errorMessage, alignment: .center)
+            .clipped()
+            .contentShape(Rectangle())
+            .accessibilityIdentifier(KeyboardDismissExempt.accessibilityIdentifier)
+            .onTapGesture {
+                focusFromUserTap()
             }
         }
         .animation(Self.errorReveal, value: errorMessage)
@@ -100,16 +83,6 @@ public struct SplickOtpField: View {
                 requestFocusIfNeeded()
             }
         }
-        .onChange(of: code) { newValue in
-            let digits = newValue.filter(\.isNumber)
-            let trimmed = String(digits.prefix(length))
-            if trimmed != code {
-                code = trimmed
-            }
-            if trimmed.count == length {
-                onComplete?(trimmed)
-            }
-        }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) { _ in
             guard Date() >= ignoreKeyboardHideUntil else { return }
             isFocused = false
@@ -118,18 +91,12 @@ public struct SplickOtpField: View {
 
     private static let errorReveal = Animation.timingCurve(0.22, 1.0, 0.36, 1.0, duration: 0.42)
 
-    private func boxWidth(for totalWidth: CGFloat) -> CGFloat {
-        let spacing = boxSpacing * CGFloat(length - 1)
-        let computed = (totalWidth - spacing) / CGFloat(length)
-        return min(52, max(40, computed))
-    }
-
     private var activeIndex: Int {
         min(code.count, length - 1)
     }
 
     @ViewBuilder
-    private func otpBox(at index: Int, width: CGFloat) -> some View {
+    private func otpBox(at index: Int) -> some View {
         let digit = digit(at: index)
         let isActive = isFocused && index == activeIndex && code.count < length
         let isFilled = index < code.count
@@ -153,7 +120,8 @@ public struct SplickOtpField: View {
                     .monospacedDigit()
             }
         }
-        .frame(width: width, height: boxHeight)
+        .frame(maxWidth: .infinity)
+        .frame(height: boxHeight)
         .animation(.easeOut(duration: 0.15), value: code)
         .animation(.easeOut(duration: 0.15), value: isFocused)
     }
@@ -202,20 +170,132 @@ public struct SplickOtpField: View {
         }
     }
 
-    /// Tapping the boxes after the keyboard was dismissed must set `@FocusState` again.
-    /// SwiftUI can ignore a no-op `isFocused = true` after `keyboardDidHide`, so bounce
-    /// focus on the next run loop when the field is not currently focused.
     private func focusFromUserTap() {
         guard !suppressKeyboardAutoFocus else { return }
         ignoreKeyboardHideUntil = Date().addingTimeInterval(1)
-        guard !isFocused else { return }
-        DispatchQueue.main.async {
-            self.applyFocus()
-        }
+        applyFocus()
     }
 
     private func applyFocus() {
         ignoreKeyboardHideUntil = Date().addingTimeInterval(1)
         isFocused = true
+    }
+}
+
+/// Invisible number-pad field whose caret/selection are forced off so only the
+/// per-cell indicator in `SplickOtpField` is visible.
+private struct HiddenOtpTextField: UIViewRepresentable {
+    @Binding var code: String
+    var length: Int
+    @Binding var isFocused: Bool
+    var onComplete: ((String) -> Void)?
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(length: length, onComplete: onComplete)
+    }
+
+    func makeUIView(context: Context) -> CaretHiddenTextField {
+        let field = CaretHiddenTextField()
+        field.keyboardType = .numberPad
+        field.textContentType = .oneTimeCode
+        field.autocorrectionType = .no
+        field.autocapitalizationType = .none
+        field.spellCheckingType = .no
+        field.smartDashesType = .no
+        field.smartQuotesType = .no
+        field.smartInsertDeleteType = .no
+        field.borderStyle = .none
+        field.backgroundColor = .clear
+        field.textColor = .clear
+        field.tintColor = .clear
+        field.font = .systemFont(ofSize: 1)
+        field.delegate = context.coordinator
+        field.addTarget(
+            context.coordinator,
+            action: #selector(Coordinator.editingChanged),
+            for: .editingChanged
+        )
+        context.coordinator.field = field
+        return field
+    }
+
+    func updateUIView(_ uiView: CaretHiddenTextField, context: Context) {
+        context.coordinator.length = length
+        context.coordinator.onComplete = onComplete
+        context.coordinator.codeBinding = $code
+        context.coordinator.isFocusedBinding = $isFocused
+        if uiView.text != code {
+            uiView.text = code
+        }
+        let shouldFocus = isFocused
+        DispatchQueue.main.async {
+            if shouldFocus {
+                if !uiView.isFirstResponder {
+                    uiView.becomeFirstResponder()
+                }
+            } else if uiView.isFirstResponder {
+                uiView.resignFirstResponder()
+            }
+        }
+    }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var length: Int
+        var onComplete: ((String) -> Void)?
+        var codeBinding: Binding<String>?
+        var isFocusedBinding: Binding<Bool>?
+        weak var field: UITextField?
+
+        init(length: Int, onComplete: ((String) -> Void)?) {
+            self.length = length
+            self.onComplete = onComplete
+        }
+
+        @objc func editingChanged(_ sender: UITextField) {
+            applySanitized(sender.text ?? "")
+        }
+
+        func textFieldDidBeginEditing(_ textField: UITextField) {
+            isFocusedBinding?.wrappedValue = true
+        }
+
+        func textFieldDidEndEditing(_ textField: UITextField) {
+            isFocusedBinding?.wrappedValue = false
+        }
+
+        func textField(
+            _ textField: UITextField,
+            shouldChangeCharactersIn range: NSRange,
+            replacementString string: String
+        ) -> Bool {
+            let current = textField.text ?? ""
+            let nsCurrent = current as NSString
+            let next = nsCurrent.replacingCharacters(in: range, with: string)
+            applySanitized(next)
+            return false
+        }
+
+        private func applySanitized(_ raw: String) {
+            let trimmed = String(raw.filter(\.isNumber).prefix(length))
+            if field?.text != trimmed {
+                field?.text = trimmed
+            }
+            if codeBinding?.wrappedValue != trimmed {
+                codeBinding?.wrappedValue = trimmed
+            }
+            if trimmed.count == length {
+                onComplete?(trimmed)
+            }
+        }
+    }
+}
+
+private final class CaretHiddenTextField: UITextField {
+    override func caretRect(for position: UITextPosition) -> CGRect { .zero }
+
+    override func selectionRects(for range: UITextRange) -> [UITextSelectionRect] { [] }
+
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        false
     }
 }

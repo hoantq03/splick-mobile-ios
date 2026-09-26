@@ -1,9 +1,10 @@
 import Foundation
 
-/// Last-token GIF keyword from a composer draft. Pure rules, no NLP.
+/// GIF keyword from a composer draft: exactly two whitespace-separated words.
 public enum GifKeywordDetector {
     public static let minimumLength = 2
     public static let maximumLength = 40
+    public static let requiredWordCount = 2
 
     public static func keyword(
         in draft: String,
@@ -15,12 +16,17 @@ public enum GifKeywordDetector {
         let end = min(max(0, cursor ?? draft.count), draft.count)
         guard end > 0 else { return nil }
         let prefix = String(draft.prefix(end))
+        guard whitespaceWordCount(in: prefix) == requiredWordCount else { return nil }
         guard let token = lastAlphanumericToken(in: prefix) else { return nil }
 
         let folded = token.lowercased()
         guard folded.count >= minimumLength, folded.count <= maximumLength else { return nil }
         guard !stopwords.contains(folded) else { return nil }
         return token
+    }
+
+    private static func whitespaceWordCount(in prefix: String) -> Int {
+        prefix.split(whereSeparator: \.isWhitespace).filter { !$0.isEmpty }.count
     }
 
     private static func lastAlphanumericToken(in prefix: String) -> String? {
