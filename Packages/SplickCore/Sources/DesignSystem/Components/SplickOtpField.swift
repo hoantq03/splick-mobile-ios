@@ -55,6 +55,9 @@ public struct SplickOtpField: View {
                     isFocused: $isFocused,
                     onComplete: onComplete
                 )
+                .frame(width: 1, height: 1)
+                .opacity(0.01)
+                .allowsHitTesting(false)
                 .accessibilityLabel("Verification code, \(length) digits")
             }
             .frame(height: boxHeight)
@@ -209,6 +212,7 @@ private struct HiddenOtpTextField: UIViewRepresentable {
         field.textColor = .clear
         field.tintColor = .clear
         field.font = .systemFont(ofSize: 1)
+        field.isUserInteractionEnabled = false
         field.delegate = context.coordinator
         field.addTarget(
             context.coordinator,
