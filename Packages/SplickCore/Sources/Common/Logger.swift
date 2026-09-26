@@ -11,6 +11,7 @@ public enum LogCategory: String {
     case expense = "Expense"
     case feed = "Feed"
     case notification = "Notification"
+    case friends = "Friends"
 }
 
 public struct Log {
@@ -20,25 +21,56 @@ public struct Log {
         os.Logger(subsystem: subsystem, category: category.rawValue)
     }
 
-    public static func debug(_ message: String, category: LogCategory = .lifecycle) {
+    private static func formattedMessage(_ message: String, metadata: [String: String]) -> String {
+        guard !metadata.isEmpty else { return message }
+        let meta = metadata
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key)=\($0.value)" }
+            .joined(separator: " ")
+        return "\(message) [\(meta)]"
+    }
+
+    public static func debug(
+        _ message: String,
+        category: LogCategory = .lifecycle,
+        metadata: [String: String] = [:]
+    ) {
         #if DEBUG
-        logger(for: category).debug("\(message, privacy: .public)")
+        logger(for: category).debug("\(formattedMessage(message, metadata: metadata), privacy: .public)")
         #endif
     }
 
-    public static func info(_ message: String, category: LogCategory = .lifecycle) {
-        logger(for: category).info("\(message, privacy: .public)")
+    public static func info(
+        _ message: String,
+        category: LogCategory = .lifecycle,
+        metadata: [String: String] = [:]
+    ) {
+        logger(for: category).info("\(formattedMessage(message, metadata: metadata), privacy: .public)")
     }
 
-    public static func warning(_ message: String, category: LogCategory = .lifecycle) {
-        logger(for: category).warning("\(message, privacy: .public)")
+    public static func warning(
+        _ message: String,
+        category: LogCategory = .lifecycle,
+        metadata: [String: String] = [:]
+    ) {
+        logger(for: category).warning("\(formattedMessage(message, metadata: metadata), privacy: .public)")
     }
 
-    public static func error(_ message: String, category: LogCategory = .lifecycle) {
-        logger(for: category).error("\(message, privacy: .public)")
+    public static func error(
+        _ message: String,
+        category: LogCategory = .lifecycle,
+        metadata: [String: String] = [:]
+    ) {
+        logger(for: category).error("\(formattedMessage(message, metadata: metadata), privacy: .public)")
     }
 
-    public static func error(_ error: Error, category: LogCategory = .lifecycle) {
-        logger(for: category).error("\(error.localizedDescription, privacy: .public)")
+    public static func error(
+        _ error: Error,
+        category: LogCategory = .lifecycle,
+        metadata: [String: String] = [:]
+    ) {
+        logger(for: category).error(
+            "\(formattedMessage(error.localizedDescription, metadata: metadata), privacy: .public)"
+        )
     }
 }

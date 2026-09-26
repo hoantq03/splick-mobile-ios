@@ -8,6 +8,8 @@ public protocol APIEndpoint {
     var queryItems: [URLQueryItem]? { get }
     var body: Encodable? { get }
     var requiresAuth: Bool { get }
+    /// When true, APIClient adds `X-Refresh-Token` from TokenProvider on each attempt (including after refresh retry).
+    var sendsRefreshTokenHeader: Bool { get }
 }
 
 extension APIEndpoint {
@@ -15,6 +17,7 @@ extension APIEndpoint {
     public var queryItems: [URLQueryItem]? { nil }
     public var body: Encodable? { nil }
     public var requiresAuth: Bool { true }
+    public var sendsRefreshTokenHeader: Bool { false }
 
     public func asURLRequest(baseURL: String, encoder: JSONEncoder = .apiEncoder) throws -> URLRequest {
         guard var components = URLComponents(string: baseURL + path) else {

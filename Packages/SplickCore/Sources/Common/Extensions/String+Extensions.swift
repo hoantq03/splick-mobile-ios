@@ -6,6 +6,54 @@ extension String {
         return range(of: pattern, options: .regularExpression) != nil
     }
 
+    public var isValidUsername: Bool {
+        let pattern = #"^[a-zA-Z0-9_.]+$"#
+        return range(of: pattern, options: .regularExpression) != nil
+    }
+
+    /// Username suggestion from the local part of an email (`name@domain` → `name`).
+    /// Invalid characters become `_`; result is empty when it cannot meet username rules.
+    public var suggestedUsernameFromEmail: String {
+        let trimmedValue = trimmed
+        guard let atIndex = trimmedValue.firstIndex(of: "@") else { return "" }
+        let localPart = trimmedValue[..<atIndex]
+        var collapsed = ""
+        collapsed.reserveCapacity(localPart.count)
+        var lastWasUnderscore = false
+        for character in localPart {
+            let isAllowed = character.isLetter || character.isNumber || character == "_" || character == "."
+            let mapped: Character = isAllowed ? character : "_"
+            if mapped == "_" {
+                if lastWasUnderscore { continue }
+                lastWasUnderscore = true
+            } else {
+                lastWasUnderscore = false
+            }
+            collapsed.append(mapped)
+        }
+        collapsed = collapsed.trimmingCharacters(in: CharacterSet(charactersIn: "._"))
+        if collapsed.count > AppConstants.Validation.maxUsernameLength {
+            collapsed = String(collapsed.prefix(AppConstants.Validation.maxUsernameLength))
+        }
+        guard collapsed.count >= 3, collapsed.isValidUsername else { return "" }
+        return collapsed
+    }
+
+    /// E.164 — aligned with backend RegisterRequestValidator.
+    public var isValidE164Phone: Bool {
+        let pattern = #"^\+?[1-9]\d{7,14}$"#
+        return range(of: pattern, options: .regularExpression) != nil
+    }
+
+    /// Normalizes local input to E.164 when possible (e.g. 0901234567 → +84901234567).
+    /// Digits without `+` default to Vietnam (`+84`). `+` / `00` use the typed calling code.
+    public var normalizedE164Phone: String {
+        if let parsed = PhoneNumberParser.parse(self) {
+            return parsed.e164 ?? parsed.e164Candidate
+        }
+        return trimmed
+    }
+
     public var trimmed: String {
         trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -17,5 +65,20 @@ extension String {
     public func truncated(to limit: Int, trailing: String = "...") -> String {
         if count <= limit { return self }
         return String(prefix(limit)) + trailing
+    }
+
+    /// Given name for compact UI — drops Vietnamese family + middle names (keeps last segment when 3+ parts).
+    public var givenNameOnly: String {
+        let parts = trimmed.split(whereSeparator: \.isWhitespace).map(String.init)
+        switch parts.count {
+        case 0:
+            return trimmed
+        case 1:
+            return parts[0]
+        case 2:
+            return parts[0]
+        default:
+            return parts[parts.count - 1]
+        }
     }
 }

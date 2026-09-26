@@ -2,20 +2,36 @@ import Foundation
 import Networking
 
 enum MediaEndpoint: APIEndpoint {
-    case upload
+    case initiateUpload(InitiateUploadRequestDTO)
+    case completeUpload(uploadId: UUID)
     case delete(id: UUID)
 
     var path: String {
         switch self {
-        case .upload: return "/v1/media/upload"
-        case .delete(let id): return "/v1/media/\(id)"
+        case .initiateUpload:
+            return "/v1/media/uploads"
+        case .completeUpload(let uploadId):
+            return "/v1/media/uploads/\(uploadId)/complete"
+        case .delete(let id):
+            return "/v1/media/\(id)"
         }
     }
 
     var method: HTTPMethod {
         switch self {
-        case .upload: return .post
-        case .delete: return .delete
+        case .initiateUpload, .completeUpload:
+            return .post
+        case .delete:
+            return .delete
+        }
+    }
+
+    var body: Encodable? {
+        switch self {
+        case .initiateUpload(let request):
+            return request
+        case .completeUpload, .delete:
+            return nil
         }
     }
 }
