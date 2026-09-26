@@ -627,14 +627,43 @@ public struct FriendsRootView: View {
     }
 
     private var friendsDirectoryListHeader: some View {
-        HStack {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
             Text(languageService.text(.friendsListTitle))
                 .font(SplickTheme.Typography.headline)
                 .foregroundStyle(SplickTheme.Colors.textPrimary)
-            Spacer(minLength: 0)
+            friendsDirectoryTabBar
         }
         .padding(.top, SplickTheme.Spacing.sm)
         .padding(.bottom, SplickTheme.Spacing.xxxs)
+    }
+
+    private var friendsDirectoryTabBar: some View {
+        HStack(spacing: 2) {
+            directoryTabButton(.users, title: languageService.text(.friendsTabUsers))
+            directoryTabButton(.all, title: languageService.text(.friendsTabAll))
+            directoryTabButton(.groups, title: languageService.text(.friendsTabGroups))
+        }
+        .padding(3)
+        .background(SplickTheme.Colors.secondaryBackground)
+        .clipShape(Capsule(style: .continuous))
+    }
+
+    private func directoryTabButton(_ tab: FriendsDirectoryTab, title: String) -> some View {
+        let selected = viewModel.directoryTab == tab
+        return Button {
+            viewModel.directoryTab = tab
+        } label: {
+            Text(title)
+                .font(.system(size: 14, weight: selected ? .semibold : .medium))
+                .foregroundStyle(selected ? Color.white : SplickTheme.Colors.textSecondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(selected ? SplickTheme.Colors.primaryGradientStart : Color.clear)
+                )
+        }
+        .buttonStyle(.plain)
     }
 
     private func friendRequestShortcut(
@@ -869,7 +898,7 @@ public struct FriendsRootView: View {
 
     @ViewBuilder
     private var searchResultsContent: some View {
-        let items = viewModel.combinedSearchItems
+        let items = viewModel.visibleSearchItems
         let itemIDs = items.map(\.id)
 
         ScrollViewReader { proxy in
@@ -1020,10 +1049,21 @@ public struct FriendsRootView: View {
 
     @ViewBuilder
     private var combinedDirectoryContent: some View {
-        let items = viewModel.combinedDirectoryItems
-        let isInitialLoading = (viewModel.friendsState == .idle || viewModel.friendsState == .loading
-            || viewModel.groupsState == .idle || viewModel.groupsState == .loading)
-            && viewModel.friends.isEmpty && viewModel.groups.isEmpty
+        let items = viewModel.visibleDirectoryItems
+        let isInitialLoading: Bool = {
+            let friendsPending = (viewModel.friendsState == .idle || viewModel.friendsState == .loading)
+                && viewModel.friends.isEmpty
+            let groupsPending = (viewModel.groupsState == .idle || viewModel.groupsState == .loading)
+                && viewModel.groups.isEmpty
+            switch viewModel.directoryTab {
+            case .users:
+                return friendsPending
+            case .all:
+                return friendsPending && groupsPending
+            case .groups:
+                return groupsPending
+            }
+        }()
 
         switch true {
         case isInitialLoading:
@@ -1096,23 +1136,26 @@ public struct FriendsRootView: View {
     }
 
     private var directoryEmptyStateCard: some View {
-        VStack(spacing: SplickTheme.Spacing.md) {
-            Image(systemName: "person.2")
+        let content = directoryEmptyContent
+        return VStack(spacing: SplickTheme.Spacing.md) {
+            Image(systemName: content.icon)
                 .font(.system(size: 40))
                 .foregroundStyle(SplickTheme.Colors.textTertiary)
 
-            Text(languageService.text(.friendsDirectoryEmptyTitle))
+            Text(languageService.text(content.title))
                 .font(SplickTheme.Typography.title)
                 .foregroundStyle(SplickTheme.Colors.textPrimary)
                 .multilineTextAlignment(.center)
 
-            Text(languageService.text(.friendsDirectoryEmptyMessage))
+            Text(languageService.text(content.message))
                 .font(SplickTheme.Typography.body)
                 .foregroundStyle(SplickTheme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
 
-            SplickButton(languageService.text(.friendsCreateGroup), style: .primary) {
-                showCreateGroup = true
+            if content.showsCreateGroup {
+                SplickButton(languageService.text(.friendsCreateGroup), style: .primary) {
+                    showCreateGroup = true
+                }
             }
         }
         .frame(maxWidth: .infinity)
@@ -1121,15 +1164,41 @@ public struct FriendsRootView: View {
         .splickCard()
     }
 
+    private var directoryEmptyContent: (icon: String, title: L10nKey, message: L10nKey, showsCreateGroup: Bool) {
+        switch viewModel.directoryTab {
+        case .users:
+            return ("person.2", .friendsUsersEmptyTitle, .friendsUsersEmptyMessage, false)
+        case .all:
+            return ("person.2", .friendsDirectoryEmptyTitle, .friendsDirectoryEmptyMessage, true)
+        case .groups:
+            return ("person.3", .friendsGroupsEmptyTitle, .friendsGroupsEmptyMessage, true)
+        }
+    }
+
     private var directoryLoadFailed: Bool {
-        if case .failed = viewModel.friendsState { return true }
-        if case .failed = viewModel.groupsState { return true }
+        switch viewModel.directoryTab {
+        case .users:
+            if case .failed = viewModel.friendsState { return viewModel.friends.isEmpty }
+        case .all:
+            if case .failed = viewModel.friendsState, case .failed = viewModel.groupsState {
+                return true
+            }
+        case .groups:
+            if case .failed = viewModel.groupsState { return viewModel.groups.isEmpty }
+        }
         return false
     }
 
     private var directoryErrorMessage: String {
-        if case .failed(let message) = viewModel.friendsState { return message }
-        if case .failed(let message) = viewModel.groupsState { return message }
+        switch viewModel.directoryTab {
+        case .users:
+            if case .failed(let message) = viewModel.friendsState { return message }
+        case .all:
+            if case .failed(let message) = viewModel.friendsState { return message }
+            if case .failed(let message) = viewModel.groupsState { return message }
+        case .groups:
+            if case .failed(let message) = viewModel.groupsState { return message }
+        }
         return languageService.text(.friendsGenericError)
     }
 

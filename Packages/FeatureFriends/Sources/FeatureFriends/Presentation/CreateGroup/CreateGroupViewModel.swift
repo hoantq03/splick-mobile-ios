@@ -62,9 +62,9 @@ public final class CreateGroupViewModel: ObservableObject {
         friends.filter { selectedMemberIds.contains($0.id) }
     }
 
-    var shouldShowMemberSuggestions: Bool {
-        isMemberSearchFocused
-            || !memberSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    var showsMemberPopup: Bool {
+        let query = memberSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        return isMemberSearchFocused || !query.isEmpty
     }
 
     var filteredFriends: [UserSummary] {

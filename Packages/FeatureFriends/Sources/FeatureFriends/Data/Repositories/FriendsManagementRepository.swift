@@ -102,6 +102,7 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
             )
             let results = response.content
                 .map { UserSearchResult(user: FriendsMapper.toUserSummary($0), friendStatus: .friends) }
+                .filter { !DeletedUser.isDeleted(displayName: $0.user.displayName) }
                 .sorted {
                     $0.user.displayName.localizedCaseInsensitiveCompare($1.user.displayName)
                         == .orderedAscending
@@ -112,7 +113,8 @@ public struct FriendsManagementRepository: FriendsManagementRepositoryProtocol {
         let response: SocialPageUserSearchResponseDTO = try await apiClient.request(
             SocialEndpoint.searchUsers(query: normalized, page: page, size: size)
         )
-        return await resolveSearchResults(response.content.map(FriendsMapper.toUserSearchResult))
+        let results = await resolveSearchResults(response.content.map(FriendsMapper.toUserSearchResult))
+        return results.filter { !DeletedUser.isDeleted(displayName: $0.user.displayName) }
     }
 
     public func discoveryPreference() async throws -> Bool {

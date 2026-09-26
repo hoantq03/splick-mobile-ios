@@ -7,6 +7,12 @@ import Localization
 import Networking
 import SplickDomain
 
+enum FriendsDirectoryTab: String, CaseIterable {
+    case users
+    case all
+    case groups
+}
+
 enum FriendsDirectoryItem: Identifiable {
     case friend(UserSummary)
     case group(SplickDomain.Group)
@@ -62,6 +68,7 @@ enum FriendsSearchItem: Identifiable {
 public final class FriendsRootViewModel: ObservableObject {
     @Published var friends: [UserSummary] = []
     @Published var groups: [SplickDomain.Group] = []
+    @Published var directoryTab: FriendsDirectoryTab = .all
     @Published private(set) var combinedDirectoryItems: [FriendsDirectoryItem] = []
     @Published private(set) var combinedSearchItems: [FriendsSearchItem] = []
     @Published var friendsState: LoadingState<[UserSummary]> = .idle
@@ -116,6 +123,14 @@ public final class FriendsRootViewModel: ObservableObject {
 
     public var isSearching: Bool {
         !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var visibleDirectoryItems: [FriendsDirectoryItem] {
+        combinedDirectoryItems.visible(for: directoryTab)
+    }
+
+    var visibleSearchItems: [FriendsSearchItem] {
+        combinedSearchItems.visible(for: directoryTab)
     }
 
     private var groupsDirectoryObserver: AnyCancellable?
@@ -468,8 +483,12 @@ public final class FriendsRootViewModel: ObservableObject {
     }
 
     func loadMoreFriendsIfNeeded(currentItemID: String?) async {
+        let lastFriendID = combinedDirectoryItems.last(where: {
+            if case .friend = $0 { return true }
+            return false
+        })?.id
         guard let currentItemID,
-              currentItemID == combinedDirectoryItems.last?.id,
+              currentItemID == lastFriendID,
               canLoadMoreFriends,
               !isLoadingMoreFriends else { return }
         await loadMoreFriends()
@@ -496,8 +515,12 @@ public final class FriendsRootViewModel: ObservableObject {
     }
 
     func loadMoreSearchIfNeeded(currentItemID: String?) async {
+        let lastUserID = combinedSearchItems.last(where: {
+            if case .user = $0 { return true }
+            return false
+        })?.id
         guard let currentItemID,
-              currentItemID == combinedSearchItems.last?.id,
+              currentItemID == lastUserID,
               canLoadMoreSearch,
               !isLoadingMoreSearch,
               !isSearchFetching else { return }
@@ -891,9 +914,10 @@ public final class FriendsRootViewModel: ObservableObject {
 
     private func filterFriends(matching query: String) -> [UserSummary] {
         friends.filter { friend in
-            friend.displayName.localizedCaseInsensitiveContains(query)
-                || friend.username.localizedCaseInsensitiveContains(query)
-                || (friend.subtitle?.localizedCaseInsensitiveContains(query) ?? false)
+            !DeletedUser.isDeleted(displayName: friend.displayName)
+                && (friend.displayName.localizedCaseInsensitiveContains(query)
+                    || friend.username.localizedCaseInsensitiveContains(query)
+                    || (friend.subtitle?.localizedCaseInsensitiveContains(query) ?? false))
         }
     }
 
@@ -1076,6 +1100,40 @@ public final class FriendsRootViewModel: ObservableObject {
                 friendStatus: override,
                 distanceMeters: item.distanceMeters
             )
+        }
+    }
+}
+
+private extension Array where Element == FriendsDirectoryItem {
+    func visible(for tab: FriendsDirectoryTab) -> [FriendsDirectoryItem] {
+        filter { item in
+            switch (tab, item) {
+            case (.users, .friend):
+                return true
+            case (.all, _):
+                return true
+            case (.groups, .group):
+                return true
+            default:
+                return false
+            }
+        }
+    }
+}
+
+private extension Array where Element == FriendsSearchItem {
+    func visible(for tab: FriendsDirectoryTab) -> [FriendsSearchItem] {
+        filter { item in
+            switch (tab, item) {
+            case (.users, .user):
+                return true
+            case (.all, _):
+                return true
+            case (.groups, .group), (.groups, .joinGroupInvite):
+                return true
+            default:
+                return false
+            }
         }
     }
 }

@@ -51,77 +51,41 @@ public struct CreateGroupSheet: View {
 
     public var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: SplickTheme.Spacing.lg) {
+            VStack(spacing: SplickTheme.Spacing.sm) {
+                VStack(alignment: .leading, spacing: SplickTheme.Spacing.md) {
                     avatarSection
-
-                    VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-                        Text(languageService.text(.friendsGroupName))
-                            .font(SplickTheme.Typography.headline)
-
-                        TextField(languageService.text(.friendsGroupNamePlaceholder), text: $viewModel.name)
-                            .textInputAutocapitalization(.words)
-                            .padding(SplickTheme.Spacing.sm)
-                            .background(SplickTheme.Colors.tertiaryBackground)
-                            .clipShape(
-                                RoundedRectangle(
-                                    cornerRadius: CreateGroupMetrics.fieldCornerRadius,
-                                    style: .continuous
-                                )
-                            )
-                    }
-                    .splickCard()
-
-                    VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-                        Text(languageService.text(.friendsGroupDescriptionOptional))
-                            .font(SplickTheme.Typography.headline)
-
-                        TextField(
-                            languageService.text(.friendsGroupDescriptionPlaceholder),
-                            text: $viewModel.groupDescription,
-                            axis: .vertical
-                        )
-                            .lineLimit(3...6)
-                            .padding(SplickTheme.Spacing.sm)
-                            .frame(minHeight: 88, alignment: .topLeading)
-                            .background(SplickTheme.Colors.tertiaryBackground)
-                            .clipShape(
-                                RoundedRectangle(
-                                    cornerRadius: CreateGroupMetrics.fieldCornerRadius,
-                                    style: .continuous
-                                )
-                            )
-                    }
-                    .splickCard()
-
-                    membersSection
-
-                    if let success = viewModel.successMessage {
-                        Text(success)
-                            .font(SplickTheme.Typography.caption)
-                            .foregroundStyle(SplickTheme.Colors.success)
-                    }
-
-                    if let error = viewModel.errorMessage {
-                        Text(error)
-                            .font(SplickTheme.Typography.caption)
-                            .foregroundStyle(SplickTheme.Colors.error)
-                    }
-
-                    SplickButton(
-                        languageService.text(.friendsCreateGroup),
-                        isLoading: viewModel.isLoading,
-                        isDisabled: !viewModel.canSubmit
-                    ) {
-                        Task { await viewModel.create() }
-                    }
+                    detailsCard
                 }
-                .padding(SplickTheme.Spacing.md)
-                .padding(.bottom, SplickTheme.Spacing.xl)
+
+                membersSection
+                    .frame(maxHeight: .infinity, alignment: .top)
+
+                if let success = viewModel.successMessage {
+                    Text(success)
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.success)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                if let error = viewModel.errorMessage {
+                    Text(error)
+                        .font(SplickTheme.Typography.caption)
+                        .foregroundStyle(SplickTheme.Colors.error)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                SplickButton(
+                    languageService.text(.friendsCreateGroup),
+                    isLoading: viewModel.isLoading,
+                    isDisabled: !viewModel.canSubmit
+                ) {
+                    Task { await viewModel.create() }
+                }
             }
+            .padding(SplickTheme.Spacing.md)
+            .animation(.easeInOut(duration: 0.2), value: viewModel.showsMemberPopup)
             .background(SplickTheme.Colors.background)
             .dismissKeyboardOnTap()
-            .scrollDismissesKeyboard(.interactively)
             .navigationTitle(languageService.text(.friendsCreateGroup))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -135,6 +99,38 @@ public struct CreateGroupSheet: View {
         }
     }
 
+    private var detailsCard: some View {
+        VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
+            TextField(languageService.text(.friendsGroupNamePlaceholder), text: $viewModel.name)
+                .textInputAutocapitalization(.words)
+                .padding(SplickTheme.Spacing.sm)
+                .background(SplickTheme.Colors.tertiaryBackground)
+                .clipShape(
+                    RoundedRectangle(
+                        cornerRadius: CreateGroupMetrics.fieldCornerRadius,
+                        style: .continuous
+                    )
+                )
+
+            TextField(
+                languageService.text(.friendsGroupDescriptionPlaceholder),
+                text: $viewModel.groupDescription,
+                axis: .vertical
+            )
+            .lineLimit(2...4)
+            .padding(SplickTheme.Spacing.sm)
+            .frame(minHeight: 72, alignment: .topLeading)
+            .background(SplickTheme.Colors.tertiaryBackground)
+            .clipShape(
+                RoundedRectangle(
+                    cornerRadius: CreateGroupMetrics.fieldCornerRadius,
+                    style: .continuous
+                )
+            )
+        }
+        .splickCard()
+    }
+
     private var avatarSection: some View {
         VStack(spacing: SplickTheme.Spacing.sm) {
             PhotosPicker(selection: $viewModel.selectedPhotoItem, matching: .images) {
@@ -144,9 +140,13 @@ public struct CreateGroupSheet: View {
                 Task { await viewModel.onPhotoItemChanged() }
             }
 
-            Text(languageService.text(.friendsGroupAvatar))
-                .font(SplickTheme.Typography.caption)
-                .foregroundStyle(SplickTheme.Colors.textSecondary)
+            Text(
+                languageService.text(
+                    viewModel.previewImage == nil ? .friendsGroupPickPhoto : .friendsGroupAvatar
+                )
+            )
+            .font(SplickTheme.Typography.caption.weight(.medium))
+            .foregroundStyle(SplickTheme.Colors.textSecondary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, SplickTheme.Spacing.xs)
@@ -154,37 +154,49 @@ public struct CreateGroupSheet: View {
 
     @ViewBuilder
     private var groupAvatarPreview: some View {
-        if let preview = viewModel.previewImage {
-            Image(uiImage: preview)
-                .resizable()
-                .scaledToFill()
-                .frame(width: CreateGroupMetrics.avatarSize, height: CreateGroupMetrics.avatarSize)
-                .clipShape(Circle())
-                .overlay {
-                    Circle()
-                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
-                }
-        } else {
-            ZStack {
+        ZStack(alignment: .bottomTrailing) {
+            if let preview = viewModel.previewImage {
+                Image(uiImage: preview)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: CreateGroupMetrics.avatarSize, height: CreateGroupMetrics.avatarSize)
+                    .clipShape(Circle())
+                    .overlay {
+                        Circle()
+                            .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+                    }
+            } else {
                 Circle()
                     .fill(SplickTheme.Colors.secondaryBackground)
                     .frame(width: CreateGroupMetrics.avatarSize, height: CreateGroupMetrics.avatarSize)
-
-                VStack(spacing: 4) {
-                    Image(systemName: "camera.fill")
-                        .font(.title3)
-                    Text(languageService.text(.friendsGroupPickPhoto))
-                        .font(.system(size: 11, weight: .medium))
-                }
-                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    .overlay {
+                        Image(systemName: "camera.fill")
+                            .font(.title3)
+                            .foregroundStyle(SplickTheme.Colors.textSecondary)
+                    }
             }
+
+            Image(systemName: "camera.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 28, height: 28)
+                .background(SplickTheme.Colors.primaryGradientStart)
+                .clipShape(Circle())
         }
     }
 
     private var membersSection: some View {
         VStack(alignment: .leading, spacing: SplickTheme.Spacing.sm) {
-            Text(languageService.text(.messagingGroupMembersTitle))
-                .font(SplickTheme.Typography.headline)
+            HStack {
+                Text(languageService.text(.messagingGroupMembersTitle))
+                    .font(SplickTheme.Typography.headline)
+                Spacer()
+                if !viewModel.selectedMembers.isEmpty {
+                    Text("\(viewModel.selectedMembers.count)")
+                        .font(SplickTheme.Typography.caption.weight(.semibold))
+                        .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                }
+            }
 
             if viewModel.isLoadingFriends {
                 HStack(spacing: SplickTheme.Spacing.sm) {
@@ -237,13 +249,15 @@ public struct CreateGroupSheet: View {
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
 
-                if viewModel.shouldShowMemberSuggestions {
+                if viewModel.showsMemberPopup {
                     memberSearchResultsList
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .frame(maxWidth: .infinity, maxHeight: 280, alignment: .top)
+                        .background(SplickTheme.Colors.secondaryBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.large, style: .continuous))
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
         }
-        .animation(.easeInOut(duration: 0.24), value: viewModel.shouldShowMemberSuggestions)
         .animation(.easeInOut(duration: 0.24), value: viewModel.selectedMemberIds)
         .splickCard()
     }
@@ -307,44 +321,44 @@ public struct CreateGroupSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(SplickTheme.Spacing.sm)
         } else {
-            VStack(spacing: 0) {
-                ForEach(viewModel.filteredFriends) { friend in
-                    HStack(spacing: SplickTheme.Spacing.sm) {
-                        HStack(spacing: SplickTheme.Spacing.sm) {
-                            AvatarView(
-                                imageURL: friend.avatarURL,
-                                name: friend.displayName,
-                                size: .small
-                            )
-                            .frame(width: 32, height: 32)
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(friend.displayName)
-                                    .font(SplickTheme.Typography.callout)
-                                    .foregroundStyle(SplickTheme.Colors.textPrimary)
-                                Text("@\(friend.username)")
-                                    .font(SplickTheme.Typography.caption)
-                                    .foregroundStyle(SplickTheme.Colors.textTertiary)
-                            }
-
-                            Spacer(minLength: 0)
-                        }
-
+            ScrollView {
+                VStack(spacing: SplickTheme.Spacing.xs) {
+                    ForEach(viewModel.filteredFriends) { friend in
                         Button {
                             viewModel.addMember(friend)
                         } label: {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.system(size: 18))
-                                .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
-                                .frame(width: 28, height: 28)
+                            HStack(spacing: SplickTheme.Spacing.sm) {
+                                AvatarView(
+                                    imageURL: friend.avatarURL,
+                                    name: friend.displayName,
+                                    size: .small
+                                )
+                                .frame(width: 32, height: 32)
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(friend.displayName)
+                                        .font(SplickTheme.Typography.callout)
+                                        .foregroundStyle(SplickTheme.Colors.textPrimary)
+                                    Text("@\(friend.username)")
+                                        .font(SplickTheme.Typography.caption)
+                                        .foregroundStyle(SplickTheme.Colors.textTertiary)
+                                }
+
+                                Spacer(minLength: 0)
+
+                                Image(systemName: "plus")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                                    .frame(width: 28, height: 28)
+                                    .background(SplickTheme.Colors.primaryGradientStart.opacity(0.12))
+                                    .clipShape(Circle())
+                            }
+                            .padding(.horizontal, SplickTheme.Spacing.sm)
+                            .padding(.vertical, 8)
+                            .background(SplickTheme.Colors.secondaryBackground)
+                            .clipShape(RoundedRectangle(cornerRadius: SplickTheme.CornerRadius.pill, style: .continuous))
                         }
                         .buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, SplickTheme.Spacing.sm)
-                    .padding(.vertical, 10)
-
-                    if friend.id != viewModel.filteredFriends.last?.id {
-                        Divider().padding(.leading, 48)
                     }
                 }
             }
