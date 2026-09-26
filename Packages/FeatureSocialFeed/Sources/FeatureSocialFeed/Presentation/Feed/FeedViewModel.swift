@@ -5,6 +5,10 @@ import Localization
 import DesignSystem
 import SplickDomain
 
+enum OwnPostPublished {
+    static let notification = Notification.Name("splick.ownPostPublished")
+}
+
 public struct GuestInviteSharePayload: Identifiable, Equatable {
     public let id = UUID()
     public let message: String
@@ -90,6 +94,12 @@ public final class FeedViewModel: ObservableObject {
     @Published var pendingGuestInviteShare: GuestInviteSharePayload?
     private var postUploadTasks: [UUID: Task<Void, Never>] = [:]
     private var pendingPostUploadInputs: [UUID: CreatePostInput] = [:]
+    /// Local ids deleted while upload is still in flight. The server post is deleted when create returns.
+    private var discardedUploadIds = Set<UUID>()
+    /// Ids deleted this session. A stale feed or startup payload must not restore them.
+    private var deletedPostIds = Set<UUID>()
+    /// Local optimistic id → server id, so a delete started on the local card still hits the server.
+    private var localToServerId: [UUID: UUID] = [:]
 
     /// O(1) lookup for post mutations — rebuilt on full-feed assign, patched on insert/remove.
     private var postIndexById: [UUID: Int] = [:]
@@ -203,24 +213,27 @@ public final class FeedViewModel: ObservableObject {
         // Cancel any in-flight `GET /v1/feed` that raced startup.
         loadFeedTask?.cancel()
         loadFeedTask = nil
-        assignPosts(startupPosts, preserveVersionsFrom: nil)
-        pinFeedFrontier(from: startupPosts)
+        let visible = startupPosts.filter { !deletedPostIds.contains($0.id) }
+        guard !visible.isEmpty else { return }
+        assignPosts(visible, preserveVersionsFrom: nil)
+        pinFeedFrontier(from: visible)
         state = .loaded(posts)
         currentPage = 0
-        canLoadMore = startupPosts.count >= 20
-        hasReachedFeedEnd = startupPosts.count < 20
+        canLoadMore = visible.count >= 20
+        hasReachedFeedEnd = visible.count < 20
         prefetchImages(for: Array(posts.prefix(Self.initialPrefetchPostCount)))
         persistFeedCache()
     }
 
     /// Applies disk-cached feed posts when memory is empty (cold start before network).
     public func applyCachedPostsIfEmpty(_ cached: [Post]) {
-        guard posts.isEmpty, !cached.isEmpty else { return }
-        assignPosts(cached, preserveVersionsFrom: nil)
-        pinFeedFrontier(from: cached)
+        let visible = cached.filter { !deletedPostIds.contains($0.id) }
+        guard posts.isEmpty, !visible.isEmpty else { return }
+        assignPosts(visible, preserveVersionsFrom: nil)
+        pinFeedFrontier(from: visible)
         state = .loaded(posts)
         currentPage = 0
-        canLoadMore = cached.count >= 20
+        canLoadMore = visible.count >= 20
         hasReachedFeedEnd = false
         prefetchImages(for: Array(posts.prefix(Self.initialPrefetchPostCount)))
     }
@@ -383,7 +396,9 @@ public final class FeedViewModel: ObservableObject {
             let mergeSignpost = FeedSignposts.beginFeedMerge()
             let companionNames = companionGroupNameIndex()
             let previousById = Dictionary(uniqueKeysWithValues: self.posts.map { ($0.id, $0) })
-            let hydratedPosts = posts.map { preserveClientMetadata(on: $0, companionNames: companionNames) }
+            let hydratedPosts = posts
+                .filter { !deletedPostIds.contains($0.id) }
+                .map { preserveClientMetadata(on: $0, companionNames: companionNames) }
             let merged = mergeFeedPreservingClientState(with: hydratedPosts)
             assignPosts(
                 merged.map { $0.ensuringVersion(relativeTo: previousById[$0.id]) },
@@ -1004,36 +1019,71 @@ public final class FeedViewModel: ObservableObject {
     }
 
     func deletePost(id: UUID) async {
-        guard let index = indexOfPost(id: id) else { return }
-        let post = posts[index]
-
-        if postUploadStates[id] != nil {
-            cancelPendingPostUpload(postId: id)
-            posts.remove(at: index)
-            rebuildPostIndex()
-            cachedCompanionGroupNames.removeValue(forKey: id)
+        if postUploadStates[id] != nil || pendingPostUploadInputs[id] != nil {
+            deletedPostIds.insert(id)
+            if postUploadTasks[id] != nil {
+                discardedUploadIds.insert(id)
+            } else {
+                cancelPendingPostUpload(postId: id)
+            }
+            removePostFromFeed(id)
+            postUploadStates.removeValue(forKey: id)
             markPostsLoaded()
+            persistFeedCache()
             return
         }
 
+        let serverId = localToServerId.removeValue(forKey: id) ?? id
+        guard let index = indexOfPost(id: id) ?? indexOfPost(id: serverId) else {
+            if serverId != id {
+                await deletePublishedPost(serverId: serverId, localId: id)
+            }
+            return
+        }
+        let post = posts[index]
+
         guard post.canDelete else {
+            if serverId != id {
+                localToServerId[id] = serverId
+            }
             alertMessage = languageService.text(.feedPostDeleteHasEvidence)
             return
         }
 
+        await deletePublishedPost(serverId: serverId, localId: id)
+    }
+
+    private func deletePublishedPost(serverId: UUID, localId: UUID) async {
         do {
-            try await deletePostUseCase.execute(postId: id)
-            if let currentIndex = indexOfPost(id: id) {
-                posts.remove(at: currentIndex)
-                rebuildPostIndex()
-                cachedCompanionGroupNames.removeValue(forKey: id)
+            try await deletePostUseCase.execute(postId: serverId)
+            deletedPostIds.insert(serverId)
+            deletedPostIds.insert(localId)
+            removePostFromFeed(localId)
+            if serverId != localId {
+                removePostFromFeed(serverId)
             }
             markPostsLoaded()
+            persistFeedCache()
             await onPostsMutated?()
         } catch {
+            if serverId != localId {
+                localToServerId[localId] = serverId
+            }
             alertMessage = languageService.localizedMessage(for: error)
             Log.error(error, category: .feed)
         }
+    }
+
+    private func removePostFromFeed(_ id: UUID) {
+        guard let index = indexOfPost(id: id) else {
+            supplementalPostsById.removeValue(forKey: id)
+            cachedCompanionGroupNames.removeValue(forKey: id)
+            return
+        }
+        posts.remove(at: index)
+        rebuildPostIndex()
+        cachedCompanionGroupNames.removeValue(forKey: id)
+        supplementalPostsById.removeValue(forKey: id)
     }
 
     private func streakWarningIfDeleteBreaks(_ post: Post) async -> StreakDeleteWarning? {
@@ -1072,12 +1122,33 @@ public final class FeedViewModel: ObservableObject {
 
         do {
             let serverPost = try await createPostUseCase.execute(input)
+            if discardedUploadIds.remove(localPostId) != nil {
+                postUploadStates.removeValue(forKey: localPostId)
+                pendingPostUploadInputs.removeValue(forKey: localPostId)
+                OptimisticPostBuilder.cleanupPendingMedia(postId: localPostId)
+                do {
+                    try await deletePostUseCase.execute(postId: serverPost.id)
+                    deletedPostIds.insert(serverPost.id)
+                } catch {
+                    Log.error(error, category: .feed)
+                }
+                persistFeedCache()
+                return
+            }
+            localToServerId[localPostId] = serverPost.id
             replaceOptimisticPost(localId: localPostId, with: serverPost)
             postUploadStates.removeValue(forKey: localPostId)
+            NotificationCenter.default.post(name: OwnPostPublished.notification, object: nil)
             pendingPostUploadInputs.removeValue(forKey: localPostId)
             OptimisticPostBuilder.cleanupPendingMedia(postId: localPostId)
             presentGuestInviteShareIfNeeded(for: serverPost)
         } catch {
+            if discardedUploadIds.remove(localPostId) != nil {
+                pendingPostUploadInputs.removeValue(forKey: localPostId)
+                postUploadStates.removeValue(forKey: localPostId)
+                OptimisticPostBuilder.cleanupPendingMedia(postId: localPostId)
+                return
+            }
             if error.isRequestCancellation { return }
             let recovery = PostUploadFailure.recovery(for: error)
             let message: String
