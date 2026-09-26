@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 import Common
 import Localization
 import SplickDomain
@@ -8,6 +9,7 @@ public struct PostPeekOverlay: View {
     @Environment(\.currentUserSummary) private var currentUserSummary
 
     private let post: Post
+    private let mediaIndex: Int
     private let onDismiss: () -> Void
     private let onOpen: () -> Void
 
@@ -19,10 +21,12 @@ public struct PostPeekOverlay: View {
 
     public init(
         post: Post,
+        mediaIndex: Int = 0,
         onDismiss: @escaping () -> Void,
         onOpen: @escaping () -> Void
     ) {
         self.post = post
+        self.mediaIndex = mediaIndex
         self.onDismiss = onDismiss
         self.onOpen = onOpen
     }
@@ -156,20 +160,25 @@ public struct PostPeekOverlay: View {
     }
 
     private var mediaPreview: some View {
-        let firstMedia = post.displayMediaItems.first
+        let media = previewMedia
+        let isVideo = media?.mediaType == .video
+        let videoURL = isVideo ? media?.mediaURL : nil
+        let posterURL = media?.thumbnailURL
+            ?? (isVideo ? post.thumbnailURL : nil)
+            ?? (isVideo ? nil : media?.mediaURL)
+            ?? post.imageURL
         let mediaShape = RoundedRectangle(cornerRadius: Self.mediaCornerRadius, style: .continuous)
 
         return Color.clear
             .aspectRatio(1, contentMode: .fit)
             .overlay {
-                GridThumbnailImage(
-                    url: firstMedia?.thumbnailURL
-                        ?? firstMedia?.mediaURL
-                        ?? post.thumbnailURL
-                        ?? post.imageURL,
-                    thumbnailWidth: 720
-                ) {
+                GridThumbnailImage(url: posterURL, thumbnailWidth: 720) {
                     SplickTheme.Colors.tertiaryBackground
+                }
+            }
+            .overlay {
+                if let videoURL {
+                    PeekLoopingVideo(url: videoURL)
                 }
             }
             .overlay(alignment: .topTrailing) {
@@ -179,16 +188,18 @@ public struct PostPeekOverlay: View {
                         .foregroundStyle(.white)
                         .shadow(radius: 2)
                         .padding(SplickTheme.Spacing.sm)
-                } else if post.mediaType == .video {
-                    Image(systemName: "play.fill")
-                        .font(.callout.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .shadow(radius: 2)
-                        .padding(SplickTheme.Spacing.sm)
                 }
             }
             .clipShape(mediaShape)
             .contentShape(mediaShape)
+    }
+
+    private var previewMedia: PostMediaItem? {
+        let items = post.displayMediaItems
+        if items.indices.contains(mediaIndex) {
+            return items[mediaIndex]
+        }
+        return items.first
     }
 
     private var normalizedCaption: String? {
@@ -207,4 +218,89 @@ public struct PostPeekOverlay: View {
             completion()
         }
     }
+}
+
+/// Muted looping preview. Touches pass through so the card tap still opens the post.
+private struct PeekLoopingVideo: UIViewRepresentable {
+    let url: URL
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeUIView(context: Context) -> PeekLoopingVideoView {
+        let view = PeekLoopingVideoView()
+        context.coordinator.attach(url: url, to: view)
+        return view
+    }
+
+    func updateUIView(_ view: PeekLoopingVideoView, context: Context) {
+        context.coordinator.attach(url: url, to: view)
+    }
+
+    static func dismantleUIView(_ uiView: PeekLoopingVideoView, coordinator: Coordinator) {
+        coordinator.stop()
+    }
+
+    final class Coordinator {
+        private var player: AVPlayer?
+        private var endObserver: NSObjectProtocol?
+        private var loadedURL: URL?
+
+        func attach(url: URL, to view: PeekLoopingVideoView) {
+            if loadedURL == url {
+                view.playerLayer.player = player
+                player?.play()
+                return
+            }
+            stop()
+            loadedURL = url
+            let item = AVPlayerItem(url: url)
+            item.preferredForwardBufferDuration = 1
+            let player = AVPlayer(playerItem: item)
+            player.isMuted = true
+            player.actionAtItemEnd = .none
+            player.automaticallyWaitsToMinimizeStalling = false
+            self.player = player
+            view.playerLayer.player = player
+            endObserver = NotificationCenter.default.addObserver(
+                forName: .AVPlayerItemDidPlayToEndTime,
+                object: item,
+                queue: .main
+            ) { [weak player] _ in
+                player?.seek(to: .zero)
+                player?.play()
+            }
+            player.play()
+        }
+
+        func stop() {
+            if let endObserver {
+                NotificationCenter.default.removeObserver(endObserver)
+                self.endObserver = nil
+            }
+            player?.pause()
+            player?.replaceCurrentItem(with: nil)
+            player = nil
+            loadedURL = nil
+        }
+    }
+}
+
+private final class PeekLoopingVideoView: UIView {
+    override class var layerClass: AnyClass { AVPlayerLayer.self }
+
+    var playerLayer: AVPlayerLayer {
+        layer as! AVPlayerLayer
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        playerLayer.videoGravity = .resizeAspectFill
+        playerLayer.backgroundColor = UIColor.clear.cgColor
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { nil }
 }
