@@ -156,7 +156,10 @@ public struct FeedView: View {
                     makeGifPickerViewModel: makeGifPickerViewModel
                 )
                 .environment(\.feedVideoCoordinator, videoCoordinator)
-                .feedPostZoomDestination(postId: destination.postId, namespace: postZoomNamespace)
+                .feedPostZoomDestination(
+                    postId: destination.zoomSourceId ?? destination.postId,
+                    namespace: postZoomNamespace
+                )
             }
             .alert(
                 languageService.text(.commonError),

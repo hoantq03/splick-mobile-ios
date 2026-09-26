@@ -58,6 +58,7 @@ struct FeedContentPager<Feed: View, Album: View, Streak: View>: View {
     @Environment(\.feedSegmentScrollState) private var feedSegmentScrollState
     @Environment(\.pullToRefreshActive) private var pullToRefreshActive
     @Environment(\.feedTabIsActive) private var feedTabIsActive
+    @Environment(\.feedPostZoomNamespace) private var feedPostZoomNamespace
 
     /// Locale + appearance only. High-frequency flags (tab active, pull-to-refresh, selection)
     /// must not replace UIHostingController roots — that hitch lagged main-tab switches on iOS 17.
@@ -109,7 +110,8 @@ struct FeedContentPager<Feed: View, Album: View, Streak: View>: View {
             splickColorTheme: splickColorTheme,
             splickBrandPalette: splickBrandPalette,
             tabBarScrollState: tabBarScrollState,
-            feedSegmentScrollState: feedSegmentScrollState
+            feedSegmentScrollState: feedSegmentScrollState,
+            feedPostZoomNamespace: feedPostZoomNamespace
         )
     }
 }
@@ -124,6 +126,7 @@ private struct _PagerEnvironmentForwarding: ViewModifier {
     let splickBrandPalette: SplickBrandPalette
     let tabBarScrollState: TabBarScrollState?
     let feedSegmentScrollState: FeedSegmentScrollState?
+    let feedPostZoomNamespace: Namespace.ID?
 
     func body(content: Content) -> some View {
         content
@@ -134,6 +137,7 @@ private struct _PagerEnvironmentForwarding: ViewModifier {
             .environment(\.splickBrandPalette, splickBrandPalette)
             .environment(\.tabBarScrollState, tabBarScrollState)
             .environment(\.feedSegmentScrollState, feedSegmentScrollState)
+            .environment(\.feedPostZoomNamespace, feedPostZoomNamespace)
     }
 }
 

@@ -16,6 +16,8 @@ public final class FeedNavigationStore: ObservableObject {
 
 public struct FeedPostDestination: Hashable {
     public let postId: UUID
+    /// Album media id when the zoom should return to that thumbnail. Nil uses `postId`.
+    public let zoomSourceId: UUID?
     public let mediaIndex: Int
     public let expandBillSplit: Bool
     /// When true, focuses the comment composer after navigation (e.g. "Write a comment…" on feed).
@@ -26,6 +28,7 @@ public struct FeedPostDestination: Hashable {
 
     public init(
         postId: UUID,
+        zoomSourceId: UUID? = nil,
         mediaIndex: Int = 0,
         expandBillSplit: Bool = false,
         focusComposerOnAppear: Bool = false,
@@ -33,6 +36,7 @@ public struct FeedPostDestination: Hashable {
         scrollToPendingEvidence: Bool = false
     ) {
         self.postId = postId
+        self.zoomSourceId = zoomSourceId
         self.mediaIndex = mediaIndex
         self.expandBillSplit = expandBillSplit
         self.focusComposerOnAppear = focusComposerOnAppear
