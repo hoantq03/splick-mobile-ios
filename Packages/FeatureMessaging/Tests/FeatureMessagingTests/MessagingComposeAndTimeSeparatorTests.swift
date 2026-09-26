@@ -234,15 +234,24 @@ final class MessagingComposeAndTimeSeparatorTests: XCTestCase {
         // Send without recipients returns nil
         let noRecipientsResult = await vm.send(submissions: [])
         XCTAssertNil(noRecipientsResult)
+        XCTAssertNotNil(vm.errorMessage)
+
+        // Composer clears the bound text before the async send reads it.
+        vm.toggleUser(friend)
+        vm.messageBody = "Hey there!"
+        let capturedBody = vm.messageBody
+        vm.messageBody = ""
+        let capturedConv = await vm.send(body: capturedBody, submissions: [])
+        XCTAssertNotNil(capturedConv)
+        XCTAssertTrue(vm.messageBody.isEmpty)
 
         // Send with empty content returns nil
-        vm.toggleUser(friend)
         vm.messageBody = "   "
         let emptyContentResult = await vm.send(submissions: [])
         XCTAssertNil(emptyContentResult)
 
         // 1. Send to single user success
-        vm.messageBody = "Hey there!"
+        vm.messageBody = "Hello again!"
         let singleUserConv = await vm.send(submissions: [])
         XCTAssertNotNil(singleUserConv)
         XCTAssertTrue(vm.messageBody.isEmpty)

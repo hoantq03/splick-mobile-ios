@@ -37,6 +37,7 @@ public final class ConversationListViewModel: ObservableObject {
     @Published public private(set) var activeSearchQuery = ""
     @Published public private(set) var isStartingConversation = false
     @Published public var startConversationError: String?
+    @Published public var actionError: String?
     @Published public private(set) var activeFilter: InboxFilter?
     @Published public private(set) var hasMorePages = false
     @Published public private(set) var isLoadingMore = false
@@ -315,6 +316,37 @@ public final class ConversationListViewModel: ObservableObject {
         await applyPeekNotificationSettings(enabled: true, mutedUntil: nil)
     }
 
+    public func toggleCloseFriendFromPeek() async {
+        guard let peek = peekConversation, let peerId = peek.peer?.userId else { return }
+        guard !peek.isGroup else { return }
+        let enabled = !peek.closeFriend
+        let optimistic = peek.updating(closeFriend: enabled)
+        peekConversation = optimistic
+        upsertConversation(optimistic)
+        do {
+            let confirmed = try await repository.setCloseFriend(friendUserId: peerId, enabled: enabled)
+            let settled = optimistic.updating(closeFriend: confirmed)
+            if peekConversation?.id == settled.id {
+                peekConversation = settled
+            }
+            upsertConversation(settled)
+        } catch {
+            if peekConversation?.id == peek.id {
+                peekConversation = peek
+            }
+            upsertConversation(peek)
+            actionError = languageService.localizedMessage(for: error)
+            Log.error(
+                error,
+                category: .network,
+                metadata: [
+                    "action": "toggleCloseFriendFromPeek",
+                    "conversationId": peek.id.uuidString,
+                ]
+            )
+        }
+    }
+
     /// Toggle mute from list peek — patches prefs onto the existing row so unread/preview stay intact
     /// (PATCH notification-settings returns unreadCount=0). Peek stays open; header bell updates live.
     public func toggleMuteFromPeek() async {
@@ -403,7 +435,6 @@ public final class ConversationListViewModel: ObservableObject {
     }
 
     public func toggleFilter(_ filter: InboxFilter) {
-        guard filter != .closeFriends else { return }
         activeFilter = activeFilter == filter ? nil : filter
         Task { await reloadInbox(showLoadingState: conversations.isEmpty) }
     }
@@ -632,6 +663,10 @@ public final class ConversationListViewModel: ObservableObject {
         startConversationError = nil
     }
 
+    public func clearActionError() {
+        actionError = nil
+    }
+
     public func markConversationAsRead(conversationId: UUID) {
         guard case .loaded(let items) = state,
               let existing = items.first(where: { $0.id == conversationId }) else {
@@ -801,7 +836,15 @@ public final class ConversationListViewModel: ObservableObject {
                 type: nil,
                 unreadOnly: true
             )
-        case .closeFriends, .none:
+        case .closeFriends:
+            return ConversationInboxQuery(
+                page: page,
+                limit: Self.pageSize,
+                type: .direct,
+                unreadOnly: false,
+                closeFriendsOnly: true
+            )
+        case .none:
             return ConversationInboxQuery(page: page, limit: Self.pageSize)
         }
     }
@@ -814,7 +857,9 @@ public final class ConversationListViewModel: ObservableObject {
             return !conversation.isGroup
         case .unread:
             return conversation.unreadCount > 0
-        case .closeFriends, .none:
+        case .closeFriends:
+            return !conversation.isGroup && conversation.closeFriend
+        case .none:
             return true
         }
     }

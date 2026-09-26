@@ -52,6 +52,7 @@ public protocol MessagingRepositoryProtocol: Sendable {
         conversationId: UUID?
     ) async throws -> [MessageSearchHit]
     func requestWsTicket() async throws -> String
+    func setCloseFriend(friendUserId: UUID, enabled: Bool) async throws -> Bool
 }
 
 public extension MessagingRepositoryProtocol {

@@ -103,6 +103,7 @@ struct MockSharePostMessagingRepository: MessagingRepositoryProtocol, @unchecked
     func removeReaction(conversationId: UUID, messageId: UUID, reactionId: UUID) async throws {}
     func searchMessages(query: String, page: Int, limit: Int, conversationId: UUID?) async throws -> [MessageSearchHit] { [] }
     func requestWsTicket() async throws -> String { "ticket" }
+    func setCloseFriend(friendUserId: UUID, enabled: Bool) async throws -> Bool { enabled }
 }
 
 final class SharePostTests: XCTestCase {

@@ -37,6 +37,7 @@ enum MessagingEndpoint: APIEndpoint {
     case addReaction(conversationId: UUID, messageId: UUID, CreateReactionRequestDTO)
     case removeReaction(conversationId: UUID, messageId: UUID, reactionId: UUID)
     case wsTicket
+    case setCloseFriend(friendUserId: UUID, enabled: Bool)
 
     var path: String {
         switch self {
@@ -81,6 +82,8 @@ enum MessagingEndpoint: APIEndpoint {
             return "/v1/messaging/conversations/\(conversationId)/messages/\(messageId)/reactions/\(reactionId)"
         case .wsTicket:
             return "/v1/messaging/ws-ticket"
+        case .setCloseFriend(let friendUserId, _):
+            return "/v1/social/friendships/\(friendUserId.uuidString.lowercased())/close-friend"
         }
     }
 
@@ -94,7 +97,7 @@ enum MessagingEndpoint: APIEndpoint {
             return .delete
         case .renameGroup, .updateGroupAvatar, .updateNotificationSettings, .editMessage:
             return .patch
-        case .transferGroupAdmin:
+        case .transferGroupAdmin, .setCloseFriend:
             return .put
         }
     }
@@ -111,6 +114,9 @@ enum MessagingEndpoint: APIEndpoint {
             }
             if query.unreadOnly {
                 items.append(URLQueryItem(name: "unreadOnly", value: "true"))
+            }
+            if query.closeFriendsOnly {
+                items.append(URLQueryItem(name: "closeFriendsOnly", value: "true"))
             }
             return items
         case .listMessages(_, let page, let limit, let after, let before):
@@ -169,6 +175,8 @@ enum MessagingEndpoint: APIEndpoint {
             return MarkReadRequestDTO(upToMessageId: messageId)
         case .addReaction(_, _, let dto):
             return dto
+        case .setCloseFriend(_, let enabled):
+            return SetCloseFriendRequestDTO(enabled: enabled)
         default:
             return nil
         }

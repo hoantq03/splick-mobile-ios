@@ -103,6 +103,7 @@ private actor MockMessagingRepositoryForUseCases: MessagingRepositoryProtocol {
     }
     func recallMessage(conversationId: UUID, messageId: UUID) async throws {}
     func requestWsTicket() async throws -> String { "ticket" }
+    func setCloseFriend(friendUserId: UUID, enabled: Bool) async throws -> Bool { enabled }
 }
 
 final class MessagingUseCasesTests: XCTestCase {

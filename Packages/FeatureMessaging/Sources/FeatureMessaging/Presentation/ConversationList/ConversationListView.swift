@@ -45,7 +45,6 @@ public struct ConversationListView: View {
     @StateObject private var refreshController = SplickRefreshController()
     @StateObject private var searchRefreshController = SplickRefreshController()
     @FocusState private var isSearchFocused: Bool
-    @State private var showCloseFriendsComingSoon = false
     @State private var conversationRowFrames: [UUID: CGRect] = [:]
     @State private var peekFrozenFrame: CGRect?
     @State private var peekSession = UUID()
@@ -189,12 +188,14 @@ public struct ConversationListView: View {
             Text(viewModel.startConversationError ?? "")
         }
         .alert(
-            languageService.text(.messagingFilterCloseFriends),
-            isPresented: $showCloseFriendsComingSoon
+            languageService.text(.commonErrorTitle),
+            isPresented: actionErrorPresented
         ) {
-            Button(languageService.text(.commonOK), role: .cancel) {}
+            Button(languageService.text(.commonOK), role: .cancel) {
+                viewModel.clearActionError()
+            }
         } message: {
-            Text(languageService.text(.messagingFilterComingSoon))
+            Text(viewModel.actionError ?? "")
         }
         .confirmationDialog(
             languageService.text(.messagingChatDeleteConversationConfirmTitle),
@@ -330,6 +331,17 @@ public struct ConversationListView: View {
             set: { isPresented in
                 if !isPresented {
                     viewModel.clearStartConversationError()
+                }
+            }
+        )
+    }
+
+    private var actionErrorPresented: Binding<Bool> {
+        Binding(
+            get: { viewModel.actionError != nil },
+            set: { isPresented in
+                if !isPresented {
+                    viewModel.clearActionError()
                 }
             }
         )
@@ -568,6 +580,13 @@ public struct ConversationListView: View {
                         },
                         onMarkRead: {
                             Task { await viewModel.markReadFromPeek() }
+                        },
+                        canToggleCloseFriend: conversation.closeFriend
+                            || conversation.peer.map { peer in
+                                viewModel.inboxFriends.contains(where: { $0.id == peer.userId })
+                            } == true,
+                        onToggleCloseFriend: {
+                            Task { await viewModel.toggleCloseFriendFromPeek() }
                         },
                         onLoadOlder: { message in
                             Task { await viewModel.loadOlderPeekMessagesIfNeeded(current: message) }
@@ -857,11 +876,10 @@ public struct ConversationListView: View {
                 inboxFilterShortcut(
                     icon: "heart.fill",
                     title: languageService.text(.messagingFilterCloseFriends),
-                    isHighlighted: false,
-                    badgeCount: 0,
-                    isDisabled: true
+                    isHighlighted: viewModel.isFilterActive(.closeFriends),
+                    badgeCount: 0
                 ) {
-                    showCloseFriendsComingSoon = true
+                    viewModel.toggleFilter(.closeFriends)
                 }
             }
             .padding(.horizontal, SplickTheme.Spacing.md)
@@ -884,7 +902,8 @@ public struct ConversationListView: View {
         case .groups: return "person.3"
         case .users: return "person"
         case .unread: return "envelope.open"
-        case .closeFriends, .none: return "line.3.horizontal.decrease.circle"
+        case .closeFriends: return "star"
+        case .none: return "line.3.horizontal.decrease.circle"
         }
     }
 
@@ -896,7 +915,9 @@ public struct ConversationListView: View {
             return languageService.text(.messagingFilterEmptyUsersTitle)
         case .unread:
             return languageService.text(.messagingFilterEmptyUnreadTitle)
-        case .closeFriends, .none:
+        case .closeFriends:
+            return languageService.text(.messagingFilterEmptyCloseFriendsTitle)
+        case .none:
             return languageService.text(.messagingEmptyTitle)
         }
     }
@@ -909,7 +930,9 @@ public struct ConversationListView: View {
             return languageService.text(.messagingFilterEmptyUsersMessage)
         case .unread:
             return languageService.text(.messagingFilterEmptyUnreadMessage)
-        case .closeFriends, .none:
+        case .closeFriends:
+            return languageService.text(.messagingFilterEmptyCloseFriendsMessage)
+        case .none:
             return languageService.text(.messagingEmptyMessage)
         }
     }

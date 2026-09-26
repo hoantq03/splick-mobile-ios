@@ -133,6 +133,7 @@ private actor StubMessagingRepository: MessagingRepositoryProtocol {
     func recallMessage(conversationId: UUID, messageId: UUID) async throws {}
 
     func requestWsTicket() async throws -> String { "test-ticket" }
+    func setCloseFriend(friendUserId: UUID, enabled: Bool) async throws -> Bool { enabled }
     func recordedMarkReadCalls() async -> [(UUID, UUID)] { markReadCalls }
     func recordedSendMessageCallCount() async -> Int { sendMessageCallCount }
     func recordedAfterFetchCalls() async -> [Int64] { afterFetchCalls }

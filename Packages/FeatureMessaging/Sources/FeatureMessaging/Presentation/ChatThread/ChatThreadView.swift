@@ -528,6 +528,26 @@ public struct ChatThreadView: View {
     }
 
     @ViewBuilder
+    private var closeFriendMenuAction: some View {
+        if relationshipViewModel.canRemoveFriend, displayConversation?.isGroup != true {
+            let isCloseFriend = displayConversation?.closeFriend == true
+            Button {
+                toggleCloseFriend()
+            } label: {
+                Label(
+                    languageService.text(
+                        isCloseFriend
+                            ? .messagingChatRemoveCloseFriend
+                            : .messagingChatAddCloseFriend
+                    ),
+                    systemImage: isCloseFriend ? "star.slash.fill" : "star.fill"
+                )
+            }
+            .disabled(repository == nil)
+        }
+    }
+
+    @ViewBuilder
     private var deleteConversationAction: some View {
         Button(role: .destructive) {
             presentCenteredConfirm { confirmDeleteConversation = true }
@@ -706,6 +726,23 @@ public struct ChatThreadView: View {
         }
     }
 
+    private func toggleCloseFriend() {
+        guard let displayConversation, let peerId = displayConversation.peer?.userId, let repository else { return }
+        guard !displayConversation.isGroup, relationshipViewModel.canRemoveFriend else { return }
+        let previous = displayConversation
+        let enabled = !previous.closeFriend
+        applyConversationUpdate(previous.updating(closeFriend: enabled))
+        Task {
+            do {
+                let confirmed = try await repository.setCloseFriend(friendUserId: peerId, enabled: enabled)
+                applyConversationUpdate(previous.updating(closeFriend: confirmed))
+            } catch {
+                applyConversationUpdate(previous)
+                leaveError = languageService.localizedMessage(for: error)
+            }
+        }
+    }
+
     /// Wait for the overflow `Menu` to dismiss so the confirm alert anchors to the
     /// full screen (center) instead of the disappearing menu popover.
     private func presentCenteredConfirm(_ present: @escaping () -> Void) {
@@ -818,6 +855,7 @@ public struct ChatThreadView: View {
     private var directChatOptionsMenu: some View {
         Menu {
             conversationComingSoonActions
+            closeFriendMenuAction
 
             if relationshipViewModel.isActive, !relationshipViewModel.isBlocked {
                 if relationshipViewModel.canRemoveFriend {

@@ -261,6 +261,13 @@ public final class MessagingRepository: MessagingRepositoryProtocol, Sendable {
         return dto.ticket
     }
 
+    public func setCloseFriend(friendUserId: UUID, enabled: Bool) async throws -> Bool {
+        let dto: CloseFriendStatusResponseDTO = try await apiClient.request(
+            MessagingEndpoint.setCloseFriend(friendUserId: friendUserId, enabled: enabled)
+        )
+        return dto.enabled
+    }
+
     private func resolveConversations(_ conversations: [Conversation]) async -> [Conversation] {
         guard let friendDisplayNameStore else { return conversations }
         return await friendDisplayNameStore.resolve(conversations)

@@ -25,6 +25,8 @@ struct ConversationPeekOverlay: View {
     let onDelete: () -> Void
     let onMute: () -> Void
     let onMarkRead: () -> Void
+    var canToggleCloseFriend = false
+    var onToggleCloseFriend: () -> Void = {}
     var onLoadOlder: ((ChatMessage) -> Void)? = nil
     var onClearPrependAnchor: (() -> Void)? = nil
 
@@ -158,6 +160,14 @@ struct ConversationPeekOverlay: View {
         }
     }
 
+    private var showCloseFriendChip: Bool {
+        canToggleCloseFriend && !context.conversation.isGroup && context.conversation.peer != nil
+    }
+
+    private var optionChipCount: Int {
+        ConversationPeekMotion.optionChipCountBase + (showCloseFriendChip ? 1 : 0)
+    }
+
     /// Intrinsic-width chips that wrap onto new rows via `FlowLayout` (matches Android FlowRow).
     private func optionsStack(maxWidth: CGFloat) -> some View {
         FlowLayout(spacing: SplickTheme.Spacing.xs, lineSpacing: SplickTheme.Spacing.xs) {
@@ -178,8 +188,19 @@ struct ConversationPeekOverlay: View {
                 destructive: false,
                 action: onMarkRead
             )
+            if showCloseFriendChip {
+                optionChip(
+                    index: 2,
+                    titleKey: context.conversation.closeFriend
+                        ? .messagingChatRemoveCloseFriend
+                        : .messagingChatAddCloseFriend,
+                    systemImage: context.conversation.closeFriend ? "star.slash.fill" : "star.fill",
+                    destructive: false,
+                    action: onToggleCloseFriend
+                )
+            }
             optionChip(
-                index: 2,
+                index: showCloseFriendChip ? 3 : 2,
                 titleKey: .messagingChatDeleteConversation,
                 systemImage: "trash",
                 destructive: true,
@@ -197,7 +218,7 @@ struct ConversationPeekOverlay: View {
         action: @escaping () -> Void
     ) -> some View {
         let appearDelay = Double(index) * ConversationPeekMotion.chipStagger
-        let dismissDelay = Double(ConversationPeekMotion.optionChipCount - 1 - index)
+        let dismissDelay = Double(optionChipCount - 1 - index)
             * ConversationPeekMotion.chipStagger
         return HStack(spacing: SplickTheme.Spacing.xs) {
             Image(systemName: systemImage)
@@ -548,7 +569,7 @@ struct ConversationPeekOverlay: View {
         withAnimation(ConversationPeekMotion.chipAppear) {
             isOptionsRevealed = false
         }
-        let previewDelay = ConversationPeekMotion.optionsDismissLeadIn
+        let previewDelay = ConversationPeekMotion.optionsDismissLeadIn(chipCount: optionChipCount)
         DispatchQueue.main.asyncAfter(deadline: .now() + previewDelay) {
             withAnimation(ConversationPeekMotion.dismiss) {
                 isRevealed = false
@@ -588,10 +609,10 @@ private enum ConversationPeekMotion {
     static let optionsStartDelay: TimeInterval = 0.20
     /// Left→right / top→bottom cascade between chips (reverse on dismiss).
     static let chipStagger: TimeInterval = 0.040
-    static let optionChipCount = 3
+    static let optionChipCountBase = 3
     /// Let the reverse chip cascade lead before the preview morphs away.
-    static var optionsDismissLeadIn: TimeInterval {
-        Double(optionChipCount - 1) * chipStagger + 0.08
+    static func optionsDismissLeadIn(chipCount: Int) -> TimeInterval {
+        Double(max(chipCount, 1) - 1) * chipStagger + 0.08
     }
     /// Hidden chip starts smaller so the pop reads clearly.
     static let chipHiddenScale: CGFloat = 0.48

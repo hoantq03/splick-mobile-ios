@@ -18,6 +18,7 @@ actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
     private(set) var deletedConversationIds: [UUID] = []
     private(set) var mutedConversationIds: [(UUID, Bool, String)] = []
     private(set) var markedRead: [(UUID, UUID)] = []
+    private(set) var closeFriendToggles: [(UUID, Bool)] = []
 
     init(
         messagesByConversation: [UUID: [ChatMessage]] = [:],
@@ -140,6 +141,10 @@ actor PeekMessagingRepositoryStub: MessagingRepositoryProtocol {
     func recallMessage(conversationId: UUID, messageId: UUID) async throws {}
 
     func requestWsTicket() async throws -> String { "peek-ticket" }
+    func setCloseFriend(friendUserId: UUID, enabled: Bool) async throws -> Bool {
+        closeFriendToggles.append((friendUserId, enabled))
+        return enabled
+    }
 
     private func makeConversation(id: UUID) -> Conversation {
         Conversation(
@@ -343,6 +348,38 @@ final class ConversationListViewModelPeekTests: XCTestCase {
         XCTAssertEqual(muted.count, 1)
         XCTAssertEqual(muted.first?.0, conversation.id)
         XCTAssertEqual(muted.first?.1, false)
+    }
+
+    func test_toggleCloseFriendFromPeek_updatesInboxFlag() async throws {
+        let peerId = UUID()
+        let conversation = Conversation(
+            id: UUID(),
+            unreadCount: 1,
+            peer: ConversationPeer(
+                userId: peerId,
+                username: "alice",
+                displayName: "Alice",
+                avatarUrl: nil
+            ),
+            lastMessage: nil,
+            createdAt: .now,
+            updatedAt: .now,
+            closeFriend: false
+        )
+        let repository = PeekMessagingRepositoryStub()
+        let viewModel = makeViewModel(repository: repository)
+        viewModel.applyStartupConversations([conversation])
+        await viewModel.beginPeek(conversation: conversation)
+
+        await viewModel.toggleCloseFriendFromPeek()
+
+        let peek = try XCTUnwrap(viewModel.peekConversation)
+        XCTAssertTrue(peek.closeFriend)
+        XCTAssertEqual(viewModel.conversations.first?.closeFriend, true)
+        let toggles = await repository.closeFriendToggles
+        XCTAssertEqual(toggles.count, 1)
+        XCTAssertEqual(toggles.first?.0, peerId)
+        XCTAssertEqual(toggles.first?.1, true)
     }
 
     func test_markReadFromPeek_clearsUnreadWithoutClosingPeek() async throws {

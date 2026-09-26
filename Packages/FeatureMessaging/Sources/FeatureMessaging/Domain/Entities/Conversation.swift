@@ -61,6 +61,7 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
     public let notificationSound: String
     public let mutedUntil: Date?
     public let leftAt: Date?
+    public let closeFriend: Bool
 
     public func isMuted(now: Date = Date()) -> Bool {
         if let mutedUntil {
@@ -96,7 +97,8 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
         notificationsEnabled: Bool = true,
         notificationSound: String = ConversationNotificationSound.`default`.rawValue,
         mutedUntil: Date? = nil,
-        leftAt: Date? = nil
+        leftAt: Date? = nil,
+        closeFriend: Bool = false
     ) {
         self.id = id
         self.type = type
@@ -112,6 +114,7 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
         self.notificationSound = notificationSound
         self.mutedUntil = mutedUntil
         self.leftAt = leftAt
+        self.closeFriend = closeFriend
     }
     
     public func updating(unreadCount: Int) -> Conversation {
@@ -129,7 +132,8 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
             notificationsEnabled: notificationsEnabled,
             notificationSound: notificationSound,
             mutedUntil: mutedUntil,
-            leftAt: leftAt
+            leftAt: leftAt,
+            closeFriend: closeFriend
         )
     }
     
@@ -148,7 +152,8 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
             notificationsEnabled: notificationsEnabled,
             notificationSound: notificationSound,
             mutedUntil: mutedUntil,
-            leftAt: leftAt
+            leftAt: leftAt,
+            closeFriend: closeFriend
         )
     }
     
@@ -167,7 +172,8 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
             notificationsEnabled: notificationsEnabled,
             notificationSound: notificationSound,
             mutedUntil: mutedUntil,
-            leftAt: leftAt
+            leftAt: leftAt,
+            closeFriend: closeFriend
         )
     }
     
@@ -191,7 +197,8 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
             notificationsEnabled: notificationsEnabled,
             notificationSound: notificationSound,
             mutedUntil: mutedUntil,
-            leftAt: leftAt
+            leftAt: leftAt,
+            closeFriend: closeFriend
         )
     }
     
@@ -210,7 +217,8 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
             notificationsEnabled: enabled,
             notificationSound: sound,
             mutedUntil: mutedUntil,
-            leftAt: leftAt
+            leftAt: leftAt,
+            closeFriend: closeFriend
         )
     }
 
@@ -229,7 +237,8 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
             notificationsEnabled: notificationsEnabled,
             notificationSound: notificationSound,
             mutedUntil: mutedUntil,
-            leftAt: leftAt
+            leftAt: leftAt,
+            closeFriend: closeFriend
         )
     }
 
@@ -248,7 +257,28 @@ public struct Conversation: Identifiable, Equatable, Hashable, Sendable {
             notificationsEnabled: notificationsEnabled,
             notificationSound: notificationSound,
             mutedUntil: mutedUntil,
-            leftAt: leftAt
+            leftAt: leftAt,
+            closeFriend: closeFriend
+        )
+    }
+
+    public func updating(closeFriend: Bool) -> Conversation {
+        Conversation(
+            id: id,
+            type: type,
+            unreadCount: unreadCount,
+            peer: peer,
+            groupName: groupName,
+            groupAvatarUrl: groupAvatarUrl,
+            memberCount: memberCount,
+            lastMessage: lastMessage,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            notificationsEnabled: notificationsEnabled,
+            notificationSound: notificationSound,
+            mutedUntil: mutedUntil,
+            leftAt: leftAt,
+            closeFriend: closeFriend
         )
     }
 }

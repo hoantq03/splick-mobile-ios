@@ -308,4 +308,8 @@ public actor FakeMessagingRepository: MessagingRepositoryProtocol {
     public func requestWsTicket() async throws -> String {
         "fake-ws-ticket"
     }
+
+    public func setCloseFriend(friendUserId: UUID, enabled: Bool) async throws -> Bool {
+        enabled
+    }
 }

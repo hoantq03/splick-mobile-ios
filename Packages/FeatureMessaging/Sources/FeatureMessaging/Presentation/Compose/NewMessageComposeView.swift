@@ -282,15 +282,15 @@ public struct NewMessageComposeView: View {
             placeholder: languageService.text(.messagingInputPlaceholder),
             isSending: viewModel.isSending,
             errorMessage: viewModel.errorMessage,
-            onSend: { _, submissions in
-                Task { await sendMessage(submissions: submissions) }
+            onSend: { text, submissions in
+                Task { await sendMessage(body: text, submissions: submissions) }
             },
             isFocused: $isMessageFocused
         )
     }
 
-    private func sendMessage(submissions: [CommentSubmissionAttachment]) async {
-        guard let conversation = await viewModel.send(submissions: submissions) else { return }
+    private func sendMessage(body: String, submissions: [CommentSubmissionAttachment]) async {
+        guard let conversation = await viewModel.send(body: body, submissions: submissions) else { return }
         onSent(conversation)
         dismiss()
     }

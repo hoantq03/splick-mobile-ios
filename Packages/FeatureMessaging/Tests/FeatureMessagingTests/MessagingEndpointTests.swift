@@ -36,6 +36,10 @@ final class MessagingEndpointTests: XCTestCase {
         XCTAssertEqual(MessagingEndpoint.addReaction(conversationId: conversationId, messageId: messageId, .init(emoji: "❤️")).path, "/v1/messaging/conversations/\(conversationId)/messages/\(messageId)/reactions")
         XCTAssertEqual(MessagingEndpoint.removeReaction(conversationId: conversationId, messageId: messageId, reactionId: reactionId).path, "/v1/messaging/conversations/\(conversationId)/messages/\(messageId)/reactions/\(reactionId)")
         XCTAssertEqual(MessagingEndpoint.wsTicket.path, "/v1/messaging/ws-ticket")
+        XCTAssertEqual(
+            MessagingEndpoint.setCloseFriend(friendUserId: friendUserId, enabled: true).path,
+            "/v1/social/friendships/\(friendUserId.uuidString.lowercased())/close-friend"
+        )
     }
 
     func testHTTPMethods() {
@@ -73,6 +77,7 @@ final class MessagingEndpointTests: XCTestCase {
 
         // PUT
         XCTAssertEqual(MessagingEndpoint.transferGroupAdmin(groupId: dummyId, .init(newAdminUserId: dummyId)).method, .put)
+        XCTAssertEqual(MessagingEndpoint.setCloseFriend(friendUserId: dummyId, enabled: true).method, .put)
     }
 
     func testQueryItems() {
@@ -86,6 +91,10 @@ final class MessagingEndpointTests: XCTestCase {
         XCTAssertTrue(itemsAll!.contains(where: { $0.name == "unreadOnly" && $0.value == "true" }))
         XCTAssertTrue(itemsAll!.contains(where: { $0.name == "page" && $0.value == "2" }))
         XCTAssertTrue(itemsAll!.contains(where: { $0.name == "limit" && $0.value == "30" }))
+
+        let qCloseFriends = ConversationInboxQuery(page: 0, limit: 20, closeFriendsOnly: true)
+        let closeFriendItems = MessagingEndpoint.listConversations(qCloseFriends).queryItems
+        XCTAssertTrue(closeFriendItems!.contains(where: { $0.name == "closeFriendsOnly" && $0.value == "true" }))
 
         // List messages with after and before
         let msgItems = MessagingEndpoint.listMessages(conversationId: dummyId, page: 1, limit: 15, after: 100, before: 200).queryItems
@@ -135,6 +144,7 @@ final class MessagingEndpointTests: XCTestCase {
         XCTAssertNotNil(MessagingEndpoint.editMessage(conversationId: dummyId, messageId: dummyId, .init(body: "edit")).body)
         XCTAssertNotNil(MessagingEndpoint.markRead(conversationId: dummyId, upToMessageId: dummyId).body)
         XCTAssertNotNil(MessagingEndpoint.addReaction(conversationId: dummyId, messageId: dummyId, .init(emoji: "👍")).body)
+        XCTAssertNotNil(MessagingEndpoint.setCloseFriend(friendUserId: dummyId, enabled: false).body)
 
         // Body is nil for GET/DELETE without body
         XCTAssertNil(MessagingEndpoint.unreadCount.body)

@@ -59,6 +59,7 @@ struct ConversationResponseDTO: Decodable {
     let notificationSound: String?
     let mutedUntil: Date?
     let leftAt: Date?
+    let closeFriend: Bool?
 
     init(
         id: UUID,
@@ -74,7 +75,8 @@ struct ConversationResponseDTO: Decodable {
         notificationsEnabled: Bool? = true,
         notificationSound: String? = "default",
         mutedUntil: Date? = nil,
-        leftAt: Date? = nil
+        leftAt: Date? = nil,
+        closeFriend: Bool? = false
     ) {
         self.id = id
         self.type = type
@@ -90,6 +92,7 @@ struct ConversationResponseDTO: Decodable {
         self.notificationSound = notificationSound
         self.mutedUntil = mutedUntil
         self.leftAt = leftAt
+        self.closeFriend = closeFriend
     }
 }
 
@@ -279,4 +282,13 @@ struct GroupConversationMemberResponseDTO: Decodable {
     let avatarUrl: String?
     let role: String?
     let status: String?
+}
+
+struct SetCloseFriendRequestDTO: Encodable {
+    let enabled: Bool
+}
+
+struct CloseFriendStatusResponseDTO: Decodable {
+    let friendUserId: UUID
+    let enabled: Bool
 }

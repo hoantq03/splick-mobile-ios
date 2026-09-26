@@ -165,10 +165,18 @@ public final class NewMessageComposeViewModel: ObservableObject {
         selectedUsers.contains(where: { $0.id == user.id })
     }
 
-    public func send(submissions: [CommentSubmissionAttachment]) async -> Conversation? {
-        let body = messageBody.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard hasRecipients, !isSending else { return nil }
-        guard !body.isEmpty || !submissions.isEmpty else { return nil }
+    public func send(
+        body: String? = nil,
+        submissions: [CommentSubmissionAttachment]
+    ) async -> Conversation? {
+        let resolvedBody = (body ?? messageBody).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !isSending else { return nil }
+        guard hasRecipients else {
+            errorMessage = languageService.text(.messagingSelectFriend)
+            restoreDraftIfNeeded(resolvedBody)
+            return nil
+        }
+        guard !resolvedBody.isEmpty || !submissions.isEmpty else { return nil }
         isSending = true
         errorMessage = nil
         defer { isSending = false }
@@ -178,11 +186,12 @@ public final class NewMessageComposeViewModel: ObservableObject {
             let mediaSubmissions = submissions.filter { $0.kind == .image || $0.kind == .gif }
             if !mediaSubmissions.isEmpty, attachments.isEmpty {
                 errorMessage = languageService.text(.messagingImageUploadFailed)
+                restoreDraftIfNeeded(resolvedBody)
                 return nil
             }
             _ = try await sendMessageUseCase.execute(
                 conversationId: conversation.id,
-                body: body,
+                body: resolvedBody,
                 clientMessageId: UUID(),
                 imageAttachments: attachments,
                 replyToMessageId: nil
@@ -193,8 +202,15 @@ public final class NewMessageComposeViewModel: ObservableObject {
             return conversation
         } catch {
             errorMessage = languageService.localizedMessage(for: error)
+            restoreDraftIfNeeded(resolvedBody)
             return nil
         }
+    }
+
+    /// AttachmentComposerView clears the bound text before this async send runs.
+    private func restoreDraftIfNeeded(_ body: String) {
+        guard messageBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !body.isEmpty else { return }
+        messageBody = body
     }
 
     private func resolveImageAttachments(

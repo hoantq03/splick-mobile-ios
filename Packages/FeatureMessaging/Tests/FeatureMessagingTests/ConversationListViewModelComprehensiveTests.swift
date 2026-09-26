@@ -162,6 +162,7 @@ private actor ComprehensiveMessagingRepositoryStub: MessagingRepositoryProtocol 
 
     func recallMessage(conversationId: UUID, messageId: UUID) async throws {}
     func requestWsTicket() async throws -> String { "ticket" }
+    func setCloseFriend(friendUserId: UUID, enabled: Bool) async throws -> Bool { enabled }
 }
 
 private final class ComprehensiveSearchProviderStub: MessagingSearchProviding, @unchecked Sendable {
@@ -268,9 +269,14 @@ final class ConversationListViewModelComprehensiveTests: XCTestCase {
         lastQuery = await repo.lastQuery
         XCTAssertEqual(lastQuery?.unreadOnly, true)
 
-        // Toggle .closeFriends -> guard prevents action
         vm.toggleFilter(.closeFriends)
-        XCTAssertEqual(vm.activeFilter, .unread)
+        XCTAssertEqual(vm.activeFilter, .closeFriends)
+        XCTAssertTrue(vm.isFilterActive(.closeFriends))
+        try? await Task.sleep(for: .milliseconds(80))
+        lastQuery = await repo.lastQuery
+        XCTAssertEqual(lastQuery?.type, .direct)
+        XCTAssertEqual(lastQuery?.closeFriendsOnly, true)
+        XCTAssertEqual(lastQuery?.unreadOnly, false)
     }
 
     // MARK: - Active Conversation Tracking

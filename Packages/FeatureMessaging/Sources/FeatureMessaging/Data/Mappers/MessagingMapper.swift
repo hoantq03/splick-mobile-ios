@@ -19,7 +19,8 @@ enum MessagingMapper {
             notificationsEnabled: dto.notificationsEnabled ?? true,
             notificationSound: ConversationNotificationSound.resolved(dto.notificationSound).rawValue,
             mutedUntil: dto.mutedUntil,
-            leftAt: dto.leftAt
+            leftAt: dto.leftAt,
+            closeFriend: dto.closeFriend ?? false
         )
     }
 
