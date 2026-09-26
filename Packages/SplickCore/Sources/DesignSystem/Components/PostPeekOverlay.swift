@@ -177,7 +177,7 @@ public struct PostPeekOverlay: View {
                 }
             }
             .overlay {
-                if let videoURL {
+                if let videoURL, !isDismissing {
                     PeekLoopingVideo(url: videoURL)
                 }
             }
@@ -239,6 +239,7 @@ private struct PeekLoopingVideo: UIViewRepresentable {
     }
 
     static func dismantleUIView(_ uiView: PeekLoopingVideoView, coordinator: Coordinator) {
+        uiView.playerLayer.player = nil
         coordinator.stop()
     }
 
