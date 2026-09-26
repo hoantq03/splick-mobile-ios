@@ -89,9 +89,15 @@ enum CameraBottomBarMetrics {
     static let previewLift: CGFloat = 24
 }
 
-/// Capsule label centered above the shutter — matches Instagram filter name chrome.
+/// Capsule label centered above the shutter — shown briefly after changing filter.
 struct CameraFilterNameBadge: View {
     let title: String
+    let presetID: String
+
+    @State private var visible = false
+    @State private var revealGeneration = 0
+
+    private static let visibleDuration: Duration = .milliseconds(1_500)
 
     var body: some View {
         Text(title)
@@ -107,6 +113,18 @@ struct CameraFilterNameBadge: View {
                         Capsule()
                             .stroke(Color.white.opacity(0.18), lineWidth: 0.5)
                     }
+            }
+            .opacity(visible ? 1 : 0)
+            .animation(.easeInOut(duration: 0.2), value: visible)
+            .onChange(of: presetID) { _ in
+                revealGeneration += 1
+                let generation = revealGeneration
+                visible = true
+                Task {
+                    try? await Task.sleep(for: Self.visibleDuration)
+                    guard generation == revealGeneration else { return }
+                    await MainActor.run { visible = false }
+                }
             }
     }
 }
