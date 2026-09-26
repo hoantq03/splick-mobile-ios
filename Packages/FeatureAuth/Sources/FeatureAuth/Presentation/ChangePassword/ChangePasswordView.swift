@@ -114,19 +114,10 @@ public struct ChangePasswordView: View {
         }
     }
 
-    /// Mirrors Connected Accounts → Connect Email sheet for accounts without a password yet.
+    /// Matches deactivate / delete account email-code verification.
     private var createPasswordContent: some View {
         VStack(spacing: SplickTheme.Spacing.lg) {
-            ConnectAccountSheetHeader(
-                kind: .email,
-                title: languageService.text(.createPasswordTitle),
-                subtitle: viewModel.accountEmail.isEmpty
-                    ? languageService.text(.createPasswordHint)
-                    : languageService.format(
-                        .connectedAccountsEmailSheetHint,
-                        viewModel.accountEmail
-                    )
-            )
+            createPasswordIntro
 
             if case .failed(let message) = viewModel.state {
                 ConnectAccountSheetErrorBanner(message: message)
@@ -144,14 +135,13 @@ public struct ChangePasswordView: View {
             } else if !viewModel.hasSentEmailCode {
                 SplickButton(
                     languageService.text(.changePasswordSendCode),
-                    style: .secondary,
                     isLoading: viewModel.isRequestingEmailCode,
-                    isDisabled: viewModel.isRequestingEmailCode
-                        || viewModel.accountEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    isFailed: viewModel.sendCodeFailed,
+                    isDisabled: viewModel.accountEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ) {
+                    hideKeyboard()
                     Task { await viewModel.requestEmailCode() }
                 }
-                .transition(.opacity)
             } else {
                 if let info = viewModel.otpInfoMessage {
                     Text(info)
@@ -159,7 +149,6 @@ public struct ChangePasswordView: View {
                         .foregroundStyle(SplickTheme.Colors.textSecondary)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
-                        .transition(.opacity)
                 }
 
                 SplickOtpField(
@@ -169,34 +158,46 @@ public struct ChangePasswordView: View {
                 .onChange(of: viewModel.otpCode) { _ in
                     viewModel.onOtpCodeChanged()
                 }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
 
-                ConnectAccountResendControl(
-                    secondsRemaining: viewModel.otpResendSecondsRemaining,
-                    isRequesting: viewModel.isRequestingEmailCode,
-                    resendLabel: languageService.text(.changePasswordResendCode),
-                    countdownFormat: { seconds in
-                        languageService.format(.changePasswordResendIn, seconds)
-                    },
-                    onResend: {
-                        Task { await viewModel.resendEmailCode() }
-                    }
-                )
+                resendCodeControl
 
                 SplickButton(
                     languageService.text(.changePasswordVerifyContinue),
                     isLoading: viewModel.isVerifyingEmailCode,
+                    isFailed: viewModel.otpError != nil,
                     isDisabled: viewModel.isVerifyingEmailCode
                         || viewModel.otpCode.count != SplickOtpField.defaultLength
                 ) {
                     hideKeyboard()
                     Task { await viewModel.verifyEmailCodeStep() }
                 }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .animation(.spring(response: 0.42, dampingFraction: 0.86), value: viewModel.hasSentEmailCode)
         .animation(.spring(response: 0.48, dampingFraction: 0.86), value: viewModel.isEmailCodeVerified)
+    }
+
+    private var createPasswordIntro: some View {
+        VStack(spacing: SplickTheme.Spacing.md) {
+            ZStack {
+                Circle()
+                    .fill(SplickTheme.Colors.primaryGradientStart.opacity(0.14))
+                    .frame(width: 56, height: 56)
+
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 26, weight: .semibold))
+                    .foregroundStyle(SplickTheme.Colors.primaryGradientStart)
+                    .symbolRenderingMode(.hierarchical)
+            }
+
+            Text(languageService.text(.createPasswordHint))
+                .font(SplickTheme.Typography.callout)
+                .foregroundStyle(SplickTheme.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, SplickTheme.Spacing.sm)
     }
 
     private func settingsGroup<Content: View>(
