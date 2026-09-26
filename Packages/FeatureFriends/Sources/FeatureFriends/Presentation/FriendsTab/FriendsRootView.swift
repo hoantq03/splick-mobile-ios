@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 import Combine
 import DesignSystem
 import Common
@@ -31,7 +30,7 @@ public struct FriendsRootView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     @State private var isPullRefreshing = false
-    @State private var isSearchFieldFocused = false
+    @FocusState private var isSearchFieldFocused: Bool
     @State private var hasCompletedInitialLoad = false
 
     private var hasSearchText: Bool {
@@ -775,20 +774,29 @@ public struct FriendsRootView: View {
     }
 
     private var friendsSearchField: some View {
-        // Match messaging inbox search capsule (`MessagingSearchChromeMetrics.rowHeight` = 44).
+        // Match messaging inbox search: SwiftUI TextField + FocusState. Avoid a custom
+        // UITextField representable — focus sync + caret pinning fought the keyboard.
         HStack(spacing: SplickTheme.Spacing.xs) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(SplickTheme.Colors.textSecondary)
+            Button {
+                isSearchFieldFocused = true
+            } label: {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(SplickTheme.Colors.textSecondary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHidden(true)
 
-            FriendsSearchTextField(
-                text: $viewModel.searchQuery,
-                placeholder: languageService.text(.friendsSearchPlaceholder),
-                isFocused: isSearchFieldFocused,
-                onFocusChange: { isSearchFieldFocused = $0 },
-                onSubmit: { isSearchFieldFocused = false }
-            )
-            .frame(maxWidth: .infinity, minHeight: 22, alignment: .leading)
+            TextField(languageService.text(.friendsSearchPlaceholder), text: $viewModel.searchQuery)
+                .font(SplickTheme.Typography.callout)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .focused($isSearchFieldFocused)
+                .submitLabel(.search)
+                .onSubmit {
+                    isSearchFieldFocused = false
+                }
+                .accessibilityIdentifier(KeyboardDismissExempt.accessibilityIdentifier)
 
             if hasSearchText {
                 Button(action: clearSearch) {
@@ -815,7 +823,6 @@ public struct FriendsRootView: View {
             }
         }
         .animation(.easeOut(duration: 0.18), value: hasSearchText)
-        .accessibilityIdentifier(KeyboardDismissExempt.accessibilityIdentifier)
         .padding(.horizontal, SplickTheme.Spacing.md)
         .padding(.vertical, SplickTheme.Spacing.sm)
         .frame(maxWidth: .infinity, minHeight: 44)
@@ -1238,104 +1245,6 @@ public struct FriendsRootView: View {
                 GroupRowView(group: group)
             }
             .buttonStyle(.plain)
-        }
-    }
-}
-
-/// Search field that keeps the caret after the text when a history row fills the query.
-private struct FriendsSearchTextField: UIViewRepresentable {
-    @Binding var text: String
-    var placeholder: String
-    var isFocused: Bool
-    var onFocusChange: (Bool) -> Void
-    var onSubmit: () -> Void
-
-    func makeUIView(context: Context) -> UITextField {
-        let field = UITextField()
-        field.delegate = context.coordinator
-        field.borderStyle = .none
-        field.backgroundColor = .clear
-        field.font = .preferredFont(forTextStyle: .callout)
-        field.textColor = .label
-        field.tintColor = UIColor(SplickTheme.Colors.primaryGradientStart)
-        field.autocorrectionType = .no
-        field.autocapitalizationType = .none
-        field.returnKeyType = .search
-        field.accessibilityIdentifier = KeyboardDismissExempt.accessibilityIdentifier
-        field.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        field.addTarget(context.coordinator, action: #selector(Coordinator.editingChanged), for: .editingChanged)
-        return field
-    }
-
-    func updateUIView(_ field: UITextField, context: Context) {
-        context.coordinator.parent = self
-        field.attributedPlaceholder = NSAttributedString(
-            string: placeholder,
-            attributes: [.foregroundColor: UIColor.secondaryLabel]
-        )
-        if field.text != text {
-            field.text = text
-            if field.isFirstResponder {
-                // UIKit resets the caret to the start after a programmatic text change.
-                Self.pinCaretToEnd(field)
-                DispatchQueue.main.async {
-                    guard field.isFirstResponder, field.text == context.coordinator.parent.text else { return }
-                    Self.pinCaretToEnd(field)
-                }
-            }
-        }
-        if isFocused, !field.isFirstResponder {
-            DispatchQueue.main.async {
-                guard context.coordinator.parent.isFocused, !field.isFirstResponder else { return }
-                field.becomeFirstResponder()
-                Self.pinCaretToEnd(field)
-            }
-        } else if !isFocused, field.isFirstResponder {
-            DispatchQueue.main.async {
-                guard !context.coordinator.parent.isFocused, field.isFirstResponder else { return }
-                field.resignFirstResponder()
-            }
-        }
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(parent: self)
-    }
-
-    private static func pinCaretToEnd(_ field: UITextField) {
-        let end = field.endOfDocument
-        field.selectedTextRange = field.textRange(from: end, to: end)
-    }
-
-    final class Coordinator: NSObject, UITextFieldDelegate {
-        var parent: FriendsSearchTextField
-
-        init(parent: FriendsSearchTextField) {
-            self.parent = parent
-        }
-
-        @objc func editingChanged(_ field: UITextField) {
-            let next = field.text ?? ""
-            guard parent.text != next else { return }
-            parent.text = next
-        }
-
-        func textFieldDidBeginEditing(_ textField: UITextField) {
-            parent.onFocusChange(true)
-            DispatchQueue.main.async {
-                FriendsSearchTextField.pinCaretToEnd(textField)
-            }
-        }
-
-        func textFieldDidEndEditing(_ textField: UITextField) {
-            parent.onFocusChange(false)
-        }
-
-        func textFieldShouldReturn(_ textField: UITextField) -> Bool {
-            parent.onSubmit()
-            textField.resignFirstResponder()
-            return true
         }
     }
 }
