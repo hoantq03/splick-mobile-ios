@@ -185,7 +185,6 @@ public struct CreatePostComposeView: View {
     @State private var showLocationMenu = false
     @State private var composeBottomBarHeight: CGFloat = 56
     @State private var profileRoute: ComposeProfileRoute?
-    @State private var trackedMediaCount = 0
 
     public init(
         viewModel: @autoclosure @escaping () -> CreatePostComposeViewModel,
@@ -248,6 +247,10 @@ public struct CreatePostComposeView: View {
                 profileDependencies: profileDependencies,
                 onUserTap: openProfile
             )
+        }
+        .onValueChange(of: showBillSplitScreen) { isShown in
+            guard !isShown else { return }
+            viewModel.deactivateBillSplitIfEmpty()
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -391,18 +394,21 @@ public struct CreatePostComposeView: View {
                         .padding(.trailing, SplickTheme.Spacing.sm)
                     }
                     .onAppear {
-                        let count = viewModel.selectedMediaItems.count
-                        trackedMediaCount = count
-                        guard count > 1, let lastID = viewModel.selectedMediaItems.last?.id else { return }
-                        scrollComposeStrip(proxy, to: lastID)
+                        scrollComposeStripToLatest(proxy)
                     }
-                    .onChange(of: viewModel.selectedMediaItems.count) { newCount in
-                        let previous = trackedMediaCount
-                        trackedMediaCount = newCount
-                        guard newCount > previous,
-                              let lastID = viewModel.selectedMediaItems.last?.id
-                        else { return }
-                        scrollComposeStrip(proxy, to: lastID)
+                    .onChange(of: viewModel.selectedMediaItems.last?.id) { _ in
+                        scrollComposeStripToLatest(proxy)
+                    }
+                    .onChange(of: viewModel.selectedMediaItems.count) { _ in
+                        scrollComposeStripToLatest(proxy)
+                    }
+                    .onChange(of: showCameraCapture) { isShowing in
+                        guard !isShowing else { return }
+                        scrollComposeStripToLatest(proxy)
+                    }
+                    .onChange(of: showPhotoLibraryPicker) { isShowing in
+                        guard !isShowing else { return }
+                        scrollComposeStripToLatest(proxy)
                     }
                 }
                 .overlay(alignment: .bottomLeading) {
@@ -421,12 +427,17 @@ public struct CreatePostComposeView: View {
         }
     }
 
-    private func scrollComposeStrip(_ proxy: ScrollViewProxy, to id: UUID) {
-        DispatchQueue.main.async {
+    private func scrollComposeStripToLatest(_ proxy: ScrollViewProxy) {
+        guard viewModel.selectedMediaItems.count > 1,
+              let lastID = viewModel.selectedMediaItems.last?.id
+        else { return }
+        let scroll = {
             withAnimation(.easeInOut(duration: 0.28)) {
-                proxy.scrollTo(id, anchor: .trailing)
+                proxy.scrollTo(lastID, anchor: .leading)
             }
         }
+        DispatchQueue.main.async(execute: scroll)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: scroll)
     }
 
     private func composeMediaCard(item: ComposeMediaDraft, width: CGFloat, height: CGFloat) -> some View {
@@ -748,8 +759,8 @@ public struct CreatePostComposeView: View {
 
     @ViewBuilder
     private func composeAnchoredMenus(_ frames: [ComposeMenuAnchor: CGRect]) -> some View {
-        GeometryReader { proxy in
-            if showCompanionsMenu || showLocationMenu {
+        if showCompanionsMenu || showLocationMenu {
+            GeometryReader { proxy in
                 Color.clear
                     .frame(width: proxy.size.width, height: proxy.size.height)
                     .contentShape(Rectangle())
@@ -761,28 +772,27 @@ public struct CreatePostComposeView: View {
                         hideKeyboard()
                         viewModel.setFriendSearchActive(false)
                     }
-            }
-            if showCompanionsMenu, let frame = frames[.tags] {
-                anchoredMenu(frame: frame, containerWidth: proxy.size.width) {
-                    ComposeCompanionsMenuPopup(
-                        viewModel: viewModel,
-                        onUserTap: openProfile,
-                        nearbyDiscoveryUseCase: nearbyDiscoveryUseCase,
-                        profileDependencies: profileDependencies
-                    )
+                if showCompanionsMenu, let frame = frames[.tags] {
+                    anchoredMenu(frame: frame, containerWidth: proxy.size.width) {
+                        ComposeCompanionsMenuPopup(
+                            viewModel: viewModel,
+                            onUserTap: openProfile,
+                            nearbyDiscoveryUseCase: nearbyDiscoveryUseCase,
+                            profileDependencies: profileDependencies
+                        )
+                    }
                 }
-            }
-            if showLocationMenu, let frame = frames[.location] {
-                anchoredMenu(frame: frame, containerWidth: proxy.size.width) {
-                    ComposeLocationMenuPopup(viewModel: viewModel) {
-                        withAnimation(ComposeSearchExpandMotion.spring) {
-                            showLocationMenu = false
+                if showLocationMenu, let frame = frames[.location] {
+                    anchoredMenu(frame: frame, containerWidth: proxy.size.width) {
+                        ComposeLocationMenuPopup(viewModel: viewModel) {
+                            withAnimation(ComposeSearchExpandMotion.spring) {
+                                showLocationMenu = false
+                            }
                         }
                     }
                 }
             }
         }
-        .allowsHitTesting(showCompanionsMenu || showLocationMenu)
     }
 
     private func anchoredMenu<Content: View>(
@@ -823,12 +833,11 @@ public struct CreatePostComposeView: View {
 
     private func openBillSplitScreen() {
         hideKeyboard()
+        viewModel.peoplePickerTarget = .bill
         viewModel.startCompanionDirectoryLoadIfNeeded()
-        withAnimation(ComposeSearchExpandMotion.spring) {
-            showCompanionsMenu = false
-            showAudienceMenu = false
-            showLocationMenu = false
-        }
+        showCompanionsMenu = false
+        showAudienceMenu = false
+        showLocationMenu = false
         showBillSplitScreen = true
     }
 
@@ -1056,9 +1065,6 @@ private struct ComposeBillSplitView: View {
         .dismissKeyboardOnTap()
         .navigationTitle(languageService.text(.feedBillSplitTitle))
         .navigationBarTitleDisplayMode(.inline)
-        .onDisappear {
-            viewModel.deactivateBillSplitIfEmpty()
-        }
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button(languageService.text(.commonDone)) {
@@ -1167,7 +1173,8 @@ private struct ComposeBillSplitView: View {
                     placeholder: languageService.text(.feedCreateTotalAmount),
                     placeholderColor: UIColor(SplickTheme.Colors.textTertiary)
                 )
-                .frame(maxWidth: .infinity, minHeight: 52, alignment: .topLeading)
+                .frame(maxWidth: .infinity)
+                .frame(height: 52, alignment: .leading)
 
                 Text(languageService.text(.feedCreateCurrencySymbol))
                     .font(.system(size: 20, weight: .regular))
@@ -1476,7 +1483,7 @@ private struct ComposeBillSplitView: View {
                     textColor: UIColor(SplickTheme.Colors.textPrimary),
                     placeholder: "-"
                 )
-                .frame(minWidth: 88)
+                .frame(width: 88, height: 22)
 
                 Text(languageService.text(.feedCreateCurrencySymbol))
                     .font(SplickTheme.Typography.caption)
@@ -1619,7 +1626,7 @@ struct ComposeCompanionsEditorView: View {
 
     private var showsFriendSearchResults: Bool {
         if billMode {
-            return isBillSearchExpanded
+            return true
         }
         return viewModel.shouldShowFriendSuggestions
     }
@@ -1730,16 +1737,31 @@ struct ComposeCompanionsEditorView: View {
                         .background(autoExpandSearch ? SplickTheme.Colors.background : SplickTheme.Colors.secondaryBackground)
                         .clipShape(Capsule())
 
-                        ComposeSearchResultsExpand(isExpanded: showsFriendSearchResults) {
-                            friendSearchResultsList
-                                .frame(maxWidth: .infinity, maxHeight: ComposeMetrics.searchResultsMaxHeight, alignment: .top)
-                                .background(autoExpandSearch ? Color.clear : SplickTheme.Colors.secondaryBackground)
-                                .clipShape(
-                                    RoundedRectangle(
-                                        cornerRadius: autoExpandSearch ? 0 : SplickTheme.CornerRadius.large,
-                                        style: .continuous
+                        if billMode {
+                            if showsFriendSearchResults {
+                                friendSearchResultsList
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: ComposeMetrics.searchResultsMaxHeight)
+                                    .background(SplickTheme.Colors.secondaryBackground)
+                                    .clipShape(
+                                        RoundedRectangle(
+                                            cornerRadius: SplickTheme.CornerRadius.large,
+                                            style: .continuous
+                                        )
                                     )
-                                )
+                            }
+                        } else {
+                            ComposeSearchResultsExpand(isExpanded: showsFriendSearchResults) {
+                                friendSearchResultsList
+                                    .frame(maxWidth: .infinity, maxHeight: ComposeMetrics.searchResultsMaxHeight, alignment: .top)
+                                    .background(autoExpandSearch ? Color.clear : SplickTheme.Colors.secondaryBackground)
+                                    .clipShape(
+                                        RoundedRectangle(
+                                            cornerRadius: autoExpandSearch ? 0 : SplickTheme.CornerRadius.large,
+                                            style: .continuous
+                                        )
+                                    )
+                            }
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1747,16 +1769,16 @@ struct ComposeCompanionsEditorView: View {
                     .animation(ComposeSearchExpandMotion.spring, value: showsFriendSearchResults)
         }
         .onAppear {
-            viewModel.peoplePickerTarget = billMode ? .bill : .tags
+            if billMode {
+                viewModel.peoplePickerTarget = .bill
+                viewModel.startCompanionDirectoryLoadIfNeeded()
+            } else {
+                viewModel.peoplePickerTarget = .tags
+            }
             if autoExpandSearch {
                 viewModel.startCompanionDirectoryLoadIfNeeded()
                 viewModel.setFriendSearchActive(true)
                 isFriendSearchFocused = true
-            }
-        }
-        .onDisappear {
-            if billMode {
-                viewModel.peoplePickerTarget = .tags
             }
         }
     }
@@ -2022,6 +2044,10 @@ struct ComposeCompanionsEditorView: View {
         .frame(maxWidth: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: ComposeMetrics.searchResultsMaxHeight)
+        // The bill editor is already inside a vertical ScrollView. Asking this inner
+        // ScrollView for an ideal height (fixedSize in ComposeSearchResultsExpand)
+        // never resolves and freezes the screen as soon as Chia bill is pushed.
+        .frame(height: billMode ? ComposeMetrics.searchResultsMaxHeight : nil)
     }
 
     private var groupSearchResultsSection: some View {
