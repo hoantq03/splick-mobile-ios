@@ -63,6 +63,12 @@ public struct ConversationListView: View {
         !searchDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// Focused search or an active query. The inbox stays mounted underneath so the
+    /// scroll view is not torn down in the same frame as the keyboard.
+    private var showsSearchSurface: Bool {
+        isSearching || isSearchFocused
+    }
+
     public init(
         viewModel: ConversationListViewModel,
         onCreateGroup: @escaping () -> Void = {},
@@ -99,11 +105,18 @@ public struct ConversationListView: View {
                         inboxFilterShortcuts
                     }
 
-                    ZStack {
+                    ZStack(alignment: .top) {
                         conversationListContent
+                            .opacity(showsSearchSurface ? 0 : 1)
+                            .animation(.none, value: showsSearchSurface)
+                            .allowsHitTesting(!showsSearchSurface)
+                            .accessibilityHidden(showsSearchSurface)
+                            .scrollDisabled(showsSearchSurface)
 
                         if isSearching {
                             searchResultsContent
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                                .background(SplickBrandAtmosphere())
                                 .transition(.opacity)
                         } else if isSearchFocused {
                             InboxSearchLanding(
@@ -115,6 +128,8 @@ public struct ConversationListView: View {
                                 },
                                 onRemoveRecent: { viewModel.removeRecentSearchPerson(id: $0) }
                             )
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                            .background(SplickBrandAtmosphere())
                             .transition(
                                 .asymmetric(
                                     insertion: .opacity
@@ -125,6 +140,7 @@ public struct ConversationListView: View {
                             )
                         }
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 .background(SplickBrandAtmosphere())
                 // Native NavigationStack push/pop. Swipe-back is edge-only via

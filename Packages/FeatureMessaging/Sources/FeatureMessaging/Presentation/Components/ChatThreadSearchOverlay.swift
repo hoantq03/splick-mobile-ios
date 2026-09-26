@@ -20,7 +20,8 @@ struct ChatThreadSearchOverlay: View {
             results
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background(SplickTheme.Colors.background)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(SplickTheme.Colors.background.ignoresSafeArea())
         .contentShape(Rectangle())
     }
 
