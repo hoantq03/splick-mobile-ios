@@ -46,6 +46,8 @@ public final class PhotoAlbumViewModel: ObservableObject {
     private var nextCursor: String?
     private var loadTask: Task<Void, Never>?
     private var captionSearchTask: Task<Void, Never>?
+    private var hasLoadedAlbum = false
+    private var ownPostObserver: NSObjectProtocol?
 
     private static let pageSize = 50
 
@@ -56,6 +58,21 @@ public final class PhotoAlbumViewModel: ObservableObject {
         self.fetchPhotoAlbumUseCase = fetchPhotoAlbumUseCase
         self.searchHistory = searchHistoryRepository.map {
             SearchHistorySession(repository: $0, scope: .album)
+        }
+        ownPostObserver = NotificationCenter.default.addObserver(
+            forName: OwnPostPublished.notification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                await self?.reloadAfterOwnPost()
+            }
+        }
+    }
+
+    deinit {
+        if let ownPostObserver {
+            NotificationCenter.default.removeObserver(ownPostObserver)
         }
     }
 
@@ -117,19 +134,28 @@ public final class PhotoAlbumViewModel: ObservableObject {
         await applyFilters(PhotoAlbumFilters())
     }
 
-    private func loadAlbum(isPullToRefresh: Bool) async {
+    /// Refetch after the user's upload lands, without replacing the grid with a skeleton.
+    private func reloadAfterOwnPost() async {
+        if let loadTask, !hasLoadedAlbum {
+            await loadTask.value
+        }
+        guard hasLoadedAlbum else { return }
+        await loadAlbum(isPullToRefresh: false, silent: true)
+    }
+
+    private func loadAlbum(isPullToRefresh: Bool, silent: Bool = false) async {
         loadTask?.cancel()
         let task = Task {
-            await performLoad(isPullToRefresh: isPullToRefresh)
+            await performLoad(isPullToRefresh: isPullToRefresh, silent: silent)
         }
         loadTask = task
         await task.value
     }
 
-    private func performLoad(isPullToRefresh: Bool) async {
+    private func performLoad(isPullToRefresh: Bool, silent: Bool = false) async {
         if isPullToRefresh {
             isRefreshing = true
-        } else {
+        } else if !silent {
             state = .loading
         }
 
@@ -147,10 +173,11 @@ public final class PhotoAlbumViewModel: ObservableObject {
             photos = page.photos
             nextCursor = page.nextCursor
             state = .loaded(photos)
+            hasLoadedAlbum = true
             prefetchThumbnails(in: page.photos)
         } catch {
             guard !Task.isCancelled else { return }
-            if error.isRequestCancellation { return }
+            if error.isRequestCancellation || silent { return }
             Log.error(error, category: .feed)
             if photos.isEmpty {
                 state = .failed(error.localizedDescription)
@@ -168,7 +195,9 @@ public final class PhotoAlbumViewModel: ObservableObject {
 
     private func prefetchThumbnails(in photos: [AlbumPhoto]) {
         let urls = photos.compactMap { photo -> URL? in
-            if photo.mediaType == .video { return photo.thumbnailURL }
+            if photo.mediaType == .video {
+                return VideoPosterURL.usableImageURL(photo.thumbnailURL, videoURL: photo.mediaURL)
+            }
             return photo.thumbnailURL ?? photo.mediaURL
         }
         ImagePrefetching.prefetch(urls: urls)

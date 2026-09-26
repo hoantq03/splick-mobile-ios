@@ -16,6 +16,7 @@ private enum AlbumScrollAnchor {
 private struct AlbumPostPreview {
     let post: Post
     let mediaIndex: Int
+    let albumPhotoId: UUID
 }
 
 public struct PhotoAlbumView: View {
@@ -120,10 +121,12 @@ public struct PhotoAlbumView: View {
             if let postPreview {
                 PostPeekOverlay(
                     post: postPreview.post,
+                    mediaIndex: postPreview.mediaIndex,
                     onDismiss: { self.postPreview = nil },
                     onOpen: {
                         let destination = FeedPostDestination(
                             postId: postPreview.post.id,
+                            zoomSourceId: postPreview.albumPhotoId,
                             mediaIndex: postPreview.mediaIndex
                         )
                         self.postPreview = nil
@@ -294,7 +297,11 @@ public struct PhotoAlbumView: View {
             let mediaIndex = post?.displayMediaItems.firstIndex(where: { $0.id == photo.id }) ?? 0
             withFeedPostNavigation {
                 navigationPath.append(
-                    FeedPostDestination(postId: photo.postId, mediaIndex: mediaIndex)
+                    FeedPostDestination(
+                        postId: photo.postId,
+                        zoomSourceId: photo.id,
+                        mediaIndex: mediaIndex
+                    )
                 )
             }
         }
@@ -313,7 +320,11 @@ public struct PhotoAlbumView: View {
                 return
             }
             let mediaIndex = post.displayMediaItems.firstIndex(where: { $0.id == photo.id }) ?? 0
-            postPreview = AlbumPostPreview(post: post, mediaIndex: mediaIndex)
+            postPreview = AlbumPostPreview(
+                post: post,
+                mediaIndex: mediaIndex,
+                albumPhotoId: photo.id
+            )
         }
     }
 }
@@ -356,11 +367,9 @@ private struct AlbumPhotoCell: View {
             }
             .clipShape(cellShape)
             .contentShape(cellShape)
+            .feedPostZoomSource(postId: photo.id)
             .overlay {
-                // Plain hit target — a Button or LongPressGesture claims the touch,
-                // so a drag that starts on a thumbnail never reaches the album scroll
-                // view or the segment pager.
-                AlbumPhotoInteractionCatcher(onTap: onTap, onLongPress: onLongPress)
+                GridPressCatcher(onTap: onTap, onLongPress: onLongPress)
             }
             .accessibilityAddTraits(.isButton)
     }
@@ -370,6 +379,10 @@ private struct AlbumPhotoCell: View {
         ZStack {
             if let poster = albumPosterURL(for: photo) {
                 GridThumbnailImage(url: poster) {
+                    placeholderContent
+                }
+            } else if photo.mediaType == .video {
+                AlbumVideoFirstFrame(videoURL: photo.mediaURL) {
                     placeholderContent
                 }
             } else {
@@ -387,10 +400,7 @@ private struct AlbumPhotoCell: View {
 
     private func albumPosterURL(for photo: AlbumPhoto) -> URL? {
         if photo.mediaType == .video {
-            guard let thumb = photo.thumbnailURL, thumb != photo.mediaURL else { return nil }
-            let ext = thumb.pathExtension.lowercased()
-            if ["mp4", "mov", "m4v", "webm", "mkv"].contains(ext) { return nil }
-            return thumb
+            return VideoPosterURL.usableImageURL(photo.thumbnailURL, videoURL: photo.mediaURL)
         }
         return photo.thumbnailURL ?? photo.mediaURL
     }
@@ -405,130 +415,28 @@ private struct AlbumPhotoCell: View {
     }
 }
 
-/// Records tap and long-press with raw touches so parent pan gestures keep the drag.
-private struct AlbumPhotoInteractionCatcher: UIViewRepresentable {
-    var onTap: () -> Void
-    var onLongPress: () -> Void
+/// First decoded video frame when the album item has no still poster.
+private struct AlbumVideoFirstFrame<Placeholder: View>: View {
+    let videoURL: URL
+    @ViewBuilder var placeholder: () -> Placeholder
+    @State private var generatedFrame: UIImage?
 
-    func makeUIView(context: Context) -> AlbumPhotoInteractionView {
-        let view = AlbumPhotoInteractionView()
-        view.onTap = onTap
-        view.onLongPress = onLongPress
-        return view
-    }
-
-    func updateUIView(_ view: AlbumPhotoInteractionView, context: Context) {
-        view.onTap = onTap
-        view.onLongPress = onLongPress
-    }
-
-    func sizeThatFits(
-        _ proposal: ProposedViewSize,
-        uiView: AlbumPhotoInteractionView,
-        context: Context
-    ) -> CGSize? {
-        CGSize(width: proposal.width ?? 0, height: proposal.height ?? 0)
-    }
-}
-
-private final class AlbumPhotoInteractionView: UIView {
-    var onTap: (() -> Void)?
-    var onLongPress: (() -> Void)?
-
-    private var longPressTimer: Timer?
-    private var originInWindow: CGPoint = .zero
-    private var movedBeyondSlop = false
-    private var didLongPress = false
-
-    private static let movementSlop: CGFloat = 12
-    private static let longPressDuration: TimeInterval = 0.45
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        isOpaque = false
-        backgroundColor = .clear
-        isAccessibilityElement = false
-        isUserInteractionEnabled = true
-        setContentHuggingPriority(.fittingSizeLevel, for: .horizontal)
-        setContentHuggingPriority(.fittingSizeLevel, for: .vertical)
-        setContentCompressionResistancePriority(.fittingSizeLevel, for: .horizontal)
-        setContentCompressionResistancePriority(.fittingSizeLevel, for: .vertical)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { nil }
-
-    deinit {
-        longPressTimer?.invalidate()
-    }
-
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        super.touchesBegan(touches, with: event)
-        guard let touch = touches.first else { return }
-        originInWindow = locationInWindow(of: touch)
-        movedBeyondSlop = false
-        didLongPress = false
-        scheduleLongPress()
-    }
-
-    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        super.touchesMoved(touches, with: event)
-        guard let touch = touches.first else { return }
-        noteMovement(of: touch)
-    }
-
-    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        super.touchesEnded(touches, with: event)
-        if let touch = touches.first {
-            noteMovement(of: touch)
+    var body: some View {
+        Group {
+            if let generatedFrame {
+                Image(uiImage: generatedFrame)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                placeholder()
+            }
         }
-        let shouldTap = !movedBeyondSlop && !didLongPress
-        cancelLongPress()
-        if shouldTap {
-            onTap?()
+        .task(id: videoURL.absoluteString) {
+            if let cached = await VideoFirstFrameCache.shared.image(for: videoURL) {
+                generatedFrame = cached
+                return
+            }
+            generatedFrame = await VideoFirstFrameCache.shared.generate(for: videoURL)
         }
-    }
-
-    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
-        super.touchesCancelled(touches, with: event)
-        cancelLongPress()
-    }
-
-    private func locationInWindow(of touch: UITouch) -> CGPoint {
-        if let window {
-            return touch.location(in: window)
-        }
-        return touch.location(in: self)
-    }
-
-    private func noteMovement(of touch: UITouch) {
-        guard !movedBeyondSlop else { return }
-        let point = locationInWindow(of: touch)
-        let dx = point.x - originInWindow.x
-        let dy = point.y - originInWindow.y
-        guard dx * dx + dy * dy > Self.movementSlop * Self.movementSlop else { return }
-        movedBeyondSlop = true
-        cancelLongPress()
-    }
-
-    private func scheduleLongPress() {
-        cancelLongPress()
-        let timer = Timer(timeInterval: Self.longPressDuration, repeats: false) { [weak self] _ in
-            self?.fireLongPress()
-        }
-        longPressTimer = timer
-        RunLoop.main.add(timer, forMode: .common)
-    }
-
-    private func fireLongPress() {
-        longPressTimer = nil
-        guard !movedBeyondSlop, !didLongPress else { return }
-        didLongPress = true
-        onLongPress?()
-    }
-
-    private func cancelLongPress() {
-        longPressTimer?.invalidate()
-        longPressTimer = nil
     }
 }
