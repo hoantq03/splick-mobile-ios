@@ -10,6 +10,7 @@ struct EditorToolbar: View {
     let onComposerTool: (ComposerTool) -> Void
     let onDone: () -> Void
     let onCancel: () -> Void
+    @State private var showDrawColorWheel = false
 
     var body: some View {
         ZStack {
@@ -86,6 +87,26 @@ struct EditorToolbar: View {
     private var bottomPanels: some View {
         if viewModel.isChromeVisible, viewModel.activeTool == .draw {
             drawOptionsBar
+                .overlay(alignment: .bottom) {
+                    if showDrawColorWheel {
+                        DrawInkColorWheel(
+                            color: Binding(
+                                get: { Color(viewModel.inkColor) },
+                                set: { next in
+                                    viewModel.inkColor = UIColor(next)
+                                    viewModel.isErasing = false
+                                }
+                            ),
+                            onCommit: { showDrawColorWheel = false }
+                        )
+                        .fixedSize()
+                        .padding(.bottom, 8)
+                    }
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+        if viewModel.isChromeVisible, viewModel.activeTool == .adjust {
+            adjustOptionsBar
                 .transition(.move(edge: .bottom).combined(with: .opacity))
         }
         if viewModel.isChromeVisible, activeComposerTool == .edit {
@@ -102,45 +123,32 @@ struct EditorToolbar: View {
                 .background(.ultraThinMaterial.opacity(0.85))
                 .transition(.move(edge: .bottom).combined(with: .opacity))
         }
-        if viewModel.isChromeVisible, viewModel.activeTool == .adjust {
-            adjustOptionsBar
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-        }
     }
 
     private var drawOptionsBar: some View {
-        VStack(spacing: SplickTheme.Spacing.sm) {
-            HStack(spacing: SplickTheme.Spacing.md) {
-                Circle()
-                    .fill(Color(viewModel.inkColor))
-                    .frame(width: max(viewModel.inkWidth, 6), height: max(viewModel.inkWidth, 6))
-                Slider(
-                    value: Binding(
-                        get: { Double(viewModel.inkWidth) },
-                        set: { viewModel.inkWidth = CGFloat($0) }
-                    ),
-                    in: 2...28
-                )
-                .tint(.white)
-            }
+        let customSelected = !viewModel.isErasing && (
+            showDrawColorWheel || PhotoEditorViewModel.inkPalette.allSatisfy { !viewModel.inkColor.isEqual($0) }
+        )
+        return VStack(spacing: SplickTheme.Spacing.sm) {
+            TaperedBrushSlider(width: $viewModel.inkWidth)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: SplickTheme.Spacing.md) {
                     Button {
                         viewModel.isErasing = true
+                        showDrawColorWheel = false
                         UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     } label: {
-                        Image(systemName: "eraser.fill")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(viewModel.isErasing ? Color.white : Color.black.opacity(0.8))
+                        Image(systemName: "eraser")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundStyle(.white)
                             .frame(width: 30, height: 30)
-                            .background(
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .fill(viewModel.isErasing ? SplickTheme.Colors.primary : Color.white)
-                            )
                             .overlay {
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .strokeBorder(Color.white.opacity(viewModel.isErasing ? 1 : 0.55), lineWidth: viewModel.isErasing ? 2.5 : 1)
+                                Circle()
+                                    .strokeBorder(
+                                        viewModel.isErasing ? SplickTheme.Colors.primary : Color.clear,
+                                        lineWidth: 2.5
+                                    )
                             }
                     }
                     .buttonStyle(.plain)
@@ -151,6 +159,7 @@ struct EditorToolbar: View {
                         Button {
                             viewModel.inkColor = color
                             viewModel.isErasing = false
+                            showDrawColorWheel = false
                             UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         } label: {
                             Circle()
@@ -166,6 +175,34 @@ struct EditorToolbar: View {
                         }
                         .buttonStyle(.plain)
                     }
+
+                    Button {
+                        viewModel.isErasing = false
+                        showDrawColorWheel.toggle()
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    } label: {
+                        Circle()
+                            .fill(
+                                AngularGradient(
+                                    colors: [.red, .yellow, .green, .cyan, .blue, .purple, .red],
+                                    center: .center
+                                )
+                            )
+                            .overlay {
+                                Circle()
+                                    .fill(Color(viewModel.inkColor))
+                                    .padding(3)
+                            }
+                            .frame(width: 30, height: 30)
+                            .overlay {
+                                Circle().strokeBorder(
+                                    customSelected ? SplickTheme.Colors.primary : Color.white.opacity(0.55),
+                                    lineWidth: customSelected ? 2.5 : 1
+                                )
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(languageService.text(.mediaDrawCustomColor))
                 }
             }
         }
@@ -251,8 +288,7 @@ struct EditorToolbar: View {
             adjustRow(
                 title: languageService.text(.mediaAdjustBrightness),
                 range: -1...1,
-                keyPath: \.brightness,
-                valueText: Self.brightnessLevel
+                keyPath: \.brightness
             )
             adjustRow(title: languageService.text(.mediaAdjustContrast), range: 0.5...1.5, keyPath: \.contrast)
             adjustRow(title: languageService.text(.mediaAdjustSaturation), range: 0...2, keyPath: \.saturation)
@@ -266,8 +302,7 @@ struct EditorToolbar: View {
     private func adjustRow(
         title: String,
         range: ClosedRange<Double>,
-        keyPath: WritableKeyPath<ImageAdjustments, Float>,
-        valueText: ((Double) -> String)? = nil
+        keyPath: WritableKeyPath<ImageAdjustments, Float>
     ) -> some View {
         let current = Double(viewModel.adjustments[keyPath: keyPath])
         return HStack(spacing: 10) {
@@ -275,7 +310,7 @@ struct EditorToolbar: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.white.opacity(0.85))
                 .frame(width: 88, alignment: .leading)
-            Slider(
+            WhiteDotSlider(
                 value: Binding(
                     get: { Double(viewModel.adjustments[keyPath: keyPath]) },
                     set: { newValue in
@@ -284,28 +319,215 @@ struct EditorToolbar: View {
                         viewModel.setAdjustments(next)
                     }
                 ),
-                in: range,
+                range: range,
                 onEditingChanged: { editing in
                     viewModel.setAdjustingLive(editing)
                     if !editing { viewModel.commitAdjustments() }
                 }
             )
-            .tint(.white)
-            if let valueText {
-                Text(valueText(current))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .monospacedDigit()
-                    .frame(width: 40, alignment: .trailing)
-            }
+            Text(Self.adjustmentLevel(current, in: range))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white)
+                .monospacedDigit()
+                .frame(width: 40, alignment: .trailing)
         }
+    }
+
+    /// Signed percent (−100…100) relative to the slider midpoint.
+    static func adjustmentLevel(_ value: Double, in range: ClosedRange<Double>) -> String {
+        let span = max(range.upperBound - range.lowerBound, 0.0001)
+        let midpoint = (range.lowerBound + range.upperBound) / 2
+        let percent = Int((((value - midpoint) / (span / 2)) * 100).rounded())
+        let clamped = min(100, max(-100, percent))
+        return clamped > 0 ? "+\(clamped)" : "\(clamped)"
     }
 
     /// Signed percent (−100…100) so the brightness slider has a readable level.
     static func brightnessLevel(_ value: Double) -> String {
-        let percent = Int((value * 100).rounded())
-        let clamped = min(100, max(-100, percent))
-        return clamped > 0 ? "+\(clamped)" : "\(clamped)"
+        adjustmentLevel(value, in: -1...1)
+    }
+}
+
+/// Thin white track with a white dot at the current adjustment.
+private struct WhiteDotSlider: View {
+    @Binding var value: Double
+    var range: ClosedRange<Double>
+    var onEditingChanged: (Bool) -> Void
+
+    var body: some View {
+        let span = max(range.upperBound - range.lowerBound, 0.0001)
+        let fraction = min(max((value - range.lowerBound) / span, 0), 1)
+        GeometryReader { geo in
+            Canvas { context, size in
+                let midY = size.height / 2
+                let x = fraction * size.width
+                var track = Path()
+                track.move(to: CGPoint(x: 0, y: midY))
+                track.addLine(to: CGPoint(x: size.width, y: midY))
+                context.stroke(
+                    track,
+                    with: .color(.white.opacity(0.4)),
+                    style: StrokeStyle(lineWidth: 2, lineCap: .round)
+                )
+                let dot = CGRect(x: x - 6, y: midY - 6, width: 12, height: 12)
+                context.fill(Path(ellipseIn: dot), with: .color(.white))
+            }
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { gesture in
+                        onEditingChanged(true)
+                        let nextFraction = min(max(gesture.location.x / max(geo.size.width, 1), 0), 1)
+                        value = range.lowerBound + (range.upperBound - range.lowerBound) * nextFraction
+                    }
+                    .onEnded { _ in
+                        onEditingChanged(false)
+                    }
+            )
+        }
+        .frame(height: 22)
+        .accessibilityValue("\(Int(value.rounded()))")
+    }
+}
+
+private struct DrawInkColorWheel: View {
+    @Binding var color: Color
+    var onCommit: () -> Void
+    @State private var isDragging = false
+    @State private var finger = CGPoint.zero
+    @State private var preview = Color.white
+
+    private let wheelSize: CGFloat = 176
+    private let loupeSize: CGFloat = 52
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Circle()
+                .fill(
+                    AngularGradient(
+                        colors: [.red, .yellow, .green, .cyan, .blue, .purple, .red],
+                        center: .center
+                    )
+                )
+                .overlay {
+                    Circle().fill(
+                        RadialGradient(
+                            colors: [.white, .clear],
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: wheelSize / 2
+                        )
+                    )
+                }
+                .frame(width: wheelSize, height: wheelSize)
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            isDragging = true
+                            finger = value.location
+                            let next = color(at: value.location)
+                            preview = next
+                            color = next
+                        }
+                        .onEnded { value in
+                            let next = color(at: value.location)
+                            preview = next
+                            color = next
+                            isDragging = false
+                            onCommit()
+                        }
+                )
+
+            if isDragging {
+                Circle()
+                    .fill(preview)
+                    .frame(width: loupeSize, height: loupeSize)
+                    .overlay {
+                        Circle().strokeBorder(.white, lineWidth: 3)
+                    }
+                    .shadow(color: .black.opacity(0.35), radius: 5, y: 2)
+                    .offset(x: loupeX, y: loupeY)
+            }
+        }
+        .frame(width: wheelSize, height: wheelSize)
+        .padding(.top, 6)
+    }
+
+    private var loupeX: CGFloat {
+        let preferRight = finger.x < wheelSize * 0.62
+        return preferRight ? finger.x + 18 : finger.x - 18 - loupeSize
+    }
+
+    private var loupeY: CGFloat {
+        min(max(finger.y - loupeSize / 2, -loupeSize * 0.3), wheelSize - loupeSize * 0.7)
+    }
+
+    private func color(at point: CGPoint) -> Color {
+        let center = wheelSize / 2
+        let dx = point.x - center
+        let dy = point.y - center
+        let saturation = min(1, hypot(dx, dy) / center)
+        var hue = atan2(dy, dx) / (2 * .pi)
+        if hue < 0 { hue += 1 }
+        return Color(hue: hue, saturation: saturation, brightness: 1)
+    }
+}
+
+/// White wedge whose height at each point equals the brush width in points.
+private struct TaperedBrushSlider: View {
+    @Binding var width: CGFloat
+    var minThickness: CGFloat = 2
+    var maxThickness: CGFloat = 28
+    @State private var lastTick = -1
+
+    var body: some View {
+        let span = max(maxThickness - minThickness, 1)
+        let fraction = min(max((width - minThickness) / span, 0), 1)
+        GeometryReader { geo in
+            Canvas { context, size in
+                let midY = size.height / 2
+                let thumbX = fraction * size.width
+                context.fill(
+                    taper(width: size.width, thickness: maxThickness, midY: midY),
+                    with: .color(.white.opacity(0.35))
+                )
+                if thumbX > 0.5 {
+                    context.fill(
+                        taper(width: thumbX, thickness: width, midY: midY),
+                        with: .color(.white)
+                    )
+                }
+            }
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        let nextFraction = min(max(value.location.x / geo.size.width, 0), 1)
+                        let next = minThickness + (maxThickness - minThickness) * nextFraction
+                        let tick = Int(next.rounded())
+                        if tick != lastTick {
+                            lastTick = tick
+                            UISelectionFeedbackGenerator().selectionChanged()
+                        }
+                        width = next
+                    }
+            )
+        }
+        .frame(height: maxThickness + 8)
+        .accessibilityValue("\(Int(width.rounded()))")
+    }
+
+    /// Trapezoid from `minThickness` on the left to `thickness` at `width`. Height is the stroke size.
+    private func taper(width: CGFloat, thickness: CGFloat, midY: CGFloat) -> Path {
+        let startHalf = minThickness / 2
+        let endHalf = thickness / 2
+        var path = Path()
+        path.move(to: CGPoint(x: 0, y: midY - startHalf))
+        path.addLine(to: CGPoint(x: width, y: midY - endHalf))
+        path.addLine(to: CGPoint(x: width, y: midY + endHalf))
+        path.addLine(to: CGPoint(x: 0, y: midY + startHalf))
+        path.closeSubpath()
+        return path
     }
 }
 

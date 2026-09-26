@@ -124,15 +124,23 @@ final class PhotoEditorViewModel: ObservableObject {
 
     static let inkPalette: [UIColor] = [
         .white,
+        UIColor(red: 0.82, green: 0.82, blue: 0.84, alpha: 1),
+        UIColor(red: 0.56, green: 0.56, blue: 0.58, alpha: 1),
         .black,
         UIColor(red: 1, green: 0.23, blue: 0.19, alpha: 1),
+        UIColor(red: 1, green: 0.42, blue: 0.42, alpha: 1),
+        UIColor(red: 1, green: 0.18, blue: 0.33, alpha: 1),
         UIColor(red: 1, green: 0.58, blue: 0, alpha: 1),
         UIColor(red: 1, green: 0.8, blue: 0, alpha: 1),
+        UIColor(red: 1, green: 0.95, blue: 0.66, alpha: 1),
         UIColor(red: 0.2, green: 0.78, blue: 0.35, alpha: 1),
+        UIColor(red: 0, green: 0.78, blue: 0.75, alpha: 1),
         UIColor(red: 0.2, green: 0.68, blue: 0.9, alpha: 1),
+        UIColor(red: 0, green: 0.48, blue: 1, alpha: 1),
         UIColor(red: 0.35, green: 0.34, blue: 0.84, alpha: 1),
-        UIColor(red: 1, green: 0.18, blue: 0.33, alpha: 1),
         UIColor(red: 0.69, green: 0.32, blue: 0.87, alpha: 1),
+        UIColor(red: 1, green: 0.62, blue: 0.94, alpha: 1),
+        UIColor(red: 0.64, green: 0.52, blue: 0.37, alpha: 1),
     ]
 
     init(sourceImage: UIImage, initialFilter: FilterPreset = .none, sessionId: UUID? = nil) {

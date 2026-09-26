@@ -375,12 +375,10 @@ struct CameraPickerView: View {
                         : languageService.text(.mediaTypePhoto)
                 )
 
-            if session.filterPreset != .none {
-                CameraFilterNameBadge(title: activeFilterTitle)
-                    .offset(y: -28)
-                    .allowsHitTesting(false)
-                    .opacity(chromeRevealOpacity)
-            }
+            CameraFilterNameBadge(title: activeFilterTitle)
+                .offset(y: -28)
+                .allowsHitTesting(false)
+                .opacity(chromeRevealOpacity)
         }
     }
 

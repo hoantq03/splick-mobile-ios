@@ -27,9 +27,12 @@ struct EditorStickerPickerBar: View {
                 contentGrid
                     .padding(.horizontal, SplickTheme.Spacing.md)
                     .padding(.bottom, SplickTheme.Spacing.xs)
+                    .frame(maxWidth: .infinity, alignment: .top)
             }
-            .frame(maxHeight: 190)
+            .frame(maxWidth: .infinity)
+            .frame(height: 190)
         }
+        .frame(maxWidth: .infinity)
         .padding(.vertical, SplickTheme.Spacing.sm)
         .background(.ultraThinMaterial.opacity(0.92))
         .onChange(of: gifPickerItems) { items in

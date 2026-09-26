@@ -99,6 +99,7 @@ struct PhotoEditorView: View {
                         onOpenGifPack: stickerPickerBuilder == nil ? nil : { showStickerPicker = true }
                     )
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
@@ -161,7 +162,8 @@ struct PhotoEditorView: View {
     }
 
     private func handleComposerTool(_ tool: ComposerTool) {
-        if tool == .edit, activeComposerTool == .edit {
+        if tool != .download, activeComposerTool == tool {
+            showStickerPicker = false
             viewModel.clearCanvasTool()
             activeComposerTool = nil
             return

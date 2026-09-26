@@ -4,7 +4,7 @@ import Localization
 import SwiftUI
 import UIKit
 
-/// Orchestrates camera capture, album picker, and photo editor.
+/// Orchestrates camera capture, album picker, and optional text-to-image editor.
 public struct MediaCaptureView: View {
     @EnvironmentObject private var languageService: LanguageService
     let onMediaCaptured: (CapturedMedia) -> Void
@@ -187,10 +187,7 @@ public struct MediaCaptureView: View {
     private func handleCameraResult(_ result: CameraPickerView.Result) {
         switch result {
         case .image(let image, let filter):
-            workingImage = image
-            workingFilter = filter
-            editorSessionId = UUID()
-            route = .editor
+            onMediaCaptured(.image(bakedImage(image, filter: filter)))
         case .video(let url):
             onMediaCaptured(.video(url))
         case .pendingVideo(let pending):
@@ -202,6 +199,12 @@ public struct MediaCaptureView: View {
         case .openTextCreation:
             route = .textCreation
         }
+    }
+
+    private func bakedImage(_ image: UIImage, filter: FilterPreset) -> UIImage {
+        guard filter != .none, let ciImage = CIImage(image: image) else { return image }
+        let filtered = FilterEngine.apply(ciImage, preset: filter)
+        return FilterEngine.renderUIImage(from: filtered) ?? image
     }
 }
 

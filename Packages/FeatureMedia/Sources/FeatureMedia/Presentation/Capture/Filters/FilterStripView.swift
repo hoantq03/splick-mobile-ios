@@ -52,7 +52,7 @@ struct FilterStripView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
-                    ForEach(CameraFilterPreset.allCases) { item in
+                    ForEach(CameraFilterPreset.allCases.filter { $0 != .ar }) { item in
                         Button {
                             preset = item
                         } label: {

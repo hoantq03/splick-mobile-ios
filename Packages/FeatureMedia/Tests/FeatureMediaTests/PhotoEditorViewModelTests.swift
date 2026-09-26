@@ -147,11 +147,16 @@ final class PhotoEditorViewModelTests: XCTestCase {
         XCTAssertNotNil(vm.normalizedCropRect)
     }
 
-    func testBrightnessLevelIsSignedPercent() {
+    func testAdjustmentLevelIsSignedPercent() {
         XCTAssertEqual(EditorToolbar.brightnessLevel(0), "0")
         XCTAssertEqual(EditorToolbar.brightnessLevel(0.25), "+25")
         XCTAssertEqual(EditorToolbar.brightnessLevel(-0.4), "-40")
         XCTAssertEqual(EditorToolbar.brightnessLevel(1.4), "+100")
         XCTAssertEqual(EditorToolbar.brightnessLevel(-1.2), "-100")
+        XCTAssertEqual(EditorToolbar.adjustmentLevel(1, in: 0.5...1.5), "0")
+        XCTAssertEqual(EditorToolbar.adjustmentLevel(1.2, in: 0.5...1.5), "+40")
+        XCTAssertEqual(EditorToolbar.adjustmentLevel(0.5, in: 0.5...1.5), "-100")
+        XCTAssertEqual(EditorToolbar.adjustmentLevel(1.5, in: 0...2), "+50")
+        XCTAssertEqual(EditorToolbar.adjustmentLevel(1, in: -2...2), "+50")
     }
 }
